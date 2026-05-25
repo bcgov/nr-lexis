@@ -1,0 +1,25 @@
+name: PR Closed
+
+on:
+  pull_request:
+    types: [closed]
+
+concurrency:
+  # PR open and close use the same group, allowing only one at a time
+  group: ${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  cleanup:
+    name: Cleanup and Image Promotion
+    uses: bcgov/quickstart-openshift-helpers/.github/workflows/.pr-close.yml@18a043020cdc4f1125ec592524e8163edc767f4a # v1.2.0
+    permissions:
+      packages: write
+    secrets:
+      oc_namespace: ${{ secrets.oc_namespace }}
+      oc_token: ${{ secrets.oc_token }}
+    with:
+      cleanup: label
+      packages: backend frontend migrations
