@@ -9,7 +9,7 @@
   <version>0.0.1-SNAPSHOT</version>
   <packaging>jar</packaging>
   <name>LEXIS Backend</name>
-  <description>LEXIS modernization backend (Spring Boot 3 + Java 21)</description>
+  <description>LEXIS backend (Spring Boot 3 + Java 21)</description>
 
   <parent>
     <groupId>org.springframework.boot</groupId>

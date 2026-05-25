@@ -1,0 +1,243 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lexis-backend
+  namespace: ${OC_NAMESPACE}
+  labels:
+    app: lexis-backend
+spec:
+  replicas: ${MIN_REPLICAS}
+  selector:
+    matchLabels:
+      app: lexis-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  template:
+    metadata:
+      labels:
+        app: lexis-backend
+      annotations:
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: '8080'
+        prometheus.io/scrape: 'true'
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+      initContainers:
+        - name: lexis-backend-init
+          image: ghcr.io/bcgov/nr-forest-client/common:prod
+          imagePullPolicy: Always
+          env:
+            - name: ORACLEDB_HOST
+              value: ${DATABASE_HOST}
+            - name: ORACLEDB_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lexis-backend-secret
+                  key: KEYSTORE_SECRET
+            - name: ORACLEDB_PORT
+              value: "1543"
+          volumeMounts:
+            - name: lexis-backend-api-cert
+              mountPath: /cert
+            - name: init-tmp-storage
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 200m
+              memory: 300Mi
+              ephemeral-storage: "50Mi"
+            limits:
+              cpu: 500m
+              memory: 500Mi
+              ephemeral-storage: "100Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: lexis-backend
+          image: ${BACKEND_IMAGE}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: ${SPRING_PROFILES_ACTIVE}
+            - name: SERVER_PORT
+              value: "8080"
+            - name: DATABASE_HOST
+              value: ${DATABASE_HOST}
+            - name: DATABASE_SERVICE_NAME
+              value: ${DATABASE_SERVICE_NAME}
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: lexis-backend-secret
+                  key: DATABASE_USER
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lexis-backend-secret
+                  key: DATABASE_PASSWORD
+            - name: APP_LOG_LEVEL
+              value: ${APP_LOG_LEVEL}
+            - name: SPRING_JPA_SHOW_SQL
+              value: "${SPRING_JPA_SHOW_SQL}"
+            - name: KEYSTORE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lexis-backend-secret
+                  key: KEYSTORE_SECRET
+          resources:
+            requests:
+              cpu: ${MIN_CPU}
+              memory: ${MIN_MEM}
+              ephemeral-storage: "200Mi"
+            limits:
+              cpu: "1000m"
+              memory: "800Mi"
+              ephemeral-storage: "500Mi"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 300
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+            successThreshold: 1
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 20
+            successThreshold: 1
+          volumeMounts:
+            - name: lexis-backend-api-cert
+              mountPath: /cert
+            - name: tls-certs
+              mountPath: /etc/tls-certs
+              readOnly: true
+            - name: log-storage
+              mountPath: /logs
+            - name: app-storage
+              mountPath: /temp
+            - name: tmp-storage
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: lexis-backend-cert
+        - name: log-storage
+          emptyDir: {}
+        - name: app-storage
+          emptyDir: {}
+        - name: tmp-storage
+          emptyDir: {}
+        - name: init-tmp-storage
+          emptyDir: {}
+        - name: lexis-backend-api-cert
+          persistentVolumeClaim:
+            claimName: lexis-backend-api-cert
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lexis-backend
+  namespace: ${OC_NAMESPACE}
+  labels:
+    app: lexis-backend
+  annotations:
+    service.alpha.openshift.io/serving-cert-secret-name: lexis-backend-cert
+spec:
+  selector:
+    app: lexis-backend
+  ports:
+    - name: 8080-tcp
+      port: 8080
+      protocol: TCP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: lexis-backend-cpu-autoscaler
+  namespace: ${OC_NAMESPACE}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: lexis-backend
+  minReplicas: ${MIN_REPLICAS}
+  maxReplicas: ${MAX_REPLICAS}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 200
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  labels:
+    app: lexis-backend
+  name: lexis-backend-api-cert
+  namespace: ${OC_NAMESPACE}
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Mi
+  storageClassName: netapp-file-standard
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: lexis-backend-secret
+  namespace: ${OC_NAMESPACE}
+  labels:
+    app: lexis-backend
+type: Opaque
+stringData:
+  DATABASE_USER: ${DATABASE_USER}
+  DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+  KEYSTORE_SECRET: ${KEYSTORE_SECRET}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-frontend-and-monitoring-to-backend
+  namespace: ${OC_NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: lexis-backend
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: lexis-frontend
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+  policyTypes:
+    - Ingress
