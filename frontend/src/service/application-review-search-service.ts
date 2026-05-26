@@ -122,6 +122,15 @@ type BackendApplicationReviewSearchResponse = {
   size: number
 }
 
+export type ApplicationReviewStatusUpdateResult = {
+  updated: boolean
+  valid: boolean
+  statusCode: string
+  clientEmail: string
+  remark: string
+  message: string
+}
+
 const buildBackendParams = (request: ApplicationReviewSearchRequest): URLSearchParams => {
   const params = new URLSearchParams()
 
@@ -204,4 +213,16 @@ export const searchApplicationReviews = async (
     console.warn('Using mock application review search data.', error)
     return applyMockSearch(request)
   }
+}
+
+export const approveApplicationReview = async (
+  applicationNumber: string,
+): Promise<ApplicationReviewStatusUpdateResult> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .post<ApplicationReviewStatusUpdateResult>(
+      `/lexis/application-reviews/${applicationNumber}/approve`,
+    )
+
+  return response.data
 }

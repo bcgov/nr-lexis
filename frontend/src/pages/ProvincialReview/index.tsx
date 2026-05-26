@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
 import {
   Button,
+  Checkbox,
   Column,
   Grid,
   InlineLoading,
+  InlineNotification,
   MultiSelect,
   Pagination,
   Select,
@@ -23,12 +25,21 @@ import type {
   ApplicationReviewSearchResponse,
   ApplicationReviewSearchSortField,
 } from '@/interfaces/ApplicationReviewSearch'
-import { searchApplicationReviews } from '@/service/application-review-search-service'
+import { useAuth } from '@/context/auth/useAuth'
+import {
+  approveApplicationReview,
+  searchApplicationReviews,
+} from '@/service/application-review-search-service'
 import { fetchApplicationReviewOptions, type SearchOption } from '@/service/search-options-service'
 
 type RegionOption = {
   id: string
   text: string
+}
+
+type ReviewActionStatus = {
+  kind: 'success' | 'error'
+  message: string
 }
 
 const FALLBACK_PRODUCT_TYPE_OPTIONS: SearchOption[] = [
@@ -67,6 +78,8 @@ const isValidIsoDate = (value: string): boolean => {
   return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
 }
 
+const normalizeReviewStatus = (status: string): string => status.trim().toUpperCase()
+
 const SORT_COLUMNS: {
   id: ApplicationReviewSearchSortField
   label: string
@@ -80,6 +93,7 @@ const SORT_COLUMNS: {
 ]
 
 const ProvincialReviewPage: FC = () => {
+  const { capabilities } = useAuth()
   const [filters, setFilters] = useState<ApplicationReviewSearchFilters>(INITIAL_FILTERS)
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>(
     FALLBACK_PRODUCT_TYPE_OPTIONS,
@@ -92,6 +106,14 @@ const ProvincialReviewPage: FC = () => {
   const [sortField, setSortField] = useState<ApplicationReviewSearchSortField>('applicationNumber')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const [pageSize, setPageSize] = useState(10)
+  const [selectedRowsById, setSelectedRowsById] = useState<Record<string, boolean>>({})
+  const [submittingApproval, setSubmittingApproval] = useState(false)
+  const [reviewActionStatus, setReviewActionStatus] = useState<ReviewActionStatus | null>(null)
+  const canApproveApplications = useMemo(() => {
+    return (
+      capabilities.roles.includes('APPLICATION_APPROVER') || capabilities.roles.includes('ADMIN')
+    )
+  }, [capabilities.roles])
 
   const hasDateValidationError = useMemo(() => {
     return (
@@ -106,6 +128,24 @@ const ProvincialReviewPage: FC = () => {
     filters.listingFromDate,
     filters.listingToDate,
   ])
+
+  const selectableRows = useMemo(() => {
+    if (!canApproveApplications) {
+      return []
+    }
+    return results.content.filter((row) => normalizeReviewStatus(row.status) === 'NEW')
+  }, [canApproveApplications, results.content])
+
+  const selectedRowsCount = useMemo(() => {
+    return Object.keys(selectedRowsById).length
+  }, [selectedRowsById])
+
+  const allSelectableRowsAreSelected = useMemo(() => {
+    if (selectableRows.length === 0) {
+      return false
+    }
+    return selectableRows.every((row) => Boolean(selectedRowsById[row.applicationNumber]))
+  }, [selectableRows, selectedRowsById])
 
   const runSearch = useCallback(async (request: ApplicationReviewSearchRequest) => {
     if (
@@ -163,6 +203,8 @@ const ProvincialReviewPage: FC = () => {
   }, [])
 
   const onSearch = () => {
+    setSelectedRowsById({})
+    setReviewActionStatus(null)
     void runSearch({
       filters,
       page: 0,
@@ -174,6 +216,8 @@ const ProvincialReviewPage: FC = () => {
 
   const onHeaderClick = (column: ApplicationReviewSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
+    setSelectedRowsById({})
+    setReviewActionStatus(null)
     setSortField(column)
     setSortDirection(nextDirection)
     void runSearch({
@@ -183,6 +227,104 @@ const ProvincialReviewPage: FC = () => {
       sortField: column,
       sortDirection: nextDirection,
     })
+  }
+
+  const toggleRowSelection = (applicationNumber: string, checked: boolean) => {
+    setReviewActionStatus(null)
+    setSelectedRowsById((current) => {
+      const next = { ...current }
+      if (checked) {
+        next[applicationNumber] = true
+      } else {
+        delete next[applicationNumber]
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAllRowsOnPage = (checked: boolean) => {
+    setReviewActionStatus(null)
+    setSelectedRowsById((current) => {
+      const next = { ...current }
+      selectableRows.forEach((row) => {
+        if (checked) {
+          next[row.applicationNumber] = true
+        } else {
+          delete next[row.applicationNumber]
+        }
+      })
+      return next
+    })
+  }
+
+  const onApproveSelectedClick = async () => {
+    if (!canApproveApplications) {
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Your account is not authorized to approve applications.',
+      })
+      return
+    }
+
+    const selectedNumbers = Object.keys(selectedRowsById)
+    if (selectedNumbers.length === 0) {
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Select at least one NEW application before approving.',
+      })
+      return
+    }
+
+    setSubmittingApproval(true)
+    setReviewActionStatus(null)
+
+    try {
+      const approvalResults = await Promise.all(
+        selectedNumbers.map(async (applicationNumber) => {
+          try {
+            const result = await approveApplicationReview(applicationNumber)
+            return {
+              applicationNumber,
+              success: result.updated && result.valid,
+              message: result.message,
+            }
+          } catch (error) {
+            console.warn(`Unable to approve application ${applicationNumber}.`, error)
+            return {
+              applicationNumber,
+              success: false,
+              message: 'Request failed.',
+            }
+          }
+        }),
+      )
+
+      const successCount = approvalResults.filter((result) => result.success).length
+      const failureCount = approvalResults.length - successCount
+
+      if (failureCount === 0) {
+        setReviewActionStatus({
+          kind: 'success',
+          message: `Approved ${successCount} application(s).`,
+        })
+      } else {
+        setReviewActionStatus({
+          kind: 'error',
+          message: `Approved ${successCount} application(s); ${failureCount} failed.`,
+        })
+      }
+
+      setSelectedRowsById({})
+      await runSearch({
+        filters,
+        page: results.page.number,
+        pageSize,
+        sortField,
+        sortDirection,
+      })
+    } finally {
+      setSubmittingApproval(false)
+    }
   }
 
   return (
@@ -280,7 +422,27 @@ const ProvincialReviewPage: FC = () => {
             <Button kind="primary" onClick={onSearch} disabled={loading || hasDateValidationError}>
               Search
             </Button>
+            <Button
+              kind="secondary"
+              onClick={() => void onApproveSelectedClick()}
+              disabled={
+                loading || submittingApproval || selectedRowsCount === 0 || !canApproveApplications
+              }
+            >
+              Approve Selected Applications
+            </Button>
           </div>
+          {!!reviewActionStatus && (
+            <InlineNotification
+              className="legacy-inline-notification"
+              kind={reviewActionStatus.kind}
+              title={
+                reviewActionStatus.kind === 'success' ? 'Approval complete' : 'Approval failed'
+              }
+              subtitle={reviewActionStatus.message}
+              onCloseButtonClick={() => setReviewActionStatus(null)}
+            />
+          )}
         </Tile>
       </Column>
 
@@ -293,6 +455,16 @@ const ProvincialReviewPage: FC = () => {
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
+                  <TableHeader>
+                    <Checkbox
+                      id="selectAllCurrentPageRows"
+                      hideLabel
+                      labelText="Select all rows on this page"
+                      checked={allSelectableRowsAreSelected}
+                      disabled={selectableRows.length === 0 || !canApproveApplications}
+                      onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
+                    />
+                  </TableHeader>
                   {SORT_COLUMNS.map((column) => (
                     <TableHeader key={column.id}>
                       <button
@@ -310,6 +482,20 @@ const ProvincialReviewPage: FC = () => {
               <TableBody>
                 {results.content.map((row) => (
                   <TableRow key={row.applicationNumber}>
+                    <TableCell>
+                      <Checkbox
+                        id={`selectRow-${row.applicationNumber}`}
+                        hideLabel
+                        labelText={`Select ${row.applicationNumber}`}
+                        checked={Boolean(selectedRowsById[row.applicationNumber])}
+                        disabled={
+                          !canApproveApplications || normalizeReviewStatus(row.status) !== 'NEW'
+                        }
+                        onChange={(_, payload) =>
+                          toggleRowSelection(row.applicationNumber, Boolean(payload.checked))
+                        }
+                      />
+                    </TableCell>
                     <TableCell>{row.applicationNumber}</TableCell>
                     <TableCell>{row.volume}</TableCell>
                     <TableCell>{row.speciesEndUse}</TableCell>
@@ -320,7 +506,7 @@ const ProvincialReviewPage: FC = () => {
                 ))}
                 {results.content.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6}>
+                    <TableCell colSpan={7}>
                       No review records found for the selected criteria.
                     </TableCell>
                   </TableRow>
@@ -333,6 +519,8 @@ const ProvincialReviewPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
+                setSelectedRowsById({})
+                setReviewActionStatus(null)
                 setPageSize(nextPageSize)
                 void runSearch({
                   filters,
