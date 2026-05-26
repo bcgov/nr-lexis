@@ -1,13 +1,221 @@
-import type { FC } from 'react'
-import LegacyModulePage from '@/pages/shared/LegacyModulePage'
+import { useMemo, useState, type FC } from 'react'
+import { Link } from 'react-router-dom'
+import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
+import { isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
+import {
+  listCreateDrafts,
+  saveCreateDraft,
+  type CreateDraftRecord,
+} from '@/service/create-draft-service'
+
+type IndianReservePermitCreateForm = {
+  permitNumber: string
+  packageNumber: string
+  clientNumber: string
+  applicationDate: string
+  permitIssueDate: string
+  estimatedShippingDate: string
+  destinationCountry: string
+  transportTypeCode: string
+  transportName: string
+  portOfExport: string
+  remarks: string
+}
+
+const MODULE_KEY = 'indian-reserve-permit'
+
+const INITIAL_FORM: IndianReservePermitCreateForm = {
+  permitNumber: '',
+  packageNumber: '',
+  clientNumber: '',
+  applicationDate: '',
+  permitIssueDate: '',
+  estimatedShippingDate: '',
+  destinationCountry: '',
+  transportTypeCode: '',
+  transportName: '',
+  portOfExport: '',
+  remarks: '',
+}
 
 const IndianReservePermitCreatePage: FC = () => {
+  const [form, setForm] = useState<IndianReservePermitCreateForm>(INITIAL_FORM)
+  const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
+    listCreateDrafts(MODULE_KEY),
+  )
+  const [status, setStatus] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+
+  const hasValidationError = useMemo(() => {
+    return (
+      !normalizeText(form.permitNumber) ||
+      !normalizeText(form.packageNumber) ||
+      !normalizeText(form.clientNumber) ||
+      !isValidIsoDate(form.applicationDate) ||
+      !isValidIsoDate(form.permitIssueDate) ||
+      !isValidIsoDate(form.estimatedShippingDate)
+    )
+  }, [form])
+
+  const onSaveDraft = () => {
+    setStatus(null)
+    if (hasValidationError) {
+      setStatus({ kind: 'error', message: 'Please fix validation errors before saving the draft.' })
+      return
+    }
+
+    const saved = saveCreateDraft(MODULE_KEY, form)
+    setDrafts(listCreateDrafts(MODULE_KEY))
+    setStatus({ kind: 'success', message: `Draft ${saved.id} saved.` })
+  }
+
   return (
-    <LegacyModulePage
-      title="Create Indian Reserve Permit"
-      description="Creation flow shell for Indian Reserve permit details and tab workflows."
-      legacySourcePath="src/main/webapp/WEB-INF/jsp/indianReserve/permit/permit.jsp"
-    />
+    <Grid fullWidth className="default-grid">
+      <Column sm={4} md={8} lg={16}>
+        <h1>Create Indian Reserve Permit</h1>
+        <p>Base create form for indian reserve permit migration.</p>
+      </Column>
+
+      {!!status && (
+        <Column sm={4} md={8} lg={16}>
+          <InlineNotification
+            kind={status.kind}
+            title={status.kind === 'success' ? 'Draft Saved' : 'Validation Error'}
+            subtitle={status.message}
+            lowContrast
+            onCloseButtonClick={() => setStatus(null)}
+          />
+        </Column>
+      )}
+
+      <Column sm={4} md={8} lg={16}>
+        <Tile>
+          <div className="legacy-search-grid">
+            <TextInput
+              id="permitNumber"
+              labelText="Permit Number (required)"
+              value={form.permitNumber}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, permitNumber: event.target.value }))
+              }
+            />
+            <TextInput
+              id="packageNumber"
+              labelText="Package Number (required)"
+              value={form.packageNumber}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, packageNumber: event.target.value }))
+              }
+            />
+            <TextInput
+              id="clientNumber"
+              labelText="Client Number (required)"
+              value={form.clientNumber}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, clientNumber: event.target.value }))
+              }
+            />
+            <TextInput
+              id="applicationDate"
+              labelText="Application Date (YYYY-MM-DD)"
+              value={form.applicationDate}
+              invalid={!isValidIsoDate(form.applicationDate)}
+              invalidText="Date must be YYYY-MM-DD."
+              onChange={(event) =>
+                setForm((current) => ({ ...current, applicationDate: event.target.value }))
+              }
+            />
+            <TextInput
+              id="permitIssueDate"
+              labelText="Permit Issue Date (YYYY-MM-DD)"
+              value={form.permitIssueDate}
+              invalid={!isValidIsoDate(form.permitIssueDate)}
+              invalidText="Date must be YYYY-MM-DD."
+              onChange={(event) =>
+                setForm((current) => ({ ...current, permitIssueDate: event.target.value }))
+              }
+            />
+            <TextInput
+              id="estimatedShippingDate"
+              labelText="Estimated Shipping Date (YYYY-MM-DD)"
+              value={form.estimatedShippingDate}
+              invalid={!isValidIsoDate(form.estimatedShippingDate)}
+              invalidText="Date must be YYYY-MM-DD."
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  estimatedShippingDate: event.target.value,
+                }))
+              }
+            />
+            <TextInput
+              id="destinationCountry"
+              labelText="Destination Country"
+              value={form.destinationCountry}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, destinationCountry: event.target.value }))
+              }
+            />
+            <TextInput
+              id="transportTypeCode"
+              labelText="Transport Type Code"
+              value={form.transportTypeCode}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, transportTypeCode: event.target.value }))
+              }
+            />
+            <TextInput
+              id="transportName"
+              labelText="Transport Name"
+              value={form.transportName}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, transportName: event.target.value }))
+              }
+            />
+            <TextInput
+              id="portOfExport"
+              labelText="Port Of Export"
+              value={form.portOfExport}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, portOfExport: event.target.value }))
+              }
+            />
+          </div>
+          <div className="legacy-search-actions">
+            <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
+              Save Draft
+            </Button>
+            <Button kind="secondary" onClick={() => setForm(INITIAL_FORM)}>
+              Reset
+            </Button>
+            <Link className="cds--link" to="/indian-reserve">
+              Back to Search
+            </Link>
+          </div>
+          <div className="legacy-search-actions">
+            <TextArea
+              id="reservePermitRemarks"
+              labelText="Remarks"
+              value={form.remarks}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, remarks: event.target.value }))
+              }
+            />
+          </div>
+        </Tile>
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
+        <CreateDraftHistory
+          title="Recent Indian Reserve Permit Drafts"
+          drafts={drafts}
+          summarize={(payload) => {
+            const value = payload as IndianReservePermitCreateForm
+            return `${value.permitNumber || 'N/A'} / ${value.packageNumber || 'N/A'}`
+          }}
+        />
+      </Column>
+    </Grid>
   )
 }
 
