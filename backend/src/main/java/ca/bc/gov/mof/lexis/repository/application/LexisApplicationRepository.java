@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.repository.application;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
@@ -42,6 +43,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATIONS_BY_CRITERIA(?,?,?,?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
+  private static final String FIND_PACKAGE_BY_NUMBER =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
   private static final String FIND_PACKAGES_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
   private static final String FIND_REMARKS_BY_APPLICATION =
@@ -195,6 +198,23 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             packages,
             remarks,
             offers));
+  }
+
+  public Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        FIND_PACKAGE_BY_NUMBER,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new LexisPackageLookupDto(
+                getString(rs, "PACKAGE_NUMBER"),
+                getLong(rs, "APPLICATION_NUMBER"),
+                coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d)));
   }
 
   public boolean verifyApplicationClients(List<Long> applicationNumbers) {

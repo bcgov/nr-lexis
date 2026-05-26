@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.application;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
@@ -14,6 +15,8 @@ public interface LexisApplicationService {
   LexisApplicationSearchResponseDto search(LexisApplicationSearchCriteria criteria);
 
   Optional<LexisApplicationDetailDto> findByApplicationNumber(long applicationNumber);
+
+  Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber);
 
   boolean verifyApplicationClients(List<Long> applicationNumbers);
 

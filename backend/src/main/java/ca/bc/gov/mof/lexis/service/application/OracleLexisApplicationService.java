@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.application;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
@@ -57,6 +58,15 @@ public class OracleLexisApplicationService implements LexisApplicationService {
       return Optional.empty();
     }
     return repository.findByApplicationNumber(applicationNumber);
+  }
+
+  @Override
+  public Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber) {
+    String normalized = trimToNull(packageNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return repository.findPackageByPackageNumber(normalized);
   }
 
   @Override

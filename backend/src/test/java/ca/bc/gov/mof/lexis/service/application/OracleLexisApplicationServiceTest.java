@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
@@ -165,6 +166,23 @@ class OracleLexisApplicationServiceTest {
   void detailShouldReturnEmptyForInvalidApplicationNumber() {
     assertThat(service.findByApplicationNumber(0L)).isEmpty();
     verifyNoInteractions(repository);
+  }
+
+  @Test
+  void packageLookupShouldReturnEmptyWhenPackageNumberBlank() {
+    assertThat(service.findPackageByPackageNumber("  ")).isEmpty();
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void packageLookupShouldPassThroughRepositoryWhenPackageNumberValid() {
+    LexisPackageLookupDto dto = new LexisPackageLookupDto("PKG-903", 1000456L, 95.0d);
+    when(repository.findPackageByPackageNumber("PKG-903")).thenReturn(Optional.of(dto));
+
+    Optional<LexisPackageLookupDto> result = service.findPackageByPackageNumber(" PKG-903 ");
+
+    assertThat(result).contains(dto);
+    verify(repository).findPackageByPackageNumber("PKG-903");
   }
 
   @Test

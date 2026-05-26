@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.application;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
@@ -198,6 +199,25 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         .filter(app -> app.applicationNumber() == applicationNumber)
         .findFirst()
         .map(this::toDetail);
+  }
+
+  @Override
+  public Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber) {
+    if (blank(packageNumber)) {
+      return Optional.empty();
+    }
+
+    String normalized = normalize(packageNumber);
+    return APPLICATIONS.stream()
+        .flatMap(
+            app ->
+                app.packages().stream()
+                    .filter(pkg -> normalize(pkg.packageNumber()).equals(normalized))
+                    .map(
+                        pkg ->
+                            new LexisPackageLookupDto(
+                                pkg.packageNumber(), app.applicationNumber(), pkg.volume())))
+        .findFirst();
   }
 
   @Override
