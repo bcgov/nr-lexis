@@ -146,7 +146,7 @@ class OfferDetailsRpcControllerTest {
   void packageVolumeShouldReturnFormattedVolume() {
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(applicationService.findPackageByPackageNumber("PKG-903"))
-        .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-903", 1000456L, 95.04d)));
+        .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-903", 1000456L, 95.04d, "S")));
 
     ResponseEntity<OfferDetailsRpcController.OfferVolumeResponseDto> response =
         controller.getPackageVolume("PKG-903");

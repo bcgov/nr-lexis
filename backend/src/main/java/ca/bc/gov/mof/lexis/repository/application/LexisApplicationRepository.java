@@ -214,7 +214,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             new LexisPackageLookupDto(
                 getString(rs, "PACKAGE_NUMBER"),
                 getLong(rs, "APPLICATION_NUMBER"),
-                coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d)));
+                coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d),
+                getString(rs, "EXPORT_GROWTH_TYPE_CODE")));
   }
 
   public boolean verifyApplicationClients(List<Long> applicationNumbers) {

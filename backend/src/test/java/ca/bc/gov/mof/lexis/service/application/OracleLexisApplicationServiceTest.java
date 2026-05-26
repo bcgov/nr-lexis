@@ -176,7 +176,7 @@ class OracleLexisApplicationServiceTest {
 
   @Test
   void packageLookupShouldPassThroughRepositoryWhenPackageNumberValid() {
-    LexisPackageLookupDto dto = new LexisPackageLookupDto("PKG-903", 1000456L, 95.0d);
+    LexisPackageLookupDto dto = new LexisPackageLookupDto("PKG-903", 1000456L, 95.0d, "S");
     when(repository.findPackageByPackageNumber("PKG-903")).thenReturn(Optional.of(dto));
 
     Optional<LexisPackageLookupDto> result = service.findPackageByPackageNumber(" PKG-903 ");

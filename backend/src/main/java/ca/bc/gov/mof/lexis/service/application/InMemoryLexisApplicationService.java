@@ -216,7 +216,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
                     .map(
                         pkg ->
                             new LexisPackageLookupDto(
-                                pkg.packageNumber(), app.applicationNumber(), pkg.volume())))
+                                pkg.packageNumber(), app.applicationNumber(), pkg.volume(), null)))
         .findFirst();
   }
 
