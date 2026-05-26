@@ -3,12 +3,16 @@ package ca.bc.gov.mof.lexis.service.permit;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitRpcScaleItemDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
@@ -36,6 +40,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final LocalDate FEE_MASK_EFFECTIVE_DATE = LocalDate.of(2024, 6, 27);
   private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
   private static final String EXEMPTION_TYPE_MINISTERIAL = "M";
+  private static final String EXEMPTION_TYPE_BLANKET_OIC = "B";
+  private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
   private static final String SPECIES_FIR = "FI";
   private static final long RCO_REGION_CODE = 1835L;
   private static final long RSK_REGION_CODE = 1908L;
@@ -201,6 +207,66 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  public PermitPackageInfoRpcResponseDto getPackageInfo(String packageNumber) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return emptyPackageInfo();
+    }
+
+    PackageInfoRow packageInfo = repository.findPackageInfoByPackageNumber(normalizedPackageNumber).orElse(null);
+    if (packageInfo == null) {
+      return emptyPackageInfo();
+    }
+
+    ApplicationInfoRow applicationInfo =
+        repository.findApplicationInfoByNumber(packageInfo.applicationNumber()).orElse(null);
+    if (applicationInfo == null) {
+      return new PermitPackageInfoRpcResponseDto(
+          "",
+          "",
+          "",
+          formatVolume(packageInfo.packageVolume()),
+          formatVolume(packageInfo.averageLength()),
+          formatVolume(packageInfo.averageDiameter()),
+          "");
+    }
+
+    String exemptionTypeCode =
+        repository.findExemptionTypeCode(applicationInfo.exemptionNumber()).orElse(null);
+    boolean blanketOic = EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(trimToNull(exemptionTypeCode));
+
+    String productTypeCode =
+        firstNonNull(trimToNull(applicationInfo.productTypeCode()), trimToNull(packageInfo.productTypeCode()));
+    String productTypeDescription =
+        productTypeCode == null
+            ? ""
+            : repository.findProductTypeDescription(productTypeCode).orElse(productTypeCode);
+
+    String growthTypeCode =
+        blanketOic
+            ? firstNonNull(trimToNull(packageInfo.growthTypeCode()), trimToNull(applicationInfo.growthTypeCode()))
+            : firstNonNull(trimToNull(applicationInfo.growthTypeCode()), trimToNull(packageInfo.growthTypeCode()));
+    String growthTypeDescription =
+        growthTypeCode == null
+            ? ""
+            : repository.findGrowthTypeDescription(growthTypeCode).orElse(growthTypeCode);
+
+    String endUseDescription =
+        blanketOic
+            ? buildBlanketPackageEndUseSort(normalizedPackageNumber)
+            : buildApplicationEndUseSort(applicationInfo);
+
+    return new PermitPackageInfoRpcResponseDto(
+        nonNull(applicationInfo.regionName()),
+        nonNull(endUseDescription),
+        nonNull(growthTypeDescription),
+        formatVolume(packageInfo.packageVolume()),
+        formatVolume(packageInfo.averageLength()),
+        formatVolume(packageInfo.averageDiameter()),
+        nonNull(productTypeDescription));
+  }
+
+  @Override
   public PermitPackageListRpcResponseDto getPackageList(Long permitNumber) {
     List<String> packageList = repository.findPackageNumbersByPermitNumber(permitNumber);
     if (packageList.isEmpty()) {
@@ -213,6 +279,69 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   public PermitHasApplicationsRpcResponseDto getPermitHasApplications(Long permitNumber) {
     boolean hasApplications = !repository.findPackageNumbersByPermitNumber(permitNumber).isEmpty();
     return new PermitHasApplicationsRpcResponseDto(hasApplications);
+  }
+
+  private PermitPackageInfoRpcResponseDto emptyPackageInfo() {
+    return new PermitPackageInfoRpcResponseDto("", "", "", "", "", "", "");
+  }
+
+  private String buildApplicationEndUseSort(ApplicationInfoRow applicationInfo) {
+    String endUseSort = trimToNull(applicationInfo.endUseSort());
+    if (endUseSort != null) {
+      return endUseSort;
+    }
+
+    List<EndUsePairRow> endUses = repository.findEndUsesByApplicationNumber(applicationInfo.applicationNumber());
+    if (endUses.isEmpty()) {
+      return "";
+    }
+
+    EndUsePairRow firstEndUse = endUses.get(0);
+    List<String> candidateExcolCodes =
+        repository.findCandidateExcolCodes(
+            endUses.size(),
+            firstEndUse.speciesCode(),
+            firstEndUse.endUseCode(),
+            applicationInfo.orgUnitNo());
+
+    if (candidateExcolCodes.size() == 1) {
+      return candidateExcolCodes.get(0);
+    }
+
+    for (String excolCode : candidateExcolCodes) {
+      boolean candidateMatches = true;
+      for (EndUsePairRow endUse : endUses) {
+        String speciesCode = trimToNull(endUse.speciesCode());
+        if (speciesCode == null || !excolCode.contains(speciesCode)) {
+          candidateMatches = false;
+          break;
+        }
+
+        if (!EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equalsIgnoreCase(trimToNull(applicationInfo.productTypeCode()))
+            && !excolCode.contains(nonNull(firstEndUse.endUseCode()))) {
+          candidateMatches = false;
+          break;
+        }
+      }
+
+      if (candidateMatches) {
+        return excolCode;
+      }
+    }
+
+    return buildLegacyPackageEndUseSort(endUses);
+  }
+
+  private String buildBlanketPackageEndUseSort(String packageNumber) {
+    return buildLegacyPackageEndUseSort(repository.findEndUsesByPackageNumber(packageNumber));
+  }
+
+  private String buildLegacyPackageEndUseSort(List<EndUsePairRow> endUses) {
+    String endUseSort = "";
+    for (EndUsePairRow endUse : endUses) {
+      endUseSort = nonNull(endUse.speciesCode()) + "/" + nonNull(endUse.endUseCode()) + "\n";
+    }
+    return endUseSort;
   }
 
   private PermitRpcScaleItemDto toSummaryScaleItem(

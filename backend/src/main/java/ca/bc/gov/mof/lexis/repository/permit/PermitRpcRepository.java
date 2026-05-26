@@ -23,6 +23,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PRM(?,?)";
   private static final String FIND_PACKAGES_BY_PERMIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_PERMIT(?,?)";
+  private static final String FIND_PACKAGE_BY_NUMBER =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
+  private static final String FIND_APPLICATION_BY_NUMBER =
+      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
+  private static final String FIND_END_USE_BY_APP = LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
+  private static final String FIND_END_USE_BY_PACK = LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_PACK(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
   private static final String FIND_EXEMPTION_BY_NUMBER =
@@ -33,6 +39,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
   private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
   private static final String FIND_GROWTH_TYPE_CODE = LEXIS_CODES_PACKAGE + "FIND_GROWTH_TYPE_CODE(?,?)";
+  private static final String FIND_PRODUCT_TYPE_CODE = LEXIS_CODES_PACKAGE + "FIND_PRODUCT_TYPE_CODE(?,?)";
+  private static final String FIND_CANDIDATE_EXCOL_VALUES =
+      LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
   private static final String FIND_RATE_BY_EXEMPTION = LEXIS_CODES_PACKAGE + "FIND_RATE_BY_EXEMPTION(?,?)";
   private static final String FIND_LOG_AMV_BY_SCALE = LEXIS_CODES_PACKAGE + "FIND_LOG_AMV(?,?)";
 
@@ -141,6 +150,78 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .filter(value -> value != null && !value.isBlank());
   }
 
+  public Optional<PackageInfoRow> findPackageInfoByPackageNumber(String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        FIND_PACKAGE_BY_NUMBER,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new PackageInfoRow(
+                getString(rs, "PACKAGE_NUMBER"),
+                getLong(rs, "APPLICATION_NUMBER"),
+                coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d),
+                coalesce(getDouble(rs, "AVERAGE_LENGTH"), 0.0d),
+                coalesce(getDouble(rs, "AVERAGE_DIAMETER"), 0.0d),
+                getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+                getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));
+  }
+
+  public Optional<ApplicationInfoRow> findApplicationInfoByNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        FIND_APPLICATION_BY_NUMBER,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new ApplicationInfoRow(
+                getLong(rs, "APPLICATION_NUMBER"),
+                getString(rs, "EXEMPTION_NUMBER"),
+                getLong(rs, "ORG_UNIT_NO"),
+                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_NAME")),
+                getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
+                getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+                getString(rs, "END_USE_SORT")));
+  }
+
+  public List<EndUsePairRow> findEndUsesByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+            FIND_END_USE_BY_APP,
+            cs -> cs.setString(1, applicationNumber.toString()),
+            2,
+            rs -> new EndUsePairRow(getString(rs, "EXPORT_SPECIES_CODE"), getString(rs, "EXPORT_END_USE_CODE")))
+        .stream()
+        .filter(row -> trim(row.speciesCode()) != null && trim(row.endUseCode()) != null)
+        .toList();
+  }
+
+  public List<EndUsePairRow> findEndUsesByPackageNumber(String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+            FIND_END_USE_BY_PACK,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> new EndUsePairRow(getString(rs, "EXPORT_SPECIES_CODE"), getString(rs, "EXPORT_END_USE_CODE")))
+        .stream()
+        .filter(row -> trim(row.speciesCode()) != null && trim(row.endUseCode()) != null)
+        .toList();
+  }
+
   public Optional<String> findSpeciesDescription(String speciesCode) {
     return findCodeDescription(FIND_SPECIES_CODE, speciesCode);
   }
@@ -151,6 +232,39 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   public Optional<String> findGrowthTypeDescription(String growthTypeCode) {
     return findCodeDescription(FIND_GROWTH_TYPE_CODE, growthTypeCode);
+  }
+
+  public Optional<String> findProductTypeDescription(String productTypeCode) {
+    return findCodeDescription(FIND_PRODUCT_TYPE_CODE, productTypeCode);
+  }
+
+  public List<String> findCandidateExcolCodes(
+      int speciesCount, String speciesCode, String endUseCode, Long orgUnitNumber) {
+    String normalizedSpecies = trim(speciesCode);
+    String normalizedEndUse = trim(endUseCode);
+    if (speciesCount < 1 || normalizedSpecies == null || normalizedEndUse == null || orgUnitNumber == null) {
+      return List.of();
+    }
+
+    StringBuilder pattern = new StringBuilder();
+    for (int i = 0; i < speciesCount; i++) {
+      pattern.append("__/");
+    }
+    pattern.append("__");
+
+    return queryCursorProcedure(
+            FIND_CANDIDATE_EXCOL_VALUES,
+            cs -> {
+              cs.setString(1, pattern.toString());
+              cs.setString(2, normalizedSpecies);
+              cs.setString(3, normalizedEndUse);
+              cs.setLong(4, orgUnitNumber);
+            },
+            5,
+            rs -> getString(rs, "EXCOL_TRANSLATION_VALUE"))
+        .stream()
+        .filter(value -> value != null && !value.isBlank())
+        .toList();
   }
 
   public Optional<BigDecimal> findFixedExemptionRate(String exemptionNumber) {
@@ -260,6 +374,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .filter(value -> value != null && !value.isBlank());
   }
 
+  private String firstNonNull(String first, String second) {
+    return first != null ? first : second;
+  }
+
   private double coalesce(Double value, double fallback) {
     return value == null ? fallback : value;
   }
@@ -290,4 +408,24 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String exemptionNumber,
       String exportCountryCode,
       double overrideFee) {}
+
+  public record PackageInfoRow(
+      String packageNumber,
+      Long applicationNumber,
+      double packageVolume,
+      double averageLength,
+      double averageDiameter,
+      String growthTypeCode,
+      String productTypeCode) {}
+
+  public record ApplicationInfoRow(
+      Long applicationNumber,
+      String exemptionNumber,
+      Long orgUnitNo,
+      String regionName,
+      String productTypeCode,
+      String growthTypeCode,
+      String endUseSort) {}
+
+  public record EndUsePairRow(String speciesCode, String endUseCode) {}
 }

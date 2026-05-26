@@ -7,11 +7,15 @@ import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
@@ -217,6 +221,65 @@ class OraclePermitDetailsRpcServiceTest {
     PermitHasApplicationsRpcResponseDto response = service.getPermitHasApplications(7000123L);
 
     assertThat(response.hasApplications()).isFalse();
+  }
+
+  @Test
+  void packageInfoShouldReturnBlankFieldsWhenPackageNotFound() {
+    when(repository.findPackageInfoByPackageNumber("PKG-903")).thenReturn(Optional.empty());
+
+    PermitPackageInfoRpcResponseDto response = service.getPackageInfo("PKG-903");
+
+    assertThat(response.region()).isEmpty();
+    assertThat(response.enduse()).isEmpty();
+    assertThat(response.ageclass()).isEmpty();
+    assertThat(response.volume()).isEmpty();
+  }
+
+  @Test
+  void packageInfoShouldMapApplicationAndCodeDescriptions() {
+    when(repository.findPackageInfoByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(new PackageInfoRow("PKG-903", 1000456L, 10.25d, 6.0d, 24.0d, "S", "T")));
+    when(repository.findApplicationInfoByNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationInfoRow(
+                    1000456L, "EX-700", 1835L, "Coast Region", "T", "S", "HE/UT")));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
+    when(repository.findProductTypeDescription("T")).thenReturn(Optional.of("Unmanufactured Timber"));
+
+    PermitPackageInfoRpcResponseDto response = service.getPackageInfo("PKG-903");
+
+    assertThat(response.region()).isEqualTo("Coast Region");
+    assertThat(response.enduse()).isEqualTo("HE/UT");
+    assertThat(response.ageclass()).isEqualTo("Standing");
+    assertThat(response.volume()).isEqualTo("10.3");
+    assertThat(response.length()).isEqualTo("6.0");
+    assertThat(response.diameter()).isEqualTo("24.0");
+    assertThat(response.productType()).isEqualTo("Unmanufactured Timber");
+  }
+
+  @Test
+  void packageInfoShouldUsePackageEndUseForBlanketOic() {
+    when(repository.findPackageInfoByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(new PackageInfoRow("PKG-903", 1000456L, 10.25d, 6.0d, 24.0d, "S", "T")));
+    when(repository.findApplicationInfoByNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationInfoRow(
+                    1000456L, "EX-701", 1835L, "Coast Region", "T", "O", "APP-ENDUSE")));
+    when(repository.findExemptionTypeCode("EX-701")).thenReturn(Optional.of("B"));
+    when(repository.findEndUsesByPackageNumber("PKG-903"))
+        .thenReturn(List.of(new EndUsePairRow("HE", "UT")));
+    when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
+    when(repository.findProductTypeDescription("T")).thenReturn(Optional.of("Unmanufactured Timber"));
+
+    PermitPackageInfoRpcResponseDto response = service.getPackageInfo("PKG-903");
+
+    assertThat(response.enduse()).isEqualTo("HE/UT\n");
+    assertThat(response.ageclass()).isEqualTo("Standing");
   }
 
   private PermitScaleDetailRow scale(
