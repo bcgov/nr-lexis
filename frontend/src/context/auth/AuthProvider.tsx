@@ -100,6 +100,8 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
 export const AuthProvider: FC<Props> = ({ children }) => {
   const [capabilities, setCapabilities] = useState<LexisSessionCapabilities>(DEFAULT_CAPABILITIES)
   const [isLoading, setIsLoading] = useState(true)
+  const externalLoginUrl = (import.meta.env.VITE_LOGIN_URL ?? '').trim()
+  const usesExternalLogin = externalLoginUrl.length > 0
 
   const refresh = useCallback(async () => {
     setIsLoading(true)
@@ -120,8 +122,12 @@ export const AuthProvider: FC<Props> = ({ children }) => {
   }, [refresh])
 
   const login = useCallback(async () => {
+    if (externalLoginUrl) {
+      window.location.assign(externalLoginUrl)
+      return
+    }
     await refresh()
-  }, [refresh])
+  }, [externalLoginUrl, refresh])
 
   const setDevRoles = useCallback(
     async (roles: string[]) => {
@@ -169,6 +175,7 @@ export const AuthProvider: FC<Props> = ({ children }) => {
     isLoading,
     isLoggedIn,
     hasAnyRole,
+    usesExternalLogin,
     defaultRoute,
     devRoles,
     refresh,
