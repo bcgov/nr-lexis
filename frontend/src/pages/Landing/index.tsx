@@ -20,8 +20,13 @@ const DEV_ROLE_OPTIONS = [
   { value: 'READ_ONLY', label: 'READ_ONLY' },
   { value: 'APPLICATION_APPROVER', label: 'APPLICATION_APPROVER' },
   { value: 'EXEMPTION_APPROVER', label: 'EXEMPTION_APPROVER' },
-  { value: 'LEXIS_INDUSTRY', label: 'LEXIS_INDUSTRY' },
-  { value: 'LOG_EXPORT_INDUSTRY', label: 'LOG_EXPORT_INDUSTRY' },
+  { value: 'LEXIS_INDUSTRY', label: 'LEXIS_INDUSTRY (Abstract Parent)' },
+  { value: 'LEXIS_INDUSTRY_00012345', label: 'LEXIS_INDUSTRY_00012345 (Concrete Child)' },
+  { value: 'LOG_EXPORT_INDUSTRY', label: 'LOG_EXPORT_INDUSTRY (Abstract Parent)' },
+  {
+    value: 'LOG_EXPORT_INDUSTRY_00012345',
+    label: 'LOG_EXPORT_INDUSTRY_00012345 (Concrete Child)',
+  },
 ]
 
 const isDevRoleSimulationEnabled = (): boolean => {
@@ -184,32 +189,39 @@ const LandingPage: FC = () => {
               </div>
 
               {showDevTools && (
-                <div className="landing-actions">
-                  <Select
-                    id="devRole"
-                    labelText="Development Role"
-                    value={selectedRole}
-                    onChange={(event) => setSelectedRole(event.target.value)}
-                  >
-                    {DEV_ROLE_OPTIONS.map((option) => (
-                      <SelectItem key={option.label} value={option.value} text={option.label} />
-                    ))}
-                  </Select>
-                  <Button
-                    kind="secondary"
-                    onClick={() => void onUseDevRole()}
-                    disabled={isLoading || !selectedRole}
-                  >
-                    Use Development Role
-                  </Button>
-                  <Button
-                    kind="ghost"
-                    onClick={() => void onClearSimulation()}
-                    disabled={isLoading || devRoles.length === 0}
-                  >
-                    Clear Development Role
-                  </Button>
-                </div>
+                <>
+                  <p className="landing-help-text">
+                    FAM role model note: <code>LEXIS_INDUSTRY</code> and{' '}
+                    <code>LOG_EXPORT_INDUSTRY</code> are abstract parents. Concrete client-scoped
+                    roles use the suffix pattern <code>ROLE_&lt;forestClientNumber&gt;</code>.
+                  </p>
+                  <div className="landing-actions">
+                    <Select
+                      id="devRole"
+                      labelText="Development Role"
+                      value={selectedRole}
+                      onChange={(event) => setSelectedRole(event.target.value)}
+                    >
+                      {DEV_ROLE_OPTIONS.map((option) => (
+                        <SelectItem key={option.label} value={option.value} text={option.label} />
+                      ))}
+                    </Select>
+                    <Button
+                      kind="secondary"
+                      onClick={() => void onUseDevRole()}
+                      disabled={isLoading || !selectedRole}
+                    >
+                      Use Development Role
+                    </Button>
+                    <Button
+                      kind="ghost"
+                      onClick={() => void onClearSimulation()}
+                      disabled={isLoading || devRoles.length === 0}
+                    >
+                      Clear Development Role
+                    </Button>
+                  </div>
+                </>
               )}
             </Tile>
           </Column>

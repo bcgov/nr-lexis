@@ -152,7 +152,7 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 }
 
 const ProvincialReviewPage: FC = () => {
-  const { capabilities } = useAuth()
+  const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState<ApplicationReviewSearchFilters>(INITIAL_FILTERS)
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>(
@@ -175,11 +175,7 @@ const ProvincialReviewPage: FC = () => {
   const [statusRemark, setStatusRemark] = useState('')
   const [statusEmailAddress, setStatusEmailAddress] = useState('')
   const [reviewActionStatus, setReviewActionStatus] = useState<ReviewActionStatus | null>(null)
-  const canApproveApplications = useMemo(() => {
-    return (
-      capabilities.roles.includes('APPLICATION_APPROVER') || capabilities.roles.includes('ADMIN')
-    )
-  }, [capabilities.roles])
+  const canApproveApplications = canPerform('/applicationsReview')
   const normalizedStatusCode = useMemo(
     () => normalizeReviewStatus(selectedStatusCode),
     [selectedStatusCode],
