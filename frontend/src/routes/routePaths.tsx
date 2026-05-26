@@ -13,6 +13,8 @@ import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetai
 import ProvincialExemptionPage from '@/pages/ProvincialExemption'
 import ProvincialExemptionCreatePage from '@/pages/ProvincialExemptionCreate'
 import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
+import ProvincialOfferCreatePage from '@/pages/ProvincialOfferCreate'
+import ProvincialOfferDetailsPage from '@/pages/ProvincialOfferDetails'
 import ProvincialOffersPage from '@/pages/ProvincialOffers'
 import ProvincialPage from '@/pages/Provincial'
 import ProvincialPermitPage from '@/pages/ProvincialPermit'
@@ -126,6 +128,26 @@ export const APP_ROUTES: RouteDescription[] = [
     element: (
       <Layout>
         <ProvincialOffersPage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/provincial/offers/create',
+    id: 'Create Provincial Offer',
+    element: (
+      <Layout>
+        <ProvincialOfferCreatePage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/provincial/offers/:offerNumber',
+    id: 'Provincial Offer Details',
+    element: (
+      <Layout>
+        <ProvincialOfferDetailsPage />
       </Layout>
     ),
     isNavigation: false,
