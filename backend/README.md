@@ -63,6 +63,7 @@ Grouped by area; see `controller/` for request and response contracts.
 | Actuator | `/actuator/health`, `/actuator/prometheus` | Public health and metrics endpoints. |
 | Applications | `/api/lexis/applications/search`, `/search/options`, `/{applicationNumber}` | Application search/detail endpoints. |
 | Application validation | `/api/lexis/applications/search/verify-clients`, `/search/has-valid-offer` | Validation helpers for selected applications. |
+| Permits | `/api/lexis/permits/search`, `/search/options`, `/{permitNumber}` | Provincial permit search/detail endpoints; Oracle service is profile-gated. |
 | Purchase offers | `/api/lexis/purchase-offers/search`, `/search/options`, `/{offerNumber}` | Purchase-offer search/detail endpoints; Oracle service is profile-gated. |
 | Exemptions | `/api/lexis/exemptions/search`, `/search/options`, `/{exemptionNumber}` | Exemptions search/detail endpoints; Oracle service is profile-gated. |
 
