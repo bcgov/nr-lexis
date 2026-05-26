@@ -7,6 +7,8 @@ import DashboardPage from '@/pages/Dashboard'
 import FederalPage from '@/pages/Federal'
 import FederalApplicationDetailsPage from '@/pages/FederalApplicationDetails'
 import IndianReservePage from '@/pages/IndianReserve'
+import IndianReservePermitCreatePage from '@/pages/IndianReservePermitCreate'
+import IndianReservePermitDetailsPage from '@/pages/IndianReservePermitDetails'
 import NotFoundPage from '@/pages/NotFound'
 import ProvincialApplicationPage from '@/pages/ProvincialApplication'
 import ProvincialApplicationCreatePage from '@/pages/ProvincialApplicationCreate'
@@ -224,6 +226,26 @@ export const APP_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isNavigation: true,
+  },
+  {
+    path: '/indian-reserve/permit/create',
+    id: 'Create Indian Reserve Permit',
+    element: (
+      <Layout>
+        <IndianReservePermitCreatePage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/indian-reserve/permit/:permitNumber',
+    id: 'Indian Reserve Permit Details',
+    element: (
+      <Layout>
+        <IndianReservePermitDetailsPage />
+      </Layout>
+    ),
+    isNavigation: false,
   },
   {
     path: '/reports',
