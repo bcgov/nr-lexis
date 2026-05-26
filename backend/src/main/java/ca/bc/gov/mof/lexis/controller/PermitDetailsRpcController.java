@@ -1,6 +1,8 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
@@ -114,6 +116,30 @@ public class PermitDetailsRpcController {
     }
 
     return ResponseEntity.ok(service.getPackageVolumeSum(permitNumber, packageNumber));
+  }
+
+  @GetMapping("/package-list")
+  public ResponseEntity<PermitPackageListRpcResponseDto> getPackageList(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for package list");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getPackageList(permitNumber));
+  }
+
+  @GetMapping("/permit-has-applications")
+  public ResponseEntity<PermitHasApplicationsRpcResponseDto> getPermitHasApplications(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for permit has applications");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getPermitHasApplications(permitNumber));
   }
 
   private Set<String> parseRoleCsv(String csv) {

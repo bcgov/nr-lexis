@@ -21,6 +21,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PKG(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_PERMIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PRM(?,?)";
+  private static final String FIND_PACKAGES_BY_PERMIT =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_PERMIT(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
   private static final String FIND_EXEMPTION_BY_NUMBER =
@@ -61,6 +63,23 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 getString(rs, "EWB"),
                 getString(rs, "FIL"),
                 getString(rs, "MF")));
+  }
+
+  public List<String> findPackageNumbersByPermitNumber(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+            FIND_PACKAGES_BY_PERMIT,
+            cs -> cs.setString(1, permitNumber.toString()),
+            2,
+            rs -> getString(rs, "PACKAGE_NUMBER"))
+        .stream()
+        .filter(packageNumber -> packageNumber != null && !packageNumber.isBlank())
+        .distinct()
+        .sorted()
+        .toList();
   }
 
   public List<PermitScaleDetailRow> findScaleDetailsByPackageNumber(String packageNumber) {

@@ -6,6 +6,8 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
@@ -178,6 +180,43 @@ class OraclePermitDetailsRpcServiceTest {
   void packageVolumeSumShouldReturnZeroForInvalidInput() {
     PermitPackageVolumeSumRpcResponseDto response = service.getPackageVolumeSum(null, null);
     assertThat(response.volume()).isEqualTo("0.0");
+  }
+
+  @Test
+  void packageListShouldReturnNoPackagesWhenPermitHasNone() {
+    when(repository.findPackageNumbersByPermitNumber(7000123L)).thenReturn(List.of());
+
+    PermitPackageListRpcResponseDto response = service.getPackageList(7000123L);
+
+    assertThat(response.packageList()).containsExactly("No Packages");
+  }
+
+  @Test
+  void packageListShouldReturnRepositoryPackageNumbers() {
+    when(repository.findPackageNumbersByPermitNumber(7000123L))
+        .thenReturn(List.of("PKG-200", "PKG-100"));
+
+    PermitPackageListRpcResponseDto response = service.getPackageList(7000123L);
+
+    assertThat(response.packageList()).containsExactly("PKG-200", "PKG-100");
+  }
+
+  @Test
+  void permitHasApplicationsShouldReflectPackageAssignments() {
+    when(repository.findPackageNumbersByPermitNumber(7000123L)).thenReturn(List.of("PKG-100"));
+
+    PermitHasApplicationsRpcResponseDto response = service.getPermitHasApplications(7000123L);
+
+    assertThat(response.hasApplications()).isTrue();
+  }
+
+  @Test
+  void permitHasApplicationsShouldBeFalseWhenNoPackagesFound() {
+    when(repository.findPackageNumbersByPermitNumber(7000123L)).thenReturn(List.of());
+
+    PermitHasApplicationsRpcResponseDto response = service.getPermitHasApplications(7000123L);
+
+    assertThat(response.hasApplications()).isFalse();
   }
 
   private PermitScaleDetailRow scale(

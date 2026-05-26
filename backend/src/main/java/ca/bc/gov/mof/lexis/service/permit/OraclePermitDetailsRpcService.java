@@ -2,6 +2,8 @@ package ca.bc.gov.mof.lexis.service.permit;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitRpcScaleItemDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
@@ -196,6 +198,21 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .sum();
 
     return new PermitPackageVolumeSumRpcResponseDto(formatVolume(packageVolume));
+  }
+
+  @Override
+  public PermitPackageListRpcResponseDto getPackageList(Long permitNumber) {
+    List<String> packageList = repository.findPackageNumbersByPermitNumber(permitNumber);
+    if (packageList.isEmpty()) {
+      return new PermitPackageListRpcResponseDto(List.of("No Packages"));
+    }
+    return new PermitPackageListRpcResponseDto(packageList);
+  }
+
+  @Override
+  public PermitHasApplicationsRpcResponseDto getPermitHasApplications(Long permitNumber) {
+    boolean hasApplications = !repository.findPackageNumbersByPermitNumber(permitNumber).isEmpty();
+    return new PermitHasApplicationsRpcResponseDto(hasApplications);
   }
 
   private PermitRpcScaleItemDto toSummaryScaleItem(

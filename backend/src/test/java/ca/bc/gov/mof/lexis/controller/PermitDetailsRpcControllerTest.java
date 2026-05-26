@@ -6,6 +6,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
@@ -129,5 +131,34 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).getPackageVolumeSum(7000123L, "PKG-903");
+  }
+
+  @Test
+  void packageListShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPackageListRpcResponseDto dto =
+        new PermitPackageListRpcResponseDto(List.of("PKG-100", "PKG-101"));
+    when(service.getPackageList(7000123L)).thenReturn(dto);
+
+    ResponseEntity<PermitPackageListRpcResponseDto> response =
+        controller.getPackageList(7000123L);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getPackageList(7000123L);
+  }
+
+  @Test
+  void permitHasApplicationsShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitHasApplicationsRpcResponseDto dto = new PermitHasApplicationsRpcResponseDto(true);
+    when(service.getPermitHasApplications(7000123L)).thenReturn(dto);
+
+    ResponseEntity<PermitHasApplicationsRpcResponseDto> response =
+        controller.getPermitHasApplications(7000123L);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getPermitHasApplications(7000123L);
   }
 }
