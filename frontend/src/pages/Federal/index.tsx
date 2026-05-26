@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -22,6 +22,7 @@ import type {
   FederalApplicationSearchRequest,
   FederalApplicationSearchResponse,
 } from '@/interfaces/FederalApplicationSearch'
+import { parsePositiveIntParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { searchFederalApplications } from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions, type SearchOption } from '@/service/search-options-service'
 
@@ -54,12 +55,38 @@ const EMPTY_RESULTS: FederalApplicationSearchResponse = {
   },
 }
 
+const DEFAULT_PAGE = 1
+const DEFAULT_PAGE_SIZE = 10
+const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
+
+const buildSearchParams = (
+  filters: FederalApplicationSearchFilters,
+  page: number,
+  pageSize: number,
+): URLSearchParams => {
+  const params = new URLSearchParams()
+
+  setSearchParam(params, 'applicationNumber', filters.applicationNumber)
+  setSearchParam(params, 'packageNumber', filters.packageNumber)
+  setSearchParam(params, 'applicationStatus', filters.applicationStatus)
+  setSearchParam(params, 'clientNumber', filters.clientNumber)
+  setSearchParam(params, 'receivedFromDate', filters.receivedFromDate)
+  setSearchParam(params, 'receivedToDate', filters.receivedToDate)
+  setSearchParam(params, 'listingFromDate', filters.listingFromDate)
+  setSearchParam(params, 'listingToDate', filters.listingToDate)
+  setSearchParam(params, 'page', page)
+  setSearchParam(params, 'pageSize', pageSize)
+
+  return params
+}
+
 const isValidIsoDate = (value: string): boolean => {
   if (!value.trim()) return true
   return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
 }
 
 const FederalPage: FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState<FederalApplicationSearchFilters>(INITIAL_FILTERS)
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>(
     FALLBACK_APPLICATION_STATUS_OPTIONS,
@@ -67,7 +94,29 @@ const FederalPage: FC = () => {
   const [results, setResults] = useState<FederalApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [pageSize, setPageSize] = useState(10)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+
+  const urlState = useMemo(() => {
+    const urlFilters: FederalApplicationSearchFilters = {
+      applicationNumber: searchParams.get('applicationNumber') ?? '',
+      packageNumber: searchParams.get('packageNumber') ?? '',
+      applicationStatus: searchParams.get('applicationStatus') ?? '',
+      clientNumber: searchParams.get('clientNumber') ?? '',
+      receivedFromDate: searchParams.get('receivedFromDate') ?? '',
+      receivedToDate: searchParams.get('receivedToDate') ?? '',
+      listingFromDate: searchParams.get('listingFromDate') ?? '',
+      listingToDate: searchParams.get('listingToDate') ?? '',
+    }
+    const parsedPageSize = parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
+
+    return {
+      filters: urlFilters,
+      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
+      pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
+        ? parsedPageSize
+        : DEFAULT_PAGE_SIZE,
+    }
+  }, [searchParams])
 
   const hasDateValidationError = useMemo(() => {
     return (
@@ -108,12 +157,17 @@ const FederalPage: FC = () => {
   }, [])
 
   useEffect(() => {
+    setFilters(urlState.filters)
+    setPageSize(urlState.pageSize)
+  }, [urlState])
+
+  useEffect(() => {
     void runSearch({
-      filters: INITIAL_FILTERS,
-      page: 0,
-      pageSize: 10,
+      filters: urlState.filters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
     })
-  }, [runSearch])
+  }, [runSearch, urlState])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -127,11 +181,7 @@ const FederalPage: FC = () => {
   }, [])
 
   const onSearch = () => {
-    void runSearch({
-      filters,
-      page: 0,
-      pageSize,
-    })
+    setSearchParams(buildSearchParams(filters, DEFAULT_PAGE, pageSize))
   }
 
   return (
@@ -288,12 +338,7 @@ const FederalPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                setPageSize(nextPageSize)
-                void runSearch({
-                  filters,
-                  page: page - 1,
-                  pageSize: nextPageSize,
-                })
+                setSearchParams(buildSearchParams(filters, page, nextPageSize))
               }}
             />
           </>

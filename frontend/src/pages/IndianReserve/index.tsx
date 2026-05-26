@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -21,6 +21,7 @@ import type {
   IndianReservePermitSearchResponse,
 } from '@/interfaces/IndianReservePermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { parsePositiveIntParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { searchIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
 
 const INITIAL_FILTERS: IndianReservePermitSearchFilters = {
@@ -42,6 +43,29 @@ const EMPTY_RESULTS: IndianReservePermitSearchResponse = {
   },
 }
 
+const DEFAULT_PAGE = 1
+const DEFAULT_PAGE_SIZE = 10
+const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
+
+const buildSearchParams = (
+  filters: IndianReservePermitSearchFilters,
+  page: number,
+  pageSize: number,
+): URLSearchParams => {
+  const params = new URLSearchParams()
+
+  setSearchParam(params, 'permitNumber', filters.permitNumber)
+  setSearchParam(params, 'packageNumber', filters.packageNumber)
+  setSearchParam(params, 'fromPermitIssueDate', filters.fromPermitIssueDate)
+  setSearchParam(params, 'toPermitIssueDate', filters.toPermitIssueDate)
+  setSearchParam(params, 'fromEstimatedShippingDate', filters.fromEstimatedShippingDate)
+  setSearchParam(params, 'toEstimatedShippingDate', filters.toEstimatedShippingDate)
+  setSearchParam(params, 'page', page)
+  setSearchParam(params, 'pageSize', pageSize)
+
+  return params
+}
+
 const isValidIsoDate = (value: string): boolean => {
   if (!value.trim()) return true
   return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
@@ -49,12 +73,33 @@ const isValidIsoDate = (value: string): boolean => {
 
 const IndianReservePage: FC = () => {
   const { canPerform } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState<IndianReservePermitSearchFilters>(INITIAL_FILTERS)
   const [results, setResults] = useState<IndianReservePermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [pageSize, setPageSize] = useState(10)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const canCreatePermit = canPerform('viewOICApplication')
+
+  const urlState = useMemo(() => {
+    const urlFilters: IndianReservePermitSearchFilters = {
+      permitNumber: searchParams.get('permitNumber') ?? '',
+      packageNumber: searchParams.get('packageNumber') ?? '',
+      fromPermitIssueDate: searchParams.get('fromPermitIssueDate') ?? '',
+      toPermitIssueDate: searchParams.get('toPermitIssueDate') ?? '',
+      fromEstimatedShippingDate: searchParams.get('fromEstimatedShippingDate') ?? '',
+      toEstimatedShippingDate: searchParams.get('toEstimatedShippingDate') ?? '',
+    }
+    const parsedPageSize = parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
+
+    return {
+      filters: urlFilters,
+      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
+      pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
+        ? parsedPageSize
+        : DEFAULT_PAGE_SIZE,
+    }
+  }, [searchParams])
 
   const hasDateValidationError = useMemo(() => {
     return (
@@ -95,19 +140,20 @@ const IndianReservePage: FC = () => {
   }, [])
 
   useEffect(() => {
+    setFilters(urlState.filters)
+    setPageSize(urlState.pageSize)
+  }, [urlState])
+
+  useEffect(() => {
     void runSearch({
-      filters: INITIAL_FILTERS,
-      page: 0,
-      pageSize: 10,
+      filters: urlState.filters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
     })
-  }, [runSearch])
+  }, [runSearch, urlState])
 
   const onSearch = () => {
-    void runSearch({
-      filters,
-      page: 0,
-      pageSize,
-    })
+    setSearchParams(buildSearchParams(filters, DEFAULT_PAGE, pageSize))
   }
 
   return (
@@ -247,12 +293,7 @@ const IndianReservePage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                setPageSize(nextPageSize)
-                void runSearch({
-                  filters,
-                  page: page - 1,
-                  pageSize: nextPageSize,
-                })
+                setSearchParams(buildSearchParams(filters, page, nextPageSize))
               }}
             />
           </>
