@@ -99,14 +99,86 @@ const applyMockSearch = (
   }
 }
 
+type BackendIndianReservePermitSearchResult = {
+  permitNumber: string
+  clientNumber: string
+  issueDate: string
+  shippingDate: string
+}
+
+type BackendIndianReservePermitSearchResponse = {
+  results: BackendIndianReservePermitSearchResult[]
+  total: number
+  page: number
+  size: number
+}
+
+const buildBackendParams = (request: IndianReservePermitSearchRequest): URLSearchParams => {
+  const params = new URLSearchParams()
+
+  const appendIfPresent = (key: string, value: string) => {
+    const trimmed = value.trim()
+    if (trimmed.length > 0) {
+      params.append(key, trimmed)
+    }
+  }
+
+  const { filters } = request
+  appendIfPresent('permitNumber', filters.permitNumber)
+  appendIfPresent('packageNumber', filters.packageNumber)
+  appendIfPresent('fromPermitIssueDate', filters.fromPermitIssueDate)
+  appendIfPresent('toPermitIssueDate', filters.toPermitIssueDate)
+  appendIfPresent('fromEstimatedShippingDate', filters.fromEstimatedShippingDate)
+  appendIfPresent('toEstimatedShippingDate', filters.toEstimatedShippingDate)
+
+  params.append('page', String(request.page))
+  params.append('size', String(request.pageSize))
+
+  return params
+}
+
+const parseBackendResponse = (payload: unknown): IndianReservePermitSearchResponse | null => {
+  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
+    return null
+  }
+
+  const backendResponse = payload as BackendIndianReservePermitSearchResponse
+  const totalElements = Number.isFinite(backendResponse.total) ? backendResponse.total : 0
+  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 10
+  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
+  const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
+
+  return {
+    content: backendResponse.results.map((row) => ({
+      permitNumber: row.permitNumber ?? '',
+      clientNumber: row.clientNumber ?? '',
+      issueDate: row.issueDate ?? '',
+      shippingDate: row.shippingDate ?? '',
+      packageNumber: '',
+    })),
+    page: {
+      number: pageNumber,
+      size: pageSize,
+      totalElements,
+      totalPages,
+    },
+  }
+}
+
 export const searchIndianReservePermits = async (
   request: IndianReservePermitSearchRequest,
 ): Promise<IndianReservePermitSearchResponse> => {
   try {
     const response = await apiService
       .getAxiosInstance()
-      .post<IndianReservePermitSearchResponse>('/v1/indian-reserve/permits/search', request)
-    return response.data
+      .get('/lexis/indian-reserve/permits/search', { params: buildBackendParams(request) })
+
+    const parsed = parseBackendResponse(response.data)
+    if (!parsed) {
+      throw new Error('Backend indian reserve permit response did not include results.')
+    }
+
+    return parsed
   } catch (error) {
     console.warn('Using mock indian reserve permit search data.', error)
     return applyMockSearch(request)
