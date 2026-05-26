@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 const NotFound: FC = () => {
   const navigate = useNavigate()
   const buttonClicked = () => {
-    navigate('/dashboard')
+    navigate('/')
   }
   return (
     <div className="not-found-page">

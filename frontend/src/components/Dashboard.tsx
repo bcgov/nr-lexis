@@ -1,97 +1,59 @@
 import type { FC } from 'react'
-import type { AxiosResponse } from 'axios'
-import type UserDto from '@/interfaces/UserDto'
-import { useEffect, useState } from 'react'
-import {
-  Button,
-  Modal,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@carbon/react'
-import apiService from '@/service/api-service'
+import { Column, Grid, Tile } from '@carbon/react'
+import { Link } from 'react-router-dom'
 
-type ModalProps = {
-  show: boolean
-  onHide: () => void
-  user?: UserDto
-}
-
-const ModalComponent: FC<ModalProps> = ({ show, onHide, user }) => {
-  return (
-    <Modal
-      open={show}
-      passiveModal
-      modalHeading="Row Details"
-      onRequestClose={onHide}
-      onRequestSubmit={onHide}
-    >
-      <pre className="user-details-json">{JSON.stringify(user, null, 2)}</pre>
-    </Modal>
-  )
-}
+const QUICK_LINKS = [
+  {
+    title: 'Provincial Application Search',
+    path: '/provincial/application',
+    description: 'Search and manage provincial applications.',
+  },
+  {
+    title: 'Provincial Exemption Search',
+    path: '/provincial/exemption',
+    description: 'View and approve exemption files.',
+  },
+  {
+    title: 'Provincial Permit Search',
+    path: '/provincial/permit',
+    description: 'Browse and review permit records.',
+  },
+  {
+    title: 'Provincial Offer Search',
+    path: '/provincial/offers',
+    description: 'Track purchase offers and status changes.',
+  },
+  {
+    title: 'Federal Application Search',
+    path: '/federal',
+    description: 'Review federal application workflows.',
+  },
+  {
+    title: 'Indian Reserve Permit Search',
+    path: '/indian-reserve',
+    description: 'Access permit workflows for Indian reserve files.',
+  },
+]
 
 const Dashboard: FC = () => {
-  const [data, setData] = useState<any>([])
-  const [selectedUser, setSelectedUser] = useState<UserDto | undefined>(undefined)
-
-  useEffect(() => {
-    apiService
-      .getAxiosInstance()
-      .get('/v1/users')
-      .then((response: AxiosResponse) => {
-        const users: UserDto[] = []
-        for (const user of response.data) {
-          const userDto = {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-          }
-          users.push(userDto)
-        }
-        setData(users)
-      })
-      .catch((error) => {
-        console.error(error)
-      })
-  }, [])
-
-  const handleClose = () => {
-    setSelectedUser(undefined)
-  }
-
   return (
-    <div className="dashboard-page">
-      <h2 className="dashboard-title">Users</h2>
-      <Table aria-label="Users table" useZebraStyles>
-        <TableHead>
-          <TableRow>
-            <TableHeader>Employee ID</TableHeader>
-            <TableHeader>Employee Name</TableHeader>
-            <TableHeader>Employee Email</TableHeader>
-            <TableHeader />
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {data.map((user: UserDto) => (
-            <TableRow key={user.id}>
-              <TableCell>{user.id}</TableCell>
-              <TableCell>{user.name}</TableCell>
-              <TableCell>{user.email}</TableCell>
-              <TableCell>
-                <Button kind="secondary" size="sm" onClick={() => setSelectedUser(user)}>
-                  View Details
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <ModalComponent show={!!selectedUser} onHide={handleClose} user={selectedUser} />
-    </div>
+    <Grid fullWidth className="default-grid">
+      <Column sm={4} md={8} lg={16}>
+        <h1 className="dashboard-title">LEXIS Dashboard</h1>
+        <p>Start from the base search views while detailed migration continues module by module.</p>
+      </Column>
+      {QUICK_LINKS.map((link) => (
+        <Column key={link.path} sm={4} md={4} lg={8}>
+          <Tile>
+            <h2 className="dashboard-title">{link.title}</h2>
+            <p>{link.description}</p>
+            <Link className="cds--link" to={link.path}>
+              Open view
+            </Link>
+          </Tile>
+        </Column>
+      ))}
+    </Grid>
   )
 }
 

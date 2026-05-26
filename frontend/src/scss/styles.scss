@@ -36,6 +36,46 @@ body {
   padding: 1rem;
 }
 
+.landing-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  background:
+    radial-gradient(circle at top right, #e0f4ff 0%, transparent 45%),
+    linear-gradient(180deg, #f4f8fb 0%, #ffffff 65%);
+}
+
+.landing-grid {
+  row-gap: 1rem;
+}
+
+.landing-logo {
+  max-width: 16rem;
+  height: auto;
+}
+
+.landing-actions {
+  display: grid;
+  gap: 1rem;
+}
+
+.landing-role-tags {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.unauthorized-page {
+  max-width: 56rem;
+  margin: 2rem auto;
+}
+
+.unauthorized-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
 .dashboard-page {
   max-width: 70rem;
   margin: 0 auto;

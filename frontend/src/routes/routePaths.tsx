@@ -1,7 +1,8 @@
 import { DashboardReference, Document, Search, UserAvatar } from '@carbon/icons-react'
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType, FC, ReactNode } from 'react'
 import { Navigate, type RouteObject } from 'react-router-dom'
 import Layout from '@/components/Layout'
+import { useAuth } from '@/context/auth/useAuth'
 import AdminPage from '@/pages/Admin'
 import DashboardPage from '@/pages/Dashboard'
 import FederalPage from '@/pages/Federal'
@@ -9,6 +10,7 @@ import FederalApplicationDetailsPage from '@/pages/FederalApplicationDetails'
 import IndianReservePage from '@/pages/IndianReserve'
 import IndianReservePermitCreatePage from '@/pages/IndianReservePermitCreate'
 import IndianReservePermitDetailsPage from '@/pages/IndianReservePermitDetails'
+import LandingPage from '@/pages/Landing'
 import NotFoundPage from '@/pages/NotFound'
 import ProvincialApplicationPage from '@/pages/ProvincialApplication'
 import ProvincialApplicationCreatePage from '@/pages/ProvincialApplicationCreate'
@@ -25,6 +27,7 @@ import ProvincialPermitCreatePage from '@/pages/ProvincialPermitCreate'
 import ProvincialReviewPage from '@/pages/ProvincialReview'
 import ProvincialSummaryPage from '@/pages/ProvincialSummary'
 import ReportsPage from '@/pages/Reports'
+import UnauthorizedPage from '@/pages/Unauthorized'
 
 export type RouteDescription = {
   id: string
@@ -32,15 +35,40 @@ export type RouteDescription = {
   element: ReactNode
   icon?: ComponentType
   isNavigation: boolean
+  requiredActions?: string[]
 } & RouteObject
 
-export type MenuItem = Pick<RouteDescription, 'id' | 'path' | 'icon'>
+const ProtectedRootRedirect: FC = () => {
+  const { defaultRoute } = useAuth()
+  return <Navigate to={defaultRoute} replace />
+}
 
-export const APP_ROUTES: RouteDescription[] = [
+export const PUBLIC_ROUTES: RouteDescription[] = [
+  {
+    path: '/',
+    id: 'Landing',
+    element: <LandingPage />,
+    isNavigation: false,
+  },
+  {
+    path: '/unauthorized',
+    id: 'Unauthorized',
+    element: <UnauthorizedPage />,
+    isNavigation: false,
+  },
+  {
+    path: '*',
+    id: 'Not Found',
+    element: <NotFoundPage />,
+    isNavigation: false,
+  },
+]
+
+export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/',
     id: 'RedirectRoot',
-    element: <Navigate to="/dashboard" replace />,
+    element: <ProtectedRootRedirect />,
     isNavigation: false,
   },
   {
@@ -58,6 +86,14 @@ export const APP_ROUTES: RouteDescription[] = [
     path: '/provincial',
     id: 'Provincial',
     icon: Search,
+    requiredActions: [
+      '/summary',
+      '/applicationsReview',
+      '/applicationSearch',
+      '/exemptionSearch',
+      '/offersSearch',
+      '/permitSearch',
+    ],
     element: (
       <Layout>
         <ProvincialPage />
@@ -199,6 +235,7 @@ export const APP_ROUTES: RouteDescription[] = [
     path: '/federal',
     id: 'Federal',
     icon: Search,
+    requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
     element: (
       <Layout>
         <FederalPage />
@@ -220,6 +257,7 @@ export const APP_ROUTES: RouteDescription[] = [
     path: '/indian-reserve',
     id: 'Indian Reserve',
     icon: Search,
+    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
     element: (
       <Layout>
         <IndianReservePage />
@@ -251,6 +289,18 @@ export const APP_ROUTES: RouteDescription[] = [
     path: '/reports',
     id: 'Reports',
     icon: Document,
+    requiredActions: [
+      '/applicationReport',
+      '/offerReport',
+      '/teacReport',
+      '/exemptionReport',
+      '/permitLedgerReport',
+      '/transportReport',
+      '/speciesGradeReport',
+      '/feeReport',
+      '/tenureReport',
+      'mofrListing',
+    ],
     element: (
       <Layout>
         <ReportsPage />
@@ -262,12 +312,23 @@ export const APP_ROUTES: RouteDescription[] = [
     path: '/admin',
     id: 'Admin',
     icon: UserAvatar,
+    requiredActions: ['/lexisAgentAdmin'],
     element: (
       <Layout>
         <AdminPage />
       </Layout>
     ),
     isNavigation: true,
+  },
+  {
+    path: '/unauthorized',
+    id: 'Unauthorized',
+    element: (
+      <Layout>
+        <UnauthorizedPage />
+      </Layout>
+    ),
+    isNavigation: false,
   },
   {
     path: '*',
@@ -281,12 +342,27 @@ export const APP_ROUTES: RouteDescription[] = [
   },
 ]
 
-export const getNavigationRoutes = (): MenuItem[] => {
-  return APP_ROUTES.filter((route) => route.isNavigation).map(({ id, path, icon }) => ({
-    id,
-    path,
-    icon,
-  }))
+export const getPublicRoutes = (): RouteDescription[] => PUBLIC_ROUTES
+
+export const getNoRoleRoutes = (): RouteDescription[] => {
+  return [
+    {
+      path: '/unauthorized',
+      id: 'Unauthorized',
+      element: (
+        <Layout>
+          <UnauthorizedPage />
+        </Layout>
+      ),
+      isNavigation: false,
+    },
+    {
+      path: '*',
+      id: 'UnauthorizedRedirect',
+      element: <Navigate to="/unauthorized" replace />,
+      isNavigation: false,
+    },
+  ]
 }
 
-export const getAppRoutes = (): RouteDescription[] => APP_ROUTES
+export const getProtectedRoutes = (): RouteDescription[] => PROTECTED_ROUTES

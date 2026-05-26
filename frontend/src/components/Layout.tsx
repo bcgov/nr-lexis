@@ -1,31 +1,82 @@
 import type { FC, ReactNode } from 'react'
-import { Home } from '@carbon/icons-react'
+import { Home, Logout } from '@carbon/icons-react'
 import {
   Content,
   Header,
-  HeaderNavigation,
   HeaderGlobalAction,
   HeaderGlobalBar,
   HeaderName,
+  HeaderNavigation,
   SkipToContent,
   Theme,
 } from '@carbon/react'
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/context/auth/useAuth'
 
 type Props = {
   children: ReactNode
 }
 
+type NavigationLink = {
+  to: string
+  label: string
+  requiredActions?: string[]
+}
+
+const NAVIGATION_LINKS: NavigationLink[] = [
+  { to: '/dashboard', label: 'Dashboard' },
+  {
+    to: '/provincial',
+    label: 'Provincial',
+    requiredActions: [
+      '/summary',
+      '/applicationsReview',
+      '/applicationSearch',
+      '/exemptionSearch',
+      '/offersSearch',
+      '/permitSearch',
+    ],
+  },
+  {
+    to: '/federal',
+    label: 'Federal',
+    requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
+  },
+  {
+    to: '/indian-reserve',
+    label: 'Indian Reserve',
+    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
+  },
+  {
+    to: '/reports',
+    label: 'Reports',
+    requiredActions: [
+      '/applicationReport',
+      '/offerReport',
+      '/teacReport',
+      '/exemptionReport',
+      '/permitLedgerReport',
+      '/transportReport',
+      '/speciesGradeReport',
+      '/feeReport',
+      '/tenureReport',
+      'mofrListing',
+    ],
+  },
+  { to: '/admin', label: 'Admin', requiredActions: ['/lexisAgentAdmin'] },
+]
+
 const Layout: FC<Props> = ({ children }) => {
   const navigate = useNavigate()
-  const navigationLinks = [
-    { to: '/dashboard', label: 'Dashboard' },
-    { to: '/provincial', label: 'Provincial' },
-    { to: '/federal', label: 'Federal' },
-    { to: '/indian-reserve', label: 'Indian Reserve' },
-    { to: '/reports', label: 'Reports' },
-    { to: '/admin', label: 'Admin' },
-  ]
+  const { capabilities, canPerform, defaultRoute, logout } = useAuth()
+
+  const visibleNavigationLinks = NAVIGATION_LINKS.filter((link) => {
+    if (!link.requiredActions || link.requiredActions.length === 0) {
+      return true
+    }
+
+    return link.requiredActions.some((action) => canPerform(action))
+  })
 
   return (
     <Theme theme="white">
@@ -33,17 +84,17 @@ const Layout: FC<Props> = ({ children }) => {
         <Header aria-label="NR LEXIS">
           <SkipToContent />
           <HeaderName
-            href="/dashboard"
+            href="/"
             prefix="NR"
             onClick={(event) => {
               event.preventDefault()
-              navigate('/dashboard')
+              navigate(defaultRoute)
             }}
           >
             LEXIS
           </HeaderName>
           <HeaderNavigation aria-label="LEXIS modules">
-            {navigationLinks.map((link) => (
+            {visibleNavigationLinks.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
@@ -58,15 +109,26 @@ const Layout: FC<Props> = ({ children }) => {
             ))}
           </HeaderNavigation>
           <HeaderGlobalBar>
-            <HeaderGlobalAction aria-label="Home" onClick={() => navigate('/dashboard')}>
+            <HeaderGlobalAction aria-label="Home" onClick={() => navigate(defaultRoute)}>
               <Home size={20} />
+            </HeaderGlobalAction>
+            <HeaderGlobalAction
+              aria-label="Log out"
+              onClick={() => {
+                void logout()
+                navigate('/')
+              }}
+            >
+              <Logout size={20} />
             </HeaderGlobalAction>
           </HeaderGlobalBar>
         </Header>
         <Content id="main-content" className="app-main">
           {children}
         </Content>
-        <footer className="app-footer">NR LEXIS</footer>
+        <footer className="app-footer">
+          NR LEXIS {capabilities.principal ? `- ${capabilities.principal}` : ''}
+        </footer>
       </div>
     </Theme>
   )
