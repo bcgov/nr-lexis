@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Button,
   Checkbox,
@@ -27,6 +28,13 @@ import type {
   ApplicationReviewSearchSortField,
 } from '@/interfaces/ApplicationReviewSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import {
+  parseCsvParam,
+  parseEnumParam,
+  parsePositiveIntParam,
+  parseSortDirectionParam,
+  setSearchParam,
+} from '@/pages/shared/search-query-utils'
 import {
   approveApplicationReview,
   sendApplicationReviewStatusEmail,
@@ -105,8 +113,47 @@ const SORT_COLUMNS: {
   { id: 'region', label: 'Region' },
 ]
 
+const DEFAULT_SORT_FIELD: ApplicationReviewSearchSortField = 'applicationNumber'
+const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
+const DEFAULT_PAGE = 1
+const DEFAULT_PAGE_SIZE = 10
+const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
+const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
+  (column) => column.id,
+) as ApplicationReviewSearchSortField[]
+
+const buildSearchParams = (
+  filters: ApplicationReviewSearchFilters,
+  sortField: ApplicationReviewSearchSortField,
+  sortDirection: 'asc' | 'desc',
+  page: number,
+  pageSize: number,
+): URLSearchParams => {
+  const params = new URLSearchParams()
+
+  setSearchParam(params, 'applicationNumber', filters.applicationNumber)
+  setSearchParam(params, 'productTypeCode', filters.productTypeCode)
+  setSearchParam(params, 'region', filters.region)
+  setSearchParam(params, 'receivedFromDate', filters.receivedFromDate)
+  setSearchParam(params, 'receivedToDate', filters.receivedToDate)
+  setSearchParam(params, 'listingFromDate', filters.listingFromDate)
+  setSearchParam(params, 'listingToDate', filters.listingToDate)
+  setSearchParam(params, 'sortField', sortField)
+  setSearchParam(params, 'sortDirection', sortDirection)
+  setSearchParam(params, 'page', page)
+  setSearchParam(params, 'pageSize', pageSize)
+
+  return params
+}
+
+const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]): RegionOption[] => {
+  const optionMap = new Map(regionOptions.map((option) => [option.id, option]))
+  return regionIds.map((regionId) => optionMap.get(regionId) ?? { id: regionId, text: regionId })
+}
+
 const ProvincialReviewPage: FC = () => {
   const { capabilities } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState<ApplicationReviewSearchFilters>(INITIAL_FILTERS)
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>(
     FALLBACK_PRODUCT_TYPE_OPTIONS,
@@ -115,13 +162,12 @@ const ProvincialReviewPage: FC = () => {
     FALLBACK_REVIEW_STATUS_OPTIONS,
   )
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
-  const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
   const [results, setResults] = useState<ApplicationReviewSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [sortField, setSortField] = useState<ApplicationReviewSearchSortField>('applicationNumber')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
-  const [pageSize, setPageSize] = useState(10)
+  const [sortField, setSortField] = useState<ApplicationReviewSearchSortField>(DEFAULT_SORT_FIELD)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [selectedRowsById, setSelectedRowsById] = useState<Record<string, boolean>>({})
   const [submittingApproval, setSubmittingApproval] = useState(false)
   const [submittingStatusUpdate, setSubmittingStatusUpdate] = useState(false)
@@ -139,6 +185,41 @@ const ProvincialReviewPage: FC = () => {
     [selectedStatusCode],
   )
   const canSendStatusEmail = EMAIL_SUPPORTED_STATUS_CODES.has(normalizedStatusCode)
+
+  const urlState = useMemo(() => {
+    const urlFilters: ApplicationReviewSearchFilters = {
+      applicationNumber: searchParams.get('applicationNumber') ?? '',
+      productTypeCode: searchParams.get('productTypeCode') ?? '',
+      region: parseCsvParam(searchParams.get('region')),
+      receivedFromDate: searchParams.get('receivedFromDate') ?? '',
+      receivedToDate: searchParams.get('receivedToDate') ?? '',
+      listingFromDate: searchParams.get('listingFromDate') ?? '',
+      listingToDate: searchParams.get('listingToDate') ?? '',
+    }
+    const parsedPageSize = parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
+
+    return {
+      filters: urlFilters,
+      sortField: parseEnumParam(
+        searchParams.get('sortField'),
+        SORT_FIELD_OPTIONS,
+        DEFAULT_SORT_FIELD,
+      ),
+      sortDirection: parseSortDirectionParam(
+        searchParams.get('sortDirection'),
+        DEFAULT_SORT_DIRECTION,
+      ),
+      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
+      pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
+        ? parsedPageSize
+        : DEFAULT_PAGE_SIZE,
+    }
+  }, [searchParams])
+
+  const selectedRegions = useMemo(
+    () => mapSelectedRegions(filters.region, regionOptions),
+    [filters.region, regionOptions],
+  )
 
   const hasDateValidationError = useMemo(() => {
     return (
@@ -197,14 +278,23 @@ const ProvincialReviewPage: FC = () => {
   }, [])
 
   useEffect(() => {
+    setFilters(urlState.filters)
+    setSortField(urlState.sortField)
+    setSortDirection(urlState.sortDirection)
+    setPageSize(urlState.pageSize)
+    setSelectedRowsById({})
+    setReviewActionStatus(null)
+  }, [urlState])
+
+  useEffect(() => {
     void runSearch({
-      filters: INITIAL_FILTERS,
-      page: 0,
-      pageSize: 10,
-      sortField: 'applicationNumber',
-      sortDirection: 'asc',
+      filters: urlState.filters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [runSearch])
+  }, [runSearch, urlState])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -232,30 +322,12 @@ const ProvincialReviewPage: FC = () => {
   }, [])
 
   const onSearch = () => {
-    setSelectedRowsById({})
-    setReviewActionStatus(null)
-    void runSearch({
-      filters,
-      page: 0,
-      pageSize,
-      sortField,
-      sortDirection,
-    })
+    setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
   const onHeaderClick = (column: ApplicationReviewSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
-    setSelectedRowsById({})
-    setReviewActionStatus(null)
-    setSortField(column)
-    setSortDirection(nextDirection)
-    void runSearch({
-      filters,
-      page: 0,
-      pageSize,
-      sortField: column,
-      sortDirection: nextDirection,
-    })
+    setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
   }
 
   const toggleRowSelection = (applicationNumber: string, checked: boolean) => {
@@ -345,11 +417,11 @@ const ProvincialReviewPage: FC = () => {
 
       setSelectedRowsById({})
       await runSearch({
-        filters,
-        page: results.page.number,
-        pageSize,
-        sortField,
-        sortDirection,
+        filters: urlState.filters,
+        page: urlState.page - 1,
+        pageSize: urlState.pageSize,
+        sortField: urlState.sortField,
+        sortDirection: urlState.sortDirection,
       })
     } finally {
       setSubmittingApproval(false)
@@ -472,11 +544,11 @@ const ProvincialReviewPage: FC = () => {
 
       setSelectedRowsById({})
       await runSearch({
-        filters,
-        page: results.page.number,
-        pageSize,
-        sortField,
-        sortDirection,
+        filters: urlState.filters,
+        page: urlState.page - 1,
+        pageSize: urlState.pageSize,
+        sortField: urlState.sortField,
+        sortDirection: urlState.sortDirection,
       })
     } finally {
       setSubmittingStatusUpdate(false)
@@ -526,7 +598,6 @@ const ProvincialReviewPage: FC = () => {
               selectedItems={selectedRegions}
               onChange={(event) => {
                 const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                setSelectedRegions(nextSelected)
                 setFilters((current) => ({
                   ...current,
                   region: nextSelected.map((item) => item.id),
@@ -746,16 +817,9 @@ const ProvincialReviewPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                setSelectedRowsById({})
-                setReviewActionStatus(null)
-                setPageSize(nextPageSize)
-                void runSearch({
-                  filters,
-                  page: page - 1,
-                  pageSize: nextPageSize,
-                  sortField,
-                  sortDirection,
-                })
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                )
               }}
             />
           </>
