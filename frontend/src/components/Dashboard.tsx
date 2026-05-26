@@ -1,8 +1,17 @@
 import type { FC } from 'react'
-import type { AxiosResponse } from '~/axios'
+import type { AxiosResponse } from 'axios'
 import type UserDto from '@/interfaces/UserDto'
 import { useEffect, useState } from 'react'
-import { Table, Modal, Button } from 'react-bootstrap'
+import {
+  Button,
+  Modal,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@carbon/react'
 import apiService from '@/service/api-service'
 
 type ModalProps = {
@@ -14,19 +23,13 @@ type ModalProps = {
 const ModalComponent: FC<ModalProps> = ({ show, onHide, user }) => {
   return (
     <Modal
-      show={show}
-      onHide={onHide}
-      size="lg"
-      aria-labelledby="contained-modal-title-vcenter"
-      centered
+      open={show}
+      passiveModal
+      modalHeading="Row Details"
+      onRequestClose={onHide}
+      onRequestSubmit={onHide}
     >
-      <Modal.Header closeButton>
-        <Modal.Title id="contained-modal-title-vcenter">Row Details</Modal.Title>
-      </Modal.Header>
-      <Modal.Body>{JSON.stringify(user)}</Modal.Body>
-      <Modal.Footer>
-        <Button onClick={onHide}>Close</Button>
-      </Modal.Footer>
+      <pre className="user-details-json">{JSON.stringify(user, null, 2)}</pre>
     </Modal>
   )
 }
@@ -61,30 +64,31 @@ const Dashboard: FC = () => {
   }
 
   return (
-    <div className="min-vh-45 mh-45 mw-50 ml-4">
-      <Table striped bordered hover>
-        <thead>
-          <tr>
-            <th>Employee ID</th>
-            <th>Employee Name</th>
-            <th>Employee Email</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
+    <div className="dashboard-page">
+      <h2 className="dashboard-title">Users</h2>
+      <Table aria-label="Users table" useZebraStyles>
+        <TableHead>
+          <TableRow>
+            <TableHeader>Employee ID</TableHeader>
+            <TableHeader>Employee Name</TableHeader>
+            <TableHeader>Employee Email</TableHeader>
+            <TableHeader />
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {data.map((user: UserDto) => (
-            <tr key={user.id}>
-              <td>{user.id}</td>
-              <td>{user.name}</td>
-              <td>{user.email}</td>
-              <td className="text-center">
-                <Button variant="secondary" size="sm" onClick={() => setSelectedUser(user)}>
+            <TableRow key={user.id}>
+              <TableCell>{user.id}</TableCell>
+              <TableCell>{user.name}</TableCell>
+              <TableCell>{user.email}</TableCell>
+              <TableCell>
+                <Button kind="secondary" size="sm" onClick={() => setSelectedUser(user)}>
                   View Details
                 </Button>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
+        </TableBody>
       </Table>
       <ModalComponent show={!!selectedUser} onHide={handleClose} user={selectedUser} />
     </div>

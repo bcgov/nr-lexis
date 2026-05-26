@@ -1,28 +1,74 @@
-import type { FC } from 'react'
-import { Footer, Header } from '@bcgov/design-system-react-components'
-import { Link } from '@tanstack/react-router'
-import { Button } from 'react-bootstrap'
+import type { FC, ReactNode } from 'react'
+import { Home } from '@carbon/icons-react'
+import {
+  Content,
+  Header,
+  HeaderNavigation,
+  HeaderGlobalAction,
+  HeaderGlobalBar,
+  HeaderName,
+  SkipToContent,
+  Theme,
+} from '@carbon/react'
+import { NavLink, useNavigate } from 'react-router-dom'
 
 type Props = {
-  children: React.ReactNode
+  children: ReactNode
 }
 
 const Layout: FC<Props> = ({ children }) => {
+  const navigate = useNavigate()
+  const navigationLinks = [
+    { to: '/dashboard', label: 'Dashboard' },
+    { to: '/provincial', label: 'Provincial' },
+    { to: '/federal', label: 'Federal' },
+    { to: '/indian-reserve', label: 'Indian Reserve' },
+    { to: '/reports', label: 'Reports' },
+    { to: '/admin', label: 'Admin' },
+  ]
+
   return (
-    <div className="d-flex flex-column min-vh-100">
-      <Header title={'QuickStart OpenShift'}>
-        {' '}
-        <Link to="/">
-          <Button variant="light" size="lg">
-            <i className="bi bi-house-door-fill" />
-          </Button>
-        </Link>
-      </Header>
-      <div className="d-flex flex-grow-1 align-items-start justify-content-center mt-5 mb-5 ml-1 mr-1">
-        {children}
+    <Theme theme="white">
+      <div className="app-shell">
+        <Header aria-label="NR LEXIS">
+          <SkipToContent />
+          <HeaderName
+            href="/dashboard"
+            prefix="NR"
+            onClick={(event) => {
+              event.preventDefault()
+              navigate('/dashboard')
+            }}
+          >
+            LEXIS
+          </HeaderName>
+          <HeaderNavigation aria-label="LEXIS modules">
+            {navigationLinks.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                className={({ isActive }) =>
+                  isActive
+                    ? 'cds--header__menu-item cds--header__menu-item--current app-header-nav-link'
+                    : 'cds--header__menu-item app-header-nav-link'
+                }
+              >
+                {link.label}
+              </NavLink>
+            ))}
+          </HeaderNavigation>
+          <HeaderGlobalBar>
+            <HeaderGlobalAction aria-label="Home" onClick={() => navigate('/dashboard')}>
+              <Home size={20} />
+            </HeaderGlobalAction>
+          </HeaderGlobalBar>
+        </Header>
+        <Content id="main-content" className="app-main">
+          {children}
+        </Content>
+        <footer className="app-footer">NR LEXIS</footer>
       </div>
-      <Footer />
-    </div>
+    </Theme>
   )
 }
 
