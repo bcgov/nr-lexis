@@ -16,6 +16,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TextArea,
   TextInput,
   Tile,
 } from '@carbon/react'
@@ -28,7 +29,9 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import {
   approveApplicationReview,
+  sendApplicationReviewStatusEmail,
   searchApplicationReviews,
+  updateApplicationReviewStatus,
 } from '@/service/application-review-search-service'
 import { fetchApplicationReviewOptions, type SearchOption } from '@/service/search-options-service'
 
@@ -45,6 +48,12 @@ type ReviewActionStatus = {
 const FALLBACK_PRODUCT_TYPE_OPTIONS: SearchOption[] = [
   { value: 'LOG', label: 'Logs' },
   { value: 'LUM', label: 'Lumber' },
+]
+
+const FALLBACK_REVIEW_STATUS_OPTIONS: SearchOption[] = [
+  { value: 'REJ', label: 'Rejected' },
+  { value: 'WDN', label: 'Withdrawn' },
+  { value: 'EXP', label: 'Expired' },
 ]
 
 const FALLBACK_REGION_OPTIONS: RegionOption[] = [
@@ -79,6 +88,10 @@ const isValidIsoDate = (value: string): boolean => {
 }
 
 const normalizeReviewStatus = (status: string): string => status.trim().toUpperCase()
+const normalizeEmail = (email: string): string => email.trim()
+const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+
+const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
 
 const SORT_COLUMNS: {
   id: ApplicationReviewSearchSortField
@@ -98,6 +111,9 @@ const ProvincialReviewPage: FC = () => {
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>(
     FALLBACK_PRODUCT_TYPE_OPTIONS,
   )
+  const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>(
+    FALLBACK_REVIEW_STATUS_OPTIONS,
+  )
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
   const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
   const [results, setResults] = useState<ApplicationReviewSearchResponse>(EMPTY_RESULTS)
@@ -108,12 +124,21 @@ const ProvincialReviewPage: FC = () => {
   const [pageSize, setPageSize] = useState(10)
   const [selectedRowsById, setSelectedRowsById] = useState<Record<string, boolean>>({})
   const [submittingApproval, setSubmittingApproval] = useState(false)
+  const [submittingStatusUpdate, setSubmittingStatusUpdate] = useState(false)
+  const [selectedStatusCode, setSelectedStatusCode] = useState('')
+  const [statusRemark, setStatusRemark] = useState('')
+  const [statusEmailAddress, setStatusEmailAddress] = useState('')
   const [reviewActionStatus, setReviewActionStatus] = useState<ReviewActionStatus | null>(null)
   const canApproveApplications = useMemo(() => {
     return (
       capabilities.roles.includes('APPLICATION_APPROVER') || capabilities.roles.includes('ADMIN')
     )
   }, [capabilities.roles])
+  const normalizedStatusCode = useMemo(
+    () => normalizeReviewStatus(selectedStatusCode),
+    [selectedStatusCode],
+  )
+  const canSendStatusEmail = EMAIL_SUPPORTED_STATUS_CODES.has(normalizedStatusCode)
 
   const hasDateValidationError = useMemo(() => {
     return (
@@ -187,6 +212,10 @@ const ProvincialReviewPage: FC = () => {
 
       if (options.productTypes.length > 0) {
         setProductTypeOptions(options.productTypes)
+      }
+
+      if (options.reviewStatuses.length > 0) {
+        setReviewStatusOptions(options.reviewStatuses)
       }
 
       if (options.regions.length > 0) {
@@ -327,6 +356,133 @@ const ProvincialReviewPage: FC = () => {
     }
   }
 
+  const onUpdateSelectedStatusClick = async (sendEmail: boolean) => {
+    if (!canApproveApplications) {
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Your account is not authorized to update application status.',
+      })
+      return
+    }
+
+    const selectedNumbers = Object.keys(selectedRowsById)
+    if (selectedNumbers.length === 0) {
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Select at least one NEW application before updating status.',
+      })
+      return
+    }
+
+    if (!normalizedStatusCode) {
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Select a review status before updating.',
+      })
+      return
+    }
+
+    const normalizedEmail = normalizeEmail(statusEmailAddress)
+    if (sendEmail) {
+      if (!canSendStatusEmail) {
+        setReviewActionStatus({
+          kind: 'error',
+          message: 'Status email is only supported for REJ and WDN.',
+        })
+        return
+      }
+
+      if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
+        setReviewActionStatus({
+          kind: 'error',
+          message: 'Enter a valid client email address before sending status email.',
+        })
+        return
+      }
+    }
+
+    setSubmittingStatusUpdate(true)
+    setReviewActionStatus(null)
+
+    try {
+      const updateResults = await Promise.all(
+        selectedNumbers.map(async (applicationNumber) => {
+          try {
+            const updateResponse = await updateApplicationReviewStatus(applicationNumber, {
+              statusCode: normalizedStatusCode,
+              remark: statusRemark,
+              clientEmailAddress: normalizedEmail,
+            })
+
+            const updateSuccess = updateResponse.updated && updateResponse.valid
+            let emailSuccess = true
+            let emailMessage = ''
+
+            if (sendEmail && updateSuccess) {
+              const emailResponse = await sendApplicationReviewStatusEmail(applicationNumber, {
+                statusCode: normalizedStatusCode,
+                remark: statusRemark,
+                clientEmailAddress: normalizedEmail,
+              })
+              emailSuccess = emailResponse.success
+              emailMessage = emailResponse.message
+            }
+
+            return {
+              success: updateSuccess && emailSuccess,
+              updateSuccess,
+              emailSuccess,
+              message: emailMessage || updateResponse.message,
+            }
+          } catch (error) {
+            console.warn(`Unable to update status for application ${applicationNumber}.`, error)
+            return {
+              success: false,
+              updateSuccess: false,
+              emailSuccess: !sendEmail,
+              message: 'Request failed.',
+            }
+          }
+        }),
+      )
+
+      const successCount = updateResults.filter((result) => result.success).length
+      const failureCount = updateResults.length - successCount
+      const emailFailureCount = sendEmail
+        ? updateResults.filter((result) => !result.emailSuccess).length
+        : 0
+
+      if (failureCount === 0) {
+        setReviewActionStatus({
+          kind: 'success',
+          message: sendEmail
+            ? `Updated status and sent email for ${successCount} application(s).`
+            : `Updated status for ${successCount} application(s).`,
+        })
+      } else {
+        const emailFailureSuffix =
+          sendEmail && emailFailureCount > 0 ? ` ${emailFailureCount} email(s) failed.` : ''
+        setReviewActionStatus({
+          kind: 'error',
+          message: sendEmail
+            ? `Updated and emailed ${successCount} application(s); ${failureCount} failed.${emailFailureSuffix}`
+            : `Updated ${successCount} application(s); ${failureCount} failed.`,
+        })
+      }
+
+      setSelectedRowsById({})
+      await runSearch({
+        filters,
+        page: results.page.number,
+        pageSize,
+        sortField,
+        sortDirection,
+      })
+    } finally {
+      setSubmittingStatusUpdate(false)
+    }
+  }
+
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
@@ -426,19 +582,90 @@ const ProvincialReviewPage: FC = () => {
               kind="secondary"
               onClick={() => void onApproveSelectedClick()}
               disabled={
-                loading || submittingApproval || selectedRowsCount === 0 || !canApproveApplications
+                loading ||
+                submittingApproval ||
+                submittingStatusUpdate ||
+                selectedRowsCount === 0 ||
+                !canApproveApplications
               }
             >
               Approve Selected Applications
             </Button>
           </div>
+          <div className="legacy-search-grid">
+            <Select
+              id="reviewStatusCode"
+              labelText="Update Status Code"
+              value={selectedStatusCode}
+              onChange={(event) => {
+                setReviewActionStatus(null)
+                setSelectedStatusCode(event.target.value)
+              }}
+            >
+              <SelectItem value="" text="Select status" />
+              {reviewStatusOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value} text={option.label} />
+              ))}
+            </Select>
+            <TextInput
+              id="reviewStatusEmail"
+              labelText="Client Email Address (required for status email)"
+              value={statusEmailAddress}
+              invalid={Boolean(statusEmailAddress) && !isValidEmail(statusEmailAddress)}
+              invalidText="Enter a valid email address."
+              onChange={(event) => {
+                setReviewActionStatus(null)
+                setStatusEmailAddress(event.target.value)
+              }}
+            />
+          </div>
+          <div className="legacy-search-actions">
+            <Button
+              kind="tertiary"
+              onClick={() => void onUpdateSelectedStatusClick(false)}
+              disabled={
+                loading ||
+                submittingApproval ||
+                submittingStatusUpdate ||
+                selectedRowsCount === 0 ||
+                !canApproveApplications ||
+                !normalizedStatusCode
+              }
+            >
+              Update Selected Status
+            </Button>
+            <Button
+              kind="tertiary"
+              onClick={() => void onUpdateSelectedStatusClick(true)}
+              disabled={
+                loading ||
+                submittingApproval ||
+                submittingStatusUpdate ||
+                selectedRowsCount === 0 ||
+                !canApproveApplications ||
+                !normalizedStatusCode ||
+                !canSendStatusEmail
+              }
+            >
+              Update Status and Send Email
+            </Button>
+          </div>
+          <div className="legacy-search-actions">
+            <TextArea
+              id="reviewStatusRemark"
+              labelText="Status Remark"
+              value={statusRemark}
+              onChange={(event) => {
+                setReviewActionStatus(null)
+                setStatusRemark(event.target.value)
+              }}
+            />
+          </div>
           {!!reviewActionStatus && (
             <InlineNotification
               className="legacy-inline-notification"
               kind={reviewActionStatus.kind}
-              title={
-                reviewActionStatus.kind === 'success' ? 'Approval complete' : 'Approval failed'
-              }
+              title={reviewActionStatus.kind === 'success' ? 'Action complete' : 'Action failed'}
               subtitle={reviewActionStatus.message}
               onCloseButtonClick={() => setReviewActionStatus(null)}
             />

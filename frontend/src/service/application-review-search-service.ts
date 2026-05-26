@@ -131,6 +131,17 @@ export type ApplicationReviewStatusUpdateResult = {
   message: string
 }
 
+export type ApplicationReviewStatusUpdateRequest = {
+  statusCode: string
+  remark: string
+  clientEmailAddress: string
+}
+
+export type ApplicationReviewStatusEmailResult = {
+  success: boolean
+  message: string
+}
+
 const buildBackendParams = (request: ApplicationReviewSearchRequest): URLSearchParams => {
   const params = new URLSearchParams()
 
@@ -222,6 +233,34 @@ export const approveApplicationReview = async (
     .getAxiosInstance()
     .post<ApplicationReviewStatusUpdateResult>(
       `/lexis/application-reviews/${applicationNumber}/approve`,
+    )
+
+  return response.data
+}
+
+export const updateApplicationReviewStatus = async (
+  applicationNumber: string,
+  payload: ApplicationReviewStatusUpdateRequest,
+): Promise<ApplicationReviewStatusUpdateResult> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .post<ApplicationReviewStatusUpdateResult>(
+      `/lexis/application-reviews/${applicationNumber}/status`,
+      payload,
+    )
+
+  return response.data
+}
+
+export const sendApplicationReviewStatusEmail = async (
+  applicationNumber: string,
+  payload: ApplicationReviewStatusUpdateRequest,
+): Promise<ApplicationReviewStatusEmailResult> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .post<ApplicationReviewStatusEmailResult>(
+      `/lexis/application-reviews/${applicationNumber}/status-email`,
+      payload,
     )
 
   return response.data
