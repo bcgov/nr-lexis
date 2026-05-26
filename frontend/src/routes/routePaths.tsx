@@ -124,6 +124,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/application',
     id: 'Provincial Application',
+    requiredActions: ['/applicationSearch'],
     element: (
       <Layout>
         <ProvincialApplicationPage />
@@ -134,6 +135,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/application/create',
     id: 'Create Provincial Application',
+    requiredActions: ['/applicationSearch', 'createApplication'],
     element: (
       <Layout>
         <ProvincialApplicationCreatePage />
@@ -144,6 +146,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/application/:applicationNumber',
     id: 'Provincial Application Details',
+    requiredActions: ['/applicationSearch', '/applicationDetails'],
     element: (
       <Layout>
         <ProvincialApplicationDetailsPage />
@@ -154,6 +157,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/exemption',
     id: 'Provincial Exemption',
+    requiredActions: ['/exemptionSearch'],
     element: (
       <Layout>
         <ProvincialExemptionPage />
@@ -164,6 +168,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/exemption/create',
     id: 'Create Provincial Exemption',
+    requiredActions: ['/exemptionSearch', '/createExemption'],
     element: (
       <Layout>
         <ProvincialExemptionCreatePage />
@@ -174,6 +179,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/exemption/:exemptionNumber',
     id: 'Provincial Exemption Details',
+    requiredActions: ['/exemptionSearch', '/exemptionDetails'],
     element: (
       <Layout>
         <ProvincialExemptionDetailsPage />
@@ -184,6 +190,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/offers',
     id: 'Provincial Offers',
+    requiredActions: ['/offersSearch'],
     element: (
       <Layout>
         <ProvincialOffersPage />
@@ -194,6 +201,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/offers/create',
     id: 'Create Provincial Offer',
+    requiredActions: ['/offersSearch', 'createOffer'],
     element: (
       <Layout>
         <ProvincialOfferCreatePage />
@@ -204,6 +212,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/offers/:offerNumber',
     id: 'Provincial Offer Details',
+    requiredActions: ['/offersSearch', '/offerDetails'],
     element: (
       <Layout>
         <ProvincialOfferDetailsPage />
@@ -214,6 +223,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/permit',
     id: 'Provincial Permit',
+    requiredActions: ['/permitSearch'],
     element: (
       <Layout>
         <ProvincialPermitPage />
@@ -224,6 +234,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/permit/create',
     id: 'Create Provincial Permit',
+    requiredActions: ['/permitSearch', 'createPermit'],
     element: (
       <Layout>
         <ProvincialPermitCreatePage />
@@ -234,6 +245,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/review',
     id: 'Provincial Review',
+    requiredActions: ['/applicationsReview'],
     element: (
       <Layout>
         <ProvincialReviewPage />
@@ -244,6 +256,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/summary',
     id: 'Provincial Summary',
+    requiredActions: ['/summary'],
     element: (
       <Layout>
         <ProvincialSummaryPage />
@@ -266,6 +279,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/federal/application/:applicationNumber',
     id: 'Federal Application Details',
+    requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
     element: (
       <Layout>
         <FederalApplicationDetailsPage />
@@ -288,6 +302,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/indian-reserve/permit/create',
     id: 'Create Indian Reserve Permit',
+    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
     element: (
       <Layout>
         <IndianReservePermitCreatePage />
@@ -298,6 +313,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/indian-reserve/permit/:permitNumber',
     id: 'Indian Reserve Permit Details',
+    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
     element: (
       <Layout>
         <IndianReservePermitDetailsPage />

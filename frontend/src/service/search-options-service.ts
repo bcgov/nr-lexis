@@ -136,3 +136,24 @@ export const fetchFederalApplicationOptions = async (): Promise<{
     applicationStatuses: parseOptions(data.applicationStatuses),
   }
 }
+
+export const fetchApplicationReviewOptions = async (): Promise<{
+  productTypes: SearchOption[]
+  regions: SearchOption[]
+  reviewStatuses: SearchOption[]
+}> => {
+  const data = await fetchOptions('/lexis/application-reviews/search/options')
+  if (!data) {
+    return {
+      productTypes: [],
+      regions: [],
+      reviewStatuses: [],
+    }
+  }
+
+  return {
+    productTypes: parseOptions(data.productTypes),
+    regions: parseOptions(data.regions),
+    reviewStatuses: parseOptions(data.reviewStatuses),
+  }
+}
