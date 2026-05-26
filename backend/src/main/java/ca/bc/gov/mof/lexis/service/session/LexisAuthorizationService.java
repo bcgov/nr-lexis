@@ -107,6 +107,23 @@ public class LexisAuthorizationService {
       return null;
     }
     String normalized = role.trim().toUpperCase(Locale.ROOT);
-    return normalized.isEmpty() ? null : normalized;
+    if (normalized.isEmpty()) {
+      return null;
+    }
+    return collapseForestClientScopedIndustryRole(normalized);
+  }
+
+  private String collapseForestClientScopedIndustryRole(String normalizedRole) {
+    for (String industryRole : configuredIndustryRoles) {
+      String prefix = industryRole + "_";
+      if (!normalizedRole.startsWith(prefix)) {
+        continue;
+      }
+      String forestClientSuffix = normalizedRole.substring(prefix.length());
+      if (!forestClientSuffix.isEmpty() && forestClientSuffix.chars().allMatch(Character::isDigit)) {
+        return industryRole;
+      }
+    }
+    return normalizedRole;
   }
 }

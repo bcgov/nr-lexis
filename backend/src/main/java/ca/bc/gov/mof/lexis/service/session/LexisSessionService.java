@@ -2,11 +2,14 @@ package ca.bc.gov.mof.lexis.service.session;
 
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionWelcomeDto;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -59,6 +62,50 @@ public class LexisSessionService {
     return normalizeRoles(Arrays.asList(roleHeader.split(",")));
   }
 
+  public List<String> parseRolesFromPrincipal(Authentication authentication) {
+    if (authentication == null || authentication.getAuthorities() == null) {
+      return List.of();
+    }
+    return parseAuthorities(authentication.getAuthorities());
+  }
+
+  public String resolveForestClientNumber(Authentication authentication) {
+    if (authentication == null || authentication.getAuthorities() == null) {
+      return null;
+    }
+
+    List<String> authorities =
+        authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
+    return resolveForestClientNumber(authorities);
+  }
+
+  public String resolveForestClientNumber(List<String> rawRoles) {
+    if (rawRoles == null || rawRoles.isEmpty()) {
+      return null;
+    }
+
+    for (String rawRole : rawRoles) {
+      String normalizedRole = normalizeRawRole(rawRole);
+      if (normalizedRole == null) {
+        continue;
+      }
+      String forestClientSuffix = extractForestClientSuffix(normalizedRole);
+      if (forestClientSuffix != null) {
+        return forestClientSuffix;
+      }
+    }
+    return null;
+  }
+
+  public List<String> parseAuthorities(Collection<? extends GrantedAuthority> authorities) {
+    if (authorities == null || authorities.isEmpty()) {
+      return List.of();
+    }
+    return normalizeRoles(
+        authorities.stream()
+            .map(GrantedAuthority::getAuthority)
+            .toList());
+  }
   public Set<String> getConfiguredIndustryRoles() {
     return Set.copyOf(configuredIndustryRoles);
   }
@@ -78,17 +125,69 @@ public class LexisSessionService {
       if (role.isEmpty()) {
         continue;
       }
-      normalized.add(role.toUpperCase(Locale.ROOT));
+      String normalizedRole = collapseForestClientScopedIndustryRole(role.toUpperCase(Locale.ROOT));
+      normalized.add(normalizedRole);
     }
     return List.copyOf(normalized);
   }
 
   private Set<String> parseRoleCsv(String csv) {
-    return new LinkedHashSet<>(normalizeRoles(Arrays.asList(csv.split(","))));
+    if (csv == null || csv.isBlank()) {
+      return Set.of();
+    }
+    LinkedHashSet<String> parsed = new LinkedHashSet<>();
+    for (String value : Arrays.asList(csv.split(","))) {
+      if (value == null) {
+        continue;
+      }
+      String normalizedRole = value.trim().toUpperCase(Locale.ROOT);
+      if (!normalizedRole.isEmpty()) {
+        parsed.add(normalizedRole);
+      }
+    }
+    return Set.copyOf(parsed);
   }
 
   private boolean isIndustryRole(String role) {
     return configuredIndustryRoles.contains(role);
+  }
+
+  private String collapseForestClientScopedIndustryRole(String normalizedRole) {
+    String forestClientSuffix = extractForestClientSuffix(normalizedRole);
+    if (forestClientSuffix == null) {
+      return normalizedRole;
+    }
+
+    for (String industryRole : configuredIndustryRoles) {
+      String prefix = industryRole + "_" + forestClientSuffix;
+      if (normalizedRole.equals(prefix)) {
+        return industryRole;
+      }
+    }
+    return normalizedRole;
+  }
+
+  private String normalizeRawRole(String rawRole) {
+    if (rawRole == null) {
+      return null;
+    }
+    String normalized = rawRole.trim().toUpperCase(Locale.ROOT);
+    return normalized.isEmpty() ? null : normalized;
+  }
+
+  private String extractForestClientSuffix(String normalizedRole) {
+    for (String industryRole : configuredIndustryRoles) {
+      String prefix = industryRole + "_";
+      if (!normalizedRole.startsWith(prefix)) {
+        continue;
+      }
+
+      String forestClientSuffix = normalizedRole.substring(prefix.length());
+      if (!forestClientSuffix.isEmpty() && forestClientSuffix.chars().allMatch(Character::isDigit)) {
+        return forestClientSuffix;
+      }
+    }
+    return null;
   }
 
   private String blankToNull(String value) {
