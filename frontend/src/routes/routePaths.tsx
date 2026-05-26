@@ -5,6 +5,7 @@ import Layout from '@/components/Layout'
 import AdminPage from '@/pages/Admin'
 import DashboardPage from '@/pages/Dashboard'
 import FederalPage from '@/pages/Federal'
+import FederalApplicationDetailsPage from '@/pages/FederalApplicationDetails'
 import IndianReservePage from '@/pages/IndianReserve'
 import NotFoundPage from '@/pages/NotFound'
 import ProvincialApplicationPage from '@/pages/ProvincialApplication'
@@ -202,6 +203,16 @@ export const APP_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isNavigation: true,
+  },
+  {
+    path: '/federal/application/:applicationNumber',
+    id: 'Federal Application Details',
+    element: (
+      <Layout>
+        <FederalApplicationDetailsPage />
+      </Layout>
+    ),
+    isNavigation: false,
   },
   {
     path: '/indian-reserve',
