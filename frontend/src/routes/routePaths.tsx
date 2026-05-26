@@ -11,6 +11,7 @@ import ProvincialApplicationPage from '@/pages/ProvincialApplication'
 import ProvincialApplicationCreatePage from '@/pages/ProvincialApplicationCreate'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
 import ProvincialExemptionPage from '@/pages/ProvincialExemption'
+import ProvincialExemptionCreatePage from '@/pages/ProvincialExemptionCreate'
 import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
 import ProvincialOffersPage from '@/pages/ProvincialOffers'
 import ProvincialPage from '@/pages/Provincial'
@@ -95,6 +96,16 @@ export const APP_ROUTES: RouteDescription[] = [
     element: (
       <Layout>
         <ProvincialExemptionPage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/provincial/exemption/create',
+    id: 'Create Provincial Exemption',
+    element: (
+      <Layout>
+        <ProvincialExemptionCreatePage />
       </Layout>
     ),
     isNavigation: false,
