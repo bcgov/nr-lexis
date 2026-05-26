@@ -24,6 +24,7 @@ import ProvincialOffersPage from '@/pages/ProvincialOffers'
 import ProvincialPage from '@/pages/Provincial'
 import ProvincialPermitPage from '@/pages/ProvincialPermit'
 import ProvincialPermitCreatePage from '@/pages/ProvincialPermitCreate'
+import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
 import ProvincialReviewPage from '@/pages/ProvincialReview'
 import ProvincialSummaryPage from '@/pages/ProvincialSummary'
 import ReportsPage from '@/pages/Reports'
@@ -243,6 +244,17 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
+    path: '/provincial/permit/:permitNumber',
+    id: 'Provincial Permit Details',
+    requiredActions: ['/permitSearch', '/permitDetails'],
+    element: (
+      <Layout>
+        <ProvincialPermitDetailsPage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
     path: '/provincial/review',
     id: 'Provincial Review',
     requiredActions: ['/applicationsReview'],
@@ -279,7 +291,11 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/federal/application/:applicationNumber',
     id: 'Federal Application Details',
-    requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
+    requiredActions: [
+      '/federalApplicationSearch',
+      '/federalApplicationDetails',
+      'viewFederalApplication',
+    ],
     element: (
       <Layout>
         <FederalApplicationDetailsPage />
@@ -313,7 +329,11 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/indian-reserve/permit/:permitNumber',
     id: 'Indian Reserve Permit Details',
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
+    requiredActions: [
+      '/indianReservePermitSearch',
+      '/indianReservePermitDetails',
+      'viewOICApplication',
+    ],
     element: (
       <Layout>
         <IndianReservePermitDetailsPage />

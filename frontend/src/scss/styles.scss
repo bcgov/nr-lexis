@@ -144,3 +144,42 @@ body {
 .legacy-sort-button:hover {
   text-decoration: underline;
 }
+
+.detail-page-header {
+  margin-bottom: 0.5rem;
+}
+
+.detail-page-error {
+  margin-bottom: 1rem;
+}
+
+.detail-tile-title {
+  margin: 0 0 1rem;
+}
+
+.detail-field-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 0;
+}
+
+.detail-field-item {
+  margin: 0;
+}
+
+.detail-field-label {
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+  margin: 0 0 0.25rem;
+}
+
+.detail-field-value {
+  font-weight: 600;
+  margin: 0;
+}
+
+.detail-list {
+  margin: 0;
+  padding-left: 1rem;
+}

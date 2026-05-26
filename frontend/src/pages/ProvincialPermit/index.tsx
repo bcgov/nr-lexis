@@ -324,7 +324,11 @@ const ProvincialPermitPage: FC = () => {
               <TableBody>
                 {results.content.map((row) => (
                   <TableRow key={row.permitNumber}>
-                    <TableCell>{row.permitNumber}</TableCell>
+                    <TableCell>
+                      <Link className="cds--link" to={`/provincial/permit/${row.permitNumber}`}>
+                        {row.permitNumber}
+                      </Link>
+                    </TableCell>
                     <TableCell>{row.status}</TableCell>
                     <TableCell>{row.applicantClientNumber}</TableCell>
                     <TableCell>{row.ownerClientNumber}</TableCell>
