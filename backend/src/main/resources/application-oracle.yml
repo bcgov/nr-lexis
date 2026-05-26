@@ -1,0 +1,25 @@
+spring:
+  autoconfigure:
+    # Re-enable datasource + JPA for Oracle profile.
+    exclude: []
+
+  datasource:
+    url: "jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCPS)(HOST=${DATABASE_HOST})(PORT=${DATABASE_PORT:1543}))(CONNECT_DATA=(SERVICE_NAME=${DATABASE_SERVICE_NAME})(SERVER=DEDICATED)))"
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 1
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      data-source-properties:
+        javax.net.ssl.trustStoreType: JKS
+        javax.net.ssl.trustStore: ${TRUSTSTORE_PATH:/cert/jssecacerts}
+        javax.net.ssl.trustStorePassword: ${KEYSTORE_SECRET}
+
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false

@@ -1,0 +1,484 @@
+package ca.bc.gov.mof.lexis.repository.oracle;
+
+import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import java.sql.Array;
+import java.sql.CallableStatement;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
+import oracle.jdbc.OracleConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.CallableStatementCallback;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+public abstract class OracleRepositorySupport {
+
+  protected static final String LEXIS_CODES_PACKAGE = "LEXIS_CODES.";
+  protected static final String LEXIS_GROUP_3_PACKAGE = "LEXIS_GROUP_3.";
+  protected static final String LEXIS_GROUP_4_PACKAGE = "LEXIS_GROUP_4.";
+  protected static final String LEXIS_GROUP_5_PACKAGE = "LEXIS_GROUP_5.";
+  protected static final String LEXIS_GROUP_9_PACKAGE = "LEXIS_GROUP_9.";
+  protected static final String LEXIS_GROUP_11_PACKAGE = "LEXIS_GROUP_11.";
+  protected static final String LEXIS_GROUP_13_PACKAGE = "LEXIS_GROUP_13.";
+  protected static final String LEXIS_GROUP_14_PACKAGE = "LEXIS_GROUP_14.";
+  protected static final String LEXIS_READ_ONLY_PACKAGE = "LEXIS_READ_ONLY.";
+
+  private static final String STRING_ARRAY_TYPE = "CBR_VARCHAR2_ARRAY";
+  private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
+
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
+  protected final JdbcTemplate jdbcTemplate;
+
+  protected OracleRepositorySupport(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
+    this.jdbcTemplate = jdbcTemplate;
+  }
+
+  @FunctionalInterface
+  protected interface SqlConsumer<T> {
+    void accept(T input) throws SQLException;
+  }
+
+  @FunctionalInterface
+  protected interface SqlRowMapper<T> {
+    T map(ResultSet rs) throws SQLException;
+  }
+
+  protected List<CodeNameDto> loadCodeNameOptions(String procedureSignature) {
+    return queryCursorProcedure(
+        procedureSignature,
+        null,
+        1,
+        rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2))));
+  }
+
+  protected <T> List<T> queryCursorProcedure(
+      String procedureSignature,
+      SqlConsumer<CallableStatement> binder,
+      int cursorOutIndex,
+      SqlRowMapper<T> rowMapper) {
+    String call = "{ call " + procedureSignature + " }";
+
+    try {
+      return jdbcTemplate.execute(
+          call,
+          (CallableStatementCallback<List<T>>) cs -> {
+            if (binder != null) {
+              binder.accept(cs);
+            }
+            cs.registerOutParameter(cursorOutIndex, Types.REF_CURSOR);
+            cs.execute();
+
+            List<T> results = new ArrayList<>();
+            try (ResultSet rs = (ResultSet) cs.getObject(cursorOutIndex)) {
+              if (rs == null) {
+                return results;
+              }
+              while (rs.next()) {
+                results.add(rowMapper.map(rs));
+              }
+            }
+            return results;
+          });
+    } catch (DataAccessException ex) {
+      logger.warn("Oracle procedure call failed [{}]: {}", procedureSignature, ex.getMessage());
+      return List.of();
+    }
+  }
+
+  protected <T> Optional<T> queryCursorSingle(
+      String procedureSignature,
+      SqlConsumer<CallableStatement> binder,
+      int cursorOutIndex,
+      SqlRowMapper<T> rowMapper) {
+    List<T> results = queryCursorProcedure(procedureSignature, binder, cursorOutIndex, rowMapper);
+    if (results.isEmpty()) {
+      return Optional.empty();
+    }
+    return Optional.ofNullable(results.get(0));
+  }
+
+  protected <T> List<T> queryDynamicPagedProcedure(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues,
+      int page,
+      SqlRowMapper<T> rowMapper) {
+    String call = "{ call " + procedureSignature + " }";
+
+    try {
+      return jdbcTemplate.execute(
+          call,
+          (CallableStatementCallback<List<T>>) cs -> {
+            cs.setString(1, whereSql);
+
+            Array array = null;
+            if (bindValues != null && !bindValues.isEmpty()) {
+              Connection connection = cs.getConnection();
+              OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
+              array = oracleConnection.createOracleArray(STRING_ARRAY_TYPE, bindValues.toArray(String[]::new));
+              cs.setArray(2, array);
+            } else {
+              cs.setNull(2, Types.ARRAY, STRING_ARRAY_TYPE);
+            }
+
+            cs.setInt(3, bindValues == null ? 0 : bindValues.size());
+            cs.setInt(4, Math.max(0, page));
+            cs.registerOutParameter(5, Types.REF_CURSOR);
+            cs.execute();
+
+            List<T> results = new ArrayList<>();
+            try (ResultSet rs = (ResultSet) cs.getObject(5)) {
+              if (rs == null) {
+                return results;
+              }
+              while (rs.next()) {
+                results.add(rowMapper.map(rs));
+              }
+            } finally {
+              if (array != null) {
+                array.free();
+              }
+            }
+            return results;
+          });
+    } catch (DataAccessException ex) {
+      logger.warn("Oracle dynamic call failed [{}]: {}", procedureSignature, ex.getMessage());
+      return List.of();
+    }
+  }
+
+  protected boolean executeProcedure(String procedureSignature, SqlConsumer<CallableStatement> binder) {
+    String call = "{ call " + procedureSignature + " }";
+    try {
+      Boolean result =
+          jdbcTemplate.execute(
+              call,
+              (CallableStatementCallback<Boolean>)
+                  cs -> {
+                    if (binder != null) {
+                      binder.accept(cs);
+                    }
+                    cs.execute();
+                    return Boolean.TRUE;
+                  });
+      return Boolean.TRUE.equals(result);
+    } catch (DataAccessException ex) {
+      logger.warn("Oracle procedure execution failed [{}]: {}", procedureSignature, ex.getMessage());
+      return false;
+    }
+  }
+
+  protected <T> List<T> queryDynamicAllPages(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues,
+      SqlRowMapper<T> rowMapper) {
+    List<T> allResults = new ArrayList<>();
+
+    for (int page = 0; page < 10_000; page++) {
+      List<T> currentPage =
+          queryDynamicPagedProcedure(procedureSignature, whereSql, bindValues, page, rowMapper);
+      if (currentPage.isEmpty()) {
+        break;
+      }
+      allResults.addAll(currentPage);
+      if (currentPage.size() < 500) {
+        // Legacy procedures page server-side; short page usually means completion.
+        continue;
+      }
+    }
+
+    return allResults;
+  }
+
+  protected String trim(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  protected LocalDate toLocalDate(Date value) {
+    return value == null ? null : value.toLocalDate();
+  }
+
+  protected LocalDate toLocalDate(Timestamp value) {
+    return value == null ? null : value.toLocalDateTime().toLocalDate();
+  }
+
+  protected Long getLong(ResultSet rs, String column) {
+    try {
+      long value = rs.getLong(column);
+      return rs.wasNull() ? null : value;
+    } catch (SQLException ex) {
+      return null;
+    }
+  }
+
+  protected Double getDouble(ResultSet rs, String column) {
+    try {
+      double value = rs.getDouble(column);
+      return rs.wasNull() ? null : value;
+    } catch (SQLException ex) {
+      return null;
+    }
+  }
+
+  protected String getString(ResultSet rs, String column) {
+    try {
+      return trim(rs.getString(column));
+    } catch (SQLException ex) {
+      return null;
+    }
+  }
+
+  protected LocalDate getLocalDate(ResultSet rs, String column) {
+    try {
+      Timestamp timestamp = rs.getTimestamp(column);
+      if (timestamp != null) {
+        return timestamp.toLocalDateTime().toLocalDate();
+      }
+    } catch (SQLException ignored) {
+      // Fall through to DATE attempt below.
+    }
+
+    try {
+      Date date = rs.getDate(column);
+      return date == null ? null : date.toLocalDate();
+    } catch (SQLException ex) {
+      return null;
+    }
+  }
+
+  protected boolean safeIdentifier(String value) {
+    return value != null && SAFE_IDENTIFIER.matcher(value).matches();
+  }
+
+  protected String sanitizedSort(
+      String sortField,
+      Map<String, String> allowedColumns,
+      String defaultField,
+      String defaultDirection) {
+    String fallbackColumn = allowedColumns.getOrDefault(defaultField, defaultField);
+    String fallbackDirection = "DESC".equalsIgnoreCase(defaultDirection) ? "DESC" : "ASC";
+
+    if (sortField == null || sortField.isBlank()) {
+      return " ORDER BY " + fallbackColumn + " " + fallbackDirection;
+    }
+
+    String normalized = sortField.trim();
+    String direction = "ASC";
+
+    if (normalized.toUpperCase().endsWith(" DESC")) {
+      direction = "DESC";
+      normalized = normalized.substring(0, normalized.length() - 5).trim();
+    } else if (normalized.toUpperCase().endsWith(" ASC")) {
+      normalized = normalized.substring(0, normalized.length() - 4).trim();
+    }
+
+    String mapped = allowedColumns.get(normalized);
+    if (mapped == null || !safeIdentifier(mapped)) {
+      mapped = fallbackColumn;
+      direction = fallbackDirection;
+    }
+
+    return " ORDER BY " + mapped + " " + direction;
+  }
+
+  protected static final class SqlWhere {
+    private final String sql;
+    private final List<String> bindValues;
+
+    SqlWhere(String sql, List<String> bindValues) {
+      this.sql = sql;
+      this.bindValues = bindValues;
+    }
+
+    public String sql() {
+      return sql;
+    }
+
+    public List<String> bindValues() {
+      return bindValues;
+    }
+  }
+
+  protected final class SqlWhereBuilder {
+    private final StringBuilder sql = new StringBuilder(" WHERE 1=1");
+    private final List<String> bindValues = new ArrayList<>();
+
+    public SqlWhereBuilder addLike(String column, String value) {
+      String normalized = trim(value);
+      if (normalized == null) {
+        return this;
+      }
+      addBind(" AND " + column + " LIKE '%' || :" + (bindValues.size() + 1) + " || '%'", normalized);
+      return this;
+    }
+
+    public SqlWhereBuilder addEquals(String column, String value) {
+      String normalized = trim(value);
+      if (normalized == null) {
+        return this;
+      }
+      addBind(" AND " + column + " = :" + (bindValues.size() + 1), normalized);
+      return this;
+    }
+
+    public SqlWhereBuilder addEqualsNumber(String column, Long value) {
+      if (value == null) {
+        return this;
+      }
+      addBind(" AND " + column + " = TO_NUMBER(:" + (bindValues.size() + 1) + ")", value.toString());
+      return this;
+    }
+
+    public SqlWhereBuilder addInEqualsNumberOrNoResults(String column, List<Long> values) {
+      if (values == null || values.isEmpty()) {
+        sql.append(" AND ").append(column).append(" = TO_NUMBER(0)");
+        return this;
+      }
+
+      Set<Long> distinct = new LinkedHashSet<>();
+      for (Long value : values) {
+        if (value != null && value > 0) {
+          distinct.add(value);
+        }
+      }
+
+      if (distinct.isEmpty()) {
+        sql.append(" AND ").append(column).append(" = TO_NUMBER(0)");
+        return this;
+      }
+
+      sql.append(" AND (");
+      int index = 0;
+      for (Long value : distinct) {
+        if (index++ > 0) {
+          sql.append(" OR ");
+        }
+        sql.append(column).append(" = TO_NUMBER(:").append(bindValues.size() + 1).append(")");
+        bindValues.add(value.toString());
+      }
+      sql.append(")");
+      return this;
+    }
+
+    public SqlWhereBuilder addInLikeOrNoResults(String column, List<Long> values) {
+      if (values == null || values.isEmpty()) {
+        sql.append(" AND ").append(column).append(" = TO_NUMBER(0)");
+        return this;
+      }
+
+      Set<Long> distinct = new LinkedHashSet<>();
+      for (Long value : values) {
+        if (value != null && value > 0) {
+          distinct.add(value);
+        }
+      }
+
+      if (distinct.isEmpty()) {
+        sql.append(" AND ").append(column).append(" = TO_NUMBER(0)");
+        return this;
+      }
+
+      sql.append(" AND (");
+      int index = 0;
+      for (Long value : distinct) {
+        if (index++ > 0) {
+          sql.append(" OR ");
+        }
+        sql.append(column).append(" LIKE '%' || :").append(bindValues.size() + 1).append(" || '%'");
+        bindValues.add(value.toString());
+      }
+      sql.append(")");
+      return this;
+    }
+
+    public SqlWhereBuilder addDateGte(String column, LocalDate value) {
+      if (value == null) {
+        return this;
+      }
+      addBind(
+          " AND " + column + " >= TO_DATE(:" + (bindValues.size() + 1) + ", 'YYYY-MM-DD')",
+          value.toString());
+      return this;
+    }
+
+    public SqlWhereBuilder addDateLte(String column, LocalDate value) {
+      if (value == null) {
+        return this;
+      }
+      addBind(
+          " AND " + column + " <= TO_DATE(:" + (bindValues.size() + 1) + ", 'YYYY-MM-DD')",
+          value.toString());
+      return this;
+    }
+
+    public SqlWhereBuilder addRaw(String rawSqlFragment) {
+      if (rawSqlFragment != null && !rawSqlFragment.isBlank()) {
+        sql.append(rawSqlFragment);
+      }
+      return this;
+    }
+
+    public SqlWhereBuilder addRawWithBinds(String rawSqlFragment, String... values) {
+      if (rawSqlFragment == null || rawSqlFragment.isBlank()) {
+        return this;
+      }
+      sql.append(rawSqlFragment);
+      if (values != null) {
+        for (String value : values) {
+          bindValues.add(value);
+        }
+      }
+      return this;
+    }
+
+    public int nextBindIndex() {
+      return bindValues.size() + 1;
+    }
+
+    public SqlWhere build(String orderByClause) {
+      String orderBy = orderByClause == null ? "" : orderByClause;
+      return new SqlWhere(sql + orderBy, List.copyOf(bindValues));
+    }
+
+    private void addBind(String clause, String value) {
+      sql.append(clause);
+      bindValues.add(value);
+    }
+  }
+
+  protected Map<String, String> mapOf(String... keyValuePairs) {
+    Map<String, String> values = new LinkedHashMap<>();
+    if (keyValuePairs == null) {
+      return values;
+    }
+
+    for (int i = 0; i + 1 < keyValuePairs.length; i += 2) {
+      values.put(keyValuePairs[i], keyValuePairs[i + 1]);
+    }
+    return values;
+  }
+
+  protected SqlWhereBuilder newWhereBuilder() {
+    return new SqlWhereBuilder();
+  }
+}

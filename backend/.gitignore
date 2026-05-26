@@ -155,5 +155,6 @@ src/main/resources/cert/jssecacerts
 
 # Local Spring profile (contains DB / Jasper credentials — see application-local.yml header)
 src/main/resources/application-local.yml
+!src/main/resources/application-oracle.yml
 
 src/main/resources/static
