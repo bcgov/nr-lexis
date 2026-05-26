@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -23,6 +23,13 @@ import type {
   ProvincialOfferSearchSortField,
 } from '@/interfaces/ProvincialOfferSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import {
+  parseCsvParam,
+  parseEnumParam,
+  parsePositiveIntParam,
+  parseSortDirectionParam,
+  setSearchParam,
+} from '@/pages/shared/search-query-utils'
 import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
 import { fetchProvincialOfferOptions } from '@/service/search-options-service'
 
@@ -77,18 +84,94 @@ const SORT_COLUMNS: {
   { id: 'offerWithdrawalDate', label: 'Offer Withdrawn Date' },
 ]
 
+const DEFAULT_SORT_FIELD: ProvincialOfferSearchSortField = 'listingDate'
+const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
+const DEFAULT_PAGE = 1
+const DEFAULT_PAGE_SIZE = 10
+const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
+const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
+  (column) => column.id,
+) as ProvincialOfferSearchSortField[]
+
+const buildSearchParams = (
+  filters: ProvincialOfferSearchFilters,
+  sortField: ProvincialOfferSearchSortField,
+  sortDirection: 'asc' | 'desc',
+  page: number,
+  pageSize: number,
+): URLSearchParams => {
+  const params = new URLSearchParams()
+
+  setSearchParam(params, 'applicationNumber', filters.applicationNumber)
+  setSearchParam(params, 'packageNumber', filters.packageNumber)
+  setSearchParam(params, 'clientNumber', filters.clientNumber)
+  setSearchParam(params, 'listingFromDate', filters.listingFromDate)
+  setSearchParam(params, 'listingToDate', filters.listingToDate)
+  setSearchParam(params, 'region', filters.region)
+  setSearchParam(params, 'withdrawalFromDate', filters.withdrawalFromDate)
+  setSearchParam(params, 'withdrawalToDate', filters.withdrawalToDate)
+  setSearchParam(params, 'sortField', sortField)
+  setSearchParam(params, 'sortDirection', sortDirection)
+  setSearchParam(params, 'page', page)
+  setSearchParam(params, 'pageSize', pageSize)
+
+  return params
+}
+
+const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]): RegionOption[] => {
+  const optionMap = new Map(regionOptions.map((option) => [option.id, option]))
+  return regionIds.map((regionId) => optionMap.get(regionId) ?? { id: regionId, text: regionId })
+}
+
 const ProvincialOffersPage: FC = () => {
   const { canPerform } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState<ProvincialOfferSearchFilters>(INITIAL_FILTERS)
-  const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [sortField, setSortField] = useState<ProvincialOfferSearchSortField>('listingDate')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
-  const [pageSize, setPageSize] = useState(10)
+  const [sortField, setSortField] = useState<ProvincialOfferSearchSortField>(DEFAULT_SORT_FIELD)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const canCreateOffer = canPerform('createOffer')
+
+  const urlState = useMemo(() => {
+    const urlFilters: ProvincialOfferSearchFilters = {
+      applicationNumber: searchParams.get('applicationNumber') ?? '',
+      packageNumber: searchParams.get('packageNumber') ?? '',
+      clientNumber: searchParams.get('clientNumber') ?? '',
+      listingFromDate: searchParams.get('listingFromDate') ?? '',
+      listingToDate: searchParams.get('listingToDate') ?? '',
+      region: parseCsvParam(searchParams.get('region')),
+      withdrawalFromDate: searchParams.get('withdrawalFromDate') ?? '',
+      withdrawalToDate: searchParams.get('withdrawalToDate') ?? '',
+    }
+
+    const parsedPageSize = parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
+
+    return {
+      filters: urlFilters,
+      sortField: parseEnumParam(
+        searchParams.get('sortField'),
+        SORT_FIELD_OPTIONS,
+        DEFAULT_SORT_FIELD,
+      ),
+      sortDirection: parseSortDirectionParam(
+        searchParams.get('sortDirection'),
+        DEFAULT_SORT_DIRECTION,
+      ),
+      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
+      pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
+        ? parsedPageSize
+        : DEFAULT_PAGE_SIZE,
+    }
+  }, [searchParams])
+
+  const selectedRegions = useMemo(
+    () => mapSelectedRegions(filters.region, regionOptions),
+    [filters.region, regionOptions],
+  )
 
   const hasDateValidationError = useMemo(() => {
     return (
@@ -129,14 +212,21 @@ const ProvincialOffersPage: FC = () => {
   }, [])
 
   useEffect(() => {
+    setFilters(urlState.filters)
+    setSortField(urlState.sortField)
+    setSortDirection(urlState.sortDirection)
+    setPageSize(urlState.pageSize)
+  }, [urlState])
+
+  useEffect(() => {
     void runSearch({
-      filters: INITIAL_FILTERS,
-      page: 0,
-      pageSize: 10,
-      sortField: 'listingDate',
-      sortDirection: 'asc',
+      filters: urlState.filters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [runSearch])
+  }, [runSearch, urlState])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -155,26 +245,12 @@ const ProvincialOffersPage: FC = () => {
   }, [])
 
   const onSearch = () => {
-    void runSearch({
-      filters,
-      page: 0,
-      pageSize,
-      sortField,
-      sortDirection,
-    })
+    setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
   const onHeaderClick = (column: ProvincialOfferSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
-    setSortField(column)
-    setSortDirection(nextDirection)
-    void runSearch({
-      filters,
-      page: 0,
-      pageSize,
-      sortField: column,
-      sortDirection: nextDirection,
-    })
+    setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
   }
 
   return (
@@ -244,7 +320,6 @@ const ProvincialOffersPage: FC = () => {
               selectedItems={selectedRegions}
               onChange={(event) => {
                 const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                setSelectedRegions(nextSelected)
                 setFilters((current) => ({
                   ...current,
                   region: nextSelected.map((item) => item.id),
@@ -341,14 +416,9 @@ const ProvincialOffersPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                setPageSize(nextPageSize)
-                void runSearch({
-                  filters,
-                  page: page - 1,
-                  pageSize: nextPageSize,
-                  sortField,
-                  sortDirection,
-                })
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                )
               }}
             />
           </>

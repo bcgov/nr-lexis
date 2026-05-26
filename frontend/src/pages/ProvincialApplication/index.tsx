@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Checkbox,
@@ -28,6 +28,13 @@ import type {
   ProvincialApplicationSearchSortField,
 } from '@/interfaces/ProvincialApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import {
+  parseCsvParam,
+  parseEnumParam,
+  parsePositiveIntParam,
+  parseSortDirectionParam,
+  setSearchParam,
+} from '@/pages/shared/search-query-utils'
 import { searchProvincialApplications } from '@/service/provincial-application-search-service'
 import {
   fetchProvincialApplicationOptions,
@@ -116,11 +123,53 @@ const SORT_COLUMNS: {
   { id: 'listingDate', label: 'Listing Date' },
 ]
 
+const DEFAULT_SORT_FIELD: ProvincialApplicationSearchSortField = 'applicationNumber'
+const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc'
+const DEFAULT_PAGE = 1
+const DEFAULT_PAGE_SIZE = 10
+const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
+const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
+  (column) => column.id,
+) as ProvincialApplicationSearchSortField[]
+
+const buildSearchParams = (
+  filters: ProvincialApplicationSearchFilters,
+  sortField: ProvincialApplicationSearchSortField,
+  sortDirection: 'asc' | 'desc',
+  page: number,
+  pageSize: number,
+): URLSearchParams => {
+  const params = new URLSearchParams()
+
+  setSearchParam(params, 'applicationNumber', filters.applicationNumber)
+  setSearchParam(params, 'packageNumber', filters.packageNumber)
+  setSearchParam(params, 'exemptionType', filters.exemptionType)
+  setSearchParam(params, 'exemptionNumber', filters.exemptionNumber)
+  setSearchParam(params, 'applicationStatus', filters.applicationStatus)
+  setSearchParam(params, 'productTypeCode', filters.productTypeCode)
+  setSearchParam(params, 'region', filters.region)
+  setSearchParam(params, 'listingFromDate', filters.listingFromDate)
+  setSearchParam(params, 'listingToDate', filters.listingToDate)
+  setSearchParam(params, 'applicantClientNumber', filters.applicantClientNumber)
+  setSearchParam(params, 'ownerClientNumber', filters.ownerClientNumber)
+  setSearchParam(params, 'sortField', sortField)
+  setSearchParam(params, 'sortDirection', sortDirection)
+  setSearchParam(params, 'page', page)
+  setSearchParam(params, 'pageSize', pageSize)
+
+  return params
+}
+
+const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]): RegionOption[] => {
+  const optionMap = new Map(regionOptions.map((option) => [option.id, option]))
+  return regionIds.map((regionId) => optionMap.get(regionId) ?? { id: regionId, text: regionId })
+}
+
 const ProvincialApplicationPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState<ProvincialApplicationSearchFilters>(INITIAL_FILTERS)
-  const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>(
     FALLBACK_EXEMPTION_TYPE_OPTIONS,
@@ -135,9 +184,9 @@ const ProvincialApplicationPage: FC = () => {
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [sortField, setSortField] =
-    useState<ProvincialApplicationSearchSortField>('applicationNumber')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
-  const [pageSize, setPageSize] = useState(10)
+    useState<ProvincialApplicationSearchSortField>(DEFAULT_SORT_FIELD)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [selectedRowsById, setSelectedRowsById] = useState<
     Record<string, ProvincialApplicationSearchItem>
   >({})
@@ -145,6 +194,45 @@ const ProvincialApplicationPage: FC = () => {
   const canCreateExemption = canPerform('/createExemption')
   const canCreateApplication = canPerform('createApplication')
   const selectedRowsCount = Object.keys(selectedRowsById).length
+
+  const urlState = useMemo(() => {
+    const urlFilters: ProvincialApplicationSearchFilters = {
+      applicationNumber: searchParams.get('applicationNumber') ?? '',
+      packageNumber: searchParams.get('packageNumber') ?? '',
+      exemptionType: searchParams.get('exemptionType') ?? '',
+      exemptionNumber: searchParams.get('exemptionNumber') ?? '',
+      applicationStatus: searchParams.get('applicationStatus') ?? '',
+      productTypeCode: searchParams.get('productTypeCode') ?? '',
+      region: parseCsvParam(searchParams.get('region')),
+      listingFromDate: searchParams.get('listingFromDate') ?? '',
+      listingToDate: searchParams.get('listingToDate') ?? '',
+      applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
+      ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
+    }
+    const parsedPageSize = parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
+
+    return {
+      filters: urlFilters,
+      sortField: parseEnumParam(
+        searchParams.get('sortField'),
+        SORT_FIELD_OPTIONS,
+        DEFAULT_SORT_FIELD,
+      ),
+      sortDirection: parseSortDirectionParam(
+        searchParams.get('sortDirection'),
+        DEFAULT_SORT_DIRECTION,
+      ),
+      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
+      pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
+        ? parsedPageSize
+        : DEFAULT_PAGE_SIZE,
+    }
+  }, [searchParams])
+
+  const selectedRegions = useMemo(
+    () => mapSelectedRegions(filters.region, regionOptions),
+    [filters.region, regionOptions],
+  )
 
   const hasDateValidationError = useMemo(() => {
     return !isValidIsoDate(filters.listingFromDate) || !isValidIsoDate(filters.listingToDate)
@@ -172,14 +260,23 @@ const ProvincialApplicationPage: FC = () => {
   }, [])
 
   useEffect(() => {
+    setFilters(urlState.filters)
+    setSortField(urlState.sortField)
+    setSortDirection(urlState.sortDirection)
+    setPageSize(urlState.pageSize)
+    setSelectedRowsById({})
+    setExemptionStatus(null)
+  }, [urlState])
+
+  useEffect(() => {
     void runSearch({
-      filters: INITIAL_FILTERS,
-      page: 0,
-      pageSize: 10,
-      sortField: 'applicationNumber',
-      sortDirection: 'desc',
+      filters: urlState.filters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [runSearch])
+  }, [runSearch, urlState])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -210,28 +307,14 @@ const ProvincialApplicationPage: FC = () => {
   const onSearch = () => {
     setSelectedRowsById({})
     setExemptionStatus(null)
-    void runSearch({
-      filters,
-      page: 0,
-      pageSize,
-      sortField,
-      sortDirection,
-    })
+    setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
   const onHeaderClick = (column: ProvincialApplicationSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
     setSelectedRowsById({})
     setExemptionStatus(null)
-    setSortField(column)
-    setSortDirection(nextDirection)
-    void runSearch({
-      filters,
-      page: 0,
-      pageSize,
-      sortField: column,
-      sortDirection: nextDirection,
-    })
+    setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
   }
 
   const selectableRows = useMemo(() => {
@@ -403,7 +486,6 @@ const ProvincialApplicationPage: FC = () => {
               selectedItems={selectedRegions}
               onChange={(event) => {
                 const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                setSelectedRegions(nextSelected)
                 setFilters((current) => ({
                   ...current,
                   region: nextSelected.map((item) => item.id),
@@ -574,14 +656,11 @@ const ProvincialApplicationPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                setPageSize(nextPageSize)
-                void runSearch({
-                  filters,
-                  page: page - 1,
-                  pageSize: nextPageSize,
-                  sortField,
-                  sortDirection,
-                })
+                setSelectedRowsById({})
+                setExemptionStatus(null)
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                )
               }}
             />
           </>

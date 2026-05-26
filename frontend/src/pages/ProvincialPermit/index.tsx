@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -25,6 +25,13 @@ import type {
   ProvincialPermitSearchSortField,
 } from '@/interfaces/ProvincialPermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import {
+  parseCsvParam,
+  parseEnumParam,
+  parsePositiveIntParam,
+  parseSortDirectionParam,
+  setSearchParam,
+} from '@/pages/shared/search-query-utils'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
 
@@ -88,10 +95,50 @@ const SORT_COLUMNS: {
   { id: 'region', label: 'Region' },
 ]
 
+const DEFAULT_SORT_FIELD: ProvincialPermitSearchSortField = 'permitNumber'
+const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
+const DEFAULT_PAGE = 1
+const DEFAULT_PAGE_SIZE = 10
+const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
+const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
+  (column) => column.id,
+) as ProvincialPermitSearchSortField[]
+
+const buildSearchParams = (
+  filters: ProvincialPermitSearchFilters,
+  sortField: ProvincialPermitSearchSortField,
+  sortDirection: 'asc' | 'desc',
+  page: number,
+  pageSize: number,
+): URLSearchParams => {
+  const params = new URLSearchParams()
+
+  setSearchParam(params, 'applicationNumber', filters.applicationNumber)
+  setSearchParam(params, 'packageNumber', filters.packageNumber)
+  setSearchParam(params, 'region', filters.region)
+  setSearchParam(params, 'issuedFromDate', filters.issuedFromDate)
+  setSearchParam(params, 'issuedToDate', filters.issuedToDate)
+  setSearchParam(params, 'permitStatus', filters.permitStatus)
+  setSearchParam(params, 'permitNumber', filters.permitNumber)
+  setSearchParam(params, 'ownerClientNumber', filters.ownerClientNumber)
+  setSearchParam(params, 'applicantClientNumber', filters.applicantClientNumber)
+  setSearchParam(params, 'sortField', sortField)
+  setSearchParam(params, 'sortDirection', sortDirection)
+  setSearchParam(params, 'page', page)
+  setSearchParam(params, 'pageSize', pageSize)
+
+  return params
+}
+
+const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]): RegionOption[] => {
+  const optionMap = new Map(regionOptions.map((option) => [option.id, option]))
+  return regionIds.map((regionId) => optionMap.get(regionId) ?? { id: regionId, text: regionId })
+}
+
 const ProvincialPermitPage: FC = () => {
   const { canPerform } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState<ProvincialPermitSearchFilters>(INITIAL_FILTERS)
-  const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>(
     FALLBACK_PERMIT_STATUS_OPTIONS,
@@ -99,10 +146,47 @@ const ProvincialPermitPage: FC = () => {
   const [results, setResults] = useState<ProvincialPermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [sortField, setSortField] = useState<ProvincialPermitSearchSortField>('permitNumber')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
-  const [pageSize, setPageSize] = useState(10)
+  const [sortField, setSortField] = useState<ProvincialPermitSearchSortField>(DEFAULT_SORT_FIELD)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const canCreatePermit = canPerform('createPermit')
+
+  const urlState = useMemo(() => {
+    const urlFilters: ProvincialPermitSearchFilters = {
+      applicationNumber: searchParams.get('applicationNumber') ?? '',
+      packageNumber: searchParams.get('packageNumber') ?? '',
+      region: parseCsvParam(searchParams.get('region')),
+      issuedFromDate: searchParams.get('issuedFromDate') ?? '',
+      issuedToDate: searchParams.get('issuedToDate') ?? '',
+      permitStatus: searchParams.get('permitStatus') ?? '',
+      permitNumber: searchParams.get('permitNumber') ?? '',
+      ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
+      applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
+    }
+    const parsedPageSize = parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
+
+    return {
+      filters: urlFilters,
+      sortField: parseEnumParam(
+        searchParams.get('sortField'),
+        SORT_FIELD_OPTIONS,
+        DEFAULT_SORT_FIELD,
+      ),
+      sortDirection: parseSortDirectionParam(
+        searchParams.get('sortDirection'),
+        DEFAULT_SORT_DIRECTION,
+      ),
+      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
+      pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
+        ? parsedPageSize
+        : DEFAULT_PAGE_SIZE,
+    }
+  }, [searchParams])
+
+  const selectedRegions = useMemo(
+    () => mapSelectedRegions(filters.region, regionOptions),
+    [filters.region, regionOptions],
+  )
 
   const hasDateValidationError = useMemo(() => {
     return !isValidIsoDate(filters.issuedFromDate) || !isValidIsoDate(filters.issuedToDate)
@@ -130,14 +214,21 @@ const ProvincialPermitPage: FC = () => {
   }, [])
 
   useEffect(() => {
+    setFilters(urlState.filters)
+    setSortField(urlState.sortField)
+    setSortDirection(urlState.sortDirection)
+    setPageSize(urlState.pageSize)
+  }, [urlState])
+
+  useEffect(() => {
     void runSearch({
-      filters: INITIAL_FILTERS,
-      page: 0,
-      pageSize: 10,
-      sortField: 'permitNumber',
-      sortDirection: 'asc',
+      filters: urlState.filters,
+      page: urlState.page - 1,
+      pageSize: urlState.pageSize,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
     })
-  }, [runSearch])
+  }, [runSearch, urlState])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -159,26 +250,12 @@ const ProvincialPermitPage: FC = () => {
   }, [])
 
   const onSearch = () => {
-    void runSearch({
-      filters,
-      page: 0,
-      pageSize,
-      sortField,
-      sortDirection,
-    })
+    setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
   const onHeaderClick = (column: ProvincialPermitSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
-    setSortField(column)
-    setSortDirection(nextDirection)
-    void runSearch({
-      filters,
-      page: 0,
-      pageSize,
-      sortField: column,
-      sortDirection: nextDirection,
-    })
+    setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
   }
 
   return (
@@ -220,7 +297,6 @@ const ProvincialPermitPage: FC = () => {
               selectedItems={selectedRegions}
               onChange={(event) => {
                 const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                setSelectedRegions(nextSelected)
                 setFilters((current) => ({
                   ...current,
                   region: nextSelected.map((item) => item.id),
@@ -355,14 +431,9 @@ const ProvincialPermitPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                setPageSize(nextPageSize)
-                void runSearch({
-                  filters,
-                  page: page - 1,
-                  pageSize: nextPageSize,
-                  sortField,
-                  sortDirection,
-                })
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                )
               }}
             />
           </>
