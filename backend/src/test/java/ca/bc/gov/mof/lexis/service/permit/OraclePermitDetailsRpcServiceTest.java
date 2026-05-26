@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
@@ -11,6 +14,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyCon
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -28,6 +32,7 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Mock private PermitRpcRepository repository;
   @Mock private LexisApplicationService applicationService;
+  @Mock private ExemptionService exemptionService;
 
   @InjectMocks private OraclePermitDetailsRpcService service;
 
@@ -128,6 +133,53 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(packageFees.scaleList()).isEmpty();
   }
 
+  @Test
+  void permitDataAfterScaleUpdateShouldAggregateVolumePiecesFeesAndExemptionVolume() {
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale("101", "TM1", "HEM", "J", 10.25d, 12L, "7000123", "PKG-903"),
+                scale("102", "TM2", "FIR", "K", 5.50d, 8L, "7000123", "PKG-999")));
+    when(repository.findPermitPolicyContextByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                new PermitPolicyContextRow(
+                    7000123L, 1835L, LocalDate.of(2026, 1, 15), "EX-700", "US", 0.0d)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(repository.findFixedExemptionRate("EX-700")).thenReturn(Optional.of(BigDecimal.valueOf(2.5d)));
+    when(repository.findFeePolicyPercentIncrease(LocalDate.of(2026, 1, 15), 1835L))
+        .thenReturn(BigDecimal.ZERO);
+    when(exemptionService.findByExemptionNumber("EX-700")).thenReturn(Optional.of(exemptionDetail("EX-700", 55.5d)));
+
+    PermitDataAfterScaleUpdateRpcResponseDto response =
+        service.getPermitDataAfterScaleUpdate(7000123L);
+
+    assertThat(response.packageVolume()).isEqualTo("15.8");
+    assertThat(response.pieces()).isEqualTo(20L);
+    assertThat(response.totalFees()).isEqualTo("$39.38");
+    assertThat(response.exemptionVolume()).isEqualTo(55.5d);
+  }
+
+  @Test
+  void packageVolumeSumShouldOnlyIncludeSelectedPackageOnPermit() {
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale("101", "TM1", "HEM", "J", 10.25d, 12L, "7000123", "PKG-903"),
+                scale("102", "TM2", "FIR", "K", 5.50d, 8L, "7000123", "PKG-999")));
+
+    PermitPackageVolumeSumRpcResponseDto response =
+        service.getPackageVolumeSum(7000123L, "PKG-903");
+
+    assertThat(response.volume()).isEqualTo("10.3");
+  }
+
+  @Test
+  void packageVolumeSumShouldReturnZeroForInvalidInput() {
+    PermitPackageVolumeSumRpcResponseDto response = service.getPackageVolumeSum(null, null);
+    assertThat(response.volume()).isEqualTo("0.0");
+  }
+
   private PermitScaleDetailRow scale(
       String id,
       String timbermark,
@@ -151,5 +203,27 @@ class OraclePermitDetailsRpcServiceTest {
         "100.00",
         "12.0",
         "1.5");
+  }
+
+  private ExemptionDetailDto exemptionDetail(String exemptionNumber, double remainingVolume) {
+    return new ExemptionDetailDto(
+        exemptionNumber,
+        "M",
+        "Ministerial",
+        "ACT",
+        "Active",
+        "00077881",
+        "00055667",
+        1000456L,
+        "APP",
+        LocalDate.of(2026, 1, 1),
+        LocalDate.of(2026, 12, 31),
+        100.0d,
+        44.5d,
+        remainingVolume,
+        "",
+        false,
+        List.of(),
+        List.of());
   }
 }

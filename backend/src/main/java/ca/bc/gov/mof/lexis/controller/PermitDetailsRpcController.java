@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
@@ -87,6 +89,31 @@ public class PermitDetailsRpcController {
 
     return ResponseEntity.ok(
         service.getScaleFeesForPackage(packageNumber, permitNumber, isMinistryUser(authentication)));
+  }
+
+  @GetMapping("/permit-data-after-scale-update")
+  public ResponseEntity<PermitDataAfterScaleUpdateRpcResponseDto> getPermitDataAfterScaleUpdate(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for permit data after scale update");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getPermitDataAfterScaleUpdate(permitNumber));
+  }
+
+  @GetMapping("/package-volume-sum")
+  public ResponseEntity<PermitPackageVolumeSumRpcResponseDto> getPackageVolumeSum(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for package volume sum");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getPackageVolumeSum(permitNumber, packageNumber));
   }
 
   private Set<String> parseRoleCsv(String csv) {

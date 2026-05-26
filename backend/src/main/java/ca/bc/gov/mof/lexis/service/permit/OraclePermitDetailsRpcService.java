@@ -1,6 +1,8 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitRpcScaleItemDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
@@ -9,6 +11,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -43,11 +46,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private final PermitRpcRepository repository;
   private final LexisApplicationService applicationService;
+  private final ExemptionService exemptionService;
 
   public OraclePermitDetailsRpcService(
-      PermitRpcRepository repository, LexisApplicationService applicationService) {
+      PermitRpcRepository repository,
+      LexisApplicationService applicationService,
+      ExemptionService exemptionService) {
     this.repository = repository;
     this.applicationService = applicationService;
+    this.exemptionService = exemptionService;
   }
 
   @Override
@@ -145,6 +152,50 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         maskTotalFeeForPackage ? "$" : formatCurrency(totalFeeForPackage),
         scaleList,
         resolveGrowthType(packageNumber));
+  }
+
+  @Override
+  public PermitDataAfterScaleUpdateRpcResponseDto getPermitDataAfterScaleUpdate(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return new PermitDataAfterScaleUpdateRpcResponseDto("0.0", 0L, "$0.00", 0.0d);
+    }
+
+    String permitNumberString = permitNumber.toString();
+    FeeCalculationContext feeContext = buildFeeContext(permitNumber, null, null);
+    List<PermitScaleDetailRow> permitScales =
+        repository.findScaleDetailsByPermitNumber(permitNumber).stream()
+            .filter(scale -> permitNumberString.equals(trimToNull(scale.exportPermitDetailNumber())))
+            .toList();
+
+    double totalVolume = permitScales.stream().mapToDouble(PermitScaleDetailRow::speciesGradeVolume).sum();
+    long totalPieces = permitScales.stream().mapToLong(PermitScaleDetailRow::piecesCount).sum();
+    BigDecimal totalFees = sumFees(permitScales, feeContext);
+    double exemptionVolume =
+        exemptionService
+            .findByExemptionNumber(feeContext.exemptionNumber())
+            .map(exemption -> exemption.remainingVolume())
+            .orElse(0.0d);
+
+    return new PermitDataAfterScaleUpdateRpcResponseDto(
+        formatVolume(totalVolume), totalPieces, formatCurrency(totalFees), exemptionVolume);
+  }
+
+  @Override
+  public PermitPackageVolumeSumRpcResponseDto getPackageVolumeSum(Long permitNumber, String packageNumber) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (permitNumber == null || permitNumber < 1 || normalizedPackageNumber == null) {
+      return new PermitPackageVolumeSumRpcResponseDto("0.0");
+    }
+
+    String permitNumberString = permitNumber.toString();
+    double packageVolume =
+        repository.findScaleDetailsByPermitNumber(permitNumber).stream()
+            .filter(scale -> permitNumberString.equals(trimToNull(scale.exportPermitDetailNumber())))
+            .filter(scale -> normalizedPackageNumber.equals(trimToNull(scale.packageNumber())))
+            .mapToDouble(PermitScaleDetailRow::speciesGradeVolume)
+            .sum();
+
+    return new PermitPackageVolumeSumRpcResponseDto(formatVolume(packageVolume));
   }
 
   private PermitRpcScaleItemDto toSummaryScaleItem(

@@ -5,6 +5,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
@@ -98,5 +100,34 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).getScaleFeesForPackage("PKG-903", 7000123L, true);
+  }
+
+  @Test
+  void permitDataAfterScaleUpdateShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitDataAfterScaleUpdateRpcResponseDto dto =
+        new PermitDataAfterScaleUpdateRpcResponseDto("12.4", 7L, "$11.11", 80.0d);
+    when(service.getPermitDataAfterScaleUpdate(7000123L)).thenReturn(dto);
+
+    ResponseEntity<PermitDataAfterScaleUpdateRpcResponseDto> response =
+        controller.getPermitDataAfterScaleUpdate(7000123L);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getPermitDataAfterScaleUpdate(7000123L);
+  }
+
+  @Test
+  void packageVolumeSumShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPackageVolumeSumRpcResponseDto dto = new PermitPackageVolumeSumRpcResponseDto("12.4");
+    when(service.getPackageVolumeSum(7000123L, "PKG-903")).thenReturn(dto);
+
+    ResponseEntity<PermitPackageVolumeSumRpcResponseDto> response =
+        controller.getPackageVolumeSum(7000123L, "PKG-903");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getPackageVolumeSum(7000123L, "PKG-903");
   }
 }
