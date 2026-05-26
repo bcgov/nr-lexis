@@ -43,6 +43,26 @@ const ProtectedRootRedirect: FC = () => {
   return <Navigate to={defaultRoute} replace />
 }
 
+type RouteGuardProps = {
+  requiredActions?: string[]
+  children: ReactNode
+}
+
+const RouteActionGuard: FC<RouteGuardProps> = ({ children, requiredActions }) => {
+  const { canPerform } = useAuth()
+
+  if (!requiredActions || requiredActions.length === 0) {
+    return <>{children}</>
+  }
+
+  const canAccessRoute = requiredActions.some((action) => canPerform(action))
+  if (!canAccessRoute) {
+    return <Navigate to="/unauthorized" replace />
+  }
+
+  return <>{children}</>
+}
+
 export const PUBLIC_ROUTES: RouteDescription[] = [
   {
     path: '/',
@@ -365,4 +385,11 @@ export const getNoRoleRoutes = (): RouteDescription[] => {
   ]
 }
 
-export const getProtectedRoutes = (): RouteDescription[] => PROTECTED_ROUTES
+export const getProtectedRoutes = (): RouteDescription[] => {
+  return PROTECTED_ROUTES.map((route) => ({
+    ...route,
+    element: (
+      <RouteActionGuard requiredActions={route.requiredActions}>{route.element}</RouteActionGuard>
+    ),
+  }))
+}

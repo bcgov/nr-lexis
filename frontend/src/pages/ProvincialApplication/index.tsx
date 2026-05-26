@@ -28,6 +28,10 @@ import type {
   ProvincialApplicationSearchSortField,
 } from '@/interfaces/ProvincialApplicationSearch'
 import { searchProvincialApplications } from '@/service/provincial-application-search-service'
+import {
+  fetchProvincialApplicationOptions,
+  type SearchOption,
+} from '@/service/search-options-service'
 
 type RegionOption = {
   id: string
@@ -39,12 +43,10 @@ type ExemptionStatus = {
   message: string
 }
 
-const REGION_OPTIONS: RegionOption[] = [
-  { id: 'CAR', text: 'Cariboo (CAR)' },
-  { id: 'KAM', text: 'Kamloops (KAM)' },
-  { id: 'NEL', text: 'Northeast (NEL)' },
-  { id: 'OMI', text: 'Omineca (OMI)' },
-  { id: 'SKE', text: 'Skeena (SKE)' },
+const FALLBACK_REGION_OPTIONS: RegionOption[] = [
+  { id: '11', text: 'Cariboo (11)' },
+  { id: '12', text: 'Coast (12)' },
+  { id: '24', text: 'Skeena (24)' },
 ]
 
 const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
@@ -71,9 +73,22 @@ const EMPTY_RESULTS: ProvincialApplicationSearchResponse = {
   },
 }
 
-const EXEMPTION_TYPE_OPTIONS = ['', 'Section 1', 'Section 2', 'Section 3']
-const APPLICATION_STATUS_OPTIONS = ['', 'Draft', 'Submitted', 'Returned', 'Approved', 'Closed']
-const PRODUCT_TYPE_OPTIONS = ['', 'Lumber', 'Logs', 'Pulp', 'Chips']
+const FALLBACK_EXEMPTION_TYPE_OPTIONS: SearchOption[] = [
+  { value: 'ALL', label: 'All' },
+  { value: 'FEE', label: 'Fee in Lieu' },
+  { value: 'APP', label: 'Application Exemption' },
+]
+
+const FALLBACK_APPLICATION_STATUS_OPTIONS: SearchOption[] = [
+  { value: 'NEW', label: 'New' },
+  { value: 'REV', label: 'In Review' },
+  { value: 'PER', label: 'Permitted' },
+]
+
+const FALLBACK_PRODUCT_TYPE_OPTIONS: SearchOption[] = [
+  { value: 'LOG', label: 'Logs' },
+  { value: 'LUM', label: 'Lumber' },
+]
 
 const isValidIsoDate = (value: string): boolean => {
   if (!value.trim()) return true
@@ -97,6 +112,16 @@ const SORT_COLUMNS: {
 const ProvincialApplicationPage: FC = () => {
   const [filters, setFilters] = useState<ProvincialApplicationSearchFilters>(INITIAL_FILTERS)
   const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
+  const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
+  const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>(
+    FALLBACK_EXEMPTION_TYPE_OPTIONS,
+  )
+  const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>(
+    FALLBACK_APPLICATION_STATUS_OPTIONS,
+  )
+  const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>(
+    FALLBACK_PRODUCT_TYPE_OPTIONS,
+  )
   const [results, setResults] = useState<ProvincialApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -143,6 +168,32 @@ const ProvincialApplicationPage: FC = () => {
       sortDirection: 'desc',
     })
   }, [runSearch])
+
+  useEffect(() => {
+    const loadOptions = async () => {
+      const options = await fetchProvincialApplicationOptions()
+
+      if (options.exemptionTypes.length > 0) {
+        setExemptionTypeOptions(options.exemptionTypes)
+      }
+      if (options.applicationStatuses.length > 0) {
+        setApplicationStatusOptions(options.applicationStatuses)
+      }
+      if (options.productTypes.length > 0) {
+        setProductTypeOptions(options.productTypes)
+      }
+      if (options.regions.length > 0) {
+        setRegionOptions(
+          options.regions.map((option) => ({
+            id: option.value,
+            text: `${option.label} (${option.value})`,
+          })),
+        )
+      }
+    }
+
+    void loadOptions()
+  }, [])
 
   const onSearch = () => {
     setSelectedRowsById({})
@@ -277,8 +328,9 @@ const ProvincialApplicationPage: FC = () => {
                 setFilters((current) => ({ ...current, exemptionType: event.target.value }))
               }
             >
-              {EXEMPTION_TYPE_OPTIONS.map((value) => (
-                <SelectItem key={value || 'all'} text={value || 'All types'} value={value} />
+              <SelectItem text="All types" value="" />
+              {exemptionTypeOptions.map((option) => (
+                <SelectItem key={option.value} text={option.label} value={option.value} />
               ))}
             </Select>
             <TextInput
@@ -297,8 +349,9 @@ const ProvincialApplicationPage: FC = () => {
                 setFilters((current) => ({ ...current, applicationStatus: event.target.value }))
               }
             >
-              {APPLICATION_STATUS_OPTIONS.map((value) => (
-                <SelectItem key={value || 'all'} text={value || 'All statuses'} value={value} />
+              <SelectItem text="All statuses" value="" />
+              {applicationStatusOptions.map((option) => (
+                <SelectItem key={option.value} text={option.label} value={option.value} />
               ))}
             </Select>
             <Select
@@ -309,18 +362,15 @@ const ProvincialApplicationPage: FC = () => {
                 setFilters((current) => ({ ...current, productTypeCode: event.target.value }))
               }
             >
-              {PRODUCT_TYPE_OPTIONS.map((value) => (
-                <SelectItem
-                  key={value || 'all'}
-                  text={value || 'All product types'}
-                  value={value}
-                />
+              <SelectItem text="All product types" value="" />
+              {productTypeOptions.map((option) => (
+                <SelectItem key={option.value} text={option.label} value={option.value} />
               ))}
             </Select>
             <MultiSelect
               id="region"
               titleText="Region"
-              items={REGION_OPTIONS}
+              items={regionOptions}
               itemToString={(item) => (item ? item.text : '')}
               label="Select region(s)"
               selectionFeedback="fixed"

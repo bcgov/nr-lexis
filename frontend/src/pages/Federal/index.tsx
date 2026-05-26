@@ -23,8 +23,15 @@ import type {
   FederalApplicationSearchResponse,
 } from '@/interfaces/FederalApplicationSearch'
 import { searchFederalApplications } from '@/service/federal-application-search-service'
+import { fetchFederalApplicationOptions, type SearchOption } from '@/service/search-options-service'
 
-const APPLICATION_STATUS_OPTIONS = ['', 'Draft', 'Submitted', 'Returned', 'Approved', 'Closed']
+const FALLBACK_APPLICATION_STATUS_OPTIONS: SearchOption[] = [
+  { value: 'Draft', label: 'Draft' },
+  { value: 'Submitted', label: 'Submitted' },
+  { value: 'Returned', label: 'Returned' },
+  { value: 'Approved', label: 'Approved' },
+  { value: 'Closed', label: 'Closed' },
+]
 
 const INITIAL_FILTERS: FederalApplicationSearchFilters = {
   applicationNumber: '',
@@ -54,6 +61,9 @@ const isValidIsoDate = (value: string): boolean => {
 
 const FederalPage: FC = () => {
   const [filters, setFilters] = useState<FederalApplicationSearchFilters>(INITIAL_FILTERS)
+  const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>(
+    FALLBACK_APPLICATION_STATUS_OPTIONS,
+  )
   const [results, setResults] = useState<FederalApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -105,6 +115,17 @@ const FederalPage: FC = () => {
     })
   }, [runSearch])
 
+  useEffect(() => {
+    const loadOptions = async () => {
+      const options = await fetchFederalApplicationOptions()
+      if (options.applicationStatuses.length > 0) {
+        setApplicationStatusOptions(options.applicationStatuses)
+      }
+    }
+
+    void loadOptions()
+  }, [])
+
   const onSearch = () => {
     void runSearch({
       filters,
@@ -150,8 +171,9 @@ const FederalPage: FC = () => {
                 setFilters((current) => ({ ...current, applicationStatus: event.target.value }))
               }
             >
-              {APPLICATION_STATUS_OPTIONS.map((value) => (
-                <SelectItem key={value || 'all'} text={value || 'All statuses'} value={value} />
+              <SelectItem text="All statuses" value="" />
+              {applicationStatusOptions.map((option) => (
+                <SelectItem key={option.value} text={option.label} value={option.value} />
               ))}
             </Select>
             <TextInput

@@ -28,6 +28,10 @@ import type {
   ProvincialExemptionSearchSortField,
 } from '@/interfaces/ProvincialExemptionSearch'
 import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
+import {
+  fetchProvincialExemptionOptions,
+  type SearchOption,
+} from '@/service/search-options-service'
 
 type RegionOption = {
   id: string
@@ -39,7 +43,7 @@ type ApprovalStatus = {
   message: string
 }
 
-const REGION_OPTIONS: RegionOption[] = [
+const FALLBACK_REGION_OPTIONS: RegionOption[] = [
   { id: 'CAR', text: 'Cariboo (CAR)' },
   { id: 'KAM', text: 'Kamloops (KAM)' },
   { id: 'NEL', text: 'Northeast (NEL)' },
@@ -47,15 +51,13 @@ const REGION_OPTIONS: RegionOption[] = [
   { id: 'SKE', text: 'Skeena (SKE)' },
 ]
 
-const EXEMPTION_TYPE_OPTIONS = [
-  { value: '', label: 'All types' },
+const FALLBACK_EXEMPTION_TYPE_OPTIONS: SearchOption[] = [
   { value: 'SECTION_1', label: 'Section 1' },
   { value: 'SECTION_2', label: 'Section 2' },
   { value: 'SECTION_3', label: 'Section 3' },
 ]
 
-const EXEMPTION_STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
+const FALLBACK_EXEMPTION_STATUS_OPTIONS: SearchOption[] = [
   { value: 'NEW', label: 'New' },
   { value: 'APPROVED', label: 'Approved' },
   { value: 'CLOSED', label: 'Closed' },
@@ -110,6 +112,13 @@ const SORT_COLUMNS: {
 const ProvincialExemptionPage: FC = () => {
   const [filters, setFilters] = useState<ProvincialExemptionSearchFilters>(INITIAL_FILTERS)
   const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
+  const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
+  const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>(
+    FALLBACK_EXEMPTION_TYPE_OPTIONS,
+  )
+  const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>(
+    FALLBACK_EXEMPTION_STATUS_OPTIONS,
+  )
   const [results, setResults] = useState<ProvincialExemptionSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -156,6 +165,29 @@ const ProvincialExemptionPage: FC = () => {
       sortDirection: 'asc',
     })
   }, [runSearch])
+
+  useEffect(() => {
+    const loadOptions = async () => {
+      const options = await fetchProvincialExemptionOptions()
+
+      if (options.exemptionTypes.length > 0) {
+        setExemptionTypeOptions(options.exemptionTypes)
+      }
+      if (options.exemptionStatuses.length > 0) {
+        setExemptionStatusOptions(options.exemptionStatuses)
+      }
+      if (options.regions.length > 0) {
+        setRegionOptions(
+          options.regions.map((option) => ({
+            id: option.value,
+            text: `${option.label} (${option.value})`,
+          })),
+        )
+      }
+    }
+
+    void loadOptions()
+  }, [])
 
   const onSearch = () => {
     setSelectedRowsById({})
@@ -279,7 +311,7 @@ const ProvincialExemptionPage: FC = () => {
             <MultiSelect
               id="region"
               titleText="Region"
-              items={REGION_OPTIONS}
+              items={regionOptions}
               itemToString={(item) => (item ? item.text : '')}
               label="Select region(s)"
               selectionFeedback="fixed"
@@ -321,7 +353,8 @@ const ProvincialExemptionPage: FC = () => {
                 setFilters((current) => ({ ...current, exemptionTypeCode: event.target.value }))
               }
             >
-              {EXEMPTION_TYPE_OPTIONS.map((option) => (
+              <SelectItem text="All types" value="" />
+              {exemptionTypeOptions.map((option) => (
                 <SelectItem key={option.value || 'all'} text={option.label} value={option.value} />
               ))}
             </Select>
@@ -336,7 +369,8 @@ const ProvincialExemptionPage: FC = () => {
                 }))
               }
             >
-              {EXEMPTION_STATUS_OPTIONS.map((option) => (
+              <SelectItem text="All statuses" value="" />
+              {exemptionStatusOptions.map((option) => (
                 <SelectItem key={option.value || 'all'} text={option.label} value={option.value} />
               ))}
             </Select>

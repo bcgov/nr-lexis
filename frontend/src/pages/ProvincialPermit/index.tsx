@@ -25,18 +25,26 @@ import type {
   ProvincialPermitSearchSortField,
 } from '@/interfaces/ProvincialPermitSearch'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
+import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
 
 type RegionOption = {
   id: string
   text: string
 }
 
-const REGION_OPTIONS: RegionOption[] = [
+const FALLBACK_REGION_OPTIONS: RegionOption[] = [
   { id: 'CAR', text: 'Cariboo (CAR)' },
   { id: 'KAM', text: 'Kamloops (KAM)' },
   { id: 'NEL', text: 'Northeast (NEL)' },
   { id: 'OMI', text: 'Omineca (OMI)' },
   { id: 'SKE', text: 'Skeena (SKE)' },
+]
+
+const FALLBACK_PERMIT_STATUS_OPTIONS: SearchOption[] = [
+  { value: 'Active', label: 'Active' },
+  { value: 'Issued', label: 'Issued' },
+  { value: 'Expired', label: 'Expired' },
+  { value: 'Cancelled', label: 'Cancelled' },
 ]
 
 const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
@@ -82,6 +90,10 @@ const SORT_COLUMNS: {
 const ProvincialPermitPage: FC = () => {
   const [filters, setFilters] = useState<ProvincialPermitSearchFilters>(INITIAL_FILTERS)
   const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
+  const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
+  const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>(
+    FALLBACK_PERMIT_STATUS_OPTIONS,
+  )
   const [results, setResults] = useState<ProvincialPermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -123,6 +135,25 @@ const ProvincialPermitPage: FC = () => {
       sortDirection: 'asc',
     })
   }, [runSearch])
+
+  useEffect(() => {
+    const loadOptions = async () => {
+      const options = await fetchProvincialPermitOptions()
+      if (options.permitStatuses.length > 0) {
+        setPermitStatusOptions(options.permitStatuses)
+      }
+      if (options.regions.length > 0) {
+        setRegionOptions(
+          options.regions.map((option) => ({
+            id: option.value,
+            text: `${option.label} (${option.value})`,
+          })),
+        )
+      }
+    }
+
+    void loadOptions()
+  }, [])
 
   const onSearch = () => {
     void runSearch({
@@ -179,7 +210,7 @@ const ProvincialPermitPage: FC = () => {
             <MultiSelect
               id="region"
               titleText="Region"
-              items={REGION_OPTIONS}
+              items={regionOptions}
               itemToString={(item) => (item ? item.text : '')}
               label="Select region(s)"
               selectionFeedback="fixed"
@@ -222,10 +253,9 @@ const ProvincialPermitPage: FC = () => {
               }
             >
               <SelectItem text="All statuses" value="" />
-              <SelectItem text="Active" value="Active" />
-              <SelectItem text="Issued" value="Issued" />
-              <SelectItem text="Expired" value="Expired" />
-              <SelectItem text="Cancelled" value="Cancelled" />
+              {permitStatusOptions.map((option) => (
+                <SelectItem key={option.value} text={option.label} value={option.value} />
+              ))}
             </Select>
             <TextInput
               id="permitNumber"

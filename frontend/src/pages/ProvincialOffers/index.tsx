@@ -23,13 +23,14 @@ import type {
   ProvincialOfferSearchSortField,
 } from '@/interfaces/ProvincialOfferSearch'
 import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
+import { fetchProvincialOfferOptions } from '@/service/search-options-service'
 
 type RegionOption = {
   id: string
   text: string
 }
 
-const REGION_OPTIONS: RegionOption[] = [
+const FALLBACK_REGION_OPTIONS: RegionOption[] = [
   { id: 'CAR', text: 'Cariboo (CAR)' },
   { id: 'KAM', text: 'Kamloops (KAM)' },
   { id: 'NEL', text: 'Northeast (NEL)' },
@@ -78,6 +79,7 @@ const SORT_COLUMNS: {
 const ProvincialOffersPage: FC = () => {
   const [filters, setFilters] = useState<ProvincialOfferSearchFilters>(INITIAL_FILTERS)
   const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
+  const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -132,6 +134,22 @@ const ProvincialOffersPage: FC = () => {
       sortDirection: 'asc',
     })
   }, [runSearch])
+
+  useEffect(() => {
+    const loadOptions = async () => {
+      const options = await fetchProvincialOfferOptions()
+      if (options.regions.length > 0) {
+        setRegionOptions(
+          options.regions.map((option) => ({
+            id: option.value,
+            text: `${option.label} (${option.value})`,
+          })),
+        )
+      }
+    }
+
+    void loadOptions()
+  }, [])
 
   const onSearch = () => {
     void runSearch({
@@ -216,7 +234,7 @@ const ProvincialOffersPage: FC = () => {
             <MultiSelect
               id="region"
               titleText="Region"
-              items={REGION_OPTIONS}
+              items={regionOptions}
               itemToString={(item) => (item ? item.text : '')}
               label="Select region(s)"
               selectionFeedback="fixed"
