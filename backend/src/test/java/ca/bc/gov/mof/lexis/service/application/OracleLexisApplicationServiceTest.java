@@ -171,7 +171,9 @@ class OracleLexisApplicationServiceTest {
   void verifyClientsShouldPassThroughRepositoryWhenInputIsValid() {
     when(repository.verifyApplicationClients(List.of(1000456L, 1000999L))).thenReturn(true);
 
-    boolean result = service.verifyApplicationClients(List.of(1000456L, null, 0L, -1L, 1000999L, 1000456L));
+    boolean result =
+        service.verifyApplicationClients(
+            Arrays.asList(1000456L, null, 0L, -1L, 1000999L, 1000456L));
 
     assertThat(result).isTrue();
     verify(repository).verifyApplicationClients(List.of(1000456L, 1000999L));
@@ -180,7 +182,7 @@ class OracleLexisApplicationServiceTest {
   @Test
   void verifyClientsShouldShortCircuitWhenInputIsInvalid() {
     assertThat(service.verifyApplicationClients(null)).isFalse();
-    assertThat(service.verifyApplicationClients(List.of(null, 0L, -1L))).isFalse();
+    assertThat(service.verifyApplicationClients(Arrays.asList(null, 0L, -1L))).isFalse();
     verifyNoInteractions(repository);
   }
 
@@ -188,7 +190,8 @@ class OracleLexisApplicationServiceTest {
   void hasValidOfferShouldPassThroughRepositoryWhenInputIsValid() {
     when(repository.hasValidOffer(List.of(1000456L, 1000999L))).thenReturn(true);
 
-    boolean result = service.hasValidOffer(List.of(1000456L, null, 0L, -1L, 1000999L, 1000456L));
+    boolean result =
+        service.hasValidOffer(Arrays.asList(1000456L, null, 0L, -1L, 1000999L, 1000456L));
 
     assertThat(result).isTrue();
     verify(repository).hasValidOffer(List.of(1000456L, 1000999L));
@@ -197,7 +200,7 @@ class OracleLexisApplicationServiceTest {
   @Test
   void hasValidOfferShouldShortCircuitWhenInputIsInvalid() {
     assertThat(service.hasValidOffer(null)).isFalse();
-    assertThat(service.hasValidOffer(List.of(null, 0L, -1L))).isFalse();
+    assertThat(service.hasValidOffer(Arrays.asList(null, 0L, -1L))).isFalse();
     verifyNoInteractions(repository);
   }
 
