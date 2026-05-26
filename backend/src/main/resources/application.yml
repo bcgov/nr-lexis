@@ -19,3 +19,30 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+
+lexis:
+  auth:
+    # Mirrors legacy WebADE "industry-roles" configuration.
+    industry-roles: "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY"
+  authz:
+    # Temporary parity scaffold:
+    # role names should match FAM roles exactly, and actions should match legacy canPerformAction/grantedAction keys.
+    # Replace with finalized matrix as modernization proceeds.
+    role-actions:
+      ADMIN: ["*"]
+      READ_ONLY:
+        - "/applicationSearch"
+        - "/applicationDetails"
+      APPLICATION_APPROVER:
+        - "/applicationsReview"
+        - "/applicationSearch"
+        - "/applicationDetails"
+      EXEMPTION_APPROVER:
+        - "/exemptionSearch"
+        - "/exemptionDetails"
+        - "/applicationSearch"
+        - "/applicationDetails"
+      INDUSTRY:
+        - "/summary"
+        - "/offersSearch"
+        - "/offerDetails"
