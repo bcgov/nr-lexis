@@ -7,9 +7,12 @@ import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -29,7 +32,7 @@ class OraclePermitDetailsRpcServiceTest {
   @InjectMocks private OraclePermitDetailsRpcService service;
 
   @Test
-  void permitSummaryShouldAggregateScaffoldFeesAndSelectedPackageRows() {
+  void permitSummaryShouldAggregateVolumeAndSelectedPackageRows() {
     when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(
             List.of(
@@ -53,6 +56,35 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void permitSummaryShouldApplyFixedExemptionRateWhenPolicyContextRequiresIt() {
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale("101", "TM1", "HEM", "J", 10.25d, 12L, "7000123", "PKG-903"),
+                scale("102", "TM2", "FIR", "K", 5.50d, 8L, "7000123", "PKG-999")));
+    when(repository.findPermitPolicyContextByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                new PermitPolicyContextRow(
+                    7000123L, 1835L, LocalDate.of(2026, 1, 15), "EX-700", "US", 0.0d)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(repository.findFixedExemptionRate("EX-700")).thenReturn(Optional.of(BigDecimal.valueOf(2.5d)));
+    when(repository.findFeePolicyPercentIncrease(LocalDate.of(2026, 1, 15), 1835L))
+        .thenReturn(BigDecimal.ZERO);
+    when(applicationService.findPackageByPackageNumber("PKG-903"))
+        .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-903", 1000456L, 10.25d, "S")));
+    when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
+
+    PermitSummaryRpcResponseDto response =
+        service.getPermitSummary(7000123L, "US", "2026-01-15", "PKG-903", true);
+
+    assertThat(response.totalFees()).isEqualTo("$39.38");
+    assertThat(response.totalFeeForPackage()).isEqualTo("$25.63");
+    assertThat(response.scaleList()).hasSize(1);
+    assertThat(response.scaleList().get(0).fee()).isEqualTo("$25.63");
+  }
+
+  @Test
   void totalFeesShouldMaskForCanadaAfterCutoverDate() {
     when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 12.40d, 5L, "7000123", "PKG-903")));
@@ -64,7 +96,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void scaleFeesShouldUseDescriptionsAndScaffoldFeeFormatting() {
+  void scaleFeesShouldUseDescriptionsAndFeeFormatting() {
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903")));
     when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
@@ -112,6 +144,7 @@ class OraclePermitDetailsRpcServiceTest {
         grade,
         volume,
         pieces,
+        1000456L,
         permitNumber,
         packageNumber,
         "C",
