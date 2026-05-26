@@ -7,6 +7,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
@@ -15,6 +16,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
@@ -280,6 +282,47 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.enduse()).isEqualTo("HE/UT\n");
     assertThat(response.ageclass()).isEqualTo("Standing");
+  }
+
+  @Test
+  void packageDetailsShouldReturnEmptyDefaultsWhenPackageNotFound() {
+    when(repository.findPackageDetailsByPackageNumber("PKG-903")).thenReturn(Optional.empty());
+
+    PermitPackageDetailsRpcResponseDto response = service.getPackageDetails("PKG-903");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.packageNumber()).isEmpty();
+    assertThat(response.scaledVolume()).isEqualTo(0.0d);
+  }
+
+  @Test
+  void packageDetailsShouldMapPackageFieldsAndScaledVolume() {
+    when(repository.findPackageDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new PackageDetailsRow(
+                    "PKG-903", 10.25d, 6.0d, 24.0d, "ACT", "Reviewed", "N", "S")));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                scale("101", "TM1", "HEM", "J", 2.35d, 4L, "7000123", "PKG-903"),
+                scale("102", "TM2", "FIR", "K", 1.24d, 2L, "7000123", "PKG-903")));
+    when(repository.findPackageStatusDescription("ACT")).thenReturn(Optional.of("Active"));
+    when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
+
+    PermitPackageDetailsRpcResponseDto response = service.getPackageDetails("PKG-903");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.packageNumber()).isEqualTo("PKG-903");
+    assertThat(response.volume()).isEqualTo("10.3");
+    assertThat(response.scaledVolume()).isEqualTo(3.6d);
+    assertThat(response.length()).isEqualTo("6.0");
+    assertThat(response.diameter()).isEqualTo("24.0");
+    assertThat(response.status()).isEqualTo("ACT");
+    assertThat(response.comments()).isEqualTo("Reviewed");
+    assertThat(response.statusDesc()).isEqualTo("Active");
+    assertThat(response.reprocessed()).isEqualTo("N");
+    assertThat(response.ageClass()).isEqualTo("Standing");
   }
 
   private PermitScaleDetailRow scale(

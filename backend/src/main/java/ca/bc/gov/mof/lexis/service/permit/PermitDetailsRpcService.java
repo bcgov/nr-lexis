@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.permit;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
@@ -33,6 +34,8 @@ public interface PermitDetailsRpcService {
   PermitPackageVolumeSumRpcResponseDto getPackageVolumeSum(Long permitNumber, String packageNumber);
 
   PermitPackageInfoRpcResponseDto getPackageInfo(String packageNumber);
+
+  PermitPackageDetailsRpcResponseDto getPackageDetails(String packageNumber);
 
   PermitPackageListRpcResponseDto getPackageList(Long permitNumber);
 

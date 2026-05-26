@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.controller;
 
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
@@ -141,6 +142,18 @@ public class PermitDetailsRpcController {
     }
 
     return ResponseEntity.ok(service.getPackageInfo(packageNumber));
+  }
+
+  @GetMapping("/package-details")
+  public ResponseEntity<PermitPackageDetailsRpcResponseDto> getPackageDetails(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for package details");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getPackageDetails(packageNumber));
   }
 
   @GetMapping("/permit-has-applications")

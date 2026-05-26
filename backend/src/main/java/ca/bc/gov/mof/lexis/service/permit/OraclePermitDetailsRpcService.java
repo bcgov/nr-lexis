@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.permit;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
@@ -13,6 +14,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
@@ -267,6 +269,49 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  public PermitPackageDetailsRpcResponseDto getPackageDetails(String packageNumber) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return emptyPackageDetails();
+    }
+
+    PackageDetailsRow packageDetails =
+        repository.findPackageDetailsByPackageNumber(normalizedPackageNumber).orElse(null);
+    if (packageDetails == null) {
+      return emptyPackageDetails();
+    }
+
+    BigDecimal scaledVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+    for (PermitScaleDetailRow scale : repository.findScaleDetailsByPackageNumber(normalizedPackageNumber)) {
+      BigDecimal speciesGradeVolume =
+          BigDecimal.valueOf(scale.speciesGradeVolume()).setScale(1, RoundingMode.HALF_UP);
+      scaledVolume = scaledVolume.add(speciesGradeVolume).setScale(1, RoundingMode.HALF_UP);
+    }
+
+    String growthTypeDescription =
+        repository
+            .findGrowthTypeDescription(packageDetails.growthTypeCode())
+            .orElse(nonNull(trimToNull(packageDetails.growthTypeCode())));
+    String packageStatusDescription =
+        repository
+            .findPackageStatusDescription(packageDetails.packageStatusCode())
+            .orElse(nonNull(trimToNull(packageDetails.packageStatusCode())));
+
+    return new PermitPackageDetailsRpcResponseDto(
+        true,
+        nonNull(packageDetails.packageNumber()),
+        formatVolume(packageDetails.packageVolume()),
+        scaledVolume.doubleValue(),
+        formatVolume(packageDetails.averageLength()),
+        formatVolume(packageDetails.averageDiameter()),
+        nonNull(trimToNull(packageDetails.packageStatusCode())),
+        nonNull(packageDetails.comments()),
+        packageStatusDescription,
+        nonNull(trimToNull(packageDetails.reprocessedIndicator())),
+        nonNull(growthTypeDescription));
+  }
+
+  @Override
   public PermitPackageListRpcResponseDto getPackageList(Long permitNumber) {
     List<String> packageList = repository.findPackageNumbersByPermitNumber(permitNumber);
     if (packageList.isEmpty()) {
@@ -283,6 +328,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private PermitPackageInfoRpcResponseDto emptyPackageInfo() {
     return new PermitPackageInfoRpcResponseDto("", "", "", "", "", "", "");
+  }
+
+  private PermitPackageDetailsRpcResponseDto emptyPackageDetails() {
+    return new PermitPackageDetailsRpcResponseDto(
+        false, "", "", 0.0d, "", "", "", "", "", "", "");
   }
 
   private String buildApplicationEndUseSort(ApplicationInfoRow applicationInfo) {

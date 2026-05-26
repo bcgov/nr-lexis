@@ -39,6 +39,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
   private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
   private static final String FIND_GROWTH_TYPE_CODE = LEXIS_CODES_PACKAGE + "FIND_GROWTH_TYPE_CODE(?,?)";
+  private static final String FIND_PACKAGE_STATUS_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_PACKAGE_STATUS_CODE(?,?)";
   private static final String FIND_PRODUCT_TYPE_CODE = LEXIS_CODES_PACKAGE + "FIND_PRODUCT_TYPE_CODE(?,?)";
   private static final String FIND_CANDIDATE_EXCOL_VALUES =
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
@@ -171,6 +173,28 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));
   }
 
+  public Optional<PackageDetailsRow> findPackageDetailsByPackageNumber(String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        FIND_PACKAGE_BY_NUMBER,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new PackageDetailsRow(
+                getString(rs, "PACKAGE_NUMBER"),
+                coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d),
+                coalesce(getDouble(rs, "AVERAGE_LENGTH"), 0.0d),
+                coalesce(getDouble(rs, "AVERAGE_DIAMETER"), 0.0d),
+                getString(rs, "EXPORT_PACKAGE_STATUS_CODE"),
+                getString(rs, "COMMENTS"),
+                getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
+                getString(rs, "EXPORT_GROWTH_TYPE_CODE")));
+  }
+
   public Optional<ApplicationInfoRow> findApplicationInfoByNumber(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
@@ -232,6 +256,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   public Optional<String> findGrowthTypeDescription(String growthTypeCode) {
     return findCodeDescription(FIND_GROWTH_TYPE_CODE, growthTypeCode);
+  }
+
+  public Optional<String> findPackageStatusDescription(String packageStatusCode) {
+    return findCodeDescription(FIND_PACKAGE_STATUS_CODE, packageStatusCode);
   }
 
   public Optional<String> findProductTypeDescription(String productTypeCode) {
@@ -426,6 +454,16 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String productTypeCode,
       String growthTypeCode,
       String endUseSort) {}
+
+  public record PackageDetailsRow(
+      String packageNumber,
+      double packageVolume,
+      double averageLength,
+      double averageDiameter,
+      String packageStatusCode,
+      String comments,
+      String reprocessedIndicator,
+      String growthTypeCode) {}
 
   public record EndUsePairRow(String speciesCode, String endUseCode) {}
 }
