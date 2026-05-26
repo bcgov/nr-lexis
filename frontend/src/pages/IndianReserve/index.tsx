@@ -20,6 +20,7 @@ import type {
   IndianReservePermitSearchRequest,
   IndianReservePermitSearchResponse,
 } from '@/interfaces/IndianReservePermitSearch'
+import { useAuth } from '@/context/auth/useAuth'
 import { searchIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
 
 const INITIAL_FILTERS: IndianReservePermitSearchFilters = {
@@ -47,11 +48,13 @@ const isValidIsoDate = (value: string): boolean => {
 }
 
 const IndianReservePage: FC = () => {
+  const { canPerform } = useAuth()
   const [filters, setFilters] = useState<IndianReservePermitSearchFilters>(INITIAL_FILTERS)
   const [results, setResults] = useState<IndianReservePermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [pageSize, setPageSize] = useState(10)
+  const canCreatePermit = canPerform('viewOICApplication')
 
   const hasDateValidationError = useMemo(() => {
     return (
@@ -192,9 +195,11 @@ const IndianReservePage: FC = () => {
             >
               Search
             </Button>
-            <Link className="cds--link" to="/indian-reserve/permit/create">
-              Add Permit
-            </Link>
+            {canCreatePermit && (
+              <Link className="cds--link" to="/indian-reserve/permit/create">
+                Add Permit
+              </Link>
+            )}
           </div>
         </Tile>
       </Column>

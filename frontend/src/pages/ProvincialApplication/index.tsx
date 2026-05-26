@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Button,
   Checkbox,
@@ -27,6 +27,7 @@ import type {
   ProvincialApplicationSearchResponse,
   ProvincialApplicationSearchSortField,
 } from '@/interfaces/ProvincialApplicationSearch'
+import { useAuth } from '@/context/auth/useAuth'
 import { searchProvincialApplications } from '@/service/provincial-application-search-service'
 import {
   fetchProvincialApplicationOptions,
@@ -39,8 +40,14 @@ type RegionOption = {
 }
 
 type ExemptionStatus = {
-  kind: 'error' | 'success'
+  kind: 'error'
   message: string
+}
+
+type ExemptionCreatePrefillState = {
+  selectedApplicationNumbers: string[]
+  applicantClientNumber: string
+  ownerClientNumber: string
 }
 
 const FALLBACK_REGION_OPTIONS: RegionOption[] = [
@@ -110,6 +117,8 @@ const SORT_COLUMNS: {
 ]
 
 const ProvincialApplicationPage: FC = () => {
+  const navigate = useNavigate()
+  const { canPerform } = useAuth()
   const [filters, setFilters] = useState<ProvincialApplicationSearchFilters>(INITIAL_FILTERS)
   const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
@@ -133,6 +142,9 @@ const ProvincialApplicationPage: FC = () => {
     Record<string, ProvincialApplicationSearchItem>
   >({})
   const [exemptionStatus, setExemptionStatus] = useState<ExemptionStatus | null>(null)
+  const canCreateExemption = canPerform('/createExemption')
+  const canCreateApplication = canPerform('createApplication')
+  const selectedRowsCount = Object.keys(selectedRowsById).length
 
   const hasDateValidationError = useMemo(() => {
     return !isValidIsoDate(filters.listingFromDate) || !isValidIsoDate(filters.listingToDate)
@@ -223,8 +235,11 @@ const ProvincialApplicationPage: FC = () => {
   }
 
   const selectableRows = useMemo(() => {
+    if (!canCreateExemption) {
+      return []
+    }
     return results.content.filter((item) => item.allowCreateExemption)
-  }, [results.content])
+  }, [canCreateExemption, results.content])
 
   const allSelectableRowsAreSelected = useMemo(() => {
     if (selectableRows.length === 0) return false
@@ -260,6 +275,14 @@ const ProvincialApplicationPage: FC = () => {
   }
 
   const onCreateExemptionClick = () => {
+    if (!canCreateExemption) {
+      setExemptionStatus({
+        kind: 'error',
+        message: 'Your account is not authorized to create exemptions.',
+      })
+      return
+    }
+
     const selectedRows = Object.values(selectedRowsById)
     if (selectedRows.length === 0) {
       setExemptionStatus({
@@ -285,10 +308,13 @@ const ProvincialApplicationPage: FC = () => {
       return
     }
 
-    setExemptionStatus({
-      kind: 'success',
-      message: `Ready to create exemption for ${selectedRows.length} selected application(s).`,
-    })
+    const prefillState: ExemptionCreatePrefillState = {
+      selectedApplicationNumbers: selectedRows.map((row) => row.applicationNumber),
+      applicantClientNumber: firstRow.applicantClientNumber,
+      ownerClientNumber: firstRow.ownerClientNumber,
+    }
+
+    navigate('/provincial/exemption/create', { state: prefillState })
   }
 
   return (
@@ -437,19 +463,21 @@ const ProvincialApplicationPage: FC = () => {
               kind="secondary"
               size="md"
               onClick={onCreateExemptionClick}
-              disabled={Object.keys(selectedRowsById).length === 0}
+              disabled={selectedRowsCount === 0 || !canCreateExemption}
             >
               Create Exemption for Selected Applications
             </Button>
-            <Link className="cds--link" to="/provincial/application/create">
-              Add Application
-            </Link>
+            {canCreateApplication && (
+              <Link className="cds--link" to="/provincial/application/create">
+                Add Application
+              </Link>
+            )}
           </div>
           {exemptionStatus && (
             <InlineNotification
               className="legacy-inline-notification"
               kind={exemptionStatus.kind}
-              title={exemptionStatus.kind === 'error' ? 'Validation failed' : 'Selection ready'}
+              title="Validation failed"
               subtitle={exemptionStatus.message}
               onCloseButtonClick={() => setExemptionStatus(null)}
             />
@@ -472,6 +500,7 @@ const ProvincialApplicationPage: FC = () => {
                       hideLabel
                       labelText="Select all rows on this page"
                       checked={allSelectableRowsAreSelected}
+                      disabled={selectableRows.length === 0}
                       onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
                     />
                   </TableHeader>
@@ -498,7 +527,7 @@ const ProvincialApplicationPage: FC = () => {
                         hideLabel
                         labelText={`Select ${row.applicationNumber}`}
                         checked={Boolean(selectedRowsById[row.applicationNumber])}
-                        disabled={!row.allowCreateExemption}
+                        disabled={!canCreateExemption || !row.allowCreateExemption}
                         onChange={(_, payload) => toggleRowSelection(row, Boolean(payload.checked))}
                       />
                     </TableCell>

@@ -22,6 +22,7 @@ import type {
   ProvincialOfferSearchResponse,
   ProvincialOfferSearchSortField,
 } from '@/interfaces/ProvincialOfferSearch'
+import { useAuth } from '@/context/auth/useAuth'
 import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
 import { fetchProvincialOfferOptions } from '@/service/search-options-service'
 
@@ -77,6 +78,7 @@ const SORT_COLUMNS: {
 ]
 
 const ProvincialOffersPage: FC = () => {
+  const { canPerform } = useAuth()
   const [filters, setFilters] = useState<ProvincialOfferSearchFilters>(INITIAL_FILTERS)
   const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
@@ -86,6 +88,7 @@ const ProvincialOffersPage: FC = () => {
   const [sortField, setSortField] = useState<ProvincialOfferSearchSortField>('listingDate')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const [pageSize, setPageSize] = useState(10)
+  const canCreateOffer = canPerform('createOffer')
 
   const hasDateValidationError = useMemo(() => {
     return (
@@ -278,9 +281,11 @@ const ProvincialOffersPage: FC = () => {
             >
               Search
             </Button>
-            <Link className="cds--link" to="/provincial/offers/create">
-              Add Offer
-            </Link>
+            {canCreateOffer && (
+              <Link className="cds--link" to="/provincial/offers/create">
+                Add Offer
+              </Link>
+            )}
           </div>
         </Tile>
       </Column>

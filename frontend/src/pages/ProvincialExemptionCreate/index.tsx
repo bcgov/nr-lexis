@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -36,6 +36,12 @@ type ProvincialExemptionCreateForm = {
   otherConditions: string
 }
 
+type ExemptionCreatePrefillState = {
+  selectedApplicationNumbers: string[]
+  ownerClientNumber: string
+  applicantClientNumber: string
+}
+
 const MODULE_KEY = 'provincial-exemption'
 
 const FALLBACK_EXEMPTION_TYPES: SearchOption[] = [
@@ -61,8 +67,56 @@ const INITIAL_FORM: ProvincialExemptionCreateForm = {
   otherConditions: '',
 }
 
+const parseExemptionPrefillState = (rawState: unknown): ExemptionCreatePrefillState | null => {
+  if (!rawState || typeof rawState !== 'object') {
+    return null
+  }
+
+  const state = rawState as Record<string, unknown>
+  const selectedApplicationNumbers = Array.isArray(state.selectedApplicationNumbers)
+    ? state.selectedApplicationNumbers.filter(
+        (value): value is string => typeof value === 'string' && value.trim().length > 0,
+      )
+    : []
+
+  if (selectedApplicationNumbers.length === 0) {
+    return null
+  }
+
+  return {
+    selectedApplicationNumbers,
+    ownerClientNumber: typeof state.ownerClientNumber === 'string' ? state.ownerClientNumber : '',
+    applicantClientNumber:
+      typeof state.applicantClientNumber === 'string' ? state.applicantClientNumber : '',
+  }
+}
+
+const buildInitialForm = (
+  prefillState: ExemptionCreatePrefillState | null,
+): ProvincialExemptionCreateForm => {
+  if (!prefillState) {
+    return INITIAL_FORM
+  }
+
+  const linkedApplicationsNote =
+    prefillState.selectedApplicationNumbers.length > 1
+      ? `Linked applications: ${prefillState.selectedApplicationNumbers.join(', ')}`
+      : ''
+
+  return {
+    ...INITIAL_FORM,
+    applicationNumber: prefillState.selectedApplicationNumbers[0],
+    ownerClientNumber: prefillState.ownerClientNumber,
+    applicantClientNumber: prefillState.applicantClientNumber,
+    otherConditions: linkedApplicationsNote,
+  }
+}
+
 const ProvincialExemptionCreatePage: FC = () => {
-  const [form, setForm] = useState<ProvincialExemptionCreateForm>(INITIAL_FORM)
+  const location = useLocation()
+  const prefillState = useMemo(() => parseExemptionPrefillState(location.state), [location.state])
+  const initialForm = useMemo(() => buildInitialForm(prefillState), [prefillState])
+  const [form, setForm] = useState<ProvincialExemptionCreateForm>(initialForm)
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>(FALLBACK_EXEMPTION_TYPES)
   const [exemptionStatuses, setExemptionStatuses] = useState<SearchOption[]>(
     FALLBACK_EXEMPTION_STATUSES,
@@ -118,6 +172,18 @@ const ProvincialExemptionCreatePage: FC = () => {
         <h1>Create Provincial Exemption</h1>
         <p>Base create form for provincial exemption migration.</p>
       </Column>
+
+      {!!prefillState && (
+        <Column sm={4} md={8} lg={16}>
+          <InlineNotification
+            kind="info"
+            title="Prefilled from selected applications"
+            subtitle={`Loaded ${prefillState.selectedApplicationNumbers.length} application(s) into this form.`}
+            lowContrast
+            hideCloseButton
+          />
+        </Column>
+      )}
 
       {!!status && (
         <Column sm={4} md={8} lg={16}>
@@ -229,7 +295,7 @@ const ProvincialExemptionCreatePage: FC = () => {
             <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
               Save Draft
             </Button>
-            <Button kind="secondary" onClick={() => setForm(INITIAL_FORM)}>
+            <Button kind="secondary" onClick={() => setForm(initialForm)}>
               Reset
             </Button>
             <Link className="cds--link" to="/provincial/exemption">

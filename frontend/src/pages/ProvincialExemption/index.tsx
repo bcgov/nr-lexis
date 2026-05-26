@@ -27,6 +27,7 @@ import type {
   ProvincialExemptionSearchResponse,
   ProvincialExemptionSearchSortField,
 } from '@/interfaces/ProvincialExemptionSearch'
+import { useAuth } from '@/context/auth/useAuth'
 import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
 import {
   fetchProvincialExemptionOptions,
@@ -110,6 +111,7 @@ const SORT_COLUMNS: {
 ]
 
 const ProvincialExemptionPage: FC = () => {
+  const { canPerform } = useAuth()
   const [filters, setFilters] = useState<ProvincialExemptionSearchFilters>(INITIAL_FILTERS)
   const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
@@ -129,6 +131,9 @@ const ProvincialExemptionPage: FC = () => {
     Record<string, ProvincialExemptionSearchItem>
   >({})
   const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus | null>(null)
+  const canCreateExemption = canPerform('/createExemption')
+  const canApproveExemption = canPerform('approveExemption')
+  const selectedRowsCount = Object.keys(selectedRowsById).length
 
   const hasDateValidationError = useMemo(() => {
     return !isValidIsoDate(filters.listFromDate) || !isValidIsoDate(filters.listToDate)
@@ -217,10 +222,13 @@ const ProvincialExemptionPage: FC = () => {
   }
 
   const selectableRows = useMemo(() => {
+    if (!canApproveExemption) {
+      return []
+    }
     return results.content.filter(
       (item) => item.canApprove && item.statusCode === 'NEW' && !item.isLocked,
     )
-  }, [results.content])
+  }, [canApproveExemption, results.content])
 
   const allSelectableRowsAreSelected = useMemo(() => {
     if (selectableRows.length === 0) return false
@@ -256,6 +264,14 @@ const ProvincialExemptionPage: FC = () => {
   }
 
   const onApproveSelectedClick = () => {
+    if (!canApproveExemption) {
+      setApprovalStatus({
+        kind: 'error',
+        message: 'Your account is not authorized to approve exemptions.',
+      })
+      return
+    }
+
     const selectedRows = Object.values(selectedRowsById)
     if (selectedRows.length === 0) {
       setApprovalStatus({
@@ -407,13 +423,15 @@ const ProvincialExemptionPage: FC = () => {
               kind="secondary"
               size="md"
               onClick={onApproveSelectedClick}
-              disabled={Object.keys(selectedRowsById).length === 0}
+              disabled={selectedRowsCount === 0 || !canApproveExemption}
             >
               Approve Selected Exemption
             </Button>
-            <Link className="cds--link" to="/provincial/exemption/create">
-              Add Exemption
-            </Link>
+            {canCreateExemption && (
+              <Link className="cds--link" to="/provincial/exemption/create">
+                Add Exemption
+              </Link>
+            )}
           </div>
           {approvalStatus && (
             <InlineNotification
@@ -442,6 +460,7 @@ const ProvincialExemptionPage: FC = () => {
                       hideLabel
                       labelText="Select all rows on this page"
                       checked={allSelectableRowsAreSelected}
+                      disabled={selectableRows.length === 0}
                       onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
                     />
                   </TableHeader>
@@ -461,7 +480,11 @@ const ProvincialExemptionPage: FC = () => {
               </TableHead>
               <TableBody>
                 {results.content.map((row) => {
-                  const canSelectRow = row.canApprove && row.statusCode === 'NEW' && !row.isLocked
+                  const canSelectRow =
+                    canApproveExemption &&
+                    row.canApprove &&
+                    row.statusCode === 'NEW' &&
+                    !row.isLocked
                   return (
                     <TableRow key={row.exemptionNumber}>
                       <TableCell>

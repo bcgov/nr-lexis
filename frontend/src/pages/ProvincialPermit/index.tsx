@@ -24,6 +24,7 @@ import type {
   ProvincialPermitSearchResponse,
   ProvincialPermitSearchSortField,
 } from '@/interfaces/ProvincialPermitSearch'
+import { useAuth } from '@/context/auth/useAuth'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
 
@@ -88,6 +89,7 @@ const SORT_COLUMNS: {
 ]
 
 const ProvincialPermitPage: FC = () => {
+  const { canPerform } = useAuth()
   const [filters, setFilters] = useState<ProvincialPermitSearchFilters>(INITIAL_FILTERS)
   const [selectedRegions, setSelectedRegions] = useState<RegionOption[]>([])
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
@@ -100,6 +102,7 @@ const ProvincialPermitPage: FC = () => {
   const [sortField, setSortField] = useState<ProvincialPermitSearchSortField>('permitNumber')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const [pageSize, setPageSize] = useState(10)
+  const canCreatePermit = canPerform('createPermit')
 
   const hasDateValidationError = useMemo(() => {
     return !isValidIsoDate(filters.issuedFromDate) || !isValidIsoDate(filters.issuedToDate)
@@ -291,9 +294,11 @@ const ProvincialPermitPage: FC = () => {
             >
               Search
             </Button>
-            <Link className="cds--link" to="/provincial/permit/create">
-              Add Permit
-            </Link>
+            {canCreatePermit && (
+              <Link className="cds--link" to="/provincial/permit/create">
+                Add Permit
+              </Link>
+            )}
           </div>
         </Tile>
       </Column>
