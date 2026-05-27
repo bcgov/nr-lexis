@@ -8,6 +8,7 @@ import type {
   ProvincialPermitDetail,
 } from '@/interfaces/LexisDetails'
 import apiService from '@/service/api-service'
+import { isMockFallbackEnabled, toSearchServiceError } from '@/service/search-service-fallback'
 
 const isNotFound = (error: unknown): boolean => {
   return (
@@ -206,8 +207,11 @@ export const fetchProvincialApplicationDetail = async (
     if (isNotFound(error)) {
       return null
     }
-    console.warn('Using mock provincial application detail data.', error)
-    return buildMockProvincialApplicationDetail(applicationNumber)
+    if (isMockFallbackEnabled()) {
+      console.warn('Using mock provincial application detail data.', error)
+      return buildMockProvincialApplicationDetail(applicationNumber)
+    }
+    throw toSearchServiceError('Unable to load provincial application detail.', error)
   }
 }
 
@@ -223,8 +227,11 @@ export const fetchProvincialExemptionDetail = async (
     if (isNotFound(error)) {
       return null
     }
-    console.warn('Using mock provincial exemption detail data.', error)
-    return buildMockProvincialExemptionDetail(exemptionNumber)
+    if (isMockFallbackEnabled()) {
+      console.warn('Using mock provincial exemption detail data.', error)
+      return buildMockProvincialExemptionDetail(exemptionNumber)
+    }
+    throw toSearchServiceError('Unable to load provincial exemption detail.', error)
   }
 }
 
@@ -240,8 +247,11 @@ export const fetchProvincialOfferDetail = async (
     if (isNotFound(error)) {
       return null
     }
-    console.warn('Using mock provincial offer detail data.', error)
-    return buildMockProvincialOfferDetail(offerNumber)
+    if (isMockFallbackEnabled()) {
+      console.warn('Using mock provincial offer detail data.', error)
+      return buildMockProvincialOfferDetail(offerNumber)
+    }
+    throw toSearchServiceError('Unable to load provincial offer detail.', error)
   }
 }
 
@@ -257,8 +267,11 @@ export const fetchProvincialPermitDetail = async (
     if (isNotFound(error)) {
       return null
     }
-    console.warn('Using mock provincial permit detail data.', error)
-    return buildMockProvincialPermitDetail(permitNumber)
+    if (isMockFallbackEnabled()) {
+      console.warn('Using mock provincial permit detail data.', error)
+      return buildMockProvincialPermitDetail(permitNumber)
+    }
+    throw toSearchServiceError('Unable to load provincial permit detail.', error)
   }
 }
 
@@ -274,8 +287,11 @@ export const fetchFederalApplicationDetail = async (
     if (isNotFound(error)) {
       return null
     }
-    console.warn('Using mock federal application detail data.', error)
-    return buildMockFederalApplicationDetail(applicationNumber)
+    if (isMockFallbackEnabled()) {
+      console.warn('Using mock federal application detail data.', error)
+      return buildMockFederalApplicationDetail(applicationNumber)
+    }
+    throw toSearchServiceError('Unable to load federal application detail.', error)
   }
 }
 
@@ -293,7 +309,10 @@ export const fetchIndianReservePermitDetail = async (
     if (isNotFound(error)) {
       return null
     }
-    console.warn('Using mock indigenous reserve permit detail data.', error)
-    return buildMockIndianReservePermitDetail(permitNumber)
+    if (isMockFallbackEnabled()) {
+      console.warn('Using mock indigenous reserve permit detail data.', error)
+      return buildMockIndianReservePermitDetail(permitNumber)
+    }
+    throw toSearchServiceError('Unable to load indigenous reserve permit detail.', error)
   }
 }

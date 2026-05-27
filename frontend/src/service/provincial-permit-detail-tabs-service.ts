@@ -1,4 +1,5 @@
 import apiService from '@/service/api-service'
+import { isMockFallbackEnabled, toSearchServiceError } from '@/service/search-service-fallback'
 
 export type ProvincialPermitItemRow = {
   id: string
@@ -253,14 +254,13 @@ const fetchRows = async <TRow>(
       source: 'api',
     }
   } catch (error) {
-    if (!shouldFallbackToMock(error)) {
-      throw error
+    if (shouldFallbackToMock(error) && isMockFallbackEnabled()) {
+      return {
+        rows: [],
+        source: 'mock',
+      }
     }
-
-    return {
-      rows: [],
-      source: 'mock',
-    }
+    throw toSearchServiceError(`Unable to load permit tab data from ${path}.`, error)
   }
 }
 
