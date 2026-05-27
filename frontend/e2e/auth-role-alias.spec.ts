@@ -34,12 +34,12 @@ const LEGACY_PLACEHOLDER_ASSERTIONS: { role: string; path: string; heading: RegE
 
 test.describe('auth role alias compatibility', () => {
   for (const role of ADMIN_ROLE_VARIANTS) {
-    test(`${role} resolves root to provincial summary`, async ({ page }) => {
+    test(`${role} resolves root to admin landing when admin is the only role`, async ({ page }) => {
       await bootstrapDevRoles(page, [role])
       await gotoProtectedRoute(page, '/')
 
-      await expect(page).toHaveURL(/\/provincial\/summary(?:\?.*)?$/)
-      await expect(page.getByRole('heading', { name: /provincial summary/i })).toBeVisible()
+      await expect(page).toHaveURL(/\/admin(?:\?.*)?$/)
+      await expect(page.getByRole('heading', { name: /administration/i })).toBeVisible()
     })
 
     test(`${role} can access protected admin and search routes`, async ({ page }) => {

@@ -8,7 +8,11 @@ This suite validates core frontend availability after migration work.
 - Auth transition compatibility:
   - Canonical `ADMIN` and legacy alias `LEXIS_ADMIN` map to the same protected access.
   - Legacy placeholder roles (`LEXIS_INDUSTRY*`, `LOG_EXPORT_INDUSTRY*`) remain routable during transition.
-  - Root redirect parity to `/provincial/summary`.
+  - Admin-only root redirect parity to `/admin`.
+- Role-access matrix hardening:
+  - Root redirect precedence mirrors legacy welcome routing (`READ_ONLY`, industry submitters, admin-only, exemption approver, MOFR fallback).
+  - Create/detail routes that need multiple actions now enforce all required actions instead of any-one-action access.
+  - Final FAM role smoke checks cover route allow/deny behavior for `READ_ONLY`, `APPLICATION_APPROVER`, `EXEMPTION_APPROVER`, `PROVINCIAL_SUBMITTER`, `FEDERAL_SUBMITTER`, and `ADMIN`.
 - Provincial application action controls:
   - "Create Exemption for Selected Applications" stays disabled until selection.
   - Selected-row client validation blocks invalid multi-select creates.

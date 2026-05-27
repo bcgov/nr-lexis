@@ -61,6 +61,12 @@ const LEGACY_PROVINCIAL_CONCRETE_PREFIX = 'LEXIS_INDUSTRY_'
 const LEGACY_FEDERAL_CONCRETE_PREFIXES = ['LEXIS_LOG_EXPORT_INDUSTRY_', 'LOG_EXPORT_INDUSTRY_']
 const CANONICAL_PROVINCIAL_CONCRETE_PREFIX = 'PROVINCIAL_SUBMITTER_'
 const CANONICAL_FEDERAL_CONCRETE_ROLE = 'FEDERAL_SUBMITTER'
+const ROLE_ADMIN = 'ADMIN'
+const ROLE_READ_ONLY = 'READ_ONLY'
+const ROLE_APPLICATION_APPROVER = 'APPLICATION_APPROVER'
+const ROLE_EXEMPTION_APPROVER = 'EXEMPTION_APPROVER'
+const ROLE_PROVINCIAL_SUBMITTER = 'PROVINCIAL_SUBMITTER'
+const ROLE_FEDERAL_SUBMITTER = 'FEDERAL_SUBMITTER'
 
 const canonicalizeRole = (role: string): string => {
   const normalizedRole = role.trim().toUpperCase()
@@ -137,14 +143,39 @@ const BASE_ADMIN_ACTIONS: string[] = [
   '/lexisFILAdmin',
 ]
 
-const DEV_READ_ONLY_ACTIONS: string[] = [...BASE_SEARCH_ACTIONS, ...BASE_DETAIL_ACTIONS]
-const DEV_APPROVER_ACTIONS: string[] = [...DEV_READ_ONLY_ACTIONS, ...BASE_WORKFLOW_ACTIONS]
-const DEV_INDUSTRY_ACTIONS: string[] = [
+const DEV_READ_ONLY_ACTIONS: string[] = [
+  '/applicationSearch',
+  '/applicationDetails',
+  '/federalApplicationSearch',
+  '/federalApplicationDetails',
+  '/permitSearch',
+  '/permitDetails',
+  '/indianReservePermitSearch',
+  '/indianReservePermitDetails',
+]
+
+const DEV_APPLICATION_APPROVER_ACTIONS: string[] = [...DEV_READ_ONLY_ACTIONS, '/applicationsReview']
+const DEV_EXEMPTION_APPROVER_ACTIONS: string[] = [
   ...DEV_READ_ONLY_ACTIONS,
-  'createOffer',
-  'createPermit',
+  '/exemptionSearch',
+  '/exemptionDetails',
+  '/applicationsReview',
+]
+
+const DEV_PROVINCIAL_SUBMITTER_ACTIONS: string[] = [
+  '/summary',
+  '/exemptionSearch',
+  '/applicationSearch',
+  '/applicationDetails',
+  '/offersSearch',
+  '/offerDetails',
+]
+
+const DEV_FEDERAL_SUBMITTER_ACTIONS: string[] = [
+  ...DEV_PROVINCIAL_SUBMITTER_ACTIONS,
+  '/federalApplicationSearch',
+  '/federalApplicationDetails',
   'viewFederalApplication',
-  'viewOICApplication',
 ]
 
 const DEV_ADMIN_ACTIONS: string[] = [
@@ -156,25 +187,39 @@ const DEV_ADMIN_ACTIONS: string[] = [
 ]
 
 const DEV_ROLE_ACTIONS: Record<string, string[]> = {
-  ADMIN: DEV_ADMIN_ACTIONS,
-  READ_ONLY: DEV_READ_ONLY_ACTIONS,
-  APPLICATION_APPROVER: DEV_APPROVER_ACTIONS,
-  EXEMPTION_APPROVER: DEV_APPROVER_ACTIONS,
-  PROVINCIAL_SUBMITTER: DEV_INDUSTRY_ACTIONS,
-  FEDERAL_SUBMITTER: DEV_INDUSTRY_ACTIONS,
+  [ROLE_ADMIN]: DEV_ADMIN_ACTIONS,
+  [ROLE_READ_ONLY]: DEV_READ_ONLY_ACTIONS,
+  [ROLE_APPLICATION_APPROVER]: DEV_APPLICATION_APPROVER_ACTIONS,
+  [ROLE_EXEMPTION_APPROVER]: DEV_EXEMPTION_APPROVER_ACTIONS,
+  [ROLE_PROVINCIAL_SUBMITTER]: DEV_PROVINCIAL_SUBMITTER_ACTIONS,
+  [ROLE_FEDERAL_SUBMITTER]: DEV_FEDERAL_SUBMITTER_ACTIONS,
   LEXIS_ADMIN: DEV_ADMIN_ACTIONS,
   LEXIS_READ_ONLY: DEV_READ_ONLY_ACTIONS,
-  LEXIS_APPLICATION_APPROVER: DEV_APPROVER_ACTIONS,
-  LEXIS_EXEMPTION_APPROVER: DEV_APPROVER_ACTIONS,
-  LEXIS_INDUSTRY: DEV_INDUSTRY_ACTIONS,
-  LEXIS_LOG_EXPORT_INDUSTRY: DEV_INDUSTRY_ACTIONS,
-  LOG_EXPORT_INDUSTRY: DEV_INDUSTRY_ACTIONS,
+  LEXIS_APPLICATION_APPROVER: DEV_APPLICATION_APPROVER_ACTIONS,
+  LEXIS_EXEMPTION_APPROVER: DEV_EXEMPTION_APPROVER_ACTIONS,
+  LEXIS_INDUSTRY: DEV_PROVINCIAL_SUBMITTER_ACTIONS,
+  LEXIS_LOG_EXPORT_INDUSTRY: DEV_FEDERAL_SUBMITTER_ACTIONS,
+  LOG_EXPORT_INDUSTRY: DEV_FEDERAL_SUBMITTER_ACTIONS,
 }
 
 const DEV_CONCRETE_ROLE_PREFIXES: string[] = ['PROVINCIAL_SUBMITTER_', 'LEXIS_INDUSTRY_']
+const INDUSTRY_ROLE_NAMES = new Set<string>([
+  ROLE_PROVINCIAL_SUBMITTER,
+  ROLE_FEDERAL_SUBMITTER,
+  'LEXIS_INDUSTRY',
+  'LEXIS_LOG_EXPORT_INDUSTRY',
+  'LOG_EXPORT_INDUSTRY',
+])
 
 const normalizeAction = (action: string): string => {
   return action.trim().toLowerCase().replace(/\.do$/i, '').replace(/^\//, '')
+}
+
+const isIndustryRole = (role: string): boolean => {
+  if (INDUSTRY_ROLE_NAMES.has(role)) {
+    return true
+  }
+  return DEV_CONCRETE_ROLE_PREFIXES.some((prefix) => role.startsWith(prefix))
 }
 
 const resolveFallbackActionsForRole = (role: string): string[] => {
@@ -184,7 +229,7 @@ const resolveFallbackActionsForRole = (role: string): string[] => {
 
   // TODO: replace this fallback with action claims from backend once Cognito/FAM authz is fully wired.
   if (DEV_CONCRETE_ROLE_PREFIXES.some((prefix) => role.startsWith(prefix))) {
-    return DEV_INDUSTRY_ACTIONS
+    return DEV_PROVINCIAL_SUBMITTER_ACTIONS
   }
 
   return []
@@ -230,6 +275,33 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     return LEGACY_ACTION_ROUTE_MAP[legacyAction]
   }
 
+  const roleSet = new Set(capabilities.roles)
+  const isReadOnlyUser = roleSet.has(ROLE_READ_ONLY) || roleSet.has('LEXIS_READ_ONLY')
+  const isIndustryUser = capabilities.roles.some((role) => isIndustryRole(role))
+  const isAdminOnly = roleSet.size === 1 && (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN'))
+  const isExemptionApproverUser =
+    roleSet.has(ROLE_EXEMPTION_APPROVER) || roleSet.has('LEXIS_EXEMPTION_APPROVER')
+
+  if (isReadOnlyUser) {
+    return '/provincial/application'
+  }
+
+  if (isIndustryUser) {
+    return '/provincial/summary'
+  }
+
+  if (isAdminOnly) {
+    return '/admin'
+  }
+
+  if (isExemptionApproverUser) {
+    return '/provincial/exemption'
+  }
+
+  if (capabilities.roles.length > 0) {
+    return '/provincial/review'
+  }
+
   const grantedSet = new Set(capabilities.grantedActions.map(normalizeAction))
   for (const action of ACTION_PRIORITY) {
     const normalizedAction = normalizeAction(action)
@@ -238,7 +310,7 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     }
   }
 
-  if (capabilities.roles.includes('ADMIN') || capabilities.roles.includes('LEXIS_ADMIN')) {
+  if (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN')) {
     return '/admin'
   }
 
