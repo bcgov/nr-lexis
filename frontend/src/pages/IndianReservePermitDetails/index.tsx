@@ -141,7 +141,7 @@ const IndianReservePermitDetailsPage: FC = () => {
                   }
                   onClick={() => navigate(withCurrentSearch('/indian-reserve'))}
                 >
-                  Open Reserve Search
+                  Back to Reserve Search Results
                 </Button>
                 <Button
                   kind="secondary"

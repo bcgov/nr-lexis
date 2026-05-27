@@ -183,7 +183,7 @@ const FederalApplicationDetailsPage: FC = () => {
                   disabled={!canAccessFederalSearch}
                   onClick={() => navigate(withCurrentSearch('/federal'))}
                 >
-                  Open Federal Search
+                  Back to Federal Search Results
                 </Button>
                 <Button
                   kind="secondary"

@@ -188,6 +188,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 <Button
                   kind="secondary"
                   size="sm"
+                  disabled={!canPerform('/applicationSearch')}
+                  onClick={() => navigate(withCurrentSearch('/provincial/application'))}
+                >
+                  Back to Application Search Results
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
                   disabled={
                     !detail.exemptionNumber ||
                     !canPerform('/exemptionSearch') ||

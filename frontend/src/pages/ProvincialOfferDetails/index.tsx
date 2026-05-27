@@ -94,7 +94,7 @@ const ProvincialOfferDetailsPage: FC = () => {
                   disabled={!canPerform('/offersSearch')}
                   onClick={() => navigate(withCurrentSearch('/provincial/offers'))}
                 >
-                  Open Offers Search
+                  Back to Offer Search Results
                 </Button>
                 <Button
                   kind="secondary"

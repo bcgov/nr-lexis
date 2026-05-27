@@ -379,7 +379,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                   disabled={!canPerform('/permitSearch')}
                   onClick={() => navigate(withCurrentSearch('/provincial/permit'))}
                 >
-                  Open Permit Search
+                  Back to Permit Search Results
                 </Button>
               </div>
             </Tile>
