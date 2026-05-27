@@ -337,6 +337,19 @@ public class PermitDetailsRpcController {
             authentication == null ? null : authentication.getName()));
   }
 
+  @GetMapping("/check-form-changes")
+  public ResponseEntity<CheckFormChangesResponseDto> checkFormChanges() {
+    // Lock-aware form diffing has not been reintroduced yet in Spring Boot;
+    // preserve legacy client contract with a stable no-op response.
+    return ResponseEntity.ok(new CheckFormChangesResponseDto(false));
+  }
+
+  @PostMapping("/release-lock")
+  public ResponseEntity<ReleaseLockResponseDto> releaseLock() {
+    // Legacy lock release is currently a no-op until lock manager parity is implemented.
+    return ResponseEntity.ok(new ReleaseLockResponseDto("ok"));
+  }
+
   @GetMapping("/invoices-for-permit")
   public ResponseEntity<PermitInvoiceListRpcResponseDto> getInvoicesForPermit(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
@@ -519,6 +532,10 @@ public class PermitDetailsRpcController {
       return null;
     }
   }
+
+  public record CheckFormChangesResponseDto(boolean permitChanged) {}
+
+  public record ReleaseLockResponseDto(String release) {}
 
   public record RemoveDocumentResponseDto(String success) {}
 }

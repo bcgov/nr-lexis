@@ -64,6 +64,8 @@ public class LegacyRouteController {
   private static final String ACTION_GET_CONVERSION_RATE = "getConversionRate";
   private static final String ACTION_GET_COUNTRY_LIST = "getCountryList";
   private static final String ACTION_GET_FILE_TYPES = "getFileTypes";
+  private static final String ACTION_CHECK_FORM_CHANGES = "checkFormChanges";
+  private static final String ACTION_RELEASE_LOCK = "releaseLock";
   private static final String ACTION_GET_DOCUMENT = "getDocument";
   private static final String ACTION_GET_DOCUMENT_DETAILS = "getDocumentDetails";
   private static final String ACTION_REMOVE_PERMIT_DOCUMENT = "removePermitDocument";
@@ -537,6 +539,12 @@ public class LegacyRouteController {
           invoiceConversionRate,
           invoiceFeeInLieu,
           authentication);
+    }
+    if (ACTION_CHECK_FORM_CHANGES.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.checkFormChanges();
+    }
+    if (ACTION_RELEASE_LOCK.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.releaseLock();
     }
     if (ACTION_GET_INVOICES_FOR_PERMIT.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getInvoicesForPermit(permitNumber);

@@ -548,4 +548,24 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getBody().success()).isEqualTo("true");
     verify(service).removeInvoiceDocument(55L);
   }
+
+  @Test
+  void checkFormChangesShouldReturnLegacyNoOpPayload() {
+    ResponseEntity<PermitDetailsRpcController.CheckFormChangesResponseDto> response =
+        controller.checkFormChanges();
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().permitChanged()).isFalse();
+  }
+
+  @Test
+  void releaseLockShouldReturnLegacyOkPayload() {
+    ResponseEntity<PermitDetailsRpcController.ReleaseLockResponseDto> response =
+        controller.releaseLock();
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().release()).isEqualTo("ok");
+  }
 }
