@@ -19,7 +19,18 @@ class InMemoryLexisUploadServiceTest {
         new MockMultipartFile(
             "file", "invoice.csv", "text/csv", "id,value\n1,123\n".getBytes(StandardCharsets.UTF_8));
 
-    LexisUploadResultDto result = service.uploadInvoice(file).orElseThrow();
+    LexisUploadResultDto result =
+        service
+            .uploadInvoice(
+                file,
+                7000123L,
+                "INV-1001",
+                "Invoice INV-1001",
+                null,
+                null,
+                null,
+                "jsmith")
+            .orElseThrow();
 
     assertThat(result.uploadType()).isEqualTo("invoice");
     assertThat(result.fileName()).isEqualTo("invoice.csv");
@@ -32,7 +43,8 @@ class InMemoryLexisUploadServiceTest {
     InMemoryLexisUploadService service = new InMemoryLexisUploadService();
     MockMultipartFile file = new MockMultipartFile("file", "empty.csv", "text/csv", new byte[0]);
 
-    Optional<LexisUploadResultDto> result = service.uploadApplication(file);
+    Optional<LexisUploadResultDto> result =
+        service.uploadApplication(file, 7000123L, "test", "jsmith");
 
     assertThat(result).isEmpty();
   }

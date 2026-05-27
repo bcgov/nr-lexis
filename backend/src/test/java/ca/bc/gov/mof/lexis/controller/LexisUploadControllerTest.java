@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -18,6 +19,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.web.multipart.MultipartFile;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,7 +34,8 @@ class LexisUploadControllerTest {
     LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
     MultipartFile file = new MockMultipartFile("file", "empty.csv", "text/csv", new byte[0]);
 
-    ResponseEntity<LexisUploadResultDto> response = controller.fileApplicationUpload(file);
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileApplicationUpload(file, 7000123L, "test", null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     verifyNoInteractions(uploadService);
@@ -44,7 +47,8 @@ class LexisUploadControllerTest {
     LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
     MultipartFile file = sampleFile("application.csv");
 
-    ResponseEntity<LexisUploadResultDto> response = controller.fileApplicationUpload(file);
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileApplicationUpload(file, 7000123L, "test", null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(uploadService);
@@ -55,15 +59,19 @@ class LexisUploadControllerTest {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
     MultipartFile file = sampleFile("application.csv");
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("application", "application.csv", file.getSize(), "accepted", "queued");
-    when(uploadService.uploadApplication(file)).thenReturn(Optional.of(payload));
+    when(uploadService.uploadApplication(file, 7000123L, "App file", "jsmith"))
+        .thenReturn(Optional.of(payload));
 
-    ResponseEntity<LexisUploadResultDto> response = controller.fileApplicationUpload(file);
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileApplicationUpload(file, 7000123L, "App file", null, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(uploadService).uploadApplication(file);
+    verify(uploadService).uploadApplication(file, 7000123L, "App file", "jsmith");
   }
 
   @Test
@@ -71,15 +79,19 @@ class LexisUploadControllerTest {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
     MultipartFile file = sampleFile("permit.csv");
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("permit", "permit.csv", file.getSize(), "accepted", "queued");
-    when(uploadService.uploadPermit(file)).thenReturn(Optional.of(payload));
+    when(uploadService.uploadPermit(file, 7000123L, "Permit file", "jsmith"))
+        .thenReturn(Optional.of(payload));
 
-    ResponseEntity<LexisUploadResultDto> response = controller.filePermitUpload(file);
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.filePermitUpload(file, 7000123L, "Permit file", null, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(uploadService).uploadPermit(file);
+    verify(uploadService).uploadPermit(file, 7000123L, "Permit file", "jsmith");
   }
 
   @Test
@@ -87,15 +99,19 @@ class LexisUploadControllerTest {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
     MultipartFile file = sampleFile("exemption.csv");
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("exemption", "exemption.csv", file.getSize(), "accepted", "queued");
-    when(uploadService.uploadExemption(file)).thenReturn(Optional.of(payload));
+    when(uploadService.uploadExemption(file, "E-123", "Exemption file", "jsmith"))
+        .thenReturn(Optional.of(payload));
 
-    ResponseEntity<LexisUploadResultDto> response = controller.fileExemptionUpload(file);
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileExemptionUpload(file, "E-123", "Exemption file", null, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(uploadService).uploadExemption(file);
+    verify(uploadService).uploadExemption(file, "E-123", "Exemption file", "jsmith");
   }
 
   @Test
@@ -103,15 +119,61 @@ class LexisUploadControllerTest {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
     MultipartFile file = sampleFile("invoice.csv");
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("invoice", "invoice.csv", file.getSize(), "accepted", "queued");
-    when(uploadService.uploadInvoice(file)).thenReturn(Optional.of(payload));
+    when(
+            uploadService.uploadInvoice(
+                file,
+                7000123L,
+                "INV-1001",
+                "Invoice INV-1001",
+                BigDecimal.valueOf(1234.56),
+                BigDecimal.valueOf(1.25),
+                BigDecimal.valueOf(55.0),
+                "jsmith"))
+        .thenReturn(Optional.of(payload));
 
-    ResponseEntity<LexisUploadResultDto> response = controller.fileInvoiceUpload(file);
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileInvoiceUpload(
+            file,
+            7000123L,
+            "INV-1001",
+            "Invoice INV-1001",
+            null,
+            BigDecimal.valueOf(1234.56),
+            null,
+            BigDecimal.valueOf(1.25),
+            null,
+            BigDecimal.valueOf(55.0),
+            null,
+            authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(uploadService).uploadInvoice(file);
+    verify(uploadService)
+        .uploadInvoice(
+            file,
+            7000123L,
+            "INV-1001",
+            "Invoice INV-1001",
+            BigDecimal.valueOf(1234.56),
+            BigDecimal.valueOf(1.25),
+            BigDecimal.valueOf(55.0),
+            "jsmith");
+  }
+
+  @Test
+  void filePermitUploadShouldReturnBadRequestWhenPermitNumberMissing() {
+    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    MultipartFile file = sampleFile("permit.csv");
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.filePermitUpload(file, null, "Permit file", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    verifyNoInteractions(uploadService);
   }
 
   private MultipartFile sampleFile(String fileName) {
@@ -122,4 +184,3 @@ class LexisUploadControllerTest {
         "col1,col2\nvalue1,value2\n".getBytes(StandardCharsets.UTF_8));
   }
 }
-
