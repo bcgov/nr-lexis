@@ -14,6 +14,7 @@ import {
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import { isPositiveNumeric, isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
 import {
+  deleteCreateDraft,
   listCreateDrafts,
   saveCreateDraft,
   type CreateDraftRecord,
@@ -66,6 +67,17 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   comments: '',
 }
 
+const mapDraftPayloadToForm = (payload: unknown): ProvincialApplicationCreateForm => {
+  if (!payload || typeof payload !== 'object') {
+    return INITIAL_FORM
+  }
+
+  return {
+    ...INITIAL_FORM,
+    ...(payload as Partial<ProvincialApplicationCreateForm>),
+  }
+}
+
 const ProvincialApplicationCreatePage: FC = () => {
   const [form, setForm] = useState<ProvincialApplicationCreateForm>(INITIAL_FORM)
   const [productTypes, setProductTypes] = useState<SearchOption[]>(FALLBACK_PRODUCT_TYPES)
@@ -116,6 +128,20 @@ const ProvincialApplicationCreatePage: FC = () => {
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({ kind: 'success', message: `Draft ${saved.id} saved.` })
+  }
+
+  const onUseDraft = (record: CreateDraftRecord<unknown>) => {
+    setForm(mapDraftPayloadToForm(record.payload))
+    setStatus({ kind: 'success', message: `Draft ${record.id} loaded.` })
+  }
+
+  const onDeleteDraft = (draftId: string) => {
+    const wasDeleted = deleteCreateDraft(MODULE_KEY, draftId)
+    setDrafts(listCreateDrafts(MODULE_KEY))
+    setStatus({
+      kind: wasDeleted ? 'success' : 'error',
+      message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
+    })
   }
 
   return (
@@ -262,6 +288,8 @@ const ProvincialApplicationCreatePage: FC = () => {
         <CreateDraftHistory
           title="Recent Application Drafts"
           drafts={drafts}
+          onUseDraft={onUseDraft}
+          onDeleteDraft={onDeleteDraft}
           summarize={(payload) => {
             const value = payload as ProvincialApplicationCreateForm
             return `${value.applicationNumber || 'N/A'} / ${value.packageNumber || 'N/A'}`

@@ -14,6 +14,7 @@ import {
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import { isPositiveNumeric, isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
 import {
+  deleteCreateDraft,
   listCreateDrafts,
   saveCreateDraft,
   type CreateDraftRecord,
@@ -126,6 +127,17 @@ const ProvincialExemptionCreatePage: FC = () => {
   )
   const [status, setStatus] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
 
+  const mapDraftPayloadToForm = (payload: unknown): ProvincialExemptionCreateForm => {
+    if (!payload || typeof payload !== 'object') {
+      return initialForm
+    }
+
+    return {
+      ...initialForm,
+      ...(payload as Partial<ProvincialExemptionCreateForm>),
+    }
+  }
+
   useEffect(() => {
     const loadOptions = async () => {
       const options = await fetchProvincialExemptionOptions()
@@ -164,6 +176,20 @@ const ProvincialExemptionCreatePage: FC = () => {
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({ kind: 'success', message: `Draft ${saved.id} saved.` })
+  }
+
+  const onUseDraft = (record: CreateDraftRecord<unknown>) => {
+    setForm(mapDraftPayloadToForm(record.payload))
+    setStatus({ kind: 'success', message: `Draft ${record.id} loaded.` })
+  }
+
+  const onDeleteDraft = (draftId: string) => {
+    const wasDeleted = deleteCreateDraft(MODULE_KEY, draftId)
+    setDrafts(listCreateDrafts(MODULE_KEY))
+    setStatus({
+      kind: wasDeleted ? 'success' : 'error',
+      message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
+    })
   }
 
   return (
@@ -319,6 +345,8 @@ const ProvincialExemptionCreatePage: FC = () => {
         <CreateDraftHistory
           title="Recent Exemption Drafts"
           drafts={drafts}
+          onUseDraft={onUseDraft}
+          onDeleteDraft={onDeleteDraft}
           summarize={(payload) => {
             const value = payload as ProvincialExemptionCreateForm
             return `${value.exemptionNumber || 'N/A'} / application ${value.applicationNumber || 'N/A'}`

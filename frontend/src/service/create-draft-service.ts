@@ -65,3 +65,15 @@ export const saveCreateDraft = <TData>(
   persistRecords(module, nextRecords)
   return nextRecord
 }
+
+export const deleteCreateDraft = (module: string, draftId: string): boolean => {
+  const records = listCreateDrafts(module)
+  const nextRecords = records.filter((record) => record.id !== draftId)
+
+  if (nextRecords.length === records.length) {
+    return false
+  }
+
+  persistRecords(module, nextRecords)
+  return true
+}

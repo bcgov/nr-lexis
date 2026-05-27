@@ -4,6 +4,7 @@ import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } f
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import { isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
 import {
+  deleteCreateDraft,
   listCreateDrafts,
   saveCreateDraft,
   type CreateDraftRecord,
@@ -39,6 +40,17 @@ const INITIAL_FORM: IndianReservePermitCreateForm = {
   remarks: '',
 }
 
+const mapDraftPayloadToForm = (payload: unknown): IndianReservePermitCreateForm => {
+  if (!payload || typeof payload !== 'object') {
+    return INITIAL_FORM
+  }
+
+  return {
+    ...INITIAL_FORM,
+    ...(payload as Partial<IndianReservePermitCreateForm>),
+  }
+}
+
 const IndianReservePermitCreatePage: FC = () => {
   const [form, setForm] = useState<IndianReservePermitCreateForm>(INITIAL_FORM)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
@@ -67,6 +79,20 @@ const IndianReservePermitCreatePage: FC = () => {
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({ kind: 'success', message: `Draft ${saved.id} saved.` })
+  }
+
+  const onUseDraft = (record: CreateDraftRecord<unknown>) => {
+    setForm(mapDraftPayloadToForm(record.payload))
+    setStatus({ kind: 'success', message: `Draft ${record.id} loaded.` })
+  }
+
+  const onDeleteDraft = (draftId: string) => {
+    const wasDeleted = deleteCreateDraft(MODULE_KEY, draftId)
+    setDrafts(listCreateDrafts(MODULE_KEY))
+    setStatus({
+      kind: wasDeleted ? 'success' : 'error',
+      message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
+    })
   }
 
   return (
@@ -209,6 +235,8 @@ const IndianReservePermitCreatePage: FC = () => {
         <CreateDraftHistory
           title="Recent Indian Reserve Permit Drafts"
           drafts={drafts}
+          onUseDraft={onUseDraft}
+          onDeleteDraft={onDeleteDraft}
           summarize={(payload) => {
             const value = payload as IndianReservePermitCreateForm
             return `${value.permitNumber || 'N/A'} / ${value.packageNumber || 'N/A'}`

@@ -14,6 +14,7 @@ import {
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import { isPositiveNumeric, isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
 import {
+  deleteCreateDraft,
   listCreateDrafts,
   saveCreateDraft,
   type CreateDraftRecord,
@@ -51,6 +52,17 @@ const INITIAL_FORM: ProvincialOfferCreateForm = {
   offerEndDate: '',
   pickupLocation: '',
   offerCondition: '',
+}
+
+const mapDraftPayloadToForm = (payload: unknown): ProvincialOfferCreateForm => {
+  if (!payload || typeof payload !== 'object') {
+    return INITIAL_FORM
+  }
+
+  return {
+    ...INITIAL_FORM,
+    ...(payload as Partial<ProvincialOfferCreateForm>),
+  }
 }
 
 const ProvincialOfferCreatePage: FC = () => {
@@ -96,6 +108,20 @@ const ProvincialOfferCreatePage: FC = () => {
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({ kind: 'success', message: `Draft ${saved.id} saved.` })
+  }
+
+  const onUseDraft = (record: CreateDraftRecord<unknown>) => {
+    setForm(mapDraftPayloadToForm(record.payload))
+    setStatus({ kind: 'success', message: `Draft ${record.id} loaded.` })
+  }
+
+  const onDeleteDraft = (draftId: string) => {
+    const wasDeleted = deleteCreateDraft(MODULE_KEY, draftId)
+    setDrafts(listCreateDrafts(MODULE_KEY))
+    setStatus({
+      kind: wasDeleted ? 'success' : 'error',
+      message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
+    })
   }
 
   return (
@@ -236,6 +262,8 @@ const ProvincialOfferCreatePage: FC = () => {
         <CreateDraftHistory
           title="Recent Offer Drafts"
           drafts={drafts}
+          onUseDraft={onUseDraft}
+          onDeleteDraft={onDeleteDraft}
           summarize={(payload) => {
             const value = payload as ProvincialOfferCreateForm
             return `${value.offerNumber || 'N/A'} / application ${value.applicationNumber || 'N/A'}`
