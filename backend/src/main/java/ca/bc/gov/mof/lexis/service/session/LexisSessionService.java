@@ -6,7 +6,6 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
@@ -23,38 +22,14 @@ public class LexisSessionService {
   private static final String ROLE_PROVINCIAL_SUBMITTER = "PROVINCIAL_SUBMITTER";
   private static final String ROLE_FEDERAL_SUBMITTER = "FEDERAL_SUBMITTER";
 
-  private static final Map<String, String> EXACT_ROLE_ALIASES =
-      Map.ofEntries(
-          Map.entry(ROLE_ADMIN, ROLE_ADMIN),
-          Map.entry(ROLE_READ_ONLY, ROLE_READ_ONLY),
-          Map.entry(ROLE_APPLICATION_APPROVER, ROLE_APPLICATION_APPROVER),
-          Map.entry(ROLE_EXEMPTION_APPROVER, ROLE_EXEMPTION_APPROVER),
-          Map.entry(ROLE_PROVINCIAL_SUBMITTER, ROLE_PROVINCIAL_SUBMITTER),
-          Map.entry(ROLE_FEDERAL_SUBMITTER, ROLE_FEDERAL_SUBMITTER),
-          Map.entry("LEXIS_ADMIN", ROLE_ADMIN),
-          Map.entry("LEXIS_READ_ONLY", ROLE_READ_ONLY),
-          Map.entry("LEXIS_APPLICATION_APPROVER", ROLE_APPLICATION_APPROVER),
-          Map.entry("LEXIS_EXEMPTION_APPROVER", ROLE_EXEMPTION_APPROVER),
-          Map.entry("LEXIS_INDUSTRY", ROLE_PROVINCIAL_SUBMITTER),
-          Map.entry("INDUSTRY", ROLE_PROVINCIAL_SUBMITTER),
-          Map.entry("LEXIS_LOG_EXPORT_INDUSTRY", ROLE_FEDERAL_SUBMITTER),
-          Map.entry("LOG_EXPORT_INDUSTRY", ROLE_FEDERAL_SUBMITTER),
-          Map.entry("LEXIS_PROVINCIAL_SUBMITTER", ROLE_PROVINCIAL_SUBMITTER),
-          Map.entry("LEXIS_FEDERAL_SUBMITTER", ROLE_FEDERAL_SUBMITTER));
-
-  private static final Map<String, String> SCOPED_ROLE_ALIASES =
-      Map.ofEntries(
-          Map.entry(ROLE_PROVINCIAL_SUBMITTER, ROLE_PROVINCIAL_SUBMITTER),
-          Map.entry("LEXIS_INDUSTRY", ROLE_PROVINCIAL_SUBMITTER),
-          Map.entry("INDUSTRY", ROLE_PROVINCIAL_SUBMITTER),
-          Map.entry("LEXIS_PROVINCIAL_SUBMITTER", ROLE_PROVINCIAL_SUBMITTER));
-
-  private static final Set<String> FEDERAL_ROLE_ALIASES =
+  private static final Set<String> CANONICAL_ROLES =
       Set.of(
-          ROLE_FEDERAL_SUBMITTER,
-          "LEXIS_LOG_EXPORT_INDUSTRY",
-          "LOG_EXPORT_INDUSTRY",
-          "LEXIS_FEDERAL_SUBMITTER");
+          ROLE_ADMIN,
+          ROLE_READ_ONLY,
+          ROLE_APPLICATION_APPROVER,
+          ROLE_EXEMPTION_APPROVER,
+          ROLE_PROVINCIAL_SUBMITTER,
+          ROLE_FEDERAL_SUBMITTER);
 
   private final Set<String> configuredIndustryRoles;
 
@@ -217,31 +192,15 @@ public class LexisSessionService {
       return null;
     }
 
-    String aliasMapped = EXACT_ROLE_ALIASES.get(normalizedRole);
-    if (aliasMapped != null) {
-      return aliasMapped;
+    if (CANONICAL_ROLES.contains(normalizedRole)) {
+      return normalizedRole;
     }
 
-    for (Map.Entry<String, String> alias : SCOPED_ROLE_ALIASES.entrySet()) {
-      String aliasPrefix = alias.getKey() + "_";
-      if (!normalizedRole.startsWith(aliasPrefix)) {
-        continue;
-      }
-
-      String suffix = normalizedRole.substring(aliasPrefix.length());
+    String provincialPrefix = ROLE_PROVINCIAL_SUBMITTER + "_";
+    if (normalizedRole.startsWith(provincialPrefix)) {
+      String suffix = normalizedRole.substring(provincialPrefix.length());
       if (!suffix.isEmpty() && suffix.chars().allMatch(Character::isDigit)) {
-        return alias.getValue() + "_" + suffix;
-      }
-    }
-
-    for (String alias : FEDERAL_ROLE_ALIASES) {
-      String aliasPrefix = alias + "_";
-      if (!normalizedRole.startsWith(aliasPrefix)) {
-        continue;
-      }
-      String suffix = normalizedRole.substring(aliasPrefix.length());
-      if (!suffix.isEmpty() && suffix.chars().allMatch(Character::isDigit)) {
-        return ROLE_FEDERAL_SUBMITTER;
+        return normalizedRole;
       }
     }
 

@@ -35,11 +35,11 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void applicationsSearchShouldAllowLegacyReadOnlyAliasDuringTransition() throws Exception {
+  void applicationsSearchShouldRejectLegacyReadOnlyAlias() throws Exception {
     mockMvc.perform(
             get("/api/lexis/applications/search")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -95,13 +95,13 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyOfferDetailsRpcShouldAllowLegacyIndustryAliasDuringTransition() throws Exception {
+  void legacyOfferDetailsRpcShouldRejectLegacyIndustryAlias() throws Exception {
     mockMvc.perform(
             get("/api/lexis/offerDetailsRPC")
                 .param("actionMapping", "getApplicationVolume")
                 .param("applicationNumber", "1000456")
                 .with(jwt().authorities(new SimpleGrantedAuthority("INDUSTRY"))))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -150,11 +150,11 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void applicationReviewApproveShouldAllowLegacyApproverAliasDuringTransition() throws Exception {
+  void applicationReviewApproveShouldRejectLegacyApproverAlias() throws Exception {
     mockMvc.perform(
             post("/api/lexis/application-reviews/1000123/approve")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
-        .andExpect(status().isNoContent());
+        .andExpect(status().isForbidden());
   }
 
   @Test

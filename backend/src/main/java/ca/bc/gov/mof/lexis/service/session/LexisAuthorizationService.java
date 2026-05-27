@@ -21,19 +21,6 @@ public class LexisAuthorizationService {
   private static final String ROLE_PROVINCIAL_SUBMITTER = "PROVINCIAL_SUBMITTER";
   private static final String ROLE_FEDERAL_SUBMITTER = "FEDERAL_SUBMITTER";
 
-  private static final Map<String, List<String>> LEGACY_ROLE_ALIASES =
-      Map.ofEntries(
-          Map.entry(ROLE_ADMIN, List.of("LEXIS_ADMIN")),
-          Map.entry(ROLE_READ_ONLY, List.of("LEXIS_READ_ONLY")),
-          Map.entry(ROLE_APPLICATION_APPROVER, List.of("LEXIS_APPLICATION_APPROVER")),
-          Map.entry(ROLE_EXEMPTION_APPROVER, List.of("LEXIS_EXEMPTION_APPROVER")),
-          Map.entry(
-              ROLE_PROVINCIAL_SUBMITTER,
-              List.of("LEXIS_INDUSTRY", "INDUSTRY", "LEXIS_PROVINCIAL_SUBMITTER")),
-          Map.entry(
-              ROLE_FEDERAL_SUBMITTER,
-              List.of("LEXIS_LOG_EXPORT_INDUSTRY", "LOG_EXPORT_INDUSTRY", "LEXIS_FEDERAL_SUBMITTER")));
-
   private final Set<String> configuredIndustryRoles;
   private final Map<String, List<String>> configuredRoleActions;
   private final LexisSessionService sessionService;
@@ -196,13 +183,6 @@ public class LexisAuthorizationService {
   }
 
   private Set<String> withLegacyAliases(Set<String> canonicalRoles) {
-    LinkedHashSet<String> expanded = new LinkedHashSet<>(canonicalRoles);
-    for (String role : canonicalRoles) {
-      List<String> legacyAliases = LEGACY_ROLE_ALIASES.get(role);
-      if (legacyAliases != null && !legacyAliases.isEmpty()) {
-        expanded.addAll(legacyAliases);
-      }
-    }
-    return Set.copyOf(expanded);
+    return Set.copyOf(canonicalRoles);
   }
 }
