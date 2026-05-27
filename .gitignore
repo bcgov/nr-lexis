@@ -1,3 +1,7 @@
+### macOS / local worktrees ###
+.DS_Store
+.wt-*/
+
 ### Generated ###
 # Created by https://www.toptal.com/developers/gitignore/api/node,java,python,go
 # Edit at https://www.toptal.com/developers/gitignore?templates=node,java,python,go
