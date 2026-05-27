@@ -213,4 +213,40 @@ class LexisRouteAuthorizationIntegrationTest {
                 .with(jwt().authorities(new SimpleGrantedAuthority("ADMIN"))))
         .andExpect(status().isNoContent());
   }
+
+  @Test
+  void legacyReportRouteShouldAllowReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/offerReport")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV")
+                .param("fromDate", "2026-01-01")
+                .param("toDate", "2026-01-31")
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void legacyOfferReportShouldRejectProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/offerReport")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV")
+                .param("fromDate", "2026-01-01")
+                .param("toDate", "2026-01-31")
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyBiweeklyListingShouldAllowProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/biweeklyListing")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV")
+                .param("fromDate", "2026-01-01")
+                .param("toDate", "2026-01-31")
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isOk());
+  }
 }
