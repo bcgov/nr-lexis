@@ -183,3 +183,7 @@ sketch
 .env.local
 .env.*.local
 !.env.example
+
+# Playwright outputs
+playwright-report/
+test-results/

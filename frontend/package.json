@@ -15,7 +15,11 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
     "test:unit": "vitest --mode test",
     "test:cov": "vitest run --mode test --coverage",
-    "build": "vite build"
+    "build": "vite build",
+    "pree2e": "playwright install chromium",
+    "e2e": "playwright test --project=chromium",
+    "e2e:ui": "playwright test --project=chromium --ui",
+    "e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@bcgov-nr/nr-theme": "^1.8.9",
