@@ -16,6 +16,10 @@ This suite validates core frontend availability after migration work.
 - Provincial review action controls:
   - Selection-driven enablement for approve/update buttons.
   - Status-dependent enablement for "Update Status and Send Email".
+- Provincial exemption action controls:
+  - Approve action stays disabled until at least one eligible row is selected.
+  - Row eligibility respects approval rules (`NEW`, approvable, not locked).
+  - Approval click shows readiness status for selected rows.
 - Core protected routes render:
   - `/provincial/application`
   - `/provincial/exemption`
