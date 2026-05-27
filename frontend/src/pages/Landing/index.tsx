@@ -8,6 +8,7 @@ import {
   Select,
   SelectItem,
   Tag,
+  TextInput,
   Tile,
 } from '@carbon/react'
 import { Login } from '@carbon/icons-react'
@@ -21,12 +22,13 @@ const DEV_ROLE_OPTIONS = [
   { value: 'APPLICATION_APPROVER', label: 'APPLICATION_APPROVER' },
   { value: 'EXEMPTION_APPROVER', label: 'EXEMPTION_APPROVER' },
   { value: 'LEXIS_INDUSTRY', label: 'LEXIS_INDUSTRY (Abstract Parent)' },
-  { value: 'LEXIS_INDUSTRY_00012345', label: 'LEXIS_INDUSTRY_00012345 (Concrete Child)' },
   { value: 'LOG_EXPORT_INDUSTRY', label: 'LOG_EXPORT_INDUSTRY (Abstract Parent)' },
-  {
-    value: 'LOG_EXPORT_INDUSTRY_00012345',
-    label: 'LOG_EXPORT_INDUSTRY_00012345 (Concrete Child)',
-  },
+]
+
+const DEV_CONCRETE_ROLE_FAMILIES = [
+  { value: '', label: 'Select role family' },
+  { value: 'LEXIS_INDUSTRY', label: 'LEXIS_INDUSTRY' },
+  { value: 'LOG_EXPORT_INDUSTRY', label: 'LOG_EXPORT_INDUSTRY' },
 ]
 
 const isDevRoleSimulationEnabled = (): boolean => {
@@ -35,6 +37,10 @@ const isDevRoleSimulationEnabled = (): boolean => {
   }
   return import.meta.env.DEV
 }
+
+const normalizeForestClientNumber = (value: string): string => value.trim()
+
+const isNumericForestClientNumber = (value: string): boolean => /^[0-9]+$/.test(value)
 
 const LandingPage: FC = () => {
   const navigate = useNavigate()
@@ -52,6 +58,8 @@ const LandingPage: FC = () => {
   } = useAuth()
 
   const [selectedRole, setSelectedRole] = useState('')
+  const [selectedConcreteRoleFamily, setSelectedConcreteRoleFamily] = useState('')
+  const [forestClientNumber, setForestClientNumber] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [showDevTools, setShowDevTools] = useState(false)
 
@@ -92,9 +100,34 @@ const LandingPage: FC = () => {
     setErrorMessage('')
     try {
       await setDevRoles([selectedRole])
+      setSelectedConcreteRoleFamily('')
+      setForestClientNumber('')
     } catch (error) {
       console.error(error)
       setErrorMessage('Unable to set development role simulation.')
+    }
+  }
+
+  const onUseConcreteDevRole = async () => {
+    const clientNumber = normalizeForestClientNumber(forestClientNumber)
+    if (!selectedConcreteRoleFamily || !clientNumber) {
+      return
+    }
+
+    if (!isNumericForestClientNumber(clientNumber)) {
+      setErrorMessage('Forest client number must be numeric for concrete role simulation.')
+      return
+    }
+
+    setErrorMessage('')
+    const concreteRole = `${selectedConcreteRoleFamily}_${clientNumber}`
+
+    try {
+      await setDevRoles([concreteRole])
+      setSelectedRole('')
+    } catch (error) {
+      console.error(error)
+      setErrorMessage('Unable to set concrete development role simulation.')
     }
   }
 
@@ -102,6 +135,9 @@ const LandingPage: FC = () => {
     setErrorMessage('')
     try {
       await clearLoginSimulation()
+      setSelectedRole('')
+      setSelectedConcreteRoleFamily('')
+      setForestClientNumber('')
     } catch (error) {
       console.error(error)
       setErrorMessage('Unable to clear development role simulation.')
@@ -193,7 +229,12 @@ const LandingPage: FC = () => {
                   <p className="landing-help-text">
                     FAM role model note: <code>LEXIS_INDUSTRY</code> and{' '}
                     <code>LOG_EXPORT_INDUSTRY</code> are abstract parents. Concrete client-scoped
-                    roles use the suffix pattern <code>ROLE_&lt;forestClientNumber&gt;</code>.
+                    roles use the suffix pattern{' '}
+                    <code>&lt;roleFamily&gt;_&lt;forestClientNumber&gt;</code>.
+                  </p>
+                  <p className="landing-help-text">
+                    TODO: replace manual concrete role simulation with live Cognito/FAM role claims
+                    once backend-auth integration is complete.
                   </p>
                   <div className="landing-actions">
                     <Select
@@ -211,7 +252,31 @@ const LandingPage: FC = () => {
                       onClick={() => void onUseDevRole()}
                       disabled={isLoading || !selectedRole}
                     >
-                      Use Development Role
+                      Use Abstract or Global Role
+                    </Button>
+                    <Select
+                      id="devConcreteRoleFamily"
+                      labelText="Concrete Role Family"
+                      value={selectedConcreteRoleFamily}
+                      onChange={(event) => setSelectedConcreteRoleFamily(event.target.value)}
+                    >
+                      {DEV_CONCRETE_ROLE_FAMILIES.map((option) => (
+                        <SelectItem key={option.label} value={option.value} text={option.label} />
+                      ))}
+                    </Select>
+                    <TextInput
+                      id="devForestClientNumber"
+                      labelText="Forest Client Number"
+                      value={forestClientNumber}
+                      onChange={(event) => setForestClientNumber(event.target.value)}
+                      placeholder="Enter numeric client number"
+                    />
+                    <Button
+                      kind="secondary"
+                      onClick={() => void onUseConcreteDevRole()}
+                      disabled={isLoading || !selectedConcreteRoleFamily || !forestClientNumber}
+                    >
+                      Use Concrete Role
                     </Button>
                     <Button
                       kind="ghost"
