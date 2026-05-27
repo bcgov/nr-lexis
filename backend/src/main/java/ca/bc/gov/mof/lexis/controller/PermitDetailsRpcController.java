@@ -160,6 +160,18 @@ public class PermitDetailsRpcController {
     return ResponseEntity.ok(service.getPackageList(permitNumber));
   }
 
+  @GetMapping("/oic-package-list")
+  public ResponseEntity<PermitPackageListRpcResponseDto> getOicPackageList(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for OIC package list");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getOicPackageList(permitNumber));
+  }
+
   @GetMapping("/package-info")
   public ResponseEntity<PermitPackageInfoRpcResponseDto> getPackageInfo(
       @RequestParam(name = "packageNumber", required = false) String packageNumber) {

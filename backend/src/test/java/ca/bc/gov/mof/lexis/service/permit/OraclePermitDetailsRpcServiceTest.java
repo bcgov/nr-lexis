@@ -251,6 +251,25 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void oicPackageListShouldReturnNoPackagesWhenOicPermitHasNone() {
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of());
+
+    PermitPackageListRpcResponseDto response = service.getOicPackageList(7000123L);
+
+    assertThat(response.packageList()).containsExactly("No Packages");
+  }
+
+  @Test
+  void oicPackageListShouldReturnRepositoryPackageNumbers() {
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L))
+        .thenReturn(List.of("PKG-OIC-2", "PKG-OIC-1"));
+
+    PermitPackageListRpcResponseDto response = service.getOicPackageList(7000123L);
+
+    assertThat(response.packageList()).containsExactly("PKG-OIC-2", "PKG-OIC-1");
+  }
+
+  @Test
   void permitHasApplicationsShouldReflectPackageAssignments() {
     when(repository.findPackageNumbersByPermitNumber(7000123L)).thenReturn(List.of("PKG-100"));
 

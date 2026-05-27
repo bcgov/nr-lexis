@@ -25,6 +25,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PRM(?,?)";
   private static final String FIND_PACKAGES_BY_PERMIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_PERMIT(?,?)";
+  private static final String FIND_PACKAGES_BY_OIC_PERMIT =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_OIC_PERMIT(?,?)";
   private static final String FIND_PACKAGES_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
   private static final String FIND_PACKAGES_BY_EXEMPTION =
@@ -112,6 +114,23 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return queryCursorProcedure(
             FIND_PACKAGES_BY_PERMIT,
             cs -> cs.setString(1, permitNumber.toString()),
+            2,
+            rs -> getString(rs, "PACKAGE_NUMBER"))
+        .stream()
+        .filter(packageNumber -> packageNumber != null && !packageNumber.isBlank())
+        .distinct()
+        .sorted()
+        .toList();
+  }
+
+  public List<String> findPackageNumbersByOicPermitNumber(Long oicPermitNumber) {
+    if (oicPermitNumber == null || oicPermitNumber < 1) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+            FIND_PACKAGES_BY_OIC_PERMIT,
+            cs -> cs.setString(1, oicPermitNumber.toString()),
             2,
             rs -> getString(rs, "PACKAGE_NUMBER"))
         .stream()

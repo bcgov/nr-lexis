@@ -191,6 +191,21 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void oicPackageListShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPackageListRpcResponseDto dto =
+        new PermitPackageListRpcResponseDto(List.of("PKG-OIC-1", "PKG-OIC-2"));
+    when(service.getOicPackageList(7000123L)).thenReturn(dto);
+
+    ResponseEntity<PermitPackageListRpcResponseDto> response =
+        controller.getOicPackageList(7000123L);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getOicPackageList(7000123L);
+  }
+
+  @Test
   void permitHasApplicationsShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitHasApplicationsRpcResponseDto dto = new PermitHasApplicationsRpcResponseDto(true);

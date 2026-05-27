@@ -384,6 +384,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  public PermitPackageListRpcResponseDto getOicPackageList(Long permitNumber) {
+    List<String> packageList = repository.findPackageNumbersByOicPermitNumber(permitNumber);
+    if (packageList.isEmpty()) {
+      return new PermitPackageListRpcResponseDto(List.of("No Packages"));
+    }
+    return new PermitPackageListRpcResponseDto(packageList);
+  }
+
+  @Override
   public PermitHasApplicationsRpcResponseDto getPermitHasApplications(Long permitNumber) {
     boolean hasApplications = !repository.findPackageNumbersByPermitNumber(permitNumber).isEmpty();
     return new PermitHasApplicationsRpcResponseDto(hasApplications);

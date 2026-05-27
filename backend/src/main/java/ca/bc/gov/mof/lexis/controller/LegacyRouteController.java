@@ -48,6 +48,7 @@ public class LegacyRouteController {
   private static final String ACTION_GET_PACKAGE_VOLUME_SUM = "getPackageVolumeSum";
   private static final String ACTION_GET_PACKAGE_INFO = "getPackageInfo";
   private static final String ACTION_GET_PACKAGE_DETAILS = "getPackageDetails";
+  private static final String ACTION_GET_OIC_PACKAGE_LIST = "getOICPackageList";
   private static final String ACTION_GET_SCALES_FOR_PACKAGE = "getScalesForPackage";
   private static final String ACTION_CHECK_PERMIT_NUMBER = "checkPermitNumber";
   private static final String ACTION_GET_APPLICATION_LIST = "getApplicationList";
@@ -487,6 +488,9 @@ public class LegacyRouteController {
     }
     if (ACTION_GET_PACKAGE_LIST.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPackageList(permitNumber);
+    }
+    if (ACTION_GET_OIC_PACKAGE_LIST.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getOicPackageList(permitNumber);
     }
     if (ACTION_GET_PACKAGE_INFO.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPackageInfo(packageNumber);

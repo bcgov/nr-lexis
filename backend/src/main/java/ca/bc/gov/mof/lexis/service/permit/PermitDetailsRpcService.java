@@ -56,6 +56,8 @@ public interface PermitDetailsRpcService {
 
   PermitPackageListRpcResponseDto getPackageList(Long permitNumber);
 
+  PermitPackageListRpcResponseDto getOicPackageList(Long permitNumber);
+
   PermitHasApplicationsRpcResponseDto getPermitHasApplications(Long permitNumber);
 
   PermitCountryListRpcResponseDto getCountryList();
