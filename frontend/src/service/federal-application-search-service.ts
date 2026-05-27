@@ -1,4 +1,8 @@
 import apiService from '@/service/api-service'
+import {
+  isSearchServiceMockFallbackEnabled,
+  toSearchServiceError,
+} from '@/service/search-service-fallback'
 import type {
   FederalApplicationSearchItem,
   FederalApplicationSearchRequest,
@@ -293,7 +297,10 @@ export const searchFederalApplications = async (
 
     return parsed
   } catch (error) {
-    console.warn('Using mock federal application search data.', error)
-    return applyMockSearch(request)
+    if (isSearchServiceMockFallbackEnabled()) {
+      console.warn('Using mock federal application search data.', error)
+      return applyMockSearch(request)
+    }
+    throw toSearchServiceError('Unable to load federal application search results.', error)
   }
 }

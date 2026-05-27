@@ -5,6 +5,10 @@ import type {
   ApplicationReviewSearchSortField,
 } from '@/interfaces/ApplicationReviewSearch'
 import apiService from '@/service/api-service'
+import {
+  isSearchServiceMockFallbackEnabled,
+  toSearchServiceError,
+} from '@/service/search-service-fallback'
 
 const MOCK_APPLICATION_REVIEWS: ApplicationReviewSearchItem[] = [
   {
@@ -221,8 +225,11 @@ export const searchApplicationReviews = async (
 
     return parsed
   } catch (error) {
-    console.warn('Using mock application review search data.', error)
-    return applyMockSearch(request)
+    if (isSearchServiceMockFallbackEnabled()) {
+      console.warn('Using mock application review search data.', error)
+      return applyMockSearch(request)
+    }
+    throw toSearchServiceError('Unable to load provincial review search results.', error)
   }
 }
 

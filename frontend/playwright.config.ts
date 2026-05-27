@@ -39,6 +39,10 @@ export default defineConfig({
     url: E2E_BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
+    env: {
+      ...process.env,
+      VITE_ENABLE_SEARCH_MOCK_FALLBACK: process.env.VITE_ENABLE_SEARCH_MOCK_FALLBACK ?? 'true',
+    },
   },
 
   /* Configure projects for major browsers */

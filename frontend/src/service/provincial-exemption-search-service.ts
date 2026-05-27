@@ -1,4 +1,8 @@
 import apiService from '@/service/api-service'
+import {
+  isSearchServiceMockFallbackEnabled,
+  toSearchServiceError,
+} from '@/service/search-service-fallback'
 import type {
   ProvincialExemptionSearchItem,
   ProvincialExemptionSearchRequest,
@@ -393,7 +397,10 @@ export const searchProvincialExemptions = async (
 
     return parsed
   } catch (error) {
-    console.warn('Using mock provincial exemption search data.', error)
-    return applyMockSearch(request)
+    if (isSearchServiceMockFallbackEnabled()) {
+      console.warn('Using mock provincial exemption search data.', error)
+      return applyMockSearch(request)
+    }
+    throw toSearchServiceError('Unable to load provincial exemption search results.', error)
   }
 }

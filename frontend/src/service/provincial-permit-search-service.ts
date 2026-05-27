@@ -1,4 +1,8 @@
 import apiService from '@/service/api-service'
+import {
+  isSearchServiceMockFallbackEnabled,
+  toSearchServiceError,
+} from '@/service/search-service-fallback'
 import type {
   ProvincialPermitSearchItem,
   ProvincialPermitSearchRequest,
@@ -318,7 +322,10 @@ export const searchProvincialPermits = async (
 
     return parsed
   } catch (error) {
-    console.warn('Using mock provincial permit search data.', error)
-    return applyMockSearch(request)
+    if (isSearchServiceMockFallbackEnabled()) {
+      console.warn('Using mock provincial permit search data.', error)
+      return applyMockSearch(request)
+    }
+    throw toSearchServiceError('Unable to load provincial permit search results.', error)
   }
 }

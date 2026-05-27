@@ -1,4 +1,8 @@
 import apiService from '@/service/api-service'
+import {
+  isSearchServiceMockFallbackEnabled,
+  toSearchServiceError,
+} from '@/service/search-service-fallback'
 import type {
   IndianReservePermitSearchItem,
   IndianReservePermitSearchRequest,
@@ -202,7 +206,10 @@ export const searchIndianReservePermits = async (
 
     return parsed
   } catch (error) {
-    console.warn('Using mock indigenous reserve permit search data.', error)
-    return applyMockSearch(request)
+    if (isSearchServiceMockFallbackEnabled()) {
+      console.warn('Using mock indigenous reserve permit search data.', error)
+      return applyMockSearch(request)
+    }
+    throw toSearchServiceError('Unable to load indigenous reserve permit search results.', error)
   }
 }
