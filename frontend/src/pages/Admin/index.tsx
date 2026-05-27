@@ -26,6 +26,7 @@ type LegacyLaunchTool = {
   actionMapping: string
   description: string
   reactUploadType?: 'application' | 'exemption' | 'permit' | 'invoice'
+  reactPath?: string
 }
 
 const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
@@ -44,6 +45,7 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
     legacyPath: '/lexisPolicyAdmin.do',
     actionMapping: 'view',
     description: 'Legacy fee policy administration page.',
+    reactPath: '/admin/policies',
   },
   {
     id: 'lexisFILAdmin',
@@ -52,6 +54,7 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
     legacyPath: '/lexisFILAdmin.do',
     actionMapping: 'view',
     description: 'Legacy fee-in-lieu percent policy page.',
+    reactPath: '/admin/policies',
   },
 ]
 
@@ -319,6 +322,15 @@ const AdminPage: FC = () => {
                           kind="ghost"
                           size="sm"
                           onClick={() => navigate(`/admin/uploads?type=${tool.reactUploadType}`)}
+                          disabled={!granted}
+                        >
+                          Open React
+                        </Button>
+                      ) : tool.reactPath ? (
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          onClick={() => navigate(tool.reactPath)}
                           disabled={!granted}
                         >
                           Open React

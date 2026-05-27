@@ -4,6 +4,7 @@ import { Navigate, type RouteObject } from 'react-router-dom'
 import Layout from '@/components/Layout'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminPage from '@/pages/Admin'
+import AdminPoliciesPage from '@/pages/AdminPolicies'
 import AdminUploadsPage from '@/pages/AdminUploads'
 import DashboardPage from '@/pages/Dashboard'
 import FederalPage from '@/pages/Federal'
@@ -389,6 +390,17 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     element: (
       <Layout>
         <AdminUploadsPage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/admin/policies',
+    id: 'Policy Center',
+    requiredActions: ['/lexisPolicyAdmin', '/lexisFILAdmin'],
+    element: (
+      <Layout>
+        <AdminPoliciesPage />
       </Layout>
     ),
     isNavigation: false,
