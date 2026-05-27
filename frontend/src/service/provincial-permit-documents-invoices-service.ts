@@ -47,6 +47,11 @@ export type PermitInvoiceConversionRateResult = {
   source: PermitDocumentAndInvoiceSource
 }
 
+export type RemovePermitDocumentResult = {
+  success: boolean
+  source: PermitDocumentAndInvoiceSource
+}
+
 type PermitInvoiceDetailsPayload = {
   invoicefound?: boolean
   rate?: unknown
@@ -74,6 +79,29 @@ const asBoolean = (value: unknown): boolean => {
   if (typeof value === 'string') {
     return value.trim().toLowerCase() === 'true'
   }
+  return false
+}
+
+const parseRemoveDocumentSuccess = (payload: unknown): boolean => {
+  if (typeof payload === 'boolean') {
+    return payload
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return false
+  }
+
+  const objectPayload = payload as Record<string, unknown>
+  if ('success' in objectPayload) {
+    return asBoolean(objectPayload.success)
+  }
+  if ('removed' in objectPayload) {
+    return asBoolean(objectPayload.removed)
+  }
+  if ('valid' in objectPayload) {
+    return asBoolean(objectPayload.valid)
+  }
+
   return false
 }
 
@@ -438,3 +466,65 @@ export const fetchPermitInvoiceConversionRate =
       }
     }
   }
+
+const removeDocumentWithFallback = async (
+  apiPath: string,
+  legacyActionMapping: string,
+  documentId: string,
+): Promise<RemovePermitDocumentResult> => {
+  const normalizedDocumentId = documentId.trim()
+  const legacyUrl = buildLegacyPermitDetailsActionUrl(legacyActionMapping, {
+    documentId: normalizedDocumentId,
+  })
+
+  try {
+    const response = await apiService.getAxiosInstance().delete<unknown>(apiPath, {
+      params: {
+        documentId: normalizedDocumentId,
+      },
+    })
+
+    if (response.status === 204) {
+      const fallbackResponse = await apiService.getAxiosInstance().get<unknown>(legacyUrl)
+      return {
+        success: parseRemoveDocumentSuccess(fallbackResponse.data),
+        source: 'legacy',
+      }
+    }
+
+    return {
+      success: parseRemoveDocumentSuccess(response.data),
+      source: 'api',
+    }
+  } catch (error) {
+    if (!shouldFallbackToLegacy(error)) {
+      throw error
+    }
+
+    const fallbackResponse = await apiService.getAxiosInstance().get<unknown>(legacyUrl)
+    return {
+      success: parseRemoveDocumentSuccess(fallbackResponse.data),
+      source: 'legacy',
+    }
+  }
+}
+
+export const removePermitDocument = async (
+  documentId: string,
+): Promise<RemovePermitDocumentResult> => {
+  return removeDocumentWithFallback(
+    '/lexis/rpc/permit-details/document/permit',
+    'removePermitDocument',
+    documentId,
+  )
+}
+
+export const removePermitInvoiceDocument = async (
+  documentId: string,
+): Promise<RemovePermitDocumentResult> => {
+  return removeDocumentWithFallback(
+    '/lexis/rpc/permit-details/document/invoice',
+    'removeInvoiceDocument',
+    documentId,
+  )
+}

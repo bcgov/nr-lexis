@@ -16,7 +16,6 @@ import {
   Tile,
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { env } from '@/env'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
@@ -26,6 +25,8 @@ import {
   fetchPermitInvoiceConversionRate,
   fetchPermitInvoices,
   openPermitDocument,
+  removePermitDocument,
+  removePermitInvoiceDocument,
   type PermitDocumentAndInvoiceSource,
   type PermitDocumentRow,
   type PermitInvoiceRow,
@@ -54,7 +55,7 @@ const formatAmount = (value: number): string => {
 const normalizeText = (value: string): string => value.trim().toLowerCase()
 
 const getLegacyActionBasePath = (): string => {
-  const configured = (env.VITE_LEXIS_LEGACY_ENDPOINT_BASE ?? '/api').trim()
+  const configured = (import.meta.env.VITE_LEXIS_LEGACY_ENDPOINT_BASE ?? '/api').trim()
   if (!configured) {
     return '/api'
   }
@@ -122,6 +123,15 @@ const matchesFilter = (
   return values.some((value) => normalizeText(String(value ?? '')).includes(normalizedFilter))
 }
 
+const isInvoiceDocumentRow = (row: PermitDocumentRow): boolean => {
+  const normalizedTypeCode = row.typeCode.trim().toUpperCase()
+  if (normalizedTypeCode === 'INV' || normalizedTypeCode === 'V') {
+    return true
+  }
+
+  return row.type.trim().toUpperCase().includes('INVOICE')
+}
+
 const ProvincialPermitDetailsPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
@@ -141,6 +151,7 @@ const ProvincialPermitDetailsPage: FC = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isOpeningPermitReport, setIsOpeningPermitReport] = useState(false)
+  const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const itemsFilter = searchParams.get('itemsFilter') ?? ''
   const feesFilter = searchParams.get('feesFilter') ?? ''
   const gbmsFilter = searchParams.get('gbmsFilter') ?? ''
@@ -372,6 +383,9 @@ const ProvincialPermitDetailsPage: FC = () => {
     return Object.values(tabsSources).some((source) => source === 'mock')
   }, [tabsSources])
 
+  const canDeletePermitDocuments = canPerform('/filePermitUpload')
+  const canDeleteInvoiceDocuments = canPerform('/fileInvoiceUpload')
+
   const onOpenPermitReport = useCallback(async () => {
     if (!detail) {
       return
@@ -465,6 +479,63 @@ const ProvincialPermitDetailsPage: FC = () => {
       setActionErrorMessage('Unable to open permit document.')
     }
   }, [])
+
+  const onRemoveDocument = useCallback(
+    async (row: PermitDocumentRow) => {
+      const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+      if (!resolvedPermitNumber) {
+        return
+      }
+
+      const invoiceDocument = isInvoiceDocumentRow(row)
+      if (!canDeletePermitDocuments || (invoiceDocument && !canDeleteInvoiceDocuments)) {
+        return
+      }
+
+      setActionErrorMessage('')
+      setActionInfoMessage('')
+      setIsRemovingDocumentId(row.id)
+      try {
+        const removeResult = invoiceDocument
+          ? await removePermitInvoiceDocument(row.id)
+          : await removePermitDocument(row.id)
+
+        if (!removeResult.success) {
+          setActionErrorMessage('Unable to remove selected document.')
+          return
+        }
+
+        if (removeResult.source === 'legacy') {
+          setActionInfoMessage(
+            'Document delete API is not available yet. Used legacy document delete endpoint.',
+          )
+        }
+
+        const [documentsResult, invoicesResult] = await Promise.all([
+          fetchPermitDocuments(resolvedPermitNumber),
+          fetchPermitInvoices(resolvedPermitNumber),
+        ])
+        setDocumentRows(documentsResult.rows)
+        setInvoiceRows(invoicesResult.rows)
+        setDocumentSource(documentsResult.source)
+        setInvoiceSource(invoicesResult.source)
+        setDocumentsInvoicesErrorMessage('')
+      } catch (error) {
+        console.error(error)
+        setActionErrorMessage('Unable to remove selected document.')
+      } finally {
+        setIsRemovingDocumentId(null)
+      }
+    },
+    [
+      canDeleteInvoiceDocuments,
+      canDeletePermitDocuments,
+      detail?.permitNumber,
+      permitNumber,
+      setDocumentRows,
+      setInvoiceRows,
+    ],
+  )
 
   const onOpenInvoiceUpload = useCallback(async () => {
     if (!detail?.permitNumber) {
@@ -976,27 +1047,43 @@ const ProvincialPermitDetailsPage: FC = () => {
                     <TableHeader>File Name</TableHeader>
                     <TableHeader>Description</TableHeader>
                     <TableHeader>Type</TableHeader>
-                    <TableHeader>Action</TableHeader>
+                    <TableHeader>Actions</TableHeader>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredDocumentRows.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.name || '-'}</TableCell>
-                      <TableCell>{row.description || '-'}</TableCell>
-                      <TableCell>{row.type || row.typeCode || '-'}</TableCell>
-                      <TableCell>
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          disabled={!canPerform('/permitDetails')}
-                          onClick={() => void onOpenDocument(row)}
-                        >
-                          Open
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredDocumentRows.map((row) => {
+                    const invoiceDocument = isInvoiceDocumentRow(row)
+                    const canDeleteRow =
+                      canDeletePermitDocuments &&
+                      (!invoiceDocument || canDeleteInvoiceDocuments)
+                    return (
+                      <TableRow key={row.id}>
+                        <TableCell>{row.name || '-'}</TableCell>
+                        <TableCell>{row.description || '-'}</TableCell>
+                        <TableCell>{row.type || row.typeCode || '-'}</TableCell>
+                        <TableCell>
+                          <div className="legacy-search-actions">
+                            <Button
+                              kind="ghost"
+                              size="sm"
+                              disabled={!canPerform('/permitDetails')}
+                              onClick={() => void onOpenDocument(row)}
+                            >
+                              Open
+                            </Button>
+                            <Button
+                              kind="danger--ghost"
+                              size="sm"
+                              disabled={!canDeleteRow || isRemovingDocumentId === row.id}
+                              onClick={() => void onRemoveDocument(row)}
+                            >
+                              {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                   {filteredDocumentRows.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={4}>

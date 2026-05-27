@@ -15,6 +15,8 @@ import {
   fetchPermitInvoiceConversionRate,
   fetchPermitInvoices,
   openPermitDocument,
+  removePermitDocument,
+  removePermitInvoiceDocument,
 } from '@/service/provincial-permit-documents-invoices-service'
 import { runReport } from '@/service/report-service'
 
@@ -35,6 +37,8 @@ vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
   fetchPermitInvoices: vi.fn(),
   fetchPermitInvoiceConversionRate: vi.fn(),
   openPermitDocument: vi.fn(),
+  removePermitDocument: vi.fn(),
+  removePermitInvoiceDocument: vi.fn(),
 }))
 
 vi.mock('@/service/report-service', () => ({
@@ -48,6 +52,8 @@ const mockedFetchPermitDocuments = vi.mocked(fetchPermitDocuments)
 const mockedFetchPermitInvoices = vi.mocked(fetchPermitInvoices)
 const mockedFetchPermitInvoiceConversionRate = vi.mocked(fetchPermitInvoiceConversionRate)
 const mockedOpenPermitDocument = vi.mocked(openPermitDocument)
+const mockedRemovePermitDocument = vi.mocked(removePermitDocument)
+const mockedRemovePermitInvoiceDocument = vi.mocked(removePermitInvoiceDocument)
 const mockedRunReport = vi.mocked(runReport)
 
 const permitDetail: ProvincialPermitDetail = {
@@ -120,6 +126,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
       blob: new Blob(['test']),
       filename: 'test.pdf',
       legacyUrl: 'https://example.test/api/lexis/permitDetailsRPC',
+    })
+    mockedRemovePermitDocument.mockResolvedValue({
+      success: true,
+      source: 'api',
+    })
+    mockedRemovePermitInvoiceDocument.mockResolvedValue({
+      success: true,
+      source: 'api',
     })
   })
 
@@ -224,6 +238,82 @@ describe('Provincial Permit Detail Action Smoke', () => {
         'permitDocumentWindow',
       )
     })
+  })
+
+  it('removes invoice document rows and refreshes tables', async () => {
+    mockedFetchPermitDocuments
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '500',
+            name: 'permit-doc.pdf',
+            description: 'Test permit document',
+            type: 'Invoice',
+            typeCode: 'INV',
+          },
+        ],
+        source: 'api',
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+        source: 'api',
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('permit-doc.pdf')
+    const deleteButton = await screen.findByRole('button', { name: 'Delete' })
+    expect(deleteButton).toBeEnabled()
+    await userEvent.click(deleteButton)
+
+    await waitFor(() => {
+      expect(mockedRemovePermitInvoiceDocument).toHaveBeenCalledWith('500')
+      expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(2)
+      expect(screen.queryByText('permit-doc.pdf')).not.toBeInTheDocument()
+    })
+  })
+
+  it('disables invoice document delete when invoice upload permission is missing', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action !== '/fileInvoiceUpload',
+    } as any)
+    mockedFetchPermitDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '501',
+          name: 'locked-invoice-doc.pdf',
+          description: 'Invoice controlled document',
+          type: 'Invoice',
+          typeCode: 'INV',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('locked-invoice-doc.pdf')
+    const deleteButton = await screen.findByRole('button', { name: 'Delete' })
+    expect(deleteButton).toBeDisabled()
+    expect(mockedRemovePermitInvoiceDocument).not.toHaveBeenCalled()
   })
 
   it('uses report service and legacy fallback URL when opening permit report', async () => {
