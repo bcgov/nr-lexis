@@ -44,7 +44,7 @@ const NAVIGATION_LINKS: NavigationLink[] = [
   },
   {
     to: '/indian-reserve',
-    label: 'Indian Reserve',
+    label: 'Indigenous Reserve',
     requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
   },
   {

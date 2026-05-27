@@ -293,7 +293,7 @@ export const fetchIndianReservePermitDetail = async (
     if (isNotFound(error)) {
       return null
     }
-    console.warn('Using mock indian reserve permit detail data.', error)
+    console.warn('Using mock indigenous reserve permit detail data.', error)
     return buildMockIndianReservePermitDetail(permitNumber)
   }
 }

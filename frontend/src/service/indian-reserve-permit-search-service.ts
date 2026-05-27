@@ -197,12 +197,12 @@ export const searchIndianReservePermits = async (
 
     const parsed = parseBackendResponse(response.data)
     if (!parsed) {
-      throw new Error('Backend indian reserve permit response did not include results.')
+      throw new Error('Backend indigenous reserve permit response did not include results.')
     }
 
     return parsed
   } catch (error) {
-    console.warn('Using mock indian reserve permit search data.', error)
+    console.warn('Using mock indigenous reserve permit search data.', error)
     return applyMockSearch(request)
   }
 }

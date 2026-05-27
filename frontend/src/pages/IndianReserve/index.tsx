@@ -174,7 +174,7 @@ const IndianReservePage: FC = () => {
       setResults(response)
     } catch (error) {
       console.error(error)
-      setErrorMessage('Unable to retrieve indian reserve permit search results.')
+      setErrorMessage('Unable to retrieve indigenous reserve permit search results.')
       setResults(EMPTY_RESULTS)
     } finally {
       setLoading(false)
@@ -222,7 +222,7 @@ const IndianReservePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Indian Reserve Permit Search</h1>
+        <h1>Indigenous Reserve Permit Search</h1>
         <p>
           Migrated from <code>src/main/webapp/WEB-INF/jsp/indianReserve/permit/search.jsp</code> and{' '}
           <code>src/main/webapp/javascript/indianReserve/search.js</code>.
@@ -318,7 +318,9 @@ const IndianReservePage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <h2 className="dashboard-title">Search Results</h2>
-        {loading && <InlineLoading description="Loading indian reserve permit search results..." />}
+        {loading && (
+          <InlineLoading description="Loading indigenous reserve permit search results..." />
+        )}
         {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
         {!loading && (
           <>
@@ -358,7 +360,7 @@ const IndianReservePage: FC = () => {
                 {results.content.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={4}>
-                      No indian reserve permits found for the selected criteria.
+                      No indigenous reserve permits found for the selected criteria.
                     </TableCell>
                   </TableRow>
                 )}

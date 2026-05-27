@@ -140,7 +140,7 @@ const ROUTE_ACCESS_CHECKS = [
   { label: 'Provincial Offers Search', action: '/offersSearch' },
   { label: 'Provincial Permit Search', action: '/permitSearch' },
   { label: 'Federal Application Search', action: '/federalApplicationSearch' },
-  { label: 'Indian Reserve Permit Search', action: '/indianReservePermitSearch' },
+  { label: 'Indigenous Reserve Permit Search', action: '/indianReservePermitSearch' },
   { label: 'Reports', action: '/applicationReport' },
   { label: 'Admin', action: '/lexisAgentAdmin' },
 ]

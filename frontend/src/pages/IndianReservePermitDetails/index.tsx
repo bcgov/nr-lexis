@@ -60,11 +60,11 @@ const IndianReservePermitDetailsPage: FC = () => {
         const response = await fetchIndianReservePermitDetail(permitNumber)
         setDetail(response)
         if (!response) {
-          setErrorMessage(`No indian reserve permit found for ${permitNumber}.`)
+          setErrorMessage(`No indigenous reserve permit found for ${permitNumber}.`)
         }
       } catch (error) {
         console.error(error)
-        setErrorMessage('Unable to retrieve indian reserve permit detail.')
+        setErrorMessage('Unable to retrieve indigenous reserve permit detail.')
       } finally {
         setLoading(false)
       }
@@ -104,7 +104,7 @@ const IndianReservePermitDetailsPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <h1>Indian Reserve Permit Details</h1>
+        <h1>Indigenous Reserve Permit Details</h1>
         <p>
           Permit <code>{permitNumber}</code>
         </p>
@@ -112,7 +112,7 @@ const IndianReservePermitDetailsPage: FC = () => {
 
       {loading && (
         <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Loading indian reserve permit detail..." />
+          <InlineLoading description="Loading indigenous reserve permit detail..." />
         </Column>
       )}
 

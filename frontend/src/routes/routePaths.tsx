@@ -307,7 +307,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   },
   {
     path: '/indian-reserve',
-    id: 'Indian Reserve',
+    id: 'Indigenous Reserve',
     icon: Search,
     requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
     element: (
@@ -319,7 +319,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   },
   {
     path: '/indian-reserve/permit/create',
-    id: 'Create Indian Reserve Permit',
+    id: 'Create Indigenous Reserve Permit',
     requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
     element: (
       <Layout>
@@ -330,7 +330,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   },
   {
     path: '/indian-reserve/permit/:permitNumber',
-    id: 'Indian Reserve Permit Details',
+    id: 'Indigenous Reserve Permit Details',
     requiredActions: [
       '/indianReservePermitSearch',
       '/indianReservePermitDetails',

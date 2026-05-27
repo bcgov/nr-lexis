@@ -88,7 +88,7 @@ const DASHBOARD_MODULES: DashboardModule[] = [
   },
   {
     id: 'indianReservePermits',
-    title: 'Indian Reserve Permits',
+    title: 'Indigenous Reserve Permits',
     description: 'Access reserve permit search workflows.',
     path: '/indian-reserve',
     requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],

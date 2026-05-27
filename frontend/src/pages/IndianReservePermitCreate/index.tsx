@@ -98,8 +98,8 @@ const IndianReservePermitCreatePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create Indian Reserve Permit</h1>
-        <p>Base create form for indian reserve permit migration.</p>
+        <h1>Create Indigenous Reserve Permit</h1>
+        <p>Base create form for indigenous reserve permit migration.</p>
       </Column>
 
       {!!status && (
@@ -233,7 +233,7 @@ const IndianReservePermitCreatePage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <CreateDraftHistory
-          title="Recent Indian Reserve Permit Drafts"
+          title="Recent Indigenous Reserve Permit Drafts"
           drafts={drafts}
           onUseDraft={onUseDraft}
           onDeleteDraft={onDeleteDraft}

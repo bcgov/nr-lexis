@@ -115,7 +115,7 @@ const INITIAL_METRICS: SummaryMetric[] = [
   },
   {
     key: 'indianReservePermits',
-    label: 'Indian Reserve Permits',
+    label: 'Indigenous Reserve Permits',
     description: 'Total reserve permit files in scope.',
     total: 0,
   },
