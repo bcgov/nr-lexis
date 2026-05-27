@@ -15,8 +15,16 @@ export type IndianReservePermitSearchItem = {
   packageNumber: string
 }
 
+export type IndianReservePermitSearchSortField =
+  | 'permitNumber'
+  | 'clientNumber'
+  | 'issueDate'
+  | 'shippingDate'
+
 export type IndianReservePermitSearchRequest = {
   filters: IndianReservePermitSearchFilters
+  sortField: IndianReservePermitSearchSortField
+  sortDirection: 'asc' | 'desc'
   page: number
   pageSize: number
 }

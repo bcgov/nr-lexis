@@ -3,6 +3,7 @@ import type {
   FederalApplicationSearchItem,
   FederalApplicationSearchRequest,
   FederalApplicationSearchResponse,
+  FederalApplicationSearchSortField,
 } from '@/interfaces/FederalApplicationSearch'
 
 const MOCK_FEDERAL_APPLICATIONS: FederalApplicationSearchItem[] = [
@@ -88,6 +89,18 @@ const MOCK_FEDERAL_APPLICATIONS: FederalApplicationSearchItem[] = [
   },
 ]
 
+const SORTERS: Record<
+  FederalApplicationSearchSortField,
+  (row: FederalApplicationSearchItem) => string | number
+> = {
+  federalApplicationNumber: (row) => row.federalApplicationNumber,
+  status: (row) => row.status,
+  clientNumber: (row) => row.clientNumber,
+  reason: (row) => row.reason,
+  receivedDate: (row) => row.receivedDate,
+  listingDate: (row) => row.listingDate,
+}
+
 const normalizeText = (value: string): string => value.trim().toLowerCase()
 
 const includesText = (source: string, filter: string): boolean => {
@@ -108,9 +121,9 @@ const isBeforeOrEqual = (value: string, to: string): boolean => {
 const applyMockSearch = (
   request: FederalApplicationSearchRequest,
 ): FederalApplicationSearchResponse => {
-  const { filters, page, pageSize } = request
+  const { filters, sortField, sortDirection, page, pageSize } = request
 
-  const rows = MOCK_FEDERAL_APPLICATIONS.filter((item) => {
+  let rows = MOCK_FEDERAL_APPLICATIONS.filter((item) => {
     return (
       includesText(item.federalApplicationNumber, filters.applicationNumber) &&
       includesText(item.packageNumber, filters.packageNumber) &&
@@ -121,6 +134,14 @@ const applyMockSearch = (
       isAfterOrEqual(item.listingDate, filters.listingFromDate) &&
       isBeforeOrEqual(item.listingDate, filters.listingToDate)
     )
+  })
+
+  rows = rows.sort((a, b) => {
+    const aValue = SORTERS[sortField](a)
+    const bValue = SORTERS[sortField](b)
+    if (aValue === bValue) return 0
+    const result = aValue > bValue ? 1 : -1
+    return sortDirection === 'asc' ? result : -result
   })
 
   const totalElements = rows.length
@@ -180,6 +201,9 @@ const buildBackendParams = (request: FederalApplicationSearchRequest): URLSearch
   appendIfPresent('ownerClientNumber', filters.clientNumber)
   appendIfPresent('agentClientNumber', filters.clientNumber)
 
+  const backendSortField =
+    request.sortDirection === 'desc' ? `${request.sortField} DESC` : request.sortField
+  params.append('sortField', backendSortField)
   params.append('page', String(request.page))
   params.append('size', String(request.pageSize))
 

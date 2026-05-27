@@ -3,6 +3,7 @@ import type {
   IndianReservePermitSearchItem,
   IndianReservePermitSearchRequest,
   IndianReservePermitSearchResponse,
+  IndianReservePermitSearchSortField,
 } from '@/interfaces/IndianReservePermitSearch'
 
 const MOCK_INDIAN_RESERVE_PERMITS: IndianReservePermitSearchItem[] = [
@@ -50,6 +51,16 @@ const MOCK_INDIAN_RESERVE_PERMITS: IndianReservePermitSearchItem[] = [
   },
 ]
 
+const SORTERS: Record<
+  IndianReservePermitSearchSortField,
+  (row: IndianReservePermitSearchItem) => string | number
+> = {
+  permitNumber: (row) => row.permitNumber,
+  clientNumber: (row) => row.clientNumber,
+  issueDate: (row) => row.issueDate,
+  shippingDate: (row) => row.shippingDate,
+}
+
 const normalizeText = (value: string): string => value.trim().toLowerCase()
 
 const includesText = (source: string, filter: string): boolean => {
@@ -70,8 +81,8 @@ const isBeforeOrEqual = (value: string, to: string): boolean => {
 const applyMockSearch = (
   request: IndianReservePermitSearchRequest,
 ): IndianReservePermitSearchResponse => {
-  const { filters, page, pageSize } = request
-  const rows = MOCK_INDIAN_RESERVE_PERMITS.filter((item) => {
+  const { filters, sortField, sortDirection, page, pageSize } = request
+  let rows = MOCK_INDIAN_RESERVE_PERMITS.filter((item) => {
     return (
       includesText(item.permitNumber, filters.permitNumber) &&
       includesText(item.packageNumber, filters.packageNumber) &&
@@ -80,6 +91,14 @@ const applyMockSearch = (
       isAfterOrEqual(item.shippingDate, filters.fromEstimatedShippingDate) &&
       isBeforeOrEqual(item.shippingDate, filters.toEstimatedShippingDate)
     )
+  })
+
+  rows = rows.sort((a, b) => {
+    const aValue = SORTERS[sortField](a)
+    const bValue = SORTERS[sortField](b)
+    if (aValue === bValue) return 0
+    const result = aValue > bValue ? 1 : -1
+    return sortDirection === 'asc' ? result : -result
   })
 
   const totalElements = rows.length
@@ -131,6 +150,9 @@ const buildBackendParams = (request: IndianReservePermitSearchRequest): URLSearc
   appendIfPresent('fromEstimatedShippingDate', filters.fromEstimatedShippingDate)
   appendIfPresent('toEstimatedShippingDate', filters.toEstimatedShippingDate)
 
+  const backendSortField =
+    request.sortDirection === 'desc' ? `${request.sortField} DESC` : request.sortField
+  params.append('sortField', backendSortField)
   params.append('page', String(request.page))
   params.append('size', String(request.pageSize))
 

@@ -21,8 +21,14 @@ import type {
   FederalApplicationSearchFilters,
   FederalApplicationSearchRequest,
   FederalApplicationSearchResponse,
+  FederalApplicationSearchSortField,
 } from '@/interfaces/FederalApplicationSearch'
-import { parsePositiveIntParam, setSearchParam } from '@/pages/shared/search-query-utils'
+import {
+  parseEnumParam,
+  parsePositiveIntParam,
+  parseSortDirectionParam,
+  setSearchParam,
+} from '@/pages/shared/search-query-utils'
 import { searchFederalApplications } from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions, type SearchOption } from '@/service/search-options-service'
 
@@ -58,9 +64,27 @@ const EMPTY_RESULTS: FederalApplicationSearchResponse = {
 const DEFAULT_PAGE = 1
 const DEFAULT_PAGE_SIZE = 10
 const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
+const SORT_COLUMNS: {
+  id: FederalApplicationSearchSortField
+  label: string
+}[] = [
+  { id: 'federalApplicationNumber', label: 'Application' },
+  { id: 'status', label: 'Status' },
+  { id: 'clientNumber', label: 'Client' },
+  { id: 'reason', label: 'Reason' },
+  { id: 'receivedDate', label: 'Received Date' },
+  { id: 'listingDate', label: 'Listing Date' },
+]
+const DEFAULT_SORT_FIELD: FederalApplicationSearchSortField = 'federalApplicationNumber'
+const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
+const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
+  (column) => column.id,
+) as FederalApplicationSearchSortField[]
 
 const buildSearchParams = (
   filters: FederalApplicationSearchFilters,
+  sortField: FederalApplicationSearchSortField,
+  sortDirection: 'asc' | 'desc',
   page: number,
   pageSize: number,
 ): URLSearchParams => {
@@ -74,6 +98,8 @@ const buildSearchParams = (
   setSearchParam(params, 'receivedToDate', filters.receivedToDate)
   setSearchParam(params, 'listingFromDate', filters.listingFromDate)
   setSearchParam(params, 'listingToDate', filters.listingToDate)
+  setSearchParam(params, 'sortField', sortField)
+  setSearchParam(params, 'sortDirection', sortDirection)
   setSearchParam(params, 'page', page)
   setSearchParam(params, 'pageSize', pageSize)
 
@@ -94,6 +120,8 @@ const FederalPage: FC = () => {
   const [results, setResults] = useState<FederalApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [sortField, setSortField] = useState<FederalApplicationSearchSortField>(DEFAULT_SORT_FIELD)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   const urlState = useMemo(() => {
@@ -111,6 +139,15 @@ const FederalPage: FC = () => {
 
     return {
       filters: urlFilters,
+      sortField: parseEnumParam(
+        searchParams.get('sortField'),
+        SORT_FIELD_OPTIONS,
+        DEFAULT_SORT_FIELD,
+      ),
+      sortDirection: parseSortDirectionParam(
+        searchParams.get('sortDirection'),
+        DEFAULT_SORT_DIRECTION,
+      ),
       page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
       pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
         ? parsedPageSize
@@ -158,12 +195,16 @@ const FederalPage: FC = () => {
 
   useEffect(() => {
     setFilters(urlState.filters)
+    setSortField(urlState.sortField)
+    setSortDirection(urlState.sortDirection)
     setPageSize(urlState.pageSize)
   }, [urlState])
 
   useEffect(() => {
     void runSearch({
       filters: urlState.filters,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
       page: urlState.page - 1,
       pageSize: urlState.pageSize,
     })
@@ -181,11 +222,24 @@ const FederalPage: FC = () => {
   }, [])
 
   const onSearch = () => {
-    setSearchParams(buildSearchParams(filters, DEFAULT_PAGE, pageSize))
+    setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
   const onClearFilters = () => {
-    setSearchParams(buildSearchParams(INITIAL_FILTERS, DEFAULT_PAGE, DEFAULT_PAGE_SIZE))
+    setSearchParams(
+      buildSearchParams(
+        INITIAL_FILTERS,
+        DEFAULT_SORT_FIELD,
+        DEFAULT_SORT_DIRECTION,
+        DEFAULT_PAGE,
+        DEFAULT_PAGE_SIZE,
+      ),
+    )
+  }
+
+  const onHeaderClick = (column: FederalApplicationSearchSortField) => {
+    const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
+    setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
   }
 
   return (
@@ -304,12 +358,18 @@ const FederalPage: FC = () => {
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
-                  <TableHeader>Application</TableHeader>
-                  <TableHeader>Status</TableHeader>
-                  <TableHeader>Client</TableHeader>
-                  <TableHeader>Reason</TableHeader>
-                  <TableHeader>Received Date</TableHeader>
-                  <TableHeader>Listing Date</TableHeader>
+                  {SORT_COLUMNS.map((column) => (
+                    <TableHeader key={column.id}>
+                      <button
+                        type="button"
+                        className="legacy-sort-button"
+                        onClick={() => onHeaderClick(column.id)}
+                      >
+                        {column.label}
+                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                      </button>
+                    </TableHeader>
+                  ))}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -345,7 +405,9 @@ const FederalPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                setSearchParams(buildSearchParams(filters, page, nextPageSize))
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                )
               }}
             />
           </>

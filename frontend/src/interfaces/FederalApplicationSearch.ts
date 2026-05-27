@@ -20,8 +20,18 @@ export type FederalApplicationSearchItem = {
   packageNumber: string
 }
 
+export type FederalApplicationSearchSortField =
+  | 'federalApplicationNumber'
+  | 'status'
+  | 'clientNumber'
+  | 'reason'
+  | 'receivedDate'
+  | 'listingDate'
+
 export type FederalApplicationSearchRequest = {
   filters: FederalApplicationSearchFilters
+  sortField: FederalApplicationSearchSortField
+  sortDirection: 'asc' | 'desc'
   page: number
   pageSize: number
 }

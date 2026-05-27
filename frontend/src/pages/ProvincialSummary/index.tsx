@@ -193,6 +193,8 @@ const ProvincialSummaryPage: FC = () => {
           },
           page: 0,
           pageSize: 1,
+          sortField: 'federalApplicationNumber',
+          sortDirection: 'asc',
         }),
         searchIndianReservePermits({
           filters: {
@@ -205,6 +207,8 @@ const ProvincialSummaryPage: FC = () => {
           },
           page: 0,
           pageSize: 1,
+          sortField: 'permitNumber',
+          sortDirection: 'asc',
         }),
       ])
 

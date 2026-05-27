@@ -19,9 +19,15 @@ import type {
   IndianReservePermitSearchFilters,
   IndianReservePermitSearchRequest,
   IndianReservePermitSearchResponse,
+  IndianReservePermitSearchSortField,
 } from '@/interfaces/IndianReservePermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
-import { parsePositiveIntParam, setSearchParam } from '@/pages/shared/search-query-utils'
+import {
+  parseEnumParam,
+  parsePositiveIntParam,
+  parseSortDirectionParam,
+  setSearchParam,
+} from '@/pages/shared/search-query-utils'
 import { searchIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
 
 const INITIAL_FILTERS: IndianReservePermitSearchFilters = {
@@ -46,9 +52,25 @@ const EMPTY_RESULTS: IndianReservePermitSearchResponse = {
 const DEFAULT_PAGE = 1
 const DEFAULT_PAGE_SIZE = 10
 const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
+const SORT_COLUMNS: {
+  id: IndianReservePermitSearchSortField
+  label: string
+}[] = [
+  { id: 'permitNumber', label: 'Permit' },
+  { id: 'clientNumber', label: 'Client' },
+  { id: 'issueDate', label: 'Issue Date' },
+  { id: 'shippingDate', label: 'Shipping Date' },
+]
+const DEFAULT_SORT_FIELD: IndianReservePermitSearchSortField = 'permitNumber'
+const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
+const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
+  (column) => column.id,
+) as IndianReservePermitSearchSortField[]
 
 const buildSearchParams = (
   filters: IndianReservePermitSearchFilters,
+  sortField: IndianReservePermitSearchSortField,
+  sortDirection: 'asc' | 'desc',
   page: number,
   pageSize: number,
 ): URLSearchParams => {
@@ -60,6 +82,8 @@ const buildSearchParams = (
   setSearchParam(params, 'toPermitIssueDate', filters.toPermitIssueDate)
   setSearchParam(params, 'fromEstimatedShippingDate', filters.fromEstimatedShippingDate)
   setSearchParam(params, 'toEstimatedShippingDate', filters.toEstimatedShippingDate)
+  setSearchParam(params, 'sortField', sortField)
+  setSearchParam(params, 'sortDirection', sortDirection)
   setSearchParam(params, 'page', page)
   setSearchParam(params, 'pageSize', pageSize)
 
@@ -78,6 +102,8 @@ const IndianReservePage: FC = () => {
   const [results, setResults] = useState<IndianReservePermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [sortField, setSortField] = useState<IndianReservePermitSearchSortField>(DEFAULT_SORT_FIELD)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const canCreatePermit = canPerform('viewOICApplication')
 
@@ -94,6 +120,15 @@ const IndianReservePage: FC = () => {
 
     return {
       filters: urlFilters,
+      sortField: parseEnumParam(
+        searchParams.get('sortField'),
+        SORT_FIELD_OPTIONS,
+        DEFAULT_SORT_FIELD,
+      ),
+      sortDirection: parseSortDirectionParam(
+        searchParams.get('sortDirection'),
+        DEFAULT_SORT_DIRECTION,
+      ),
       page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
       pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
         ? parsedPageSize
@@ -141,23 +176,40 @@ const IndianReservePage: FC = () => {
 
   useEffect(() => {
     setFilters(urlState.filters)
+    setSortField(urlState.sortField)
+    setSortDirection(urlState.sortDirection)
     setPageSize(urlState.pageSize)
   }, [urlState])
 
   useEffect(() => {
     void runSearch({
       filters: urlState.filters,
+      sortField: urlState.sortField,
+      sortDirection: urlState.sortDirection,
       page: urlState.page - 1,
       pageSize: urlState.pageSize,
     })
   }, [runSearch, urlState])
 
   const onSearch = () => {
-    setSearchParams(buildSearchParams(filters, DEFAULT_PAGE, pageSize))
+    setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
   const onClearFilters = () => {
-    setSearchParams(buildSearchParams(INITIAL_FILTERS, DEFAULT_PAGE, DEFAULT_PAGE_SIZE))
+    setSearchParams(
+      buildSearchParams(
+        INITIAL_FILTERS,
+        DEFAULT_SORT_FIELD,
+        DEFAULT_SORT_DIRECTION,
+        DEFAULT_PAGE,
+        DEFAULT_PAGE_SIZE,
+      ),
+    )
+  }
+
+  const onHeaderClick = (column: IndianReservePermitSearchSortField) => {
+    const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
+    setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
   }
 
   return (
@@ -266,10 +318,18 @@ const IndianReservePage: FC = () => {
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
-                  <TableHeader>Permit</TableHeader>
-                  <TableHeader>Client</TableHeader>
-                  <TableHeader>Issue Date</TableHeader>
-                  <TableHeader>Shipping Date</TableHeader>
+                  {SORT_COLUMNS.map((column) => (
+                    <TableHeader key={column.id}>
+                      <button
+                        type="button"
+                        className="legacy-sort-button"
+                        onClick={() => onHeaderClick(column.id)}
+                      >
+                        {column.label}
+                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                      </button>
+                    </TableHeader>
+                  ))}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -300,7 +360,9 @@ const IndianReservePage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                setSearchParams(buildSearchParams(filters, page, nextPageSize))
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                )
               }}
             />
           </>
