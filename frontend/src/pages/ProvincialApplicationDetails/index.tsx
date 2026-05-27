@@ -15,7 +15,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
@@ -34,12 +34,13 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const { applicationNumber } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [packageFilter, setPackageFilter] = useState('')
-  const [offerFilter, setOfferFilter] = useState('')
-  const [remarkFilter, setRemarkFilter] = useState('')
+  const [packageFilter, setPackageFilter] = useState(searchParams.get('packageFilter') ?? '')
+  const [offerFilter, setOfferFilter] = useState(searchParams.get('offerFilter') ?? '')
+  const [remarkFilter, setRemarkFilter] = useState(searchParams.get('remarkFilter') ?? '')
 
   useEffect(() => {
     const load = async () => {
@@ -68,6 +69,42 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
     void load()
   }, [applicationNumber])
+
+  useEffect(() => {
+    const packageFilterParam = searchParams.get('packageFilter') ?? ''
+    const offerFilterParam = searchParams.get('offerFilter') ?? ''
+    const remarkFilterParam = searchParams.get('remarkFilter') ?? ''
+
+    setPackageFilter((current) => (current === packageFilterParam ? current : packageFilterParam))
+    setOfferFilter((current) => (current === offerFilterParam ? current : offerFilterParam))
+    setRemarkFilter((current) => (current === remarkFilterParam ? current : remarkFilterParam))
+  }, [searchParams])
+
+  useEffect(() => {
+    const nextSearchParams = new URLSearchParams(searchParams)
+
+    if (packageFilter.trim().length > 0) {
+      nextSearchParams.set('packageFilter', packageFilter)
+    } else {
+      nextSearchParams.delete('packageFilter')
+    }
+
+    if (offerFilter.trim().length > 0) {
+      nextSearchParams.set('offerFilter', offerFilter)
+    } else {
+      nextSearchParams.delete('offerFilter')
+    }
+
+    if (remarkFilter.trim().length > 0) {
+      nextSearchParams.set('remarkFilter', remarkFilter)
+    } else {
+      nextSearchParams.delete('remarkFilter')
+    }
+
+    if (nextSearchParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextSearchParams, { replace: true })
+    }
+  }, [offerFilter, packageFilter, remarkFilter, searchParams, setSearchParams])
 
   const filteredPackages = useMemo(() => {
     const rows = detail?.packages ?? []

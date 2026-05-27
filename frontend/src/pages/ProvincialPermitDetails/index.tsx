@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import {
+  Button,
   Column,
   Grid,
   InlineLoading,
@@ -14,7 +15,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile, DetailListTile, type DetailListItem } from '@/pages/shared/DetailSections'
@@ -57,17 +58,18 @@ const ProvincialPermitDetailsPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const { permitNumber } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<ProvincialPermitDetail | null>(null)
   const [tabsData, setTabsData] = useState<ProvincialPermitDetailTabsData | null>(null)
   const [tabsSources, setTabsSources] = useState<ProvincialPermitDetailTabsSources | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [tabsErrorMessage, setTabsErrorMessage] = useState('')
-  const [itemsFilter, setItemsFilter] = useState('')
-  const [feesFilter, setFeesFilter] = useState('')
-  const [gbmsFilter, setGbmsFilter] = useState('')
-  const [oicFilter, setOicFilter] = useState('')
-  const [boicFilter, setBoicFilter] = useState('')
+  const [itemsFilter, setItemsFilter] = useState(searchParams.get('itemsFilter') ?? '')
+  const [feesFilter, setFeesFilter] = useState(searchParams.get('feesFilter') ?? '')
+  const [gbmsFilter, setGbmsFilter] = useState(searchParams.get('gbmsFilter') ?? '')
+  const [oicFilter, setOicFilter] = useState(searchParams.get('oicFilter') ?? '')
+  const [boicFilter, setBoicFilter] = useState(searchParams.get('boicFilter') ?? '')
 
   useEffect(() => {
     const load = async () => {
@@ -120,6 +122,58 @@ const ProvincialPermitDetailsPage: FC = () => {
 
     void load()
   }, [permitNumber])
+
+  useEffect(() => {
+    const itemsFilterParam = searchParams.get('itemsFilter') ?? ''
+    const feesFilterParam = searchParams.get('feesFilter') ?? ''
+    const gbmsFilterParam = searchParams.get('gbmsFilter') ?? ''
+    const oicFilterParam = searchParams.get('oicFilter') ?? ''
+    const boicFilterParam = searchParams.get('boicFilter') ?? ''
+
+    setItemsFilter((current) => (current === itemsFilterParam ? current : itemsFilterParam))
+    setFeesFilter((current) => (current === feesFilterParam ? current : feesFilterParam))
+    setGbmsFilter((current) => (current === gbmsFilterParam ? current : gbmsFilterParam))
+    setOicFilter((current) => (current === oicFilterParam ? current : oicFilterParam))
+    setBoicFilter((current) => (current === boicFilterParam ? current : boicFilterParam))
+  }, [searchParams])
+
+  useEffect(() => {
+    const nextSearchParams = new URLSearchParams(searchParams)
+
+    if (itemsFilter.trim().length > 0) {
+      nextSearchParams.set('itemsFilter', itemsFilter)
+    } else {
+      nextSearchParams.delete('itemsFilter')
+    }
+
+    if (feesFilter.trim().length > 0) {
+      nextSearchParams.set('feesFilter', feesFilter)
+    } else {
+      nextSearchParams.delete('feesFilter')
+    }
+
+    if (gbmsFilter.trim().length > 0) {
+      nextSearchParams.set('gbmsFilter', gbmsFilter)
+    } else {
+      nextSearchParams.delete('gbmsFilter')
+    }
+
+    if (oicFilter.trim().length > 0) {
+      nextSearchParams.set('oicFilter', oicFilter)
+    } else {
+      nextSearchParams.delete('oicFilter')
+    }
+
+    if (boicFilter.trim().length > 0) {
+      nextSearchParams.set('boicFilter', boicFilter)
+    } else {
+      nextSearchParams.delete('boicFilter')
+    }
+
+    if (nextSearchParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextSearchParams, { replace: true })
+    }
+  }, [boicFilter, feesFilter, gbmsFilter, itemsFilter, oicFilter, searchParams, setSearchParams])
 
   const documentItems = useMemo<DetailListItem[]>(() => {
     if (!detail) {

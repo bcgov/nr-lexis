@@ -15,7 +15,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
@@ -34,11 +34,12 @@ const ProvincialExemptionDetailsPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const { exemptionNumber } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<ProvincialExemptionDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [permitFilter, setPermitFilter] = useState('')
-  const [remarkFilter, setRemarkFilter] = useState('')
+  const [permitFilter, setPermitFilter] = useState(searchParams.get('permitFilter') ?? '')
+  const [remarkFilter, setRemarkFilter] = useState(searchParams.get('remarkFilter') ?? '')
 
   useEffect(() => {
     const load = async () => {
@@ -67,6 +68,34 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
     void load()
   }, [exemptionNumber])
+
+  useEffect(() => {
+    const permitFilterParam = searchParams.get('permitFilter') ?? ''
+    const remarkFilterParam = searchParams.get('remarkFilter') ?? ''
+
+    setPermitFilter((current) => (current === permitFilterParam ? current : permitFilterParam))
+    setRemarkFilter((current) => (current === remarkFilterParam ? current : remarkFilterParam))
+  }, [searchParams])
+
+  useEffect(() => {
+    const nextSearchParams = new URLSearchParams(searchParams)
+
+    if (permitFilter.trim().length > 0) {
+      nextSearchParams.set('permitFilter', permitFilter)
+    } else {
+      nextSearchParams.delete('permitFilter')
+    }
+
+    if (remarkFilter.trim().length > 0) {
+      nextSearchParams.set('remarkFilter', remarkFilter)
+    } else {
+      nextSearchParams.delete('remarkFilter')
+    }
+
+    if (nextSearchParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextSearchParams, { replace: true })
+    }
+  }, [permitFilter, remarkFilter, searchParams, setSearchParams])
 
   const filteredPermitNumbers = useMemo(() => {
     const rows = detail?.permitNumbers ?? []

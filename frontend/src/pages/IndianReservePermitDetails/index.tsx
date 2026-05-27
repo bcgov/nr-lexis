@@ -14,7 +14,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { IndianReservePermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
@@ -33,10 +33,11 @@ const IndianReservePermitDetailsPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const { permitNumber } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<IndianReservePermitDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [packageFilter, setPackageFilter] = useState('')
+  const [packageFilter, setPackageFilter] = useState(searchParams.get('packageFilter') ?? '')
 
   useEffect(() => {
     const load = async () => {
@@ -64,6 +65,24 @@ const IndianReservePermitDetailsPage: FC = () => {
 
     void load()
   }, [permitNumber])
+
+  useEffect(() => {
+    const packageFilterParam = searchParams.get('packageFilter') ?? ''
+    setPackageFilter((current) => (current === packageFilterParam ? current : packageFilterParam))
+  }, [searchParams])
+
+  useEffect(() => {
+    const nextSearchParams = new URLSearchParams(searchParams)
+    if (packageFilter.trim().length > 0) {
+      nextSearchParams.set('packageFilter', packageFilter)
+    } else {
+      nextSearchParams.delete('packageFilter')
+    }
+
+    if (nextSearchParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextSearchParams, { replace: true })
+    }
+  }, [packageFilter, searchParams, setSearchParams])
 
   const filteredPackages = useMemo(() => {
     const rows = detail?.packages ?? []
