@@ -6,10 +6,13 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
@@ -27,6 +30,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import java.math.BigDecimal;
@@ -246,6 +250,40 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.countryList().get(0).code()).isEqualTo("CA");
     assertThat(response.countryList().get(1).code()).isEqualTo("US");
     assertThat(response.countryList().get(2).code()).isEqualTo("GB");
+  }
+
+  @Test
+  void invoicesForPermitShouldReturnInvoiceList() {
+    when(repository.findInvoiceNumbersByPermit(7000123L)).thenReturn(List.of("INV-100", "INV-101"));
+
+    PermitInvoiceListRpcResponseDto response = service.getInvoicesForPermit(7000123L);
+
+    assertThat(response.invoiceList()).containsExactly("INV-100", "INV-101");
+  }
+
+  @Test
+  void invoiceDetailsShouldReturnComputedCadAmounts() {
+    when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L))
+        .thenReturn(Optional.of(new SalesInvoiceRow("INV-100", 100.0d, 1.25d, 20.0d)));
+
+    PermitInvoiceDetailsRpcResponseDto response =
+        service.getInvoiceDetails(7000123L, "INV-100");
+
+    assertThat(response.invoicefound()).isTrue();
+    assertThat(response.rate()).isEqualTo("1.25");
+    assertThat(response.fee()).isEqualTo("$25.00");
+    assertThat(response.value()).isEqualTo("$125.00");
+  }
+
+  @Test
+  void conversionRateShouldReturnSuccessWhenRateExists() {
+    when(repository.findCurrencyConversionRateByDate(LocalDate.now(), "USD"))
+        .thenReturn(Optional.of(1.333d));
+
+    PermitConversionRateRpcResponseDto response = service.getConversionRate();
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.conversionRate()).isEqualTo("1.33");
   }
 
   @Test

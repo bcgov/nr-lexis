@@ -1,10 +1,13 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
@@ -183,6 +186,42 @@ public class PermitDetailsRpcController {
     }
 
     return ResponseEntity.ok(service.getCountryList());
+  }
+
+  @GetMapping("/invoices-for-permit")
+  public ResponseEntity<PermitInvoiceListRpcResponseDto> getInvoicesForPermit(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for invoices for permit");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getInvoicesForPermit(permitNumber));
+  }
+
+  @GetMapping("/invoice-details")
+  public ResponseEntity<PermitInvoiceDetailsRpcResponseDto> getInvoiceDetails(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for invoice details");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getInvoiceDetails(permitNumber, salesInvoiceNumber));
+  }
+
+  @GetMapping("/conversion-rate")
+  public ResponseEntity<PermitConversionRateRpcResponseDto> getConversionRate() {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for conversion rate");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getConversionRate());
   }
 
   @GetMapping("/file-types")

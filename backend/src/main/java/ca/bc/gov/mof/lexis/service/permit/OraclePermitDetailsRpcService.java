@@ -3,10 +3,13 @@ package ca.bc.gov.mof.lexis.service.permit;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
@@ -25,6 +28,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsR
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import java.math.BigDecimal;
@@ -348,6 +352,43 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .map(row -> new PermitCountryItemRpcResponseDto(nonNull(row.description()), nonNull(row.code())))
             .toList();
     return new PermitCountryListRpcResponseDto(countries);
+  }
+
+  @Override
+  public PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber) {
+    return new PermitInvoiceListRpcResponseDto(repository.findInvoiceNumbersByPermit(permitNumber));
+  }
+
+  @Override
+  public PermitInvoiceDetailsRpcResponseDto getInvoiceDetails(
+      Long permitNumber, String salesInvoiceNumber) {
+    Optional<SalesInvoiceRow> invoice =
+        repository.findSalesInvoiceByNumberAndPermit(salesInvoiceNumber, permitNumber);
+    if (invoice.isEmpty()) {
+      return new PermitInvoiceDetailsRpcResponseDto(false, "", "", "");
+    }
+
+    SalesInvoiceRow row = invoice.get();
+    BigDecimal rateToCad = BigDecimal.valueOf(row.currencyConversionRate());
+    BigDecimal feeCad = rateToCad.multiply(BigDecimal.valueOf(row.feeInLieu()));
+    BigDecimal valueCad = rateToCad.multiply(BigDecimal.valueOf(row.exportValue()));
+
+    return new PermitInvoiceDetailsRpcResponseDto(
+        true,
+        formatDecimal(rateToCad, 2),
+        formatCurrency(feeCad),
+        formatCurrency(valueCad));
+  }
+
+  @Override
+  public PermitConversionRateRpcResponseDto getConversionRate() {
+    Optional<Double> conversionRate = repository.findCurrencyConversionRateByDate(LocalDate.now(), "USD");
+    if (conversionRate.isEmpty()) {
+      return new PermitConversionRateRpcResponseDto(false, "");
+    }
+
+    return new PermitConversionRateRpcResponseDto(
+        true, formatDecimal(BigDecimal.valueOf(conversionRate.get()), 2));
   }
 
   @Override

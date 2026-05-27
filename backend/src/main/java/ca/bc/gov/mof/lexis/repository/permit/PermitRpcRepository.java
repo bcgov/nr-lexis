@@ -39,6 +39,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_FILE_DETAILS(?,?)";
   private static final String FIND_APPLICATION_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPL_FILE_DETAILS(?,?)";
+  private static final String FIND_INVOICE_BY_ID = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICE_BY_ID(?,?,?)";
+  private static final String FIND_INVOICES_BY_PERMIT = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICES_BY_PERMIT(?,?)";
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String IS_APP_UNMANU = LEXIS_GROUP_5_PACKAGE + "IS_APP_UMANU(?,?)";
   private static final String GET_POLICY_FACTOR = LEXIS_GROUP_5_PACKAGE + "GET_POLICY_FACTOR(?,?,?)";
@@ -59,6 +61,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
   private static final String FIND_RATE_BY_EXEMPTION = LEXIS_CODES_PACKAGE + "FIND_RATE_BY_EXEMPTION(?,?)";
   private static final String FIND_LOG_AMV_BY_SCALE = LEXIS_CODES_PACKAGE + "FIND_LOG_AMV(?,?)";
+  private static final String FIND_CONVERSION_FOR_DATE =
+      LEXIS_CODES_PACKAGE + "FIND_CONVERSION_FOR_DATE(?,?,?)";
   private static final String FIND_ALL_COUNTRY_CODES = LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)";
   private static final String FIND_ALL_ATTACHMENT_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_ATTACH_CODES(?)";
@@ -225,6 +229,62 @@ public class PermitRpcRepository extends OracleRepositorySupport {
             2,
             rs -> trim(getString(rs, "DESCRIPTION")))
         .filter(value -> value != null && !value.isBlank());
+  }
+
+  public Optional<SalesInvoiceRow> findSalesInvoiceByNumberAndPermit(
+      String salesInvoiceNumber, Long permitNumber) {
+    String normalizedSalesInvoiceNumber = trim(salesInvoiceNumber);
+    if (normalizedSalesInvoiceNumber == null || permitNumber == null || permitNumber < 1) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        FIND_INVOICE_BY_ID,
+        cs -> {
+          cs.setString(1, normalizedSalesInvoiceNumber);
+          cs.setString(2, permitNumber.toString());
+        },
+        3,
+        rs ->
+            new SalesInvoiceRow(
+                nonNull(getString(rs, "EXPORT_SALES_INVOICE_NUMBER")),
+                coalesce(getDouble(rs, "EXPORT_VALUE"), 0.0d),
+                coalesce(getDouble(rs, "CURRENCY_CONVERSION_RATE"), 0.0d),
+                coalesce(getDouble(rs, "FEE_IN_LIEU"), 0.0d)));
+  }
+
+  public List<String> findInvoiceNumbersByPermit(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+            FIND_INVOICES_BY_PERMIT,
+            cs -> cs.setString(1, permitNumber.toString()),
+            2,
+            rs -> getString(rs, "EXPORT_SALES_INVOICE_NUMBER"))
+        .stream()
+        .filter(value -> value != null && !value.isBlank())
+        .distinct()
+        .sorted()
+        .toList();
+  }
+
+  public Optional<Double> findCurrencyConversionRateByDate(LocalDate applicationDate, String countryCode) {
+    LocalDate normalizedDate = applicationDate == null ? LocalDate.now() : applicationDate;
+    String normalizedCountryCode = trim(countryCode);
+    if (normalizedCountryCode == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        FIND_CONVERSION_FOR_DATE,
+        cs -> {
+          cs.setString(1, normalizedCountryCode);
+          cs.setDate(2, java.sql.Date.valueOf(normalizedDate));
+        },
+        3,
+        rs -> coalesce(getDouble(rs, "RATE_TO_CANADIAN"), 0.0d));
   }
 
   public boolean deletePermitFile(Long documentId) {
@@ -561,6 +621,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return first != null ? first : second;
   }
 
+  private String nonNull(String value) {
+    return value == null ? "" : value;
+  }
+
   private DocumentRow mapDocumentRow(ResultSet rs) {
     Long attachmentId = getLong(rs, "EXPORT_ATTACHMENT_ID");
     return new DocumentRow(
@@ -647,4 +711,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String growthTypeCode) {}
 
   public record EndUsePairRow(String speciesCode, String endUseCode) {}
+
+  public record SalesInvoiceRow(
+      String salesInvoiceNumber,
+      double exportValue,
+      double currencyConversionRate,
+      double feeInLieu) {}
 }

@@ -49,6 +49,9 @@ public class LegacyRouteController {
   private static final String ACTION_GET_PACKAGE_INFO = "getPackageInfo";
   private static final String ACTION_GET_PACKAGE_DETAILS = "getPackageDetails";
   private static final String ACTION_GET_PERMIT_HAS_APPLICATIONS = "getPermitHasApplications";
+  private static final String ACTION_GET_INVOICES_FOR_PERMIT = "getInvoicesForPermit";
+  private static final String ACTION_GET_INVOICE_DETAILS = "getInvoiceDetails";
+  private static final String ACTION_GET_CONVERSION_RATE = "getConversionRate";
   private static final String ACTION_GET_COUNTRY_LIST = "getCountryList";
   private static final String ACTION_GET_FILE_TYPES = "getFileTypes";
   private static final String ACTION_GET_DOCUMENT = "getDocument";
@@ -449,6 +452,7 @@ public class LegacyRouteController {
       @RequestParam(name = "countryCode", required = false) String countryCode,
       @RequestParam(name = "applicationDate", required = false) String applicationDate,
       @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber,
       @RequestParam(name = "fileID", required = false) String fileId,
       @RequestParam(name = "fileName", required = false) String fileName,
       @RequestParam(name = "documentId", required = false) String documentId,
@@ -482,6 +486,15 @@ public class LegacyRouteController {
     }
     if (ACTION_GET_PERMIT_HAS_APPLICATIONS.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPermitHasApplications(permitNumber);
+    }
+    if (ACTION_GET_INVOICES_FOR_PERMIT.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getInvoicesForPermit(permitNumber);
+    }
+    if (ACTION_GET_INVOICE_DETAILS.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getInvoiceDetails(permitNumber, salesInvoiceNumber);
+    }
+    if (ACTION_GET_CONVERSION_RATE.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getConversionRate();
     }
     if (ACTION_GET_COUNTRY_LIST.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getCountryList();

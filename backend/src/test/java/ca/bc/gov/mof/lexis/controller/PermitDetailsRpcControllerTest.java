@@ -7,10 +7,13 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
@@ -232,6 +235,50 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void invoicesForPermitShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitInvoiceListRpcResponseDto dto =
+        new PermitInvoiceListRpcResponseDto(List.of("INV-100", "INV-101"));
+    when(service.getInvoicesForPermit(7000123L)).thenReturn(dto);
+
+    ResponseEntity<PermitInvoiceListRpcResponseDto> response =
+        controller.getInvoicesForPermit(7000123L);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getInvoicesForPermit(7000123L);
+  }
+
+  @Test
+  void invoiceDetailsShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitInvoiceDetailsRpcResponseDto dto =
+        new PermitInvoiceDetailsRpcResponseDto(true, "1.25", "$50.00", "$125.00");
+    when(service.getInvoiceDetails(7000123L, "INV-101")).thenReturn(dto);
+
+    ResponseEntity<PermitInvoiceDetailsRpcResponseDto> response =
+        controller.getInvoiceDetails(7000123L, "INV-101");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getInvoiceDetails(7000123L, "INV-101");
+  }
+
+  @Test
+  void conversionRateShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitConversionRateRpcResponseDto dto = new PermitConversionRateRpcResponseDto(true, "1.23");
+    when(service.getConversionRate()).thenReturn(dto);
+
+    ResponseEntity<PermitConversionRateRpcResponseDto> response =
+        controller.getConversionRate();
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getConversionRate();
+  }
+
+  @Test
   void fileTypesShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     List<PermitFileTypeRpcResponseDto> dto = List.of(new PermitFileTypeRpcResponseDto("INV", "Invoice"));
@@ -282,5 +329,33 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isEqualTo("true");
     verify(service).removePermitDocument(33L);
+  }
+
+  @Test
+  void removeApplicationDocumentShouldReturnSuccessFlag() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.removeApplicationDocument(44L)).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeApplicationDocument("44");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isEqualTo("true");
+    verify(service).removeApplicationDocument(44L);
+  }
+
+  @Test
+  void removeInvoiceDocumentShouldReturnSuccessFlag() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.removeInvoiceDocument(55L)).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeInvoiceDocument("55");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isEqualTo("true");
+    verify(service).removeInvoiceDocument(55L);
   }
 }
