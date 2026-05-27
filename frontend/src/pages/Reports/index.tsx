@@ -1,4 +1,5 @@
-import { useMemo, useState, type FC } from 'react'
+import { useEffect, useMemo, useState, type FC } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Button,
   Checkbox,
@@ -18,6 +19,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import { buildLegacyReportUrl, runReport } from '@/service/report-service'
 
@@ -48,6 +50,8 @@ type ReportActionMapping = {
   value: string
   label: string
 }
+
+type ReportCategoryFilter = 'ALL' | ReportDefinition['category']
 
 const OUTPUT_FORMAT_FIELD: ReportFieldDefinition = {
   key: 'outputFormat',
@@ -553,6 +557,92 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
 ]
 
+const REPORT_CATEGORY_OPTIONS = ['ALL', 'Provincial', 'Federal', 'Cross-Module'] as const
+
+const parseBooleanFlag = (value: string | null): boolean => {
+  if (!value) {
+    return false
+  }
+
+  const normalized = value.trim().toLowerCase()
+  return normalized === '1' || normalized === 'true' || normalized === 'yes'
+}
+
+const parseRecordParam = (value: string | null): Record<string, string> => {
+  if (!value) {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(value)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {}
+    }
+
+    return Object.entries(parsed).reduce<Record<string, string>>((acc, [key, fieldValue]) => {
+      if (typeof fieldValue === 'string') {
+        acc[key] = fieldValue
+      }
+      return acc
+    }, {})
+  } catch (error) {
+    console.warn('Unable to parse report values from URL state.', error)
+    return {}
+  }
+}
+
+const sanitizeReportValues = (
+  report: ReportDefinition,
+  values: Record<string, string>,
+): Record<string, string> => {
+  const allowedKeys = new Set(report.fields.map((field) => field.key))
+  return Object.entries(values).reduce<Record<string, string>>((acc, [key, value]) => {
+    if (allowedKeys.has(key)) {
+      acc[key] = value
+    }
+    return acc
+  }, {})
+}
+
+const resolveReportById = (reportId: string): ReportDefinition => {
+  return REPORT_DEFINITIONS.find((report) => report.id === reportId) ?? REPORT_DEFINITIONS[0]
+}
+
+const resolveActionMapping = (report: ReportDefinition, actionValue: string | null): string => {
+  const mappedValue = (actionValue ?? '').trim()
+  if (report.actionMappings.some((actionMapping) => actionMapping.value === mappedValue)) {
+    return mappedValue
+  }
+
+  return report.actionMappings[0].value
+}
+
+const buildReportSearchParams = (payload: {
+  searchText: string
+  selectedCategory: ReportCategoryFilter
+  showGrantedOnly: boolean
+  selectedReportId: string
+  selectedActionMapping: string
+  selectedReportValues: Record<string, string>
+}): URLSearchParams => {
+  const params = new URLSearchParams()
+
+  setSearchParam(params, 'q', payload.searchText)
+  if (payload.selectedCategory !== 'ALL') {
+    setSearchParam(params, 'category', payload.selectedCategory)
+  }
+  if (payload.showGrantedOnly) {
+    params.set('granted', '1')
+  }
+  setSearchParam(params, 'report', payload.selectedReportId)
+  setSearchParam(params, 'action', payload.selectedActionMapping)
+  if (Object.keys(payload.selectedReportValues).length > 0) {
+    params.set('values', JSON.stringify(payload.selectedReportValues))
+  }
+
+  return params
+}
+
 const normalizeText = (value: string): string => value.trim().toLowerCase()
 
 const triggerBrowserDownload = (blob: Blob, filename: string): void => {
@@ -584,17 +674,38 @@ const openBlobInNewTab = (blob: Blob): boolean => {
 }
 
 const ReportsPage: FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams()
   const { canPerform } = useAuth()
-  const [searchText, setSearchText] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<'ALL' | ReportDefinition['category']>(
-    'ALL',
+  const initialReportId = useMemo(() => {
+    const requestedReportId = (searchParams.get('report') ?? '').trim()
+    if (REPORT_DEFINITIONS.some((report) => report.id === requestedReportId)) {
+      return requestedReportId
+    }
+    return REPORT_DEFINITIONS[0].id
+  }, [searchParams])
+  const initialReport = useMemo(() => resolveReportById(initialReportId), [initialReportId])
+  const initialReportValues = useMemo(() => {
+    const parsedValues = parseRecordParam(searchParams.get('values'))
+    return sanitizeReportValues(initialReport, parsedValues)
+  }, [initialReport, searchParams])
+  const initialSelectedAction = useMemo(() => {
+    return resolveActionMapping(initialReport, searchParams.get('action'))
+  }, [initialReport, searchParams])
+
+  const [searchText, setSearchText] = useState(() => searchParams.get('q') ?? '')
+  const [selectedCategory, setSelectedCategory] = useState<ReportCategoryFilter>(() =>
+    parseEnumParam(searchParams.get('category'), REPORT_CATEGORY_OPTIONS, 'ALL'),
   )
-  const [showGrantedOnly, setShowGrantedOnly] = useState(false)
-  const [selectedReportId, setSelectedReportId] = useState(REPORT_DEFINITIONS[0].id)
-  const [reportValuesById, setReportValuesById] = useState<Record<string, Record<string, string>>>(
-    {},
+  const [showGrantedOnly, setShowGrantedOnly] = useState(() =>
+    parseBooleanFlag(searchParams.get('granted')),
   )
-  const [selectedActionById, setSelectedActionById] = useState<Record<string, string>>({})
+  const [selectedReportId, setSelectedReportId] = useState(initialReport.id)
+  const [reportValuesById, setReportValuesById] = useState<Record<string, Record<string, string>>>({
+    [initialReport.id]: initialReportValues,
+  })
+  const [selectedActionById, setSelectedActionById] = useState<Record<string, string>>({
+    [initialReport.id]: initialSelectedAction,
+  })
   const [launchErrorMessage, setLaunchErrorMessage] = useState('')
   const [legacyFallbackMessage, setLegacyFallbackMessage] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -632,6 +743,30 @@ const ReportsPage: FC = () => {
   const selectedActionMapping =
     selectedActionById[selectedReport.id] ?? selectedReport.actionMappings[0].value
 
+  useEffect(() => {
+    const nextParams = buildReportSearchParams({
+      searchText,
+      selectedCategory,
+      showGrantedOnly,
+      selectedReportId: selectedReport.id,
+      selectedActionMapping,
+      selectedReportValues,
+    })
+    const nextQuery = nextParams.toString()
+    if (nextQuery !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true })
+    }
+  }, [
+    searchParams,
+    searchText,
+    selectedActionMapping,
+    selectedCategory,
+    selectedReport.id,
+    selectedReportValues,
+    setSearchParams,
+    showGrantedOnly,
+  ])
+
   const previewUrl = useMemo(() => {
     return buildLegacyReportUrl(
       selectedReport.legacyPath,
@@ -663,6 +798,12 @@ const ReportsPage: FC = () => {
     }))
     setLaunchErrorMessage('')
     setLegacyFallbackMessage('')
+  }
+
+  const onResetReportFilters = (): void => {
+    setSearchText('')
+    setSelectedCategory('ALL')
+    setShowGrantedOnly(false)
   }
 
   const onOpenReportRequest = async (): Promise<void> => {
@@ -763,6 +904,11 @@ const ReportsPage: FC = () => {
                 onChange={(_, payload) => setShowGrantedOnly(Boolean(payload.checked))}
               />
             </div>
+          </div>
+          <div className="legacy-search-actions">
+            <Button kind="ghost" size="sm" onClick={onResetReportFilters}>
+              Reset Report Filters
+            </Button>
           </div>
           <p className="landing-help-text">
             TODO: replace free-text code inputs with backend-driven report option endpoints when
