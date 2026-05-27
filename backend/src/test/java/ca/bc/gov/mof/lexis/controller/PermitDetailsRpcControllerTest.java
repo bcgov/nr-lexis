@@ -12,6 +12,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseD
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitGbmsInvoiceHistoryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
@@ -392,6 +393,28 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).getInvoiceDetails(7000123L, "INV-101");
+  }
+
+  @Test
+  void gbmsInvoiceHistoryShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    List<PermitGbmsInvoiceHistoryItemRpcResponseDto> dto =
+        List.of(
+            new PermitGbmsInvoiceHistoryItemRpcResponseDto(
+                "GBMS-1", "", "", "125.00", "03/01/2026", "03/01/2026", "03/02/2026"));
+    when(service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true)).thenReturn(dto);
+
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_READ_ONLY")));
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_READ_ONLY"));
+
+    ResponseEntity<List<PermitGbmsInvoiceHistoryItemRpcResponseDto>> response =
+        controller.getGbmsInvoiceHistory("RCPT-1", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getGbmsInvoiceHistory("RCPT-1", 7000123L, true);
   }
 
   @Test

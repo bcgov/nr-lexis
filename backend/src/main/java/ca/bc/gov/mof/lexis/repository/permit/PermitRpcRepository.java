@@ -50,6 +50,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private static final String FIND_INVOICE_BY_ID = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICE_BY_ID(?,?,?)";
   private static final String FIND_INVOICES_BY_PERMIT = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICES_BY_PERMIT(?,?)";
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
+  private static final String FIND_GBMS_INVOICE_HISTORY =
+      LEXIS_GROUP_9_PACKAGE + "FIND_GBMS_INVOICE_HISTORY(?,?,?)";
+  private static final String FIND_GBMS_INVOICE_HISTORY_READ_ONLY =
+      LEXIS_READ_ONLY_PACKAGE + "FIND_GBMS_INVOICE_HISTORY(?,?,?)";
   private static final String IS_APP_UNMANU = LEXIS_GROUP_5_PACKAGE + "IS_APP_UMANU(?,?)";
   private static final String GET_POLICY_FACTOR = LEXIS_GROUP_5_PACKAGE + "GET_POLICY_FACTOR(?,?,?)";
   private static final String DELETE_PERMIT_FILE_ATTACHMENT =
@@ -353,6 +357,32 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .distinct()
         .sorted()
         .toList();
+  }
+
+  public List<GbmsInvoiceHistoryRow> findGbmsInvoiceHistory(
+      String receiptNumber, Long permitNumber, boolean readOnlyUser) {
+    String normalizedReceiptNumber = trim(receiptNumber);
+    String normalizedPermitNumber =
+        permitNumber == null || permitNumber < 1 ? null : permitNumber.toString();
+    String procedure =
+        readOnlyUser ? FIND_GBMS_INVOICE_HISTORY_READ_ONLY : FIND_GBMS_INVOICE_HISTORY;
+
+    return queryCursorProcedure(
+        procedure,
+        cs -> {
+          cs.setString(1, normalizedReceiptNumber);
+          cs.setString(2, normalizedPermitNumber);
+        },
+        3,
+        rs ->
+            new GbmsInvoiceHistoryRow(
+                getString(rs, "INVOICE_NUMBER"),
+                getString(rs, "CANCELLED_BY_INVOICE"),
+                getString(rs, "REPLACED_BY_INVOICE"),
+                coalesce(getDouble(rs, "INVOICE_AMOUNT"), 0.0d),
+                getLocalDate(rs, "PRINTED_DATE"),
+                getLocalDate(rs, "ENTRY_TIMESTAMP"),
+                getLocalDate(rs, "UPDATE_TIMESTAMP")));
   }
 
   public Optional<Double> findCurrencyConversionRateByDate(LocalDate applicationDate, String countryCode) {
@@ -819,4 +849,13 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       double exportValue,
       double currencyConversionRate,
       double feeInLieu) {}
+
+  public record GbmsInvoiceHistoryRow(
+      String invoiceNumber,
+      String cancelledByInvoice,
+      String replacedByInvoice,
+      double invoiceAmount,
+      LocalDate printedDate,
+      LocalDate entryDate,
+      LocalDate updateDate) {}
 }

@@ -59,6 +59,7 @@ public class LegacyRouteController {
   private static final String ACTION_GET_PERMIT_HAS_APPLICATIONS = "getPermitHasApplications";
   private static final String ACTION_GET_INVOICES_FOR_PERMIT = "getInvoicesForPermit";
   private static final String ACTION_GET_INVOICE_DETAILS = "getInvoiceDetails";
+  private static final String ACTION_GET_GBMS_INVOICE_HISTORY = "getGBMSInvoiceHistory";
   private static final String ACTION_GET_CONVERSION_RATE = "getConversionRate";
   private static final String ACTION_GET_COUNTRY_LIST = "getCountryList";
   private static final String ACTION_GET_FILE_TYPES = "getFileTypes";
@@ -464,6 +465,7 @@ public class LegacyRouteController {
       @RequestParam(name = "selectedApplications", required = false) String selectedApplications,
       @RequestParam(name = "selectedPackages", required = false) String selectedPackages,
       @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber,
+      @RequestParam(name = "receiptNumber", required = false) String receiptNumber,
       @RequestParam(name = "fileID", required = false) String fileId,
       @RequestParam(name = "fileName", required = false) String fileName,
       @RequestParam(name = "documentId", required = false) String documentId,
@@ -528,6 +530,10 @@ public class LegacyRouteController {
     }
     if (ACTION_GET_INVOICE_DETAILS.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getInvoiceDetails(permitNumber, salesInvoiceNumber);
+    }
+    if (ACTION_GET_GBMS_INVOICE_HISTORY.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getGbmsInvoiceHistory(
+          receiptNumber, permitNumber, authentication);
     }
     if (ACTION_GET_CONVERSION_RATE.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getConversionRate();

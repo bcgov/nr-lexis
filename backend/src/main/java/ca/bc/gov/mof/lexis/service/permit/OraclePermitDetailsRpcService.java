@@ -12,6 +12,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseD
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitGbmsInvoiceHistoryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
@@ -29,6 +30,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.AttachmentTypeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.GbmsInvoiceHistoryRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
@@ -524,6 +526,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  public List<PermitGbmsInvoiceHistoryItemRpcResponseDto> getGbmsInvoiceHistory(
+      String receiptNumber, Long permitNumber, boolean readOnlyUser) {
+    return repository.findGbmsInvoiceHistory(receiptNumber, permitNumber, readOnlyUser).stream()
+        .map(this::toGbmsInvoiceHistoryItem)
+        .toList();
+  }
+
+  @Override
   public PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber) {
     return new PermitInvoiceListRpcResponseDto(repository.findInvoiceNumbersByPermit(permitNumber));
   }
@@ -727,6 +737,22 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .orElse("");
     regionByApplication.put(applicationNumber, resolved);
     return resolved;
+  }
+
+  private PermitGbmsInvoiceHistoryItemRpcResponseDto toGbmsInvoiceHistoryItem(
+      GbmsInvoiceHistoryRow row) {
+    return new PermitGbmsInvoiceHistoryItemRpcResponseDto(
+        nonNull(row.invoiceNumber()),
+        nonNull(row.cancelledByInvoice()),
+        nonNull(row.replacedByInvoice()),
+        formatDecimal(BigDecimal.valueOf(row.invoiceAmount()), 2),
+        formatDate(row.printedDate()),
+        formatDate(row.entryDate()),
+        formatDate(row.updateDate()));
+  }
+
+  private String formatDate(LocalDate value) {
+    return value == null ? "" : LEGACY_DATE_FORMATTER.format(value);
   }
 
   private long sortGroup(long groupBy) {

@@ -6,6 +6,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseD
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitGbmsInvoiceHistoryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
@@ -294,6 +295,21 @@ public class PermitDetailsRpcController {
     return ResponseEntity.ok(service.getExemptionVolumeRemaining(exemptionNumber));
   }
 
+  @GetMapping("/gbms-invoice-history")
+  public ResponseEntity<List<PermitGbmsInvoiceHistoryItemRpcResponseDto>> getGbmsInvoiceHistory(
+      @RequestParam(name = "receiptNumber", required = false) String receiptNumber,
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      Authentication authentication) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for GBMS invoice history");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.getGbmsInvoiceHistory(receiptNumber, permitNumber, isReadOnlyUser(authentication)));
+  }
+
   @GetMapping("/invoices-for-permit")
   public ResponseEntity<PermitInvoiceListRpcResponseDto> getInvoicesForPermit(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
@@ -455,6 +471,14 @@ public class PermitDetailsRpcController {
       }
     }
     return true;
+  }
+
+  private boolean isReadOnlyUser(Authentication authentication) {
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    if (roles == null || roles.isEmpty()) {
+      return false;
+    }
+    return roles.contains("LEXIS_READ_ONLY") || roles.contains("READ_ONLY");
   }
 
   public record RemoveDocumentResponseDto(String success) {}

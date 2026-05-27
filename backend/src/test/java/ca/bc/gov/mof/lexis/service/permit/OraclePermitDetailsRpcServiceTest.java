@@ -15,6 +15,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseD
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitGbmsInvoiceHistoryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
@@ -32,6 +33,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.AttachmentTypeR
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.GbmsInvoiceHistoryRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageCandidateRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
@@ -401,6 +403,33 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.rate()).isEqualTo("1.25");
     assertThat(response.fee()).isEqualTo("$25.00");
     assertThat(response.value()).isEqualTo("$125.00");
+  }
+
+  @Test
+  void gbmsInvoiceHistoryShouldReturnLegacyFormattedRows() {
+    when(repository.findGbmsInvoiceHistory("RCPT-1", 7000123L, true))
+        .thenReturn(
+            List.of(
+                new GbmsInvoiceHistoryRow(
+                    "GBMS-1",
+                    null,
+                    "GBMS-2",
+                    125.0d,
+                    LocalDate.of(2026, 3, 1),
+                    LocalDate.of(2026, 3, 1),
+                    LocalDate.of(2026, 3, 2))));
+
+    List<PermitGbmsInvoiceHistoryItemRpcResponseDto> response =
+        service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true);
+
+    assertThat(response).hasSize(1);
+    assertThat(response.get(0).gbmsInvoiceNumber()).isEqualTo("GBMS-1");
+    assertThat(response.get(0).cancelledByInvoice()).isEmpty();
+    assertThat(response.get(0).replacedByInvoice()).isEqualTo("GBMS-2");
+    assertThat(response.get(0).invoiceAmount()).isEqualTo("125.00");
+    assertThat(response.get(0).printedDate()).isEqualTo("03/01/2026");
+    assertThat(response.get(0).entryDate()).isEqualTo("03/01/2026");
+    assertThat(response.get(0).updateDate()).isEqualTo("03/02/2026");
   }
 
   @Test
