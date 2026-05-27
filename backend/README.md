@@ -17,11 +17,8 @@ Spring Boot backend service for the Log Exemption Information System (LEXIS).
 ## Running Locally
 
 ```bash
-# 1) Create local profile overrides (gitignored output file)
-cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
-
-# 2) Run backend with Oracle + local profiles
-SPRING_PROFILES_ACTIVE=oracle,local mvn spring-boot:run
+# Run backend with local + Oracle profiles
+mvn -DskipTests spring-boot:run -Dspring-boot.run.profiles=local,oracle
 
 # Health checks
 curl http://localhost:8080/actuator/health
@@ -32,7 +29,7 @@ curl http://localhost:8080/actuator/prometheus
 
 ### Environment Variables
 
-In OpenShift deployments these come from the Secret created by `openshift.deploy.yml`. For local setup, start from `.env.example`.
+In OpenShift deployments these come from the Secret created by `openshift.deploy.yml`. For local development, keep credentials in `src/main/resources/application-local.yml` (gitignored) and use `.env.example` for optional shell-based overrides.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -56,7 +53,7 @@ In OpenShift deployments these come from the Secret created by `openshift.deploy
 |---------|-------------|
 | `default` | Boots without datasource/JPA autoconfig so backend can run while DB wiring is incomplete. |
 | `oracle` | Activates Oracle-profiled repository/service beans (e.g., exemptions service/repository). |
-| `local` | Loads local-only overrides from `application-local.yml` (gitignored; seeded from `application-local.yml.example`). |
+| `local` | Local-dev profile. Loads `application-local.yml` (gitignored). Activate alongside `oracle` (`SPRING_PROFILES_ACTIVE=local,oracle`). |
 
 ## API Endpoints
 
@@ -97,7 +94,9 @@ backend/
 │   ├── repository/
 │   └── service/
 └── src/main/resources/
-    └── application.yml
+    ├── application.yml
+    ├── application-oracle.yml
+    └── application-local.yml (gitignored, local only)
 ```
 
 ## Origins
