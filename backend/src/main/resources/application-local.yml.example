@@ -1,0 +1,37 @@
+# Local-only profile overrides for backend development.
+# Copy this file to `application-local.yml` (gitignored) and fill values.
+# Run with:
+#   SPRING_PROFILES_ACTIVE=oracle,local mvn spring-boot:run
+
+server:
+  port: 8080
+
+spring:
+  datasource:
+    # Option 1 (recommended): keep these as env vars in your shell/.env.
+    # Option 2: uncomment and set explicit local values here.
+    # url: "jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCPS)(HOST=<db-host>)(PORT=1543))(CONNECT_DATA=(SERVICE_NAME=<db-service-name>)(SERVER=DEDICATED)))"
+    # username: "<db-username>"
+    # password: "<db-password>"
+    hikari:
+      data-source-properties:
+        # Required when Oracle TCPS truststore is needed locally.
+        # javax.net.ssl.trustStoreType: JKS
+        # javax.net.ssl.trustStore: "/absolute/path/to/jssecacerts"
+        # javax.net.ssl.trustStorePassword: "<truststore-password>"
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Leave empty while route auth is off.
+          # Required once Cognito auth is enabled locally.
+          issuer-uri: ""
+          jwk-set-uri: ""
+
+lexis:
+  auth:
+    cognito:
+      # Keep auth disabled for local parity until Cognito token flow is in use locally.
+      enabled: false
+      enforce-route-auth: false

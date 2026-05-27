@@ -17,8 +17,11 @@ Spring Boot backend service for the Log Exemption Information System (LEXIS).
 ## Running Locally
 
 ```bash
-# Run backend
-mvn spring-boot:run
+# 1) Create local profile overrides (gitignored output file)
+cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
+
+# 2) Run backend with Oracle + local profiles
+SPRING_PROFILES_ACTIVE=oracle,local mvn spring-boot:run
 
 # Health checks
 curl http://localhost:8080/actuator/health
@@ -53,6 +56,7 @@ In OpenShift deployments these come from the Secret created by `openshift.deploy
 |---------|-------------|
 | `default` | Boots without datasource/JPA autoconfig so backend can run while DB wiring is incomplete. |
 | `oracle` | Activates Oracle-profiled repository/service beans (e.g., exemptions service/repository). |
+| `local` | Loads local-only overrides from `application-local.yml` (gitignored; seeded from `application-local.yml.example`). |
 
 ## API Endpoints
 
