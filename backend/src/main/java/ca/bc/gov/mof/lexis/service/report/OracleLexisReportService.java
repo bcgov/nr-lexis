@@ -55,15 +55,18 @@ public class OracleLexisReportService implements LexisReportService {
 
   private final DataSource dataSource;
   private final LexisJasperReportParameterProvider parameterProvider;
+  private final OracleLegacyCsvReportService legacyCsvReportService;
   private final ConcurrentHashMap<String, JasperReport> compiledTemplateCache = new ConcurrentHashMap<>();
   private final AtomicBoolean runtimeResourcesPrepared = new AtomicBoolean(false);
   private final Path runtimeTemplateDirectory;
 
   public OracleLexisReportService(
       DataSource dataSource,
-      LexisJasperReportParameterProvider parameterProvider) {
+      LexisJasperReportParameterProvider parameterProvider,
+      OracleLegacyCsvReportService legacyCsvReportService) {
     this.dataSource = dataSource;
     this.parameterProvider = parameterProvider;
+    this.legacyCsvReportService = legacyCsvReportService;
     this.runtimeTemplateDirectory = initRuntimeTemplateDirectory();
   }
 
@@ -80,18 +83,24 @@ public class OracleLexisReportService implements LexisReportService {
     }
 
     LexisJasperReportDefinition definition = definitionOptional.get();
-    if (!definition.supportsJasperTemplate()) {
+    LexisReportFormat format = LexisReportFormat.fromNullable(request == null ? null : request.format());
+    Optional<LexisGeneratedReport> legacyCsvReport =
+        legacyCsvReportService.generateLegacyCsvReport(definition, request, format);
+    if (legacyCsvReport.isPresent()) {
+      return legacyCsvReport;
+    }
+
+    if (format != LexisReportFormat.PDF) {
       LOGGER.warn(
-          "Report action [{}] has no migrated Jasper template yet", definition.action());
+          "Report action [{}] requested unsupported format [{}] in current migration state",
+          definition.action(),
+          format.name());
       return Optional.empty();
     }
 
-    LexisReportFormat format = LexisReportFormat.fromNullable(request == null ? null : request.format());
-    if (format != LexisReportFormat.PDF) {
+    if (!definition.supportsJasperTemplate()) {
       LOGGER.warn(
-          "Report action [{}] requested unsupported format [{}] for Jasper flow",
-          definition.action(),
-          format);
+          "Report action [{}] has no migrated Jasper template yet", definition.action());
       return Optional.empty();
     }
 
