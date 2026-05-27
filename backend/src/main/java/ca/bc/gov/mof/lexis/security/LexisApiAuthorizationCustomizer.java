@@ -311,73 +311,185 @@ public class LexisApiAuthorizationCustomizer
     authorizeAction(
         authorize,
         HttpMethod.POST,
-        new String[] {"/api/lexis/reports/biweeklyListing", "/api/lexis/reports/biweekly-listing"},
+        new String[] {
+          "/api/lexis/reports/biweeklyListing",
+          "/api/lexis/reports/biweekly-listing",
+          "/api/lexis/biweeklyListing",
+          "/api/lexis/biweeklyListing.do"
+        },
+        "mofrListing");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/biweeklyListing", "/api/lexis/biweeklyListing.do"},
         "mofrListing");
     authorizeAction(
         authorize,
         HttpMethod.POST,
-        new String[] {"/api/lexis/reports/offerReport", "/api/lexis/reports/offer-report"},
+        new String[] {
+          "/api/lexis/reports/offerReport",
+          "/api/lexis/reports/offer-report",
+          "/api/lexis/offerReport",
+          "/api/lexis/offerReport.do"
+        },
+        "/offerReport");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/offerReport", "/api/lexis/offerReport.do"},
         "/offerReport");
     authorizeAction(
         authorize,
         HttpMethod.POST,
         new String[] {
-          "/api/lexis/reports/speciesGradeReport", "/api/lexis/reports/species-grade-report"
+          "/api/lexis/reports/speciesGradeReport",
+          "/api/lexis/reports/species-grade-report",
+          "/api/lexis/speciesGradeReport",
+          "/api/lexis/speciesGradeReport.do"
         },
         "/speciesGradeReport");
     authorizeAction(
         authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/speciesGradeReport", "/api/lexis/speciesGradeReport.do"},
+        "/speciesGradeReport");
+    authorizeAction(
+        authorize,
         HttpMethod.POST,
-        new String[] {"/api/lexis/reports/exemptionReport", "/api/lexis/reports/exemption-report"},
+        new String[] {
+          "/api/lexis/reports/exemptionReport",
+          "/api/lexis/reports/exemption-report",
+          "/api/lexis/exemptionReport",
+          "/api/lexis/exemptionReport.do"
+        },
+        "/exemptionReport");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/exemptionReport", "/api/lexis/exemptionReport.do"},
         "/exemptionReport");
     authorizeAction(
         authorize,
         HttpMethod.POST,
         new String[] {
-          "/api/lexis/reports/applicationReport", "/api/lexis/reports/application-report"
+          "/api/lexis/reports/applicationReport",
+          "/api/lexis/reports/application-report",
+          "/api/lexis/applicationReport",
+          "/api/lexis/applicationReport.do"
         },
+        "/applicationReport");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/applicationReport", "/api/lexis/applicationReport.do"},
         "/applicationReport");
     authorizeAction(
         authorize,
         HttpMethod.POST,
         new String[] {
           "/api/lexis/reports/approvedExemptionReport",
-          "/api/lexis/reports/approved-exemption-report"
+          "/api/lexis/reports/approved-exemption-report",
+          "/api/lexis/approvedExemptionReport",
+          "/api/lexis/approvedExemptionReport.do"
+        },
+        "/approvedExemptionReport");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {
+          "/api/lexis/approvedExemptionReport",
+          "/api/lexis/approvedExemptionReport.do"
         },
         "/approvedExemptionReport");
     authorizeAction(
         authorize,
         HttpMethod.POST,
-        new String[] {"/api/lexis/reports/permitReport", "/api/lexis/reports/permit-report"},
+        new String[] {
+          "/api/lexis/reports/permitReport",
+          "/api/lexis/reports/permit-report",
+          "/api/lexis/permitReport",
+          "/api/lexis/permitReport.do"
+        },
+        "/permitReport");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/permitReport", "/api/lexis/permitReport.do"},
         "/permitReport");
     authorizeAction(
         authorize,
         HttpMethod.POST,
         new String[] {
-          "/api/lexis/reports/permitLedgerReport", "/api/lexis/reports/permit-ledger-report"
+          "/api/lexis/reports/permitLedgerReport",
+          "/api/lexis/reports/permit-ledger-report",
+          "/api/lexis/permitLedgerReport",
+          "/api/lexis/permitLedgerReport.do"
         },
         "/permitLedgerReport");
     authorizeAction(
         authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/permitLedgerReport", "/api/lexis/permitLedgerReport.do"},
+        "/permitLedgerReport");
+    authorizeAction(
+        authorize,
         HttpMethod.POST,
-        new String[] {"/api/lexis/reports/feeReport", "/api/lexis/reports/fee-report"},
+        new String[] {
+          "/api/lexis/reports/feeReport",
+          "/api/lexis/reports/fee-report",
+          "/api/lexis/feeReport",
+          "/api/lexis/feeReport.do"
+        },
+        "/feeReport");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/feeReport", "/api/lexis/feeReport.do"},
         "/feeReport");
     authorizeAction(
         authorize,
         HttpMethod.POST,
         new String[] {
-          "/api/lexis/reports/transportReport", "/api/lexis/reports/transport-report"
+          "/api/lexis/reports/transportReport",
+          "/api/lexis/reports/transport-report",
+          "/api/lexis/transportReport",
+          "/api/lexis/transportReport.do"
         },
         "/transportReport");
     authorizeAction(
         authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/transportReport", "/api/lexis/transportReport.do"},
+        "/transportReport");
+    authorizeAction(
+        authorize,
         HttpMethod.POST,
-        new String[] {"/api/lexis/reports/teacReport", "/api/lexis/reports/teac-report"},
+        new String[] {
+          "/api/lexis/reports/teacReport",
+          "/api/lexis/reports/teac-report",
+          "/api/lexis/teacReport",
+          "/api/lexis/teacReport.do"
+        },
+        "/teacReport");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/teacReport", "/api/lexis/teacReport.do"},
         "/teacReport");
     authorizeAction(
         authorize,
         HttpMethod.POST,
-        new String[] {"/api/lexis/reports/tenureReport", "/api/lexis/reports/tenure-report"},
+        new String[] {
+          "/api/lexis/reports/tenureReport",
+          "/api/lexis/reports/tenure-report",
+          "/api/lexis/tenureReport",
+          "/api/lexis/tenureReport.do"
+        },
+        "/tenureReport");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/tenureReport", "/api/lexis/tenureReport.do"},
         "/tenureReport");
 
     authorize.anyRequest().denyAll();

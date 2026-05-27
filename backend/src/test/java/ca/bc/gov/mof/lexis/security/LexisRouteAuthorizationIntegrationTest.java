@@ -182,4 +182,35 @@ class LexisRouteAuthorizationIntegrationTest {
                 .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isNoContent());
   }
+
+  @Test
+  void legacyReportRouteShouldRejectAnonymousRequests() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/lexis/offerReport")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyReportRouteShouldAllowAdminRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/offerReport")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV")
+                .param("fromDate", "2026-01-01")
+                .param("toDate", "2026-01-31")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ADMIN"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void legacyReportRouteShouldAllowViewWithAdminRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/offerReport.do")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ADMIN"))))
+        .andExpect(status().isNoContent());
+  }
 }
