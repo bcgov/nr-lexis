@@ -20,6 +20,10 @@ This suite validates core frontend availability after migration work.
   - Approve action stays disabled until at least one eligible row is selected.
   - Row eligibility respects approval rules (`NEW`, approvable, not locked).
   - Approval click shows readiness status for selected rows.
+- Federal application action controls:
+  - Create-exemption action stays disabled until at least one eligible row is selected.
+  - Row eligibility respects federal checkbox availability (legacy `showCheckbox` behavior).
+  - Multi-selection validates client-number matching before navigation.
 - Core protected routes render:
   - `/provincial/application`
   - `/provincial/exemption`

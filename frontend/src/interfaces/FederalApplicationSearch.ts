@@ -15,9 +15,12 @@ export type FederalApplicationSearchItem = {
   status: string
   clientNumber: string
   reason: string
+  exemptionType: string
+  exemptionNumber: string
   receivedDate: string
   listingDate: string
   packageNumber: string
+  allowCreateExemption: boolean
 }
 
 export type FederalApplicationSearchSortField =

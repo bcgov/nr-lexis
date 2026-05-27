@@ -13,9 +13,12 @@ const MOCK_FEDERAL_APPLICATIONS: FederalApplicationSearchItem[] = [
     status: 'Submitted',
     clientNumber: '00011234',
     reason: 'Export lumber',
+    exemptionType: '',
+    exemptionNumber: '',
     receivedDate: '2026-01-10',
     listingDate: '2026-01-12',
     packageNumber: 'PKG-20001',
+    allowCreateExemption: true,
   },
   {
     applicationNumber: 'F-A-10002',
@@ -23,9 +26,12 @@ const MOCK_FEDERAL_APPLICATIONS: FederalApplicationSearchItem[] = [
     status: 'Draft',
     clientNumber: '00021234',
     reason: 'Export pulp',
+    exemptionType: '',
+    exemptionNumber: '',
     receivedDate: '2026-01-13',
     listingDate: '2026-01-15',
     packageNumber: 'PKG-20002',
+    allowCreateExemption: true,
   },
   {
     applicationNumber: 'F-A-10003',
@@ -33,9 +39,12 @@ const MOCK_FEDERAL_APPLICATIONS: FederalApplicationSearchItem[] = [
     status: 'Approved',
     clientNumber: '00019876',
     reason: 'Cross-border shipment',
+    exemptionType: 'Section 2',
+    exemptionNumber: 'E-60001',
     receivedDate: '2025-12-02',
     listingDate: '2025-12-06',
     packageNumber: 'PKG-20003',
+    allowCreateExemption: false,
   },
   {
     applicationNumber: 'F-A-10004',
@@ -43,9 +52,12 @@ const MOCK_FEDERAL_APPLICATIONS: FederalApplicationSearchItem[] = [
     status: 'Returned',
     clientNumber: '00014567',
     reason: 'Missing transport docs',
+    exemptionType: '',
+    exemptionNumber: '',
     receivedDate: '2025-11-28',
     listingDate: '2025-11-30',
     packageNumber: 'PKG-20004',
+    allowCreateExemption: true,
   },
   {
     applicationNumber: 'F-A-10005',
@@ -53,9 +65,12 @@ const MOCK_FEDERAL_APPLICATIONS: FederalApplicationSearchItem[] = [
     status: 'Submitted',
     clientNumber: '00017654',
     reason: 'Export timber',
+    exemptionType: '',
+    exemptionNumber: '',
     receivedDate: '2026-02-18',
     listingDate: '2026-02-20',
     packageNumber: 'PKG-20005',
+    allowCreateExemption: true,
   },
   {
     applicationNumber: 'F-A-10006',
@@ -63,9 +78,12 @@ const MOCK_FEDERAL_APPLICATIONS: FederalApplicationSearchItem[] = [
     status: 'Submitted',
     clientNumber: '00019876',
     reason: 'Contract shipment',
+    exemptionType: '',
+    exemptionNumber: '',
     receivedDate: '2026-02-27',
     listingDate: '2026-02-28',
     packageNumber: 'PKG-20006',
+    allowCreateExemption: true,
   },
   {
     applicationNumber: 'F-A-10007',
@@ -73,9 +91,12 @@ const MOCK_FEDERAL_APPLICATIONS: FederalApplicationSearchItem[] = [
     status: 'Draft',
     clientNumber: '00012345',
     reason: 'New application',
+    exemptionType: '',
+    exemptionNumber: '',
     receivedDate: '2026-03-01',
     listingDate: '2026-03-03',
     packageNumber: 'PKG-20007',
+    allowCreateExemption: true,
   },
   {
     applicationNumber: 'F-A-10008',
@@ -83,9 +104,12 @@ const MOCK_FEDERAL_APPLICATIONS: FederalApplicationSearchItem[] = [
     status: 'Approved',
     clientNumber: '00014321',
     reason: 'Special permit',
+    exemptionType: 'Section 1',
+    exemptionNumber: 'E-60002',
     receivedDate: '2026-03-08',
     listingDate: '2026-03-10',
     packageNumber: 'PKG-20008',
+    allowCreateExemption: false,
   },
 ]
 
@@ -167,6 +191,10 @@ type BackendFederalApplicationSearchResult = {
   status: string
   client: string
   reason: string
+  exemptionType?: string | null
+  exemptionNumber?: string | null
+  showCheckbox?: boolean | null
+  locked?: boolean | null
   receivedDate: string
   listingDate: string
 }
@@ -222,16 +250,25 @@ const parseBackendResponse = (payload: unknown): FederalApplicationSearchRespons
   const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
 
   return {
-    content: backendResponse.results.map((row) => ({
-      applicationNumber: String(row.applicationNumber ?? ''),
-      federalApplicationNumber: row.federalApplicationNumber ?? '',
-      status: row.status ?? '',
-      clientNumber: row.client ?? '',
-      reason: row.reason ?? '',
-      receivedDate: row.receivedDate ?? '',
-      listingDate: row.listingDate ?? '',
-      packageNumber: '',
-    })),
+    content: backendResponse.results.map((row) => {
+      const hasExemptionNumber =
+        typeof row.exemptionNumber === 'string' && row.exemptionNumber.trim().length > 0
+
+      return {
+        applicationNumber: String(row.applicationNumber ?? ''),
+        federalApplicationNumber: row.federalApplicationNumber ?? '',
+        status: row.status ?? '',
+        clientNumber: row.client ?? '',
+        reason: row.reason ?? '',
+        exemptionType: row.exemptionType ?? '',
+        exemptionNumber: row.exemptionNumber ?? '',
+        receivedDate: row.receivedDate ?? '',
+        listingDate: row.listingDate ?? '',
+        packageNumber: '',
+        allowCreateExemption:
+          Boolean(row.showCheckbox ?? !hasExemptionNumber) && !Boolean(row.locked),
+      }
+    }),
     page: {
       number: pageNumber,
       size: pageSize,

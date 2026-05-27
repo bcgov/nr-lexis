@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
+  Checkbox,
   Column,
   Grid,
   InlineLoading,
+  InlineNotification,
   Pagination,
   Select,
   SelectItem,
@@ -19,10 +21,12 @@ import {
 } from '@carbon/react'
 import type {
   FederalApplicationSearchFilters,
+  FederalApplicationSearchItem,
   FederalApplicationSearchRequest,
   FederalApplicationSearchResponse,
   FederalApplicationSearchSortField,
 } from '@/interfaces/FederalApplicationSearch'
+import { useAuth } from '@/context/auth/useAuth'
 import {
   parseEnumParam,
   parsePositiveIntParam,
@@ -111,7 +115,20 @@ const isValidIsoDate = (value: string): boolean => {
   return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
 }
 
+type ExemptionSelectionStatus = {
+  kind: 'error' | 'success'
+  message: string
+}
+
+type ExemptionCreatePrefillState = {
+  selectedApplicationNumbers: string[]
+  applicantClientNumber: string
+  ownerClientNumber: string
+}
+
 const FederalPage: FC = () => {
+  const navigate = useNavigate()
+  const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>(
     FALLBACK_APPLICATION_STATUS_OPTIONS,
@@ -119,6 +136,13 @@ const FederalPage: FC = () => {
   const [results, setResults] = useState<FederalApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [selectedRowsById, setSelectedRowsById] = useState<
+    Record<string, FederalApplicationSearchItem>
+  >({})
+  const [exemptionSelectionStatus, setExemptionSelectionStatus] =
+    useState<ExemptionSelectionStatus | null>(null)
+  const canCreateExemption = canPerform('/createExemption')
+  const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
     (path: string): string => {
       const query = searchParams.toString()
@@ -211,6 +235,11 @@ const FederalPage: FC = () => {
   }, [])
 
   useEffect(() => {
+    setSelectedRowsById({})
+    setExemptionSelectionStatus(null)
+  }, [urlState])
+
+  useEffect(() => {
     void runSearch({
       filters: urlState.filters,
       sortField: urlState.sortField,
@@ -232,10 +261,14 @@ const FederalPage: FC = () => {
   }, [])
 
   const onSearch = () => {
+    setSelectedRowsById({})
+    setExemptionSelectionStatus(null)
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
   const onClearFilters = () => {
+    setSelectedRowsById({})
+    setExemptionSelectionStatus(null)
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -249,7 +282,90 @@ const FederalPage: FC = () => {
 
   const onHeaderClick = (column: FederalApplicationSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
+    setSelectedRowsById({})
+    setExemptionSelectionStatus(null)
     setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
+  }
+
+  const selectableRows = useMemo(() => {
+    if (!canCreateExemption) {
+      return []
+    }
+    return results.content.filter((item) => item.allowCreateExemption)
+  }, [canCreateExemption, results.content])
+
+  const allSelectableRowsAreSelected = useMemo(() => {
+    if (selectableRows.length === 0) return false
+    return selectableRows.every((item) => Boolean(selectedRowsById[item.applicationNumber]))
+  }, [selectableRows, selectedRowsById])
+
+  const toggleRowSelection = (row: FederalApplicationSearchItem, checked: boolean) => {
+    setExemptionSelectionStatus(null)
+    setSelectedRowsById((current) => {
+      const next = { ...current }
+      if (checked) {
+        next[row.applicationNumber] = row
+      } else {
+        delete next[row.applicationNumber]
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAllRowsOnPage = (checked: boolean) => {
+    setExemptionSelectionStatus(null)
+    setSelectedRowsById((current) => {
+      const next = { ...current }
+      selectableRows.forEach((row) => {
+        if (checked) {
+          next[row.applicationNumber] = row
+        } else {
+          delete next[row.applicationNumber]
+        }
+      })
+      return next
+    })
+  }
+
+  const onCreateExemptionClick = () => {
+    if (!canCreateExemption) {
+      setExemptionSelectionStatus({
+        kind: 'error',
+        message: 'Your account is not authorized to create exemptions.',
+      })
+      return
+    }
+
+    const selectedRows = Object.values(selectedRowsById)
+    if (selectedRows.length === 0) {
+      setExemptionSelectionStatus({
+        kind: 'error',
+        message: 'Select at least one federal application before creating an exemption.',
+      })
+      return
+    }
+
+    const firstRow = selectedRows[0]
+    const allRowsMatchClientNumbers = selectedRows.every(
+      (row) => row.clientNumber === firstRow.clientNumber,
+    )
+
+    if (!allRowsMatchClientNumbers) {
+      setExemptionSelectionStatus({
+        kind: 'error',
+        message:
+          'Selected federal applications do not share the same client number. Multi-application exemptions require matching clients.',
+      })
+      return
+    }
+
+    const prefillState: ExemptionCreatePrefillState = {
+      selectedApplicationNumbers: selectedRows.map((row) => row.applicationNumber),
+      applicantClientNumber: firstRow.clientNumber,
+      ownerClientNumber: firstRow.clientNumber,
+    }
+
+    navigate('/provincial/exemption/create', { state: prefillState })
   }
 
   return (
@@ -339,7 +455,26 @@ const FederalPage: FC = () => {
             <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
               Clear Filters
             </Button>
+            <Button
+              kind="secondary"
+              size="md"
+              onClick={onCreateExemptionClick}
+              disabled={selectedRowsCount === 0 || !canCreateExemption}
+            >
+              Create Exemption for Selected Applications
+            </Button>
           </div>
+          {exemptionSelectionStatus && (
+            <InlineNotification
+              className="legacy-inline-notification"
+              kind={exemptionSelectionStatus.kind}
+              title={
+                exemptionSelectionStatus.kind === 'error' ? 'Validation failed' : 'Selection ready'
+              }
+              subtitle={exemptionSelectionStatus.message}
+              onCloseButtonClick={() => setExemptionSelectionStatus(null)}
+            />
+          )}
         </Tile>
       </Column>
 
@@ -352,6 +487,16 @@ const FederalPage: FC = () => {
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
+                  <TableHeader>
+                    <Checkbox
+                      id="selectAllCurrentPageRows"
+                      hideLabel
+                      labelText="Select all rows on this page"
+                      checked={allSelectableRowsAreSelected}
+                      disabled={selectableRows.length === 0}
+                      onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
+                    />
+                  </TableHeader>
                   {SORT_COLUMNS.map((column) => (
                     <TableHeader key={column.id}>
                       <button
@@ -364,11 +509,23 @@ const FederalPage: FC = () => {
                       </button>
                     </TableHeader>
                   ))}
+                  <TableHeader>Exemption Type</TableHeader>
+                  <TableHeader>Exemption Number</TableHeader>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {results.content.map((row) => (
                   <TableRow key={row.applicationNumber}>
+                    <TableCell>
+                      <Checkbox
+                        id={`selectRow-${row.applicationNumber}`}
+                        hideLabel
+                        labelText={`Select ${row.applicationNumber}`}
+                        checked={Boolean(selectedRowsById[row.applicationNumber])}
+                        disabled={!canCreateExemption || !row.allowCreateExemption}
+                        onChange={(_, payload) => toggleRowSelection(row, Boolean(payload.checked))}
+                      />
+                    </TableCell>
                     <TableCell>
                       <Link
                         className="cds--link"
@@ -380,13 +537,26 @@ const FederalPage: FC = () => {
                     <TableCell>{row.status}</TableCell>
                     <TableCell>{row.clientNumber}</TableCell>
                     <TableCell>{row.reason}</TableCell>
+                    <TableCell>{row.exemptionType || '-'}</TableCell>
+                    <TableCell>
+                      {row.exemptionNumber ? (
+                        <Link
+                          className="cds--link"
+                          to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
+                        >
+                          {row.exemptionNumber}
+                        </Link>
+                      ) : (
+                        '-'
+                      )}
+                    </TableCell>
                     <TableCell>{row.receivedDate}</TableCell>
                     <TableCell>{row.listingDate}</TableCell>
                   </TableRow>
                 ))}
                 {results.content.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6}>
+                    <TableCell colSpan={9}>
                       No federal applications found for the selected criteria.
                     </TableCell>
                   </TableRow>
@@ -399,6 +569,8 @@ const FederalPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
+                setSelectedRowsById({})
+                setExemptionSelectionStatus(null)
                 setSearchParams(
                   buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
                 )
