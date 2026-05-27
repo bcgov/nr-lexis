@@ -1,8 +1,9 @@
-import { useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
 import {
   Button,
   Column,
   Grid,
+  InlineLoading,
   InlineNotification,
   Table,
   TableBody,
@@ -15,90 +16,24 @@ import {
   Tile,
 } from '@carbon/react'
 import { useAuth } from '@/context/auth/useAuth'
-
-type FeePolicyRow = {
-  id: string
-  effectiveDate: string
-  orgUnitCode: string
-  orgUnitName: string
-  policyPercentage: string
-  entryUserId: string
-  entryTimestamp: string
-  updateUserId: string
-  updateTimestamp: string
-}
-
-type FilPolicyRow = {
-  id: string
-  effectiveDate: string
-  filPercentage: string
-  entryUserId: string
-  entryTimestamp: string
-  updateUserId: string
-  updateTimestamp: string
-}
-
-const FEE_POLICY_STORAGE_KEY = 'lexis.admin.feePolicies'
-const FIL_POLICY_STORAGE_KEY = 'lexis.admin.filPolicies'
-
-const DEFAULT_USER_ID = 'CURRENT_USER'
-
-const createTimestamp = (): string => new Date().toISOString()
-
-const createRowId = (): string => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-
-const parseStoredArray = <T,>(value: string | null): T[] => {
-  if (!value) {
-    return []
-  }
-
-  try {
-    const parsed = JSON.parse(value)
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-    return parsed as T[]
-  } catch {
-    return []
-  }
-}
-
-const loadFeePolicies = (): FeePolicyRow[] => {
-  return parseStoredArray<FeePolicyRow>(localStorage.getItem(FEE_POLICY_STORAGE_KEY))
-}
-
-const loadFilPolicies = (): FilPolicyRow[] => {
-  return parseStoredArray<FilPolicyRow>(localStorage.getItem(FIL_POLICY_STORAGE_KEY))
-}
-
-const persistFeePolicies = (rows: FeePolicyRow[]): void => {
-  localStorage.setItem(FEE_POLICY_STORAGE_KEY, JSON.stringify(rows))
-}
-
-const persistFilPolicies = (rows: FilPolicyRow[]): void => {
-  localStorage.setItem(FIL_POLICY_STORAGE_KEY, JSON.stringify(rows))
-}
-
-const sortByEffectiveDateDesc = <TRow extends { effectiveDate: string }>(rows: TRow[]): TRow[] => {
-  return [...rows].sort((a, b) => {
-    if (a.effectiveDate === b.effectiveDate) {
-      return 0
-    }
-    return a.effectiveDate > b.effectiveDate ? -1 : 1
-  })
-}
+import {
+  deleteFeePolicy as deleteFeePolicyRequest,
+  deleteFilPolicy as deleteFilPolicyRequest,
+  fetchFeePolicies,
+  fetchFilPolicies,
+  type FeePolicyRow,
+  type FilPolicyRow,
+  upsertFeePolicy as upsertFeePolicyRequest,
+  upsertFilPolicy as upsertFilPolicyRequest,
+} from '@/service/admin-policy-service'
 
 const AdminPoliciesPage: FC = () => {
   const { canPerform } = useAuth()
   const canManageFeePolicy = canPerform('/lexisPolicyAdmin')
   const canManageFilPolicy = canPerform('/lexisFILAdmin')
 
-  const [feePolicies, setFeePolicies] = useState<FeePolicyRow[]>(() =>
-    sortByEffectiveDateDesc(loadFeePolicies()),
-  )
-  const [filPolicies, setFilPolicies] = useState<FilPolicyRow[]>(() =>
-    sortByEffectiveDateDesc(loadFilPolicies()),
-  )
+  const [feePolicies, setFeePolicies] = useState<FeePolicyRow[]>([])
+  const [filPolicies, setFilPolicies] = useState<FilPolicyRow[]>([])
 
   const [feeEffectiveDate, setFeeEffectiveDate] = useState('')
   const [feeOrgUnitCode, setFeeOrgUnitCode] = useState('')
@@ -112,6 +47,8 @@ const AdminPoliciesPage: FC = () => {
 
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [isLoadingPolicies, setIsLoadingPolicies] = useState(true)
+  const [isMutatingPolicies, setIsMutatingPolicies] = useState(false)
 
   const feePolicyCount = useMemo(() => feePolicies.length, [feePolicies.length])
   const filPolicyCount = useMemo(() => filPolicies.length, [filPolicies.length])
@@ -137,7 +74,35 @@ const AdminPoliciesPage: FC = () => {
 
   const isValidPercentage = (value: string): boolean => /^\d+(\.\d+)?$/.test(value.trim())
 
-  const upsertFeePolicy = (): void => {
+  const loadPolicies = useCallback(async () => {
+    setIsLoadingPolicies(true)
+    clearNotifications()
+
+    try {
+      const [loadedFeePolicies, loadedFilPolicies] = await Promise.all([
+        fetchFeePolicies(),
+        fetchFilPolicies(),
+      ])
+      setFeePolicies(loadedFeePolicies)
+      setFilPolicies(loadedFilPolicies)
+    } catch (error) {
+      console.error(error)
+      const status = (error as any)?.response?.status
+      if (status) {
+        setErrorMessage(`Unable to load policy data (status ${status}).`)
+      } else {
+        setErrorMessage('Unable to load policy data.')
+      }
+    } finally {
+      setIsLoadingPolicies(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadPolicies()
+  }, [loadPolicies])
+
+  const upsertFeePolicy = async (): Promise<void> => {
     clearNotifications()
 
     if (!canManageFeePolicy) {
@@ -155,46 +120,30 @@ const AdminPoliciesPage: FC = () => {
       return
     }
 
-    const timestamp = createTimestamp()
+    setIsMutatingPolicies(true)
 
-    if (editingFeePolicyId) {
-      const updatedRows = sortByEffectiveDateDesc(
-        feePolicies.map((row) =>
-          row.id === editingFeePolicyId
-            ? {
-                ...row,
-                effectiveDate: feeEffectiveDate,
-                orgUnitCode: feeOrgUnitCode.trim().toUpperCase(),
-                orgUnitName: feeOrgUnitName.trim(),
-                policyPercentage: feePolicyPercentage.trim(),
-                updateUserId: DEFAULT_USER_ID,
-                updateTimestamp: timestamp,
-              }
-            : row,
-        ),
-      )
-      setFeePolicies(updatedRows)
-      persistFeePolicies(updatedRows)
-      setSuccessMessage('Fee policy updated.')
-    } else {
-      const newRow: FeePolicyRow = {
-        id: createRowId(),
+    try {
+      const updatedRows = await upsertFeePolicyRequest({
+        id: editingFeePolicyId,
         effectiveDate: feeEffectiveDate,
-        orgUnitCode: feeOrgUnitCode.trim().toUpperCase(),
-        orgUnitName: feeOrgUnitName.trim(),
-        policyPercentage: feePolicyPercentage.trim(),
-        entryUserId: DEFAULT_USER_ID,
-        entryTimestamp: timestamp,
-        updateUserId: DEFAULT_USER_ID,
-        updateTimestamp: timestamp,
-      }
-      const updatedRows = sortByEffectiveDateDesc([...feePolicies, newRow])
+        orgUnitCode: feeOrgUnitCode,
+        orgUnitName: feeOrgUnitName,
+        policyPercentage: feePolicyPercentage,
+      })
       setFeePolicies(updatedRows)
-      persistFeePolicies(updatedRows)
-      setSuccessMessage('Fee policy added.')
+      setSuccessMessage(editingFeePolicyId ? 'Fee policy updated.' : 'Fee policy added.')
+      resetFeeForm()
+    } catch (error) {
+      console.error(error)
+      const status = (error as any)?.response?.status
+      if (status) {
+        setErrorMessage(`Fee policy request failed with status ${status}.`)
+      } else {
+        setErrorMessage('Fee policy request failed.')
+      }
+    } finally {
+      setIsMutatingPolicies(false)
     }
-
-    resetFeeForm()
   }
 
   const editFeePolicy = (row: FeePolicyRow): void => {
@@ -206,18 +155,31 @@ const AdminPoliciesPage: FC = () => {
     clearNotifications()
   }
 
-  const deleteFeePolicy = (rowId: string): void => {
+  const deleteFeePolicy = async (rowId: string): Promise<void> => {
     clearNotifications()
-    const updatedRows = feePolicies.filter((row) => row.id !== rowId)
-    setFeePolicies(updatedRows)
-    persistFeePolicies(updatedRows)
-    if (editingFeePolicyId === rowId) {
-      resetFeeForm()
+    setIsMutatingPolicies(true)
+
+    try {
+      const updatedRows = await deleteFeePolicyRequest(rowId)
+      setFeePolicies(updatedRows)
+      if (editingFeePolicyId === rowId) {
+        resetFeeForm()
+      }
+      setSuccessMessage('Fee policy deleted.')
+    } catch (error) {
+      console.error(error)
+      const status = (error as any)?.response?.status
+      if (status) {
+        setErrorMessage(`Fee policy delete failed with status ${status}.`)
+      } else {
+        setErrorMessage('Fee policy delete failed.')
+      }
+    } finally {
+      setIsMutatingPolicies(false)
     }
-    setSuccessMessage('Fee policy deleted.')
   }
 
-  const upsertFilPolicy = (): void => {
+  const upsertFilPolicy = async (): Promise<void> => {
     clearNotifications()
 
     if (!canManageFilPolicy) {
@@ -235,42 +197,28 @@ const AdminPoliciesPage: FC = () => {
       return
     }
 
-    const timestamp = createTimestamp()
+    setIsMutatingPolicies(true)
 
-    if (editingFilPolicyId) {
-      const updatedRows = sortByEffectiveDateDesc(
-        filPolicies.map((row) =>
-          row.id === editingFilPolicyId
-            ? {
-                ...row,
-                effectiveDate: filEffectiveDate,
-                filPercentage: filPolicyPercentage.trim(),
-                updateUserId: DEFAULT_USER_ID,
-                updateTimestamp: timestamp,
-              }
-            : row,
-        ),
-      )
-      setFilPolicies(updatedRows)
-      persistFilPolicies(updatedRows)
-      setSuccessMessage('FIL policy updated.')
-    } else {
-      const newRow: FilPolicyRow = {
-        id: createRowId(),
+    try {
+      const updatedRows = await upsertFilPolicyRequest({
+        id: editingFilPolicyId,
         effectiveDate: filEffectiveDate,
-        filPercentage: filPolicyPercentage.trim(),
-        entryUserId: DEFAULT_USER_ID,
-        entryTimestamp: timestamp,
-        updateUserId: DEFAULT_USER_ID,
-        updateTimestamp: timestamp,
-      }
-      const updatedRows = sortByEffectiveDateDesc([...filPolicies, newRow])
+        filPercentage: filPolicyPercentage,
+      })
       setFilPolicies(updatedRows)
-      persistFilPolicies(updatedRows)
-      setSuccessMessage('FIL policy added.')
+      setSuccessMessage(editingFilPolicyId ? 'FIL policy updated.' : 'FIL policy added.')
+      resetFilForm()
+    } catch (error) {
+      console.error(error)
+      const status = (error as any)?.response?.status
+      if (status) {
+        setErrorMessage(`FIL policy request failed with status ${status}.`)
+      } else {
+        setErrorMessage('FIL policy request failed.')
+      }
+    } finally {
+      setIsMutatingPolicies(false)
     }
-
-    resetFilForm()
   }
 
   const editFilPolicy = (row: FilPolicyRow): void => {
@@ -280,15 +228,28 @@ const AdminPoliciesPage: FC = () => {
     clearNotifications()
   }
 
-  const deleteFilPolicy = (rowId: string): void => {
+  const deleteFilPolicy = async (rowId: string): Promise<void> => {
     clearNotifications()
-    const updatedRows = filPolicies.filter((row) => row.id !== rowId)
-    setFilPolicies(updatedRows)
-    persistFilPolicies(updatedRows)
-    if (editingFilPolicyId === rowId) {
-      resetFilForm()
+    setIsMutatingPolicies(true)
+
+    try {
+      const updatedRows = await deleteFilPolicyRequest(rowId)
+      setFilPolicies(updatedRows)
+      if (editingFilPolicyId === rowId) {
+        resetFilForm()
+      }
+      setSuccessMessage('FIL policy deleted.')
+    } catch (error) {
+      console.error(error)
+      const status = (error as any)?.response?.status
+      if (status) {
+        setErrorMessage(`FIL policy delete failed with status ${status}.`)
+      } else {
+        setErrorMessage('FIL policy delete failed.')
+      }
+    } finally {
+      setIsMutatingPolicies(false)
     }
-    setSuccessMessage('FIL policy deleted.')
   }
 
   return (
@@ -301,8 +262,8 @@ const AdminPoliciesPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <p className="landing-help-text">
-            TODO: replace local storage policy state with Spring policy admin APIs when
-            `/lexisPolicyAdmin` and `/lexisFILAdmin` RPC replacements are available.
+            Policy administration is API-first and falls back to local draft storage only when
+            policy endpoints are unavailable in the current environment.
           </p>
           <p>
             Fee policy access:{' '}
@@ -316,6 +277,7 @@ const AdminPoliciesPage: FC = () => {
               {canManageFilPolicy ? 'Allowed' : 'Not Granted'}
             </Tag>
           </p>
+          {isLoadingPolicies && <InlineLoading description="Loading policy data..." />}
           {successMessage && (
             <InlineNotification
               kind="success"
@@ -371,10 +333,18 @@ const AdminPoliciesPage: FC = () => {
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="primary" onClick={upsertFeePolicy} disabled={!canManageFeePolicy}>
+            <Button
+              kind="primary"
+              onClick={() => void upsertFeePolicy()}
+              disabled={isLoadingPolicies || isMutatingPolicies || !canManageFeePolicy}
+            >
               {editingFeePolicyId ? 'Update Fee Policy' : 'Add Fee Policy'}
             </Button>
-            <Button kind="ghost" onClick={resetFeeForm}>
+            <Button
+              kind="ghost"
+              onClick={resetFeeForm}
+              disabled={isLoadingPolicies || isMutatingPolicies}
+            >
               Cancel Edit
             </Button>
           </div>
@@ -403,10 +373,20 @@ const AdminPoliciesPage: FC = () => {
                   <TableCell>{row.updateUserId}</TableCell>
                   <TableCell>{row.updateTimestamp}</TableCell>
                   <TableCell>
-                    <Button kind="ghost" size="sm" onClick={() => editFeePolicy(row)}>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      onClick={() => editFeePolicy(row)}
+                      disabled={isLoadingPolicies || isMutatingPolicies}
+                    >
                       Edit
                     </Button>
-                    <Button kind="ghost" size="sm" onClick={() => deleteFeePolicy(row.id)}>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      onClick={() => void deleteFeePolicy(row.id)}
+                      disabled={isLoadingPolicies || isMutatingPolicies}
+                    >
                       Delete
                     </Button>
                   </TableCell>
@@ -444,10 +424,18 @@ const AdminPoliciesPage: FC = () => {
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="primary" onClick={upsertFilPolicy} disabled={!canManageFilPolicy}>
+            <Button
+              kind="primary"
+              onClick={() => void upsertFilPolicy()}
+              disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
+            >
               {editingFilPolicyId ? 'Update FIL Policy' : 'Add FIL Policy'}
             </Button>
-            <Button kind="ghost" onClick={resetFilForm}>
+            <Button
+              kind="ghost"
+              onClick={resetFilForm}
+              disabled={isLoadingPolicies || isMutatingPolicies}
+            >
               Cancel Edit
             </Button>
           </div>
@@ -474,10 +462,20 @@ const AdminPoliciesPage: FC = () => {
                   <TableCell>{row.updateUserId}</TableCell>
                   <TableCell>{row.updateTimestamp}</TableCell>
                   <TableCell>
-                    <Button kind="ghost" size="sm" onClick={() => editFilPolicy(row)}>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      onClick={() => editFilPolicy(row)}
+                      disabled={isLoadingPolicies || isMutatingPolicies}
+                    >
                       Edit
                     </Button>
-                    <Button kind="ghost" size="sm" onClick={() => deleteFilPolicy(row.id)}>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      onClick={() => void deleteFilPolicy(row.id)}
+                      disabled={isLoadingPolicies || isMutatingPolicies}
+                    >
                       Delete
                     </Button>
                   </TableCell>

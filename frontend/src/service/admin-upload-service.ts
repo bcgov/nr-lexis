@@ -34,6 +34,13 @@ type UploadRequestByType = {
   invoice: InvoiceUploadRequest
 }
 
+const MODERN_UPLOAD_ENDPOINTS: Record<UploadWorkflowType, string> = {
+  application: '/lexis/admin/uploads/applications',
+  exemption: '/lexis/admin/uploads/exemptions',
+  permit: '/lexis/admin/uploads/permits',
+  invoice: '/lexis/admin/uploads/invoices',
+}
+
 const LEGACY_UPLOAD_ENDPOINTS: Record<
   UploadWorkflowType,
   {
@@ -59,12 +66,52 @@ const LEGACY_UPLOAD_ENDPOINTS: Record<
   },
 }
 
+const FALLBACK_STATUSES = new Set([404, 405, 500, 501, 502, 503])
+
+const shouldFallbackToLegacy = (error: unknown): boolean => {
+  const status = (error as any)?.response?.status
+  if (typeof status === 'number') {
+    return FALLBACK_STATUSES.has(status)
+  }
+  return true
+}
+
 const appendBaseFormData = (formData: FormData, request: UploadRequestBase): void => {
   formData.append('formFile', request.file)
   formData.append('fileDescription', request.fileDescription)
 }
 
-export const submitLegacyUpload = async <TType extends UploadWorkflowType>(
+const buildModernPayload = <TType extends UploadWorkflowType>(
+  workflowType: TType,
+  request: UploadRequestByType[TType],
+): FormData => {
+  const formData = new FormData()
+  appendBaseFormData(formData, request)
+
+  if (workflowType === 'application') {
+    formData.append('applicationNumber', request.applicationNumber)
+  }
+
+  if (workflowType === 'exemption') {
+    formData.append('exemptionNumber', request.exemptionNumber)
+  }
+
+  if (workflowType === 'permit') {
+    formData.append('permitNumber', request.permitNumber)
+  }
+
+  if (workflowType === 'invoice') {
+    formData.append('permitNumber', request.permitNumber)
+    formData.append('salesInvoiceNumber', request.salesInvoiceNumber)
+    formData.append('invoiceExportValue', request.invoiceExportValue)
+    formData.append('invoiceConversionRate', request.invoiceConversionRate)
+    formData.append('invoiceFeeInLieu', request.invoiceFeeInLieu)
+  }
+
+  return formData
+}
+
+const submitLegacyUpload = async <TType extends UploadWorkflowType>(
   workflowType: TType,
   request: UploadRequestByType[TType],
 ): Promise<void> => {
@@ -101,4 +148,25 @@ export const submitLegacyUpload = async <TType extends UploadWorkflowType>(
       'Content-Type': 'multipart/form-data',
     },
   })
+}
+
+export const submitAdminUpload = async <TType extends UploadWorkflowType>(
+  workflowType: TType,
+  request: UploadRequestByType[TType],
+): Promise<void> => {
+  const modernEndpoint = MODERN_UPLOAD_ENDPOINTS[workflowType]
+  const modernPayload = buildModernPayload(workflowType, request)
+
+  try {
+    await apiService.getAxiosInstance().post(modernEndpoint, modernPayload, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  } catch (error) {
+    if (!shouldFallbackToLegacy(error)) {
+      throw error
+    }
+    await submitLegacyUpload(workflowType, request)
+  }
 }

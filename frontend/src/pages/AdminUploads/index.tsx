@@ -13,7 +13,7 @@ import {
 } from '@carbon/react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
-import { submitLegacyUpload, type UploadWorkflowType } from '@/service/legacy-upload-service'
+import { submitAdminUpload, type UploadWorkflowType } from '@/service/admin-upload-service'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -188,25 +188,25 @@ const AdminUploadsPage: FC = () => {
 
     try {
       if (selectedWorkflowType === 'application') {
-        await submitLegacyUpload('application', {
+        await submitAdminUpload('application', {
           applicationNumber: formState.applicationNumber.trim(),
           file: selectedFile,
           fileDescription: formState.fileDescription.trim(),
         })
       } else if (selectedWorkflowType === 'exemption') {
-        await submitLegacyUpload('exemption', {
+        await submitAdminUpload('exemption', {
           exemptionNumber: formState.exemptionNumber.trim(),
           file: selectedFile,
           fileDescription: formState.fileDescription.trim(),
         })
       } else if (selectedWorkflowType === 'permit') {
-        await submitLegacyUpload('permit', {
+        await submitAdminUpload('permit', {
           permitNumber: formState.permitNumber.trim(),
           file: selectedFile,
           fileDescription: formState.fileDescription.trim(),
         })
       } else {
-        await submitLegacyUpload('invoice', {
+        await submitAdminUpload('invoice', {
           permitNumber: formState.permitNumber.trim(),
           salesInvoiceNumber: formState.salesInvoiceNumber.trim(),
           invoiceExportValue: formState.invoiceExportValue.trim(),
@@ -252,8 +252,8 @@ const AdminUploadsPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <p className="landing-help-text">
-            TODO: switch these uploads to dedicated Spring REST endpoints and backend validation
-            DTOs once upload migration is complete.
+            Upload API calls are native-first and will use legacy endpoints only as fallback during
+            backend transition.
           </p>
           <div className="legacy-search-grid">
             <Select
