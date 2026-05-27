@@ -30,7 +30,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void applicationsSearchShouldAllowCanonicalReadOnlyRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/applications/search")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
         .andExpect(status().isOk());
   }
 
@@ -38,7 +38,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void applicationsSearchShouldAllowLegacyReadOnlyAliasDuringTransition() throws Exception {
     mockMvc.perform(
             get("/api/lexis/applications/search")
-                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isOk());
   }
 
@@ -47,7 +47,7 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             get("/api/lexis/applicationSearch")
                 .param("actionMapping", "view")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
         .andExpect(status().is2xxSuccessful());
   }
 
@@ -60,7 +60,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void applicationDetailsRpcShouldAllowCanonicalReadOnlyRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/rpc/application-details/document-details")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
         .andExpect(status().isNoContent());
   }
 
@@ -73,7 +73,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void exemptionDetailsRpcShouldAllowCanonicalExemptionApproverRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/rpc/exemption-details/applications")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("EXEMPTION_APPROVER"))))
         .andExpect(status().isNoContent());
   }
 
@@ -90,7 +90,7 @@ class LexisRouteAuthorizationIntegrationTest {
             get("/api/lexis/offerDetailsRPC")
                 .param("actionMapping", "getApplicationVolume")
                 .param("applicationNumber", "1000456")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_INDUSTRY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isOk());
   }
 
@@ -110,7 +110,7 @@ class LexisRouteAuthorizationIntegrationTest {
             post("/api/lexis/offerDetailsRPC")
                 .param("actionMapping", "getClientLocations")
                 .param("clientNumber", "77881")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_INDUSTRY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isNoContent());
   }
 
@@ -120,7 +120,7 @@ class LexisRouteAuthorizationIntegrationTest {
             post("/api/lexis/permitDetailsRPC")
                 .param("actionMapping", "getPackageList")
                 .param("permitNumber", "7000123")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
         .andExpect(status().isNoContent());
   }
 
@@ -129,7 +129,7 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             post("/api/lexis/permitDetailsRPC")
                 .param("actionMapping", "getCountryList")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
         .andExpect(status().isNoContent());
   }
 
@@ -137,7 +137,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void applicationReviewSearchShouldRejectIndustryRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/application-reviews/search")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_INDUSTRY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isForbidden());
   }
 
@@ -145,7 +145,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void applicationReviewApproveShouldAllowCanonicalApproverRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/application-reviews/1000123/approve")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("APPLICATION_APPROVER"))))
         .andExpect(status().isNoContent());
   }
 
@@ -153,7 +153,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void applicationReviewApproveShouldAllowLegacyApproverAliasDuringTransition() throws Exception {
     mockMvc.perform(
             post("/api/lexis/application-reviews/1000123/approve")
-                .with(jwt().authorities(new SimpleGrantedAuthority("APPLICATION_APPROVER"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
         .andExpect(status().isNoContent());
   }
 
@@ -161,7 +161,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void sessionWelcomeShouldUseTokenAuthoritiesForRoleResolution() throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/welcome")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_INDUSTRY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isOk());
   }
 
@@ -170,7 +170,7 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")
                 .param("action", "/summary")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_LOG_EXPORT_INDUSTRY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("FEDERAL_SUBMITTER"))))
         .andExpect(status().isOk());
   }
 
@@ -179,7 +179,7 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             post("/api/lexis/summary")
                 .param("actionMapping", "getApplications")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_INDUSTRY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isNoContent());
   }
 }

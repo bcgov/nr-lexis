@@ -55,6 +55,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PermitDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PermitDetailsRpcController.class);
+  private static final String ROLE_READ_ONLY = "READ_ONLY";
 
   private final ObjectProvider<PermitDetailsRpcService> serviceProvider;
   private final LexisSessionService sessionService;
@@ -613,7 +614,7 @@ public class PermitDetailsRpcController {
     if (roles == null || roles.isEmpty()) {
       return false;
     }
-    return roles.contains("LEXIS_READ_ONLY") || roles.contains("READ_ONLY");
+    return roles.contains(ROLE_READ_ONLY);
   }
 
   private BigDecimal parsePositiveDecimal(String rawValue) {

@@ -65,7 +65,7 @@ class PermitDetailsRpcControllerTest {
   @BeforeEach
   void setup() {
     when(sessionService.getConfiguredIndustryRoles())
-        .thenReturn(Set.of("LEXIS_INDUSTRY", "LEXIS_LOG_EXPORT_INDUSTRY"));
+        .thenReturn(Set.of("PROVINCIAL_SUBMITTER", "FEDERAL_SUBMITTER"));
     controller =
         new PermitDetailsRpcController(serviceProvider, sessionService);
   }
@@ -90,8 +90,8 @@ class PermitDetailsRpcControllerTest {
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_INDUSTRY_00077881")));
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_INDUSTRY"));
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER_00077881")));
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("PROVINCIAL_SUBMITTER"));
 
     ResponseEntity<PermitSummaryRpcResponseDto> response =
         controller.getPermitSummary(7000123L, "US", "2026-01-15", "PKG-903", authentication);
@@ -123,8 +123,8 @@ class PermitDetailsRpcControllerTest {
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_READ_ONLY")));
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_READ_ONLY"));
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("READ_ONLY")));
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("READ_ONLY"));
 
     ResponseEntity<PermitScaleFeesRpcResponseDto> response =
         controller.getScaleFeesForPackage("PKG-903", 7000123L, authentication);
@@ -411,8 +411,8 @@ class PermitDetailsRpcControllerTest {
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_READ_ONLY")));
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_READ_ONLY"));
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("READ_ONLY")));
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("READ_ONLY"));
 
     ResponseEntity<List<PermitGbmsInvoiceHistoryItemRpcResponseDto>> response =
         controller.getGbmsInvoiceHistory("RCPT-1", 7000123L, authentication);
@@ -439,8 +439,8 @@ class PermitDetailsRpcControllerTest {
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_ADMIN"));
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("ADMIN")));
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("ADMIN"));
 
     ResponseEntity<PermitPersistenceRpcResponseDto> response =
         controller.addInvoice(
@@ -488,7 +488,7 @@ class PermitDetailsRpcControllerTest {
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("ADMIN")));
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.addPermit(request, authentication);
@@ -524,7 +524,7 @@ class PermitDetailsRpcControllerTest {
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("ADMIN")));
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updatePermit(request, authentication);
@@ -560,7 +560,7 @@ class PermitDetailsRpcControllerTest {
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("ADMIN")));
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updateShipping(request, authentication);

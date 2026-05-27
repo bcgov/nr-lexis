@@ -28,8 +28,8 @@ public class ExemptionDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ExemptionDetailsRpcController.class);
 
-  private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
-  private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
+  private static final String ROLE_READ_ONLY = "READ_ONLY";
+  private static final String ROLE_APPLICATION_APPROVER = "APPLICATION_APPROVER";
 
   private static final String ACTION_GET_APPLICATIONS = "getApplications";
   private static final String ACTION_GET_PERMITS = "getPermits";

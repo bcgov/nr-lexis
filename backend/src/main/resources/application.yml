@@ -31,15 +31,15 @@ lexis:
     cognito:
       enabled: ${LEXIS_COGNITO_ENABLED:false}
       enforce-route-auth: ${LEXIS_ENFORCE_ROUTE_AUTH:false}
-    # Mirrors legacy WebADE "industry-roles" configuration.
-    industry-roles: "LEXIS_INDUSTRY,LEXIS_LOG_EXPORT_INDUSTRY"
+    # Mirrors legacy WebADE "industry-roles" behaviour with renamed submitter roles.
+    industry-roles: "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER"
   authz:
     # Temporary parity scaffold:
     # role names should match FAM roles exactly, and actions should match legacy canPerformAction/grantedAction keys.
     # Replace with finalized matrix as modernization proceeds.
     role-actions:
-      LEXIS_ADMIN: ["*"]
-      LEXIS_READ_ONLY:
+      ADMIN: ["*"]
+      READ_ONLY:
         - "/applicationSearch"
         - "/applicationDetails"
         - "/federalApplicationSearch"
@@ -48,7 +48,7 @@ lexis:
         - "/permitDetails"
         - "/indianReservePermitSearch"
         - "/indianReservePermitDetails"
-      LEXIS_APPLICATION_APPROVER:
+      APPLICATION_APPROVER:
         - "/applicationsReview"
         - "/applicationSearch"
         - "/applicationDetails"
@@ -58,7 +58,7 @@ lexis:
         - "/permitDetails"
         - "/indianReservePermitSearch"
         - "/indianReservePermitDetails"
-      LEXIS_EXEMPTION_APPROVER:
+      EXEMPTION_APPROVER:
         - "/exemptionSearch"
         - "/exemptionDetails"
         - "/applicationSearch"
@@ -70,14 +70,14 @@ lexis:
         - "/permitDetails"
         - "/indianReservePermitSearch"
         - "/indianReservePermitDetails"
-      LEXIS_INDUSTRY:
+      PROVINCIAL_SUBMITTER:
         - "/summary"
         - "/exemptionSearch"
         - "/applicationSearch"
         - "/applicationDetails"
         - "/offersSearch"
         - "/offerDetails"
-      LEXIS_LOG_EXPORT_INDUSTRY:
+      FEDERAL_SUBMITTER:
         - "/summary"
         - "/exemptionSearch"
         - "/applicationSearch"

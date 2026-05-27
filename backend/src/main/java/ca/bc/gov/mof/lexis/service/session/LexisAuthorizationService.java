@@ -14,21 +14,25 @@ public class LexisAuthorizationService {
 
   private static final String ALL_ACTIONS_TOKEN = "*";
   private static final String INDUSTRY_ROLE_KEY = "INDUSTRY";
-  private static final String ROLE_ADMIN = "LEXIS_ADMIN";
-  private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
-  private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
-  private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
-  private static final String ROLE_INDUSTRY = "LEXIS_INDUSTRY";
-  private static final String ROLE_LOG_EXPORT_INDUSTRY = "LEXIS_LOG_EXPORT_INDUSTRY";
+  private static final String ROLE_ADMIN = "ADMIN";
+  private static final String ROLE_READ_ONLY = "READ_ONLY";
+  private static final String ROLE_APPLICATION_APPROVER = "APPLICATION_APPROVER";
+  private static final String ROLE_EXEMPTION_APPROVER = "EXEMPTION_APPROVER";
+  private static final String ROLE_PROVINCIAL_SUBMITTER = "PROVINCIAL_SUBMITTER";
+  private static final String ROLE_FEDERAL_SUBMITTER = "FEDERAL_SUBMITTER";
 
-  private static final Map<String, String> LEGACY_ROLE_ALIASES =
-      Map.of(
-          ROLE_ADMIN, "ADMIN",
-          ROLE_READ_ONLY, "READ_ONLY",
-          ROLE_APPLICATION_APPROVER, "APPLICATION_APPROVER",
-          ROLE_EXEMPTION_APPROVER, "EXEMPTION_APPROVER",
-          ROLE_INDUSTRY, "INDUSTRY",
-          ROLE_LOG_EXPORT_INDUSTRY, "LOG_EXPORT_INDUSTRY");
+  private static final Map<String, List<String>> LEGACY_ROLE_ALIASES =
+      Map.ofEntries(
+          Map.entry(ROLE_ADMIN, List.of("LEXIS_ADMIN")),
+          Map.entry(ROLE_READ_ONLY, List.of("LEXIS_READ_ONLY")),
+          Map.entry(ROLE_APPLICATION_APPROVER, List.of("LEXIS_APPLICATION_APPROVER")),
+          Map.entry(ROLE_EXEMPTION_APPROVER, List.of("LEXIS_EXEMPTION_APPROVER")),
+          Map.entry(
+              ROLE_PROVINCIAL_SUBMITTER,
+              List.of("LEXIS_INDUSTRY", "INDUSTRY", "LEXIS_PROVINCIAL_SUBMITTER")),
+          Map.entry(
+              ROLE_FEDERAL_SUBMITTER,
+              List.of("LEXIS_LOG_EXPORT_INDUSTRY", "LOG_EXPORT_INDUSTRY", "LEXIS_FEDERAL_SUBMITTER")));
 
   private final Set<String> configuredIndustryRoles;
   private final Map<String, List<String>> configuredRoleActions;
@@ -194,9 +198,9 @@ public class LexisAuthorizationService {
   private Set<String> withLegacyAliases(Set<String> canonicalRoles) {
     LinkedHashSet<String> expanded = new LinkedHashSet<>(canonicalRoles);
     for (String role : canonicalRoles) {
-      String legacyAlias = LEGACY_ROLE_ALIASES.get(role);
-      if (legacyAlias != null) {
-        expanded.add(legacyAlias);
+      List<String> legacyAliases = LEGACY_ROLE_ALIASES.get(role);
+      if (legacyAliases != null && !legacyAliases.isEmpty()) {
+        expanded.addAll(legacyAliases);
       }
     }
     return Set.copyOf(expanded);

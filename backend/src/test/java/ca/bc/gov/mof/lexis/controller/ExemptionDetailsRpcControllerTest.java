@@ -53,10 +53,10 @@ class ExemptionDetailsRpcControllerTest {
   @Test
   void applicationsShouldReturnPayloadWhenServiceAvailable() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(sessionService.parseRolesFromPrincipal(null)).thenReturn(List.of("LEXIS_READ_ONLY"));
-    when(authorizationService.canPerformAction(List.of("LEXIS_READ_ONLY"), "viewFederalApplication"))
+    when(sessionService.parseRolesFromPrincipal(null)).thenReturn(List.of("READ_ONLY"));
+    when(authorizationService.canPerformAction(List.of("READ_ONLY"), "viewFederalApplication"))
         .thenReturn(true);
-    when(authorizationService.canPerformAction(List.of("LEXIS_READ_ONLY"), "viewOICApplication"))
+    when(authorizationService.canPerformAction(List.of("READ_ONLY"), "viewOICApplication"))
         .thenReturn(true);
     when(service.getApplications("EX-205", true, true))
         .thenReturn(
@@ -81,9 +81,9 @@ class ExemptionDetailsRpcControllerTest {
   void permitsShouldReturnPayloadAndVisibilityFlags() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_READ_ONLY"));
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("READ_ONLY"));
     when(sessionService.getConfiguredIndustryRoles())
-        .thenReturn(Set.of("LEXIS_INDUSTRY", "LEXIS_LOG_EXPORT_INDUSTRY"));
+        .thenReturn(Set.of("PROVINCIAL_SUBMITTER", "FEDERAL_SUBMITTER"));
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
     when(service.getPermits("EX-205", true, true, "00077881"))
         .thenReturn(
