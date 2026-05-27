@@ -184,6 +184,10 @@ const FederalPage: FC = () => {
     setSearchParams(buildSearchParams(filters, DEFAULT_PAGE, pageSize))
   }
 
+  const onClearFilters = () => {
+    setSearchParams(buildSearchParams(INITIAL_FILTERS, DEFAULT_PAGE, DEFAULT_PAGE_SIZE))
+  }
+
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
@@ -283,6 +287,9 @@ const FederalPage: FC = () => {
               size="md"
             >
               Search
+            </Button>
+            <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
+              Clear Filters
             </Button>
           </div>
         </Tile>

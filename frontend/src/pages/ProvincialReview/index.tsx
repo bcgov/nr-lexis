@@ -321,6 +321,18 @@ const ProvincialReviewPage: FC = () => {
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
+  const onClearFilters = () => {
+    setSearchParams(
+      buildSearchParams(
+        INITIAL_FILTERS,
+        DEFAULT_SORT_FIELD,
+        DEFAULT_SORT_DIRECTION,
+        DEFAULT_PAGE,
+        DEFAULT_PAGE_SIZE,
+      ),
+    )
+  }
+
   const onHeaderClick = (column: ApplicationReviewSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
     setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
@@ -644,6 +656,9 @@ const ProvincialReviewPage: FC = () => {
           <div className="legacy-search-actions">
             <Button kind="primary" onClick={onSearch} disabled={loading || hasDateValidationError}>
               Search
+            </Button>
+            <Button kind="tertiary" onClick={onClearFilters} disabled={loading}>
+              Clear Filters
             </Button>
             <Button
               kind="secondary"

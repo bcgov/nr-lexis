@@ -47,7 +47,112 @@ const ACTION_PRIORITY: string[] = [
   '/lexisAgentAdmin',
 ]
 
+const BASE_SEARCH_ACTIONS: string[] = [
+  '/summary',
+  '/applicationSearch',
+  '/exemptionSearch',
+  '/offersSearch',
+  '/permitSearch',
+  '/federalApplicationSearch',
+  '/indianReservePermitSearch',
+]
+
+const BASE_DETAIL_ACTIONS: string[] = [
+  '/applicationDetails',
+  '/exemptionDetails',
+  '/offerDetails',
+  '/permitDetails',
+  '/federalApplicationDetails',
+  '/indianReservePermitDetails',
+]
+
+const BASE_REPORT_ACTIONS: string[] = [
+  '/applicationReport',
+  '/offerReport',
+  '/teacReport',
+  '/exemptionReport',
+  '/permitLedgerReport',
+  '/transportReport',
+  '/speciesGradeReport',
+  '/feeReport',
+  '/tenureReport',
+  'mofrListing',
+]
+
+const BASE_WORKFLOW_ACTIONS: string[] = [
+  '/applicationsReview',
+  'createApplication',
+  '/createExemption',
+  'createOffer',
+  'createPermit',
+  'approveExemption',
+  'viewFederalApplication',
+  'viewOICApplication',
+]
+
+const BASE_ADMIN_ACTIONS: string[] = [
+  '/lexisAgentAdmin',
+  '/fileApplicationUpload',
+  '/fileExemptionUpload',
+  '/filePermitUpload',
+  '/fileInvoiceUpload',
+  '/lexisPolicyAdmin',
+  '/lexisFILAdmin',
+]
+
+const DEV_READ_ONLY_ACTIONS: string[] = [...BASE_SEARCH_ACTIONS, ...BASE_DETAIL_ACTIONS]
+const DEV_APPROVER_ACTIONS: string[] = [...DEV_READ_ONLY_ACTIONS, ...BASE_WORKFLOW_ACTIONS]
+const DEV_INDUSTRY_ACTIONS: string[] = [
+  ...DEV_READ_ONLY_ACTIONS,
+  'createOffer',
+  'createPermit',
+  'viewFederalApplication',
+  'viewOICApplication',
+]
+
+const DEV_ADMIN_ACTIONS: string[] = [
+  ...BASE_SEARCH_ACTIONS,
+  ...BASE_DETAIL_ACTIONS,
+  ...BASE_REPORT_ACTIONS,
+  ...BASE_WORKFLOW_ACTIONS,
+  ...BASE_ADMIN_ACTIONS,
+]
+
+const DEV_ROLE_ACTIONS: Record<string, string[]> = {
+  ADMIN: DEV_ADMIN_ACTIONS,
+  READ_ONLY: DEV_READ_ONLY_ACTIONS,
+  APPLICATION_APPROVER: DEV_APPROVER_ACTIONS,
+  EXEMPTION_APPROVER: DEV_APPROVER_ACTIONS,
+  LEXIS_INDUSTRY: DEV_INDUSTRY_ACTIONS,
+  LOG_EXPORT_INDUSTRY: DEV_INDUSTRY_ACTIONS,
+}
+
+const DEV_CONCRETE_ROLE_PREFIXES: string[] = ['LEXIS_INDUSTRY_', 'LOG_EXPORT_INDUSTRY_']
+
 const normalizeAction = (action: string): string => action.trim().toLowerCase()
+
+const resolveFallbackActionsForRole = (role: string): string[] => {
+  if (DEV_ROLE_ACTIONS[role]) {
+    return DEV_ROLE_ACTIONS[role]
+  }
+
+  // TODO: replace this fallback with action claims from backend once Cognito/FAM authz is fully wired.
+  if (DEV_CONCRETE_ROLE_PREFIXES.some((prefix) => role.startsWith(prefix))) {
+    return DEV_INDUSTRY_ACTIONS
+  }
+
+  return []
+}
+
+const deriveGrantedActionsFromRoles = (roles: string[]): string[] => {
+  const actionSet = new Set<string>()
+
+  roles
+    .flatMap((role) => resolveFallbackActionsForRole(role))
+    .forEach((action) => actionSet.add(action))
+
+  return Array.from(actionSet)
+}
 
 const normalizeLegacyActionFromPath = (legacyPath: string | null): string | null => {
   if (!legacyPath) {
@@ -102,6 +207,7 @@ export const AuthProvider: FC<Props> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true)
   const externalLoginUrl = (import.meta.env.VITE_LOGIN_URL ?? '').trim()
   const usesExternalLogin = externalLoginUrl.length > 0
+  const devRoles = readDevRoles()
 
   const refresh = useCallback(async () => {
     setIsLoading(true)
@@ -154,9 +260,32 @@ export const AuthProvider: FC<Props> = ({ children }) => {
     }
   }, [])
 
+  const effectiveRoles = useMemo(() => {
+    if (capabilities.roles.length > 0) {
+      return capabilities.roles
+    }
+    return devRoles
+  }, [capabilities.roles, devRoles])
+
+  const effectiveGrantedActions = useMemo(() => {
+    if (capabilities.grantedActions.length > 0) {
+      return capabilities.grantedActions
+    }
+    return deriveGrantedActionsFromRoles(effectiveRoles)
+  }, [capabilities.grantedActions, effectiveRoles])
+
+  const effectiveCapabilities = useMemo(
+    () => ({
+      ...capabilities,
+      roles: effectiveRoles,
+      grantedActions: effectiveGrantedActions,
+    }),
+    [capabilities, effectiveGrantedActions, effectiveRoles],
+  )
+
   const grantedActionSet = useMemo(() => {
-    return new Set(capabilities.grantedActions.map(normalizeAction))
-  }, [capabilities.grantedActions])
+    return new Set(effectiveGrantedActions.map(normalizeAction))
+  }, [effectiveGrantedActions])
 
   const canPerform = useCallback(
     (action: string): boolean => {
@@ -165,13 +294,12 @@ export const AuthProvider: FC<Props> = ({ children }) => {
     [grantedActionSet],
   )
 
-  const hasAnyRole = capabilities.roles.length > 0
+  const hasAnyRole = effectiveRoles.length > 0
   const isLoggedIn = capabilities.authenticated || hasAnyRole
-  const defaultRoute = resolveDefaultRoute(capabilities)
-  const devRoles = readDevRoles()
+  const defaultRoute = resolveDefaultRoute(effectiveCapabilities)
 
   const contextValue: AuthContextType = {
-    capabilities,
+    capabilities: effectiveCapabilities,
     isLoading,
     isLoggedIn,
     hasAnyRole,

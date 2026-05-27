@@ -253,6 +253,18 @@ const ProvincialPermitPage: FC = () => {
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
+  const onClearFilters = () => {
+    setSearchParams(
+      buildSearchParams(
+        INITIAL_FILTERS,
+        DEFAULT_SORT_FIELD,
+        DEFAULT_SORT_DIRECTION,
+        DEFAULT_PAGE,
+        DEFAULT_PAGE_SIZE,
+      ),
+    )
+  }
+
   const onHeaderClick = (column: ProvincialPermitSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
     setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
@@ -369,6 +381,9 @@ const ProvincialPermitPage: FC = () => {
               size="md"
             >
               Search
+            </Button>
+            <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
+              Clear Filters
             </Button>
             {canCreatePermit && (
               <Link className="cds--link" to="/provincial/permit/create">
