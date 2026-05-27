@@ -4,7 +4,6 @@ import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -14,13 +13,28 @@ public class LexisAuthorizationService {
 
   private static final String ALL_ACTIONS_TOKEN = "*";
   private static final String INDUSTRY_ROLE_KEY = "INDUSTRY";
+  private static final String ROLE_ADMIN = "LEXIS_ADMIN";
+  private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
+  private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
+  private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
+  private static final String ROLE_LOG_EXPORT_INDUSTRY = "LEXIS_LOG_EXPORT_INDUSTRY";
+
+  private static final Map<String, String> LEGACY_ROLE_ALIASES =
+      Map.of(
+          ROLE_ADMIN, "ADMIN",
+          ROLE_READ_ONLY, "READ_ONLY",
+          ROLE_APPLICATION_APPROVER, "APPLICATION_APPROVER",
+          ROLE_EXEMPTION_APPROVER, "EXEMPTION_APPROVER",
+          ROLE_LOG_EXPORT_INDUSTRY, "LOG_EXPORT_INDUSTRY");
 
   private final Set<String> configuredIndustryRoles;
   private final Map<String, List<String>> configuredRoleActions;
+  private final LexisSessionService sessionService;
 
   public LexisAuthorizationService(
       LexisAuthorizationProperties authorizationProperties,
       LexisSessionService sessionService) {
+    this.sessionService = sessionService;
     this.configuredIndustryRoles = Set.copyOf(sessionService.getConfiguredIndustryRoles());
     this.configuredRoleActions = normalizeRoleActions(authorizationProperties.getRoleActions());
   }
@@ -65,7 +79,7 @@ public class LexisAuthorizationService {
     if (roles.contains(INDUSTRY_ROLE_KEY)) {
       roles.addAll(configuredIndustryRoles);
     }
-    return Set.copyOf(roles);
+    return withLegacyAliases(roles);
   }
 
   public Set<String> resolveRolesForAction(String rawAction) {
@@ -89,7 +103,7 @@ public class LexisAuthorizationService {
     if (roles.remove(INDUSTRY_ROLE_KEY)) {
       roles.addAll(configuredIndustryRoles);
     }
-    return Set.copyOf(roles);
+    return withLegacyAliases(roles);
   }
 
   private void appendRoleActions(Set<String> granted, String role) {
@@ -157,27 +171,17 @@ public class LexisAuthorizationService {
   }
 
   private String normalizeRole(String role) {
-    if (role == null) {
-      return null;
-    }
-    String normalized = role.trim().toUpperCase(Locale.ROOT);
-    if (normalized.isEmpty()) {
-      return null;
-    }
-    return collapseForestClientScopedIndustryRole(normalized);
+    return sessionService.normalizeRole(role);
   }
 
-  private String collapseForestClientScopedIndustryRole(String normalizedRole) {
-    for (String industryRole : configuredIndustryRoles) {
-      String prefix = industryRole + "_";
-      if (!normalizedRole.startsWith(prefix)) {
-        continue;
-      }
-      String forestClientSuffix = normalizedRole.substring(prefix.length());
-      if (!forestClientSuffix.isEmpty() && forestClientSuffix.chars().allMatch(Character::isDigit)) {
-        return industryRole;
+  private Set<String> withLegacyAliases(Set<String> canonicalRoles) {
+    LinkedHashSet<String> expanded = new LinkedHashSet<>(canonicalRoles);
+    for (String role : canonicalRoles) {
+      String legacyAlias = LEGACY_ROLE_ALIASES.get(role);
+      if (legacyAlias != null) {
+        expanded.add(legacyAlias);
       }
     }
-    return normalizedRole;
+    return Set.copyOf(expanded);
   }
 }

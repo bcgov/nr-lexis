@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
@@ -15,9 +16,19 @@ import org.springframework.stereotype.Service;
 @Service
 public class LexisSessionService {
 
-  private static final String ROLE_READ_ONLY = "READ_ONLY";
-  private static final String ROLE_ADMIN = "ADMIN";
-  private static final String ROLE_EXEMPTION_APPROVER = "EXEMPTION_APPROVER";
+  private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
+  private static final String ROLE_ADMIN = "LEXIS_ADMIN";
+  private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
+  private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
+  private static final String ROLE_LOG_EXPORT_INDUSTRY = "LEXIS_LOG_EXPORT_INDUSTRY";
+
+  private static final Map<String, String> ROLE_ALIASES =
+      Map.of(
+          "ADMIN", ROLE_ADMIN,
+          "READ_ONLY", ROLE_READ_ONLY,
+          "APPLICATION_APPROVER", ROLE_APPLICATION_APPROVER,
+          "EXEMPTION_APPROVER", ROLE_EXEMPTION_APPROVER,
+          "LOG_EXPORT_INDUSTRY", ROLE_LOG_EXPORT_INDUSTRY);
 
   private final Set<String> configuredIndustryRoles;
 
@@ -85,7 +96,7 @@ public class LexisSessionService {
     }
 
     for (String rawRole : rawRoles) {
-      String normalizedRole = normalizeRawRole(rawRole);
+      String normalizedRole = canonicalizeRole(rawRole);
       if (normalizedRole == null) {
         continue;
       }
@@ -110,6 +121,14 @@ public class LexisSessionService {
     return Set.copyOf(configuredIndustryRoles);
   }
 
+  public String normalizeRole(String rawRole) {
+    String canonicalRole = canonicalizeRole(rawRole);
+    if (canonicalRole == null) {
+      return null;
+    }
+    return collapseForestClientScopedIndustryRole(canonicalRole);
+  }
+
   private List<String> normalizeRoles(List<String> rawRoles) {
     if (rawRoles == null || rawRoles.isEmpty()) {
       return List.of();
@@ -117,15 +136,10 @@ public class LexisSessionService {
 
     LinkedHashSet<String> normalized = new LinkedHashSet<>();
     for (String value : rawRoles) {
-      if (value == null) {
+      String normalizedRole = normalizeRole(value);
+      if (normalizedRole == null) {
         continue;
       }
-
-      String role = value.trim();
-      if (role.isEmpty()) {
-        continue;
-      }
-      String normalizedRole = collapseForestClientScopedIndustryRole(role.toUpperCase(Locale.ROOT));
       normalized.add(normalizedRole);
     }
     return List.copyOf(normalized);
@@ -137,11 +151,8 @@ public class LexisSessionService {
     }
     LinkedHashSet<String> parsed = new LinkedHashSet<>();
     for (String value : Arrays.asList(csv.split(","))) {
-      if (value == null) {
-        continue;
-      }
-      String normalizedRole = value.trim().toUpperCase(Locale.ROOT);
-      if (!normalizedRole.isEmpty()) {
+      String normalizedRole = canonicalizeRole(value);
+      if (normalizedRole != null) {
         parsed.add(normalizedRole);
       }
     }
@@ -167,12 +178,33 @@ public class LexisSessionService {
     return normalizedRole;
   }
 
-  private String normalizeRawRole(String rawRole) {
+  private String canonicalizeRole(String rawRole) {
     if (rawRole == null) {
       return null;
     }
-    String normalized = rawRole.trim().toUpperCase(Locale.ROOT);
-    return normalized.isEmpty() ? null : normalized;
+    String normalizedRole = rawRole.trim().toUpperCase(Locale.ROOT);
+    if (normalizedRole.isEmpty()) {
+      return null;
+    }
+
+    String aliasMapped = ROLE_ALIASES.get(normalizedRole);
+    if (aliasMapped != null) {
+      return aliasMapped;
+    }
+
+    for (Map.Entry<String, String> alias : ROLE_ALIASES.entrySet()) {
+      String aliasPrefix = alias.getKey() + "_";
+      if (!normalizedRole.startsWith(aliasPrefix)) {
+        continue;
+      }
+
+      String suffix = normalizedRole.substring(aliasPrefix.length());
+      if (!suffix.isEmpty() && suffix.chars().allMatch(Character::isDigit)) {
+        return alias.getValue() + "_" + suffix;
+      }
+    }
+
+    return normalizedRole;
   }
 
   private String extractForestClientSuffix(String normalizedRole) {

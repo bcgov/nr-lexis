@@ -1,8 +1,12 @@
 package ca.bc.gov.mof.lexis.security;
 
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -16,7 +20,6 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -25,10 +28,12 @@ public class Oauth2SecurityCustomizer
     implements Customizer<OAuth2ResourceServerConfigurer<HttpSecurity>> {
 
   private final JwtDecoder jwtDecoder;
+  private final LexisSessionService sessionService;
 
   public Oauth2SecurityCustomizer(
       @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri,
-      @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuerUri) {
+      @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuerUri,
+      LexisSessionService sessionService) {
 
     NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
     OAuth2TokenValidator<Jwt> tokenUseValidator =
@@ -48,6 +53,7 @@ public class Oauth2SecurityCustomizer
         new DelegatingOAuth2TokenValidator<>(
             JwtValidators.createDefaultWithIssuer(issuerUri), tokenUseValidator));
     this.jwtDecoder = decoder;
+    this.sessionService = sessionService;
   }
 
   @Override
@@ -56,13 +62,20 @@ public class Oauth2SecurityCustomizer
   }
 
   private Converter<Jwt, AbstractAuthenticationToken> converter() {
-    JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter =
-        new JwtGrantedAuthoritiesConverter();
-    grantedAuthoritiesConverter.setAuthoritiesClaimName("cognito:groups");
-    grantedAuthoritiesConverter.setAuthorityPrefix("");
-
     JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-    converter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
+    converter.setJwtGrantedAuthoritiesConverter(this::normalizedAuthorities);
     return converter;
+  }
+
+  private List<GrantedAuthority> normalizedAuthorities(Jwt jwt) {
+    List<String> groups = jwt.getClaimAsStringList("cognito:groups");
+    if (groups == null || groups.isEmpty()) {
+      return List.of();
+    }
+
+    List<String> normalizedRoles = sessionService.parseRoleHeader(String.join(",", groups));
+    return normalizedRoles.stream()
+        .map(role -> (GrantedAuthority) new SimpleGrantedAuthority(role))
+        .toList();
   }
 }

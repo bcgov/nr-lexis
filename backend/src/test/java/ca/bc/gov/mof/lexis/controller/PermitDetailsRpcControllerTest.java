@@ -43,7 +43,7 @@ class PermitDetailsRpcControllerTest {
   @BeforeEach
   void setup() {
     when(sessionService.getConfiguredIndustryRoles())
-        .thenReturn(Set.of("LEXIS_INDUSTRY", "LOG_EXPORT_INDUSTRY"));
+        .thenReturn(Set.of("LEXIS_INDUSTRY", "LEXIS_LOG_EXPORT_INDUSTRY"));
     controller =
         new PermitDetailsRpcController(serviceProvider, sessionService);
   }
@@ -101,8 +101,8 @@ class PermitDetailsRpcControllerTest {
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("READ_ONLY")));
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("READ_ONLY"));
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_READ_ONLY")));
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_READ_ONLY"));
 
     ResponseEntity<PermitScaleFeesRpcResponseDto> response =
         controller.getScaleFeesForPackage("PKG-903", 7000123L, authentication);

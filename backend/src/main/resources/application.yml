@@ -32,14 +32,14 @@ lexis:
       enabled: ${LEXIS_COGNITO_ENABLED:false}
       enforce-route-auth: ${LEXIS_ENFORCE_ROUTE_AUTH:false}
     # Mirrors legacy WebADE "industry-roles" configuration.
-    industry-roles: "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY"
+    industry-roles: "LEXIS_INDUSTRY,LEXIS_LOG_EXPORT_INDUSTRY"
   authz:
     # Temporary parity scaffold:
     # role names should match FAM roles exactly, and actions should match legacy canPerformAction/grantedAction keys.
     # Replace with finalized matrix as modernization proceeds.
     role-actions:
-      ADMIN: ["*"]
-      READ_ONLY:
+      LEXIS_ADMIN: ["*"]
+      LEXIS_READ_ONLY:
         - "/applicationSearch"
         - "/applicationDetails"
         - "/federalApplicationSearch"
@@ -48,7 +48,7 @@ lexis:
         - "/permitDetails"
         - "/indianReservePermitSearch"
         - "/indianReservePermitDetails"
-      APPLICATION_APPROVER:
+      LEXIS_APPLICATION_APPROVER:
         - "/applicationsReview"
         - "/applicationSearch"
         - "/applicationDetails"
@@ -58,7 +58,7 @@ lexis:
         - "/permitDetails"
         - "/indianReservePermitSearch"
         - "/indianReservePermitDetails"
-      EXEMPTION_APPROVER:
+      LEXIS_EXEMPTION_APPROVER:
         - "/exemptionSearch"
         - "/exemptionDetails"
         - "/applicationSearch"
@@ -70,7 +70,14 @@ lexis:
         - "/permitDetails"
         - "/indianReservePermitSearch"
         - "/indianReservePermitDetails"
-      INDUSTRY:
+      LEXIS_INDUSTRY:
+        - "/summary"
+        - "/exemptionSearch"
+        - "/applicationSearch"
+        - "/applicationDetails"
+        - "/offersSearch"
+        - "/offerDetails"
+      LEXIS_LOG_EXPORT_INDUSTRY:
         - "/summary"
         - "/exemptionSearch"
         - "/applicationSearch"

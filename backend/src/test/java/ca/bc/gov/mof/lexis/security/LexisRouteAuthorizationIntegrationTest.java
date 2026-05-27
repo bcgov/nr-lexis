@@ -27,7 +27,15 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void applicationsSearchShouldAllowReadOnlyRole() throws Exception {
+  void applicationsSearchShouldAllowCanonicalReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/applications/search")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void applicationsSearchShouldAllowLegacyReadOnlyAliasDuringTransition() throws Exception {
     mockMvc.perform(
             get("/api/lexis/applications/search")
                 .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
@@ -43,7 +51,15 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void applicationReviewApproveShouldAllowApplicationApproverRole() throws Exception {
+  void applicationReviewApproveShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/application-reviews/1000123/approve")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void applicationReviewApproveShouldAllowLegacyApproverAliasDuringTransition() throws Exception {
     mockMvc.perform(
             post("/api/lexis/application-reviews/1000123/approve")
                 .with(jwt().authorities(new SimpleGrantedAuthority("APPLICATION_APPROVER"))))
@@ -63,7 +79,7 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")
                 .param("action", "/summary")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_INDUSTRY"))))
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_LOG_EXPORT_INDUSTRY"))))
         .andExpect(status().isOk());
   }
 }

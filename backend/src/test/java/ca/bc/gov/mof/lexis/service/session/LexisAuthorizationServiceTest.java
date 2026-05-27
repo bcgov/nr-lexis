@@ -17,124 +17,91 @@ class LexisAuthorizationServiceTest {
   void shouldGrantAllKnownActionsForWildcardRoleMapping() {
     LexisAuthorizationService service =
         createService(
-            "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY",
+            "LEXIS_INDUSTRY,LEXIS_LOG_EXPORT_INDUSTRY",
             Map.of(
-                "ADMIN", List.of("*"),
-                "READ_ONLY", List.of("/applicationSearch")));
+                "LEXIS_ADMIN", List.of("*"),
+                "LEXIS_READ_ONLY", List.of("/applicationSearch")));
 
-    List<String> granted = service.resolveGrantedActions(List.of("admin"));
+    List<String> granted = service.resolveGrantedActions(List.of("LEXIS_ADMIN"));
 
     assertThat(granted).containsExactlyElementsOf(service.getKnownActions());
   }
 
   @Test
-  void shouldApplyIndustryTemplateForConfiguredIndustryRoles() {
+  void shouldApplyCanonicalIndustryMappingsForCanonicalAndLegacyScopedRoles() {
     LexisAuthorizationService service =
         createService(
-            "LEXIS_INDUSTRY",
-            Map.of(
-                "READ_ONLY", List.of("/applicationSearch"),
-                "INDUSTRY", List.of("/summary", "/offersSearch")));
-
-    List<String> granted = service.resolveGrantedActions(List.of("lexis_industry"));
-
-    assertThat(granted).containsExactly("/summary", "/offersSearch");
-  }
-
-  @Test
-  void shouldGrantConfiguredActionsForForestClientScopedIndustryRoles() {
-    LexisAuthorizationService service =
-        createService(
-            "LEXIS_INDUSTRY",
+            "LEXIS_INDUSTRY,LEXIS_LOG_EXPORT_INDUSTRY",
             Map.of(
                 "LEXIS_INDUSTRY", List.of("/summary"),
-                "INDUSTRY", List.of("/offerDetails")));
+                "LEXIS_LOG_EXPORT_INDUSTRY", List.of("/offersSearch")));
 
-    List<String> granted = service.resolveGrantedActions(List.of("LEXIS_INDUSTRY_00001234"));
+    List<String> canonicalScoped = service.resolveGrantedActions(List.of("LEXIS_LOG_EXPORT_INDUSTRY_00001234"));
+    List<String> legacyScoped = service.resolveGrantedActions(List.of("LOG_EXPORT_INDUSTRY_00001234"));
 
-    assertThat(granted).containsExactly("/summary", "/offerDetails");
+    assertThat(canonicalScoped).containsExactly("/offersSearch");
+    assertThat(legacyScoped).containsExactly("/offersSearch");
   }
 
   @Test
-  void shouldNotCollapseIndustryRoleWithNonForestClientSuffix() {
+  void shouldNormalizeLegacyRoleAliasesToCanonicalMappings() {
     LexisAuthorizationService service =
         createService(
-            "LEXIS_INDUSTRY",
+            "LEXIS_INDUSTRY,LEXIS_LOG_EXPORT_INDUSTRY",
             Map.of(
-                "LEXIS_INDUSTRY", List.of("/summary"),
-                "INDUSTRY", List.of("/offerDetails")));
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_ADMIN", List.of("/lexisAgentAdmin")));
 
-    List<String> granted = service.resolveGrantedActions(List.of("LEXIS_INDUSTRY_ADMIN"));
-
-    assertThat(granted).isEmpty();
-  }
-
-  @Test
-  void shouldIgnoreUnknownActionsAndNormalizeRoleNames() {
-    LexisAuthorizationService service =
-        createService(
-            "LEXIS_INDUSTRY",
-            Map.of(
-                " read_only ", List.of("/applicationSearch", "/notInLegacyCatalog"),
-                "ADMIN", List.of("/lexisAgentAdmin")));
-
-    List<String> granted = service.resolveGrantedActions(List.of(" READ_ONLY ", "admin", "admin"));
+    List<String> granted = service.resolveGrantedActions(List.of("read_only", "admin", "ADMIN"));
 
     assertThat(granted).containsExactly("/applicationSearch", "/lexisAgentAdmin");
   }
 
   @Test
-  void shouldResolveRolesForConfiguredActionAndWildcard() {
+  void shouldResolveRolesForConfiguredActionAndIncludeLegacyAliases() {
     LexisAuthorizationService service =
         createService(
-            "LEXIS_INDUSTRY",
+            "LEXIS_INDUSTRY,LEXIS_LOG_EXPORT_INDUSTRY",
             Map.of(
-                "ADMIN", List.of("*"),
-                "READ_ONLY", List.of("/applicationSearch"),
-                "APPLICATION_APPROVER", List.of("/applicationsReview")));
+                "LEXIS_ADMIN", List.of("*"),
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_APPLICATION_APPROVER", List.of("/applicationsReview")));
 
     Set<String> roles = service.resolveRolesForAction("/applicationSearch");
 
-    assertThat(roles).containsExactly("ADMIN", "READ_ONLY");
+    assertThat(roles)
+        .contains(
+            "LEXIS_ADMIN",
+            "LEXIS_READ_ONLY",
+            "ADMIN",
+            "READ_ONLY")
+        .doesNotContain("LEXIS_APPLICATION_APPROVER", "APPLICATION_APPROVER");
   }
 
   @Test
-  void shouldExpandIndustryTemplateRoleWhenResolvingConfiguredRoles() {
+  void shouldResolveIndustryActionRolesAndIncludeLegacyIndustryAlias() {
     LexisAuthorizationService service =
         createService(
-            "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY",
+            "LEXIS_INDUSTRY,LEXIS_LOG_EXPORT_INDUSTRY",
             Map.of(
-                "ADMIN", List.of("*"),
-                "INDUSTRY", List.of("/summary")));
-
-    Set<String> roles = service.getConfiguredRoles();
-
-    assertThat(roles).contains("ADMIN", "INDUSTRY", "LEXIS_INDUSTRY", "LOG_EXPORT_INDUSTRY");
-  }
-
-  @Test
-  void shouldExpandIndustryTemplateRoleWhenResolvingActionRoles() {
-    LexisAuthorizationService service =
-        createService(
-            "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY",
-            Map.of(
-                "ADMIN", List.of("*"),
-                "INDUSTRY", List.of("/summary")));
+                "LEXIS_INDUSTRY", List.of("/summary"),
+                "LEXIS_LOG_EXPORT_INDUSTRY", List.of("/summary")));
 
     Set<String> roles = service.resolveRolesForAction("/summary");
 
-    assertThat(roles).contains("ADMIN", "LEXIS_INDUSTRY", "LOG_EXPORT_INDUSTRY");
-    assertThat(roles).doesNotContain("INDUSTRY");
+    assertThat(roles)
+        .contains("LEXIS_INDUSTRY", "LEXIS_LOG_EXPORT_INDUSTRY", "LOG_EXPORT_INDUSTRY")
+        .doesNotContain("INDUSTRY");
   }
 
   @Test
   void shouldReturnEmptyRolesWhenActionNotConfigured() {
     LexisAuthorizationService service =
         createService(
-            "LEXIS_INDUSTRY",
+            "LEXIS_INDUSTRY,LEXIS_LOG_EXPORT_INDUSTRY",
             Map.of(
-                "READ_ONLY", List.of("/applicationSearch"),
-                "APPLICATION_APPROVER", List.of("/applicationsReview")));
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_APPLICATION_APPROVER", List.of("/applicationsReview")));
 
     Set<String> roles = service.resolveRolesForAction("/notMapped");
 
@@ -142,17 +109,39 @@ class LexisAuthorizationServiceTest {
   }
 
   @Test
+  void shouldExposeConfiguredCanonicalRolesAndLegacyAliasesForRouteAuth() {
+    LexisAuthorizationService service =
+        createService(
+            "LEXIS_INDUSTRY,LEXIS_LOG_EXPORT_INDUSTRY",
+            Map.of(
+                "LEXIS_ADMIN", List.of("*"),
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_LOG_EXPORT_INDUSTRY", List.of("/summary")));
+
+    Set<String> roles = service.getConfiguredRoles();
+
+    assertThat(roles)
+        .contains(
+            "LEXIS_ADMIN",
+            "LEXIS_READ_ONLY",
+            "LEXIS_LOG_EXPORT_INDUSTRY",
+            "ADMIN",
+            "READ_ONLY",
+            "LOG_EXPORT_INDUSTRY");
+  }
+
+  @Test
   void canPerformActionShouldSupportActionNamesWithOrWithoutLeadingSlash() {
     LexisAuthorizationService service =
         createService(
-            "LEXIS_INDUSTRY",
+            "LEXIS_INDUSTRY,LEXIS_LOG_EXPORT_INDUSTRY",
             Map.of(
-                "READ_ONLY", List.of("/applicationSearch"),
-                "ADMIN", List.of("*")));
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_ADMIN", List.of("*")));
 
-    assertThat(service.canPerformAction(List.of("READ_ONLY"), "/applicationSearch")).isTrue();
+    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "/applicationSearch")).isTrue();
     assertThat(service.canPerformAction(List.of("READ_ONLY"), "applicationSearch")).isTrue();
-    assertThat(service.canPerformAction(List.of("READ_ONLY"), "/offersSearch")).isFalse();
+    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "/offersSearch")).isFalse();
   }
 
   private LexisAuthorizationService createService(

@@ -13,7 +13,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 class LexisSessionServiceTest {
 
   private final LexisSessionService service =
-      new LexisSessionService("LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY");
+      new LexisSessionService("LEXIS_INDUSTRY,LEXIS_LOG_EXPORT_INDUSTRY");
 
   @Test
   void shouldRouteReadOnlyUsersToApplicationSearch() {
@@ -22,6 +22,7 @@ class LexisSessionServiceTest {
 
     assertThat(response.welcomeTarget()).isEqualTo("readOnly");
     assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
+    assertThat(response.roles()).containsExactly("LEXIS_ADMIN", "LEXIS_READ_ONLY");
   }
 
   @Test
@@ -36,11 +37,20 @@ class LexisSessionServiceTest {
   @Test
   void shouldRouteForestClientScopedIndustryUsersToSummary() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_industry_00001234"));
+        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_log_export_industry_00001234"));
 
     assertThat(response.welcomeTarget()).isEqualTo("industryUser");
     assertThat(response.legacyPath()).isEqualTo("/summary.do?actionMapping=view");
-    assertThat(response.roles()).containsExactly("LEXIS_INDUSTRY");
+    assertThat(response.roles()).containsExactly("LEXIS_LOG_EXPORT_INDUSTRY");
+  }
+
+  @Test
+  void shouldRouteLegacyScopedIndustryAliasToCanonicalIndustrySummary() {
+    LexisSessionWelcomeDto response =
+        service.resolveWelcomeRoute("idir\\jsmith", List.of("log_export_industry_00001234"));
+
+    assertThat(response.welcomeTarget()).isEqualTo("industryUser");
+    assertThat(response.roles()).containsExactly("LEXIS_LOG_EXPORT_INDUSTRY");
   }
 
   @Test
@@ -59,6 +69,7 @@ class LexisSessionServiceTest {
 
     assertThat(response.welcomeTarget()).isEqualTo("adminUser");
     assertThat(response.legacyPath()).isEqualTo("/lexisAgentAdmin.do?actionMapping=view");
+    assertThat(response.roles()).containsExactly("LEXIS_ADMIN");
   }
 
   @Test
@@ -68,6 +79,7 @@ class LexisSessionServiceTest {
 
     assertThat(response.welcomeTarget()).isEqualTo("exemptionApprover");
     assertThat(response.legacyPath()).isEqualTo("/exemptionSearch.do?actionMapping=view");
+    assertThat(response.roles()).containsExactly("LEXIS_EXEMPTION_APPROVER", "OTHER_ROLE");
   }
 
   @Test
@@ -77,25 +89,26 @@ class LexisSessionServiceTest {
 
     assertThat(response.welcomeTarget()).isEqualTo("mofrUser");
     assertThat(response.legacyPath()).isEqualTo("/applicationsReview.do?actionMapping=view");
+    assertThat(response.roles()).containsExactly("LEXIS_APPLICATION_APPROVER");
   }
 
   @Test
-  void shouldParseRoleHeaderIntoNormalizedDistinctRoles() {
-    List<String> roles = service.parseRoleHeader(" admin, read_only,ADMIN ,, ");
+  void shouldParseRoleHeaderIntoCanonicalDistinctRoles() {
+    List<String> roles = service.parseRoleHeader(" admin, read_only,LEXIS_ADMIN ,, ");
 
-    assertThat(roles).containsExactly("ADMIN", "READ_ONLY");
+    assertThat(roles).containsExactly("LEXIS_ADMIN", "LEXIS_READ_ONLY");
   }
 
   @Test
-  void shouldParseAuthoritiesIntoNormalizedDistinctRoles() {
+  void shouldParseAuthoritiesIntoCanonicalDistinctRoles() {
     List<String> roles =
         service.parseAuthorities(
             List.of(
                 new SimpleGrantedAuthority(" read_only "),
-                new SimpleGrantedAuthority("ADMIN"),
+                new SimpleGrantedAuthority("LEXIS_ADMIN"),
                 new SimpleGrantedAuthority("admin")));
 
-    assertThat(roles).containsExactly("READ_ONLY", "ADMIN");
+    assertThat(roles).containsExactly("LEXIS_READ_ONLY", "LEXIS_ADMIN");
   }
 
   @Test
@@ -103,10 +116,21 @@ class LexisSessionServiceTest {
     List<String> roles =
         service.parseAuthorities(
             List.of(
+                new SimpleGrantedAuthority("lexis_log_export_industry_00009999"),
+                new SimpleGrantedAuthority("READ_ONLY")));
+
+    assertThat(roles).containsExactly("LEXIS_LOG_EXPORT_INDUSTRY", "LEXIS_READ_ONLY");
+  }
+
+  @Test
+  void shouldCollapseLegacyScopedIndustryAuthorities() {
+    List<String> roles =
+        service.parseAuthorities(
+            List.of(
                 new SimpleGrantedAuthority("log_export_industry_00009999"),
                 new SimpleGrantedAuthority("READ_ONLY")));
 
-    assertThat(roles).containsExactly("LOG_EXPORT_INDUSTRY", "READ_ONLY");
+    assertThat(roles).containsExactly("LEXIS_LOG_EXPORT_INDUSTRY", "LEXIS_READ_ONLY");
   }
 
   @Test
@@ -116,12 +140,19 @@ class LexisSessionServiceTest {
 
     List<String> roles = service.parseRolesFromPrincipal(authentication);
 
-    assertThat(roles).containsExactly("LEXIS_INDUSTRY", "READ_ONLY");
+    assertThat(roles).containsExactly("LEXIS_INDUSTRY", "LEXIS_READ_ONLY");
   }
 
   @Test
-  void shouldResolveForestClientNumberFromScopedRole() {
+  void shouldResolveForestClientNumberFromCanonicalScopedRole() {
     String clientNumber = service.resolveForestClientNumber(List.of("lexis_industry_00077881"));
+
+    assertThat(clientNumber).isEqualTo("00077881");
+  }
+
+  @Test
+  void shouldResolveForestClientNumberFromLegacyScopedRoleAlias() {
+    String clientNumber = service.resolveForestClientNumber(List.of("log_export_industry_00077881"));
 
     assertThat(clientNumber).isEqualTo("00077881");
   }
@@ -133,7 +164,7 @@ class LexisSessionServiceTest {
             "idir\\jsmith",
             "n/a",
             List.of(
-                new SimpleGrantedAuthority("LOG_EXPORT_INDUSTRY_00055667"),
+                new SimpleGrantedAuthority("LEXIS_LOG_EXPORT_INDUSTRY_00055667"),
                 new SimpleGrantedAuthority("READ_ONLY")));
 
     String clientNumber = service.resolveForestClientNumber(authentication);
@@ -143,7 +174,7 @@ class LexisSessionServiceTest {
 
   @Test
   void shouldReturnNullWhenNoScopedForestClientRolePresent() {
-    String clientNumber = service.resolveForestClientNumber(List.of("ADMIN", "READ_ONLY"));
+    String clientNumber = service.resolveForestClientNumber(List.of("LEXIS_ADMIN", "LEXIS_READ_ONLY"));
 
     assertThat(clientNumber).isNull();
   }
