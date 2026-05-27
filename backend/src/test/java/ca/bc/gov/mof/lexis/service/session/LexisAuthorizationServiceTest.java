@@ -150,6 +150,20 @@ class LexisAuthorizationServiceTest {
     assertThat(service.canPerformAction(List.of("READ_ONLY"), "/offersSearch")).isFalse();
   }
 
+  @Test
+  void canPerformActionShouldSupportNonRouteActionsForLegacyVisibilityChecks() {
+    LexisAuthorizationService service =
+        createService(
+            "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER",
+            Map.of(
+                "READ_ONLY", List.of("viewFederalApplication", "viewOICApplication"),
+                "PROVINCIAL_SUBMITTER", List.of("industryListing")));
+
+    assertThat(service.canPerformAction(List.of("READ_ONLY"), "viewFederalApplication")).isTrue();
+    assertThat(service.canPerformAction(List.of("READ_ONLY"), "viewOICApplication")).isTrue();
+    assertThat(service.canPerformAction(List.of("PROVINCIAL_SUBMITTER"), "viewFederalApplication")).isFalse();
+  }
+
   private LexisAuthorizationService createService(
       String industryRolesCsv, Map<String, List<String>> roleActions) {
     LexisAuthorizationProperties properties = new LexisAuthorizationProperties();

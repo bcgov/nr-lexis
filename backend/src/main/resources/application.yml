@@ -60,6 +60,8 @@ lexis:
         - "/feeReport"
         - "/tenureReport"
         - "/approvedExemptionReport"
+        - "viewFederalApplication"
+        - "viewOICApplication"
       APPLICATION_APPROVER:
         - "/applicationsReview"
         - "/applicationSearch"
@@ -82,6 +84,8 @@ lexis:
         - "/feeReport"
         - "/tenureReport"
         - "/approvedExemptionReport"
+        - "viewFederalApplication"
+        - "viewOICApplication"
       EXEMPTION_APPROVER:
         - "/exemptionSearch"
         - "/exemptionDetails"
@@ -106,6 +110,8 @@ lexis:
         - "/feeReport"
         - "/tenureReport"
         - "/approvedExemptionReport"
+        - "viewFederalApplication"
+        - "viewOICApplication"
       PROVINCIAL_SUBMITTER:
         - "industryListing"
         - "mofrListing"
