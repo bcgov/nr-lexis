@@ -1,8 +1,24 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
-import { Column, Grid, InlineLoading, InlineNotification, Tag } from '@carbon/react'
-import { useParams } from 'react-router-dom'
+import {
+  Button,
+  Column,
+  Grid,
+  InlineLoading,
+  InlineNotification,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tag,
+  TextInput,
+  Tile,
+} from '@carbon/react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldTile, DetailListTile, type DetailListItem } from '@/pages/shared/DetailSections'
+import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -12,11 +28,17 @@ const displayValue = (value: string | number | null | undefined): string => {
   return String(value)
 }
 
+const normalizeText = (value: string): string => value.trim().toLowerCase()
+
 const ProvincialExemptionDetailsPage: FC = () => {
+  const navigate = useNavigate()
+  const { canPerform } = useAuth()
   const { exemptionNumber } = useParams()
   const [detail, setDetail] = useState<ProvincialExemptionDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [permitFilter, setPermitFilter] = useState('')
+  const [remarkFilter, setRemarkFilter] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -46,19 +68,27 @@ const ProvincialExemptionDetailsPage: FC = () => {
     void load()
   }, [exemptionNumber])
 
-  const permitItems = useMemo<DetailListItem[]>(() => {
-    return (detail?.permitNumbers ?? []).map((permitNumber) => ({
-      key: permitNumber,
-      content: permitNumber,
-    }))
-  }, [detail?.permitNumbers])
+  const filteredPermitNumbers = useMemo(() => {
+    const rows = detail?.permitNumbers ?? []
+    if (!permitFilter.trim()) {
+      return rows
+    }
 
-  const remarkItems = useMemo<DetailListItem[]>(() => {
-    return (detail?.remarks ?? []).map((item, index) => ({
-      key: `${item.title}-${index}`,
-      content: `${item.title}: ${item.remark}`,
-    }))
-  }, [detail?.remarks])
+    const normalizedFilter = normalizeText(permitFilter)
+    return rows.filter((permitNumber) => normalizeText(permitNumber).includes(normalizedFilter))
+  }, [detail?.permitNumbers, permitFilter])
+
+  const filteredRemarks = useMemo(() => {
+    const rows = detail?.remarks ?? []
+    if (!remarkFilter.trim()) {
+      return rows
+    }
+
+    const normalizedFilter = normalizeText(remarkFilter)
+    return rows.filter((item) =>
+      normalizeText(`${item.title} ${item.remark}`).includes(normalizedFilter),
+    )
+  }, [detail?.remarks, remarkFilter])
 
   return (
     <Grid fullWidth className="default-grid">
@@ -88,6 +118,38 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
       {!loading && detail && (
         <>
+          <Column sm={4} md={8} lg={16}>
+            <Tile>
+              <h2 className="detail-tile-title">Actions</h2>
+              <div className="legacy-search-actions">
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={
+                    !detail.applicationNumber ||
+                    !canPerform('/applicationSearch') ||
+                    !canPerform('/applicationDetails')
+                  }
+                  onClick={() => {
+                    if (detail.applicationNumber) {
+                      navigate(`/provincial/application/${detail.applicationNumber}`)
+                    }
+                  }}
+                >
+                  Open Application Detail
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={!canPerform('/permitSearch')}
+                  onClick={() => navigate('/provincial/permit')}
+                >
+                  Open Permit Search
+                </Button>
+              </div>
+            </Tile>
+          </Column>
+
           <Column sm={4} md={8} lg={16}>
             <DetailFieldTile
               title="Exemption Summary"
@@ -138,18 +200,79 @@ const ProvincialExemptionDetailsPage: FC = () => {
           </Column>
 
           <Column sm={4} md={8} lg={8}>
-            <DetailListTile
-              title="Related Permits"
-              items={permitItems}
-              emptyLabel="No related permits available."
-            />
+            <Tile>
+              <h2 className="detail-tile-title">Related Permits</h2>
+              <TextInput
+                id="exemptionDetailPermitFilter"
+                labelText="Filter permits"
+                value={permitFilter}
+                onChange={(event) => setPermitFilter(event.target.value)}
+                placeholder="Filter by permit number"
+              />
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Permit Number</TableHeader>
+                    <TableHeader>Open</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredPermitNumbers.map((permitNumber) => (
+                    <TableRow key={permitNumber}>
+                      <TableCell>{permitNumber}</TableCell>
+                      <TableCell>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          disabled={!canPerform('/permitSearch') || !canPerform('/permitDetails')}
+                          onClick={() => navigate(`/provincial/permit/${permitNumber}`)}
+                        >
+                          Open
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredPermitNumbers.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={2}>No permits matched the current filter.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Tile>
           </Column>
           <Column sm={4} md={8} lg={8}>
-            <DetailListTile
-              title="Remarks"
-              items={remarkItems}
-              emptyLabel="No remarks available."
-            />
+            <Tile>
+              <h2 className="detail-tile-title">Remarks</h2>
+              <TextInput
+                id="exemptionDetailRemarkFilter"
+                labelText="Filter remarks"
+                value={remarkFilter}
+                onChange={(event) => setRemarkFilter(event.target.value)}
+                placeholder="Filter by title or remark text"
+              />
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Title</TableHeader>
+                    <TableHeader>Remark</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredRemarks.map((item) => (
+                    <TableRow key={`${item.title}-${item.remark}`}>
+                      <TableCell>{item.title}</TableCell>
+                      <TableCell>{item.remark}</TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredRemarks.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={2}>No remarks matched the current filter.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Tile>
           </Column>
         </>
       )}

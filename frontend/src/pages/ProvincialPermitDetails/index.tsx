@@ -14,7 +14,8 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile, DetailListTile, type DetailListItem } from '@/pages/shared/DetailSections'
 import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
@@ -53,6 +54,8 @@ const matchesFilter = (
 }
 
 const ProvincialPermitDetailsPage: FC = () => {
+  const navigate = useNavigate()
+  const { canPerform } = useAuth()
   const { permitNumber } = useParams()
   const [detail, setDetail] = useState<ProvincialPermitDetail | null>(null)
   const [tabsData, setTabsData] = useState<ProvincialPermitDetailTabsData | null>(null)
@@ -267,6 +270,56 @@ const ProvincialPermitDetailsPage: FC = () => {
 
       {!loading && detail && (
         <>
+          <Column sm={4} md={8} lg={16}>
+            <Tile>
+              <h2 className="detail-tile-title">Actions</h2>
+              <div className="legacy-search-actions">
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={
+                    !detail.applicationNumber ||
+                    !canPerform('/applicationSearch') ||
+                    !canPerform('/applicationDetails')
+                  }
+                  onClick={() => {
+                    if (detail.applicationNumber) {
+                      navigate(`/provincial/application/${detail.applicationNumber}`)
+                    }
+                  }}
+                >
+                  Open Application Detail
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={
+                    !detail.exemptionNumber ||
+                    !canPerform('/exemptionSearch') ||
+                    !canPerform('/exemptionDetails')
+                  }
+                  onClick={() => {
+                    if (detail.exemptionNumber) {
+                      navigate(
+                        `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`,
+                      )
+                    }
+                  }}
+                >
+                  Open Exemption Detail
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={!canPerform('/permitSearch')}
+                  onClick={() => navigate('/provincial/permit')}
+                >
+                  Open Permit Search
+                </Button>
+              </div>
+            </Tile>
+          </Column>
+
           {usesAnyMockTabData && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <InlineNotification

@@ -42,6 +42,13 @@ type ProvincialWorkflowDefinition = {
 
 type WorkflowTotals = Record<WorkflowMetricKey, number>
 
+type ProvincialQuickAction = {
+  id: string
+  label: string
+  path: string
+  requiredActions: string[]
+}
+
 const WORKFLOWS: ProvincialWorkflowDefinition[] = [
   {
     id: 'applicationSearch',
@@ -100,6 +107,39 @@ const EMPTY_TOTALS: WorkflowTotals = {
   provincialPermits: 0,
   reviewQueue: 0,
 }
+
+const QUICK_ACTIONS: ProvincialQuickAction[] = [
+  {
+    id: 'createApplication',
+    label: 'Create Application',
+    path: '/provincial/application/create',
+    requiredActions: ['/applicationSearch', 'createApplication'],
+  },
+  {
+    id: 'createExemption',
+    label: 'Create Exemption',
+    path: '/provincial/exemption/create',
+    requiredActions: ['/exemptionSearch', '/createExemption'],
+  },
+  {
+    id: 'createOffer',
+    label: 'Create Offer',
+    path: '/provincial/offers/create',
+    requiredActions: ['/offersSearch', 'createOffer'],
+  },
+  {
+    id: 'createPermit',
+    label: 'Create Permit',
+    path: '/provincial/permit/create',
+    requiredActions: ['/permitSearch', 'createPermit'],
+  },
+  {
+    id: 'openReviewQueue',
+    label: 'Open Review Queue',
+    path: '/provincial/review',
+    requiredActions: ['/applicationsReview'],
+  },
+]
 
 const normalizeText = (value: string): string => value.trim().toLowerCase()
 
@@ -288,6 +328,31 @@ const ProvincialPage: FC = () => {
             <Button kind="ghost" onClick={() => navigate('/provincial/summary')}>
               Open Summary
             </Button>
+          </div>
+        </Tile>
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
+        <Tile>
+          <h2 className="dashboard-title">Quick Actions</h2>
+          <div className="legacy-search-actions">
+            {QUICK_ACTIONS.map((action) => {
+              const canAccessAction = action.requiredActions.some((requiredAction) =>
+                canPerform(requiredAction),
+              )
+
+              return (
+                <Button
+                  key={action.id}
+                  kind={canAccessAction ? 'primary' : 'ghost'}
+                  size="sm"
+                  disabled={!canAccessAction}
+                  onClick={() => navigate(action.path)}
+                >
+                  {action.label}
+                </Button>
+              )
+            })}
           </div>
         </Tile>
       </Column>

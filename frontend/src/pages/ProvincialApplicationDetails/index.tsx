@@ -1,8 +1,24 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
-import { Column, Grid, InlineLoading, InlineNotification, Tag } from '@carbon/react'
-import { useParams } from 'react-router-dom'
+import {
+  Button,
+  Column,
+  Grid,
+  InlineLoading,
+  InlineNotification,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tag,
+  TextInput,
+  Tile,
+} from '@carbon/react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldTile, DetailListTile, type DetailListItem } from '@/pages/shared/DetailSections'
+import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -12,11 +28,18 @@ const displayValue = (value: string | number | null | undefined): string => {
   return String(value)
 }
 
+const normalizeText = (value: string): string => value.trim().toLowerCase()
+
 const ProvincialApplicationDetailsPage: FC = () => {
+  const navigate = useNavigate()
+  const { canPerform } = useAuth()
   const { applicationNumber } = useParams()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [packageFilter, setPackageFilter] = useState('')
+  const [offerFilter, setOfferFilter] = useState('')
+  const [remarkFilter, setRemarkFilter] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -46,29 +69,45 @@ const ProvincialApplicationDetailsPage: FC = () => {
     void load()
   }, [applicationNumber])
 
-  const packageItems = useMemo<DetailListItem[]>(() => {
-    return (detail?.packages ?? []).map((item) => ({
-      key: item.packageNumber,
-      content: `${item.packageNumber} - ${item.volume.toLocaleString()} m³ (${item.pieceCount} pieces)`,
-    }))
-  }, [detail?.packages])
+  const filteredPackages = useMemo(() => {
+    const rows = detail?.packages ?? []
+    if (!packageFilter.trim()) {
+      return rows
+    }
 
-  const remarkItems = useMemo<DetailListItem[]>(() => {
-    return (detail?.remarks ?? []).map((item, index) => ({
-      key: `${item.title}-${index}`,
-      content: `${item.title}: ${item.remark}`,
-    }))
-  }, [detail?.remarks])
+    const normalizedFilter = normalizeText(packageFilter)
+    return rows.filter((item) =>
+      normalizeText(
+        `${item.packageNumber} ${item.volume.toLocaleString()} ${item.pieceCount.toLocaleString()}`,
+      ).includes(normalizedFilter),
+    )
+  }, [detail?.packages, packageFilter])
 
-  const offerItems = useMemo<DetailListItem[]>(() => {
-    return (detail?.offers ?? []).map((item) => {
-      const suffix = item.withdrawalDate ? ` (withdrawn ${item.withdrawalDate})` : ''
-      return {
-        key: item.offerNumber,
-        content: `${item.offerNumber} - ${item.validOffer ? 'Valid' : 'Invalid'}${suffix}`,
-      }
-    })
-  }, [detail?.offers])
+  const filteredOffers = useMemo(() => {
+    const rows = detail?.offers ?? []
+    if (!offerFilter.trim()) {
+      return rows
+    }
+
+    const normalizedFilter = normalizeText(offerFilter)
+    return rows.filter((item) =>
+      normalizeText(
+        `${item.offerNumber} ${item.validOffer ? 'valid' : 'invalid'} ${item.withdrawalDate ?? ''}`,
+      ).includes(normalizedFilter),
+    )
+  }, [detail?.offers, offerFilter])
+
+  const filteredRemarks = useMemo(() => {
+    const rows = detail?.remarks ?? []
+    if (!remarkFilter.trim()) {
+      return rows
+    }
+
+    const normalizedFilter = normalizeText(remarkFilter)
+    return rows.filter((item) =>
+      normalizeText(`${item.title} ${item.remark}`).includes(normalizedFilter),
+    )
+  }, [detail?.remarks, remarkFilter])
 
   return (
     <Grid fullWidth className="default-grid">
@@ -98,6 +137,40 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
       {!loading && detail && (
         <>
+          <Column sm={4} md={8} lg={16}>
+            <Tile>
+              <h2 className="detail-tile-title">Actions</h2>
+              <div className="legacy-search-actions">
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={
+                    !detail.exemptionNumber ||
+                    !canPerform('/exemptionSearch') ||
+                    !canPerform('/exemptionDetails')
+                  }
+                  onClick={() => {
+                    if (detail.exemptionNumber) {
+                      navigate(
+                        `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`,
+                      )
+                    }
+                  }}
+                >
+                  Open Exemption Detail
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={!canPerform('/offersSearch')}
+                  onClick={() => navigate('/provincial/offers')}
+                >
+                  Open Offers Search
+                </Button>
+              </div>
+            </Tile>
+          </Column>
+
           <Column sm={4} md={8} lg={16}>
             <DetailFieldTile
               title="Application Summary"
@@ -176,21 +249,118 @@ const ProvincialApplicationDetailsPage: FC = () => {
           </Column>
 
           <Column sm={4} md={8} lg={8}>
-            <DetailListTile
-              title="Packages"
-              items={packageItems}
-              emptyLabel="No packages available."
-            />
+            <Tile>
+              <h2 className="detail-tile-title">Packages</h2>
+              <TextInput
+                id="applicationDetailPackageFilter"
+                labelText="Filter packages"
+                value={packageFilter}
+                onChange={(event) => setPackageFilter(event.target.value)}
+                placeholder="Filter by package, pieces, or volume"
+              />
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Package</TableHeader>
+                    <TableHeader>Volume (m3)</TableHeader>
+                    <TableHeader>Pieces</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredPackages.map((item) => (
+                    <TableRow key={item.packageNumber}>
+                      <TableCell>{item.packageNumber}</TableCell>
+                      <TableCell>{item.volume.toLocaleString()}</TableCell>
+                      <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredPackages.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3}>No package rows matched the current filter.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Tile>
           </Column>
           <Column sm={4} md={8} lg={8}>
-            <DetailListTile title="Offers" items={offerItems} emptyLabel="No offers available." />
+            <Tile>
+              <h2 className="detail-tile-title">Offers</h2>
+              <TextInput
+                id="applicationDetailOfferFilter"
+                labelText="Filter offers"
+                value={offerFilter}
+                onChange={(event) => setOfferFilter(event.target.value)}
+                placeholder="Filter by offer number, validity, or withdrawal date"
+              />
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Offer</TableHeader>
+                    <TableHeader>Valid</TableHeader>
+                    <TableHeader>Withdrawal Date</TableHeader>
+                    <TableHeader>Open</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredOffers.map((item) => (
+                    <TableRow key={item.offerNumber}>
+                      <TableCell>{item.offerNumber}</TableCell>
+                      <TableCell>{item.validOffer ? 'Yes' : 'No'}</TableCell>
+                      <TableCell>{item.withdrawalDate ?? '-'}</TableCell>
+                      <TableCell>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          disabled={!canPerform('/offersSearch') || !canPerform('/offerDetails')}
+                          onClick={() => navigate(`/provincial/offers/${item.offerNumber}`)}
+                        >
+                          Open
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredOffers.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4}>No offer rows matched the current filter.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Tile>
           </Column>
           <Column sm={4} md={8} lg={16}>
-            <DetailListTile
-              title="Remarks"
-              items={remarkItems}
-              emptyLabel="No remarks available."
-            />
+            <Tile>
+              <h2 className="detail-tile-title">Remarks</h2>
+              <TextInput
+                id="applicationDetailRemarkFilter"
+                labelText="Filter remarks"
+                value={remarkFilter}
+                onChange={(event) => setRemarkFilter(event.target.value)}
+                placeholder="Filter by title or remark text"
+              />
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Title</TableHeader>
+                    <TableHeader>Remark</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredRemarks.map((item) => (
+                    <TableRow key={`${item.title}-${item.remark}`}>
+                      <TableCell>{item.title}</TableCell>
+                      <TableCell>{item.remark}</TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredRemarks.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={2}>No remarks matched the current filter.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Tile>
           </Column>
         </>
       )}
