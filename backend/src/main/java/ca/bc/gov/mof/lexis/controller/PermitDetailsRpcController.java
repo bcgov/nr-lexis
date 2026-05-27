@@ -19,11 +19,13 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
+import java.math.BigDecimal;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -39,6 +41,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -310,6 +313,30 @@ public class PermitDetailsRpcController {
         service.getGbmsInvoiceHistory(receiptNumber, permitNumber, isReadOnlyUser(authentication)));
   }
 
+  @PostMapping("/add-invoice")
+  public ResponseEntity<PermitPersistenceRpcResponseDto> addInvoice(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber,
+      @RequestParam(name = "invoiceExportValue", required = false) String invoiceExportValue,
+      @RequestParam(name = "invoiceConversionRate", required = false) String invoiceConversionRate,
+      @RequestParam(name = "invoiceFeeInLieu", required = false) String invoiceFeeInLieu,
+      Authentication authentication) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for add invoice");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.addInvoice(
+            permitNumber,
+            salesInvoiceNumber,
+            parsePositiveDecimal(invoiceExportValue),
+            parsePositiveDecimal(invoiceConversionRate),
+            parsePositiveDecimal(invoiceFeeInLieu),
+            authentication == null ? null : authentication.getName()));
+  }
+
   @GetMapping("/invoices-for-permit")
   public ResponseEntity<PermitInvoiceListRpcResponseDto> getInvoicesForPermit(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
@@ -479,6 +506,18 @@ public class PermitDetailsRpcController {
       return false;
     }
     return roles.contains("LEXIS_READ_ONLY") || roles.contains("READ_ONLY");
+  }
+
+  private BigDecimal parsePositiveDecimal(String rawValue) {
+    if (rawValue == null || rawValue.isBlank()) {
+      return null;
+    }
+    try {
+      BigDecimal parsed = new BigDecimal(rawValue.trim());
+      return parsed.compareTo(BigDecimal.ZERO) > 0 ? parsed : null;
+    } catch (NumberFormatException ex) {
+      return null;
+    }
   }
 
   public record RemoveDocumentResponseDto(String success) {}

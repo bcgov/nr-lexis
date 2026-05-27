@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
@@ -49,6 +50,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_APPL_FILE_DETAILS(?,?)";
   private static final String FIND_INVOICE_BY_ID = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICE_BY_ID(?,?,?)";
   private static final String FIND_INVOICES_BY_PERMIT = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICES_BY_PERMIT(?,?)";
+  private static final String INSERT_SALES_INVOICE =
+      LEXIS_GROUP_9_PACKAGE + "INSERT_SALES_INVOICE(?,?,?,?,?,?,?,?,?,?)";
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String FIND_GBMS_INVOICE_HISTORY =
       LEXIS_GROUP_9_PACKAGE + "FIND_GBMS_INVOICE_HISTORY(?,?,?)";
@@ -357,6 +360,47 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .distinct()
         .sorted()
         .toList();
+  }
+
+  public Optional<SalesInvoiceRow> insertSalesInvoice(
+      Long permitNumber,
+      String salesInvoiceNumber,
+      BigDecimal exportValue,
+      BigDecimal currencyConversionRate,
+      BigDecimal feeInLieu,
+      String userId) {
+    String normalizedSalesInvoiceNumber = trim(salesInvoiceNumber);
+    String normalizedUserId = trim(userId);
+    if (permitNumber == null
+        || permitNumber < 1
+        || normalizedSalesInvoiceNumber == null
+        || exportValue == null
+        || currencyConversionRate == null
+        || feeInLieu == null) {
+      return Optional.empty();
+    }
+
+    Timestamp now = new Timestamp(System.currentTimeMillis());
+    return queryCursorSingle(
+        INSERT_SALES_INVOICE,
+        cs -> {
+          cs.setString(1, normalizedSalesInvoiceNumber);
+          cs.setLong(2, permitNumber);
+          cs.setBigDecimal(3, exportValue);
+          cs.setBigDecimal(4, currencyConversionRate);
+          cs.setBigDecimal(5, feeInLieu);
+          cs.setString(6, normalizedUserId);
+          cs.setTimestamp(7, now);
+          cs.setNull(8, Types.VARCHAR);
+          cs.setNull(9, Types.TIMESTAMP);
+        },
+        10,
+        rs ->
+            new SalesInvoiceRow(
+                nonNull(getString(rs, "EXPORT_SALES_INVOICE_NUMBER")),
+                coalesce(getDouble(rs, "EXPORT_VALUE"), 0.0d),
+                coalesce(getDouble(rs, "CURRENCY_CONVERSION_RATE"), 0.0d),
+                coalesce(getDouble(rs, "FEE_IN_LIEU"), 0.0d)));
   }
 
   public List<GbmsInvoiceHistoryRow> findGbmsInvoiceHistory(

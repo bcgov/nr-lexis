@@ -25,6 +25,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
@@ -415,6 +416,42 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).getGbmsInvoiceHistory("RCPT-1", 7000123L, true);
+  }
+
+  @Test
+  void addInvoiceShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPersistenceRpcResponseDto dto =
+        new PermitPersistenceRpcResponseDto(
+            true, "The sales invoice was saved successfully.", List.of(), List.of(), 7000123L);
+    when(service.addInvoice(
+            7000123L,
+            "INV-100",
+            new java.math.BigDecimal("100.00"),
+            new java.math.BigDecimal("1.25"),
+            new java.math.BigDecimal("12.00"),
+            "idir\\jsmith"))
+        .thenReturn(dto);
+
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_ADMIN"));
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.addInvoice(
+            7000123L, "INV-100", "100.00", "1.25", "12.00", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service)
+        .addInvoice(
+            7000123L,
+            "INV-100",
+            new java.math.BigDecimal("100.00"),
+            new java.math.BigDecimal("1.25"),
+            new java.math.BigDecimal("12.00"),
+            "idir\\jsmith");
   }
 
   @Test

@@ -21,6 +21,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitRpcScaleItemDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
@@ -531,6 +532,71 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     return repository.findGbmsInvoiceHistory(receiptNumber, permitNumber, readOnlyUser).stream()
         .map(this::toGbmsInvoiceHistoryItem)
         .toList();
+  }
+
+  @Override
+  public PermitPersistenceRpcResponseDto addInvoice(
+      Long permitNumber,
+      String salesInvoiceNumber,
+      BigDecimal invoiceExportValue,
+      BigDecimal invoiceConversionRate,
+      BigDecimal invoiceFeeInLieu,
+      String userId) {
+    List<String> errors = new ArrayList<>();
+    String normalizedSalesInvoiceNumber = trimToNull(salesInvoiceNumber);
+
+    if (permitNumber == null || permitNumber < 1) {
+      errors.add("A valid permit number is required.");
+    }
+    if (normalizedSalesInvoiceNumber == null) {
+      errors.add("A valid sales invoice number is required.");
+    }
+    if (invoiceExportValue == null || invoiceExportValue.compareTo(BigDecimal.ZERO) <= 0) {
+      errors.add("A valid export value is required.");
+    }
+    if (invoiceConversionRate == null || invoiceConversionRate.compareTo(BigDecimal.ZERO) <= 0) {
+      errors.add("A valid currency conversion rate is required.");
+    }
+    if (invoiceFeeInLieu == null || invoiceFeeInLieu.compareTo(BigDecimal.ZERO) <= 0) {
+      errors.add("A valid fee in lieu is required.");
+    }
+    if (!errors.isEmpty()) {
+      return new PermitPersistenceRpcResponseDto(
+          false, "", errors, List.of(), permitNumber);
+    }
+
+    if (repository.findSalesInvoiceByNumberAndPermit(normalizedSalesInvoiceNumber, permitNumber).isPresent()) {
+      return new PermitPersistenceRpcResponseDto(
+          false,
+          "",
+          List.of("Sales invoice " + normalizedSalesInvoiceNumber + " already exists."),
+          List.of(),
+          permitNumber);
+    }
+
+    Optional<SalesInvoiceRow> inserted =
+        repository.insertSalesInvoice(
+            permitNumber,
+            normalizedSalesInvoiceNumber,
+            invoiceExportValue,
+            invoiceConversionRate,
+            invoiceFeeInLieu,
+            trimToNull(userId));
+    if (inserted.isEmpty()) {
+      return new PermitPersistenceRpcResponseDto(
+          false,
+          "",
+          List.of("Unable to save sales invoice."),
+          List.of(),
+          permitNumber);
+    }
+
+    return new PermitPersistenceRpcResponseDto(
+        true,
+        "The sales invoice was saved successfully.",
+        List.of(),
+        List.of(),
+        permitNumber);
   }
 
   @Override

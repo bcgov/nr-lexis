@@ -20,9 +20,11 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -79,6 +81,14 @@ public interface PermitDetailsRpcService {
 
   List<PermitGbmsInvoiceHistoryItemRpcResponseDto> getGbmsInvoiceHistory(
       String receiptNumber, Long permitNumber, boolean readOnlyUser);
+
+  PermitPersistenceRpcResponseDto addInvoice(
+      Long permitNumber,
+      String salesInvoiceNumber,
+      BigDecimal invoiceExportValue,
+      BigDecimal invoiceConversionRate,
+      BigDecimal invoiceFeeInLieu,
+      String userId);
 
   PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber);
 

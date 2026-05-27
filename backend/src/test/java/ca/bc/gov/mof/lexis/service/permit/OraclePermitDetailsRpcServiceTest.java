@@ -24,6 +24,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
@@ -430,6 +431,59 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.get(0).printedDate()).isEqualTo("03/01/2026");
     assertThat(response.get(0).entryDate()).isEqualTo("03/01/2026");
     assertThat(response.get(0).updateDate()).isEqualTo("03/02/2026");
+  }
+
+  @Test
+  void addInvoiceShouldPersistWhenInputIsValid() {
+    when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L)).thenReturn(Optional.empty());
+    when(repository.insertSalesInvoice(
+            7000123L,
+            "INV-100",
+            new BigDecimal("100.00"),
+            new BigDecimal("1.25"),
+            new BigDecimal("12.00"),
+            "idir\\jsmith"))
+        .thenReturn(Optional.of(new SalesInvoiceRow("INV-100", 100.0d, 1.25d, 12.0d)));
+
+    PermitPersistenceRpcResponseDto response =
+        service.addInvoice(
+            7000123L,
+            "INV-100",
+            new BigDecimal("100.00"),
+            new BigDecimal("1.25"),
+            new BigDecimal("12.00"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("The sales invoice was saved successfully.");
+    assertThat(response.errors()).isEmpty();
+  }
+
+  @Test
+  void addInvoiceShouldReturnValidationErrors() {
+    PermitPersistenceRpcResponseDto response =
+        service.addInvoice(null, "", null, null, null, "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).isNotEmpty();
+  }
+
+  @Test
+  void addInvoiceShouldRejectDuplicateInvoice() {
+    when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L))
+        .thenReturn(Optional.of(new SalesInvoiceRow("INV-100", 100.0d, 1.25d, 12.0d)));
+
+    PermitPersistenceRpcResponseDto response =
+        service.addInvoice(
+            7000123L,
+            "INV-100",
+            new BigDecimal("100.00"),
+            new BigDecimal("1.25"),
+            new BigDecimal("12.00"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Sales invoice INV-100 already exists.");
   }
 
   @Test

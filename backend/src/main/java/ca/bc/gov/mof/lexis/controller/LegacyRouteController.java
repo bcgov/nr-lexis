@@ -57,6 +57,7 @@ public class LegacyRouteController {
   private static final String ACTION_GET_APPROVED_EXEMPTION_VOLUME = "getApprovedExemptionVolume";
   private static final String ACTION_GET_EXEMPTION_VOLUME_REMAINING = "getExemptionVolumeRemaining";
   private static final String ACTION_GET_PERMIT_HAS_APPLICATIONS = "getPermitHasApplications";
+  private static final String ACTION_ADD_INVOICE = "addInvoice";
   private static final String ACTION_GET_INVOICES_FOR_PERMIT = "getInvoicesForPermit";
   private static final String ACTION_GET_INVOICE_DETAILS = "getInvoiceDetails";
   private static final String ACTION_GET_GBMS_INVOICE_HISTORY = "getGBMSInvoiceHistory";
@@ -465,6 +466,9 @@ public class LegacyRouteController {
       @RequestParam(name = "selectedApplications", required = false) String selectedApplications,
       @RequestParam(name = "selectedPackages", required = false) String selectedPackages,
       @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber,
+      @RequestParam(name = "invoiceExportValue", required = false) String invoiceExportValue,
+      @RequestParam(name = "invoiceConversionRate", required = false) String invoiceConversionRate,
+      @RequestParam(name = "invoiceFeeInLieu", required = false) String invoiceFeeInLieu,
       @RequestParam(name = "receiptNumber", required = false) String receiptNumber,
       @RequestParam(name = "fileID", required = false) String fileId,
       @RequestParam(name = "fileName", required = false) String fileName,
@@ -524,6 +528,15 @@ public class LegacyRouteController {
     }
     if (ACTION_GET_PERMIT_HAS_APPLICATIONS.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPermitHasApplications(permitNumber);
+    }
+    if (ACTION_ADD_INVOICE.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.addInvoice(
+          permitNumber,
+          salesInvoiceNumber,
+          invoiceExportValue,
+          invoiceConversionRate,
+          invoiceFeeInLieu,
+          authentication);
     }
     if (ACTION_GET_INVOICES_FOR_PERMIT.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getInvoicesForPermit(permitNumber);
