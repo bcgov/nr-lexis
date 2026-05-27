@@ -37,13 +37,28 @@ const IndianReservePermitDetailsPage: FC = () => {
   const [detail, setDetail] = useState<IndianReservePermitDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [packageFilter, setPackageFilter] = useState(searchParams.get('packageFilter') ?? '')
+  const packageFilter = searchParams.get('packageFilter') ?? ''
   const withCurrentSearch = useCallback(
     (path: string): string => {
       const query = searchParams.toString()
       return query.length > 0 ? `${path}?${query}` : path
     },
     [searchParams],
+  )
+  const updateFilterParam = useCallback(
+    (value: string) => {
+      const nextSearchParams = new URLSearchParams(searchParams)
+      if (value.trim().length > 0) {
+        nextSearchParams.set('packageFilter', value)
+      } else {
+        nextSearchParams.delete('packageFilter')
+      }
+
+      if (nextSearchParams.toString() !== searchParams.toString()) {
+        setSearchParams(nextSearchParams, { replace: true })
+      }
+    },
+    [searchParams, setSearchParams],
   )
 
   useEffect(() => {
@@ -72,24 +87,6 @@ const IndianReservePermitDetailsPage: FC = () => {
 
     void load()
   }, [permitNumber])
-
-  useEffect(() => {
-    const packageFilterParam = searchParams.get('packageFilter') ?? ''
-    setPackageFilter((current) => (current === packageFilterParam ? current : packageFilterParam))
-  }, [searchParams])
-
-  useEffect(() => {
-    const nextSearchParams = new URLSearchParams(searchParams)
-    if (packageFilter.trim().length > 0) {
-      nextSearchParams.set('packageFilter', packageFilter)
-    } else {
-      nextSearchParams.delete('packageFilter')
-    }
-
-    if (nextSearchParams.toString() !== searchParams.toString()) {
-      setSearchParams(nextSearchParams, { replace: true })
-    }
-  }, [packageFilter, searchParams, setSearchParams])
 
   const filteredPackages = useMemo(() => {
     const rows = detail?.packages ?? []
@@ -190,7 +187,7 @@ const IndianReservePermitDetailsPage: FC = () => {
                 id="reservePermitPackageFilter"
                 labelText="Filter packages"
                 value={packageFilter}
-                onChange={(event) => setPackageFilter(event.target.value)}
+                onChange={(event) => updateFilterParam(event.target.value)}
                 placeholder="Filter package identifiers"
               />
               <Table useZebraStyles>

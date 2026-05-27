@@ -38,15 +38,30 @@ const FederalApplicationDetailsPage: FC = () => {
   const [detail, setDetail] = useState<FederalApplicationDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [packageFilter, setPackageFilter] = useState(searchParams.get('packageFilter') ?? '')
-  const [offerFilter, setOfferFilter] = useState(searchParams.get('offerFilter') ?? '')
-  const [remarkFilter, setRemarkFilter] = useState(searchParams.get('remarkFilter') ?? '')
+  const packageFilter = searchParams.get('packageFilter') ?? ''
+  const offerFilter = searchParams.get('offerFilter') ?? ''
+  const remarkFilter = searchParams.get('remarkFilter') ?? ''
   const withCurrentSearch = useCallback(
     (path: string): string => {
       const query = searchParams.toString()
       return query.length > 0 ? `${path}?${query}` : path
     },
     [searchParams],
+  )
+  const updateFilterParam = useCallback(
+    (key: 'packageFilter' | 'offerFilter' | 'remarkFilter', value: string) => {
+      const nextSearchParams = new URLSearchParams(searchParams)
+      if (value.trim().length > 0) {
+        nextSearchParams.set(key, value)
+      } else {
+        nextSearchParams.delete(key)
+      }
+
+      if (nextSearchParams.toString() !== searchParams.toString()) {
+        setSearchParams(nextSearchParams, { replace: true })
+      }
+    },
+    [searchParams, setSearchParams],
   )
 
   useEffect(() => {
@@ -75,42 +90,6 @@ const FederalApplicationDetailsPage: FC = () => {
 
     void load()
   }, [applicationNumber])
-
-  useEffect(() => {
-    const packageFilterParam = searchParams.get('packageFilter') ?? ''
-    const offerFilterParam = searchParams.get('offerFilter') ?? ''
-    const remarkFilterParam = searchParams.get('remarkFilter') ?? ''
-
-    setPackageFilter((current) => (current === packageFilterParam ? current : packageFilterParam))
-    setOfferFilter((current) => (current === offerFilterParam ? current : offerFilterParam))
-    setRemarkFilter((current) => (current === remarkFilterParam ? current : remarkFilterParam))
-  }, [searchParams])
-
-  useEffect(() => {
-    const nextSearchParams = new URLSearchParams(searchParams)
-
-    if (packageFilter.trim().length > 0) {
-      nextSearchParams.set('packageFilter', packageFilter)
-    } else {
-      nextSearchParams.delete('packageFilter')
-    }
-
-    if (offerFilter.trim().length > 0) {
-      nextSearchParams.set('offerFilter', offerFilter)
-    } else {
-      nextSearchParams.delete('offerFilter')
-    }
-
-    if (remarkFilter.trim().length > 0) {
-      nextSearchParams.set('remarkFilter', remarkFilter)
-    } else {
-      nextSearchParams.delete('remarkFilter')
-    }
-
-    if (nextSearchParams.toString() !== searchParams.toString()) {
-      setSearchParams(nextSearchParams, { replace: true })
-    }
-  }, [offerFilter, packageFilter, remarkFilter, searchParams, setSearchParams])
 
   const filteredPackages = useMemo(() => {
     const rows = detail?.packages ?? []
@@ -294,7 +273,7 @@ const FederalApplicationDetailsPage: FC = () => {
                 id="federalDetailPackageFilter"
                 labelText="Filter packages"
                 value={packageFilter}
-                onChange={(event) => setPackageFilter(event.target.value)}
+                onChange={(event) => updateFilterParam('packageFilter', event.target.value)}
                 placeholder="Filter by package identifier"
               />
               <Table useZebraStyles>
@@ -326,7 +305,7 @@ const FederalApplicationDetailsPage: FC = () => {
                 id="federalDetailOfferFilter"
                 labelText="Filter offers"
                 value={offerFilter}
-                onChange={(event) => setOfferFilter(event.target.value)}
+                onChange={(event) => updateFilterParam('offerFilter', event.target.value)}
                 placeholder="Filter by offer reference"
               />
               <Table useZebraStyles>
@@ -373,7 +352,7 @@ const FederalApplicationDetailsPage: FC = () => {
                 id="federalDetailRemarkFilter"
                 labelText="Filter remarks"
                 value={remarkFilter}
-                onChange={(event) => setRemarkFilter(event.target.value)}
+                onChange={(event) => updateFilterParam('remarkFilter', event.target.value)}
                 placeholder="Filter remark text"
               />
               <Table useZebraStyles>
