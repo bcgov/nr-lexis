@@ -47,6 +47,31 @@ const ACTION_PRIORITY: string[] = [
   '/lexisAgentAdmin',
 ]
 
+const LEGACY_TO_CANONICAL_ROLE_MAP: Record<string, string> = {
+  ADMIN: 'LEXIS_ADMIN',
+  READ_ONLY: 'LEXIS_READ_ONLY',
+  APPLICATION_APPROVER: 'LEXIS_APPLICATION_APPROVER',
+  EXEMPTION_APPROVER: 'LEXIS_EXEMPTION_APPROVER',
+  LOG_EXPORT_INDUSTRY: 'LEXIS_LOG_EXPORT_INDUSTRY',
+}
+
+const LEGACY_LOG_EXPORT_CONCRETE_PREFIX = 'LOG_EXPORT_INDUSTRY_'
+const CANONICAL_LOG_EXPORT_CONCRETE_PREFIX = 'LEXIS_LOG_EXPORT_INDUSTRY_'
+
+const canonicalizeRole = (role: string): string => {
+  const normalizedRole = role.trim().toUpperCase()
+
+  if (normalizedRole.startsWith(LEGACY_LOG_EXPORT_CONCRETE_PREFIX)) {
+    return `${CANONICAL_LOG_EXPORT_CONCRETE_PREFIX}${normalizedRole.slice(LEGACY_LOG_EXPORT_CONCRETE_PREFIX.length)}`
+  }
+
+  return LEGACY_TO_CANONICAL_ROLE_MAP[normalizedRole] ?? normalizedRole
+}
+
+const canonicalizeRoles = (roles: string[]): string[] => {
+  return normalizeRoles(roles.map(canonicalizeRole))
+}
+
 const BASE_SEARCH_ACTIONS: string[] = [
   '/summary',
   '/applicationSearch',
@@ -119,15 +144,24 @@ const DEV_ADMIN_ACTIONS: string[] = [
 ]
 
 const DEV_ROLE_ACTIONS: Record<string, string[]> = {
+  LEXIS_ADMIN: DEV_ADMIN_ACTIONS,
+  LEXIS_READ_ONLY: DEV_READ_ONLY_ACTIONS,
+  LEXIS_APPLICATION_APPROVER: DEV_APPROVER_ACTIONS,
+  LEXIS_EXEMPTION_APPROVER: DEV_APPROVER_ACTIONS,
+  LEXIS_INDUSTRY: DEV_INDUSTRY_ACTIONS,
+  LEXIS_LOG_EXPORT_INDUSTRY: DEV_INDUSTRY_ACTIONS,
   ADMIN: DEV_ADMIN_ACTIONS,
   READ_ONLY: DEV_READ_ONLY_ACTIONS,
   APPLICATION_APPROVER: DEV_APPROVER_ACTIONS,
   EXEMPTION_APPROVER: DEV_APPROVER_ACTIONS,
-  LEXIS_INDUSTRY: DEV_INDUSTRY_ACTIONS,
   LOG_EXPORT_INDUSTRY: DEV_INDUSTRY_ACTIONS,
 }
 
-const DEV_CONCRETE_ROLE_PREFIXES: string[] = ['LEXIS_INDUSTRY_', 'LOG_EXPORT_INDUSTRY_']
+const DEV_CONCRETE_ROLE_PREFIXES: string[] = [
+  'LEXIS_INDUSTRY_',
+  'LEXIS_LOG_EXPORT_INDUSTRY_',
+  'LOG_EXPORT_INDUSTRY_',
+]
 
 const normalizeAction = (action: string): string => action.trim().toLowerCase()
 
@@ -172,7 +206,7 @@ const sanitizeCapabilities = (
   return {
     authenticated: Boolean(payload.authenticated),
     principal: payload.principal ?? null,
-    roles: normalizeRoles(payload.roles ?? []),
+    roles: canonicalizeRoles(payload.roles ?? []),
     welcomeTarget: payload.welcomeTarget ?? null,
     legacyPath: payload.legacyPath ?? null,
     grantedActions: (payload.grantedActions ?? []).filter(
@@ -195,7 +229,7 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     }
   }
 
-  if (capabilities.roles.includes('ADMIN')) {
+  if (capabilities.roles.includes('LEXIS_ADMIN') || capabilities.roles.includes('ADMIN')) {
     return '/admin'
   }
 
@@ -237,7 +271,7 @@ export const AuthProvider: FC<Props> = ({ children }) => {
 
   const setDevRoles = useCallback(
     async (roles: string[]) => {
-      writeDevRoles(roles)
+      writeDevRoles(canonicalizeRoles(roles))
       await refresh()
     },
     [refresh],
@@ -261,10 +295,11 @@ export const AuthProvider: FC<Props> = ({ children }) => {
   }, [])
 
   const effectiveRoles = useMemo(() => {
+    const canonicalDevRoles = canonicalizeRoles(devRoles)
     if (capabilities.roles.length > 0) {
       return capabilities.roles
     }
-    return devRoles
+    return canonicalDevRoles
   }, [capabilities.roles, devRoles])
 
   const effectiveGrantedActions = useMemo(() => {
@@ -305,7 +340,7 @@ export const AuthProvider: FC<Props> = ({ children }) => {
     hasAnyRole,
     usesExternalLogin,
     defaultRoute,
-    devRoles,
+    devRoles: canonicalizeRoles(devRoles),
     refresh,
     login,
     logout,

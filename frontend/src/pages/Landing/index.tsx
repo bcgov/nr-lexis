@@ -17,18 +17,21 @@ import logo from '@/assets/gov-bc-logo-horiz.png'
 
 const DEV_ROLE_OPTIONS = [
   { value: '', label: 'Select a role' },
-  { value: 'ADMIN', label: 'ADMIN' },
-  { value: 'READ_ONLY', label: 'READ_ONLY' },
-  { value: 'APPLICATION_APPROVER', label: 'APPLICATION_APPROVER' },
-  { value: 'EXEMPTION_APPROVER', label: 'EXEMPTION_APPROVER' },
+  { value: 'LEXIS_ADMIN', label: 'LEXIS_ADMIN' },
+  { value: 'LEXIS_READ_ONLY', label: 'LEXIS_READ_ONLY' },
+  { value: 'LEXIS_APPLICATION_APPROVER', label: 'LEXIS_APPLICATION_APPROVER' },
+  { value: 'LEXIS_EXEMPTION_APPROVER', label: 'LEXIS_EXEMPTION_APPROVER' },
   { value: 'LEXIS_INDUSTRY', label: 'LEXIS_INDUSTRY (Abstract Parent)' },
-  { value: 'LOG_EXPORT_INDUSTRY', label: 'LOG_EXPORT_INDUSTRY (Abstract Parent)' },
+  {
+    value: 'LEXIS_LOG_EXPORT_INDUSTRY',
+    label: 'LEXIS_LOG_EXPORT_INDUSTRY (Abstract Parent)',
+  },
 ]
 
 const DEV_CONCRETE_ROLE_FAMILIES = [
   { value: '', label: 'Select role family' },
   { value: 'LEXIS_INDUSTRY', label: 'LEXIS_INDUSTRY' },
-  { value: 'LOG_EXPORT_INDUSTRY', label: 'LOG_EXPORT_INDUSTRY' },
+  { value: 'LEXIS_LOG_EXPORT_INDUSTRY', label: 'LEXIS_LOG_EXPORT_INDUSTRY' },
 ]
 
 const isDevRoleSimulationEnabled = (): boolean => {
@@ -228,9 +231,10 @@ const LandingPage: FC = () => {
                 <>
                   <p className="landing-help-text">
                     FAM role model note: <code>LEXIS_INDUSTRY</code> and{' '}
-                    <code>LOG_EXPORT_INDUSTRY</code> are abstract parents. Concrete client-scoped
-                    roles use the suffix pattern{' '}
-                    <code>&lt;roleFamily&gt;_&lt;forestClientNumber&gt;</code>.
+                    <code>LEXIS_LOG_EXPORT_INDUSTRY</code> are abstract parents. Concrete
+                    client-scoped roles use the suffix pattern{' '}
+                    <code>&lt;roleFamily&gt;_&lt;forestClientNumber&gt;</code>. Legacy aliases are
+                    accepted during transition.
                   </p>
                   <p className="landing-help-text">
                     TODO: replace manual concrete role simulation with live Cognito/FAM role claims
