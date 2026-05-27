@@ -41,7 +41,7 @@ export default defineConfig({
     timeout: 120000,
     env: {
       ...process.env,
-      VITE_ENABLE_SEARCH_MOCK_FALLBACK: process.env.VITE_ENABLE_SEARCH_MOCK_FALLBACK ?? 'true',
+      VITE_ENABLE_SEARCH_MOCK_FALLBACK: process.env.VITE_ENABLE_SEARCH_MOCK_FALLBACK ?? 'false',
     },
   },
 
