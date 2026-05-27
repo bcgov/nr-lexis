@@ -19,6 +19,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { useAuth } from '@/context/auth/useAuth'
+import { buildLegacyReportUrl, runReport } from '@/service/report-service'
 
 type ReportDefinition = {
   id: string
@@ -554,83 +555,32 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
 
 const normalizeText = (value: string): string => value.trim().toLowerCase()
 
-const splitCsv = (value: string): string[] =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0)
-
-const normalizeClientNumber = (value: string): string => {
-  const trimmed = value.trim()
-  if (!trimmed || !/^[0-9]+$/.test(trimmed)) {
-    return trimmed
-  }
-
-  return trimmed.padStart(8, '0')
+const triggerBrowserDownload = (blob: Blob, filename: string): void => {
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(objectUrl)
 }
 
-const normalizeUppercase = (value: string): string => value.trim().toUpperCase()
+const openBlobInNewTab = (blob: Blob): boolean => {
+  const objectUrl = URL.createObjectURL(blob)
+  const openedWindow = window.open(
+    objectUrl,
+    'reportWindow',
+    'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
+  )
 
-const getReportBasePath = (): string => {
-  const configured = (import.meta.env.VITE_LEXIS_REPORT_ENDPOINT_BASE ?? '/api').trim()
-  if (!configured) {
-    return '/api'
-  }
-  return configured.endsWith('/') ? configured.slice(0, -1) : configured
-}
-
-const appendCsvValues = (url: URL, key: string, value: string): void => {
-  splitCsv(value).forEach((entry) => url.searchParams.append(key, entry))
-}
-
-const buildReportUrl = (
-  report: ReportDefinition,
-  values: Record<string, string>,
-  selectedActionMapping: string,
-): string => {
-  const basePath = getReportBasePath()
-  const url = new URL(`${window.location.origin}${basePath}${report.legacyPath}`)
-
-  url.searchParams.set('actionMapping', selectedActionMapping)
-
-  Object.entries(values).forEach(([key, rawValue]) => {
-    const value = rawValue.trim()
-    if (!value || key === 'tenureTypes' || key === 'timberMarks') {
-      return
-    }
-
-    if (key === 'clientNumber') {
-      url.searchParams.set(key, normalizeClientNumber(value))
-      return
-    }
-
-    if (key === 'forestFileId' || key === 'timberMark') {
-      url.searchParams.set(key, normalizeUppercase(value))
-      return
-    }
-
-    if (key === 'region' || key === 'orgUnitNumber') {
-      appendCsvValues(url, key, value)
-      return
-    }
-
-    url.searchParams.set(key, value)
-  })
-
-  if (report.id === 'tenureReport') {
-    const tenureTypes = splitCsv(values.tenureTypes ?? '').slice(0, 6)
-    const timberMarks = splitCsv(values.timberMarks ?? '').slice(0, 6)
-
-    tenureTypes.forEach((value, index) => {
-      url.searchParams.set(`tenureType${index + 1}`, normalizeUppercase(value))
-    })
-
-    timberMarks.forEach((value, index) => {
-      url.searchParams.set(`timberMark${index + 1}`, normalizeUppercase(value))
-    })
+  if (!openedWindow) {
+    URL.revokeObjectURL(objectUrl)
+    return false
   }
 
-  return url.toString()
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  return true
 }
 
 const ReportsPage: FC = () => {
@@ -646,6 +596,8 @@ const ReportsPage: FC = () => {
   )
   const [selectedActionById, setSelectedActionById] = useState<Record<string, string>>({})
   const [launchErrorMessage, setLaunchErrorMessage] = useState('')
+  const [legacyFallbackMessage, setLegacyFallbackMessage] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
 
   const visibleReports = useMemo(() => {
     return REPORT_DEFINITIONS.filter((report) => {
@@ -681,12 +633,17 @@ const ReportsPage: FC = () => {
     selectedActionById[selectedReport.id] ?? selectedReport.actionMappings[0].value
 
   const previewUrl = useMemo(() => {
-    return buildReportUrl(selectedReport, selectedReportValues, selectedActionMapping)
+    return buildLegacyReportUrl(
+      selectedReport.legacyPath,
+      selectedReportValues,
+      selectedActionMapping,
+    )
   }, [selectedActionMapping, selectedReport, selectedReportValues])
 
   const onSelectReport = (reportId: string): void => {
     setSelectedReportId(reportId)
     setLaunchErrorMessage('')
+    setLegacyFallbackMessage('')
   }
 
   const onUpdateField = (fieldKey: string, value: string): void => {
@@ -705,18 +662,60 @@ const ReportsPage: FC = () => {
       [selectedReport.id]: {},
     }))
     setLaunchErrorMessage('')
+    setLegacyFallbackMessage('')
   }
 
-  const onOpenReportRequest = (): void => {
+  const onOpenReportRequest = async (): Promise<void> => {
     setLaunchErrorMessage('')
-    const reportWindow = window.open(
-      previewUrl,
-      'reportWindow',
-      'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
-    )
+    setLegacyFallbackMessage('')
+    setIsGenerating(true)
 
-    if (!reportWindow) {
-      setLaunchErrorMessage('Unable to open report window. Enable popups for this site and retry.')
+    try {
+      const runResult = await runReport({
+        reportId: selectedReport.id,
+        legacyPath: selectedReport.legacyPath,
+        actionMapping: selectedActionMapping,
+        values: selectedReportValues,
+      })
+
+      if (runResult.source === 'api') {
+        const outputFormat = (selectedReportValues.outputFormat ?? 'PDF').trim().toUpperCase()
+        const shouldDownload = outputFormat === 'CSV'
+
+        if (shouldDownload) {
+          triggerBrowserDownload(runResult.blob, runResult.filename)
+          return
+        }
+
+        const opened = openBlobInNewTab(runResult.blob)
+        if (!opened) {
+          triggerBrowserDownload(runResult.blob, runResult.filename)
+          setLaunchErrorMessage(
+            'Popup blocked while opening report preview. Downloaded the generated file instead.',
+          )
+        }
+        return
+      }
+
+      setLegacyFallbackMessage(
+        'Report API is not available for this request yet. Opened the legacy endpoint for parity.',
+      )
+      const fallbackWindow = window.open(
+        runResult.legacyUrl,
+        'reportWindow',
+        'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
+      )
+
+      if (!fallbackWindow) {
+        setLaunchErrorMessage(
+          'Unable to open report window. Enable popups for this site and retry.',
+        )
+      }
+    } catch (error) {
+      console.error(error)
+      setLaunchErrorMessage('Unable to generate report. Check values and try again.')
+    } finally {
+      setIsGenerating(false)
     }
   }
 
@@ -725,8 +724,8 @@ const ReportsPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <h1>Reports</h1>
         <p>
-          Legacy report launcher parity for key LEXIS report actions. Access is driven by granted
-          actions from session capabilities.
+          API-first report generation for key LEXIS actions with automatic legacy fallback while
+          Spring report endpoints are being finalized.
         </p>
       </Column>
 
@@ -827,7 +826,7 @@ const ReportsPage: FC = () => {
           <h2 className="dashboard-title">{selectedReport.title}</h2>
           <p>{selectedReport.description}</p>
           <p>
-            Legacy endpoint: <code>{selectedReport.legacyPath}</code>
+            Fallback endpoint: <code>{selectedReport.legacyPath}</code>
           </p>
           <p>
             Required action: <code>{selectedReport.action}</code>
@@ -904,10 +903,10 @@ const ReportsPage: FC = () => {
           <div className="legacy-search-actions">
             <Button
               kind="primary"
-              onClick={onOpenReportRequest}
-              disabled={!canPerform(selectedReport.action)}
+              onClick={() => void onOpenReportRequest()}
+              disabled={!canPerform(selectedReport.action) || isGenerating}
             >
-              Open Report Request
+              {isGenerating ? 'Generating Report...' : 'Generate Report'}
             </Button>
             <Button kind="ghost" onClick={onResetFields}>
               Reset Fields
@@ -920,11 +919,20 @@ const ReportsPage: FC = () => {
           )}
           <TextArea
             id="reportRequestPreviewUrl"
-            labelText="Generated Request URL"
+            labelText="Legacy Fallback Request URL"
             value={previewUrl}
             readOnly
             rows={6}
           />
+          {legacyFallbackMessage && (
+            <InlineNotification
+              kind="info"
+              title="Legacy Fallback"
+              subtitle={legacyFallbackMessage}
+              lowContrast
+              onCloseButtonClick={() => setLegacyFallbackMessage('')}
+            />
+          )}
           {launchErrorMessage && (
             <InlineNotification
               kind="error"
