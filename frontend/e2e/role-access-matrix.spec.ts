@@ -27,6 +27,8 @@ const ROUTE_ACCESS_ASSERTIONS: RouteAccessAssertion[] = [
   { role: 'READ_ONLY', path: '/provincial/application', allowed: true, heading: /provincial application search/i },
   { role: 'READ_ONLY', path: '/provincial/application/create', allowed: false },
   { role: 'READ_ONLY', path: '/indian-reserve/permit/create', allowed: false },
+  { role: 'READ_ONLY', path: '/admin/uploads', allowed: false },
+  { role: 'READ_ONLY', path: '/admin/policies', allowed: false },
   { role: 'APPLICATION_APPROVER', path: '/provincial/review', allowed: true, heading: /provincial review/i },
   { role: 'APPLICATION_APPROVER', path: '/provincial/exemption', allowed: false },
   { role: 'EXEMPTION_APPROVER', path: '/provincial/exemption', allowed: true, heading: /provincial exemption search/i },
@@ -35,6 +37,8 @@ const ROUTE_ACCESS_ASSERTIONS: RouteAccessAssertion[] = [
   { role: 'PROVINCIAL_SUBMITTER', path: '/provincial/review', allowed: false },
   { role: 'FEDERAL_SUBMITTER', path: '/federal', allowed: true, heading: /federal application search/i },
   { role: 'FEDERAL_SUBMITTER', path: '/provincial/permit', allowed: false },
+  { role: 'ADMIN', path: '/admin/uploads', allowed: true, heading: /upload center/i },
+  { role: 'ADMIN', path: '/admin/policies', allowed: true, heading: /policy center/i },
 ]
 
 const expectUnauthorized = async (page: Page): Promise<void> => {

@@ -265,18 +265,18 @@ const AdminPoliciesPage: FC = () => {
             Policy administration is API-first and falls back to local draft storage only when
             policy endpoints are unavailable in the current environment.
           </p>
-          <p>
+          <div>
             Fee policy access:{' '}
             <Tag type={canManageFeePolicy ? 'green' : 'red'}>
               {canManageFeePolicy ? 'Allowed' : 'Not Granted'}
             </Tag>
-          </p>
-          <p>
+          </div>
+          <div>
             FIL policy access:{' '}
             <Tag type={canManageFilPolicy ? 'green' : 'red'}>
               {canManageFilPolicy ? 'Allowed' : 'Not Granted'}
             </Tag>
-          </p>
+          </div>
           {isLoadingPolicies && <InlineLoading description="Loading policy data..." />}
           {successMessage && (
             <InlineNotification
