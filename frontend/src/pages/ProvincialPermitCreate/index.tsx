@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -19,6 +19,7 @@ import {
   saveCreateDraft,
   type CreateDraftRecord,
 } from '@/service/create-draft-service'
+import { submitProvincialPermitCreate } from '@/service/create-submit-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
 
 type ProvincialPermitCreateForm = {
@@ -67,13 +68,41 @@ const mapDraftPayloadToForm = (payload: unknown): ProvincialPermitCreateForm => 
   }
 }
 
+const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialPermitCreateForm => {
+  return {
+    ...INITIAL_FORM,
+    permitNumber: query.get('permitNumber') ?? '',
+    applicationNumber: query.get('applicationNumber') ?? '',
+    packageNumber: query.get('packageNumber') ?? '',
+    exemptionNumber: query.get('exemptionNumber') ?? '',
+    permitStatus: query.get('permitStatus') ?? query.get('permitStatusCode') ?? '',
+    applicantClientNumber:
+      query.get('applicantClientNumber') ?? query.get('agentClientNumber') ?? '',
+    ownerClientNumber: query.get('ownerClientNumber') ?? '',
+    issueDate: query.get('issueDate') ?? '',
+    estimatedShippingDate: query.get('estimatedShippingDate') ?? '',
+    permitVolume: query.get('permitVolume') ?? '',
+    remarks: query.get('remarks') ?? '',
+  }
+}
+
+type PageStatus = {
+  kind: 'success' | 'error'
+  title: string
+  message: string
+}
+
 const ProvincialPermitCreatePage: FC = () => {
-  const [form, setForm] = useState<ProvincialPermitCreateForm>(INITIAL_FORM)
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const initialForm = useMemo(() => buildInitialFormFromQuery(searchParams), [searchParams])
+  const [form, setForm] = useState<ProvincialPermitCreateForm>(() => initialForm)
   const [permitStatuses, setPermitStatuses] = useState<SearchOption[]>(FALLBACK_PERMIT_STATUSES)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
-  const [status, setStatus] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+  const [status, setStatus] = useState<PageStatus | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -105,18 +134,70 @@ const ProvincialPermitCreatePage: FC = () => {
   const onSaveDraft = () => {
     setStatus(null)
     if (hasValidationError) {
-      setStatus({ kind: 'error', message: 'Please fix validation errors before saving the draft.' })
+      setStatus({
+        kind: 'error',
+        title: 'Validation Error',
+        message: 'Please fix validation errors before saving the draft.',
+      })
       return
     }
 
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
-    setStatus({ kind: 'success', message: `Draft ${saved.id} saved.` })
+    setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
+  }
+
+  const onSubmit = async () => {
+    if (hasValidationError) {
+      setStatus({
+        kind: 'error',
+        title: 'Validation Error',
+        message: 'Please fix validation errors before submitting.',
+      })
+      return
+    }
+
+    setStatus(null)
+    setIsSubmitting(true)
+    try {
+      const result = await submitProvincialPermitCreate(form)
+      const responseMessage = [result.message, ...result.errors, ...result.warnings]
+        .filter((value) => value.trim().length > 0)
+        .join(' ')
+
+      if (result.success) {
+        if (result.createdId) {
+          navigate(`/provincial/permit/${encodeURIComponent(result.createdId)}`)
+          return
+        }
+        setStatus({
+          kind: 'success',
+          title: 'Permit Submitted',
+          message: responseMessage || 'Permit submitted successfully.',
+        })
+        return
+      }
+
+      setStatus({
+        kind: 'error',
+        title: 'Submit Failed',
+        message: responseMessage || 'Unable to submit provincial permit create request.',
+      })
+    } catch (error) {
+      console.error(error)
+      setStatus({
+        kind: 'error',
+        title: 'Submit Failed',
+        message: 'Unable to submit provincial permit create request.',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
     setForm(mapDraftPayloadToForm(record.payload))
-    setStatus({ kind: 'success', message: `Draft ${record.id} loaded.` })
+    setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
   }
 
   const onDeleteDraft = (draftId: string) => {
@@ -124,6 +205,7 @@ const ProvincialPermitCreatePage: FC = () => {
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({
       kind: wasDeleted ? 'success' : 'error',
+      title: wasDeleted ? 'Draft Deleted' : 'Draft Delete Failed',
       message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
     })
   }
@@ -139,7 +221,7 @@ const ProvincialPermitCreatePage: FC = () => {
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind={status.kind}
-            title={status.kind === 'success' ? 'Draft Saved' : 'Validation Error'}
+            title={status.title}
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
@@ -253,7 +335,14 @@ const ProvincialPermitCreatePage: FC = () => {
             <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
               Save Draft
             </Button>
-            <Button kind="secondary" onClick={() => setForm(INITIAL_FORM)}>
+            <Button
+              kind="primary"
+              onClick={() => void onSubmit()}
+              disabled={hasValidationError || isSubmitting}
+            >
+              Submit
+            </Button>
+            <Button kind="secondary" onClick={() => setForm(initialForm)}>
               Reset
             </Button>
             <Link className="cds--link" to="/provincial/permit">

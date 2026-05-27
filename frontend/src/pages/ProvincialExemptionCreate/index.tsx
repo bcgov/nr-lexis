@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -23,6 +23,7 @@ import {
   fetchProvincialExemptionOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import { submitProvincialExemptionCreate } from '@/service/create-submit-service'
 
 type ProvincialExemptionCreateForm = {
   exemptionNumber: string
@@ -92,6 +93,67 @@ const parseExemptionPrefillState = (rawState: unknown): ExemptionCreatePrefillSt
   }
 }
 
+const parseExemptionPrefillQuery = (query: URLSearchParams): ExemptionCreatePrefillState | null => {
+  const applicationsFromCsv = (query.get('applications') ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+  const fallbackSingleApplication = (query.get('applicationNumber') ?? '').trim()
+  const selectedApplicationNumbers =
+    applicationsFromCsv.length > 0
+      ? applicationsFromCsv
+      : fallbackSingleApplication
+        ? [fallbackSingleApplication]
+        : []
+
+  if (selectedApplicationNumbers.length === 0) {
+    return null
+  }
+
+  return {
+    selectedApplicationNumbers,
+    ownerClientNumber: query.get('ownerClientNumber') ?? '',
+    applicantClientNumber:
+      query.get('applicantClientNumber') ?? query.get('agentClientNumber') ?? '',
+  }
+}
+
+const mergePrefillState = (
+  locationPrefill: ExemptionCreatePrefillState | null,
+  queryPrefill: ExemptionCreatePrefillState | null,
+): ExemptionCreatePrefillState | null => {
+  if (!locationPrefill && !queryPrefill) {
+    return null
+  }
+
+  if (locationPrefill && !queryPrefill) {
+    return locationPrefill
+  }
+
+  if (!locationPrefill && queryPrefill) {
+    return queryPrefill
+  }
+
+  const mergedApplicationNumbers = Array.from(
+    new Set([
+      ...(locationPrefill?.selectedApplicationNumbers ?? []),
+      ...(queryPrefill?.selectedApplicationNumbers ?? []),
+    ]),
+  )
+
+  if (mergedApplicationNumbers.length === 0) {
+    return null
+  }
+
+  return {
+    selectedApplicationNumbers: mergedApplicationNumbers,
+    ownerClientNumber:
+      locationPrefill?.ownerClientNumber || queryPrefill?.ownerClientNumber || '',
+    applicantClientNumber:
+      locationPrefill?.applicantClientNumber || queryPrefill?.applicantClientNumber || '',
+  }
+}
+
 const buildInitialForm = (
   prefillState: ExemptionCreatePrefillState | null,
 ): ProvincialExemptionCreateForm => {
@@ -113,9 +175,24 @@ const buildInitialForm = (
   }
 }
 
+type PageStatus = {
+  kind: 'success' | 'error'
+  title: string
+  message: string
+}
+
 const ProvincialExemptionCreatePage: FC = () => {
+  const navigate = useNavigate()
   const location = useLocation()
-  const prefillState = useMemo(() => parseExemptionPrefillState(location.state), [location.state])
+  const [searchParams] = useSearchParams()
+  const prefillState = useMemo(
+    () =>
+      mergePrefillState(
+        parseExemptionPrefillState(location.state),
+        parseExemptionPrefillQuery(searchParams),
+      ),
+    [location.state, searchParams],
+  )
   const initialForm = useMemo(() => buildInitialForm(prefillState), [prefillState])
   const [form, setForm] = useState<ProvincialExemptionCreateForm>(initialForm)
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>(FALLBACK_EXEMPTION_TYPES)
@@ -125,7 +202,8 @@ const ProvincialExemptionCreatePage: FC = () => {
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
-  const [status, setStatus] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+  const [status, setStatus] = useState<PageStatus | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const mapDraftPayloadToForm = (payload: unknown): ProvincialExemptionCreateForm => {
     if (!payload || typeof payload !== 'object') {
@@ -152,6 +230,10 @@ const ProvincialExemptionCreatePage: FC = () => {
     void loadOptions()
   }, [])
 
+  useEffect(() => {
+    setForm(initialForm)
+  }, [initialForm])
+
   const hasValidationError = useMemo(() => {
     return (
       !normalizeText(form.exemptionNumber) ||
@@ -169,18 +251,73 @@ const ProvincialExemptionCreatePage: FC = () => {
   const onSaveDraft = () => {
     setStatus(null)
     if (hasValidationError) {
-      setStatus({ kind: 'error', message: 'Please fix validation errors before saving the draft.' })
+      setStatus({
+        kind: 'error',
+        title: 'Validation Error',
+        message: 'Please fix validation errors before saving the draft.',
+      })
       return
     }
 
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
-    setStatus({ kind: 'success', message: `Draft ${saved.id} saved.` })
+    setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
+  }
+
+  const onSubmit = async () => {
+    if (hasValidationError) {
+      setStatus({
+        kind: 'error',
+        title: 'Validation Error',
+        message: 'Please fix validation errors before submitting.',
+      })
+      return
+    }
+
+    setStatus(null)
+    setIsSubmitting(true)
+    try {
+      const result = await submitProvincialExemptionCreate({
+        ...form,
+        linkedApplicationNumbers: prefillState?.selectedApplicationNumbers ?? [form.applicationNumber],
+      })
+      const responseMessage = [result.message, ...result.errors, ...result.warnings]
+        .filter((value) => value.trim().length > 0)
+        .join(' ')
+
+      if (result.success) {
+        if (result.createdId) {
+          navigate(`/provincial/exemption/${encodeURIComponent(result.createdId)}`)
+          return
+        }
+        setStatus({
+          kind: 'success',
+          title: 'Exemption Submitted',
+          message: responseMessage || 'Exemption submitted successfully.',
+        })
+        return
+      }
+
+      setStatus({
+        kind: 'error',
+        title: 'Submit Failed',
+        message: responseMessage || 'Unable to submit provincial exemption create request.',
+      })
+    } catch (error) {
+      console.error(error)
+      setStatus({
+        kind: 'error',
+        title: 'Submit Failed',
+        message: 'Unable to submit provincial exemption create request.',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
     setForm(mapDraftPayloadToForm(record.payload))
-    setStatus({ kind: 'success', message: `Draft ${record.id} loaded.` })
+    setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
   }
 
   const onDeleteDraft = (draftId: string) => {
@@ -188,6 +325,7 @@ const ProvincialExemptionCreatePage: FC = () => {
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({
       kind: wasDeleted ? 'success' : 'error',
+      title: wasDeleted ? 'Draft Deleted' : 'Draft Delete Failed',
       message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
     })
   }
@@ -215,7 +353,7 @@ const ProvincialExemptionCreatePage: FC = () => {
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind={status.kind}
-            title={status.kind === 'success' ? 'Draft Saved' : 'Validation Error'}
+            title={status.title}
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
@@ -320,6 +458,13 @@ const ProvincialExemptionCreatePage: FC = () => {
           <div className="legacy-search-actions">
             <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
               Save Draft
+            </Button>
+            <Button
+              kind="primary"
+              onClick={() => void onSubmit()}
+              disabled={hasValidationError || isSubmitting}
+            >
+              Submit
             </Button>
             <Button kind="secondary" onClick={() => setForm(initialForm)}>
               Reset

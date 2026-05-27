@@ -132,6 +132,27 @@ const ProvincialApplicationDetailsPage: FC = () => {
     )
   }, [detail?.remarks, remarkFilter])
 
+  const onCreateOffer = useCallback(() => {
+    if (!detail) {
+      return
+    }
+
+    const params = new URLSearchParams()
+    params.set('applicationNumber', String(detail.applicationNumber))
+    if (detail.packages.length === 1 && detail.packages[0]?.packageNumber) {
+      params.set('packageNumber', detail.packages[0].packageNumber)
+    }
+    if (detail.ownerClientNumber) {
+      params.set('offeringClientNumber', detail.ownerClientNumber)
+    }
+    if (detail.orgUnitNumber !== null) {
+      params.set('region', String(detail.orgUnitNumber))
+    }
+
+    const query = params.toString()
+    navigate(query.length > 0 ? `/provincial/offers/create?${query}` : '/provincial/offers/create')
+  }, [detail, navigate])
+
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
@@ -199,6 +220,20 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   onClick={() => navigate(withCurrentSearch('/provincial/offers'))}
                 >
                   Open Offers Search
+                </Button>
+                <Button
+                  kind="primary"
+                  size="sm"
+                  disabled={
+                    !canPerform('/offersSearch') ||
+                    !canPerform('createOffer') ||
+                    !detail.canCreateOffers ||
+                    detail.industryUser ||
+                    detail.packages.length === 0
+                  }
+                  onClick={onCreateOffer}
+                >
+                  Create Offer
                 </Button>
               </div>
             </Tile>

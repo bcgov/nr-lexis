@@ -1,0 +1,319 @@
+import axios from 'axios'
+import apiService from '@/service/api-service'
+
+export type CreateSubmissionResult = {
+  success: boolean
+  message: string
+  createdId?: string
+  errors: string[]
+  warnings: string[]
+}
+
+type LegacyCreateResponse = {
+  success?: boolean
+  valid?: boolean
+  message?: string
+  errors?: unknown
+  warnings?: unknown
+  applicationNumber?: unknown
+  exemptionNumber?: unknown
+  exportPurchaseOfferNumber?: unknown
+  offerNumber?: unknown
+  permitNumber?: unknown
+}
+
+const asString = (value: unknown): string | undefined => {
+  if (value === null || value === undefined) {
+    return undefined
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : undefined
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  return undefined
+}
+
+const asStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.map((item) => asString(item)).filter((item): item is string => Boolean(item))
+}
+
+const toUrlEncodedParams = (payload: Record<string, string | undefined>): URLSearchParams => {
+  const params = new URLSearchParams()
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value !== undefined && value.trim().length > 0) {
+      params.append(key, value)
+    }
+  })
+  return params
+}
+
+const parseCreateResponse = (
+  payload: LegacyCreateResponse,
+  createdIdKeyCandidates: Array<keyof LegacyCreateResponse>,
+): CreateSubmissionResult => {
+  const success = payload.success ?? payload.valid ?? false
+  const message = asString(payload.message) ?? (success ? 'Saved successfully.' : 'Save failed.')
+  const errors = asStringArray(payload.errors)
+  const warnings = asStringArray(payload.warnings)
+  const createdId = createdIdKeyCandidates
+    .map((key) => asString(payload[key]))
+    .find((value) => Boolean(value))
+
+  return {
+    success,
+    message,
+    createdId,
+    errors,
+    warnings,
+  }
+}
+
+const buildFailureResult = (defaultMessage: string, error: unknown): CreateSubmissionResult => {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status
+    const responsePayload = (error.response?.data ?? null) as LegacyCreateResponse | null
+    const responseMessage = asString(responsePayload?.message)
+    const responseErrors = asStringArray(responsePayload?.errors)
+
+    let message = defaultMessage
+    if (status === 404 || status === 405) {
+      message =
+        'Submit endpoint is not available in this environment yet. Keep using drafts until backend create APIs are deployed.'
+    } else if (responseMessage) {
+      message = responseMessage
+    } else if (status) {
+      message = `${defaultMessage} (status ${status}).`
+    }
+
+    return {
+      success: false,
+      message,
+      createdId: undefined,
+      errors: responseErrors,
+      warnings: [],
+    }
+  }
+
+  return {
+    success: false,
+    message: defaultMessage,
+    createdId: undefined,
+    errors: [],
+    warnings: [],
+  }
+}
+
+const postLegacyForm = async (
+  path: string,
+  payload: Record<string, string | undefined>,
+): Promise<LegacyCreateResponse> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .post<LegacyCreateResponse>(path, toUrlEncodedParams(payload), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+  return response.data ?? {}
+}
+
+export type ProvincialApplicationCreateSubmission = {
+  applicationNumber: string
+  packageNumber: string
+  ownerClientNumber: string
+  applicantClientNumber: string
+  productTypeCode: string
+  exemptionType: string
+  region: string
+  receivedDate: string
+  listingDate: string
+  comments: string
+}
+
+export const submitProvincialApplicationCreate = async (
+  form: ProvincialApplicationCreateSubmission,
+): Promise<CreateSubmissionResult> => {
+  try {
+    const payload = await postLegacyForm('/lexis/applicationDetailsRPC', {
+      actionMapping: 'addApplication',
+      applicationNumber: form.applicationNumber,
+      packageNumber: form.packageNumber,
+      ownerClientNumber: form.ownerClientNumber,
+      applicantClientNumber: form.applicantClientNumber,
+      agentClientNumber: form.applicantClientNumber,
+      productTypeCode: form.productTypeCode,
+      exemptionType: form.exemptionType,
+      exemptionTypeCode: form.exemptionType,
+      region: form.region,
+      orgUnitNumber: form.region,
+      receivedDate: form.receivedDate,
+      listingDate: form.listingDate,
+      comments: form.comments,
+      additionalRemarks: form.comments,
+    })
+    return parseCreateResponse(payload, ['applicationNumber'])
+  } catch (error) {
+    return buildFailureResult('Unable to submit provincial application create request.', error)
+  }
+}
+
+export type ProvincialExemptionCreateSubmission = {
+  exemptionNumber: string
+  applicationNumber: string
+  linkedApplicationNumbers: string[]
+  exemptionTypeCode: string
+  exemptionStatusCode: string
+  ownerClientNumber: string
+  applicantClientNumber: string
+  approvalDate: string
+  expiryDate: string
+  approvedVolume: string
+  otherConditions: string
+}
+
+export const submitProvincialExemptionCreate = async (
+  form: ProvincialExemptionCreateSubmission,
+): Promise<CreateSubmissionResult> => {
+  try {
+    const payload = await postLegacyForm('/lexis/exemptionDetailsRPC', {
+      actionMapping: 'addExemption',
+      exemptionNumber: form.exemptionNumber,
+      applicationNumber: form.applicationNumber,
+      applications: form.linkedApplicationNumbers.join(','),
+      exemptionTypeCode: form.exemptionTypeCode,
+      exemptionStatusCode: form.exemptionStatusCode,
+      ownerClientNumber: form.ownerClientNumber,
+      applicantClientNumber: form.applicantClientNumber,
+      agentClientNumber: form.applicantClientNumber,
+      approvalDate: form.approvalDate,
+      expiryDate: form.expiryDate,
+      approvedVolume: form.approvedVolume,
+      otherConditions: form.otherConditions,
+    })
+    return parseCreateResponse(payload, ['exemptionNumber'])
+  } catch (error) {
+    return buildFailureResult('Unable to submit provincial exemption create request.', error)
+  }
+}
+
+export type ProvincialOfferCreateSubmission = {
+  offerNumber: string
+  applicationNumber: string
+  packageNumber: string
+  offeringClientNumber: string
+  region: string
+  purchaseOfferAmount: string
+  purchaseOfferDate: string
+  offerEndDate: string
+  pickupLocation: string
+  offerCondition: string
+}
+
+export const submitProvincialOfferCreate = async (
+  form: ProvincialOfferCreateSubmission,
+): Promise<CreateSubmissionResult> => {
+  try {
+    const payload = await postLegacyForm('/lexis/offerDetailsRPC', {
+      actionMapping: 'addOffer',
+      offerNumber: form.offerNumber,
+      exportPurchaseOfferNumber: form.offerNumber,
+      applicationNumber: form.applicationNumber,
+      packageNumber: form.packageNumber,
+      offeringClientNumber: form.offeringClientNumber,
+      clientNumber: form.offeringClientNumber,
+      region: form.region,
+      purchaseOfferAmount: form.purchaseOfferAmount,
+      purchaseOfferDate: form.purchaseOfferDate,
+      offerEndDate: form.offerEndDate,
+      pickupLocation: form.pickupLocation,
+      offerCondition: form.offerCondition,
+      offerRemark: form.offerCondition,
+    })
+    return parseCreateResponse(payload, ['exportPurchaseOfferNumber', 'offerNumber'])
+  } catch (error) {
+    return buildFailureResult('Unable to submit provincial offer create request.', error)
+  }
+}
+
+export type ProvincialPermitCreateSubmission = {
+  permitNumber: string
+  applicationNumber: string
+  packageNumber: string
+  exemptionNumber: string
+  permitStatus: string
+  applicantClientNumber: string
+  ownerClientNumber: string
+  issueDate: string
+  estimatedShippingDate: string
+  permitVolume: string
+  remarks: string
+}
+
+export const submitProvincialPermitCreate = async (
+  form: ProvincialPermitCreateSubmission,
+): Promise<CreateSubmissionResult> => {
+  try {
+    const payload = await postLegacyForm('/lexis/rpc/permit-details/add-permit', {
+      actionMapping: 'addPermit',
+      permitNumber: form.permitNumber,
+      permitStatus: form.permitStatus,
+      permitIssueDate: form.issueDate,
+      estimatedShippingDate: form.estimatedShippingDate,
+      exemptionNumber: form.exemptionNumber,
+      permitTotalVolume: form.permitVolume,
+      ownerClientNumber: form.ownerClientNumber,
+      agentClientNumber: form.applicantClientNumber,
+      permitRemarks: form.remarks,
+      oicApplicationNumber: form.applicationNumber,
+      packageNumber: form.packageNumber,
+    })
+    return parseCreateResponse(payload, ['permitNumber'])
+  } catch (error) {
+    return buildFailureResult('Unable to submit provincial permit create request.', error)
+  }
+}
+
+export type IndianReservePermitCreateSubmission = {
+  permitNumber: string
+  packageNumber: string
+  clientNumber: string
+  applicationDate: string
+  permitIssueDate: string
+  estimatedShippingDate: string
+  destinationCountry: string
+  transportTypeCode: string
+  transportName: string
+  portOfExport: string
+  remarks: string
+}
+
+export const submitIndianReservePermitCreate = async (
+  form: IndianReservePermitCreateSubmission,
+): Promise<CreateSubmissionResult> => {
+  try {
+    const payload = await postLegacyForm('/lexis/indianReservePermitDetails', {
+      actionMapping: 'saveReservePermit',
+      applicationNumber: '0',
+      clientNumber: form.clientNumber,
+      permitNumber: form.permitNumber,
+      applicationDate: form.applicationDate,
+      permitIssueDate: form.permitIssueDate,
+      estShippingDate: form.estimatedShippingDate,
+      destinationCountry: form.destinationCountry,
+      transportTypeCode: form.transportTypeCode,
+      transportName: form.transportName,
+      portOfExport: form.portOfExport,
+      permitRemarks: form.remarks,
+      packageNumber: form.packageNumber,
+    })
+    return parseCreateResponse(payload, ['permitNumber'])
+  } catch (error) {
+    return buildFailureResult('Unable to submit indigenous reserve permit create request.', error)
+  }
+}

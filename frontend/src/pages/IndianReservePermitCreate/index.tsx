@@ -1,5 +1,5 @@
 import { useMemo, useState, type FC } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import { isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
@@ -9,6 +9,7 @@ import {
   saveCreateDraft,
   type CreateDraftRecord,
 } from '@/service/create-draft-service'
+import { submitIndianReservePermitCreate } from '@/service/create-submit-service'
 
 type IndianReservePermitCreateForm = {
   permitNumber: string
@@ -51,12 +52,39 @@ const mapDraftPayloadToForm = (payload: unknown): IndianReservePermitCreateForm 
   }
 }
 
+const buildInitialFormFromQuery = (query: URLSearchParams): IndianReservePermitCreateForm => {
+  return {
+    ...INITIAL_FORM,
+    permitNumber: query.get('permitNumber') ?? '',
+    packageNumber: query.get('packageNumber') ?? '',
+    clientNumber: query.get('clientNumber') ?? '',
+    applicationDate: query.get('applicationDate') ?? '',
+    permitIssueDate: query.get('permitIssueDate') ?? '',
+    estimatedShippingDate: query.get('estimatedShippingDate') ?? query.get('estShippingDate') ?? '',
+    destinationCountry: query.get('destinationCountry') ?? '',
+    transportTypeCode: query.get('transportTypeCode') ?? '',
+    transportName: query.get('transportName') ?? '',
+    portOfExport: query.get('portOfExport') ?? '',
+    remarks: query.get('remarks') ?? '',
+  }
+}
+
+type PageStatus = {
+  kind: 'success' | 'error'
+  title: string
+  message: string
+}
+
 const IndianReservePermitCreatePage: FC = () => {
-  const [form, setForm] = useState<IndianReservePermitCreateForm>(INITIAL_FORM)
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const initialForm = useMemo(() => buildInitialFormFromQuery(searchParams), [searchParams])
+  const [form, setForm] = useState<IndianReservePermitCreateForm>(() => initialForm)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
-  const [status, setStatus] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+  const [status, setStatus] = useState<PageStatus | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const hasValidationError = useMemo(() => {
     return (
@@ -72,18 +100,70 @@ const IndianReservePermitCreatePage: FC = () => {
   const onSaveDraft = () => {
     setStatus(null)
     if (hasValidationError) {
-      setStatus({ kind: 'error', message: 'Please fix validation errors before saving the draft.' })
+      setStatus({
+        kind: 'error',
+        title: 'Validation Error',
+        message: 'Please fix validation errors before saving the draft.',
+      })
       return
     }
 
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
-    setStatus({ kind: 'success', message: `Draft ${saved.id} saved.` })
+    setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
+  }
+
+  const onSubmit = async () => {
+    if (hasValidationError) {
+      setStatus({
+        kind: 'error',
+        title: 'Validation Error',
+        message: 'Please fix validation errors before submitting.',
+      })
+      return
+    }
+
+    setStatus(null)
+    setIsSubmitting(true)
+    try {
+      const result = await submitIndianReservePermitCreate(form)
+      const responseMessage = [result.message, ...result.errors, ...result.warnings]
+        .filter((value) => value.trim().length > 0)
+        .join(' ')
+
+      if (result.success) {
+        if (result.createdId) {
+          navigate(`/indian-reserve/permit/${encodeURIComponent(result.createdId)}`)
+          return
+        }
+        setStatus({
+          kind: 'success',
+          title: 'Permit Submitted',
+          message: responseMessage || 'Indigenous reserve permit submitted successfully.',
+        })
+        return
+      }
+
+      setStatus({
+        kind: 'error',
+        title: 'Submit Failed',
+        message: responseMessage || 'Unable to submit indigenous reserve permit create request.',
+      })
+    } catch (error) {
+      console.error(error)
+      setStatus({
+        kind: 'error',
+        title: 'Submit Failed',
+        message: 'Unable to submit indigenous reserve permit create request.',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
     setForm(mapDraftPayloadToForm(record.payload))
-    setStatus({ kind: 'success', message: `Draft ${record.id} loaded.` })
+    setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
   }
 
   const onDeleteDraft = (draftId: string) => {
@@ -91,6 +171,7 @@ const IndianReservePermitCreatePage: FC = () => {
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({
       kind: wasDeleted ? 'success' : 'error',
+      title: wasDeleted ? 'Draft Deleted' : 'Draft Delete Failed',
       message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
     })
   }
@@ -106,7 +187,7 @@ const IndianReservePermitCreatePage: FC = () => {
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind={status.kind}
-            title={status.kind === 'success' ? 'Draft Saved' : 'Validation Error'}
+            title={status.title}
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
@@ -211,7 +292,14 @@ const IndianReservePermitCreatePage: FC = () => {
             <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
               Save Draft
             </Button>
-            <Button kind="secondary" onClick={() => setForm(INITIAL_FORM)}>
+            <Button
+              kind="primary"
+              onClick={() => void onSubmit()}
+              disabled={hasValidationError || isSubmitting}
+            >
+              Submit
+            </Button>
+            <Button kind="secondary" onClick={() => setForm(initialForm)}>
               Reset
             </Button>
             <Link className="cds--link" to="/indian-reserve">

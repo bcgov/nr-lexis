@@ -113,6 +113,37 @@ const ProvincialExemptionDetailsPage: FC = () => {
     )
   }, [detail?.remarks, remarkFilter])
 
+  const isActiveExemption = useMemo(() => {
+    if (!detail) {
+      return false
+    }
+    return (
+      normalizeText(detail.exemptionStatusDescription ?? '') === 'active' ||
+      normalizeText(detail.exemptionStatusCode ?? '') === 'active'
+    )
+  }, [detail])
+
+  const onCreatePermit = useCallback(() => {
+    if (!detail) {
+      return
+    }
+
+    const params = new URLSearchParams()
+    params.set('exemptionNumber', detail.exemptionNumber)
+    if (detail.applicationNumber !== null) {
+      params.set('applicationNumber', String(detail.applicationNumber))
+    }
+    if (detail.ownerClientNumber) {
+      params.set('ownerClientNumber', detail.ownerClientNumber)
+    }
+    if (detail.agentClientNumber) {
+      params.set('applicantClientNumber', detail.agentClientNumber)
+    }
+
+    const query = params.toString()
+    navigate(query.length > 0 ? `/provincial/permit/create?${query}` : '/provincial/permit/create')
+  }, [detail, navigate])
+
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
@@ -178,6 +209,18 @@ const ProvincialExemptionDetailsPage: FC = () => {
                   onClick={() => navigate(withCurrentSearch('/provincial/permit'))}
                 >
                   Open Permit Search
+                </Button>
+                <Button
+                  kind="primary"
+                  size="sm"
+                  disabled={
+                    !canPerform('/permitSearch') ||
+                    !canPerform('createPermit') ||
+                    !isActiveExemption
+                  }
+                  onClick={onCreatePermit}
+                >
+                  Create Permit
                 </Button>
               </div>
             </Tile>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -23,6 +23,7 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import { submitProvincialApplicationCreate } from '@/service/create-submit-service'
 
 type ProvincialApplicationCreateForm = {
   applicationNumber: string
@@ -78,15 +79,50 @@ const mapDraftPayloadToForm = (payload: unknown): ProvincialApplicationCreateFor
   }
 }
 
+const buildInitialFormFromQuery = (
+  query: URLSearchParams,
+): ProvincialApplicationCreateForm => {
+  return {
+    ...INITIAL_FORM,
+    applicationNumber: query.get('applicationNumber') ?? '',
+    packageNumber: query.get('packageNumber') ?? '',
+    ownerClientNumber: query.get('ownerClientNumber') ?? '',
+    applicantClientNumber: query.get('applicantClientNumber') ?? '',
+    productTypeCode: query.get('productTypeCode') ?? '',
+    exemptionType: query.get('exemptionType') ?? query.get('exemptionTypeCode') ?? '',
+    region: query.get('region') ?? query.get('orgUnitNumber') ?? '',
+    receivedDate: query.get('receivedDate') ?? '',
+    listingDate: query.get('listingDate') ?? '',
+    comments: query.get('comments') ?? '',
+  }
+}
+
+type PageStatus = {
+  kind: 'success' | 'error'
+  title: string
+  message: string
+}
+
 const ProvincialApplicationCreatePage: FC = () => {
-  const [form, setForm] = useState<ProvincialApplicationCreateForm>(INITIAL_FORM)
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const initialForm = useMemo(
+    () => buildInitialFormFromQuery(searchParams),
+    [searchParams],
+  )
+  const [form, setForm] = useState<ProvincialApplicationCreateForm>(initialForm)
   const [productTypes, setProductTypes] = useState<SearchOption[]>(FALLBACK_PRODUCT_TYPES)
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>(FALLBACK_EXEMPTION_TYPES)
   const [regions, setRegions] = useState<SearchOption[]>(FALLBACK_REGIONS)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
-  const [status, setStatus] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+  const [status, setStatus] = useState<PageStatus | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    setForm(initialForm)
+  }, [initialForm])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -121,18 +157,70 @@ const ProvincialApplicationCreatePage: FC = () => {
   const onSaveDraft = () => {
     setStatus(null)
     if (hasValidationError) {
-      setStatus({ kind: 'error', message: 'Please fix validation errors before saving the draft.' })
+      setStatus({
+        kind: 'error',
+        title: 'Validation Error',
+        message: 'Please fix validation errors before saving the draft.',
+      })
       return
     }
 
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
-    setStatus({ kind: 'success', message: `Draft ${saved.id} saved.` })
+    setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
+  }
+
+  const onSubmit = async () => {
+    if (hasValidationError) {
+      setStatus({
+        kind: 'error',
+        title: 'Validation Error',
+        message: 'Please fix validation errors before submitting.',
+      })
+      return
+    }
+
+    setStatus(null)
+    setIsSubmitting(true)
+    try {
+      const result = await submitProvincialApplicationCreate(form)
+      const responseMessage = [result.message, ...result.errors, ...result.warnings]
+        .filter((value) => value.trim().length > 0)
+        .join(' ')
+
+      if (result.success) {
+        if (result.createdId) {
+          navigate(`/provincial/application/${encodeURIComponent(result.createdId)}`)
+          return
+        }
+        setStatus({
+          kind: 'success',
+          title: 'Application Submitted',
+          message: responseMessage || 'Application submitted successfully.',
+        })
+        return
+      }
+
+      setStatus({
+        kind: 'error',
+        title: 'Submit Failed',
+        message: responseMessage || 'Unable to submit provincial application create request.',
+      })
+    } catch (error) {
+      console.error(error)
+      setStatus({
+        kind: 'error',
+        title: 'Submit Failed',
+        message: 'Unable to submit provincial application create request.',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
     setForm(mapDraftPayloadToForm(record.payload))
-    setStatus({ kind: 'success', message: `Draft ${record.id} loaded.` })
+    setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
   }
 
   const onDeleteDraft = (draftId: string) => {
@@ -140,6 +228,7 @@ const ProvincialApplicationCreatePage: FC = () => {
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({
       kind: wasDeleted ? 'success' : 'error',
+      title: wasDeleted ? 'Draft Deleted' : 'Draft Delete Failed',
       message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
     })
   }
@@ -155,7 +244,7 @@ const ProvincialApplicationCreatePage: FC = () => {
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind={status.kind}
-            title={status.kind === 'success' ? 'Draft Saved' : 'Validation Error'}
+            title={status.title}
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
@@ -263,6 +352,13 @@ const ProvincialApplicationCreatePage: FC = () => {
           <div className="legacy-search-actions">
             <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
               Save Draft
+            </Button>
+            <Button
+              kind="primary"
+              onClick={() => void onSubmit()}
+              disabled={hasValidationError || isSubmitting}
+            >
+              Submit
             </Button>
             <Button kind="secondary" onClick={() => setForm(INITIAL_FORM)}>
               Reset
