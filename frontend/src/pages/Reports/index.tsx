@@ -22,6 +22,12 @@ import {
 import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import { buildLegacyReportUrl, runReport } from '@/service/report-service'
+import {
+  fetchProvincialApplicationOptions,
+  fetchProvincialExemptionOptions,
+  fetchProvincialPermitOptions,
+  type SearchOption,
+} from '@/service/search-options-service'
 
 type ReportDefinition = {
   id: string
@@ -568,6 +574,16 @@ const parseBooleanFlag = (value: string | null): boolean => {
   return normalized === '1' || normalized === 'true' || normalized === 'yes'
 }
 
+const mergeOptions = (...optionGroups: SearchOption[][]): SearchOption[] => {
+  const byCode = new Map<string, SearchOption>()
+  optionGroups.flat().forEach((option) => {
+    if (!byCode.has(option.value)) {
+      byCode.set(option.value, option)
+    }
+  })
+  return Array.from(byCode.values())
+}
+
 const parseRecordParam = (value: string | null): Record<string, string> => {
   if (!value) {
     return {}
@@ -706,6 +722,9 @@ const ReportsPage: FC = () => {
   const [selectedActionById, setSelectedActionById] = useState<Record<string, string>>({
     [initialReport.id]: initialSelectedAction,
   })
+  const [reportFieldOptionsByKey, setReportFieldOptionsByKey] = useState<
+    Record<string, SearchOption[]>
+  >({})
   const [launchErrorMessage, setLaunchErrorMessage] = useState('')
   const [legacyFallbackMessage, setLegacyFallbackMessage] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -766,6 +785,30 @@ const ReportsPage: FC = () => {
     setSearchParams,
     showGrantedOnly,
   ])
+
+  useEffect(() => {
+    const loadReportFieldOptions = async () => {
+      const [applicationOptions, exemptionOptions, permitOptions] = await Promise.all([
+        fetchProvincialApplicationOptions(),
+        fetchProvincialExemptionOptions(),
+        fetchProvincialPermitOptions(),
+      ])
+
+      const exemptionTypeOptions = mergeOptions(
+        applicationOptions.exemptionTypes,
+        exemptionOptions.exemptionTypes,
+      )
+
+      setReportFieldOptionsByKey({
+        exemptionType: exemptionTypeOptions,
+        exemptionTypeCode: exemptionTypeOptions,
+        exemptionStatus: exemptionOptions.exemptionStatuses,
+        permitStatus: permitOptions.permitStatuses,
+      })
+    }
+
+    void loadReportFieldOptions()
+  }, [])
 
   const previewUrl = useMemo(() => {
     return buildLegacyReportUrl(
@@ -911,8 +954,8 @@ const ReportsPage: FC = () => {
             </Button>
           </div>
           <p className="landing-help-text">
-            TODO: replace free-text code inputs with backend-driven report option endpoints when
-            Spring report APIs are ported.
+            Some code fields now load backend options where available. Remaining free-text report
+            code fields will be switched as additional option endpoints are exposed.
           </p>
         </Tile>
       </Column>
@@ -1000,8 +1043,33 @@ const ReportsPage: FC = () => {
             {selectedReport.fields.map((field) => {
               const currentValue =
                 selectedReportValues[field.key] ?? (field.key === 'outputFormat' ? 'PDF' : '')
+              const dynamicOptions = reportFieldOptionsByKey[field.key] ?? []
+              const shouldRenderSelect = field.type === 'select' || dynamicOptions.length > 0
 
-              if (field.type === 'select') {
+              if (shouldRenderSelect) {
+                const providedOptions =
+                  dynamicOptions.length > 0
+                    ? dynamicOptions
+                    : (field.options ?? [{ value: '', label: 'Select an option' }])
+                const hasCurrentValue = providedOptions.some(
+                  (option) => option.value === currentValue,
+                )
+                const resolvedOptions = hasCurrentValue
+                  ? providedOptions
+                  : currentValue
+                    ? [
+                        ...providedOptions,
+                        {
+                          value: currentValue,
+                          label: `Custom (${currentValue})`,
+                        },
+                      ]
+                    : providedOptions
+                const optionsWithFallback =
+                  dynamicOptions.length > 0
+                    ? [{ value: '', label: 'All values' }, ...resolvedOptions]
+                    : resolvedOptions
+
                 return (
                   <Select
                     key={field.key}
@@ -1010,7 +1078,7 @@ const ReportsPage: FC = () => {
                     value={currentValue}
                     onChange={(event) => onUpdateField(field.key, event.target.value)}
                   >
-                    {(field.options ?? [{ value: '', label: 'Select an option' }]).map((option) => (
+                    {optionsWithFallback.map((option) => (
                       <SelectItem key={option.value} value={option.value} text={option.label} />
                     ))}
                   </Select>
