@@ -20,6 +20,8 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcRespo
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRequestDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
@@ -36,6 +38,7 @@ import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -55,6 +58,7 @@ class PermitDetailsRpcControllerTest {
   @Mock private ObjectProvider<PermitDetailsRpcService> serviceProvider;
   @Mock private PermitDetailsRpcService service;
   @Mock private LexisSessionService sessionService;
+  @Mock private HttpServletRequest request;
 
   private PermitDetailsRpcController controller;
 
@@ -452,6 +456,121 @@ class PermitDetailsRpcControllerTest {
             new java.math.BigDecimal("1.25"),
             new java.math.BigDecimal("12.00"),
             "idir\\jsmith");
+  }
+
+  @Test
+  void addPermitShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameter("permitNumber")).thenReturn("7000123");
+    when(request.getParameter("permitStatus")).thenReturn("ACT");
+    when(request.getParameter("permitSubmitDate")).thenReturn("2026-05-27");
+    when(request.getParameter("permitIssueDate")).thenReturn("2026-05-27");
+    when(request.getParameter("permitExpiryDate")).thenReturn("2026-06-27");
+    when(request.getParameter("exemptionNumber")).thenReturn("EX-700");
+    when(request.getParameter("region")).thenReturn("1835");
+    when(request.getParameter("permitTotalVolume")).thenReturn("100.0");
+    when(request.getParameter("permitTotalPieces")).thenReturn("25");
+
+    PermitMutationRpcResponseDto dto =
+        new PermitMutationRpcResponseDto(
+            true,
+            "The permit was saved successfully.",
+            List.of(),
+            List.of(),
+            7000123L,
+            "ACT",
+            null,
+            false,
+            false,
+            null);
+    when(service.addPermit(org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(dto);
+
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.addPermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service)
+        .addPermit(
+            org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+  }
+
+  @Test
+  void updatePermitShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameter("permitNumber")).thenReturn("7000123");
+    when(request.getParameter("permitStatus")).thenReturn("PPD");
+
+    PermitMutationRpcResponseDto dto =
+        new PermitMutationRpcResponseDto(
+            true,
+            "The permit was updated successfully.",
+            List.of(),
+            List.of(),
+            7000123L,
+            "PPD",
+            "RCP-100",
+            false,
+            false,
+            null);
+    when(service.updatePermit(org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(dto);
+
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service)
+        .updatePermit(
+            org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+  }
+
+  @Test
+  void updateShippingShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameter("permitNumber")).thenReturn("7000123");
+    when(request.getParameter("estimatedShippingDate")).thenReturn("2026-06-10");
+
+    PermitMutationRpcResponseDto dto =
+        new PermitMutationRpcResponseDto(
+            true,
+            "The permit was saved successfully.",
+            List.of(),
+            List.of(),
+            7000123L,
+            "ACT",
+            null,
+            false,
+            false,
+            null);
+    when(service.updateShipping(org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(dto);
+
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updateShipping(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service)
+        .updateShipping(
+            org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
   }
 
   @Test

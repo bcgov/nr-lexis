@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDate;
@@ -50,6 +51,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_APPL_FILE_DETAILS(?,?)";
   private static final String FIND_INVOICE_BY_ID = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICE_BY_ID(?,?,?)";
   private static final String FIND_INVOICES_BY_PERMIT = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICES_BY_PERMIT(?,?)";
+  private static final String INSERT_PERMIT_DETAIL =
+      LEXIS_GROUP_9_PACKAGE + "INSERT_PERMIT_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String UPDATE_PERMIT_DETAIL =
+      LEXIS_GROUP_9_PACKAGE + "UPDATE_PERMIT_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String INSERT_SALES_INVOICE =
       LEXIS_GROUP_9_PACKAGE + "INSERT_SALES_INVOICE(?,?,?,?,?,?,?,?,?,?)";
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
@@ -362,6 +367,122 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .toList();
   }
 
+  public Optional<PermitMutationRow> findPermitMutationByPermitNumber(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        FIND_PERMIT_DETAIL_BY_ID,
+        cs -> cs.setString(1, permitNumber.toString()),
+        2,
+        this::mapPermitMutationRow);
+  }
+
+  public Optional<PermitMutationRow> insertPermitDetail(PermitMutationRow row, String entryUserId) {
+    String normalizedEntryUserId = trim(entryUserId);
+    if (row == null || normalizedEntryUserId == null) {
+      return Optional.empty();
+    }
+
+    Timestamp now = new Timestamp(System.currentTimeMillis());
+    return queryCursorSingle(
+        INSERT_PERMIT_DETAIL,
+        cs -> {
+          cs.setString(1, trim(row.destinationCompanyName()));
+          cs.setString(2, trim(row.transportName()));
+          setDateOrNull(cs, 3, row.estimatedShippingDate());
+          cs.setString(4, trim(row.otherPortOfExport()));
+          setDateOrNull(cs, 5, row.applicationDate());
+          setDateOrNull(cs, 6, row.receivedDate());
+          setDateOrNull(cs, 7, row.permitIssueDate());
+          cs.setString(8, trim(row.receiptNumber()));
+          setDateOrNull(cs, 9, row.expiryDate());
+          setDoubleOrNull(cs, 10, row.permitVolume());
+          setLongOrNull(cs, 11, row.numberOfPieces());
+          setLongOrNull(cs, 12, row.feeInLieuVolume());
+          cs.setString(13, trim(row.federalPermitNumber()));
+          cs.setString(14, trim(row.remarks()));
+          cs.setString(15, normalizedEntryUserId);
+          cs.setTimestamp(16, now);
+          cs.setNull(17, Types.VARCHAR);
+          cs.setNull(18, Types.TIMESTAMP);
+          cs.setString(19, trim(row.transportTypeCode()));
+          cs.setString(20, trim(row.scaleMethodCode()));
+          cs.setString(21, trim(row.clientNumber()));
+          cs.setString(22, trim(row.clientLocationCode()));
+          cs.setString(23, trim(row.agentNumber()));
+          cs.setString(24, trim(row.agentLocationCode()));
+          cs.setString(25, trim(row.exemptionNumber()));
+          setLongOrNull(cs, 26, row.orgUnitNo());
+          cs.setString(27, trim(row.portOfExportCode()));
+          cs.setString(28, trim(row.permitStatusCode()));
+          cs.setString(29, trim(row.countryCode()));
+          cs.setString(30, trim(row.growthTypeCode()));
+          setDoubleOrNull(cs, 31, row.overrideFee());
+          cs.setString(32, trim(row.overrideComment()));
+          setLongOrNull(cs, 33, row.oicApplicationNumber());
+          setLongOrNull(cs, 34, row.oicRequestPieces());
+          setDoubleOrNull(cs, 35, row.oicRequestVolume());
+          cs.setString(36, trim(row.productTypeCode()));
+          cs.setNull(37, Types.TIMESTAMP);
+        },
+        38,
+        this::mapPermitMutationRow);
+  }
+
+  public boolean updatePermitDetail(
+      PermitMutationRow row, String updateUserId, LocalDate twoElevenImplementDate) {
+    String normalizedUpdateUserId = trim(updateUserId);
+    if (row == null || row.permitNumber() == null || row.permitNumber() < 1 || normalizedUpdateUserId == null) {
+      return false;
+    }
+
+    Timestamp now = new Timestamp(System.currentTimeMillis());
+    return executeProcedure(
+        UPDATE_PERMIT_DETAIL,
+        cs -> {
+          cs.setLong(1, row.permitNumber());
+          cs.setString(2, trim(row.destinationCompanyName()));
+          cs.setString(3, trim(row.transportName()));
+          setDateOrNull(cs, 4, row.estimatedShippingDate());
+          cs.setString(5, trim(row.otherPortOfExport()));
+          setDateOrNull(cs, 6, row.applicationDate());
+          setDateOrNull(cs, 7, row.receivedDate());
+          setDateOrNull(cs, 8, row.permitIssueDate());
+          cs.setString(9, trim(row.receiptNumber()));
+          setDateOrNull(cs, 10, row.expiryDate());
+          setDoubleOrNull(cs, 11, row.permitVolume());
+          setLongOrNull(cs, 12, row.numberOfPieces());
+          setLongOrNull(cs, 13, row.feeInLieuVolume());
+          cs.setString(14, trim(row.federalPermitNumber()));
+          cs.setString(15, trim(row.remarks()));
+          cs.setString(16, trim(row.entryUserId()));
+          cs.setTimestamp(17, row.entryTimestamp());
+          cs.setString(18, normalizedUpdateUserId);
+          cs.setTimestamp(19, now);
+          cs.setString(20, trim(row.transportTypeCode()));
+          cs.setString(21, trim(row.scaleMethodCode()));
+          cs.setString(22, trim(row.clientNumber()));
+          cs.setString(23, trim(row.clientLocationCode()));
+          cs.setString(24, trim(row.agentNumber()));
+          cs.setString(25, trim(row.agentLocationCode()));
+          cs.setString(26, trim(row.exemptionNumber()));
+          setLongOrNull(cs, 27, row.orgUnitNo());
+          cs.setString(28, trim(row.portOfExportCode()));
+          cs.setString(29, trim(row.permitStatusCode()));
+          cs.setString(30, trim(row.growthTypeCode()));
+          cs.setString(31, trim(row.countryCode()));
+          setDoubleOrNull(cs, 32, row.overrideFee());
+          cs.setString(33, trim(row.overrideComment()));
+          setLongOrNull(cs, 34, row.oicApplicationNumber());
+          setLongOrNull(cs, 35, row.oicRequestPieces());
+          setDoubleOrNull(cs, 36, row.oicRequestVolume());
+          cs.setString(37, trim(row.productTypeCode()));
+          setDateOrNull(cs, 38, twoElevenImplementDate);
+        });
+  }
+
   public Optional<SalesInvoiceRow> insertSalesInvoice(
       Long permitNumber,
       String salesInvoiceNumber,
@@ -586,7 +707,11 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_NAME")),
                 getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
                 getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
-                getString(rs, "END_USE_SORT")));
+                getString(rs, "END_USE_SORT"),
+                getString(rs, "OWNER_CLIENT_NUMBER"),
+                getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
+                getString(rs, "AGENT_CLIENT_NUMBER"),
+                getString(rs, "AGENT_CLIENT_LOCATION_CODE")));
   }
 
   public List<EndUsePairRow> findEndUsesByApplicationNumber(Long applicationNumber) {
@@ -805,6 +930,78 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         exportPermitNumber);
   }
 
+  private PermitMutationRow mapPermitMutationRow(ResultSet rs) {
+    return new PermitMutationRow(
+        getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+        getString(rs, "DESTINATION_COMPANY_NAME"),
+        getString(rs, "TRANSPORT_NAME"),
+        getLocalDate(rs, "ESTIMATED_SHIPPING_DATE"),
+        getString(rs, "OTHER_PORT_OF_EXPORT"),
+        getLocalDate(rs, "APPLICATION_DATE"),
+        getLocalDate(rs, "RECEIVED_DATE"),
+        getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
+        getString(rs, "RECEIPT_NUMBER"),
+        getLocalDate(rs, "EXPIRY_DATE"),
+        getDouble(rs, "PERMIT_VOLUME"),
+        getLong(rs, "NUMBER_OF_PIECES"),
+        getLong(rs, "FEE_IN_LIEU_VOLUME"),
+        getString(rs, "FEDERAL_PERMIT_NUMBER"),
+        getString(rs, "REMARKS"),
+        getString(rs, "ENTRY_USERID"),
+        getTimestamp(rs, "ENTRY_TIMESTAMP"),
+        getString(rs, "EXPORT_TRANSPORT_TYPE_CODE"),
+        getString(rs, "EXPORT_SCALE_METHOD_CODE"),
+        getString(rs, "CLIENT_NUMBER"),
+        getString(rs, "CLIENT_LOCN_CODE"),
+        getString(rs, "AGENT_NUMBER"),
+        getString(rs, "AGENT_LOCN_CODE"),
+        getString(rs, "EXEMPTION_NUMBER"),
+        getLong(rs, "ORG_UNIT_NO"),
+        getString(rs, "EXPORT_PORT_OF_EXPORT_CODE"),
+        getString(rs, "EXPORT_PERMIT_STATUS_CODE"),
+        getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+        getString(rs, "EXPORT_COUNTRY_CODE"),
+        getDouble(rs, "OVERRIDE_FEE"),
+        getString(rs, "OVERRIDE_COMMENT"),
+        getLong(rs, "OIC_APPLICATION_NUMBER"),
+        getLong(rs, "OIC_REQUEST_PIECES"),
+        getDouble(rs, "OIC_REQUEST_VOLUME"),
+        getString(rs, "EXPORT_PRODUCT_TYPE_CODE"));
+  }
+
+  private Timestamp getTimestamp(ResultSet rs, String column) {
+    try {
+      return rs.getTimestamp(column);
+    } catch (SQLException ex) {
+      return null;
+    }
+  }
+
+  private void setDateOrNull(java.sql.CallableStatement cs, int index, LocalDate value)
+      throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.TIMESTAMP);
+      return;
+    }
+    cs.setTimestamp(index, Timestamp.valueOf(value.atStartOfDay()));
+  }
+
+  private void setLongOrNull(java.sql.CallableStatement cs, int index, Long value) throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.NUMERIC);
+      return;
+    }
+    cs.setLong(index, value);
+  }
+
+  private void setDoubleOrNull(java.sql.CallableStatement cs, int index, Double value) throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.NUMERIC);
+      return;
+    }
+    cs.setDouble(index, value);
+  }
+
   private String safeFileName(String value) {
     if (value == null || value.isBlank()) {
       return "";
@@ -869,7 +1066,34 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String regionName,
       String productTypeCode,
       String growthTypeCode,
-      String endUseSort) {}
+      String endUseSort,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String agentClientNumber,
+      String agentClientLocationCode) {
+
+    public ApplicationInfoRow(
+        Long applicationNumber,
+        String exemptionNumber,
+        Long orgUnitNo,
+        String regionName,
+        String productTypeCode,
+        String growthTypeCode,
+        String endUseSort) {
+      this(
+          applicationNumber,
+          exemptionNumber,
+          orgUnitNo,
+          regionName,
+          productTypeCode,
+          growthTypeCode,
+          endUseSort,
+          null,
+          null,
+          null,
+          null);
+    }
+  }
 
   public record PackageDetailsRow(
       String packageNumber,
@@ -893,6 +1117,43 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       double exportValue,
       double currencyConversionRate,
       double feeInLieu) {}
+
+  public record PermitMutationRow(
+      Long permitNumber,
+      String destinationCompanyName,
+      String transportName,
+      LocalDate estimatedShippingDate,
+      String otherPortOfExport,
+      LocalDate applicationDate,
+      LocalDate receivedDate,
+      LocalDate permitIssueDate,
+      String receiptNumber,
+      LocalDate expiryDate,
+      Double permitVolume,
+      Long numberOfPieces,
+      Long feeInLieuVolume,
+      String federalPermitNumber,
+      String remarks,
+      String entryUserId,
+      Timestamp entryTimestamp,
+      String transportTypeCode,
+      String scaleMethodCode,
+      String clientNumber,
+      String clientLocationCode,
+      String agentNumber,
+      String agentLocationCode,
+      String exemptionNumber,
+      Long orgUnitNo,
+      String portOfExportCode,
+      String permitStatusCode,
+      String growthTypeCode,
+      String countryCode,
+      Double overrideFee,
+      String overrideComment,
+      Long oicApplicationNumber,
+      Long oicRequestPieces,
+      Double oicRequestVolume,
+      String productTypeCode) {}
 
   public record GbmsInvoiceHistoryRow(
       String invoiceNumber,

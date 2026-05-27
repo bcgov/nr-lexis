@@ -19,6 +19,8 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitGbmsInvoiceHistoryItemRpcRespons
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRequestDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
@@ -41,6 +43,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
@@ -431,6 +434,176 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.get(0).printedDate()).isEqualTo("03/01/2026");
     assertThat(response.get(0).entryDate()).isEqualTo("03/01/2026");
     assertThat(response.get(0).updateDate()).isEqualTo("03/02/2026");
+  }
+
+  @Test
+  void addPermitShouldPersistWhenInputIsValid() {
+    PermitMutationRequestDto request =
+        new PermitMutationRequestDto(
+            "7000123",
+            "ACT",
+            "2026-05-27",
+            "2026-05-27",
+            "2026-06-27",
+            null,
+            "EX-700",
+            "Acme Lumber",
+            "US",
+            "TRUCK",
+            "Hauler 1",
+            "2026-06-01",
+            "VA",
+            null,
+            null,
+            null,
+            "S",
+            "100.0",
+            "25",
+            "1835",
+            "00070001",
+            "01",
+            "00070002",
+            "02",
+            null,
+            null,
+            null,
+            null,
+            "S",
+            "T",
+            null,
+            null,
+            null);
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(Optional.of(exemptionDetail("EX-700", 55.5d)));
+    when(repository.findApplicationNumbersByExemptionNumber("EX-700")).thenReturn(List.of());
+    when(repository.insertPermitDetail(org.mockito.ArgumentMatchers.any(PermitMutationRow.class), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            Optional.of(
+                new PermitMutationRow(
+                    7000123L,
+                    "Acme Lumber",
+                    "Hauler 1",
+                    LocalDate.of(2026, 6, 1),
+                    null,
+                    LocalDate.of(2026, 5, 27),
+                    LocalDate.of(2026, 5, 27),
+                    LocalDate.of(2026, 5, 27),
+                    null,
+                    LocalDate.of(2026, 6, 27),
+                    100.0d,
+                    25L,
+                    0L,
+                    null,
+                    null,
+                    "idir\\jsmith",
+                    null,
+                    "TRUCK",
+                    "W",
+                    "00070001",
+                    "01",
+                    "00070002",
+                    "02",
+                    "EX-700",
+                    1835L,
+                    "VA",
+                    "ACT",
+                    "S",
+                    "US",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "T")));
+
+    PermitMutationRpcResponseDto response = service.addPermit(request, "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.permitNumber()).isEqualTo(7000123L);
+    assertThat(response.permitStatus()).isEqualTo("ACT");
+  }
+
+  @Test
+  void updateShippingShouldRejectInvalidDate() {
+    PermitMutationRequestDto request =
+        new PermitMutationRequestDto(
+            "7000123",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "bad-date",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                new PermitMutationRow(
+                    7000123L,
+                    null,
+                    null,
+                    null,
+                    null,
+                    LocalDate.of(2026, 5, 1),
+                    LocalDate.of(2026, 5, 1),
+                    LocalDate.of(2026, 5, 2),
+                    null,
+                    LocalDate.of(2026, 6, 1),
+                    10.0d,
+                    10L,
+                    0L,
+                    null,
+                    null,
+                    "idir\\jsmith",
+                    null,
+                    "TRUCK",
+                    "W",
+                    "00070001",
+                    "01",
+                    null,
+                    null,
+                    "EX-700",
+                    1835L,
+                    null,
+                    "ACT",
+                    "S",
+                    "US",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "T")));
+
+    PermitMutationRpcResponseDto response = service.updateShipping(request, "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Invalid Date Format");
   }
 
   @Test

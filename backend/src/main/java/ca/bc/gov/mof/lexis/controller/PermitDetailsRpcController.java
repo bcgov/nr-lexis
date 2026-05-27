@@ -14,6 +14,8 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcRespo
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRequestDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
@@ -25,6 +27,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.nio.charset.StandardCharsets;
@@ -313,6 +316,51 @@ public class PermitDetailsRpcController {
         service.getGbmsInvoiceHistory(receiptNumber, permitNumber, isReadOnlyUser(authentication)));
   }
 
+  @PostMapping("/add-permit")
+  public ResponseEntity<PermitMutationRpcResponseDto> addPermit(
+      HttpServletRequest request, Authentication authentication) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for add permit");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.addPermit(
+            buildPermitMutationRequest(request),
+            authentication == null ? null : authentication.getName()));
+  }
+
+  @PostMapping("/update-permit")
+  public ResponseEntity<PermitMutationRpcResponseDto> updatePermit(
+      HttpServletRequest request, Authentication authentication) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for update permit");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.updatePermit(
+            buildPermitMutationRequest(request),
+            authentication == null ? null : authentication.getName()));
+  }
+
+  @PostMapping("/update-shipping")
+  public ResponseEntity<PermitMutationRpcResponseDto> updateShipping(
+      HttpServletRequest request, Authentication authentication) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for update shipping");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.updateShipping(
+            buildPermitMutationRequest(request),
+            authentication == null ? null : authentication.getName()));
+  }
+
   @PostMapping("/add-invoice")
   public ResponseEntity<PermitPersistenceRpcResponseDto> addInvoice(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,
@@ -474,6 +522,53 @@ public class PermitDetailsRpcController {
 
     boolean removed = service.removeInvoiceDocument(parsePositiveLong(documentId));
     return ResponseEntity.ok(new RemoveDocumentResponseDto(Boolean.toString(removed)));
+  }
+
+  private PermitMutationRequestDto buildPermitMutationRequest(HttpServletRequest request) {
+    return new PermitMutationRequestDto(
+        firstParam(request, "permitNumber"),
+        firstParam(request, "permitStatus"),
+        firstParam(request, "permitSubmitDate"),
+        firstParam(request, "permitIssueDate"),
+        firstParam(request, "permitExpiryDate"),
+        firstParam(request, "permitRequestDate"),
+        firstParam(request, "exemptionNumber"),
+        firstParam(request, "destinationCompanyName"),
+        firstParam(request, "destinationCountry"),
+        firstParam(request, "transportType"),
+        firstParam(request, "transportName"),
+        firstParam(request, "estimatedShippingDate"),
+        firstParam(request, "portOfExport"),
+        firstParam(request, "otherPortOfExport"),
+        firstParam(request, "permitReceiptNo", "receiptNumber"),
+        firstParam(request, "permitRemarks"),
+        firstParam(request, "permitGrowthType", "growthType"),
+        firstParam(request, "permitTotalVolume"),
+        firstParam(request, "permitNumberOfPieces", "permitTotalPieces"),
+        firstParam(request, "orgUnitNo", "region"),
+        firstParam(request, "ownerClientNumber"),
+        firstParam(request, "ownerClientLocation"),
+        firstParam(request, "agentClientNumber"),
+        firstParam(request, "agentClientLocation"),
+        firstParam(request, "oicApplicationNumber"),
+        firstParam(request, "oicRegion"),
+        firstParam(request, "oicPermitTotalPieces"),
+        firstParam(request, "oicPermitTotalVolume"),
+        firstParam(request, "packageAgeClass"),
+        firstParam(request, "packageProductType"),
+        firstParam(request, "overrideInd"),
+        firstParam(request, "overrideFee"),
+        firstParam(request, "overrideComment"));
+  }
+
+  private String firstParam(HttpServletRequest request, String... names) {
+    for (String name : names) {
+      String value = request.getParameter(name);
+      if (value != null && !value.isBlank()) {
+        return value;
+      }
+    }
+    return null;
   }
 
   private Long parsePositiveLong(String rawValue) {

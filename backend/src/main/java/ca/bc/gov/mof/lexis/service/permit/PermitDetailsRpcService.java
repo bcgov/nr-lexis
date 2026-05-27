@@ -20,6 +20,8 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRequestDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
@@ -89,6 +91,12 @@ public interface PermitDetailsRpcService {
       BigDecimal invoiceConversionRate,
       BigDecimal invoiceFeeInLieu,
       String userId);
+
+  PermitMutationRpcResponseDto addPermit(PermitMutationRequestDto request, String userId);
+
+  PermitMutationRpcResponseDto updatePermit(PermitMutationRequestDto request, String userId);
+
+  PermitMutationRpcResponseDto updateShipping(PermitMutationRequestDto request, String userId);
 
   PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber);
 

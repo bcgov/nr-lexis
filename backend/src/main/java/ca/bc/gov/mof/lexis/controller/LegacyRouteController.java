@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -51,6 +52,9 @@ public class LegacyRouteController {
   private static final String ACTION_GET_OIC_PACKAGE_LIST = "getOICPackageList";
   private static final String ACTION_GET_SCALES_FOR_PACKAGE = "getScalesForPackage";
   private static final String ACTION_CHECK_PERMIT_NUMBER = "checkPermitNumber";
+  private static final String ACTION_ADD_PERMIT = "addPermit";
+  private static final String ACTION_UPDATE_PERMIT = "updatePermit";
+  private static final String ACTION_UPDATE_SHIPPING = "updateShipping";
   private static final String ACTION_GET_APPLICATION_LIST = "getApplicationList";
   private static final String ACTION_GET_AVAILABLE_APPLICATION_LIST = "getAvailableApplicationList";
   private static final String ACTION_GET_AVAILABLE_PACKAGE_LIST = "getAvailablePackageList";
@@ -475,6 +479,7 @@ public class LegacyRouteController {
       @RequestParam(name = "fileID", required = false) String fileId,
       @RequestParam(name = "fileName", required = false) String fileName,
       @RequestParam(name = "documentId", required = false) String documentId,
+      HttpServletRequest request,
       Authentication authentication) {
     if (ACTION_GET_PERMIT_SUMMARY.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPermitSummary(
@@ -511,6 +516,15 @@ public class LegacyRouteController {
     }
     if (ACTION_CHECK_PERMIT_NUMBER.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.checkPermitNumber(permitNumber);
+    }
+    if (ACTION_ADD_PERMIT.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.addPermit(request, authentication);
+    }
+    if (ACTION_UPDATE_PERMIT.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.updatePermit(request, authentication);
+    }
+    if (ACTION_UPDATE_SHIPPING.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.updateShipping(request, authentication);
     }
     if (ACTION_GET_APPLICATION_LIST.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getApplicationList(permitNumber);
