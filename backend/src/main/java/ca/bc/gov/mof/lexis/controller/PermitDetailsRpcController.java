@@ -6,8 +6,12 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseD
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
@@ -186,6 +190,57 @@ public class PermitDetailsRpcController {
     }
 
     return ResponseEntity.ok(service.getCountryList());
+  }
+
+  @GetMapping("/check-permit-number")
+  public ResponseEntity<PermitNumberAvailabilityRpcResponseDto> checkPermitNumber(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for check permit number");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.checkPermitNumber(permitNumber));
+  }
+
+  @GetMapping("/application-list")
+  public ResponseEntity<PermitApplicationListRpcResponseDto> getApplicationList(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for application list");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getApplicationList(permitNumber));
+  }
+
+  @GetMapping("/available-application-list")
+  public ResponseEntity<PermitAvailableApplicationListRpcResponseDto> getAvailableApplicationList(
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      @RequestParam(name = "selectedApplications", required = false) String selectedApplications) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for available application list");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.getAvailableApplicationList(exemptionNumber, selectedApplications));
+  }
+
+  @GetMapping("/available-package-list")
+  public ResponseEntity<PermitAvailablePackageListRpcResponseDto> getAvailablePackageList(
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      @RequestParam(name = "selectedPackages", required = false) String selectedPackages) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for available package list");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getAvailablePackageList(exemptionNumber, selectedPackages));
   }
 
   @GetMapping("/invoices-for-permit")

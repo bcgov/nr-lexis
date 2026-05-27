@@ -1,6 +1,9 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
@@ -10,6 +13,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
@@ -28,6 +32,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsR
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageCandidateRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
@@ -352,6 +357,96 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .map(row -> new PermitCountryItemRpcResponseDto(nonNull(row.description()), nonNull(row.code())))
             .toList();
     return new PermitCountryListRpcResponseDto(countries);
+  }
+
+  @Override
+  public PermitNumberAvailabilityRpcResponseDto checkPermitNumber(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return new PermitNumberAvailabilityRpcResponseDto(true);
+    }
+    return new PermitNumberAvailabilityRpcResponseDto(
+        repository.findPermitPolicyContextByPermitNumber(permitNumber).isEmpty());
+  }
+
+  @Override
+  public PermitApplicationListRpcResponseDto getApplicationList(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return new PermitApplicationListRpcResponseDto(List.of());
+    }
+
+    List<String> applications =
+        repository.findApplicationNumbersByPermitNumber(permitNumber).stream()
+            .map(String::valueOf)
+            .toList();
+    return new PermitApplicationListRpcResponseDto(applications);
+  }
+
+  @Override
+  public PermitAvailableApplicationListRpcResponseDto getAvailableApplicationList(
+      String exemptionNumber, String selectedApplicationsCsv) {
+    String normalizedExemptionNumber = trimToNull(exemptionNumber);
+    if (normalizedExemptionNumber == null) {
+      return new PermitAvailableApplicationListRpcResponseDto(
+          List.of(), "No applications are currently available.");
+    }
+
+    Set<String> selectedApplications = parseCsvSet(selectedApplicationsCsv);
+    Map<Long, Boolean> hasAssignedPermitByApplication = new LinkedHashMap<>();
+    for (PackageCandidateRow row : repository.findPackagesByExemptionNumber(normalizedExemptionNumber)) {
+      if (row.applicationNumber() == null || row.applicationNumber() < 1) {
+        continue;
+      }
+      boolean hasAssignedPermit =
+          row.exportPermitNumber() != null && row.exportPermitNumber() > 0;
+      hasAssignedPermitByApplication.merge(
+          row.applicationNumber(), hasAssignedPermit, Boolean::logicalOr);
+    }
+
+    List<String> applicationList =
+        hasAssignedPermitByApplication.entrySet().stream()
+            .filter(entry -> !entry.getValue())
+            .map(entry -> String.valueOf(entry.getKey()))
+            .filter(applicationNumber -> !selectedApplications.contains(applicationNumber))
+            .sorted()
+            .toList();
+
+    return new PermitAvailableApplicationListRpcResponseDto(
+        applicationList,
+        applicationList.isEmpty() ? "No applications are currently available." : null);
+  }
+
+  @Override
+  public PermitAvailablePackageListRpcResponseDto getAvailablePackageList(
+      String exemptionNumber, String selectedPackagesCsv) {
+    String normalizedExemptionNumber = trimToNull(exemptionNumber);
+    if (normalizedExemptionNumber == null) {
+      return new PermitAvailablePackageListRpcResponseDto(
+          List.of(), "No applications are currently available.");
+    }
+
+    Set<String> selectedPackages = parseCsvSet(selectedPackagesCsv);
+    List<String> packageList = new ArrayList<>();
+    for (Long applicationNumber :
+        repository.findApplicationNumbersByExemptionNumber(normalizedExemptionNumber)) {
+      for (PackageCandidateRow row : repository.findPackagesByApplicationNumber(applicationNumber)) {
+        String packageNumber = trimToNull(row.packageNumber());
+        if (packageNumber == null) {
+          continue;
+        }
+        if (selectedPackages.contains(packageNumber)) {
+          continue;
+        }
+        if (row.exportPermitNumber() != null && row.exportPermitNumber() > 0) {
+          continue;
+        }
+        packageList.add(packageNumber);
+      }
+    }
+
+    List<String> distinctPackages = packageList.stream().distinct().sorted().toList();
+    return new PermitAvailablePackageListRpcResponseDto(
+        distinctPackages,
+        distinctPackages.isEmpty() ? "No applications are currently available." : null);
   }
 
   @Override
@@ -914,6 +1009,19 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     } catch (NumberFormatException ex) {
       return null;
     }
+  }
+
+  private Set<String> parseCsvSet(String csv) {
+    String normalizedCsv = trimToNull(csv);
+    if (normalizedCsv == null) {
+      return Set.of();
+    }
+
+    return normalizedCsv.lines()
+        .flatMap(line -> java.util.Arrays.stream(line.split(",")))
+        .map(String::trim)
+        .filter(token -> !token.isEmpty())
+        .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
   }
 
   private String trimToNull(String value) {

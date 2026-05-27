@@ -2,12 +2,16 @@ package ca.bc.gov.mof.lexis.service.permit;
 
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
@@ -50,6 +54,16 @@ public interface PermitDetailsRpcService {
   PermitHasApplicationsRpcResponseDto getPermitHasApplications(Long permitNumber);
 
   PermitCountryListRpcResponseDto getCountryList();
+
+  PermitNumberAvailabilityRpcResponseDto checkPermitNumber(Long permitNumber);
+
+  PermitApplicationListRpcResponseDto getApplicationList(Long permitNumber);
+
+  PermitAvailableApplicationListRpcResponseDto getAvailableApplicationList(
+      String exemptionNumber, String selectedApplicationsCsv);
+
+  PermitAvailablePackageListRpcResponseDto getAvailablePackageList(
+      String exemptionNumber, String selectedPackagesCsv);
 
   PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber);
 

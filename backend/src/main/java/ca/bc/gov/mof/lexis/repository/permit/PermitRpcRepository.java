@@ -25,10 +25,16 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PRM(?,?)";
   private static final String FIND_PACKAGES_BY_PERMIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_PERMIT(?,?)";
+  private static final String FIND_PACKAGES_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
+  private static final String FIND_PACKAGES_BY_EXEMPTION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_EXMP(?,?)";
   private static final String FIND_PACKAGE_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
+  private static final String FIND_APPLICATION_BY_EXEMPTION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_EXEMPTION(?,?)";
   private static final String FIND_END_USE_BY_APP = LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
   private static final String FIND_END_USE_BY_PACK = LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_PACK(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
@@ -110,6 +116,66 @@ public class PermitRpcRepository extends OracleRepositorySupport {
             rs -> getString(rs, "PACKAGE_NUMBER"))
         .stream()
         .filter(packageNumber -> packageNumber != null && !packageNumber.isBlank())
+        .distinct()
+        .sorted()
+        .toList();
+  }
+
+  public List<Long> findApplicationNumbersByPermitNumber(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+            FIND_PACKAGES_BY_PERMIT,
+            cs -> cs.setString(1, permitNumber.toString()),
+            2,
+            rs -> getLong(rs, "APPLICATION_NUMBER"))
+        .stream()
+        .filter(applicationNumber -> applicationNumber != null && applicationNumber > 0)
+        .distinct()
+        .sorted()
+        .toList();
+  }
+
+  public List<PackageCandidateRow> findPackagesByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+        FIND_PACKAGES_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        this::mapPackageCandidateRow);
+  }
+
+  public List<PackageCandidateRow> findPackagesByExemptionNumber(String exemptionNumber) {
+    String normalizedExemptionNumber = trim(exemptionNumber);
+    if (normalizedExemptionNumber == null) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+        FIND_PACKAGES_BY_EXEMPTION,
+        cs -> cs.setString(1, normalizedExemptionNumber),
+        2,
+        this::mapPackageCandidateRow);
+  }
+
+  public List<Long> findApplicationNumbersByExemptionNumber(String exemptionNumber) {
+    String normalizedExemptionNumber = trim(exemptionNumber);
+    if (normalizedExemptionNumber == null) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+            FIND_APPLICATION_BY_EXEMPTION,
+            cs -> cs.setString(1, normalizedExemptionNumber),
+            2,
+            rs -> getLong(rs, "APPLICATION_NUMBER"))
+        .stream()
+        .filter(applicationNumber -> applicationNumber != null && applicationNumber > 0)
         .distinct()
         .sorted()
         .toList();
@@ -634,6 +700,18 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         firstNonNull(getString(rs, "EXPORT_ATTACHMENT_TYPE_CODE"), ""));
   }
 
+  private PackageCandidateRow mapPackageCandidateRow(ResultSet rs) {
+    Long exportPermitNumber = getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER");
+    if (exportPermitNumber == null) {
+      exportPermitNumber = getLong(rs, "EXPORT_PERMIT_NUMBER");
+    }
+
+    return new PackageCandidateRow(
+        getLong(rs, "APPLICATION_NUMBER"),
+        trim(getString(rs, "PACKAGE_NUMBER")),
+        exportPermitNumber);
+  }
+
   private String safeFileName(String value) {
     if (value == null || value.isBlank()) {
       return "";
@@ -711,6 +789,11 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String growthTypeCode) {}
 
   public record EndUsePairRow(String speciesCode, String endUseCode) {}
+
+  public record PackageCandidateRow(
+      Long applicationNumber,
+      String packageNumber,
+      Long exportPermitNumber) {}
 
   public record SalesInvoiceRow(
       String salesInvoiceNumber,

@@ -12,8 +12,12 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseD
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
@@ -217,6 +221,65 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).getPackageDetails("PKG-903");
+  }
+
+  @Test
+  void checkPermitNumberShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitNumberAvailabilityRpcResponseDto dto = new PermitNumberAvailabilityRpcResponseDto(true);
+    when(service.checkPermitNumber(7000123L)).thenReturn(dto);
+
+    ResponseEntity<PermitNumberAvailabilityRpcResponseDto> response =
+        controller.checkPermitNumber(7000123L);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).checkPermitNumber(7000123L);
+  }
+
+  @Test
+  void applicationListShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitApplicationListRpcResponseDto dto =
+        new PermitApplicationListRpcResponseDto(List.of("1000456", "1000457"));
+    when(service.getApplicationList(7000123L)).thenReturn(dto);
+
+    ResponseEntity<PermitApplicationListRpcResponseDto> response =
+        controller.getApplicationList(7000123L);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getApplicationList(7000123L);
+  }
+
+  @Test
+  void availableApplicationListShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitAvailableApplicationListRpcResponseDto dto =
+        new PermitAvailableApplicationListRpcResponseDto(List.of("1000456"), null);
+    when(service.getAvailableApplicationList("EX-700", "1000458")).thenReturn(dto);
+
+    ResponseEntity<PermitAvailableApplicationListRpcResponseDto> response =
+        controller.getAvailableApplicationList("EX-700", "1000458");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getAvailableApplicationList("EX-700", "1000458");
+  }
+
+  @Test
+  void availablePackageListShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitAvailablePackageListRpcResponseDto dto =
+        new PermitAvailablePackageListRpcResponseDto(List.of("PKG-900"), null);
+    when(service.getAvailablePackageList("EX-700", "PKG-901")).thenReturn(dto);
+
+    ResponseEntity<PermitAvailablePackageListRpcResponseDto> response =
+        controller.getAvailablePackageList("EX-700", "PKG-901");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getAvailablePackageList("EX-700", "PKG-901");
   }
 
   @Test

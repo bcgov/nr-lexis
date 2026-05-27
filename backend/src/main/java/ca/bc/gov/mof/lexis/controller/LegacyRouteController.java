@@ -48,6 +48,10 @@ public class LegacyRouteController {
   private static final String ACTION_GET_PACKAGE_VOLUME_SUM = "getPackageVolumeSum";
   private static final String ACTION_GET_PACKAGE_INFO = "getPackageInfo";
   private static final String ACTION_GET_PACKAGE_DETAILS = "getPackageDetails";
+  private static final String ACTION_CHECK_PERMIT_NUMBER = "checkPermitNumber";
+  private static final String ACTION_GET_APPLICATION_LIST = "getApplicationList";
+  private static final String ACTION_GET_AVAILABLE_APPLICATION_LIST = "getAvailableApplicationList";
+  private static final String ACTION_GET_AVAILABLE_PACKAGE_LIST = "getAvailablePackageList";
   private static final String ACTION_GET_PERMIT_HAS_APPLICATIONS = "getPermitHasApplications";
   private static final String ACTION_GET_INVOICES_FOR_PERMIT = "getInvoicesForPermit";
   private static final String ACTION_GET_INVOICE_DETAILS = "getInvoiceDetails";
@@ -452,6 +456,9 @@ public class LegacyRouteController {
       @RequestParam(name = "countryCode", required = false) String countryCode,
       @RequestParam(name = "applicationDate", required = false) String applicationDate,
       @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      @RequestParam(name = "selectedApplications", required = false) String selectedApplications,
+      @RequestParam(name = "selectedPackages", required = false) String selectedPackages,
       @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber,
       @RequestParam(name = "fileID", required = false) String fileId,
       @RequestParam(name = "fileName", required = false) String fileName,
@@ -483,6 +490,19 @@ public class LegacyRouteController {
     }
     if (ACTION_GET_PACKAGE_DETAILS.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPackageDetails(packageNumber);
+    }
+    if (ACTION_CHECK_PERMIT_NUMBER.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.checkPermitNumber(permitNumber);
+    }
+    if (ACTION_GET_APPLICATION_LIST.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getApplicationList(permitNumber);
+    }
+    if (ACTION_GET_AVAILABLE_APPLICATION_LIST.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getAvailableApplicationList(
+          exemptionNumber, selectedApplications);
+    }
+    if (ACTION_GET_AVAILABLE_PACKAGE_LIST.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getAvailablePackageList(exemptionNumber, selectedPackages);
     }
     if (ACTION_GET_PERMIT_HAS_APPLICATIONS.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPermitHasApplications(permitNumber);

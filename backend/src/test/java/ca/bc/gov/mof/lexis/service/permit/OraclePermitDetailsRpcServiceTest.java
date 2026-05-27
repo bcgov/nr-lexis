@@ -5,6 +5,9 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
@@ -13,6 +16,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
@@ -26,6 +30,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageCandidateRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
@@ -233,6 +238,60 @@ class OraclePermitDetailsRpcServiceTest {
     PermitHasApplicationsRpcResponseDto response = service.getPermitHasApplications(7000123L);
 
     assertThat(response.hasApplications()).isFalse();
+  }
+
+  @Test
+  void checkPermitNumberShouldReturnAvailableWhenPermitMissing() {
+    when(repository.findPermitPolicyContextByPermitNumber(7000123L)).thenReturn(Optional.empty());
+
+    PermitNumberAvailabilityRpcResponseDto response = service.checkPermitNumber(7000123L);
+
+    assertThat(response.available()).isTrue();
+  }
+
+  @Test
+  void applicationListShouldReturnDistinctSortedApplicationsForPermit() {
+    when(repository.findApplicationNumbersByPermitNumber(7000123L))
+        .thenReturn(List.of(1000456L, 1000457L));
+
+    PermitApplicationListRpcResponseDto response = service.getApplicationList(7000123L);
+
+    assertThat(response.applicationList()).containsExactly("1000456", "1000457");
+  }
+
+  @Test
+  void availableApplicationListShouldExcludeSelectedAndAssignedApplications() {
+    when(repository.findPackagesByExemptionNumber("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(1000456L, "PKG-901", 0L),
+                new PackageCandidateRow(1000457L, "PKG-902", 7000123L),
+                new PackageCandidateRow(1000458L, "PKG-903", 0L)));
+
+    PermitAvailableApplicationListRpcResponseDto response =
+        service.getAvailableApplicationList("EX-700", "1000458");
+
+    assertThat(response.applicationList()).containsExactly("1000456");
+    assertThat(response.errorMessage()).isNull();
+  }
+
+  @Test
+  void availablePackageListShouldExcludeSelectedAndAssignedPackages() {
+    when(repository.findApplicationNumbersByExemptionNumber("EX-700"))
+        .thenReturn(List.of(1000456L, 1000457L));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(1000456L, "PKG-901", 0L),
+                new PackageCandidateRow(1000456L, "PKG-902", 7000123L)));
+    when(repository.findPackagesByApplicationNumber(1000457L))
+        .thenReturn(List.of(new PackageCandidateRow(1000457L, "PKG-903", 0L)));
+
+    PermitAvailablePackageListRpcResponseDto response =
+        service.getAvailablePackageList("EX-700", "PKG-903");
+
+    assertThat(response.packageList()).containsExactly("PKG-901");
+    assertThat(response.errorMessage()).isNull();
   }
 
   @Test
