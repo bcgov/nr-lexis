@@ -8,6 +8,9 @@ This suite validates core frontend availability after migration work.
 - Auth transition compatibility:
   - `LEXIS_ADMIN` and legacy `ADMIN` map to the same protected access.
   - Root redirect parity to `/provincial/summary`.
+- Provincial review action controls:
+  - Selection-driven enablement for approve/update buttons.
+  - Status-dependent enablement for "Update Status and Send Email".
 - Core protected routes render:
   - `/provincial/application`
   - `/provincial/exemption`
