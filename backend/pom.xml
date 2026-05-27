@@ -25,7 +25,7 @@
     <maven.compiler.version>3.10.1</maven.compiler.version>
     <ojdbc.version>21.3.0.0</ojdbc.version>
     <resilience4j.version>2.3.0</resilience4j.version>
-    <jasperreports.version>6.21.5</jasperreports.version>
+    <jasperreports.version>7.0.4</jasperreports.version>
   </properties>
 
   <dependencies>
