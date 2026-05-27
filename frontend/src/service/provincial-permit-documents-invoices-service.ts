@@ -610,3 +610,13 @@ export const removePermitInvoiceDocument = async (
     documentId,
   )
 }
+
+export const removePermitApplicationDocument = async (
+  documentId: string,
+): Promise<RemovePermitDocumentResult> => {
+  return removeDocumentWithFallback(
+    '/lexis/rpc/permit-details/document/application',
+    'removeApplicationDocument',
+    documentId,
+  )
+}

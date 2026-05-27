@@ -26,6 +26,7 @@ import {
   fetchPermitInvoiceConversionRate,
   fetchPermitInvoices,
   openPermitDocument,
+  removePermitApplicationDocument,
   removePermitDocument,
   removePermitInvoiceDocument,
   type PermitDocumentAndInvoiceSource,
@@ -131,6 +132,10 @@ const isInvoiceDocumentRow = (row: PermitDocumentRow): boolean => {
   }
 
   return row.type.trim().toUpperCase().includes('INVOICE')
+}
+
+const isApplicationDocumentRow = (row: PermitDocumentRow): boolean => {
+  return row.typeCode.trim().toUpperCase() === 'INS'
 }
 
 const ProvincialPermitDetailsPage: FC = () => {
@@ -503,7 +508,9 @@ const ProvincialPermitDetailsPage: FC = () => {
       try {
         const removeResult = invoiceDocument
           ? await removePermitInvoiceDocument(row.id)
-          : await removePermitDocument(row.id)
+          : isApplicationDocumentRow(row)
+            ? await removePermitApplicationDocument(row.id)
+            : await removePermitDocument(row.id)
 
         if (!removeResult.success) {
           setActionErrorMessage('Unable to remove selected document.')

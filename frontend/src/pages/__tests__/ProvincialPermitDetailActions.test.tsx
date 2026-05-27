@@ -16,6 +16,7 @@ import {
   fetchPermitInvoiceConversionRate,
   fetchPermitInvoices,
   openPermitDocument,
+  removePermitApplicationDocument,
   removePermitDocument,
   removePermitInvoiceDocument,
 } from '@/service/provincial-permit-documents-invoices-service'
@@ -39,6 +40,7 @@ vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
   fetchPermitInvoices: vi.fn(),
   fetchPermitInvoiceConversionRate: vi.fn(),
   openPermitDocument: vi.fn(),
+  removePermitApplicationDocument: vi.fn(),
   removePermitDocument: vi.fn(),
   removePermitInvoiceDocument: vi.fn(),
 }))
@@ -55,6 +57,7 @@ const mockedFetchPermitDocuments = vi.mocked(fetchPermitDocuments)
 const mockedFetchPermitInvoices = vi.mocked(fetchPermitInvoices)
 const mockedFetchPermitInvoiceConversionRate = vi.mocked(fetchPermitInvoiceConversionRate)
 const mockedOpenPermitDocument = vi.mocked(openPermitDocument)
+const mockedRemovePermitApplicationDocument = vi.mocked(removePermitApplicationDocument)
 const mockedRemovePermitDocument = vi.mocked(removePermitDocument)
 const mockedRemovePermitInvoiceDocument = vi.mocked(removePermitInvoiceDocument)
 const mockedRunReport = vi.mocked(runReport)
@@ -138,6 +141,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       legacyUrl: 'https://example.test/api/lexis/permitDetailsRPC',
     })
     mockedRemovePermitDocument.mockResolvedValue({
+      success: true,
+      source: 'api',
+    })
+    mockedRemovePermitApplicationDocument.mockResolvedValue({
       success: true,
       source: 'api',
     })
@@ -379,6 +386,47 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     expect(deleteButton).toBeDisabled()
     expect(mockedRemovePermitInvoiceDocument).not.toHaveBeenCalled()
+  })
+
+  it('removes application-linked documents with application delete endpoint', async () => {
+    mockedFetchPermitDocuments
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '7777',
+            name: 'application-doc.pdf',
+            description: 'Linked application document',
+            type: 'Application',
+            typeCode: 'INS',
+          },
+        ],
+        source: 'api',
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+        source: 'api',
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('application-doc.pdf')
+    const deleteButton = await screen.findByRole('button', { name: 'Delete' })
+    await userEvent.click(deleteButton)
+
+    await waitFor(() => {
+      expect(mockedRemovePermitApplicationDocument).toHaveBeenCalledWith('7777')
+      expect(mockedRemovePermitDocument).not.toHaveBeenCalledWith('7777')
+      expect(mockedRemovePermitInvoiceDocument).not.toHaveBeenCalledWith('7777')
+    })
   })
 
   it('uses report service and legacy fallback URL when opening permit report', async () => {
