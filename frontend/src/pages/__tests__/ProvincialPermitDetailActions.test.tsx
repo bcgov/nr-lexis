@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,6 +10,12 @@ import {
   fetchProvincialPermitDetailTabs,
   type ProvincialPermitDetailTabsResult,
 } from '@/service/provincial-permit-detail-tabs-service'
+import {
+  fetchPermitDocuments,
+  fetchPermitInvoiceConversionRate,
+  fetchPermitInvoices,
+  openPermitDocument,
+} from '@/service/provincial-permit-documents-invoices-service'
 import { runReport } from '@/service/report-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -24,6 +30,13 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
   fetchProvincialPermitDetailTabs: vi.fn(),
 }))
 
+vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
+  fetchPermitDocuments: vi.fn(),
+  fetchPermitInvoices: vi.fn(),
+  fetchPermitInvoiceConversionRate: vi.fn(),
+  openPermitDocument: vi.fn(),
+}))
+
 vi.mock('@/service/report-service', () => ({
   runReport: vi.fn(),
 }))
@@ -31,6 +44,10 @@ vi.mock('@/service/report-service', () => ({
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailTabs)
+const mockedFetchPermitDocuments = vi.mocked(fetchPermitDocuments)
+const mockedFetchPermitInvoices = vi.mocked(fetchPermitInvoices)
+const mockedFetchPermitInvoiceConversionRate = vi.mocked(fetchPermitInvoiceConversionRate)
+const mockedOpenPermitDocument = vi.mocked(openPermitDocument)
 const mockedRunReport = vi.mocked(runReport)
 
 const permitDetail: ProvincialPermitDetail = {
@@ -86,6 +103,24 @@ describe('Provincial Permit Detail Action Smoke', () => {
     } as any)
     mockedFetchProvincialPermitDetail.mockResolvedValue(permitDetail)
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
+    mockedFetchPermitDocuments.mockResolvedValue({
+      rows: [],
+      source: 'api',
+    })
+    mockedFetchPermitInvoices.mockResolvedValue({
+      rows: [],
+      source: 'api',
+    })
+    mockedFetchPermitInvoiceConversionRate.mockResolvedValue({
+      conversionRate: '1.00',
+      source: 'api',
+    })
+    mockedOpenPermitDocument.mockResolvedValue({
+      source: 'api',
+      blob: new Blob(['test']),
+      filename: 'test.pdf',
+      legacyUrl: 'https://example.test/api/lexis/permitDetailsRPC',
+    })
   })
 
   it('opens permit document upload popup with permit number', async () => {
@@ -113,7 +148,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
-  it('opens invoice upload popup with permit number and conversion-rate placeholder', async () => {
+  it('opens invoice upload popup with permit number and conversion rate lookup', async () => {
+    mockedFetchPermitInvoiceConversionRate.mockResolvedValue({
+      conversionRate: '1.37',
+      source: 'api',
+    })
     const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
 
     render(
@@ -131,13 +170,60 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(uploadInvoiceButton).toBeEnabled()
     await userEvent.click(uploadInvoiceButton)
 
-    expect(openSpy).toHaveBeenCalledWith(
-      expect.stringContaining(
-        '/fileInvoiceUpload.do?actionMapping=view&permitNumber=777&invoiceConversionRate=1.00',
-      ),
-      'invoiceUploadWindow',
-      expect.any(String),
+    await waitFor(() => {
+      expect(mockedFetchPermitInvoiceConversionRate).toHaveBeenCalledTimes(1)
+      expect(openSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '/fileInvoiceUpload.do?actionMapping=view&permitNumber=777&invoiceConversionRate=1.37',
+        ),
+        'invoiceUploadWindow',
+        expect.any(String),
+      )
+    })
+  })
+
+  it('opens permit document via legacy fallback when document API is unavailable', async () => {
+    mockedFetchPermitDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '500',
+          name: 'permit-doc.pdf',
+          description: 'Test permit document',
+          type: 'Invoice',
+          typeCode: 'INV',
+        },
+      ],
+      source: 'legacy',
+    })
+    mockedOpenPermitDocument.mockResolvedValue({
+      source: 'legacy',
+      legacyUrl:
+        'https://example.test/api/lexis/permitDetailsRPC?actionMapping=getDocument&fileID=500&fileName=permit-doc.pdf',
+    })
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
     )
+
+    await screen.findByText('permit-doc.pdf')
+    const openDocumentButton = await screen.findByRole('button', { name: 'Open' })
+    await userEvent.click(openDocumentButton)
+
+    await waitFor(() => {
+      expect(mockedOpenPermitDocument).toHaveBeenCalledWith('500', 'permit-doc.pdf')
+      expect(openSpy).toHaveBeenCalledWith(
+        'https://example.test/api/lexis/permitDetailsRPC?actionMapping=getDocument&fileID=500&fileName=permit-doc.pdf',
+        'permitDocumentWindow',
+      )
+    })
   })
 
   it('uses report service and legacy fallback URL when opening permit report', async () => {

@@ -19,8 +19,17 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { env } from '@/env'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldTile, DetailListTile, type DetailListItem } from '@/pages/shared/DetailSections'
+import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
+import {
+  fetchPermitDocuments,
+  fetchPermitInvoiceConversionRate,
+  fetchPermitInvoices,
+  openPermitDocument,
+  type PermitDocumentAndInvoiceSource,
+  type PermitDocumentRow,
+  type PermitInvoiceRow,
+} from '@/service/provincial-permit-documents-invoices-service'
 import {
   fetchProvincialPermitDetailTabs,
   type ProvincialPermitDetailTabsData,
@@ -121,9 +130,14 @@ const ProvincialPermitDetailsPage: FC = () => {
   const [detail, setDetail] = useState<ProvincialPermitDetail | null>(null)
   const [tabsData, setTabsData] = useState<ProvincialPermitDetailTabsData | null>(null)
   const [tabsSources, setTabsSources] = useState<ProvincialPermitDetailTabsSources | null>(null)
+  const [documentRows, setDocumentRows] = useState<PermitDocumentRow[]>([])
+  const [invoiceRows, setInvoiceRows] = useState<PermitInvoiceRow[]>([])
+  const [documentSource, setDocumentSource] = useState<PermitDocumentAndInvoiceSource>('api')
+  const [invoiceSource, setInvoiceSource] = useState<PermitDocumentAndInvoiceSource>('api')
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [tabsErrorMessage, setTabsErrorMessage] = useState('')
+  const [documentsInvoicesErrorMessage, setDocumentsInvoicesErrorMessage] = useState('')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isOpeningPermitReport, setIsOpeningPermitReport] = useState(false)
@@ -132,6 +146,8 @@ const ProvincialPermitDetailsPage: FC = () => {
   const gbmsFilter = searchParams.get('gbmsFilter') ?? ''
   const oicFilter = searchParams.get('oicFilter') ?? ''
   const boicFilter = searchParams.get('boicFilter') ?? ''
+  const documentsFilter = searchParams.get('documentsFilter') ?? ''
+  const invoicesFilter = searchParams.get('invoicesFilter') ?? ''
   const withCurrentSearch = useCallback(
     (path: string): string => {
       const query = searchParams.toString()
@@ -141,7 +157,14 @@ const ProvincialPermitDetailsPage: FC = () => {
   )
   const updateFilterParam = useCallback(
     (
-      key: 'itemsFilter' | 'feesFilter' | 'gbmsFilter' | 'oicFilter' | 'boicFilter',
+      key:
+        | 'itemsFilter'
+        | 'feesFilter'
+        | 'gbmsFilter'
+        | 'oicFilter'
+        | 'boicFilter'
+        | 'documentsFilter'
+        | 'invoicesFilter',
       value: string,
     ) => {
       const nextSearchParams = new URLSearchParams(searchParams)
@@ -162,6 +185,12 @@ const ProvincialPermitDetailsPage: FC = () => {
     const load = async () => {
       if (!permitNumber) {
         setErrorMessage('Permit number is missing from the route.')
+        setDetail(null)
+        setTabsData(null)
+        setTabsSources(null)
+        setDocumentRows([])
+        setInvoiceRows([])
+        setDocumentsInvoicesErrorMessage('')
         setLoading(false)
         return
       }
@@ -169,6 +198,7 @@ const ProvincialPermitDetailsPage: FC = () => {
       setLoading(true)
       setErrorMessage('')
       setTabsErrorMessage('')
+      setDocumentsInvoicesErrorMessage('')
 
       try {
         const response = await fetchProvincialPermitDetail(permitNumber)
@@ -178,6 +208,10 @@ const ProvincialPermitDetailsPage: FC = () => {
           setErrorMessage(`No provincial permit found for ${permitNumber}.`)
           setTabsData(null)
           setTabsSources(null)
+          setDocumentRows([])
+          setInvoiceRows([])
+          setDocumentSource('api')
+          setInvoiceSource('api')
           return
         }
 
@@ -197,11 +231,37 @@ const ProvincialPermitDetailsPage: FC = () => {
           setTabsSources(null)
           setTabsErrorMessage('Unable to retrieve permit item and fee tables.')
         }
+
+        try {
+          const [documentsResult, invoicesResult] = await Promise.all([
+            fetchPermitDocuments(permitNumber),
+            fetchPermitInvoices(permitNumber),
+          ])
+          setDocumentRows(documentsResult.rows)
+          setInvoiceRows(invoicesResult.rows)
+          setDocumentSource(documentsResult.source)
+          setInvoiceSource(invoicesResult.source)
+        } catch (error) {
+          console.error(error)
+          setDocumentRows([])
+          setInvoiceRows([])
+          setDocumentSource('api')
+          setInvoiceSource('api')
+          setDocumentsInvoicesErrorMessage(
+            'Unable to retrieve permit documents or invoice details.',
+          )
+        }
       } catch (error) {
         console.error(error)
         setErrorMessage('Unable to retrieve provincial permit detail.')
+        setDetail(null)
         setTabsData(null)
         setTabsSources(null)
+        setDocumentRows([])
+        setInvoiceRows([])
+        setDocumentSource('api')
+        setInvoiceSource('api')
+        setDocumentsInvoicesErrorMessage('')
       } finally {
         setLoading(false)
       }
@@ -209,35 +269,6 @@ const ProvincialPermitDetailsPage: FC = () => {
 
     void load()
   }, [permitNumber])
-
-  const documentItems = useMemo<DetailListItem[]>(() => {
-    if (!detail) {
-      return []
-    }
-
-    const items: DetailListItem[] = []
-    if (detail.invoiceNumber) {
-      items.push({
-        key: `invoice-${detail.invoiceNumber}`,
-        content: `Invoice: ${detail.invoiceNumber}`,
-      })
-    }
-    if (detail.federalPermitNumber) {
-      items.push({
-        key: `federal-${detail.federalPermitNumber}`,
-        content: `Federal Permit: ${detail.federalPermitNumber}`,
-      })
-    }
-
-    if (detail.remarks) {
-      items.push({
-        key: 'remarks',
-        content: `Remarks: ${detail.remarks}`,
-      })
-    }
-
-    return items
-  }, [detail])
 
   const filteredItems = useMemo(() => {
     if (!tabsData) {
@@ -311,6 +342,27 @@ const ProvincialPermitDetailsPage: FC = () => {
       ),
     )
   }, [boicFilter, tabsData])
+
+  const filteredDocumentRows = useMemo(() => {
+    return documentRows.filter((row) =>
+      matchesFilter([row.id, row.name, row.description, row.type, row.typeCode], documentsFilter),
+    )
+  }, [documentRows, documentsFilter])
+
+  const filteredInvoiceRows = useMemo(() => {
+    return invoiceRows.filter((row) =>
+      matchesFilter(
+        [
+          row.invoiceNumber,
+          row.exportValueCad,
+          row.conversionRate,
+          row.feeInLieu,
+          row.invoiceFound ? 'found' : 'missing',
+        ],
+        invoicesFilter,
+      ),
+    )
+  }, [invoiceRows, invoicesFilter])
 
   const usesAnyMockTabData = useMemo(() => {
     if (!tabsSources) {
@@ -391,18 +443,54 @@ const ProvincialPermitDetailsPage: FC = () => {
     }
   }, [detail?.permitNumber])
 
-  const onOpenInvoiceUpload = useCallback(() => {
+  const onOpenDocument = useCallback(async (row: PermitDocumentRow) => {
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    try {
+      const result = await openPermitDocument(row.id, row.name)
+      if (result.source === 'api') {
+        triggerBrowserDownload(result.blob, result.filename)
+        return
+      }
+
+      setActionInfoMessage(
+        'Document download API is not available yet. Opened the legacy document endpoint.',
+      )
+      const popup = window.open(result.legacyUrl, 'permitDocumentWindow')
+      if (!popup) {
+        setActionErrorMessage('Unable to open document window. Enable popups and retry.')
+      }
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to open permit document.')
+    }
+  }, [])
+
+  const onOpenInvoiceUpload = useCallback(async () => {
     if (!detail?.permitNumber) {
       return
     }
 
     setActionErrorMessage('')
     setActionInfoMessage('')
+    let conversionRate = '1.00'
+    try {
+      const conversionResult = await fetchPermitInvoiceConversionRate()
+      conversionRate = conversionResult.conversionRate || conversionRate
+      if (conversionResult.source === 'legacy') {
+        setActionInfoMessage(
+          'Invoice conversion-rate API is not available yet. Used legacy conversion-rate lookup.',
+        )
+      }
+    } catch (error) {
+      console.error(error)
+      setActionInfoMessage('Unable to retrieve conversion rate. Using 1.00 for invoice upload.')
+    }
+
     const uploadUrl = buildLegacyActionUrl('/fileInvoiceUpload.do', {
       actionMapping: 'view',
       permitNumber: String(detail.permitNumber),
-      // TODO: wire live conversion-rate lookup when endpoint parity lands.
-      invoiceConversionRate: '1.00',
+      invoiceConversionRate: conversionRate,
     })
     const popup = window.open(
       uploadUrl,
@@ -446,6 +534,17 @@ const ProvincialPermitDetailsPage: FC = () => {
             kind="warning"
             title="Permit Tables Unavailable"
             subtitle={tabsErrorMessage}
+            lowContrast
+          />
+        </Column>
+      )}
+
+      {!loading && !!documentsInvoicesErrorMessage && (
+        <Column sm={4} md={8} lg={16} className="detail-page-error">
+          <InlineNotification
+            kind="warning"
+            title="Documents/Invoices Unavailable"
+            subtitle={documentsInvoicesErrorMessage}
             lowContrast
           />
         </Column>
@@ -523,7 +622,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                   kind="secondary"
                   size="sm"
                   disabled={!detail.permitNumber || !canPerform('/fileInvoiceUpload')}
-                  onClick={onOpenInvoiceUpload}
+                  onClick={() => void onOpenInvoiceUpload()}
                 >
                   Upload Invoice
                 </Button>
@@ -624,6 +723,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                   value: displayValue(detail.applicantClientNumber),
                 },
                 { label: 'Owner Client Number', value: displayValue(detail.ownerClientNumber) },
+                { label: 'Remarks', value: displayValue(detail.remarks) },
               ]}
             />
           </Column>
@@ -855,12 +955,103 @@ const ProvincialPermitDetailsPage: FC = () => {
             </Tile>
           </Column>
 
-          <Column sm={4} md={8} lg={8}>
-            <DetailListTile
-              title="Documents and Notes"
-              items={documentItems}
-              emptyLabel="No document references available."
-            />
+          <Column sm={4} md={8} lg={16}>
+            <Tile>
+              <h2 className="detail-tile-title">
+                Permit Documents{' '}
+                <Tag type={documentSource === 'api' ? 'green' : 'gray'}>
+                  {documentSource === 'api' ? 'API' : 'Fallback'}
+                </Tag>
+              </h2>
+              <TextInput
+                id="permitDocumentsFilter"
+                labelText="Filter document rows"
+                value={documentsFilter}
+                onChange={(event) => updateFilterParam('documentsFilter', event.target.value)}
+                placeholder="Filter by file name, description, type, or id"
+              />
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>File Name</TableHeader>
+                    <TableHeader>Description</TableHeader>
+                    <TableHeader>Type</TableHeader>
+                    <TableHeader>Action</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredDocumentRows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>{row.name || '-'}</TableCell>
+                      <TableCell>{row.description || '-'}</TableCell>
+                      <TableCell>{row.type || row.typeCode || '-'}</TableCell>
+                      <TableCell>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          disabled={!canPerform('/permitDetails')}
+                          onClick={() => void onOpenDocument(row)}
+                        >
+                          Open
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredDocumentRows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4}>
+                        No document rows matched the current filter.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Tile>
+          </Column>
+
+          <Column sm={4} md={8} lg={16}>
+            <Tile>
+              <h2 className="detail-tile-title">
+                Invoices{' '}
+                <Tag type={invoiceSource === 'api' ? 'green' : 'gray'}>
+                  {invoiceSource === 'api' ? 'API' : 'Fallback'}
+                </Tag>
+              </h2>
+              <TextInput
+                id="permitInvoicesFilter"
+                labelText="Filter invoice rows"
+                value={invoicesFilter}
+                onChange={(event) => updateFilterParam('invoicesFilter', event.target.value)}
+                placeholder="Filter by invoice number, value, rate, or fee-in-lieu"
+              />
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Invoice Number</TableHeader>
+                    <TableHeader>Export Value (CAD)</TableHeader>
+                    <TableHeader>Conversion Rate</TableHeader>
+                    <TableHeader>Fee In Lieu</TableHeader>
+                    <TableHeader>Status</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredInvoiceRows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>{row.invoiceNumber || '-'}</TableCell>
+                      <TableCell>{row.exportValueCad || '-'}</TableCell>
+                      <TableCell>{row.conversionRate || '-'}</TableCell>
+                      <TableCell>{row.feeInLieu || '-'}</TableCell>
+                      <TableCell>{row.invoiceFound ? 'Found' : 'Missing'}</TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredInvoiceRows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5}>No invoice rows matched the current filter.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Tile>
           </Column>
 
           <Column sm={4} md={8} lg={8}>
@@ -878,6 +1069,8 @@ const ProvincialPermitDetailsPage: FC = () => {
                   label: 'BOIC Items',
                   value: tabsSources?.boicItems === 'api' ? 'API' : 'Fallback',
                 },
+                { label: 'Documents', value: documentSource === 'api' ? 'API' : 'Fallback' },
+                { label: 'Invoices', value: invoiceSource === 'api' ? 'API' : 'Fallback' },
               ]}
             />
           </Column>
