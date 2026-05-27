@@ -56,6 +56,19 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void exemptionDetailsRpcShouldRejectAnonymousRequests() throws Exception {
+    mockMvc.perform(get("/api/lexis/rpc/exemption-details/applications")).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void exemptionDetailsRpcShouldAllowCanonicalExemptionApproverRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/rpc/exemption-details/applications")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void applicationReviewSearchShouldRejectIndustryRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/application-reviews/search")

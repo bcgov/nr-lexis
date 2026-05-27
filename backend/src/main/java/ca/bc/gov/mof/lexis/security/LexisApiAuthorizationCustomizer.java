@@ -209,6 +209,22 @@ public class LexisApiAuthorizationCustomizer
     authorizeAction(
         authorize,
         HttpMethod.GET,
+        new String[] {"/api/lexis/rpc/exemption-details/**", "/api/lexis/exemptionDetailsRPC"},
+        "/exemptionDetails");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {"/api/lexis/rpc/exemption-details/**", "/api/lexis/exemptionDetailsRPC"},
+        "/exemptionDetails");
+    authorizeAction(
+        authorize,
+        HttpMethod.DELETE,
+        new String[] {"/api/lexis/rpc/exemption-details/**"},
+        "/exemptionDetails");
+
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
         new String[] {"/api/lexis/rpc/offer-details/**"},
         "/offerDetails");
     authorizeAction(
