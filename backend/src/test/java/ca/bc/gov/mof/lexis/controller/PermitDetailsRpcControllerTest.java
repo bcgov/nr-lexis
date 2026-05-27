@@ -5,7 +5,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
@@ -17,6 +21,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -209,5 +214,73 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).getPackageDetails("PKG-903");
+  }
+
+  @Test
+  void countryListShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitCountryListRpcResponseDto dto =
+        new PermitCountryListRpcResponseDto(
+            List.of(new PermitCountryItemRpcResponseDto("Canada", "CA")));
+    when(service.getCountryList()).thenReturn(dto);
+
+    ResponseEntity<PermitCountryListRpcResponseDto> response = controller.getCountryList();
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getCountryList();
+  }
+
+  @Test
+  void fileTypesShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    List<PermitFileTypeRpcResponseDto> dto = List.of(new PermitFileTypeRpcResponseDto("INV", "Invoice"));
+    when(service.getFileTypes()).thenReturn(dto);
+
+    ResponseEntity<List<PermitFileTypeRpcResponseDto>> response = controller.getFileTypes();
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getFileTypes();
+  }
+
+  @Test
+  void documentDetailsShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    List<PermitDocumentItemRpcResponseDto> dto =
+        List.of(new PermitDocumentItemRpcResponseDto("file.pdf", "", "Invoice", "INV", 77L));
+    when(service.getDocumentDetails(7000123L)).thenReturn(dto);
+
+    ResponseEntity<List<PermitDocumentItemRpcResponseDto>> response =
+        controller.getDocumentDetails("7000123");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getDocumentDetails(7000123L);
+  }
+
+  @Test
+  void documentShouldReturnNoContentWhenMissing() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocument(77L)).thenReturn(Optional.empty());
+
+    ResponseEntity<byte[]> response = controller.getDocument("77", "file.pdf");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    verify(service).getDocument(77L);
+  }
+
+  @Test
+  void removePermitDocumentShouldReturnSuccessFlag() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.removePermitDocument(33L)).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removePermitDocument("33");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isEqualTo("true");
+    verify(service).removePermitDocument(33L);
   }
 }

@@ -1,6 +1,9 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
@@ -9,6 +12,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
+import java.nio.charset.StandardCharsets;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.util.List;
@@ -16,9 +20,13 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -166,6 +174,131 @@ public class PermitDetailsRpcController {
     return ResponseEntity.ok(service.getPermitHasApplications(permitNumber));
   }
 
+  @GetMapping("/country-list")
+  public ResponseEntity<PermitCountryListRpcResponseDto> getCountryList() {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for country list");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getCountryList());
+  }
+
+  @GetMapping("/file-types")
+  public ResponseEntity<List<PermitFileTypeRpcResponseDto>> getFileTypes() {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for file types");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getFileTypes());
+  }
+
+  @GetMapping("/document-details")
+  public ResponseEntity<List<PermitDocumentItemRpcResponseDto>> getDocumentDetails(
+      @RequestParam(name = "permitNumber", required = false) String permitNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for document details");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getDocumentDetails(parsePositiveLong(permitNumber)));
+  }
+
+  @GetMapping("/document")
+  public ResponseEntity<byte[]> getDocument(
+      @RequestParam(name = "fileId", required = false) String fileId,
+      @RequestParam(name = "fileName", required = false) String fileName) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for get document");
+      return ResponseEntity.noContent().build();
+    }
+
+    return service
+        .getDocument(parsePositiveLong(fileId))
+        .map(
+            content -> {
+              HttpHeaders headers = new HttpHeaders();
+              String normalizedFileName = sanitizeFileName(fileName);
+              if (normalizedFileName != null && !normalizedFileName.isBlank()) {
+                headers.setContentDisposition(
+                    ContentDisposition.attachment()
+                        .filename(normalizedFileName, StandardCharsets.UTF_8)
+                        .build());
+              }
+              headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+              return ResponseEntity.ok().headers(headers).body(content.bytes());
+            })
+        .orElseGet(() -> ResponseEntity.noContent().build());
+  }
+
+  @DeleteMapping("/document/permit")
+  public ResponseEntity<RemoveDocumentResponseDto> removePermitDocument(
+      @RequestParam(name = "documentId", required = false) String documentId) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for remove permit document");
+      return ResponseEntity.noContent().build();
+    }
+
+    boolean removed = service.removePermitDocument(parsePositiveLong(documentId));
+    return ResponseEntity.ok(new RemoveDocumentResponseDto(Boolean.toString(removed)));
+  }
+
+  @DeleteMapping("/document/application")
+  public ResponseEntity<RemoveDocumentResponseDto> removeApplicationDocument(
+      @RequestParam(name = "documentId", required = false) String documentId) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for remove application document");
+      return ResponseEntity.noContent().build();
+    }
+
+    boolean removed = service.removeApplicationDocument(parsePositiveLong(documentId));
+    return ResponseEntity.ok(new RemoveDocumentResponseDto(Boolean.toString(removed)));
+  }
+
+  @DeleteMapping("/document/invoice")
+  public ResponseEntity<RemoveDocumentResponseDto> removeInvoiceDocument(
+      @RequestParam(name = "documentId", required = false) String documentId) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for remove invoice document");
+      return ResponseEntity.noContent().build();
+    }
+
+    boolean removed = service.removeInvoiceDocument(parsePositiveLong(documentId));
+    return ResponseEntity.ok(new RemoveDocumentResponseDto(Boolean.toString(removed)));
+  }
+
+  private Long parsePositiveLong(String rawValue) {
+    if (rawValue == null || rawValue.isBlank()) {
+      return null;
+    }
+    try {
+      long parsed = Long.parseLong(rawValue.trim());
+      return parsed > 0 ? parsed : null;
+    } catch (NumberFormatException ex) {
+      return null;
+    }
+  }
+
+  private String sanitizeFileName(String rawValue) {
+    if (rawValue == null || rawValue.isBlank()) {
+      return null;
+    }
+    String normalized = rawValue.trim();
+    int slashIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
+    if (slashIndex >= 0 && slashIndex < normalized.length() - 1) {
+      normalized = normalized.substring(slashIndex + 1);
+    }
+    return normalized;
+  }
+
   private boolean isMinistryUser(Authentication authentication) {
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
     if (roles == null || roles.isEmpty()) {
@@ -178,4 +311,6 @@ public class PermitDetailsRpcController {
     }
     return true;
   }
+
+  public record RemoveDocumentResponseDto(String success) {}
 }

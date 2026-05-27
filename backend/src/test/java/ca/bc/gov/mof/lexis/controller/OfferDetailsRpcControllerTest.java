@@ -9,6 +9,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import java.time.LocalDate;
 import java.util.List;
@@ -29,15 +30,20 @@ class OfferDetailsRpcControllerTest {
 
   @Mock private ObjectProvider<LexisApplicationService> applicationServiceProvider;
   @Mock private ObjectProvider<FederalApplicationService> federalApplicationServiceProvider;
+  @Mock private ObjectProvider<ClientLookupService> clientLookupServiceProvider;
   @Mock private LexisApplicationService applicationService;
   @Mock private FederalApplicationService federalApplicationService;
+  @Mock private ClientLookupService clientLookupService;
 
   private OfferDetailsRpcController controller;
 
   @BeforeEach
   void setup() {
     controller =
-        new OfferDetailsRpcController(applicationServiceProvider, federalApplicationServiceProvider);
+        new OfferDetailsRpcController(
+            applicationServiceProvider,
+            federalApplicationServiceProvider,
+            clientLookupServiceProvider);
   }
 
   @Test
@@ -167,6 +173,35 @@ class OfferDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().volume()).isEqualTo("0.0");
+  }
+
+  @Test
+  void clientDataShouldReturnNotfoundWhenClientDoesNotExist() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getClientData("77881", "00")).thenReturn(Optional.empty());
+
+    ResponseEntity<OfferDetailsRpcController.OfferClientDataResponseDto> response =
+        controller.getClientData("77881", "00");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().notfound()).isEqualTo("true");
+  }
+
+  @Test
+  void clientLocationsShouldReturnLocationRows() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getClientLocations("77881"))
+        .thenReturn(List.of(new ClientLookupService.ClientLocation("00 - Main", "00", true)));
+
+    ResponseEntity<List<OfferDetailsRpcController.OfferClientLocationResponseDto>> response =
+        controller.getClientLocations("77881");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody()).hasSize(1);
+    assertThat(response.getBody().get(0).locationCode()).isEqualTo("00");
+    assertThat(response.getBody().get(0).selected()).isTrue();
   }
 
   private LexisApplicationDetailDto application(

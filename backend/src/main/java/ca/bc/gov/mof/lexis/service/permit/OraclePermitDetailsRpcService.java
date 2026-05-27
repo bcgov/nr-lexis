@@ -1,7 +1,11 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
@@ -11,6 +15,9 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitRpcScaleItemDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.AttachmentTypeRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
@@ -25,9 +32,13 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.context.annotation.Profile;
@@ -326,6 +337,83 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     return new PermitHasApplicationsRpcResponseDto(hasApplications);
   }
 
+  @Override
+  public PermitCountryListRpcResponseDto getCountryList() {
+    List<PermitCountryItemRpcResponseDto> countries =
+        repository.findAllCountryCodes().stream()
+            .sorted(
+                Comparator.comparingLong((CountryCodeRow row) -> sortGroup(row.groupBy()))
+                    .thenComparingLong(CountryCodeRow::orderBy)
+                    .thenComparing(row -> nonNull(trimToNull(row.code()))))
+            .map(row -> new PermitCountryItemRpcResponseDto(nonNull(row.description()), nonNull(row.code())))
+            .toList();
+    return new PermitCountryListRpcResponseDto(countries);
+  }
+
+  @Override
+  public List<PermitFileTypeRpcResponseDto> getFileTypes() {
+    return repository.findAllAttachmentTypes().stream()
+        .sorted(
+            Comparator.comparingLong((AttachmentTypeRow row) -> sortGroup(row.groupBy()))
+                .thenComparingLong(AttachmentTypeRow::orderBy)
+                .thenComparing(row -> nonNull(trimToNull(row.code()))))
+        .map(row -> new PermitFileTypeRpcResponseDto(nonNull(row.code()), nonNull(row.description())))
+        .toList();
+  }
+
+  @Override
+  public List<PermitDocumentItemRpcResponseDto> getDocumentDetails(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+
+    List<DocumentRow> allDocuments = new ArrayList<>();
+    allDocuments.addAll(repository.findPermitDocumentDetailsByPermitNumber(permitNumber));
+
+    List<Long> applicationNumbers =
+        repository.findScaleDetailsByPermitNumber(permitNumber).stream()
+            .map(PermitScaleDetailRow::applicationNumber)
+            .filter(applicationNumber -> applicationNumber != null && applicationNumber > 0)
+            .distinct()
+            .toList();
+
+    for (Long applicationNumber : applicationNumbers) {
+      allDocuments.addAll(repository.findApplicationDocumentDetailsByApplicationNumber(applicationNumber));
+    }
+
+    Map<String, String> attachmentTypeByCode = new LinkedHashMap<>();
+    return allDocuments.stream()
+        .map(
+            row ->
+                new PermitDocumentItemRpcResponseDto(
+                    nonNull(row.fileName()),
+                    nonNull(row.description()),
+                    resolveAttachmentTypeDescription(row.attachmentTypeCode(), attachmentTypeByCode),
+                    nonNull(trimToNull(row.attachmentTypeCode())),
+                    row.id()))
+        .toList();
+  }
+
+  @Override
+  public Optional<DocumentContent> getDocument(Long fileId) {
+    return repository.findFileAttachmentBytes(fileId).map(DocumentContent::new);
+  }
+
+  @Override
+  public boolean removePermitDocument(Long documentId) {
+    return repository.deletePermitFile(documentId);
+  }
+
+  @Override
+  public boolean removeApplicationDocument(Long documentId) {
+    return repository.deleteApplicationFile(documentId);
+  }
+
+  @Override
+  public boolean removeInvoiceDocument(Long documentId) {
+    return repository.deleteInvoiceFile(documentId);
+  }
+
   private PermitPackageInfoRpcResponseDto emptyPackageInfo() {
     return new PermitPackageInfoRpcResponseDto("", "", "", "", "", "", "");
   }
@@ -392,6 +480,27 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       endUseSort = nonNull(endUse.speciesCode()) + "/" + nonNull(endUse.endUseCode()) + "\n";
     }
     return endUseSort;
+  }
+
+  private String resolveAttachmentTypeDescription(
+      String attachmentTypeCode, Map<String, String> attachmentTypeByCode) {
+    String normalizedCode = trimToNull(attachmentTypeCode);
+    if (normalizedCode == null) {
+      return "";
+    }
+
+    String known = attachmentTypeByCode.get(normalizedCode);
+    if (known != null) {
+      return known;
+    }
+
+    String resolved = repository.findAttachmentTypeDescription(normalizedCode).orElse(normalizedCode);
+    attachmentTypeByCode.put(normalizedCode, resolved);
+    return resolved;
+  }
+
+  private long sortGroup(long groupBy) {
+    return groupBy == 0L ? 9999L : groupBy;
   }
 
   private PermitRpcScaleItemDto toSummaryScaleItem(

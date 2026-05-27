@@ -302,6 +302,11 @@ public class LexisApiAuthorizationCustomizer
         HttpMethod.POST,
         new String[] {"/api/lexis/permitDetailsRPC", "/api/lexis/permitDetailsRPC.do"},
         "/permitDetails");
+    authorizeAction(
+        authorize,
+        HttpMethod.DELETE,
+        new String[] {"/api/lexis/rpc/permit-details/**"},
+        "/permitDetails");
 
     authorizeAction(
         authorize,

@@ -1,7 +1,9 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import java.io.InputStream;
 import java.math.BigDecimal;
+import java.sql.ResultSet;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
@@ -33,8 +35,19 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
+  private static final String FIND_PERMIT_FILE_DETAILS =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_FILE_DETAILS(?,?)";
+  private static final String FIND_APPLICATION_FILE_DETAILS =
+      LEXIS_GROUP_5_PACKAGE + "FIND_APPL_FILE_DETAILS(?,?)";
+  private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String IS_APP_UNMANU = LEXIS_GROUP_5_PACKAGE + "IS_APP_UMANU(?,?)";
   private static final String GET_POLICY_FACTOR = LEXIS_GROUP_5_PACKAGE + "GET_POLICY_FACTOR(?,?,?)";
+  private static final String DELETE_PERMIT_FILE_ATTACHMENT =
+      LEXIS_GROUP_9_PACKAGE + "DELETE_PERMIT_FILE_ATTACHMENT(?)";
+  private static final String DELETE_APPLICATION_FILE_ATTACHMENT =
+      LEXIS_GROUP_9_PACKAGE + "DELETE_APPL_FILE_ATTACHMENT(?)";
+  private static final String DELETE_INVOICE_FILE_ATTACHMENT =
+      LEXIS_GROUP_9_PACKAGE + "DELETE_INVOICE_FILE_ATTACHMENT(?)";
 
   private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
   private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
@@ -46,6 +59,11 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
   private static final String FIND_RATE_BY_EXEMPTION = LEXIS_CODES_PACKAGE + "FIND_RATE_BY_EXEMPTION(?,?)";
   private static final String FIND_LOG_AMV_BY_SCALE = LEXIS_CODES_PACKAGE + "FIND_LOG_AMV(?,?)";
+  private static final String FIND_ALL_COUNTRY_CODES = LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)";
+  private static final String FIND_ALL_ATTACHMENT_TYPE_CODES =
+      LEXIS_CODES_PACKAGE + "FIND_ALL_ATTACH_CODES(?)";
+  private static final String FIND_ATTACHMENT_TYPE_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
 
   public PermitRpcRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -91,6 +109,143 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .distinct()
         .sorted()
         .toList();
+  }
+
+  public List<DocumentRow> findPermitDocumentDetailsByPermitNumber(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+        FIND_PERMIT_FILE_DETAILS,
+        cs -> cs.setLong(1, permitNumber),
+        2,
+        this::mapDocumentRow);
+  }
+
+  public List<DocumentRow> findApplicationDocumentDetailsByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+        FIND_APPLICATION_FILE_DETAILS,
+        cs -> cs.setLong(1, applicationNumber),
+        2,
+        this::mapDocumentRow);
+  }
+
+  public Optional<byte[]> findFileAttachmentBytes(Long fileId) {
+    if (fileId == null || fileId < 1) {
+      return Optional.empty();
+    }
+
+    String call = "{ call " + FIND_FILE_ATTACHMENT + " }";
+    try {
+      return jdbcTemplate.execute(
+          call,
+          (CallableStatementCallback<Optional<byte[]>>)
+              cs -> {
+                cs.setLong(1, fileId);
+                cs.registerOutParameter(2, Types.REF_CURSOR);
+                cs.execute();
+
+                try (ResultSet rs = (ResultSet) cs.getObject(2)) {
+                  if (rs == null || !rs.next()) {
+                    return Optional.empty();
+                  }
+                  InputStream input = rs.getBinaryStream(1);
+                  if (input == null) {
+                    return Optional.empty();
+                  }
+                  try {
+                    return Optional.of(input.readAllBytes());
+                  } catch (java.io.IOException ex) {
+                    logger.warn(
+                        "Oracle file attachment read failed [{}]: {}",
+                        FIND_FILE_ATTACHMENT,
+                        ex.getMessage());
+                    return Optional.empty();
+                  } finally {
+                    try {
+                      input.close();
+                    } catch (java.io.IOException ignored) {
+                      // Ignore stream close exceptions for read-only attachment lookups.
+                    }
+                  }
+                }
+              });
+    } catch (DataAccessException ex) {
+      logger.warn("Oracle file attachment lookup failed [{}]: {}", FIND_FILE_ATTACHMENT, ex.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  public List<CountryCodeRow> findAllCountryCodes() {
+    return queryCursorProcedure(
+            FIND_ALL_COUNTRY_CODES,
+            null,
+            1,
+            rs ->
+                new CountryCodeRow(
+                    getString(rs, "CODE"),
+                    getString(rs, "DESCRIPTION"),
+                    coalesce(getLong(rs, "GROUP_BY"), 0L),
+                    coalesce(getLong(rs, "ORDER_BY"), 0L)))
+        .stream()
+        .filter(row -> row.code() != null && row.description() != null)
+        .toList();
+  }
+
+  public List<AttachmentTypeRow> findAllAttachmentTypes() {
+    return queryCursorProcedure(
+            FIND_ALL_ATTACHMENT_TYPE_CODES,
+            null,
+            1,
+            rs ->
+                new AttachmentTypeRow(
+                    getString(rs, "CODE"),
+                    getString(rs, "DESCRIPTION"),
+                    coalesce(getLong(rs, "GROUP_BY"), 0L),
+                    coalesce(getLong(rs, "ORDER_BY"), 0L)))
+        .stream()
+        .filter(row -> row.code() != null && row.description() != null)
+        .toList();
+  }
+
+  public Optional<String> findAttachmentTypeDescription(String attachmentTypeCode) {
+    String normalized = trim(attachmentTypeCode);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+            FIND_ATTACHMENT_TYPE_CODE,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> trim(getString(rs, "DESCRIPTION")))
+        .filter(value -> value != null && !value.isBlank());
+  }
+
+  public boolean deletePermitFile(Long documentId) {
+    if (documentId == null || documentId < 1) {
+      return false;
+    }
+    return executeProcedure(DELETE_PERMIT_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+  }
+
+  public boolean deleteApplicationFile(Long documentId) {
+    if (documentId == null || documentId < 1) {
+      return false;
+    }
+    return executeProcedure(DELETE_APPLICATION_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
+  }
+
+  public boolean deleteInvoiceFile(Long documentId) {
+    if (documentId == null || documentId < 1) {
+      return false;
+    }
+    return executeProcedure(DELETE_INVOICE_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
   }
 
   public List<PermitScaleDetailRow> findScaleDetailsByPackageNumber(String packageNumber) {
@@ -406,6 +561,26 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return first != null ? first : second;
   }
 
+  private DocumentRow mapDocumentRow(ResultSet rs) {
+    Long attachmentId = getLong(rs, "EXPORT_ATTACHMENT_ID");
+    return new DocumentRow(
+        coalesce(attachmentId, 0L),
+        safeFileName(getString(rs, "FILE_NAME")),
+        firstNonNull(getString(rs, "DESCRIPTION"), ""),
+        firstNonNull(getString(rs, "EXPORT_ATTACHMENT_TYPE_CODE"), ""));
+  }
+
+  private String safeFileName(String value) {
+    if (value == null || value.isBlank()) {
+      return "";
+    }
+    int slashIndex = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
+    if (slashIndex < 0 || slashIndex >= value.length() - 1) {
+      return value;
+    }
+    return value.substring(slashIndex + 1);
+  }
+
   private double coalesce(Double value, double fallback) {
     return value == null ? fallback : value;
   }
@@ -413,6 +588,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private long coalesce(Long value, long fallback) {
     return value == null ? fallback : value;
   }
+
+  public record DocumentRow(long id, String fileName, String description, String attachmentTypeCode) {}
+
+  public record CountryCodeRow(String code, String description, long groupBy, long orderBy) {}
+
+  public record AttachmentTypeRow(String code, String description, long groupBy, long orderBy) {}
 
   public record PermitScaleDetailRow(
       String exportScaleDetailId,

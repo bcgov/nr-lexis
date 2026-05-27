@@ -39,6 +39,8 @@ public class LegacyRouteController {
   private static final String ACTION_GET_PACKAGE_LIST = "getPackageList";
   private static final String ACTION_GET_PACKAGE_VOLUME = "getPackageVolume";
   private static final String ACTION_GET_APPLICATION_VOLUME = "getApplicationVolume";
+  private static final String ACTION_GET_CLIENT_DATA = "getClientData";
+  private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
   private static final String ACTION_GET_PERMIT_SUMMARY = "getPermitSummary";
   private static final String ACTION_GET_TOTAL_FEES_FOR_PERMIT = "getTotalFeesForPermit";
   private static final String ACTION_GET_SCALE_FEES_FOR_PACKAGE = "getScaleFeesForPackage";
@@ -47,6 +49,13 @@ public class LegacyRouteController {
   private static final String ACTION_GET_PACKAGE_INFO = "getPackageInfo";
   private static final String ACTION_GET_PACKAGE_DETAILS = "getPackageDetails";
   private static final String ACTION_GET_PERMIT_HAS_APPLICATIONS = "getPermitHasApplications";
+  private static final String ACTION_GET_COUNTRY_LIST = "getCountryList";
+  private static final String ACTION_GET_FILE_TYPES = "getFileTypes";
+  private static final String ACTION_GET_DOCUMENT = "getDocument";
+  private static final String ACTION_GET_DOCUMENT_DETAILS = "getDocumentDetails";
+  private static final String ACTION_REMOVE_PERMIT_DOCUMENT = "removePermitDocument";
+  private static final String ACTION_REMOVE_APPLICATION_DOCUMENT = "removeApplicationDocument";
+  private static final String ACTION_REMOVE_INVOICE_DOCUMENT = "removeInvoiceDocument";
 
   private final LexisApplicationController applicationController;
   private final ExemptionController exemptionController;
@@ -404,7 +413,9 @@ public class LegacyRouteController {
   public ResponseEntity<?> offerDetailsRpc(
       @RequestParam(name = "actionMapping", required = false) String actionMapping,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
-      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
     if (ACTION_VALIDATE_APPLICATION_NUMBER.equalsIgnoreCase(actionMapping)) {
       return offerDetailsRpcController.validateApplicationNumber(applicationNumber);
     }
@@ -420,6 +431,12 @@ public class LegacyRouteController {
     if (ACTION_GET_APPLICATION_VOLUME.equalsIgnoreCase(actionMapping)) {
       return offerDetailsRpcController.getApplicationVolume(applicationNumber);
     }
+    if (ACTION_GET_CLIENT_DATA.equalsIgnoreCase(actionMapping)) {
+      return offerDetailsRpcController.getClientData(clientNumber, clientLocationCode);
+    }
+    if (ACTION_GET_CLIENT_LOCATIONS.equalsIgnoreCase(actionMapping)) {
+      return offerDetailsRpcController.getClientLocations(clientNumber);
+    }
     return ResponseEntity.noContent().build();
   }
 
@@ -432,6 +449,9 @@ public class LegacyRouteController {
       @RequestParam(name = "countryCode", required = false) String countryCode,
       @RequestParam(name = "applicationDate", required = false) String applicationDate,
       @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "fileID", required = false) String fileId,
+      @RequestParam(name = "fileName", required = false) String fileName,
+      @RequestParam(name = "documentId", required = false) String documentId,
       Authentication authentication) {
     if (ACTION_GET_PERMIT_SUMMARY.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPermitSummary(
@@ -462,6 +482,28 @@ public class LegacyRouteController {
     }
     if (ACTION_GET_PERMIT_HAS_APPLICATIONS.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPermitHasApplications(permitNumber);
+    }
+    if (ACTION_GET_COUNTRY_LIST.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getCountryList();
+    }
+    if (ACTION_GET_FILE_TYPES.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getFileTypes();
+    }
+    if (ACTION_GET_DOCUMENT.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getDocument(fileId, fileName);
+    }
+    if (ACTION_GET_DOCUMENT_DETAILS.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getDocumentDetails(
+          permitNumber == null ? null : permitNumber.toString());
+    }
+    if (ACTION_REMOVE_PERMIT_DOCUMENT.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.removePermitDocument(documentId);
+    }
+    if (ACTION_REMOVE_APPLICATION_DOCUMENT.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.removeApplicationDocument(documentId);
+    }
+    if (ACTION_REMOVE_INVOICE_DOCUMENT.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.removeInvoiceDocument(documentId);
     }
     return ResponseEntity.noContent().build();
   }

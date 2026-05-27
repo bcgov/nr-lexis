@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.controller;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -33,12 +34,15 @@ public class OfferDetailsRpcController {
 
   private final ObjectProvider<LexisApplicationService> applicationServiceProvider;
   private final ObjectProvider<FederalApplicationService> federalApplicationServiceProvider;
+  private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
 
   public OfferDetailsRpcController(
       ObjectProvider<LexisApplicationService> applicationServiceProvider,
-      ObjectProvider<FederalApplicationService> federalApplicationServiceProvider) {
+      ObjectProvider<FederalApplicationService> federalApplicationServiceProvider,
+      ObjectProvider<ClientLookupService> clientLookupServiceProvider) {
     this.applicationServiceProvider = applicationServiceProvider;
     this.federalApplicationServiceProvider = federalApplicationServiceProvider;
+    this.clientLookupServiceProvider = clientLookupServiceProvider;
   }
 
   @GetMapping("/validate-application-number")
@@ -199,6 +203,59 @@ public class OfferDetailsRpcController {
     return ResponseEntity.ok(new OfferVolumeResponseDto(formatVolume(detail.get().applicationVolume())));
   }
 
+  @GetMapping("/client-data")
+  public ResponseEntity<OfferClientDataResponseDto> getClientData(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
+    ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
+    if (clientLookupService == null) {
+      LOGGER.warn("Client lookup service unavailable - returning no content for client data");
+      return ResponseEntity.noContent().build();
+    }
+
+    return clientLookupService
+        .getClientData(clientNumber, clientLocationCode)
+        .map(
+            data ->
+                ResponseEntity.ok(
+                    new OfferClientDataResponseDto(
+                        data.clientNumber(),
+                        data.companyName(),
+                        data.address(),
+                        data.city(),
+                        data.province(),
+                        data.postalCode(),
+                        data.country(),
+                        data.phone(),
+                        data.fax(),
+                        data.email(),
+                        null)))
+        .orElseGet(
+            () ->
+                ResponseEntity.ok(
+                    new OfferClientDataResponseDto(
+                        null, null, null, null, null, null, null, null, null, null, "true")));
+  }
+
+  @GetMapping("/client-locations")
+  public ResponseEntity<List<OfferClientLocationResponseDto>> getClientLocations(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber) {
+    ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
+    if (clientLookupService == null) {
+      LOGGER.warn("Client lookup service unavailable - returning no content for client locations");
+      return ResponseEntity.noContent().build();
+    }
+
+    List<OfferClientLocationResponseDto> response =
+        clientLookupService.getClientLocations(clientNumber).stream()
+            .map(
+                location ->
+                    new OfferClientLocationResponseDto(
+                        location.locationName(), location.locationCode(), location.selected()))
+            .toList();
+    return ResponseEntity.ok(response);
+  }
+
   private boolean isFederalApplication(Long applicationNumber) {
     FederalApplicationService federalService = federalApplicationServiceProvider.getIfAvailable();
     if (federalService == null) {
@@ -257,4 +314,20 @@ public class OfferDetailsRpcController {
   public record OfferPackageListResponseDto(List<String> packageList) {}
 
   public record OfferVolumeResponseDto(String volume) {}
+
+  public record OfferClientDataResponseDto(
+      String clientNumber,
+      String companyName,
+      String address,
+      String city,
+      String province,
+      String postalCode,
+      String country,
+      String phone,
+      String fax,
+      String email,
+      String notfound) {}
+
+  public record OfferClientLocationResponseDto(
+      String locationName, String locationCode, boolean selected) {}
 }

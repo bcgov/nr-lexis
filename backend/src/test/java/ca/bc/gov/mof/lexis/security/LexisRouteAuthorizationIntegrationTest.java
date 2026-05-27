@@ -95,11 +95,30 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyOfferDetailsRpcShouldAllowClientLookupAction() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/offerDetailsRPC")
+                .param("actionMapping", "getClientLocations")
+                .param("clientNumber", "77881")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_INDUSTRY"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void legacyPermitDetailsRpcShouldAllowReadOnlyRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/permitDetailsRPC")
                 .param("actionMapping", "getPackageList")
                 .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyPermitDetailsRpcShouldAllowCountryListAction() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/permitDetailsRPC")
+                .param("actionMapping", "getCountryList")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isNoContent());
   }

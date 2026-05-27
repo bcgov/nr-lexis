@@ -5,7 +5,10 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
@@ -15,6 +18,9 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.AttachmentTypeRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
@@ -223,6 +229,58 @@ class OraclePermitDetailsRpcServiceTest {
     PermitHasApplicationsRpcResponseDto response = service.getPermitHasApplications(7000123L);
 
     assertThat(response.hasApplications()).isFalse();
+  }
+
+  @Test
+  void countryListShouldReturnSortedCountryItems() {
+    when(repository.findAllCountryCodes())
+        .thenReturn(
+            List.of(
+                new CountryCodeRow("US", "United States", 2L, 2L),
+                new CountryCodeRow("CA", "Canada", 1L, 1L),
+                new CountryCodeRow("GB", "United Kingdom", 0L, 1L)));
+
+    PermitCountryListRpcResponseDto response = service.getCountryList();
+
+    assertThat(response.countryList()).hasSize(3);
+    assertThat(response.countryList().get(0).code()).isEqualTo("CA");
+    assertThat(response.countryList().get(1).code()).isEqualTo("US");
+    assertThat(response.countryList().get(2).code()).isEqualTo("GB");
+  }
+
+  @Test
+  void fileTypesShouldReturnSortedFileTypeItems() {
+    when(repository.findAllAttachmentTypes())
+        .thenReturn(
+            List.of(
+                new AttachmentTypeRow("INS", "Application Document", 2L, 1L),
+                new AttachmentTypeRow("INV", "Invoice", 1L, 1L)));
+
+    List<PermitFileTypeRpcResponseDto> response = service.getFileTypes();
+
+    assertThat(response).hasSize(2);
+    assertThat(response.get(0).code()).isEqualTo("INV");
+    assertThat(response.get(1).code()).isEqualTo("INS");
+  }
+
+  @Test
+  void documentDetailsShouldIncludePermitAndApplicationDocuments() {
+    when(repository.findPermitDocumentDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(new DocumentRow(50L, "permit.pdf", "", "INV")));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 2.35d, 4L, "7000123", "PKG-903")));
+    when(repository.findApplicationDocumentDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(new DocumentRow(75L, "application.pdf", "", "INS")));
+    when(repository.findAttachmentTypeDescription("INV")).thenReturn(Optional.of("Invoice"));
+    when(repository.findAttachmentTypeDescription("INS")).thenReturn(Optional.of("Insurance"));
+
+    List<PermitDocumentItemRpcResponseDto> response = service.getDocumentDetails(7000123L);
+
+    assertThat(response).hasSize(2);
+    assertThat(response.get(0).name()).isEqualTo("permit.pdf");
+    assertThat(response.get(0).type()).isEqualTo("Invoice");
+    assertThat(response.get(1).name()).isEqualTo("application.pdf");
+    assertThat(response.get(1).type()).isEqualTo("Insurance");
   }
 
   @Test
