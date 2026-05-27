@@ -135,6 +135,13 @@ const ProvincialOffersPage: FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const canCreateOffer = canPerform('createOffer')
+  const withCurrentSearch = useCallback(
+    (path: string): string => {
+      const query = searchParams.toString()
+      return query.length > 0 ? `${path}?${query}` : path
+    },
+    [searchParams],
+  )
 
   const urlState = useMemo(() => {
     const urlFilters: ProvincialOfferSearchFilters = {
@@ -407,7 +414,10 @@ const ProvincialOffersPage: FC = () => {
                 {results.content.map((row) => (
                   <TableRow key={row.offerNumber}>
                     <TableCell>
-                      <Link className="cds--link" to={`/provincial/offers/${row.offerNumber}`}>
+                      <Link
+                        className="cds--link"
+                        to={withCurrentSearch(`/provincial/offers/${row.offerNumber}`)}
+                      >
                         {row.offerNumber}
                       </Link>
                     </TableCell>

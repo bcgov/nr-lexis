@@ -182,6 +182,13 @@ const ProvincialExemptionPage: FC = () => {
   const canCreateExemption = canPerform('/createExemption')
   const canApproveExemption = canPerform('approveExemption')
   const selectedRowsCount = Object.keys(selectedRowsById).length
+  const withCurrentSearch = useCallback(
+    (path: string): string => {
+      const query = searchParams.toString()
+      return query.length > 0 ? `${path}?${query}` : path
+    },
+    [searchParams],
+  )
 
   const urlState = useMemo(() => {
     const urlFilters: ProvincialExemptionSearchFilters = {
@@ -598,7 +605,7 @@ const ProvincialExemptionPage: FC = () => {
                         {row.canViewExemption ? (
                           <Link
                             className="cds--link"
-                            to={`/provincial/exemption/${row.exemptionNumber}`}
+                            to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
                           >
                             {row.exemptionNumber}
                           </Link>

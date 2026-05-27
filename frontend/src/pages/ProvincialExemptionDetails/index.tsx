@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
 import {
   Button,
   Column,
@@ -40,6 +40,13 @@ const ProvincialExemptionDetailsPage: FC = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [permitFilter, setPermitFilter] = useState(searchParams.get('permitFilter') ?? '')
   const [remarkFilter, setRemarkFilter] = useState(searchParams.get('remarkFilter') ?? '')
+  const withCurrentSearch = useCallback(
+    (path: string): string => {
+      const query = searchParams.toString()
+      return query.length > 0 ? `${path}?${query}` : path
+    },
+    [searchParams],
+  )
 
   useEffect(() => {
     const load = async () => {
@@ -161,7 +168,9 @@ const ProvincialExemptionDetailsPage: FC = () => {
                   }
                   onClick={() => {
                     if (detail.applicationNumber) {
-                      navigate(`/provincial/application/${detail.applicationNumber}`)
+                      navigate(
+                        withCurrentSearch(`/provincial/application/${detail.applicationNumber}`),
+                      )
                     }
                   }}
                 >
@@ -171,7 +180,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
                   kind="secondary"
                   size="sm"
                   disabled={!canPerform('/permitSearch')}
-                  onClick={() => navigate('/provincial/permit')}
+                  onClick={() => navigate(withCurrentSearch('/provincial/permit'))}
                 >
                   Open Permit Search
                 </Button>
@@ -254,7 +263,9 @@ const ProvincialExemptionDetailsPage: FC = () => {
                           kind="ghost"
                           size="sm"
                           disabled={!canPerform('/permitSearch') || !canPerform('/permitDetails')}
-                          onClick={() => navigate(`/provincial/permit/${permitNumber}`)}
+                          onClick={() =>
+                            navigate(withCurrentSearch(`/provincial/permit/${permitNumber}`))
+                          }
                         >
                           Open
                         </Button>

@@ -123,6 +123,13 @@ const FederalPage: FC = () => {
   const [sortField, setSortField] = useState<FederalApplicationSearchSortField>(DEFAULT_SORT_FIELD)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const withCurrentSearch = useCallback(
+    (path: string): string => {
+      const query = searchParams.toString()
+      return query.length > 0 ? `${path}?${query}` : path
+    },
+    [searchParams],
+  )
 
   const urlState = useMemo(() => {
     const urlFilters: FederalApplicationSearchFilters = {
@@ -378,7 +385,7 @@ const FederalPage: FC = () => {
                     <TableCell>
                       <Link
                         className="cds--link"
-                        to={`/federal/application/${row.applicationNumber}`}
+                        to={withCurrentSearch(`/federal/application/${row.applicationNumber}`)}
                       >
                         {row.federalApplicationNumber}
                       </Link>

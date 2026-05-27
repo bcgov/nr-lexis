@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Checkbox,
@@ -176,6 +176,15 @@ const ProvincialReviewPage: FC = () => {
   const [statusEmailAddress, setStatusEmailAddress] = useState('')
   const [reviewActionStatus, setReviewActionStatus] = useState<ReviewActionStatus | null>(null)
   const canApproveApplications = canPerform('/applicationsReview')
+  const canOpenApplicationDetails =
+    canPerform('/applicationSearch') && canPerform('/applicationDetails')
+  const withCurrentSearch = useCallback(
+    (path: string): string => {
+      const query = searchParams.toString()
+      return query.length > 0 ? `${path}?${query}` : path
+    },
+    [searchParams],
+  )
   const normalizedStatusCode = useMemo(
     () => normalizeReviewStatus(selectedStatusCode),
     [selectedStatusCode],
@@ -805,7 +814,18 @@ const ProvincialReviewPage: FC = () => {
                         }
                       />
                     </TableCell>
-                    <TableCell>{row.applicationNumber}</TableCell>
+                    <TableCell>
+                      {canOpenApplicationDetails ? (
+                        <Link
+                          className="cds--link"
+                          to={withCurrentSearch(`/provincial/application/${row.applicationNumber}`)}
+                        >
+                          {row.applicationNumber}
+                        </Link>
+                      ) : (
+                        row.applicationNumber
+                      )}
+                    </TableCell>
                     <TableCell>{row.volume}</TableCell>
                     <TableCell>{row.speciesEndUse}</TableCell>
                     <TableCell>{row.listingDate}</TableCell>

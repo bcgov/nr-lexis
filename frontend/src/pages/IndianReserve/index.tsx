@@ -106,6 +106,13 @@ const IndianReservePage: FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const canCreatePermit = canPerform('viewOICApplication')
+  const withCurrentSearch = useCallback(
+    (path: string): string => {
+      const query = searchParams.toString()
+      return query.length > 0 ? `${path}?${query}` : path
+    },
+    [searchParams],
+  )
 
   const urlState = useMemo(() => {
     const urlFilters: IndianReservePermitSearchFilters = {
@@ -336,7 +343,10 @@ const IndianReservePage: FC = () => {
                 {results.content.map((row) => (
                   <TableRow key={row.permitNumber}>
                     <TableCell>
-                      <Link className="cds--link" to={`/indian-reserve/permit/${row.permitNumber}`}>
+                      <Link
+                        className="cds--link"
+                        to={withCurrentSearch(`/indian-reserve/permit/${row.permitNumber}`)}
+                      >
                         {row.permitNumber}
                       </Link>
                     </TableCell>

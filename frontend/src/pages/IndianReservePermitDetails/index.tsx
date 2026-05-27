@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
 import {
   Button,
   Column,
@@ -38,6 +38,13 @@ const IndianReservePermitDetailsPage: FC = () => {
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [packageFilter, setPackageFilter] = useState(searchParams.get('packageFilter') ?? '')
+  const withCurrentSearch = useCallback(
+    (path: string): string => {
+      const query = searchParams.toString()
+      return query.length > 0 ? `${path}?${query}` : path
+    },
+    [searchParams],
+  )
 
   useEffect(() => {
     const load = async () => {
@@ -132,7 +139,7 @@ const IndianReservePermitDetailsPage: FC = () => {
                   disabled={
                     !canPerform('/indianReservePermitSearch') && !canPerform('viewOICApplication')
                   }
-                  onClick={() => navigate('/indian-reserve')}
+                  onClick={() => navigate(withCurrentSearch('/indian-reserve'))}
                 >
                   Open Reserve Search
                 </Button>
@@ -142,7 +149,7 @@ const IndianReservePermitDetailsPage: FC = () => {
                   disabled={
                     !canPerform('/indianReservePermitSearch') && !canPerform('viewOICApplication')
                   }
-                  onClick={() => navigate('/indian-reserve/permit/create')}
+                  onClick={() => navigate(withCurrentSearch('/indian-reserve/permit/create'))}
                 >
                   Create Reserve Permit
                 </Button>

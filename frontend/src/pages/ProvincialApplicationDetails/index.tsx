@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
 import {
   Button,
   Column,
@@ -41,6 +41,13 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [packageFilter, setPackageFilter] = useState(searchParams.get('packageFilter') ?? '')
   const [offerFilter, setOfferFilter] = useState(searchParams.get('offerFilter') ?? '')
   const [remarkFilter, setRemarkFilter] = useState(searchParams.get('remarkFilter') ?? '')
+  const withCurrentSearch = useCallback(
+    (path: string): string => {
+      const query = searchParams.toString()
+      return query.length > 0 ? `${path}?${query}` : path
+    },
+    [searchParams],
+  )
 
   useEffect(() => {
     const load = async () => {
@@ -189,7 +196,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   onClick={() => {
                     if (detail.exemptionNumber) {
                       navigate(
-                        `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`,
+                        withCurrentSearch(
+                          `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`,
+                        ),
                       )
                     }
                   }}
@@ -200,7 +209,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   kind="secondary"
                   size="sm"
                   disabled={!canPerform('/offersSearch')}
-                  onClick={() => navigate('/provincial/offers')}
+                  onClick={() => navigate(withCurrentSearch('/provincial/offers'))}
                 >
                   Open Offers Search
                 </Button>
@@ -350,7 +359,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
                           kind="ghost"
                           size="sm"
                           disabled={!canPerform('/offersSearch') || !canPerform('/offerDetails')}
-                          onClick={() => navigate(`/provincial/offers/${item.offerNumber}`)}
+                          onClick={() =>
+                            navigate(withCurrentSearch(`/provincial/offers/${item.offerNumber}`))
+                          }
                         >
                           Open
                         </Button>
