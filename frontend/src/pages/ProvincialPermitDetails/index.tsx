@@ -1,8 +1,8 @@
-import { useEffect, useState, type FC } from 'react'
+import { useEffect, useMemo, useState, type FC } from 'react'
 import { Column, Grid, InlineLoading, InlineNotification } from '@carbon/react'
 import { useParams } from 'react-router-dom'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { DetailFieldTile, DetailListTile, type DetailListItem } from '@/pages/shared/DetailSections'
 import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -45,6 +45,50 @@ const ProvincialPermitDetailsPage: FC = () => {
     void load()
   }, [permitNumber])
 
+  const documentItems = useMemo<DetailListItem[]>(() => {
+    if (!detail) {
+      return []
+    }
+
+    const items: DetailListItem[] = []
+    if (detail.invoiceNumber) {
+      items.push({
+        key: `invoice-${detail.invoiceNumber}`,
+        content: `Invoice: ${detail.invoiceNumber}`,
+      })
+    }
+    if (detail.federalPermitNumber) {
+      items.push({
+        key: `federal-${detail.federalPermitNumber}`,
+        content: `Federal Permit: ${detail.federalPermitNumber}`,
+      })
+    }
+
+    if (detail.remarks) {
+      items.push({
+        key: 'remarks',
+        content: `Remarks: ${detail.remarks}`,
+      })
+    }
+
+    return items
+  }, [detail])
+
+  const legacyTabParityItems = useMemo<DetailListItem[]>(() => {
+    return [
+      { key: 'permit', content: 'Permit tab: migrated summary fields available' },
+      { key: 'shipping', content: 'Shipping tab: destination and transport fields available' },
+      { key: 'items', content: 'Items tab: pending Spring endpoint parity' },
+      { key: 'fees', content: 'Fees tab: pending Spring endpoint parity' },
+      { key: 'invoices', content: 'Invoices tab: base invoice identifier available' },
+      { key: 'documents', content: 'Documents tab: base document references scaffolded' },
+      { key: 'gbms', content: 'GBMS tab: pending Spring endpoint parity' },
+      { key: 'oicItems', content: 'OIC items tab: pending Spring endpoint parity' },
+      { key: 'boicItems', content: 'BOIC items tab: pending Spring endpoint parity' },
+      { key: 'agentOwner', content: 'Agent/Owner tabs: base client references available' },
+    ]
+  }, [])
+
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
@@ -72,52 +116,85 @@ const ProvincialPermitDetailsPage: FC = () => {
       )}
 
       {!loading && detail && (
-        <Column sm={4} md={8} lg={16}>
-          <DetailFieldTile
-            title="Permit Summary"
-            fields={[
-              { label: 'Permit Number', value: displayValue(detail.permitNumber) },
-              { label: 'Application Number', value: displayValue(detail.applicationNumber) },
-              { label: 'Package Number', value: displayValue(detail.packageNumber) },
-              { label: 'Exemption Number', value: displayValue(detail.exemptionNumber) },
-              {
-                label: 'Status',
-                value: displayValue(detail.permitStatusDescription ?? detail.permitStatusCode),
-              },
-              {
-                label: 'Applicant Client Number',
-                value: displayValue(detail.applicantClientNumber),
-              },
-              { label: 'Owner Client Number', value: displayValue(detail.ownerClientNumber) },
-              {
-                label: 'Destination Company',
-                value: displayValue(detail.destinationCompanyName),
-              },
-              {
-                label: 'Destination Country',
-                value: displayValue(detail.destinationCountryCode),
-              },
-              { label: 'Transport Type', value: displayValue(detail.transportTypeCode) },
-              { label: 'Transport Name', value: displayValue(detail.transportName) },
-              { label: 'Port Of Export', value: displayValue(detail.portOfExportCode) },
-              { label: 'Other Port Of Export', value: displayValue(detail.otherPortOfExport) },
-              { label: 'Issue Date', value: displayValue(detail.issueDate) },
-              { label: 'Expiry Date', value: displayValue(detail.expiryDate) },
-              { label: 'Received Date', value: displayValue(detail.receivedDate) },
-              {
-                label: 'Estimated Shipping Date',
-                value: displayValue(detail.estimatedShippingDate),
-              },
-              { label: 'Permit Volume (m³)', value: displayValue(detail.permitVolume) },
-              { label: 'Number Of Pieces', value: displayValue(detail.numberOfPieces) },
-              { label: 'Receipt Number', value: displayValue(detail.receiptNumber) },
-              { label: 'Federal Permit Number', value: displayValue(detail.federalPermitNumber) },
-              { label: 'Invoice Number', value: displayValue(detail.invoiceNumber) },
-              { label: 'Remarks', value: displayValue(detail.remarks) },
-              { label: 'Region', value: displayValue(detail.region) },
-            ]}
-          />
-        </Column>
+        <>
+          <Column sm={4} md={8} lg={16}>
+            <DetailFieldTile
+              title="Permit Summary"
+              fields={[
+                { label: 'Permit Number', value: displayValue(detail.permitNumber) },
+                { label: 'Application Number', value: displayValue(detail.applicationNumber) },
+                { label: 'Package Number', value: displayValue(detail.packageNumber) },
+                { label: 'Exemption Number', value: displayValue(detail.exemptionNumber) },
+                {
+                  label: 'Status',
+                  value: displayValue(detail.permitStatusDescription ?? detail.permitStatusCode),
+                },
+                { label: 'Issue Date', value: displayValue(detail.issueDate) },
+                { label: 'Expiry Date', value: displayValue(detail.expiryDate) },
+                { label: 'Received Date', value: displayValue(detail.receivedDate) },
+                { label: 'Region', value: displayValue(detail.region) },
+              ]}
+            />
+          </Column>
+
+          <Column sm={4} md={8} lg={8}>
+            <DetailFieldTile
+              title="Shipping"
+              fields={[
+                {
+                  label: 'Destination Company',
+                  value: displayValue(detail.destinationCompanyName),
+                },
+                {
+                  label: 'Destination Country',
+                  value: displayValue(detail.destinationCountryCode),
+                },
+                { label: 'Transport Type', value: displayValue(detail.transportTypeCode) },
+                { label: 'Transport Name', value: displayValue(detail.transportName) },
+                { label: 'Port Of Export', value: displayValue(detail.portOfExportCode) },
+                { label: 'Other Port Of Export', value: displayValue(detail.otherPortOfExport) },
+                {
+                  label: 'Estimated Shipping Date',
+                  value: displayValue(detail.estimatedShippingDate),
+                },
+              ]}
+            />
+          </Column>
+
+          <Column sm={4} md={8} lg={8}>
+            <DetailFieldTile
+              title="Financial and Volume"
+              fields={[
+                { label: 'Permit Volume (m³)', value: displayValue(detail.permitVolume) },
+                { label: 'Number Of Pieces', value: displayValue(detail.numberOfPieces) },
+                { label: 'Receipt Number', value: displayValue(detail.receiptNumber) },
+                { label: 'Invoice Number', value: displayValue(detail.invoiceNumber) },
+                { label: 'Federal Permit Number', value: displayValue(detail.federalPermitNumber) },
+                {
+                  label: 'Applicant Client Number',
+                  value: displayValue(detail.applicantClientNumber),
+                },
+                { label: 'Owner Client Number', value: displayValue(detail.ownerClientNumber) },
+              ]}
+            />
+          </Column>
+
+          <Column sm={4} md={8} lg={8}>
+            <DetailListTile
+              title="Documents and Notes"
+              items={documentItems}
+              emptyLabel="No document references available."
+            />
+          </Column>
+
+          <Column sm={4} md={8} lg={8}>
+            <DetailListTile
+              title="Legacy Tab Parity"
+              items={legacyTabParityItems}
+              emptyLabel="No tab mapping details available."
+            />
+          </Column>
+        </>
       )}
     </Grid>
   )
