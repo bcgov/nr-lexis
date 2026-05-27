@@ -1,0 +1,936 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="LEXIS_TENURE_ANALYSIS.rpt" pageWidth="792" pageHeight="612" orientation="Landscape" whenNoDataType="AllSectionsNoDetail" columnWidth="684" leftMargin="54" rightMargin="54" topMargin="54" bottomMargin="54" isSummaryNewPage="true" uuid="d6c025c8-fa47-44b3-8f84-8236147da8ec">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<property name="ireport.jasperserver.reportUnit" value="/JCRS/LEXIS/Reports/LEXIS/LEXIS_TENURE_ANALYSIS.rpt"/>
+	<property name="ireport.jasperserver.url" value="http://localhost:8080/jasperserver/services/repository"/>
+	<parameter name="P_ORG_UNIT_NUMBER" class="java.lang.String"/>
+	<parameter name="P_EXEMPTION_REASON" class="java.lang.String"/>
+	<parameter name="P_EXEMPTION_TYPE" class="java.lang.String"/>
+	<parameter name="P_EXEMPTION_NUMBER" class="java.lang.String"/>
+	<parameter name="P_CLIENT_NUMBER" class="java.lang.String"/>
+	<parameter name="P_CLIENT_TYPE" class="java.lang.String"/>
+	<parameter name="P_FROM_DATE" class="java.lang.String"/>
+	<parameter name="P_TO_DATE" class="java.lang.String"/>
+	<parameter name="P_TENURE_TYPE_1" class="java.lang.String"/>
+	<parameter name="P_TENURE_TYPE_2" class="java.lang.String"/>
+	<parameter name="P_TENURE_TYPE_3" class="java.lang.String"/>
+	<parameter name="P_TENURE_TYPE_4" class="java.lang.String"/>
+	<parameter name="P_TENURE_TYPE_5" class="java.lang.String"/>
+	<parameter name="P_TENURE_TYPE_6" class="java.lang.String"/>
+	<parameter name="P_TIMBER_MARK_1" class="java.lang.String"/>
+	<parameter name="P_TIMBER_MARK_2" class="java.lang.String"/>
+	<parameter name="P_TIMBER_MARK_3" class="java.lang.String"/>
+	<parameter name="P_TIMBER_MARK_4" class="java.lang.String"/>
+	<parameter name="P_TIMBER_MARK_5" class="java.lang.String"/>
+	<parameter name="P_TIMBER_MARK_6" class="java.lang.String"/>
+	<parameter name="P_FOREST_FILE_ID" class="java.lang.String"/>
+	<parameter name="ORACLE_REF_CURSOR" class="java.sql.ResultSet" isForPrompting="false"/>
+	<parameter name="LoggedInUser" class="com.jaspersoft.jasperserver.api.metadata.user.domain.User" isForPrompting="false"/>
+	<parameter name="p_report_id" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["LEXIS_TENURE_ANALYSIS.rpt"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? "repo:" : "\\"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_EXT" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? ".jrxml" : ".jasper"]]></defaultValueExpression>
+	</parameter>
+	<queryString language="plsql">
+		<![CDATA[{call LEXIS_REPORTING.TENURE_ANALYSIS(
+P_TENURE_ANALYSIS => $P{ORACLE_REF_CURSOR},
+P_ORG_UNIT_NUMBER => $P{P_ORG_UNIT_NUMBER},
+P_EXEMPTION_REASON => $P{P_EXEMPTION_REASON},
+P_EXEMPTION_TYPE => $P{P_EXEMPTION_TYPE},
+P_EXEMPTION_NUMBER => $P{P_EXEMPTION_NUMBER},
+P_CLIENT_NUMBER => $P{P_CLIENT_NUMBER},
+P_CLIENT_TYPE => $P{P_CLIENT_TYPE},
+P_FROM_DATE => $P{P_FROM_DATE},
+P_TO_DATE => $P{P_TO_DATE},
+P_TENURE_TYPE_1 => $P{P_TENURE_TYPE_1},
+P_TENURE_TYPE_2 => $P{P_TENURE_TYPE_2},
+P_TENURE_TYPE_3 => $P{P_TENURE_TYPE_3},
+P_TENURE_TYPE_4 => $P{P_TENURE_TYPE_4},
+P_TENURE_TYPE_5 => $P{P_TENURE_TYPE_5},
+P_TENURE_TYPE_6 => $P{P_TENURE_TYPE_6},
+P_TIMBER_MARK_1 => $P{P_TIMBER_MARK_1},
+P_TIMBER_MARK_2 => $P{P_TIMBER_MARK_2},
+P_TIMBER_MARK_3 => $P{P_TIMBER_MARK_3},
+P_TIMBER_MARK_4 => $P{P_TIMBER_MARK_4},
+P_TIMBER_MARK_5 => $P{P_TIMBER_MARK_5},
+P_TIMBER_MARK_6 => $P{P_TIMBER_MARK_6},
+P_FOREST_FILE_ID => $P{P_FOREST_FILE_ID}
+)}]]>
+	</queryString>
+	<field name="EXEMPTION_REASON_DESC" class="java.lang.String"/>
+	<field name="EXEMPTION_NUMBER" class="java.lang.String"/>
+	<field name="ORG_UNIT_NAME" class="java.lang.String"/>
+	<field name="TENURE_TYPE" class="java.lang.String"/>
+	<field name="TENURE_DESC" class="java.lang.String"/>
+	<field name="FOREST_FILE_ID" class="java.lang.String"/>
+	<field name="TIMBER_MARK" class="java.lang.String"/>
+	<field name="MARK_CLIENT_NUMBER" class="java.lang.String"/>
+	<field name="CLIENT_NAME" class="java.lang.String"/>
+	<field name="LEGAL_FIRST_NAME" class="java.lang.String"/>
+	<field name="LEGAL_MIDDLE_NAME" class="java.lang.String"/>
+	<field name="SPECIES_GRADE_VOLUME" class="java.math.BigDecimal"/>
+	<field name="EXPORT_PERMIT_DETAIL_NUMBER" class="java.math.BigDecimal"/>
+	<sortField name="EXEMPTION_NUMBER"/>
+	<sortField name="TENURE_TYPE"/>
+	<sortField name="TIMBER_MARK"/>
+	<variable name="CCF0_TENURE_TYPE_LIST" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_TENURE_TYPE_1}) or {?P_TENURE_TYPE_1} = '' then
+//    'All'
+//else
+//    {?P_TENURE_TYPE_1} + ' ' + {?P_TENURE_TYPE_2} + ' ' + {?P_TENURE_TYPE_3} + ' ' +
+//  {?P_TENURE_TYPE_4} + ' ' + {?P_TENURE_TYPE_5} + ' ' + {?P_TENURE_TYPE_6}
+
+( $P{P_TENURE_TYPE_1}==null || $P{P_TENURE_TYPE_1}.isEmpty()
+?   "All"
+:   ( $P{P_TENURE_TYPE_1} == null || $P{P_TENURE_TYPE_1}.isEmpty() ? "" : $P{P_TENURE_TYPE_1} + " " ) +
+    ( $P{P_TENURE_TYPE_2} == null || $P{P_TENURE_TYPE_2}.isEmpty() ? "" : $P{P_TENURE_TYPE_2} + " " ) +
+    ( $P{P_TENURE_TYPE_3} == null || $P{P_TENURE_TYPE_3}.isEmpty() ? "" : $P{P_TENURE_TYPE_3} + " " ) +
+    ( $P{P_TENURE_TYPE_4} == null || $P{P_TENURE_TYPE_4}.isEmpty() ? "" : $P{P_TENURE_TYPE_4} + " " ) +
+    ( $P{P_TENURE_TYPE_5} == null || $P{P_TENURE_TYPE_5}.isEmpty() ? "" : $P{P_TENURE_TYPE_5} + " " ) +
+    ( $P{P_TENURE_TYPE_6} == null || $P{P_TENURE_TYPE_6}.isEmpty() ? "" : $P{P_TENURE_TYPE_6} )
+)]]></variableExpression>
+	</variable>
+	<variable name="CCF1_TIMBER_MARK_LIST" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_TIMBER_MARK_1}) or {?P_TIMBER_MARK_1} = '' then
+//    'All'
+//else
+//    {?P_TIMBER_MARK_1} + " " + {?P_TIMBER_MARK_2} + " " + {?P_TIMBER_MARK_3} + " " +
+//  {?P_TIMBER_MARK_4} + " " + {?P_TIMBER_MARK_5} + " " + {?P_TIMBER_MARK_6}
+
+$P{P_TIMBER_MARK_1} == null || $P{P_TIMBER_MARK_1}.isEmpty()
+?   "All"
+:   ( $P{P_TIMBER_MARK_1} == null || $P{P_TIMBER_MARK_1}.isEmpty() ? "" : $P{P_TIMBER_MARK_1} + " " ) +
+    ( $P{P_TIMBER_MARK_2} == null || $P{P_TIMBER_MARK_2}.isEmpty() ? "" : $P{P_TIMBER_MARK_2} + " " ) +
+    ( $P{P_TIMBER_MARK_3} == null || $P{P_TIMBER_MARK_3}.isEmpty() ? "" : $P{P_TIMBER_MARK_3} + " " ) +
+    ( $P{P_TIMBER_MARK_4} == null || $P{P_TIMBER_MARK_4}.isEmpty() ? "" : $P{P_TIMBER_MARK_4} + " " ) +
+    ( $P{P_TIMBER_MARK_5} == null || $P{P_TIMBER_MARK_5}.isEmpty() ? "" : $P{P_TIMBER_MARK_5} + " " ) +
+    ( $P{P_TIMBER_MARK_6} == null || $P{P_TIMBER_MARK_6}.isEmpty() ? "" : $P{P_TIMBER_MARK_6} )]]></variableExpression>
+	</variable>
+	<variable name="CCF2_F_FOREST_FILE_ID" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_FOREST_FILE_ID}) or {?P_FOREST_FILE_ID} = '' then
+//    'All'
+//else
+//    {?P_FOREST_FILE_ID}
+
+$P{P_FOREST_FILE_ID} == null || $P{P_FOREST_FILE_ID}.isEmpty()
+?   "All"
+:   $P{P_FOREST_FILE_ID}]]></variableExpression>
+	</variable>
+	<variable name="CCF3_F_EXE_NUMBER" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_EXEMPTION_NUMBER}) or {?P_EXEMPTION_NUMBER} = '' then
+//    'All'
+//else
+//    {?P_EXEMPTION_NUMBER}
+
+$P{P_EXEMPTION_NUMBER} == null || $P{P_EXEMPTION_NUMBER}.isEmpty()
+?   "All"
+:   $P{P_EXEMPTION_NUMBER}]]></variableExpression>
+	</variable>
+	<variable name="CCF4_F_REGION" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//GetRegionName({?P_ORG_UNIT_NUMBER})
+//Function (StringVar P_ORG_UNIT)
+//Local StringVar org_unit_name := "";
+//Local NumberVar counter := 0;
+//if (P_ORG_UNIT LIKE "*1903*") then ( org_unit_name := org_unit_name & ", RCB";
+//    counter := counter + 1; );
+//if (P_ORG_UNIT LIKE "*1904*") then(     org_unit_name := org_unit_name & ", RKB";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1905*") then(    org_unit_name := org_unit_name & ", RNO";
+//    counter := counter + 1; );
+//if (P_ORG_UNIT LIKE "*1906*") then(    org_unit_name := org_unit_name & ", ROM";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1907*") then(    org_unit_name := org_unit_name & ", RTO";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1908*") then(    org_unit_name := org_unit_name & ", RSK";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1909*") then(    org_unit_name := org_unit_name & ", RSC";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1910*") then(    org_unit_name := org_unit_name & ", RWC";
+//    counter := counter + 1;);
+//if Len(org_unit_name) > 0 then
+//(  if counter = 8 then
+//        "All"
+//  else
+//      Right(org_unit_name, len(org_unit_name) - 2)
+//)else
+//    org_unit_name;
+
+$P{P_ORG_UNIT_NUMBER} == null ? "" :
+$P{P_ORG_UNIT_NUMBER}!=null &&
+$P{P_ORG_UNIT_NUMBER}.contains( "1903" )&& $P{P_ORG_UNIT_NUMBER}.contains( "1904" ) && $P{P_ORG_UNIT_NUMBER}.contains( "1905" ) && $P{P_ORG_UNIT_NUMBER}.contains( "1906" ) &&
+$P{P_ORG_UNIT_NUMBER}.contains( "1907" )&& $P{P_ORG_UNIT_NUMBER}.contains( "1908" ) && $P{P_ORG_UNIT_NUMBER}.contains( "1909" ) && $P{P_ORG_UNIT_NUMBER}.contains( "1910" )
+?   "All"
+:   org.apache.commons.lang.StringUtils.chomp(
+    (
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1903" ) ? "RCB, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1904" ) ? "RKB, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1905" ) ? "RNO, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1906" ) ? "ROM, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1907" ) ? "RTO, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1908" ) ? "RSK, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1909" ) ? "RSC, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1910" ) ? "RWC, " : "" )
+     ), ", ")]]></variableExpression>
+	</variable>
+	<variable name="CCF5_F_EXE_REASON" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if (isnull({?P_EXEMPTION_REASON})) then
+//'All'
+//else if ({?P_EXEMPTION_REASON} = 'S') then
+//'Surplus'
+//else if ({?P_EXEMPTION_REASON} = 'E') then
+//'Economic'
+//else if ({?P_EXEMPTION_REASON} = 'U') then
+//Utilization'
+//else
+//'All'
+
+$P{P_EXEMPTION_REASON} == null || $P{P_EXEMPTION_REASON}.isEmpty()
+?   "All"
+:   $P{P_EXEMPTION_REASON}.equalsIgnoreCase( "S" )
+    ?   "Surplus"
+    :   $P{P_EXEMPTION_REASON}.equalsIgnoreCase( "E" )
+        ?   "Economic"
+        :   $P{P_EXEMPTION_REASON}.equalsIgnoreCase( "U" )
+            ?   "Utilization"
+            :   "All"]]></variableExpression>
+	</variable>
+	<variable name="CCF6_F_EXE_TYPE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if ({?P_EXEMPTION_TYPE} = 'M') then
+//'Ministerial'
+//else if ({?P_EXEMPTION_TYPE} = 'F') then
+//'Federal'
+//else if ({?P_EXEMPTION_TYPE} = 'O') then
+//'Order In Council'
+//else
+//'All'
+
+$P{P_EXEMPTION_TYPE} == null || $P{P_EXEMPTION_TYPE}.isEmpty()
+?   "All"
+:   $P{P_EXEMPTION_TYPE}.equalsIgnoreCase( "M" )
+    ?   "Ministerial"
+    :   $P{P_EXEMPTION_TYPE}.equalsIgnoreCase( "F" )
+        ?   "Federal"
+        :   $P{P_EXEMPTION_TYPE}.equalsIgnoreCase( "O" )
+            ?   "Order In Council"
+            :   "All"]]></variableExpression>
+	</variable>
+	<variable name="CCF7_F_CLIENT_TYPE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_CLIENT_TYPE}) or {?P_CLIENT_TYPE} = '' then
+//    'All'
+//else if {?P_CLIENT_TYPE} = 'P' then
+//    'Permit Holder'
+//else if {?P_CLIENT_TYPE} = 'M' then
+//    'Mark Holder'
+
+$P{P_CLIENT_TYPE} == null || $P{P_CLIENT_TYPE}.isEmpty()
+?   "All"
+:   $P{P_CLIENT_TYPE}.equalsIgnoreCase( "P" )
+    ?   "Permit Holder"
+    :   $P{P_CLIENT_TYPE}.equalsIgnoreCase( "M" )
+        ?   "Mark Holder"
+        :   "All"]]></variableExpression>
+	</variable>
+	<variable name="CCF8_F_CLIENT_NUMBER" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_CLIENT_NUMBER}) or {?P_CLIENT_NUMBER} = '' then
+//    'All'
+//else
+//    {?P_CLIENT_NUMBER}
+
+$P{P_CLIENT_NUMBER} == null || $P{P_CLIENT_NUMBER}.isEmpty()
+?   "All"
+:   $P{P_CLIENT_NUMBER}]]></variableExpression>
+	</variable>
+	<variable name="CCF9_F_DATE_FROM" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_FROM_DATE}) or {?P_FROM_DATE} = '' then
+//    'Not Entered'
+//else
+//    {?P_FROM_DATE}
+
+$P{P_FROM_DATE} == null || $P{P_FROM_DATE}.isEmpty()
+?   "Not Entered"
+:   $P{P_FROM_DATE}]]></variableExpression>
+	</variable>
+	<variable name="CCF10_F_DATE_TO" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_TO_DATE}) or {?P_TO_DATE} = '' then
+//    'Not Entered'
+//else
+//    {?P_TO_DATE}
+
+$P{P_TO_DATE} == null || $P{P_TO_DATE}.isEmpty()
+?   "Not Entered"
+:   $P{P_TO_DATE}]]></variableExpression>
+	</variable>
+	<variable name="CCF11_TITLE_DATE_RANGE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if (
+//    (isnull({?P_FROM_DATE}) or {?P_FROM_DATE} = '') and
+//    (isnull({?P_TO_DATE}) or {?P_TO_DATE} = '')
+//    ) then
+//'All Dates'
+//else if (
+//    isnull({?P_FROM_DATE}) or {?P_FROM_DATE} = ''
+//    ) then
+//{?P_TO_DATE} + ' and Previous'
+//else if (
+//    isnull({?P_TO_DATE}) or {?P_TO_DATE} = ''
+//    ) then
+//{?P_FROM_DATE} + ' and After'
+//else
+//
+//{?P_FROM_DATE} + ' to ' + {?P_TO_DATE}
+
+($P{P_FROM_DATE} == null || $P{P_FROM_DATE}.isEmpty() ) &&
+($P{P_TO_DATE} == null || $P{P_TO_DATE}.isEmpty() )
+?   "All Dates"
+:   $P{P_FROM_DATE} == null || $P{P_FROM_DATE}.isEmpty()
+    ?   $P{P_TO_DATE} + " and Previous"
+    :   $P{P_TO_DATE} == null || $P{P_TO_DATE}.isEmpty()
+        ?   $P{P_FROM_DATE} + " and After"
+        :   $P{P_FROM_DATE} + " to " + $P{P_TO_DATE}]]></variableExpression>
+	</variable>
+	<variable name="Sum (TENURE_ANALYSIS.SPECIES_GRADE_VOLUME, TENURE_ANALYSIS.TIMBER_MARK)" class="java.math.BigDecimal" resetType="Group" resetGroup="Group 2" calculation="Sum">
+		<variableExpression><![CDATA[$F{SPECIES_GRADE_VOLUME}]]></variableExpression>
+	</variable>
+	<variable name="Sum (TENURE_ANALYSIS.SPECIES_GRADE_VOLUME, TENURE_ANALYSIS.EXEMPTION_NUMBER)" class="java.math.BigDecimal" resetType="Group" resetGroup="Group 0" calculation="Sum">
+		<variableExpression><![CDATA[$F{SPECIES_GRADE_VOLUME}]]></variableExpression>
+	</variable>
+	<variable name="Sum (TENURE_ANALYSIS.SPECIES_GRADE_VOLUME)" class="java.math.BigDecimal" calculation="Sum">
+		<variableExpression><![CDATA[$F{SPECIES_GRADE_VOLUME}]]></variableExpression>
+	</variable>
+	<variable name="v_dummy" class="java.lang.String">
+		<variableExpression><![CDATA[""]]></variableExpression>
+	</variable>
+	<group name="dummy_group">
+		<groupExpression><![CDATA[$V{v_dummy}]]></groupExpression>
+		<groupFooter>
+			<band height="30">
+				<staticText>
+					<reportElement uuid="49035c4a-b103-471d-a1b2-4cffd2a1136c" x="342" y="5" width="217" height="15" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Total Permit Volume for Report (m3):]]></text>
+				</staticText>
+				<textField pattern="###0.0;-###0.0" isBlankWhenNull="true">
+					<reportElement uuid="575586c9-fd25-4d92-be66-0f7f91398209" x="564" y="5" width="53" height="15" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{Sum (TENURE_ANALYSIS.SPECIES_GRADE_VOLUME)}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupFooter>
+	</group>
+	<group name="Group 0" isStartNewPage="true">
+		<groupExpression><![CDATA[$F{EXEMPTION_NUMBER}]]></groupExpression>
+		<groupHeader>
+			<band height="78" splitType="Prevent">
+				<line>
+					<reportElement uuid="4d55d546-1538-4a81-abe4-dcf10f8763a5" x="0" y="48" width="682" height="1"/>
+					<graphicElement>
+						<pen lineWidth="1.0" lineStyle="Solid"/>
+					</graphicElement>
+				</line>
+				<line>
+					<reportElement uuid="f5f2e7ee-aead-417d-9600-5cc5d3a4ceb8" x="0" y="75" width="682" height="1"/>
+					<graphicElement>
+						<pen lineWidth="1.0" lineStyle="Solid"/>
+					</graphicElement>
+				</line>
+				<staticText>
+					<reportElement uuid="cf878b60-db20-4388-99ea-275d36214434" x="4" y="61" width="42" height="12" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Tenure ID]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="53b5e3f8-0fa6-4db8-a8a0-a5d56e85fffe" x="58" y="61" width="76" height="12" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Tenure Holder]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="82dc823e-1f3d-4ee7-ab69-f0946716e1c3" x="528" y="48" width="38" height="11" forecolor="#000000"/>
+					<textElement textAlignment="Center">
+						<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Timber]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="17637fa7-d6b4-4f9b-8171-0a493ef4ff5b" x="528" y="60" width="38" height="12" forecolor="#000000"/>
+					<textElement textAlignment="Center">
+						<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Mark]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="a3c46f5f-cf73-4d4a-8d4d-8a1bfcda12ac" x="570" y="48" width="58" height="11" forecolor="#000000"/>
+					<textElement textAlignment="Center">
+						<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Permit]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="b3474f9f-f6a1-4ed2-8024-e88595f17ef7" x="570" y="60" width="58" height="12" forecolor="#000000"/>
+					<textElement textAlignment="Center">
+						<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Volume (m3)]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="aa671944-12e4-4609-b370-a0f3c589bf97" x="630" y="48" width="39" height="11" forecolor="#000000"/>
+					<textElement textAlignment="Center">
+						<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Permit]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="c8ecffc4-c3af-42ef-b5ad-93230cdd258d" x="630" y="60" width="39" height="12" forecolor="#000000"/>
+					<textElement textAlignment="Center">
+						<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Number]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="ae0f5c18-617e-4108-8baa-75c0faad835e" x="4" y="3" width="130" height="10"/>
+					<textElement>
+						<font fontName="Arial" size="8" isBold="true"/>
+					</textElement>
+					<text><![CDATA[Exemption Number]]></text>
+				</staticText>
+				<textField>
+					<reportElement uuid="1ec66f14-2ee5-4d49-9ea7-3021351b0569" x="134" y="3" width="248" height="10"/>
+					<textElement>
+						<font fontName="Arial" size="8" isBold="true"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{EXEMPTION_NUMBER} == null || $F{EXEMPTION_NUMBER}.isEmpty() ? "" : $F{EXEMPTION_NUMBER}]]></textFieldExpression>
+				</textField>
+				<staticText>
+					<reportElement uuid="ae0f5c18-617e-4108-8baa-75c0faad835e" x="4" y="13" width="130" height="10"/>
+					<textElement>
+						<font fontName="Arial" size="8" isBold="true"/>
+					</textElement>
+					<text><![CDATA[Exemption Reason]]></text>
+				</staticText>
+				<textField>
+					<reportElement uuid="1ec66f14-2ee5-4d49-9ea7-3021351b0569" x="134" y="13" width="248" height="10"/>
+					<textElement>
+						<font fontName="Arial" size="8" isBold="true"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{EXEMPTION_REASON_DESC} == null || $F{EXEMPTION_REASON_DESC}.isEmpty() ? "" : $F{EXEMPTION_REASON_DESC}]]></textFieldExpression>
+				</textField>
+				<staticText>
+					<reportElement uuid="ae0f5c18-617e-4108-8baa-75c0faad835e" x="4" y="33" width="130" height="10"/>
+					<textElement>
+						<font fontName="Arial" size="8" isBold="true"/>
+					</textElement>
+					<text><![CDATA[Tenure Type]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="ae0f5c18-617e-4108-8baa-75c0faad835e" x="4" y="23" width="130" height="10"/>
+					<textElement>
+						<font fontName="Arial" size="8" isBold="true"/>
+					</textElement>
+					<text><![CDATA[Region]]></text>
+				</staticText>
+				<textField>
+					<reportElement uuid="1ec66f14-2ee5-4d49-9ea7-3021351b0569" x="134" y="33" width="248" height="10"/>
+					<textElement>
+						<font fontName="Arial" size="8" isBold="true"/>
+					</textElement>
+					<textFieldExpression><![CDATA[( $F{TENURE_TYPE} == null || $F{TENURE_TYPE}.isEmpty() ? "" : $F{TENURE_TYPE} ) + " " +
+( $F{TENURE_DESC} == null || $F{TENURE_DESC}.isEmpty() ? "" : $F{TENURE_DESC} )]]></textFieldExpression>
+				</textField>
+				<textField>
+					<reportElement uuid="1ec66f14-2ee5-4d49-9ea7-3021351b0569" x="134" y="23" width="248" height="10"/>
+					<textElement>
+						<font fontName="Arial" size="8" isBold="true"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{ORG_UNIT_NAME} == null || $F{ORG_UNIT_NAME}.isEmpty() ? "" : $F{ORG_UNIT_NAME}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band height="16" splitType="Prevent">
+				<staticText>
+					<reportElement uuid="c1a8daf2-8ebe-48cd-ab3d-f0834a9931d6" x="468" y="0" width="96" height="12" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Total for Exemption:]]></text>
+				</staticText>
+				<textField pattern="###0.0;-###0.0" isBlankWhenNull="true">
+					<reportElement uuid="f6b526d4-ef5b-4d37-b8cd-5e52b920b69f" x="570" y="0" width="46" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{Sum (TENURE_ANALYSIS.SPECIES_GRADE_VOLUME, TENURE_ANALYSIS.EXEMPTION_NUMBER)}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupFooter>
+	</group>
+	<group name="Group 1">
+		<groupExpression><![CDATA[$F{TENURE_TYPE}]]></groupExpression>
+		<groupHeader>
+			<band height="13" splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="85d6cc79-8c0f-4d36-8d84-4b84aef6a837" x="0" y="0" width="128" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{TENURE_TYPE}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+			</band>
+		</groupFooter>
+	</group>
+	<group name="Group 2">
+		<groupExpression><![CDATA[$F{TIMBER_MARK}]]></groupExpression>
+		<groupHeader>
+			<band height="13" splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="4b45395d-149d-4e60-be82-57843caf96e0" x="0" y="0" width="128" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{TIMBER_MARK}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band height="27" splitType="Prevent">
+				<line>
+					<reportElement uuid="3e766aa7-b377-464c-bd21-1da8444c465a" x="7" y="17" width="669" height="1"/>
+					<graphicElement>
+						<pen lineStyle="Solid"/>
+					</graphicElement>
+				</line>
+				<staticText>
+					<reportElement uuid="db4688c7-f149-4b42-85ab-121eb2932e5c" x="450" y="0" width="115" height="12" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Total for Timber Mark:]]></text>
+				</staticText>
+				<textField pattern="###0.0;-###0.0" isBlankWhenNull="true">
+					<reportElement uuid="8cd4731a-c3d6-4094-b2c5-12a1e93d99e5" x="570" y="0" width="44" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{Sum (TENURE_ANALYSIS.SPECIES_GRADE_VOLUME, TENURE_ANALYSIS.TIMBER_MARK)}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupFooter>
+	</group>
+	<background>
+		<band height="504">
+			<rectangle>
+				<reportElement uuid="abfb3b4d-bb9d-4dc4-9df9-aa4fe533bd75" x="0" y="0" width="682" height="503"/>
+			</rectangle>
+		</band>
+	</background>
+	<pageHeader>
+		<band height="91" splitType="Prevent">
+			<line>
+				<reportElement uuid="a8e0cd05-75fd-4133-8099-5b9a64b1d994" x="0" y="87" width="682" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<image>
+				<reportElement uuid="09fea0a4-d1e9-43a6-beee-197b916419b8" x="4" y="18" width="200" height="65"/>
+				<imageExpression><![CDATA[($P{SUBREPORT_DIR} + "lexis_flnr_logo.png" )]]></imageExpression>
+			</image>
+			<subreport>
+				<reportElement uuid="b1f7c071-7d32-4ef8-b669-2e7a38e7f4f3" x="145" y="10" width="360" height="15"/>
+				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
+				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
+			</subreport>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="a9245561-0056-45a3-b416-e684fcf88266" x="145" y="25" width="359" height="65" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA["Province of British Columbia" + System.getProperty("line.separator") + "Log Exemption Information System" + System.getProperty("line.separator") + "Tenure Analysis" + System.getProperty("line.separator") + $V{CCF11_TITLE_DATE_RANGE}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="0554c008-29c7-49f2-b79d-c122ed6757cc" x="504" y="18" width="80" height="11"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true"/>
+				</textElement>
+				<text><![CDATA[Page]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="0dcb51ff-60bf-4cbd-90d8-502e71a638f7" x="584" y="18" width="6" height="11"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true"/>
+				</textElement>
+				<text><![CDATA[ : ]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="89706437-ec18-4a0b-91c9-a0ee9f6b2765" x="590" y="18" width="10" height="11"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report" isBlankWhenNull="true">
+				<reportElement uuid="57d6a0f4-120c-4f5e-954a-6814d7003c6a" x="600" y="18" width="80" height="11"/>
+				<textElement>
+					<font fontName="Arial" size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[" of " + $V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="516ac387-f7aa-4fd8-9a0b-850bb01f08cc" x="504" y="29" width="80" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Date/Time Printed]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="0dcb51ff-60bf-4cbd-90d8-502e71a638f7" x="584" y="28" width="6" height="11"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true"/>
+				</textElement>
+				<text><![CDATA[ : ]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="590" y="29" width="90" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[" " + new SimpleDateFormat("yyyy-MM-dd H:mm:ss").format(new java.util.Date())]]></textFieldExpression>
+			</textField>
+		</band>
+	</pageHeader>
+	<detail>
+		<band height="14" splitType="Prevent">
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="3f9e18b3-2a30-4d6c-a05e-ee242c5dffba" isPrintRepeatedValues="false" x="6" y="0" width="50" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{FOREST_FILE_ID}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="f5c8e5ce-d07f-4523-8f1d-e68ffc9a3d73" isPrintRepeatedValues="false" x="60" y="0" width="414" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[( $F{MARK_CLIENT_NUMBER} == null || $F{MARK_CLIENT_NUMBER}.isEmpty() ? "" : $F{MARK_CLIENT_NUMBER} + " " ) +
+( $F{CLIENT_NAME} == null || $F{CLIENT_NAME}.isEmpty() ? "" : $F{CLIENT_NAME} + " " ) +
+( $F{LEGAL_FIRST_NAME} == null || $F{LEGAL_FIRST_NAME}.isEmpty() ? "" : $F{LEGAL_FIRST_NAME} + " " ) +
+( $F{LEGAL_MIDDLE_NAME} == null || $F{LEGAL_MIDDLE_NAME}.isEmpty() ? "" : $F{LEGAL_MIDDLE_NAME} )]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="ca6ffa07-7482-4d00-9a6c-4d3458621d8e" x="516" y="0" width="42" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{TIMBER_MARK}]]></textFieldExpression>
+			</textField>
+			<textField pattern="###0.0;-###0.0" isBlankWhenNull="true">
+				<reportElement uuid="895baa93-c209-4fc8-8fd6-e7ab57860908" x="570" y="0" width="40" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{SPECIES_GRADE_VOLUME}]]></textFieldExpression>
+			</textField>
+			<textField pattern="###0;-###0" isBlankWhenNull="true">
+				<reportElement uuid="fcf55a0b-21ed-4576-b38d-c446ebfa25ad" x="624" y="0" width="36" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{EXPORT_PERMIT_DETAIL_NUMBER}]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<summary>
+		<band height="320">
+			<line>
+				<reportElement uuid="ceb1bc61-254a-4a54-83f1-856e2632d0c5" x="0" y="90" width="682" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<image scaleImage="RetainShape" isUsingCache="false">
+				<reportElement uuid="7e2ea7df-fd4b-4b07-874c-698719f9d8ac" x="4" y="14" width="59" height="69"/>
+				<imageExpression><![CDATA[($P{SUBREPORT_DIR} + "lexis_flnr_logo.png" )]]></imageExpression>
+			</image>
+			<subreport>
+				<reportElement uuid="08a165c1-d31d-4545-b52a-fe21775aea63" x="145" y="10" width="360" height="15"/>
+				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
+				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
+			</subreport>
+			<staticText>
+				<reportElement uuid="0c1834ec-1ab6-46c6-aa1d-dc3b558dc40c" x="145" y="25" width="359" height="57" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Province of British Columbia
+Log Exemption Information System
+Tenure Analysis
+Report Run Summary]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="6f5a8451-7b18-4f0c-8179-923fd60af7cf" x="173" y="92" width="324" height="16" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Run Time Selection Options]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="7f359890-2689-4f48-9e10-da4626f79fbe" x="4" y="292" width="65" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[End of Report]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="0554c008-29c7-49f2-b79d-c122ed6757cc" x="504" y="18" width="80" height="11"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true"/>
+				</textElement>
+				<text><![CDATA[Page]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="0dcb51ff-60bf-4cbd-90d8-502e71a638f7" x="584" y="29" width="6" height="11"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true"/>
+				</textElement>
+				<text><![CDATA[ : ]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="516ac387-f7aa-4fd8-9a0b-850bb01f08cc" x="504" y="29" width="80" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Date/Time Printed]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="0dcb51ff-60bf-4cbd-90d8-502e71a638f7" x="584" y="18" width="6" height="11"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true"/>
+				</textElement>
+				<text><![CDATA[ : ]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="89706437-ec18-4a0b-91c9-a0ee9f6b2765" x="590" y="18" width="10" height="11"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="590" y="29" width="90" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[" " + new SimpleDateFormat("yyyy-MM-dd H:mm:ss").format(new java.util.Date())]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report" isBlankWhenNull="true">
+				<reportElement uuid="57d6a0f4-120c-4f5e-954a-6814d7003c6a" x="600" y="18" width="80" height="11"/>
+				<textElement>
+					<font fontName="Arial" size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[" of " + $V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="5acb29c0-ab87-412a-8629-768ac7ca02c8" x="170" y="117" width="108" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Permit Issue From Date]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="278" y="117" width="278" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF9_F_DATE_FROM}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="555ff754-e768-4d4e-8ab9-1662ef389164" x="170" y="128" width="108" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Permit Issue To Date]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="9d8e4b2f-1902-4a53-81c2-8ef7d18c2513" x="170" y="139" width="386" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[-----------------------------------------------------------------------------------------------------------]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="9fb7942f-17be-4353-b555-25ae96b0d296" x="170" y="150" width="108" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Region]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="fa5a20c1-7533-4866-807d-31873acf2312" x="170" y="161" width="108" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Exemption Reason]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="5aee9443-4e17-49b9-8d42-3a23e2302ae9" x="170" y="172" width="108" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Exemption Type]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="c9e5b18b-d6cc-4d5b-a522-fdd8caafe021" x="170" y="183" width="108" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Exemption Number]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="311d3d84-0978-4498-9dd5-248ffc54c663" x="170" y="194" width="108" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Client Type]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="86c7348f-3211-4d17-aa15-f16a5b7b1aa1" x="170" y="238" width="386" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[-----------------------------------------------------------------------------------------------------------]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="f282ccf6-2fd0-4c54-a033-1b71e6a074d3" x="170" y="249" width="108" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Timber Mark(s)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="304fb095-0f31-4575-a2b0-5d31bdd2a2c0" x="170" y="216" width="386" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[-----------------------------------------------------------------------------------------------------------]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="86478dd9-7a71-447f-a06f-5b224cd898f5" x="170" y="227" width="108" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Tenure Type(s)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="1b49e1b5-a0c8-4985-a4a7-ac46d9b335a3" x="170" y="271" width="108" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Forest File ID]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="5f4bc20c-3418-412b-8399-8a0bec3f2468" x="170" y="205" width="108" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Client Number]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="278" y="128" width="278" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF10_F_DATE_TO}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="278" y="150" width="278" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF4_F_REGION}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="278" y="161" width="278" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF5_F_EXE_REASON}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="278" y="172" width="278" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF6_F_EXE_TYPE}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="278" y="183" width="278" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF3_F_EXE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="278" y="194" width="278" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF7_F_CLIENT_TYPE}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="278" y="205" width="278" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF8_F_CLIENT_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="278" y="227" width="278" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF0_TENURE_TYPE_LIST}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="278" y="249" width="278" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF1_TIMBER_MARK_LIST}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="8fd216ad-5225-468b-82d2-b35f3ccbdd61" x="278" y="271" width="278" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF2_F_FOREST_FILE_ID}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="57571301-07ca-423f-ac60-966cc859f802" x="170" y="260" width="386" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[-----------------------------------------------------------------------------------------------------------]]></text>
+			</staticText>
+		</band>
+	</summary>
+</jasperReport>

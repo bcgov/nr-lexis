@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="packages_sub_report" pageWidth="612" pageHeight="792" whenNoDataType="AllSectionsNoDetail" columnWidth="612" leftMargin="0" rightMargin="0" topMargin="0" bottomMargin="0" uuid="94891fa5-d78f-4ea3-b3e7-69ec9485ea60">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<property name="ireport.jasperserver.reportUnit" value="/JCRS/LEXIS/Reports/LEXIS/LEXIS_biweekly.rpt"/>
+	<property name="ireport.jasperserver.url" value="http://localhost:8080/jasperserver/services/repository"/>
+	<parameter name="P_APPLICATION_NUMBER" class="java.math.BigDecimal"/>
+	<parameter name="P_JURISDICTION" class="java.lang.String"/>
+	<parameter name="ORACLE_REF_CURSOR" class="java.sql.ResultSet" isForPrompting="false"/>
+	<parameter name="LoggedInUser" class="com.jaspersoft.jasperserver.api.metadata.user.domain.User" isForPrompting="false"/>
+	<parameter name="p_report_id" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["packages_sub_report"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? "repo:" : "\\"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_EXT" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? ".jrxml" : ".jasper"]]></defaultValueExpression>
+	</parameter>
+	<queryString language="plsql">
+		<![CDATA[{call LEXIS_REPORTING.BIWEEKLY_SUBREPORT_RPT(
+P_BIWEEKLY_PACKAGE => $P{ORACLE_REF_CURSOR},
+P_APPLICATION_NUMBER => $P{P_APPLICATION_NUMBER},
+P_JURISDICTION => $P{P_JURISDICTION}
+)}]]>
+	</queryString>
+	<field name="PACKAGE_NUMBER" class="java.lang.String"/>
+	<field name="PACKAGE_VOLUME" class="java.math.BigDecimal"/>
+	<field name="EXPORT_GROWTH_TYPE_CODE" class="java.lang.String"/>
+	<field name="DESCRIPTION" class="java.lang.String"/>
+	<field name="AVERAGE_LENGTH" class="java.math.BigDecimal"/>
+	<field name="AVERAGE_DIAMETER" class="java.math.BigDecimal"/>
+	<title>
+		<band height="13">
+			<staticText>
+				<reportElement uuid="e5b7be74-907d-435f-9176-2f298dcac601" x="28" y="0" width="125" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Package Number]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="3603dd13-ecf9-4993-8896-986f2907281d" x="131" y="0" width="71" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Volume (m3)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="05cc236e-6480-49f7-9591-ba1d08349569" x="206" y="0" width="86" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Growth Ind]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="991df017-3f09-41d6-a6a4-adfec02dad1d" x="293" y="0" width="96" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Average Length (m)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="33cb619b-8ecf-4029-aa94-e15d25e1a494" x="389" y="0" width="112" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="true" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Average Diameter (rad)]]></text>
+			</staticText>
+		</band>
+	</title>
+	<detail>
+		<band height="14" splitType="Prevent">
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="57d0d674-cf4e-4ebd-8b1f-452982479356" x="28" y="1" width="125" height="13" forecolor="#000000"/>
+				<textElement>
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{PACKAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.0;-#,##0.0" isBlankWhenNull="true">
+				<reportElement uuid="049d85f3-bda3-44b9-aa5f-afb1e4461f99" x="153" y="1" width="49" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{PACKAGE_VOLUME}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="5d67066b-936b-4c54-b0a6-4518c6fe7ee1" x="206" y="1" width="86" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{DESCRIPTION}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.0;-#,##0.0" isBlankWhenNull="true">
+				<reportElement uuid="dfcbcf24-df1c-4731-ae95-1ced1b21ef5d" x="292" y="1" width="96" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{AVERAGE_LENGTH}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.0;-#,##0.0" isBlankWhenNull="true">
+				<reportElement uuid="872e6216-e71b-400b-a977-30244f9a49f3" x="395" y="1" width="105" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{AVERAGE_DIAMETER}]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+</jasperReport>
