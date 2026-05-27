@@ -236,6 +236,13 @@ const fetchRows = async <TRow>(
 ): Promise<{ rows: TRow[]; source: ProvincialPermitTabSource }> => {
   try {
     const response = await apiService.getAxiosInstance().get(path)
+    if (response.status === 204) {
+      return {
+        rows: [],
+        source: 'api',
+      }
+    }
+
     const payloadRows = parseArrayPayload(response.data)
     if (!payloadRows) {
       throw new Error(`Invalid list response from ${path}`)
@@ -275,26 +282,12 @@ export const fetchProvincialPermitDetailTabs = async (
     ),
   ])
 
-  const items =
-    itemsResult.source === 'api' && itemsResult.rows.length > 0
-      ? itemsResult.rows
-      : buildMockItems(context)
-  const fees =
-    feesResult.source === 'api' && feesResult.rows.length > 0
-      ? feesResult.rows
-      : buildMockFees(context)
+  const items = itemsResult.source === 'api' ? itemsResult.rows : buildMockItems(context)
+  const fees = feesResult.source === 'api' ? feesResult.rows : buildMockFees(context)
   const gbmsEvents =
-    gbmsResult.source === 'api' && gbmsResult.rows.length > 0
-      ? gbmsResult.rows
-      : buildMockEvents('GBMS', context)
-  const oicItems =
-    oicResult.source === 'api' && oicResult.rows.length > 0
-      ? oicResult.rows
-      : buildMockEvents('OIC', context)
-  const boicItems =
-    boicResult.source === 'api' && boicResult.rows.length > 0
-      ? boicResult.rows
-      : buildMockEvents('BOIC', context)
+    gbmsResult.source === 'api' ? gbmsResult.rows : buildMockEvents('GBMS', context)
+  const oicItems = oicResult.source === 'api' ? oicResult.rows : buildMockEvents('OIC', context)
+  const boicItems = boicResult.source === 'api' ? boicResult.rows : buildMockEvents('BOIC', context)
 
   return {
     data: {
@@ -305,11 +298,11 @@ export const fetchProvincialPermitDetailTabs = async (
       boicItems,
     },
     sources: {
-      items: itemsResult.source === 'api' && itemsResult.rows.length > 0 ? 'api' : 'mock',
-      fees: feesResult.source === 'api' && feesResult.rows.length > 0 ? 'api' : 'mock',
-      gbmsEvents: gbmsResult.source === 'api' && gbmsResult.rows.length > 0 ? 'api' : 'mock',
-      oicItems: oicResult.source === 'api' && oicResult.rows.length > 0 ? 'api' : 'mock',
-      boicItems: boicResult.source === 'api' && boicResult.rows.length > 0 ? 'api' : 'mock',
+      items: itemsResult.source,
+      fees: feesResult.source,
+      gbmsEvents: gbmsResult.source,
+      oicItems: oicResult.source,
+      boicItems: boicResult.source,
     },
   }
 }
