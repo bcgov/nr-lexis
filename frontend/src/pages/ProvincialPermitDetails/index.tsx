@@ -16,6 +16,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { env } from '@/env'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile, DetailListTile, type DetailListItem } from '@/pages/shared/DetailSections'
@@ -25,6 +26,7 @@ import {
   type ProvincialPermitDetailTabsData,
   type ProvincialPermitDetailTabsSources,
 } from '@/service/provincial-permit-detail-tabs-service'
+import { runReport } from '@/service/report-service'
 
 const displayValue = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined || value === '') {
@@ -41,6 +43,63 @@ const formatAmount = (value: number): string => {
 }
 
 const normalizeText = (value: string): string => value.trim().toLowerCase()
+
+const getLegacyActionBasePath = (): string => {
+  const configured = (env.VITE_LEXIS_LEGACY_ENDPOINT_BASE ?? '/api').trim()
+  if (!configured) {
+    return '/api'
+  }
+  return configured.endsWith('/') ? configured.slice(0, -1) : configured
+}
+
+const buildLegacyActionUrl = (
+  legacyPath: string,
+  values: Record<string, string | undefined>,
+): string => {
+  const basePath = getLegacyActionBasePath()
+  const url = new URL(`${window.location.origin}${basePath}${legacyPath}`)
+
+  Object.entries(values).forEach(([key, value]) => {
+    if (!value) {
+      return
+    }
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return
+    }
+    url.searchParams.set(key, trimmed)
+  })
+
+  return url.toString()
+}
+
+const triggerBrowserDownload = (blob: Blob, filename: string): void => {
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(objectUrl)
+}
+
+const openBlobInNewTab = (blob: Blob): boolean => {
+  const objectUrl = URL.createObjectURL(blob)
+  const openedWindow = window.open(
+    objectUrl,
+    'permitReportWindow',
+    'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
+  )
+
+  if (!openedWindow) {
+    URL.revokeObjectURL(objectUrl)
+    return false
+  }
+
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  return true
+}
 
 const matchesFilter = (
   values: Array<string | number | null | undefined>,
@@ -65,6 +124,9 @@ const ProvincialPermitDetailsPage: FC = () => {
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [tabsErrorMessage, setTabsErrorMessage] = useState('')
+  const [actionErrorMessage, setActionErrorMessage] = useState('')
+  const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [isOpeningPermitReport, setIsOpeningPermitReport] = useState(false)
   const itemsFilter = searchParams.get('itemsFilter') ?? ''
   const feesFilter = searchParams.get('feesFilter') ?? ''
   const gbmsFilter = searchParams.get('gbmsFilter') ?? ''
@@ -258,6 +320,100 @@ const ProvincialPermitDetailsPage: FC = () => {
     return Object.values(tabsSources).some((source) => source === 'mock')
   }, [tabsSources])
 
+  const onOpenPermitReport = useCallback(async () => {
+    if (!detail) {
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setIsOpeningPermitReport(true)
+    try {
+      const runResult = await runReport({
+        reportId: 'permitReport',
+        legacyPath: '/permitReport.do',
+        actionMapping: 'generate',
+        values: {
+          permitNumber: String(detail.permitNumber ?? permitNumber ?? ''),
+          outputFormat: 'PDF',
+        },
+      })
+
+      if (runResult.source === 'api') {
+        const opened = openBlobInNewTab(runResult.blob)
+        if (!opened) {
+          triggerBrowserDownload(runResult.blob, runResult.filename)
+          setActionErrorMessage(
+            'Popup blocked while opening permit report preview. Downloaded the report file instead.',
+          )
+        }
+        return
+      }
+
+      setActionInfoMessage(
+        'Permit report API is not available yet. Opened the legacy permit report endpoint.',
+      )
+      const fallbackWindow = window.open(
+        runResult.legacyUrl,
+        'permitReportWindow',
+        'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
+      )
+
+      if (!fallbackWindow) {
+        setActionErrorMessage('Unable to open permit report window. Enable popups and retry.')
+      }
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to generate permit report.')
+    } finally {
+      setIsOpeningPermitReport(false)
+    }
+  }, [detail, permitNumber])
+
+  const onOpenPermitUpload = useCallback(() => {
+    if (!detail?.permitNumber) {
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    const uploadUrl = buildLegacyActionUrl('/filePermitUpload.do', {
+      actionMapping: 'view',
+      permitNumber: String(detail.permitNumber),
+    })
+    const popup = window.open(
+      uploadUrl,
+      'permitUploadWindow',
+      'height=350,width=700,menubar=0,status=1,resizable=1,scrollbars=1',
+    )
+    if (!popup) {
+      setActionErrorMessage('Unable to open permit upload window. Enable popups and retry.')
+    }
+  }, [detail?.permitNumber])
+
+  const onOpenInvoiceUpload = useCallback(() => {
+    if (!detail?.permitNumber) {
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    const uploadUrl = buildLegacyActionUrl('/fileInvoiceUpload.do', {
+      actionMapping: 'view',
+      permitNumber: String(detail.permitNumber),
+      // TODO: wire live conversion-rate lookup when endpoint parity lands.
+      invoiceConversionRate: '1.00',
+    })
+    const popup = window.open(
+      uploadUrl,
+      'invoiceUploadWindow',
+      'height=550,width=760,menubar=0,status=1,resizable=1,scrollbars=1',
+    )
+    if (!popup) {
+      setActionErrorMessage('Unable to open invoice upload window. Enable popups and retry.')
+    }
+  }, [detail?.permitNumber])
+
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
@@ -347,9 +503,57 @@ const ProvincialPermitDetailsPage: FC = () => {
                 >
                   Back to Permit Search Results
                 </Button>
+                <Button
+                  kind="primary"
+                  size="sm"
+                  disabled={isOpeningPermitReport || !canPerform('/permitSearch')}
+                  onClick={() => void onOpenPermitReport()}
+                >
+                  {isOpeningPermitReport ? 'Opening Permit Report...' : 'Open Permit Report'}
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={!detail.permitNumber || !canPerform('/filePermitUpload')}
+                  onClick={onOpenPermitUpload}
+                >
+                  Upload Permit Document
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={!detail.permitNumber || !canPerform('/fileInvoiceUpload')}
+                  onClick={onOpenInvoiceUpload}
+                >
+                  Upload Invoice
+                </Button>
               </div>
             </Tile>
           </Column>
+
+          {!!actionInfoMessage && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <InlineNotification
+                kind="info"
+                title="Legacy Fallback Used"
+                subtitle={actionInfoMessage}
+                lowContrast
+                onCloseButtonClick={() => setActionInfoMessage('')}
+              />
+            </Column>
+          )}
+
+          {!!actionErrorMessage && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <InlineNotification
+                kind="error"
+                title="Action Failed"
+                subtitle={actionErrorMessage}
+                lowContrast
+                onCloseButtonClick={() => setActionErrorMessage('')}
+              />
+            </Column>
+          )}
 
           {usesAnyMockTabData && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
