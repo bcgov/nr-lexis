@@ -7,7 +7,12 @@ This suite validates core frontend availability after migration work.
 - Landing/login shell renders.
 - Auth transition compatibility:
   - Canonical `ADMIN` and legacy alias `LEXIS_ADMIN` map to the same protected access.
+  - Legacy placeholder roles (`LEXIS_INDUSTRY*`, `LOG_EXPORT_INDUSTRY*`) remain routable during transition.
   - Root redirect parity to `/provincial/summary`.
+- Provincial application action controls:
+  - "Create Exemption for Selected Applications" stays disabled until selection.
+  - Selected-row client validation blocks invalid multi-select creates.
+  - Valid selection navigates to exemption create with prefilled state.
 - Provincial review action controls:
   - Selection-driven enablement for approve/update buttons.
   - Status-dependent enablement for "Update Status and Send Email".
