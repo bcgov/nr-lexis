@@ -38,14 +38,29 @@ const ProvincialExemptionDetailsPage: FC = () => {
   const [detail, setDetail] = useState<ProvincialExemptionDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [permitFilter, setPermitFilter] = useState(searchParams.get('permitFilter') ?? '')
-  const [remarkFilter, setRemarkFilter] = useState(searchParams.get('remarkFilter') ?? '')
+  const permitFilter = searchParams.get('permitFilter') ?? ''
+  const remarkFilter = searchParams.get('remarkFilter') ?? ''
   const withCurrentSearch = useCallback(
     (path: string): string => {
       const query = searchParams.toString()
       return query.length > 0 ? `${path}?${query}` : path
     },
     [searchParams],
+  )
+  const updateFilterParam = useCallback(
+    (key: 'permitFilter' | 'remarkFilter', value: string) => {
+      const nextSearchParams = new URLSearchParams(searchParams)
+      if (value.trim().length > 0) {
+        nextSearchParams.set(key, value)
+      } else {
+        nextSearchParams.delete(key)
+      }
+
+      if (nextSearchParams.toString() !== searchParams.toString()) {
+        setSearchParams(nextSearchParams, { replace: true })
+      }
+    },
+    [searchParams, setSearchParams],
   )
 
   useEffect(() => {
@@ -75,34 +90,6 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
     void load()
   }, [exemptionNumber])
-
-  useEffect(() => {
-    const permitFilterParam = searchParams.get('permitFilter') ?? ''
-    const remarkFilterParam = searchParams.get('remarkFilter') ?? ''
-
-    setPermitFilter((current) => (current === permitFilterParam ? current : permitFilterParam))
-    setRemarkFilter((current) => (current === remarkFilterParam ? current : remarkFilterParam))
-  }, [searchParams])
-
-  useEffect(() => {
-    const nextSearchParams = new URLSearchParams(searchParams)
-
-    if (permitFilter.trim().length > 0) {
-      nextSearchParams.set('permitFilter', permitFilter)
-    } else {
-      nextSearchParams.delete('permitFilter')
-    }
-
-    if (remarkFilter.trim().length > 0) {
-      nextSearchParams.set('remarkFilter', remarkFilter)
-    } else {
-      nextSearchParams.delete('remarkFilter')
-    }
-
-    if (nextSearchParams.toString() !== searchParams.toString()) {
-      setSearchParams(nextSearchParams, { replace: true })
-    }
-  }, [permitFilter, remarkFilter, searchParams, setSearchParams])
 
   const filteredPermitNumbers = useMemo(() => {
     const rows = detail?.permitNumbers ?? []
@@ -252,7 +239,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
                 id="exemptionDetailPermitFilter"
                 labelText="Filter permits"
                 value={permitFilter}
-                onChange={(event) => setPermitFilter(event.target.value)}
+                onChange={(event) => updateFilterParam('permitFilter', event.target.value)}
                 placeholder="Filter by permit number"
               />
               <Table useZebraStyles>
@@ -296,7 +283,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
                 id="exemptionDetailRemarkFilter"
                 labelText="Filter remarks"
                 value={remarkFilter}
-                onChange={(event) => setRemarkFilter(event.target.value)}
+                onChange={(event) => updateFilterParam('remarkFilter', event.target.value)}
                 placeholder="Filter by title or remark text"
               />
               <Table useZebraStyles>
