@@ -6,6 +6,12 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
       - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AWS_COGNITO_ISSUER_URI:}
+          jwk-set-uri: ${AWS_COGNITO_JWK_SET_URI:${AWS_COGNITO_ISSUER_URI:}/.well-known/jwks.json}
 
 server:
   port: 8080
@@ -22,6 +28,9 @@ management:
 
 lexis:
   auth:
+    cognito:
+      enabled: ${LEXIS_COGNITO_ENABLED:false}
+      enforce-route-auth: ${LEXIS_ENFORCE_ROUTE_AUTH:false}
     # Mirrors legacy WebADE "industry-roles" configuration.
     industry-roles: "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY"
   authz:
@@ -33,16 +42,38 @@ lexis:
       READ_ONLY:
         - "/applicationSearch"
         - "/applicationDetails"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "/permitSearch"
+        - "/permitDetails"
+        - "/indianReservePermitSearch"
+        - "/indianReservePermitDetails"
       APPLICATION_APPROVER:
         - "/applicationsReview"
         - "/applicationSearch"
         - "/applicationDetails"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "/permitSearch"
+        - "/permitDetails"
+        - "/indianReservePermitSearch"
+        - "/indianReservePermitDetails"
       EXEMPTION_APPROVER:
         - "/exemptionSearch"
         - "/exemptionDetails"
         - "/applicationSearch"
         - "/applicationDetails"
+        - "/applicationsReview"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "/permitSearch"
+        - "/permitDetails"
+        - "/indianReservePermitSearch"
+        - "/indianReservePermitDetails"
       INDUSTRY:
         - "/summary"
+        - "/exemptionSearch"
+        - "/applicationSearch"
+        - "/applicationDetails"
         - "/offersSearch"
         - "/offerDetails"

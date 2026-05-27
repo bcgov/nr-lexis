@@ -43,6 +43,55 @@ public class LexisAuthorizationService {
     return LexisLegacyActionCatalog.ACTIONS;
   }
 
+  public boolean canPerformAction(List<String> rawRoles, String rawAction) {
+    String action = normalizeAction(rawAction);
+    if (action == null) {
+      return false;
+    }
+
+    List<String> grantedActions = resolveGrantedActions(rawRoles);
+    if (grantedActions.contains(action)) {
+      return true;
+    }
+
+    if (!action.startsWith("/")) {
+      return grantedActions.contains("/" + action);
+    }
+    return false;
+  }
+
+  public Set<String> getConfiguredRoles() {
+    Set<String> roles = new LinkedHashSet<>(configuredRoleActions.keySet());
+    if (roles.contains(INDUSTRY_ROLE_KEY)) {
+      roles.addAll(configuredIndustryRoles);
+    }
+    return Set.copyOf(roles);
+  }
+
+  public Set<String> resolveRolesForAction(String rawAction) {
+    String action = normalizeAction(rawAction);
+    if (action == null) {
+      return Set.of();
+    }
+
+    Set<String> roles = new LinkedHashSet<>();
+    for (Map.Entry<String, List<String>> entry : configuredRoleActions.entrySet()) {
+      String role = entry.getKey();
+      List<String> actions = entry.getValue();
+      if (actions == null || actions.isEmpty()) {
+        continue;
+      }
+      if (actions.contains(ALL_ACTIONS_TOKEN) || actions.contains(action)) {
+        roles.add(role);
+      }
+    }
+
+    if (roles.remove(INDUSTRY_ROLE_KEY)) {
+      roles.addAll(configuredIndustryRoles);
+    }
+    return Set.copyOf(roles);
+  }
+
   private void appendRoleActions(Set<String> granted, String role) {
     List<String> actions = configuredRoleActions.get(role);
     if (actions == null || actions.isEmpty()) {
@@ -77,15 +126,20 @@ public class LexisAuthorizationService {
   private List<String> normalizeActions(List<String> rawActions) {
     LinkedHashSet<String> normalized = new LinkedHashSet<>();
     for (String rawAction : rawActions) {
-      if (rawAction == null) {
-        continue;
-      }
-      String action = rawAction.trim();
-      if (!action.isEmpty()) {
-        normalized.add(action);
+      String normalizedAction = normalizeAction(rawAction);
+      if (normalizedAction != null) {
+        normalized.add(normalizedAction);
       }
     }
     return List.copyOf(normalized);
+  }
+
+  private String normalizeAction(String action) {
+    if (action == null) {
+      return null;
+    }
+    String normalized = action.trim();
+    return normalized.isEmpty() ? null : normalized;
   }
 
   private List<String> normalizeRoles(List<String> rawRoles) {

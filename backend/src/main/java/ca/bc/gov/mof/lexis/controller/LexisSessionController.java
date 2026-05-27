@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.controller;
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionCapabilitiesDto;
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionLogoutDto;
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionMessageDto;
+import ca.bc.gov.mof.lexis.dto.session.LexisSessionActionAccessDto;
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionWelcomeDto;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
@@ -13,6 +14,7 @@ import java.security.Principal;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -45,7 +47,7 @@ public class LexisSessionController {
 
     Principal principal = request.getUserPrincipal();
     String principalName = principal == null ? null : principal.getName();
-    List<String> roles = resolveRoles(roleFilters, roleHeader);
+    List<String> roles = resolveRoles(roleFilters, roleHeader, principal);
     return ResponseEntity.ok(sessionService.resolveWelcomeRoute(principalName, roles));
   }
 
@@ -57,7 +59,7 @@ public class LexisSessionController {
 
     Principal principal = request.getUserPrincipal();
     String principalName = principal == null ? null : principal.getName();
-    List<String> roles = resolveRoles(roleFilters, roleHeader);
+    List<String> roles = resolveRoles(roleFilters, roleHeader, principal);
 
     LexisSessionWelcomeDto welcome = sessionService.resolveWelcomeRoute(principalName, roles);
     List<String> grantedActions = authorizationService.resolveGrantedActions(welcome.roles());
@@ -70,6 +72,27 @@ public class LexisSessionController {
             welcome.welcomeTarget(),
             welcome.legacyPath(),
             grantedActions));
+  }
+
+  @GetMapping("/canPerformAction")
+  public ResponseEntity<LexisSessionActionAccessDto> canPerformAction(
+      @RequestParam(name = "action") String action,
+      @RequestParam(name = "role", required = false) List<String> roleFilters,
+      @RequestHeader(name = ROLES_HEADER, required = false) String roleHeader,
+      HttpServletRequest request) {
+
+    Principal principal = request.getUserPrincipal();
+    String principalName = principal == null ? null : principal.getName();
+    List<String> roles = resolveRoles(roleFilters, roleHeader, principal);
+    boolean granted = authorizationService.canPerformAction(roles, action);
+
+    return ResponseEntity.ok(
+        new LexisSessionActionAccessDto(
+            principalName != null && !principalName.isBlank(),
+            principalName,
+            roles,
+            action,
+            granted));
   }
 
   @RequestMapping(path = "/logoff", method = {RequestMethod.GET, RequestMethod.POST})
@@ -102,11 +125,19 @@ public class LexisSessionController {
         .body(new LexisSessionMessageDto("GENERIC_ERROR", "An unexpected server error occurred."));
   }
 
-  private List<String> resolveRoles(List<String> roleFilters, String roleHeader) {
-    List<String> roles = roleFilters;
-    if (roles == null || roles.isEmpty()) {
-      roles = sessionService.parseRoleHeader(roleHeader);
+  private List<String> resolveRoles(
+      List<String> roleFilters, String roleHeader, Principal principal) {
+    if (roleFilters != null && !roleFilters.isEmpty()) {
+      return roleFilters;
     }
-    return roles;
+
+    if (principal instanceof Authentication authentication) {
+      List<String> tokenRoles = sessionService.parseRolesFromPrincipal(authentication);
+      if (!tokenRoles.isEmpty()) {
+        return tokenRoles;
+      }
+    }
+
+    return sessionService.parseRoleHeader(roleHeader);
   }
 }

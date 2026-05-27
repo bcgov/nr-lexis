@@ -6,6 +6,7 @@ import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -80,6 +81,78 @@ class LexisAuthorizationServiceTest {
     List<String> granted = service.resolveGrantedActions(List.of(" READ_ONLY ", "admin", "admin"));
 
     assertThat(granted).containsExactly("/applicationSearch", "/lexisAgentAdmin");
+  }
+
+  @Test
+  void shouldResolveRolesForConfiguredActionAndWildcard() {
+    LexisAuthorizationService service =
+        createService(
+            "LEXIS_INDUSTRY",
+            Map.of(
+                "ADMIN", List.of("*"),
+                "READ_ONLY", List.of("/applicationSearch"),
+                "APPLICATION_APPROVER", List.of("/applicationsReview")));
+
+    Set<String> roles = service.resolveRolesForAction("/applicationSearch");
+
+    assertThat(roles).containsExactly("ADMIN", "READ_ONLY");
+  }
+
+  @Test
+  void shouldExpandIndustryTemplateRoleWhenResolvingConfiguredRoles() {
+    LexisAuthorizationService service =
+        createService(
+            "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY",
+            Map.of(
+                "ADMIN", List.of("*"),
+                "INDUSTRY", List.of("/summary")));
+
+    Set<String> roles = service.getConfiguredRoles();
+
+    assertThat(roles).contains("ADMIN", "INDUSTRY", "LEXIS_INDUSTRY", "LOG_EXPORT_INDUSTRY");
+  }
+
+  @Test
+  void shouldExpandIndustryTemplateRoleWhenResolvingActionRoles() {
+    LexisAuthorizationService service =
+        createService(
+            "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY",
+            Map.of(
+                "ADMIN", List.of("*"),
+                "INDUSTRY", List.of("/summary")));
+
+    Set<String> roles = service.resolveRolesForAction("/summary");
+
+    assertThat(roles).contains("ADMIN", "LEXIS_INDUSTRY", "LOG_EXPORT_INDUSTRY");
+    assertThat(roles).doesNotContain("INDUSTRY");
+  }
+
+  @Test
+  void shouldReturnEmptyRolesWhenActionNotConfigured() {
+    LexisAuthorizationService service =
+        createService(
+            "LEXIS_INDUSTRY",
+            Map.of(
+                "READ_ONLY", List.of("/applicationSearch"),
+                "APPLICATION_APPROVER", List.of("/applicationsReview")));
+
+    Set<String> roles = service.resolveRolesForAction("/notMapped");
+
+    assertThat(roles).isEmpty();
+  }
+
+  @Test
+  void canPerformActionShouldSupportActionNamesWithOrWithoutLeadingSlash() {
+    LexisAuthorizationService service =
+        createService(
+            "LEXIS_INDUSTRY",
+            Map.of(
+                "READ_ONLY", List.of("/applicationSearch"),
+                "ADMIN", List.of("*")));
+
+    assertThat(service.canPerformAction(List.of("READ_ONLY"), "/applicationSearch")).isTrue();
+    assertThat(service.canPerformAction(List.of("READ_ONLY"), "applicationSearch")).isTrue();
+    assertThat(service.canPerformAction(List.of("READ_ONLY"), "/offersSearch")).isFalse();
   }
 
   private LexisAuthorizationService createService(
