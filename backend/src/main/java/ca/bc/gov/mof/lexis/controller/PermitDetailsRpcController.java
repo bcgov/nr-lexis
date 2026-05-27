@@ -4,8 +4,10 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
@@ -17,11 +19,12 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
-import java.nio.charset.StandardCharsets;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -106,6 +109,18 @@ public class PermitDetailsRpcController {
 
     return ResponseEntity.ok(
         service.getScaleFeesForPackage(packageNumber, permitNumber, isMinistryUser(authentication)));
+  }
+
+  @GetMapping("/scales-for-package")
+  public ResponseEntity<PermitScalesForPackageRpcResponseDto> getScalesForPackage(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for scales for package");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getScalesForPackage(packageNumber));
   }
 
   @GetMapping("/permit-data-after-scale-update")
@@ -241,6 +256,30 @@ public class PermitDetailsRpcController {
     }
 
     return ResponseEntity.ok(service.getAvailablePackageList(exemptionNumber, selectedPackages));
+  }
+
+  @GetMapping("/approved-exemption-volume")
+  public ResponseEntity<PermitApprovedExemptionVolumeRpcResponseDto> getApprovedExemptionVolume(
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for approved exemption volume");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getApprovedExemptionVolume(exemptionNumber));
+  }
+
+  @GetMapping("/exemption-volume-remaining")
+  public ResponseEntity<PermitExemptionVolumeRemainingRpcResponseDto> getExemptionVolumeRemaining(
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for exemption volume remaining");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getExemptionVolumeRemaining(exemptionNumber));
   }
 
   @GetMapping("/invoices-for-permit")

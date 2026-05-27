@@ -6,12 +6,14 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
@@ -22,6 +24,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
@@ -142,6 +145,31 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.scaleList().get(0).species()).isEqualTo("Hemlock");
     assertThat(response.scaleList().get(0).grade()).isEqualTo("Grade J");
     assertThat(response.scaleList().get(0).fee()).isEqualTo("$7.60");
+  }
+
+  @Test
+  void scalesForPackageShouldMapScaleDetailsDescriptionsAndRegion() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903")));
+    when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
+    when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
+    when(repository.findApplicationInfoByNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationInfoRow(
+                    1000456L, "EX-700", 1835L, "RCO", "T", "S", "HE/UT")));
+
+    PermitScalesForPackageRpcResponseDto response = service.getScalesForPackage("PKG-903");
+
+    assertThat(response.scaleList()).hasSize(1);
+    assertThat(response.scaleList().get(0).timbermark()).isEqualTo("TM1");
+    assertThat(response.scaleList().get(0).pieces()).isEqualTo(11L);
+    assertThat(response.scaleList().get(0).species()).isEqualTo("Hemlock");
+    assertThat(response.scaleList().get(0).grade()).isEqualTo("Grade J");
+    assertThat(response.scaleList().get(0).volume()).isEqualTo("7.6");
+    assertThat(response.scaleList().get(0).permit()).isEqualTo("7000123");
+    assertThat(response.scaleList().get(0).cascadeSplitCode()).isEqualTo("C");
+    assertThat(response.scaleList().get(0).region()).isEqualTo("RCO");
   }
 
   @Test
@@ -292,6 +320,28 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.packageList()).containsExactly("PKG-901");
     assertThat(response.errorMessage()).isNull();
+  }
+
+  @Test
+  void approvedExemptionVolumeShouldReturnValueFromExemptionService() {
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(Optional.of(exemptionDetail("EX-700", 55.5d)));
+
+    PermitApprovedExemptionVolumeRpcResponseDto response =
+        service.getApprovedExemptionVolume("EX-700");
+
+    assertThat(response.approvedExemptionVolume()).isEqualTo(100.0d);
+  }
+
+  @Test
+  void exemptionVolumeRemainingShouldReturnValueFromExemptionService() {
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(Optional.of(exemptionDetail("EX-700", 55.5d)));
+
+    PermitExemptionVolumeRemainingRpcResponseDto response =
+        service.getExemptionVolumeRemaining("EX-700");
+
+    assertThat(response.exemptionVolumeRemaining()).isEqualTo(55.5d);
   }
 
   @Test

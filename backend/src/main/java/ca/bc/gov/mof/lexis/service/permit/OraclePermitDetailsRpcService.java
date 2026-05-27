@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.permit;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
@@ -9,6 +10,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
@@ -19,7 +21,9 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitRpcScaleItemDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.AttachmentTypeRow;
@@ -182,6 +186,45 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         maskTotalFeeForPackage ? "$" : formatCurrency(totalFeeForPackage),
         scaleList,
         resolveGrowthType(packageNumber));
+  }
+
+  @Override
+  public PermitScalesForPackageRpcResponseDto getScalesForPackage(String packageNumber) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return new PermitScalesForPackageRpcResponseDto(List.of());
+    }
+
+    Map<Long, String> regionByApplication = new HashMap<>();
+    List<PermitScaleItemRpcResponseDto> scaleList =
+        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber).stream()
+            .map(
+                scale -> {
+                  String species =
+                      repository
+                          .findSpeciesDescription(scale.exportSpeciesCode())
+                          .orElse(nonNull(scale.exportSpeciesCode()));
+                  String grade =
+                      repository
+                          .findGradeDescription(scale.exportGradeCode())
+                          .orElse(nonNull(scale.exportGradeCode()));
+                  String region =
+                      resolveRegionForApplication(scale.applicationNumber(), regionByApplication);
+                  String permit = firstNonNull(trimToNull(scale.exportPermitDetailNumber()), "");
+                  return new PermitScaleItemRpcResponseDto(
+                      nonNull(scale.timberMark()),
+                      scale.piecesCount(),
+                      species,
+                      grade,
+                      formatVolume(scale.speciesGradeVolume()),
+                      permit,
+                      nonNull(scale.exportScaleDetailId()),
+                      nonNull(scale.cascadeSplitCode()),
+                      region);
+                })
+            .toList();
+
+    return new PermitScalesForPackageRpcResponseDto(scaleList);
   }
 
   @Override
@@ -450,6 +493,28 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  public PermitApprovedExemptionVolumeRpcResponseDto getApprovedExemptionVolume(
+      String exemptionNumber) {
+    double approvedVolume =
+        exemptionService
+            .findByExemptionNumber(exemptionNumber)
+            .map(exemption -> exemption.approvedVolume())
+            .orElse(0.0d);
+    return new PermitApprovedExemptionVolumeRpcResponseDto(approvedVolume);
+  }
+
+  @Override
+  public PermitExemptionVolumeRemainingRpcResponseDto getExemptionVolumeRemaining(
+      String exemptionNumber) {
+    double remainingVolume =
+        exemptionService
+            .findByExemptionNumber(exemptionNumber)
+            .map(exemption -> exemption.remainingVolume())
+            .orElse(0.0d);
+    return new PermitExemptionVolumeRemainingRpcResponseDto(remainingVolume);
+  }
+
+  @Override
   public PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber) {
     return new PermitInvoiceListRpcResponseDto(repository.findInvoiceNumbersByPermit(permitNumber));
   }
@@ -632,6 +697,26 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     String resolved = repository.findAttachmentTypeDescription(normalizedCode).orElse(normalizedCode);
     attachmentTypeByCode.put(normalizedCode, resolved);
+    return resolved;
+  }
+
+  private String resolveRegionForApplication(
+      Long applicationNumber, Map<Long, String> regionByApplication) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return "";
+    }
+    String cached = regionByApplication.get(applicationNumber);
+    if (cached != null) {
+      return cached;
+    }
+
+    String resolved =
+        repository
+            .findApplicationInfoByNumber(applicationNumber)
+            .map(ApplicationInfoRow::regionName)
+            .map(this::nonNull)
+            .orElse("");
+    regionByApplication.put(applicationNumber, resolved);
     return resolved;
   }
 

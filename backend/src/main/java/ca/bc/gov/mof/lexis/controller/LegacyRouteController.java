@@ -48,10 +48,13 @@ public class LegacyRouteController {
   private static final String ACTION_GET_PACKAGE_VOLUME_SUM = "getPackageVolumeSum";
   private static final String ACTION_GET_PACKAGE_INFO = "getPackageInfo";
   private static final String ACTION_GET_PACKAGE_DETAILS = "getPackageDetails";
+  private static final String ACTION_GET_SCALES_FOR_PACKAGE = "getScalesForPackage";
   private static final String ACTION_CHECK_PERMIT_NUMBER = "checkPermitNumber";
   private static final String ACTION_GET_APPLICATION_LIST = "getApplicationList";
   private static final String ACTION_GET_AVAILABLE_APPLICATION_LIST = "getAvailableApplicationList";
   private static final String ACTION_GET_AVAILABLE_PACKAGE_LIST = "getAvailablePackageList";
+  private static final String ACTION_GET_APPROVED_EXEMPTION_VOLUME = "getApprovedExemptionVolume";
+  private static final String ACTION_GET_EXEMPTION_VOLUME_REMAINING = "getExemptionVolumeRemaining";
   private static final String ACTION_GET_PERMIT_HAS_APPLICATIONS = "getPermitHasApplications";
   private static final String ACTION_GET_INVOICES_FOR_PERMIT = "getInvoicesForPermit";
   private static final String ACTION_GET_INVOICE_DETAILS = "getInvoiceDetails";
@@ -491,6 +494,9 @@ public class LegacyRouteController {
     if (ACTION_GET_PACKAGE_DETAILS.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPackageDetails(packageNumber);
     }
+    if (ACTION_GET_SCALES_FOR_PACKAGE.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getScalesForPackage(packageNumber);
+    }
     if (ACTION_CHECK_PERMIT_NUMBER.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.checkPermitNumber(permitNumber);
     }
@@ -503,6 +509,12 @@ public class LegacyRouteController {
     }
     if (ACTION_GET_AVAILABLE_PACKAGE_LIST.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getAvailablePackageList(exemptionNumber, selectedPackages);
+    }
+    if (ACTION_GET_APPROVED_EXEMPTION_VOLUME.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getApprovedExemptionVolume(exemptionNumber);
+    }
+    if (ACTION_GET_EXEMPTION_VOLUME_REMAINING.equalsIgnoreCase(actionMapping)) {
+      return permitDetailsRpcController.getExemptionVolumeRemaining(exemptionNumber);
     }
     if (ACTION_GET_PERMIT_HAS_APPLICATIONS.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPermitHasApplications(permitNumber);

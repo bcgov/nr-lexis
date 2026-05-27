@@ -10,8 +10,10 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
@@ -23,6 +25,8 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
@@ -122,6 +126,24 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).getScaleFeesForPackage("PKG-903", 7000123L, true);
+  }
+
+  @Test
+  void scalesForPackageShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitScalesForPackageRpcResponseDto dto =
+        new PermitScalesForPackageRpcResponseDto(
+            List.of(
+                new PermitScaleItemRpcResponseDto(
+                    "TM1", 11L, "Hemlock", "Grade J", "7.6", "7000123", "101", "W", "RCO")));
+    when(service.getScalesForPackage("PKG-903")).thenReturn(dto);
+
+    ResponseEntity<PermitScalesForPackageRpcResponseDto> response =
+        controller.getScalesForPackage("PKG-903");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getScalesForPackage("PKG-903");
   }
 
   @Test
@@ -280,6 +302,36 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).getAvailablePackageList("EX-700", "PKG-901");
+  }
+
+  @Test
+  void approvedExemptionVolumeShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitApprovedExemptionVolumeRpcResponseDto dto =
+        new PermitApprovedExemptionVolumeRpcResponseDto(100.5d);
+    when(service.getApprovedExemptionVolume("EX-700")).thenReturn(dto);
+
+    ResponseEntity<PermitApprovedExemptionVolumeRpcResponseDto> response =
+        controller.getApprovedExemptionVolume("EX-700");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getApprovedExemptionVolume("EX-700");
+  }
+
+  @Test
+  void exemptionVolumeRemainingShouldForwardRequestToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitExemptionVolumeRemainingRpcResponseDto dto =
+        new PermitExemptionVolumeRemainingRpcResponseDto(55.25d);
+    when(service.getExemptionVolumeRemaining("EX-700")).thenReturn(dto);
+
+    ResponseEntity<PermitExemptionVolumeRemainingRpcResponseDto> response =
+        controller.getExemptionVolumeRemaining("EX-700");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getExemptionVolumeRemaining("EX-700");
   }
 
   @Test
