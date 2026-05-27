@@ -154,7 +154,6 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 const ProvincialReviewPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [filters, setFilters] = useState<ApplicationReviewSearchFilters>(INITIAL_FILTERS)
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>(
     FALLBACK_PRODUCT_TYPE_OPTIONS,
   )
@@ -165,9 +164,6 @@ const ProvincialReviewPage: FC = () => {
   const [results, setResults] = useState<ApplicationReviewSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [sortField, setSortField] = useState<ApplicationReviewSearchSortField>(DEFAULT_SORT_FIELD)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [selectedRowsById, setSelectedRowsById] = useState<Record<string, boolean>>({})
   const [submittingApproval, setSubmittingApproval] = useState(false)
   const [submittingStatusUpdate, setSubmittingStatusUpdate] = useState(false)
@@ -220,6 +216,26 @@ const ProvincialReviewPage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const filters = urlState.filters
+  const sortField = urlState.sortField
+  const sortDirection = urlState.sortDirection
+  const pageSize = urlState.pageSize
+  const updateFilter = useCallback(
+    <K extends keyof ApplicationReviewSearchFilters>(
+      key: K,
+      value: ApplicationReviewSearchFilters[K],
+    ) => {
+      const nextFilters = {
+        ...filters,
+        [key]: value,
+      }
+      setSearchParams(
+        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
+        { replace: true },
+      )
+    },
+    [filters, pageSize, setSearchParams, sortDirection, sortField],
+  )
 
   const selectedRegions = useMemo(
     () => mapSelectedRegions(filters.region, regionOptions),
@@ -283,10 +299,6 @@ const ProvincialReviewPage: FC = () => {
   }, [])
 
   useEffect(() => {
-    setFilters(urlState.filters)
-    setSortField(urlState.sortField)
-    setSortDirection(urlState.sortDirection)
-    setPageSize(urlState.pageSize)
     setSelectedRowsById({})
     setReviewActionStatus(null)
   }, [urlState])
@@ -588,17 +600,13 @@ const ProvincialReviewPage: FC = () => {
               id="applicationNumber"
               labelText="Application Number"
               value={filters.applicationNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, applicationNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
             <Select
               id="productTypeCode"
               labelText="Product Type"
               value={filters.productTypeCode}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, productTypeCode: event.target.value }))
-              }
+              onChange={(event) => updateFilter('productTypeCode', event.target.value)}
             >
               <SelectItem text="All product types" value="" />
               {productTypeOptions.map((option) => (
@@ -615,10 +623,10 @@ const ProvincialReviewPage: FC = () => {
               selectedItems={selectedRegions}
               onChange={(event) => {
                 const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                setFilters((current) => ({
-                  ...current,
-                  region: nextSelected.map((item) => item.id),
-                }))
+                updateFilter(
+                  'region',
+                  nextSelected.map((item) => item.id),
+                )
               }}
             />
             <TextInput
@@ -627,9 +635,7 @@ const ProvincialReviewPage: FC = () => {
               value={filters.receivedFromDate}
               invalid={!isValidIsoDate(filters.receivedFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, receivedFromDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('receivedFromDate', event.target.value)}
             />
             <TextInput
               id="receivedToDate"
@@ -637,9 +643,7 @@ const ProvincialReviewPage: FC = () => {
               value={filters.receivedToDate}
               invalid={!isValidIsoDate(filters.receivedToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, receivedToDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('receivedToDate', event.target.value)}
             />
             <TextInput
               id="listingFromDate"
@@ -647,9 +651,7 @@ const ProvincialReviewPage: FC = () => {
               value={filters.listingFromDate}
               invalid={!isValidIsoDate(filters.listingFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, listingFromDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('listingFromDate', event.target.value)}
             />
             <TextInput
               id="listingToDate"
@@ -657,9 +659,7 @@ const ProvincialReviewPage: FC = () => {
               value={filters.listingToDate}
               invalid={!isValidIsoDate(filters.listingToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, listingToDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('listingToDate', event.target.value)}
             />
           </div>
           <div className="legacy-search-actions">

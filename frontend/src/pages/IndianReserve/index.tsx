@@ -98,13 +98,9 @@ const isValidIsoDate = (value: string): boolean => {
 const IndianReservePage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [filters, setFilters] = useState<IndianReservePermitSearchFilters>(INITIAL_FILTERS)
   const [results, setResults] = useState<IndianReservePermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [sortField, setSortField] = useState<IndianReservePermitSearchSortField>(DEFAULT_SORT_FIELD)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const canCreatePermit = canPerform('viewOICApplication')
   const withCurrentSearch = useCallback(
     (path: string): string => {
@@ -142,6 +138,26 @@ const IndianReservePage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const filters = urlState.filters
+  const sortField = urlState.sortField
+  const sortDirection = urlState.sortDirection
+  const pageSize = urlState.pageSize
+  const updateFilter = useCallback(
+    <K extends keyof IndianReservePermitSearchFilters>(
+      key: K,
+      value: IndianReservePermitSearchFilters[K],
+    ) => {
+      const nextFilters = {
+        ...filters,
+        [key]: value,
+      }
+      setSearchParams(
+        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
+        { replace: true },
+      )
+    },
+    [filters, pageSize, setSearchParams, sortDirection, sortField],
+  )
 
   const hasDateValidationError = useMemo(() => {
     return (
@@ -180,13 +196,6 @@ const IndianReservePage: FC = () => {
       setLoading(false)
     }
   }, [])
-
-  useEffect(() => {
-    setFilters(urlState.filters)
-    setSortField(urlState.sortField)
-    setSortDirection(urlState.sortDirection)
-    setPageSize(urlState.pageSize)
-  }, [urlState])
 
   useEffect(() => {
     void runSearch({
@@ -236,17 +245,13 @@ const IndianReservePage: FC = () => {
               id="permitNumber"
               labelText="Permit Number"
               value={filters.permitNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, permitNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('permitNumber', event.target.value)}
             />
             <TextInput
               id="packageNumber"
               labelText="Package Number"
               value={filters.packageNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, packageNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
             <TextInput
               id="fromPermitIssueDate"
@@ -254,9 +259,7 @@ const IndianReservePage: FC = () => {
               value={filters.fromPermitIssueDate}
               invalid={!isValidIsoDate(filters.fromPermitIssueDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, fromPermitIssueDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('fromPermitIssueDate', event.target.value)}
             />
             <TextInput
               id="toPermitIssueDate"
@@ -264,9 +267,7 @@ const IndianReservePage: FC = () => {
               value={filters.toPermitIssueDate}
               invalid={!isValidIsoDate(filters.toPermitIssueDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, toPermitIssueDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('toPermitIssueDate', event.target.value)}
             />
             <TextInput
               id="fromEstimatedShippingDate"
@@ -274,12 +275,7 @@ const IndianReservePage: FC = () => {
               value={filters.fromEstimatedShippingDate}
               invalid={!isValidIsoDate(filters.fromEstimatedShippingDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({
-                  ...current,
-                  fromEstimatedShippingDate: event.target.value,
-                }))
-              }
+              onChange={(event) => updateFilter('fromEstimatedShippingDate', event.target.value)}
             />
             <TextInput
               id="toEstimatedShippingDate"
@@ -287,12 +283,7 @@ const IndianReservePage: FC = () => {
               value={filters.toEstimatedShippingDate}
               invalid={!isValidIsoDate(filters.toEstimatedShippingDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({
-                  ...current,
-                  toEstimatedShippingDate: event.target.value,
-                }))
-              }
+              onChange={(event) => updateFilter('toEstimatedShippingDate', event.target.value)}
             />
           </div>
           <div className="legacy-search-actions">

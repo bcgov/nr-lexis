@@ -24,27 +24,27 @@ const DEFAULT_CAPABILITIES: LexisSessionCapabilities = {
 }
 
 const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
-  '/summary': '/provincial/summary',
-  '/applicationsreview': '/provincial/review',
-  '/applicationsearch': '/provincial/application',
-  '/exemptionsearch': '/provincial/exemption',
-  '/offerssearch': '/provincial/offers',
-  '/permitsearch': '/provincial/permit',
-  '/federalapplicationsearch': '/federal',
-  '/indianreservepermitsearch': '/indian-reserve',
-  '/lexisagentadmin': '/admin',
+  summary: '/provincial/summary',
+  applicationsreview: '/provincial/review',
+  applicationsearch: '/provincial/application',
+  exemptionsearch: '/provincial/exemption',
+  offerssearch: '/provincial/offers',
+  permitsearch: '/provincial/permit',
+  federalapplicationsearch: '/federal',
+  indianreservepermitsearch: '/indian-reserve',
+  lexisagentadmin: '/admin',
 }
 
 const ACTION_PRIORITY: string[] = [
-  '/summary',
-  '/applicationsReview',
-  '/applicationSearch',
-  '/exemptionSearch',
-  '/offersSearch',
-  '/permitSearch',
-  '/federalApplicationSearch',
-  '/indianReservePermitSearch',
-  '/lexisAgentAdmin',
+  'summary',
+  'applicationsReview',
+  'applicationSearch',
+  'exemptionSearch',
+  'offersSearch',
+  'permitSearch',
+  'federalApplicationSearch',
+  'indianReservePermitSearch',
+  'lexisAgentAdmin',
 ]
 
 const LEGACY_TO_CANONICAL_ROLE_MAP: Record<string, string> = {
@@ -163,7 +163,9 @@ const DEV_CONCRETE_ROLE_PREFIXES: string[] = [
   'LOG_EXPORT_INDUSTRY_',
 ]
 
-const normalizeAction = (action: string): string => action.trim().toLowerCase()
+const normalizeAction = (action: string): string => {
+  return action.trim().toLowerCase().replace(/\.do$/i, '').replace(/^\//, '')
+}
 
 const resolveFallbackActionsForRole = (role: string): string[] => {
   if (DEV_ROLE_ACTIONS[role]) {
@@ -194,10 +196,7 @@ const normalizeLegacyActionFromPath = (legacyPath: string | null): string | null
   }
 
   const withoutQuery = legacyPath.trim().split('?')[0]
-  const normalizedWithLeadingSlash = withoutQuery.startsWith('/')
-    ? withoutQuery
-    : `/${withoutQuery}`
-  return normalizedWithLeadingSlash.replace(/\.do$/i, '').toLowerCase()
+  return normalizeAction(withoutQuery)
 }
 
 const sanitizeCapabilities = (

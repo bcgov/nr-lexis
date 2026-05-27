@@ -126,14 +126,10 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 const ProvincialOffersPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [filters, setFilters] = useState<ProvincialOfferSearchFilters>(INITIAL_FILTERS)
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [sortField, setSortField] = useState<ProvincialOfferSearchSortField>(DEFAULT_SORT_FIELD)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const canCreateOffer = canPerform('createOffer')
   const withCurrentSearch = useCallback(
     (path: string): string => {
@@ -174,6 +170,26 @@ const ProvincialOffersPage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const filters = urlState.filters
+  const sortField = urlState.sortField
+  const sortDirection = urlState.sortDirection
+  const pageSize = urlState.pageSize
+  const updateFilter = useCallback(
+    <K extends keyof ProvincialOfferSearchFilters>(
+      key: K,
+      value: ProvincialOfferSearchFilters[K],
+    ) => {
+      const nextFilters = {
+        ...filters,
+        [key]: value,
+      }
+      setSearchParams(
+        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
+        { replace: true },
+      )
+    },
+    [filters, pageSize, setSearchParams, sortDirection, sortField],
+  )
 
   const selectedRegions = useMemo(
     () => mapSelectedRegions(filters.region, regionOptions),
@@ -217,13 +233,6 @@ const ProvincialOffersPage: FC = () => {
       setLoading(false)
     }
   }, [])
-
-  useEffect(() => {
-    setFilters(urlState.filters)
-    setSortField(urlState.sortField)
-    setSortDirection(urlState.sortDirection)
-    setPageSize(urlState.pageSize)
-  }, [urlState])
 
   useEffect(() => {
     void runSearch({
@@ -289,25 +298,19 @@ const ProvincialOffersPage: FC = () => {
               id="applicationNumber"
               labelText="Application Number"
               value={filters.applicationNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, applicationNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
             <TextInput
               id="packageNumber"
               labelText="Package Number"
               value={filters.packageNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, packageNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
             <TextInput
               id="clientNumber"
               labelText="Client Number"
               value={filters.clientNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, clientNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('clientNumber', event.target.value)}
             />
             <TextInput
               id="listingFromDate"
@@ -315,9 +318,7 @@ const ProvincialOffersPage: FC = () => {
               value={filters.listingFromDate}
               invalid={!isValidIsoDate(filters.listingFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, listingFromDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('listingFromDate', event.target.value)}
             />
             <TextInput
               id="listingToDate"
@@ -325,9 +326,7 @@ const ProvincialOffersPage: FC = () => {
               value={filters.listingToDate}
               invalid={!isValidIsoDate(filters.listingToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, listingToDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('listingToDate', event.target.value)}
             />
             <MultiSelect
               id="region"
@@ -339,10 +338,10 @@ const ProvincialOffersPage: FC = () => {
               selectedItems={selectedRegions}
               onChange={(event) => {
                 const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                setFilters((current) => ({
-                  ...current,
-                  region: nextSelected.map((item) => item.id),
-                }))
+                updateFilter(
+                  'region',
+                  nextSelected.map((item) => item.id),
+                )
               }}
             />
             <TextInput
@@ -351,9 +350,7 @@ const ProvincialOffersPage: FC = () => {
               value={filters.withdrawalFromDate}
               invalid={!isValidIsoDate(filters.withdrawalFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, withdrawalFromDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('withdrawalFromDate', event.target.value)}
             />
             <TextInput
               id="withdrawalToDate"
@@ -361,9 +358,7 @@ const ProvincialOffersPage: FC = () => {
               value={filters.withdrawalToDate}
               invalid={!isValidIsoDate(filters.withdrawalToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, withdrawalToDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('withdrawalToDate', event.target.value)}
             />
           </div>
           <div className="legacy-search-actions">

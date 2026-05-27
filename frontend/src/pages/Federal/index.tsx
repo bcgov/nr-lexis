@@ -113,16 +113,12 @@ const isValidIsoDate = (value: string): boolean => {
 
 const FederalPage: FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [filters, setFilters] = useState<FederalApplicationSearchFilters>(INITIAL_FILTERS)
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>(
     FALLBACK_APPLICATION_STATUS_OPTIONS,
   )
   const [results, setResults] = useState<FederalApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [sortField, setSortField] = useState<FederalApplicationSearchSortField>(DEFAULT_SORT_FIELD)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const withCurrentSearch = useCallback(
     (path: string): string => {
       const query = searchParams.toString()
@@ -161,6 +157,20 @@ const FederalPage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const filters = urlState.filters
+  const sortField = urlState.sortField
+  const sortDirection = urlState.sortDirection
+  const pageSize = urlState.pageSize
+  const updateFilter = useCallback(
+    (key: keyof FederalApplicationSearchFilters, value: string) => {
+      const nextFilters = { ...filters, [key]: value }
+      setSearchParams(
+        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
+        { replace: true },
+      )
+    },
+    [filters, pageSize, setSearchParams, sortDirection, sortField],
+  )
 
   const hasDateValidationError = useMemo(() => {
     return (
@@ -199,13 +209,6 @@ const FederalPage: FC = () => {
       setLoading(false)
     }
   }, [])
-
-  useEffect(() => {
-    setFilters(urlState.filters)
-    setSortField(urlState.sortField)
-    setSortDirection(urlState.sortDirection)
-    setPageSize(urlState.pageSize)
-  }, [urlState])
 
   useEffect(() => {
     void runSearch({
@@ -266,25 +269,19 @@ const FederalPage: FC = () => {
               id="applicationNumber"
               labelText="Application Number"
               value={filters.applicationNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, applicationNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
             <TextInput
               id="packageNumber"
               labelText="Package Number"
               value={filters.packageNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, packageNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
             <Select
               id="applicationStatus"
               labelText="Application Status"
               value={filters.applicationStatus}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, applicationStatus: event.target.value }))
-              }
+              onChange={(event) => updateFilter('applicationStatus', event.target.value)}
             >
               <SelectItem text="All statuses" value="" />
               {applicationStatusOptions.map((option) => (
@@ -295,9 +292,7 @@ const FederalPage: FC = () => {
               id="clientNumber"
               labelText="Client Number"
               value={filters.clientNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, clientNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('clientNumber', event.target.value)}
             />
             <TextInput
               id="receivedFromDate"
@@ -305,9 +300,7 @@ const FederalPage: FC = () => {
               value={filters.receivedFromDate}
               invalid={!isValidIsoDate(filters.receivedFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, receivedFromDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('receivedFromDate', event.target.value)}
             />
             <TextInput
               id="receivedToDate"
@@ -315,9 +308,7 @@ const FederalPage: FC = () => {
               value={filters.receivedToDate}
               invalid={!isValidIsoDate(filters.receivedToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, receivedToDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('receivedToDate', event.target.value)}
             />
             <TextInput
               id="listingFromDate"
@@ -325,9 +316,7 @@ const FederalPage: FC = () => {
               value={filters.listingFromDate}
               invalid={!isValidIsoDate(filters.listingFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, listingFromDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('listingFromDate', event.target.value)}
             />
             <TextInput
               id="listingToDate"
@@ -335,9 +324,7 @@ const FederalPage: FC = () => {
               value={filters.listingToDate}
               invalid={!isValidIsoDate(filters.listingToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, listingToDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('listingToDate', event.target.value)}
             />
           </div>
           <div className="legacy-search-actions">

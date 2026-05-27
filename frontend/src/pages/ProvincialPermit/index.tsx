@@ -138,7 +138,6 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 const ProvincialPermitPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [filters, setFilters] = useState<ProvincialPermitSearchFilters>(INITIAL_FILTERS)
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>(
     FALLBACK_PERMIT_STATUS_OPTIONS,
@@ -146,9 +145,6 @@ const ProvincialPermitPage: FC = () => {
   const [results, setResults] = useState<ProvincialPermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [sortField, setSortField] = useState<ProvincialPermitSearchSortField>(DEFAULT_SORT_FIELD)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const canCreatePermit = canPerform('createPermit')
   const withCurrentSearch = useCallback(
     (path: string): string => {
@@ -189,6 +185,26 @@ const ProvincialPermitPage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const filters = urlState.filters
+  const sortField = urlState.sortField
+  const sortDirection = urlState.sortDirection
+  const pageSize = urlState.pageSize
+  const updateFilter = useCallback(
+    <K extends keyof ProvincialPermitSearchFilters>(
+      key: K,
+      value: ProvincialPermitSearchFilters[K],
+    ) => {
+      const nextFilters = {
+        ...filters,
+        [key]: value,
+      }
+      setSearchParams(
+        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
+        { replace: true },
+      )
+    },
+    [filters, pageSize, setSearchParams, sortDirection, sortField],
+  )
 
   const selectedRegions = useMemo(
     () => mapSelectedRegions(filters.region, regionOptions),
@@ -219,13 +235,6 @@ const ProvincialPermitPage: FC = () => {
       setLoading(false)
     }
   }, [])
-
-  useEffect(() => {
-    setFilters(urlState.filters)
-    setSortField(urlState.sortField)
-    setSortDirection(urlState.sortDirection)
-    setPageSize(urlState.pageSize)
-  }, [urlState])
 
   useEffect(() => {
     void runSearch({
@@ -294,17 +303,13 @@ const ProvincialPermitPage: FC = () => {
               id="applicationNumber"
               labelText="Application Number"
               value={filters.applicationNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, applicationNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
             <TextInput
               id="packageNumber"
               labelText="Package Number"
               value={filters.packageNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, packageNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
             <MultiSelect
               id="region"
@@ -316,10 +321,10 @@ const ProvincialPermitPage: FC = () => {
               selectedItems={selectedRegions}
               onChange={(event) => {
                 const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                setFilters((current) => ({
-                  ...current,
-                  region: nextSelected.map((item) => item.id),
-                }))
+                updateFilter(
+                  'region',
+                  nextSelected.map((item) => item.id),
+                )
               }}
             />
             <TextInput
@@ -328,9 +333,7 @@ const ProvincialPermitPage: FC = () => {
               value={filters.issuedFromDate}
               invalid={!isValidIsoDate(filters.issuedFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, issuedFromDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('issuedFromDate', event.target.value)}
             />
             <TextInput
               id="issuedToDate"
@@ -338,17 +341,13 @@ const ProvincialPermitPage: FC = () => {
               value={filters.issuedToDate}
               invalid={!isValidIsoDate(filters.issuedToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, issuedToDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('issuedToDate', event.target.value)}
             />
             <Select
               id="permitStatus"
               labelText="Permit Status"
               value={filters.permitStatus}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, permitStatus: event.target.value }))
-              }
+              onChange={(event) => updateFilter('permitStatus', event.target.value)}
             >
               <SelectItem text="All statuses" value="" />
               {permitStatusOptions.map((option) => (
@@ -359,25 +358,19 @@ const ProvincialPermitPage: FC = () => {
               id="permitNumber"
               labelText="Permit Number"
               value={filters.permitNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, permitNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('permitNumber', event.target.value)}
             />
             <TextInput
               id="applicantClientNumber"
               labelText="Applicant Client Number"
               value={filters.applicantClientNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, applicantClientNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
             />
             <TextInput
               id="ownerClientNumber"
               labelText="Owner Client Number"
               value={filters.ownerClientNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, ownerClientNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
             />
           </div>
           <div className="legacy-search-actions">

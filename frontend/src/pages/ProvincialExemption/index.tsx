@@ -161,7 +161,6 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 const ProvincialExemptionPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [filters, setFilters] = useState<ProvincialExemptionSearchFilters>(INITIAL_FILTERS)
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>(
     FALLBACK_EXEMPTION_TYPE_OPTIONS,
@@ -172,9 +171,6 @@ const ProvincialExemptionPage: FC = () => {
   const [results, setResults] = useState<ProvincialExemptionSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [sortField, setSortField] = useState<ProvincialExemptionSearchSortField>(DEFAULT_SORT_FIELD)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIRECTION)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [selectedRowsById, setSelectedRowsById] = useState<
     Record<string, ProvincialExemptionSearchItem>
   >({})
@@ -222,6 +218,26 @@ const ProvincialExemptionPage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const filters = urlState.filters
+  const sortField = urlState.sortField
+  const sortDirection = urlState.sortDirection
+  const pageSize = urlState.pageSize
+  const updateFilter = useCallback(
+    <K extends keyof ProvincialExemptionSearchFilters>(
+      key: K,
+      value: ProvincialExemptionSearchFilters[K],
+    ) => {
+      const nextFilters = {
+        ...filters,
+        [key]: value,
+      }
+      setSearchParams(
+        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
+        { replace: true },
+      )
+    },
+    [filters, pageSize, setSearchParams, sortDirection, sortField],
+  )
 
   const selectedRegions = useMemo(
     () => mapSelectedRegions(filters.region, regionOptions),
@@ -255,10 +271,6 @@ const ProvincialExemptionPage: FC = () => {
   }, [])
 
   useEffect(() => {
-    setFilters(urlState.filters)
-    setSortField(urlState.sortField)
-    setSortDirection(urlState.sortDirection)
-    setPageSize(urlState.pageSize)
     setSelectedRowsById({})
     setApprovalStatus(null)
   }, [urlState])
@@ -404,25 +416,19 @@ const ProvincialExemptionPage: FC = () => {
               id="applicationNumber"
               labelText="Application Number"
               value={filters.applicationNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, applicationNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
             <TextInput
               id="packageNumber"
               labelText="Package Number"
               value={filters.packageNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, packageNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
             <TextInput
               id="exemptionNumber"
               labelText="Exemption Number"
               value={filters.exemptionNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, exemptionNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
             />
             <MultiSelect
               id="region"
@@ -434,10 +440,10 @@ const ProvincialExemptionPage: FC = () => {
               selectedItems={selectedRegions}
               onChange={(event) => {
                 const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                setFilters((current) => ({
-                  ...current,
-                  region: nextSelected.map((item) => item.id),
-                }))
+                updateFilter(
+                  'region',
+                  nextSelected.map((item) => item.id),
+                )
               }}
             />
             <TextInput
@@ -446,9 +452,7 @@ const ProvincialExemptionPage: FC = () => {
               value={filters.listFromDate}
               invalid={!isValidIsoDate(filters.listFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, listFromDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('listFromDate', event.target.value)}
             />
             <TextInput
               id="listToDate"
@@ -456,17 +460,13 @@ const ProvincialExemptionPage: FC = () => {
               value={filters.listToDate}
               invalid={!isValidIsoDate(filters.listToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, listToDate: event.target.value }))
-              }
+              onChange={(event) => updateFilter('listToDate', event.target.value)}
             />
             <Select
               id="exemptionTypeCode"
               labelText="Exemption Type"
               value={filters.exemptionTypeCode}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, exemptionTypeCode: event.target.value }))
-              }
+              onChange={(event) => updateFilter('exemptionTypeCode', event.target.value)}
             >
               <SelectItem text="All types" value="" />
               {exemptionTypeOptions.map((option) => (
@@ -477,12 +477,7 @@ const ProvincialExemptionPage: FC = () => {
               id="exemptionStatusCode"
               labelText="Exemption Status"
               value={filters.exemptionStatusCode}
-              onChange={(event) =>
-                setFilters((current) => ({
-                  ...current,
-                  exemptionStatusCode: event.target.value,
-                }))
-              }
+              onChange={(event) => updateFilter('exemptionStatusCode', event.target.value)}
             >
               <SelectItem text="All statuses" value="" />
               {exemptionStatusOptions.map((option) => (
@@ -493,20 +488,13 @@ const ProvincialExemptionPage: FC = () => {
               id="applicantClientNumber"
               labelText="Applicant Client Number"
               value={filters.applicantClientNumber}
-              onChange={(event) =>
-                setFilters((current) => ({
-                  ...current,
-                  applicantClientNumber: event.target.value,
-                }))
-              }
+              onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
             />
             <TextInput
               id="ownerClientNumber"
               labelText="Owner Client Number"
               value={filters.ownerClientNumber}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, ownerClientNumber: event.target.value }))
-              }
+              onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
             />
           </div>
           <div className="legacy-search-actions">
