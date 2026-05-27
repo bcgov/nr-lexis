@@ -15,6 +15,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 
 type LegacyLaunchTool = {
@@ -24,6 +25,7 @@ type LegacyLaunchTool = {
   legacyPath: string
   actionMapping: string
   description: string
+  reactUploadType?: 'application' | 'exemption' | 'permit' | 'invoice'
 }
 
 const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
@@ -61,6 +63,7 @@ const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
     legacyPath: '/fileApplicationUpload.do',
     actionMapping: 'display',
     description: 'Legacy file upload workflow for applications.',
+    reactUploadType: 'application',
   },
   {
     id: 'fileExemptionUpload',
@@ -69,6 +72,7 @@ const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
     legacyPath: '/fileExemptionUpload.do',
     actionMapping: 'display',
     description: 'Legacy file upload workflow for exemptions.',
+    reactUploadType: 'exemption',
   },
   {
     id: 'filePermitUpload',
@@ -77,6 +81,7 @@ const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
     legacyPath: '/filePermitUpload.do',
     actionMapping: 'display',
     description: 'Legacy file upload workflow for permits.',
+    reactUploadType: 'permit',
   },
   {
     id: 'fileInvoiceUpload',
@@ -85,6 +90,7 @@ const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
     legacyPath: '/fileInvoiceUpload.do',
     actionMapping: 'display',
     description: 'Legacy file upload workflow for invoices.',
+    reactUploadType: 'invoice',
   },
 ]
 
@@ -169,6 +175,7 @@ const buildLegacyToolUrl = (tool: LegacyLaunchTool): string => {
 }
 
 const AdminPage: FC = () => {
+  const navigate = useNavigate()
   const { capabilities, canPerform, refresh } = useAuth()
   const [actionFilter, setActionFilter] = useState('')
   const [showGrantedOnly, setShowGrantedOnly] = useState(false)
@@ -286,6 +293,7 @@ const AdminPage: FC = () => {
                 <TableHeader>Tool</TableHeader>
                 <TableHeader>Required Action</TableHeader>
                 <TableHeader>Access</TableHeader>
+                <TableHeader>React</TableHeader>
                 <TableHeader>Launch</TableHeader>
               </TableRow>
             </TableHead>
@@ -304,6 +312,20 @@ const AdminPage: FC = () => {
                     </TableCell>
                     <TableCell>
                       <Tag type={granted ? 'green' : 'red'}>{granted ? 'Allowed' : 'Denied'}</Tag>
+                    </TableCell>
+                    <TableCell>
+                      {tool.reactUploadType ? (
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/admin/uploads?type=${tool.reactUploadType}`)}
+                          disabled={!granted}
+                        >
+                          Open React
+                        </Button>
+                      ) : (
+                        <span>-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Button

@@ -4,6 +4,7 @@ import { Navigate, type RouteObject } from 'react-router-dom'
 import Layout from '@/components/Layout'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminPage from '@/pages/Admin'
+import AdminUploadsPage from '@/pages/AdminUploads'
 import DashboardPage from '@/pages/Dashboard'
 import FederalPage from '@/pages/Federal'
 import FederalApplicationDetailsPage from '@/pages/FederalApplicationDetails'
@@ -375,6 +376,22 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isNavigation: true,
+  },
+  {
+    path: '/admin/uploads',
+    id: 'Upload Center',
+    requiredActions: [
+      '/fileApplicationUpload',
+      '/fileExemptionUpload',
+      '/filePermitUpload',
+      '/fileInvoiceUpload',
+    ],
+    element: (
+      <Layout>
+        <AdminUploadsPage />
+      </Layout>
+    ),
+    isNavigation: false,
   },
   {
     path: '/unauthorized',
