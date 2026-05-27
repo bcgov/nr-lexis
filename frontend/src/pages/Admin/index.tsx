@@ -4,6 +4,7 @@ import {
   Checkbox,
   Column,
   Grid,
+  InlineNotification,
   Table,
   TableBody,
   TableCell,
@@ -15,6 +16,77 @@ import {
   Tile,
 } from '@carbon/react'
 import { useAuth } from '@/context/auth/useAuth'
+
+type LegacyLaunchTool = {
+  id: string
+  label: string
+  requiredAction: string
+  legacyPath: string
+  actionMapping: string
+  description: string
+}
+
+const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
+  {
+    id: 'lexisAgentAdmin',
+    label: 'LEXIS Administration',
+    requiredAction: '/lexisAgentAdmin',
+    legacyPath: '/lexisAgentAdmin.do',
+    actionMapping: 'view',
+    description: 'Legacy administration dashboard.',
+  },
+  {
+    id: 'lexisPolicyAdmin',
+    label: 'Fee Policy Administration',
+    requiredAction: '/lexisPolicyAdmin',
+    legacyPath: '/lexisPolicyAdmin.do',
+    actionMapping: 'view',
+    description: 'Legacy fee policy administration page.',
+  },
+  {
+    id: 'lexisFILAdmin',
+    label: 'FIL Percent Administration',
+    requiredAction: '/lexisFILAdmin',
+    legacyPath: '/lexisFILAdmin.do',
+    actionMapping: 'view',
+    description: 'Legacy fee-in-lieu percent policy page.',
+  },
+]
+
+const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
+  {
+    id: 'fileApplicationUpload',
+    label: 'Application Upload',
+    requiredAction: '/fileApplicationUpload',
+    legacyPath: '/fileApplicationUpload.do',
+    actionMapping: 'display',
+    description: 'Legacy file upload workflow for applications.',
+  },
+  {
+    id: 'fileExemptionUpload',
+    label: 'Exemption Upload',
+    requiredAction: '/fileExemptionUpload',
+    legacyPath: '/fileExemptionUpload.do',
+    actionMapping: 'display',
+    description: 'Legacy file upload workflow for exemptions.',
+  },
+  {
+    id: 'filePermitUpload',
+    label: 'Permit Upload',
+    requiredAction: '/filePermitUpload',
+    legacyPath: '/filePermitUpload.do',
+    actionMapping: 'display',
+    description: 'Legacy file upload workflow for permits.',
+  },
+  {
+    id: 'fileInvoiceUpload',
+    label: 'Invoice Upload',
+    requiredAction: '/fileInvoiceUpload',
+    legacyPath: '/fileInvoiceUpload.do',
+    actionMapping: 'display',
+    description: 'Legacy file upload workflow for invoices.',
+  },
+]
 
 const LEGACY_ACTION_CATALOG = [
   '/applicationDetails',
@@ -82,10 +154,25 @@ const ROUTE_ACCESS_CHECKS = [
 
 const normalizeText = (value: string): string => value.trim().toLowerCase()
 
+const getLegacyEndpointBase = (): string => {
+  const configured = (import.meta.env.VITE_LEXIS_LEGACY_ENDPOINT_BASE ?? '/api').trim()
+  if (!configured) {
+    return '/api'
+  }
+  return configured.endsWith('/') ? configured.slice(0, -1) : configured
+}
+
+const buildLegacyToolUrl = (tool: LegacyLaunchTool): string => {
+  const url = new URL(`${window.location.origin}${getLegacyEndpointBase()}${tool.legacyPath}`)
+  url.searchParams.set('actionMapping', tool.actionMapping)
+  return url.toString()
+}
+
 const AdminPage: FC = () => {
   const { capabilities, canPerform, refresh } = useAuth()
   const [actionFilter, setActionFilter] = useState('')
   const [showGrantedOnly, setShowGrantedOnly] = useState(false)
+  const [launchErrorMessage, setLaunchErrorMessage] = useState('')
 
   const visibleActions = useMemo(() => {
     return LEGACY_ACTION_CATALOG.filter((action) => {
@@ -102,6 +189,19 @@ const AdminPage: FC = () => {
   const grantedActionCount = useMemo(() => {
     return LEGACY_ACTION_CATALOG.filter((action) => canPerform(action)).length
   }, [canPerform])
+
+  const openLegacyTool = (tool: LegacyLaunchTool): void => {
+    setLaunchErrorMessage('')
+    const popup = window.open(
+      buildLegacyToolUrl(tool),
+      'legacyAdminWindow',
+      'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
+    )
+
+    if (!popup) {
+      setLaunchErrorMessage('Unable to open legacy tool window. Enable popups and try again.')
+    }
+  }
 
   return (
     <Grid fullWidth className="default-grid">
@@ -165,6 +265,71 @@ const AdminPage: FC = () => {
               })}
             </TableBody>
           </Table>
+        </Tile>
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
+        <Tile>
+          <h2 className="dashboard-title">Legacy Admin and Upload Launchers</h2>
+          <p>
+            These links preserve `nr-lexis-main` entry points while Spring replacements are
+            completed.
+          </p>
+          <p className="landing-help-text">
+            TODO: replace direct legacy endpoint launches with native React screens once policy and
+            upload APIs are ported.
+          </p>
+
+          <Table useZebraStyles>
+            <TableHead>
+              <TableRow>
+                <TableHeader>Tool</TableHeader>
+                <TableHeader>Required Action</TableHeader>
+                <TableHeader>Access</TableHeader>
+                <TableHeader>Launch</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {[...LEGACY_ADMIN_TOOLS, ...LEGACY_UPLOAD_TOOLS].map((tool) => {
+                const granted = canPerform(tool.requiredAction)
+                return (
+                  <TableRow key={tool.id}>
+                    <TableCell>
+                      <strong>{tool.label}</strong>
+                      <div>{tool.description}</div>
+                      <code>{tool.legacyPath}</code>
+                    </TableCell>
+                    <TableCell>
+                      <code>{tool.requiredAction}</code>
+                    </TableCell>
+                    <TableCell>
+                      <Tag type={granted ? 'green' : 'red'}>{granted ? 'Allowed' : 'Denied'}</Tag>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        kind="secondary"
+                        size="sm"
+                        onClick={() => openLegacyTool(tool)}
+                        disabled={!granted}
+                      >
+                        Open
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+
+          {launchErrorMessage && (
+            <InlineNotification
+              kind="error"
+              title="Launch Error"
+              subtitle={launchErrorMessage}
+              lowContrast
+              onCloseButtonClick={() => setLaunchErrorMessage('')}
+            />
+          )}
         </Tile>
       </Column>
 
