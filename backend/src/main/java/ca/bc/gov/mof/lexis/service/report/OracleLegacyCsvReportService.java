@@ -13,6 +13,8 @@ import java.sql.Types;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javax.sql.DataSource;
@@ -59,26 +61,27 @@ public class OracleLegacyCsvReportService {
     };
   }
 
-  private Optional<LexisGeneratedReport> generateSpeciesGradeCsv(LexisReportRequestDto request) {
-    Map<String, String> parameters = requestParameters(request);
-    byte[] content =
-        executeCursorProcedure(
-            SPECIES_GRADE_CSV_PROCEDURE,
-            cs -> {
-              cs.setDate(1, toSqlDate(first(parameters, "fromDate")));
-              cs.setDate(2, toSqlDate(first(parameters, "toDate")));
-              setNullableString(cs, 3, csvValue(parameters, "region"));
-              setNullableString(cs, 4, emptyToNull(first(parameters, "permitStatus")));
-              setNullableString(cs, 5, emptyToNull(first(parameters, "exemptionNumber")));
-              setNullableString(cs, 6, emptyToNull(first(parameters, "exemptionType")));
-              setNullableString(cs, 7, emptyToNull(first(parameters, "exemptionReason")));
-              setNullableString(cs, 8, emptyToNull(first(parameters, "growthType")));
-              setNullableString(cs, 9, emptyToNull(first(parameters, "timberMark")));
-              setNullableString(cs, 10, emptyToNull(first(parameters, "forestFileId")));
-            },
-            11);
+  public Optional<LegacyTabularReportData> loadLegacyTabularReportData(
+      LexisJasperReportDefinition definition,
+      LexisReportRequestDto request) {
+    return switch (definition) {
+      case SPECIES_GRADE_REPORT -> loadSpeciesGradeData(request);
+      case TEAC_REPORT -> loadTeacData(request);
+      default -> Optional.empty();
+    };
+  }
 
-    if (content == null) {
+  private Optional<LexisGeneratedReport> generateSpeciesGradeCsv(LexisReportRequestDto request) {
+    Optional<LegacyTabularReportData> dataOptional = loadSpeciesGradeData(request);
+    if (dataOptional.isEmpty()) {
+      return Optional.empty();
+    }
+
+    byte[] content;
+    try {
+      content = renderCsv(dataOptional.orElseThrow());
+    } catch (IOException ex) {
+      LOGGER.warn("Unable to render species grade CSV: {}", ex.getMessage());
       return Optional.empty();
     }
 
@@ -90,29 +93,16 @@ public class OracleLegacyCsvReportService {
   }
 
   private Optional<LexisGeneratedReport> generateTeacCsv(LexisReportRequestDto request) {
-    Map<String, String> parameters = requestParameters(request);
-
-    String jurisdiction = normalize(first(parameters, "exportJurisdictionCode", "jurisdiction"));
-    String procedureCall;
-    if (JURISDICTION_PROVINCIAL.equalsIgnoreCase(jurisdiction)) {
-      procedureCall = PROVINCIAL_TEAC_CSV_PROCEDURE;
-    } else if (JURISDICTION_FEDERAL.equalsIgnoreCase(jurisdiction)) {
-      procedureCall = FEDERAL_TEAC_CSV_PROCEDURE;
-    } else {
-      LOGGER.warn("TEAC CSV request missing recognized jurisdiction: [{}]", jurisdiction);
+    Optional<LegacyTabularReportData> dataOptional = loadTeacData(request);
+    if (dataOptional.isEmpty()) {
       return Optional.empty();
     }
 
-    byte[] content =
-        executeCursorProcedure(
-            procedureCall,
-            cs -> {
-              setNullableString(cs, 1, csvValue(parameters, "region"));
-              cs.setLong(2, parseLongOrZero(first(parameters, "exportSchedule")));
-            },
-            3);
-
-    if (content == null) {
+    byte[] content;
+    try {
+      content = renderCsv(dataOptional.orElseThrow());
+    } catch (IOException ex) {
+      LOGGER.warn("Unable to render TEAC CSV: {}", ex.getMessage());
       return Optional.empty();
     }
 
@@ -123,7 +113,49 @@ public class OracleLegacyCsvReportService {
             content));
   }
 
-  private byte[] executeCursorProcedure(
+  private Optional<LegacyTabularReportData> loadSpeciesGradeData(LexisReportRequestDto request) {
+    Map<String, String> parameters = requestParameters(request);
+    return executeCursorProcedure(
+        SPECIES_GRADE_CSV_PROCEDURE,
+        cs -> {
+          cs.setDate(1, toSqlDate(first(parameters, "fromDate")));
+          cs.setDate(2, toSqlDate(first(parameters, "toDate")));
+          setNullableString(cs, 3, csvValue(parameters, "region"));
+          setNullableString(cs, 4, emptyToNull(first(parameters, "permitStatus")));
+          setNullableString(cs, 5, emptyToNull(first(parameters, "exemptionNumber")));
+          setNullableString(cs, 6, emptyToNull(first(parameters, "exemptionType")));
+          setNullableString(cs, 7, emptyToNull(first(parameters, "exemptionReason")));
+          setNullableString(cs, 8, emptyToNull(first(parameters, "growthType")));
+          setNullableString(cs, 9, emptyToNull(first(parameters, "timberMark")));
+          setNullableString(cs, 10, emptyToNull(first(parameters, "forestFileId")));
+        },
+        11);
+  }
+
+  private Optional<LegacyTabularReportData> loadTeacData(LexisReportRequestDto request) {
+    Map<String, String> parameters = requestParameters(request);
+    String jurisdiction = normalize(first(parameters, "exportJurisdictionCode", "jurisdiction"));
+
+    String procedureCall;
+    if (JURISDICTION_PROVINCIAL.equalsIgnoreCase(jurisdiction)) {
+      procedureCall = PROVINCIAL_TEAC_CSV_PROCEDURE;
+    } else if (JURISDICTION_FEDERAL.equalsIgnoreCase(jurisdiction)) {
+      procedureCall = FEDERAL_TEAC_CSV_PROCEDURE;
+    } else {
+      LOGGER.warn("TEAC CSV request missing recognized jurisdiction: [{}]", jurisdiction);
+      return Optional.empty();
+    }
+
+    return executeCursorProcedure(
+        procedureCall,
+        cs -> {
+          setNullableString(cs, 1, csvValue(parameters, "region"));
+          cs.setLong(2, parseLongOrZero(first(parameters, "exportSchedule")));
+        },
+        3);
+  }
+
+  private Optional<LegacyTabularReportData> executeCursorProcedure(
       String procedureCall,
       SqlStatementBinder binder,
       int cursorOutIndex) {
@@ -135,38 +167,55 @@ public class OracleLegacyCsvReportService {
 
       try (ResultSet rs = (ResultSet) cs.getObject(cursorOutIndex)) {
         if (rs == null) {
-          return null;
+          return Optional.empty();
         }
-        return renderCsv(rs);
+        return Optional.of(readTabularData(rs));
       }
-    } catch (SQLException | IOException ex) {
+    } catch (SQLException ex) {
       LOGGER.warn("CSV report procedure failed [{}]: {}", procedureCall, ex.getMessage());
-      return null;
+      return Optional.empty();
     }
   }
 
-  private byte[] renderCsv(ResultSet rs) throws SQLException, IOException {
+  private LegacyTabularReportData readTabularData(ResultSet rs) throws SQLException {
     ResultSetMetaData meta = rs.getMetaData();
     int columnCount = meta.getColumnCount();
+    List<String> headers = new ArrayList<>(columnCount);
+    for (int index = 1; index <= columnCount; index++) {
+      headers.add(meta.getColumnName(index));
+    }
+
+    List<List<String>> rows = new ArrayList<>();
+    while (rs.next()) {
+      List<String> row = new ArrayList<>(columnCount);
+      for (int index = 1; index <= columnCount; index++) {
+        String value = rs.getString(index);
+        row.add(value == null ? "" : value);
+      }
+      rows.add(row);
+    }
+
+    return new LegacyTabularReportData(headers, rows);
+  }
+
+  private byte[] renderCsv(LegacyTabularReportData data) throws IOException {
+    int columnCount = data.columnHeaders().size();
 
     ByteArrayOutputStream output = new ByteArrayOutputStream(16 * 1024);
-    writeCsvRow(output, columnCount, index -> meta.getColumnName(index));
+    writeCsvRow(output, columnCount, index -> data.columnHeaders().get(index - 1));
 
-    while (rs.next()) {
+    for (List<String> row : data.rows()) {
       writeCsvRow(
           output,
           columnCount,
-          index -> {
-            String value = rs.getString(index);
-            return value == null ? "" : value;
-          });
+          index -> row.get(index - 1));
     }
 
     return output.toByteArray();
   }
 
   private void writeCsvRow(ByteArrayOutputStream output, int columnCount, CsvValueResolver resolver)
-      throws IOException, SQLException {
+      throws IOException {
     for (int index = 1; index <= columnCount; index++) {
       String value = sanitizeForCsv(resolver.resolve(index));
       output.write('"');
@@ -305,6 +354,6 @@ public class OracleLegacyCsvReportService {
 
   @FunctionalInterface
   private interface CsvValueResolver {
-    String resolve(int index) throws SQLException;
+    String resolve(int index);
   }
 }

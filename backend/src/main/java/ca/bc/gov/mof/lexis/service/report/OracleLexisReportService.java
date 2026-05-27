@@ -56,6 +56,7 @@ public class OracleLexisReportService implements LexisReportService {
   private final DataSource dataSource;
   private final LexisJasperReportParameterProvider parameterProvider;
   private final OracleLegacyCsvReportService legacyCsvReportService;
+  private final OracleLegacyJasperTableReportService legacyJasperTableReportService;
   private final ConcurrentHashMap<String, JasperReport> compiledTemplateCache = new ConcurrentHashMap<>();
   private final AtomicBoolean runtimeResourcesPrepared = new AtomicBoolean(false);
   private final Path runtimeTemplateDirectory;
@@ -63,10 +64,12 @@ public class OracleLexisReportService implements LexisReportService {
   public OracleLexisReportService(
       DataSource dataSource,
       LexisJasperReportParameterProvider parameterProvider,
-      OracleLegacyCsvReportService legacyCsvReportService) {
+      OracleLegacyCsvReportService legacyCsvReportService,
+      OracleLegacyJasperTableReportService legacyJasperTableReportService) {
     this.dataSource = dataSource;
     this.parameterProvider = parameterProvider;
     this.legacyCsvReportService = legacyCsvReportService;
+    this.legacyJasperTableReportService = legacyJasperTableReportService;
     this.runtimeTemplateDirectory = initRuntimeTemplateDirectory();
   }
 
@@ -88,6 +91,12 @@ public class OracleLexisReportService implements LexisReportService {
         legacyCsvReportService.generateLegacyCsvReport(definition, request, format);
     if (legacyCsvReport.isPresent()) {
       return legacyCsvReport;
+    }
+
+    Optional<LexisGeneratedReport> legacyPdfReport =
+        legacyJasperTableReportService.generateLegacyPdfReport(definition, request, format);
+    if (legacyPdfReport.isPresent()) {
+      return legacyPdfReport;
     }
 
     if (format != LexisReportFormat.PDF) {

@@ -25,7 +25,11 @@
     <maven.compiler.version>3.10.1</maven.compiler.version>
     <ojdbc.version>21.3.0.0</ojdbc.version>
     <resilience4j.version>2.3.0</resilience4j.version>
-    <jasperreports.version>7.0.4</jasperreports.version>
+    <!--
+      Jasper 7.x currently fails to compile standard JRXML templates in this modernization path.
+      Keep parity with nr-rept on 6.21.5 until the 7.x loader/parser path is stable for our templates.
+    -->
+    <jasperreports.version>6.21.5</jasperreports.version>
   </properties>
 
   <dependencies>
@@ -115,6 +119,15 @@
         <artifactId>maven-compiler-plugin</artifactId>
         <configuration>
           <release>${java.version}</release>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <java.awt.headless>true</java.awt.headless>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
       <plugin>
