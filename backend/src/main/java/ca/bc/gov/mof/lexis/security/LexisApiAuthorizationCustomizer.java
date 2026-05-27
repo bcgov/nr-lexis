@@ -39,6 +39,8 @@ public class LexisApiAuthorizationCustomizer
         authorize,
         HttpMethod.GET,
         new String[] {
+          "/api/lexis/applicationSearch",
+          "/api/lexis/applicationSearch.do",
           "/api/lexis/applications/search/options",
           "/api/lexis/applications/search",
           "/api/lexis/applications/search/verify-clients",
@@ -48,24 +50,39 @@ public class LexisApiAuthorizationCustomizer
     authorizeAction(
         authorize,
         HttpMethod.GET,
-        new String[] {"/api/lexis/applications/*"},
+        new String[] {
+          "/api/lexis/applicationDetails",
+          "/api/lexis/applicationDetails.do",
+          "/api/lexis/applications/*"
+        },
         "/applicationDetails");
 
     authorizeAction(
         authorize,
         HttpMethod.GET,
-        new String[] {"/api/lexis/exemptions/search/options", "/api/lexis/exemptions/search"},
+        new String[] {
+          "/api/lexis/exemptionSearch",
+          "/api/lexis/exemptionSearch.do",
+          "/api/lexis/exemptions/search/options",
+          "/api/lexis/exemptions/search"
+        },
         "/exemptionSearch");
     authorizeAction(
         authorize,
         HttpMethod.GET,
-        new String[] {"/api/lexis/exemptions/*"},
+        new String[] {
+          "/api/lexis/exemptionDetails",
+          "/api/lexis/exemptionDetails.do",
+          "/api/lexis/exemptions/*"
+        },
         "/exemptionDetails");
 
     authorizeAction(
         authorize,
         HttpMethod.GET,
         new String[] {
+          "/api/lexis/federalApplicationSearch",
+          "/api/lexis/federalApplicationSearch.do",
           "/api/lexis/federal/applications/search/options",
           "/api/lexis/federal/applications/search",
           "/api/lexis/federal/applications/search/verify-clients"
@@ -75,6 +92,8 @@ public class LexisApiAuthorizationCustomizer
         authorize,
         HttpMethod.GET,
         new String[] {
+          "/api/lexis/federalApplicationDetails",
+          "/api/lexis/federalApplicationDetails.do",
           "/api/lexis/federal/applications/*", "/api/lexis/federal/applications/*/permit"
         },
         "/federalApplicationDetails");
@@ -83,45 +102,80 @@ public class LexisApiAuthorizationCustomizer
         authorize,
         HttpMethod.GET,
         new String[] {
+          "/api/lexis/indianReservePermitSearch",
+          "/api/lexis/indianReservePermitSearch.do",
           "/api/lexis/indian-reserve/permits/search/options", "/api/lexis/indian-reserve/permits/search"
         },
         "/indianReservePermitSearch");
     authorizeAction(
         authorize,
         HttpMethod.GET,
-        new String[] {"/api/lexis/indian-reserve/permits/*"},
+        new String[] {
+          "/api/lexis/indianReservePermitDetails",
+          "/api/lexis/indianReservePermitDetails.do",
+          "/api/lexis/indian-reserve/permits/*"
+        },
         "/indianReservePermitDetails");
 
     authorizeAction(
         authorize,
         HttpMethod.GET,
         new String[] {
+          "/api/lexis/offersSearch",
+          "/api/lexis/offersSearch.do",
           "/api/lexis/purchase-offers/search/options", "/api/lexis/purchase-offers/search"
         },
         "/offersSearch");
     authorizeAction(
         authorize,
         HttpMethod.GET,
-        new String[] {"/api/lexis/purchase-offers/*"},
+        new String[] {
+          "/api/lexis/offerDetails",
+          "/api/lexis/offerDetails.do",
+          "/api/lexis/purchase-offers/*"
+        },
         "/offerDetails");
 
     authorizeAction(
         authorize,
         HttpMethod.GET,
-        new String[] {"/api/lexis/permits/search/options", "/api/lexis/permits/search"},
+        new String[] {
+          "/api/lexis/permitSearch",
+          "/api/lexis/permitSearch.do",
+          "/api/lexis/permits/search/options",
+          "/api/lexis/permits/search"
+        },
         "/permitSearch");
     authorizeAction(
         authorize,
         HttpMethod.GET,
-        new String[] {"/api/lexis/permits/*", "/api/lexis/fee-details/permits/*/summary"},
+        new String[] {
+          "/api/lexis/permitDetails",
+          "/api/lexis/permitDetails.do",
+          "/api/lexis/feeDetails",
+          "/api/lexis/feeDetails.do",
+          "/api/lexis/permits/*",
+          "/api/lexis/fee-details/permits/*/summary"
+        },
         "/permitDetails");
 
-    authorizeAction(authorize, HttpMethod.GET, new String[] {"/api/lexis/summary/**"}, "/summary");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/summary", "/api/lexis/summary.do", "/api/lexis/summary/**"},
+        "/summary");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {"/api/lexis/summary", "/api/lexis/summary.do"},
+        "/summary");
 
     authorizeAction(
         authorize,
         HttpMethod.GET,
         new String[] {
+          "/api/lexis/applicationsReview",
+          "/api/lexis/applicationsReview.do",
           "/api/lexis/application-reviews/search/options", "/api/lexis/application-reviews/search"
         },
         "/applicationsReview");
@@ -225,12 +279,28 @@ public class LexisApiAuthorizationCustomizer
     authorizeAction(
         authorize,
         HttpMethod.GET,
-        new String[] {"/api/lexis/rpc/offer-details/**"},
+        new String[] {
+          "/api/lexis/rpc/offer-details/**", "/api/lexis/offerDetailsRPC", "/api/lexis/offerDetailsRPC.do"
+        },
+        "/offerDetails");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {"/api/lexis/offerDetailsRPC", "/api/lexis/offerDetailsRPC.do"},
         "/offerDetails");
     authorizeAction(
         authorize,
         HttpMethod.GET,
-        new String[] {"/api/lexis/rpc/permit-details/**"},
+        new String[] {
+          "/api/lexis/rpc/permit-details/**",
+          "/api/lexis/permitDetailsRPC",
+          "/api/lexis/permitDetailsRPC.do"
+        },
+        "/permitDetails");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {"/api/lexis/permitDetailsRPC", "/api/lexis/permitDetailsRPC.do"},
         "/permitDetails");
 
     authorizeAction(

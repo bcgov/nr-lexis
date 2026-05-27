@@ -43,6 +43,15 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyApplicationSearchRouteShouldAllowCanonicalReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/applicationSearch")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
   void applicationDetailsRpcShouldRejectAnonymousRequests() throws Exception {
     mockMvc.perform(get("/api/lexis/rpc/application-details/document-details")).andExpect(status().isForbidden());
   }
@@ -65,6 +74,33 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             get("/api/lexis/rpc/exemption-details/applications")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyOfferDetailsRpcShouldRequireAuthentication() throws Exception {
+    mockMvc
+        .perform(get("/api/lexis/offerDetailsRPC").param("actionMapping", "getApplicationVolume"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyOfferDetailsRpcShouldAllowIndustryRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/offerDetailsRPC")
+                .param("actionMapping", "getApplicationVolume")
+                .param("applicationNumber", "1000456")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_INDUSTRY"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void legacyPermitDetailsRpcShouldAllowReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/permitDetailsRPC")
+                .param("actionMapping", "getPackageList")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isNoContent());
   }
 
@@ -107,5 +143,14 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("action", "/summary")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_LOG_EXPORT_INDUSTRY"))))
         .andExpect(status().isOk());
+  }
+
+  @Test
+  void legacySummaryRouteShouldAllowPostForIndustryRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/summary")
+                .param("actionMapping", "getApplications")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_INDUSTRY"))))
+        .andExpect(status().isNoContent());
   }
 }
