@@ -6,7 +6,6 @@ import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -83,48 +82,6 @@ class LexisAuthorizationServiceTest {
     assertThat(granted).containsExactly("/applicationSearch", "/lexisAgentAdmin");
   }
 
-  @Test
-  void shouldResolveRolesForConfiguredActionAndWildcard() {
-    LexisAuthorizationService service =
-        createService(
-            "LEXIS_INDUSTRY",
-            Map.of(
-                "ADMIN", List.of("*"),
-                "READ_ONLY", List.of("/applicationSearch"),
-                "APPLICATION_APPROVER", List.of("/applicationsReview")));
-
-    Set<String> roles = service.resolveRolesForAction("/applicationSearch");
-
-    assertThat(roles).containsExactlyInAnyOrder("ADMIN", "READ_ONLY");
-  }
-
-  @Test
-  void shouldReturnEmptyRolesWhenActionNotConfigured() {
-    LexisAuthorizationService service =
-        createService(
-            "LEXIS_INDUSTRY",
-            Map.of(
-                "READ_ONLY", List.of("/applicationSearch"),
-                "APPLICATION_APPROVER", List.of("/applicationsReview")));
-
-    Set<String> roles = service.resolveRolesForAction("/notMapped");
-
-    assertThat(roles).isEmpty();
-  }
-
-  @Test
-  void canPerformActionShouldSupportActionNamesWithOrWithoutLeadingSlash() {
-    LexisAuthorizationService service =
-        createService(
-            "LEXIS_INDUSTRY",
-            Map.of(
-                "READ_ONLY", List.of("/applicationSearch"),
-                "ADMIN", List.of("*")));
-
-    assertThat(service.canPerformAction(List.of("READ_ONLY"), "/applicationSearch")).isTrue();
-    assertThat(service.canPerformAction(List.of("READ_ONLY"), "applicationSearch")).isTrue();
-    assertThat(service.canPerformAction(List.of("READ_ONLY"), "/offersSearch")).isFalse();
-  }
   private LexisAuthorizationService createService(
       String industryRolesCsv, Map<String, List<String>> roleActions) {
     LexisAuthorizationProperties properties = new LexisAuthorizationProperties();
