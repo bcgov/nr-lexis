@@ -6,7 +6,7 @@ export const DEV_ROLES_STORAGE_KEY = 'lexis.dev.roles'
 
 export const bootstrapDevRoles = async (
   page: Page,
-  roles: string[] = ['LEXIS_ADMIN'],
+  roles: string[] = ['ADMIN'],
 ): Promise<void> => {
   await page.addInitScript(
     ({ key, configuredRoles }: { key: string; configuredRoles: string[] }) => {

@@ -17,21 +17,17 @@ import logo from '@/assets/gov-bc-logo-horiz.png'
 
 const DEV_ROLE_OPTIONS = [
   { value: '', label: 'Select a role' },
-  { value: 'LEXIS_ADMIN', label: 'LEXIS_ADMIN' },
-  { value: 'LEXIS_READ_ONLY', label: 'LEXIS_READ_ONLY' },
-  { value: 'LEXIS_APPLICATION_APPROVER', label: 'LEXIS_APPLICATION_APPROVER' },
-  { value: 'LEXIS_EXEMPTION_APPROVER', label: 'LEXIS_EXEMPTION_APPROVER' },
-  { value: 'LEXIS_INDUSTRY', label: 'LEXIS_INDUSTRY (Abstract Parent)' },
-  {
-    value: 'LEXIS_LOG_EXPORT_INDUSTRY',
-    label: 'LEXIS_LOG_EXPORT_INDUSTRY (Abstract Parent)',
-  },
+  { value: 'ADMIN', label: 'ADMIN' },
+  { value: 'READ_ONLY', label: 'READ_ONLY' },
+  { value: 'APPLICATION_APPROVER', label: 'APPLICATION_APPROVER' },
+  { value: 'EXEMPTION_APPROVER', label: 'EXEMPTION_APPROVER' },
+  { value: 'PROVINCIAL_SUBMITTER', label: 'PROVINCIAL_SUBMITTER (Abstract Parent)' },
+  { value: 'FEDERAL_SUBMITTER', label: 'FEDERAL_SUBMITTER (Concrete)' },
 ]
 
 const DEV_CONCRETE_ROLE_FAMILIES = [
   { value: '', label: 'Select role family' },
-  { value: 'LEXIS_INDUSTRY', label: 'LEXIS_INDUSTRY' },
-  { value: 'LEXIS_LOG_EXPORT_INDUSTRY', label: 'LEXIS_LOG_EXPORT_INDUSTRY' },
+  { value: 'PROVINCIAL_SUBMITTER', label: 'PROVINCIAL_SUBMITTER' },
 ]
 
 const isDevRoleSimulationEnabled = (): boolean => {
@@ -230,11 +226,10 @@ const LandingPage: FC = () => {
               {showDevTools && (
                 <>
                   <p className="landing-help-text">
-                    FAM role model note: <code>LEXIS_INDUSTRY</code> and{' '}
-                    <code>LEXIS_LOG_EXPORT_INDUSTRY</code> are abstract parents. Concrete
-                    client-scoped roles use the suffix pattern{' '}
-                    <code>&lt;roleFamily&gt;_&lt;forestClientNumber&gt;</code>. Legacy aliases are
-                    accepted during transition.
+                    FAM role model note: <code>PROVINCIAL_SUBMITTER</code> is abstract and
+                    client-scoped via <code>PROVINCIAL_SUBMITTER_&lt;forestClientNumber&gt;</code>.{' '}
+                    <code>FEDERAL_SUBMITTER</code> is concrete and selected directly (no client
+                    suffix). Legacy placeholder aliases are normalized during transition.
                   </p>
                   <p className="landing-help-text">
                     TODO: replace manual concrete role simulation with live Cognito/FAM role claims
@@ -256,7 +251,7 @@ const LandingPage: FC = () => {
                       onClick={() => void onUseDevRole()}
                       disabled={isLoading || !selectedRole}
                     >
-                      Use Abstract or Global Role
+                      Use Selected Role
                     </Button>
                     <Select
                       id="devConcreteRoleFamily"
@@ -273,7 +268,7 @@ const LandingPage: FC = () => {
                       labelText="Forest Client Number"
                       value={forestClientNumber}
                       onChange={(event) => setForestClientNumber(event.target.value)}
-                      placeholder="Enter numeric client number"
+                      placeholder="Enter numeric provincial client number"
                     />
                     <Button
                       kind="secondary"

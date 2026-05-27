@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { bootstrapDevRoles, gotoProtectedRoute } from './utils'
 
-const ROLE_VARIANTS = ['LEXIS_ADMIN', 'ADMIN'] as const
+const ADMIN_ROLE_VARIANTS = ['ADMIN', 'LEXIS_ADMIN'] as const
 
 const PROTECTED_ROUTE_ASSERTIONS: { path: string; heading: RegExp }[] = [
   { path: '/admin', heading: /administration/i },
@@ -9,8 +9,31 @@ const PROTECTED_ROUTE_ASSERTIONS: { path: string; heading: RegExp }[] = [
   { path: '/federal', heading: /federal application search/i },
 ]
 
+const LEGACY_PLACEHOLDER_ASSERTIONS: { role: string; path: string; heading: RegExp }[] = [
+  {
+    role: 'LEXIS_INDUSTRY',
+    path: '/provincial/application',
+    heading: /provincial application search/i,
+  },
+  {
+    role: 'LEXIS_INDUSTRY_00012345',
+    path: '/provincial/application',
+    heading: /provincial application search/i,
+  },
+  {
+    role: 'LOG_EXPORT_INDUSTRY',
+    path: '/federal',
+    heading: /federal application search/i,
+  },
+  {
+    role: 'LOG_EXPORT_INDUSTRY_00012345',
+    path: '/federal',
+    heading: /federal application search/i,
+  },
+]
+
 test.describe('auth role alias compatibility', () => {
-  for (const role of ROLE_VARIANTS) {
+  for (const role of ADMIN_ROLE_VARIANTS) {
     test(`${role} resolves root to provincial summary`, async ({ page }) => {
       await bootstrapDevRoles(page, [role])
       await gotoProtectedRoute(page, '/')
@@ -27,6 +50,16 @@ test.describe('auth role alias compatibility', () => {
         await expect(page.getByRole('heading', { name: /unauthorized/i })).toHaveCount(0)
         await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
       }
+    })
+  }
+
+  for (const assertion of LEGACY_PLACEHOLDER_ASSERTIONS) {
+    test(`legacy placeholder role ${assertion.role} remains routable`, async ({ page }) => {
+      await bootstrapDevRoles(page, [assertion.role])
+      await gotoProtectedRoute(page, assertion.path)
+
+      await expect(page.getByRole('heading', { name: /unauthorized/i })).toHaveCount(0)
+      await expect(page.getByRole('heading', { name: assertion.heading })).toBeVisible()
     })
   }
 })

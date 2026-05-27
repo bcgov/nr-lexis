@@ -3,7 +3,7 @@ import { bootstrapDevRoles, gotoProtectedRoute } from './utils'
 
 test.describe('provincial review table action states', () => {
   test('selection and status drive action button enablement', async ({ page }) => {
-    await bootstrapDevRoles(page, ['LEXIS_ADMIN'])
+    await bootstrapDevRoles(page, ['ADMIN'])
     await gotoProtectedRoute(page, '/provincial/review')
 
     const approveSelectedButton = page.getByRole('button', {

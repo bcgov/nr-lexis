@@ -6,7 +6,7 @@ This suite validates core frontend availability after migration work.
 
 - Landing/login shell renders.
 - Auth transition compatibility:
-  - `LEXIS_ADMIN` and legacy `ADMIN` map to the same protected access.
+  - Canonical `ADMIN` and legacy alias `LEXIS_ADMIN` map to the same protected access.
   - Root redirect parity to `/provincial/summary`.
 - Provincial review action controls:
   - Selection-driven enablement for approve/update buttons.
@@ -25,7 +25,7 @@ This suite validates core frontend availability after migration work.
 
 - Defaults to `E2E_BASE_URL=http://127.0.0.1:4173`.
 - Playwright launches the Vite dev server automatically via `webServer` in config.
-- Tests bootstrap `LEXIS_ADMIN` into local storage so protected routes are reachable without external auth.
+- Tests bootstrap `ADMIN` into local storage so protected routes are reachable without external auth.
 
 ## Run commands
 

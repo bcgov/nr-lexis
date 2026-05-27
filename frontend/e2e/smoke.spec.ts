@@ -21,14 +21,14 @@ test.describe('frontend smoke coverage', () => {
 
   for (const route of ROUTE_ASSERTIONS) {
     test(`route renders: ${route.path}`, async ({ page }) => {
-      await bootstrapDevRoles(page, ['LEXIS_ADMIN'])
+      await bootstrapDevRoles(page, ['ADMIN'])
       await gotoProtectedRoute(page, route.path)
       await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
     })
   }
 
   test('query-string filter state updates on core tables', async ({ page }) => {
-    await bootstrapDevRoles(page, ['LEXIS_ADMIN'])
+    await bootstrapDevRoles(page, ['ADMIN'])
     await gotoProtectedRoute(page, '/provincial/application')
     await page.fill('#applicationNumber', 'APP-123')
     await expect(page).toHaveURL(/applicationNumber=APP-123/)
