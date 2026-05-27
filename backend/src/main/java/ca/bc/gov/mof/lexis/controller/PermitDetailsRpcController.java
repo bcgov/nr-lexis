@@ -10,17 +10,14 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
-import java.util.Arrays;
-import java.util.LinkedHashSet;
-import java.util.Locale;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import java.util.List;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,13 +32,14 @@ public class PermitDetailsRpcController {
   private static final Logger LOGGER = LoggerFactory.getLogger(PermitDetailsRpcController.class);
 
   private final ObjectProvider<PermitDetailsRpcService> serviceProvider;
+  private final LexisSessionService sessionService;
   private final Set<String> configuredIndustryRoles;
 
   public PermitDetailsRpcController(
-      ObjectProvider<PermitDetailsRpcService> serviceProvider,
-      @Value("${lexis.auth.industry-roles:}") String industryRolesCsv) {
+      ObjectProvider<PermitDetailsRpcService> serviceProvider, LexisSessionService sessionService) {
     this.serviceProvider = serviceProvider;
-    this.configuredIndustryRoles = parseRoleCsv(industryRolesCsv);
+    this.sessionService = sessionService;
+    this.configuredIndustryRoles = sessionService.getConfiguredIndustryRoles();
   }
 
   @GetMapping("/permit-summary")
@@ -168,50 +166,16 @@ public class PermitDetailsRpcController {
     return ResponseEntity.ok(service.getPermitHasApplications(permitNumber));
   }
 
-  private Set<String> parseRoleCsv(String csv) {
-    if (csv == null || csv.isBlank()) {
-      return Set.of();
-    }
-
-    LinkedHashSet<String> parsed = new LinkedHashSet<>();
-    for (String role : Arrays.asList(csv.split(","))) {
-      if (role == null) {
-        continue;
-      }
-      String normalizedRole = role.trim().toUpperCase(Locale.ROOT);
-      if (!normalizedRole.isEmpty()) {
-        parsed.add(normalizedRole);
-      }
-    }
-    return Set.copyOf(parsed);
-  }
-
   private boolean isMinistryUser(Authentication authentication) {
-    if (authentication == null || authentication.getAuthorities() == null) {
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    if (roles == null || roles.isEmpty()) {
       return true;
     }
-    for (GrantedAuthority authority : authentication.getAuthorities()) {
-      String role = normalizeRole(authority.getAuthority());
-      if (role == null) {
-        continue;
-      }
+    for (String role : roles) {
       if (configuredIndustryRoles.contains(role)) {
         return false;
       }
-      for (String configuredIndustryRole : configuredIndustryRoles) {
-        if (role.startsWith(configuredIndustryRole + "_")) {
-          return false;
-        }
-      }
     }
     return true;
-  }
-
-  private String normalizeRole(String role) {
-    if (role == null) {
-      return null;
-    }
-    String normalized = role.trim().toUpperCase(Locale.ROOT);
-    return normalized.isEmpty() ? null : normalized;
   }
 }

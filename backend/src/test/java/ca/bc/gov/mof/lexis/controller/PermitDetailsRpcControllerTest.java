@@ -15,7 +15,9 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,14 +36,16 @@ class PermitDetailsRpcControllerTest {
 
   @Mock private ObjectProvider<PermitDetailsRpcService> serviceProvider;
   @Mock private PermitDetailsRpcService service;
+  @Mock private LexisSessionService sessionService;
 
   private PermitDetailsRpcController controller;
 
   @BeforeEach
   void setup() {
+    when(sessionService.getConfiguredIndustryRoles())
+        .thenReturn(Set.of("LEXIS_INDUSTRY", "LOG_EXPORT_INDUSTRY"));
     controller =
-        new PermitDetailsRpcController(
-            serviceProvider, "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY");
+        new PermitDetailsRpcController(serviceProvider, sessionService);
   }
 
   @Test
@@ -65,6 +69,7 @@ class PermitDetailsRpcControllerTest {
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
             "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_INDUSTRY_00077881")));
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_INDUSTRY"));
 
     ResponseEntity<PermitSummaryRpcResponseDto> response =
         controller.getPermitSummary(7000123L, "US", "2026-01-15", "PKG-903", authentication);
@@ -97,6 +102,7 @@ class PermitDetailsRpcControllerTest {
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
             "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("READ_ONLY")));
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("READ_ONLY"));
 
     ResponseEntity<PermitScaleFeesRpcResponseDto> response =
         controller.getScaleFeesForPackage("PKG-903", 7000123L, authentication);

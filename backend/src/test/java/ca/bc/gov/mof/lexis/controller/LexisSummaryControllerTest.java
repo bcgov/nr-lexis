@@ -16,6 +16,7 @@ import ca.bc.gov.mof.lexis.dto.summary.SummaryOffersResponseDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryPaginationResponseDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryPermitItemDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryPermitsResponseDto;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.service.summary.LexisSummaryService;
 import java.time.LocalDate;
 import java.util.List;
@@ -36,11 +37,12 @@ class LexisSummaryControllerTest {
 
   @Mock private ObjectProvider<LexisSummaryService> summaryServiceProvider;
   @Mock private LexisSummaryService summaryService;
+  @Mock private LexisSessionService sessionService;
 
   @Test
   void applicationsShouldReturnNoContentWhenServiceMissing() {
     LexisSummaryController controller =
-        new LexisSummaryController(summaryServiceProvider, "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY");
+        new LexisSummaryController(summaryServiceProvider, sessionService);
     when(summaryServiceProvider.getIfAvailable()).thenReturn(null);
 
     ResponseEntity<SummaryApplicationsResponseDto> response =
@@ -53,7 +55,7 @@ class LexisSummaryControllerTest {
   @Test
   void applicationsShouldUseLegacyPageAliasAndResolvedClientScope() {
     LexisSummaryController controller =
-        new LexisSummaryController(summaryServiceProvider, "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY");
+        new LexisSummaryController(summaryServiceProvider, sessionService);
     when(summaryServiceProvider.getIfAvailable()).thenReturn(summaryService);
 
     TestingAuthenticationToken authentication =
@@ -61,6 +63,7 @@ class LexisSummaryControllerTest {
             "idir\\jsmith",
             "n/a",
             List.of(new SimpleGrantedAuthority("LEXIS_INDUSTRY_00077881")));
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
 
     SummaryApplicationsResponseDto payload =
         new SummaryApplicationsResponseDto(
@@ -90,7 +93,7 @@ class LexisSummaryControllerTest {
   @Test
   void offersShouldReturnPayloadWhenServiceAvailable() {
     LexisSummaryController controller =
-        new LexisSummaryController(summaryServiceProvider, "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY");
+        new LexisSummaryController(summaryServiceProvider, sessionService);
     when(summaryServiceProvider.getIfAvailable()).thenReturn(summaryService);
 
     TestingAuthenticationToken authentication =
@@ -98,6 +101,7 @@ class LexisSummaryControllerTest {
             "idir\\jsmith",
             "n/a",
             List.of(new SimpleGrantedAuthority("LOG_EXPORT_INDUSTRY_00077881")));
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
 
     SummaryOffersResponseDto payload =
         new SummaryOffersResponseDto(
@@ -118,7 +122,7 @@ class LexisSummaryControllerTest {
   @Test
   void exemptionsShouldUseLegacyPageAliasAndResolvedClientScope() {
     LexisSummaryController controller =
-        new LexisSummaryController(summaryServiceProvider, "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY");
+        new LexisSummaryController(summaryServiceProvider, sessionService);
     when(summaryServiceProvider.getIfAvailable()).thenReturn(summaryService);
 
     TestingAuthenticationToken authentication =
@@ -126,6 +130,7 @@ class LexisSummaryControllerTest {
             "idir\\jsmith",
             "n/a",
             List.of(new SimpleGrantedAuthority("LEXIS_INDUSTRY_00077881")));
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
 
     SummaryExemptionsResponseDto payload =
         new SummaryExemptionsResponseDto(
@@ -156,7 +161,7 @@ class LexisSummaryControllerTest {
   @Test
   void permitsShouldUseResolvedClientScope() {
     LexisSummaryController controller =
-        new LexisSummaryController(summaryServiceProvider, "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY");
+        new LexisSummaryController(summaryServiceProvider, sessionService);
     when(summaryServiceProvider.getIfAvailable()).thenReturn(summaryService);
 
     TestingAuthenticationToken authentication =
@@ -164,6 +169,7 @@ class LexisSummaryControllerTest {
             "idir\\jsmith",
             "n/a",
             List.of(new SimpleGrantedAuthority("LOG_EXPORT_INDUSTRY_00077881")));
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
 
     SummaryPermitsResponseDto payload =
         new SummaryPermitsResponseDto(
@@ -194,7 +200,7 @@ class LexisSummaryControllerTest {
   @Test
   void feesShouldUseLegacyPageAliasAndResolvedClientScope() {
     LexisSummaryController controller =
-        new LexisSummaryController(summaryServiceProvider, "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY");
+        new LexisSummaryController(summaryServiceProvider, sessionService);
     when(summaryServiceProvider.getIfAvailable()).thenReturn(summaryService);
 
     TestingAuthenticationToken authentication =
@@ -202,6 +208,7 @@ class LexisSummaryControllerTest {
             "idir\\jsmith",
             "n/a",
             List.of(new SimpleGrantedAuthority("LEXIS_INDUSTRY_00077881")));
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
 
     SummaryFeesResponseDto payload =
         new SummaryFeesResponseDto(
@@ -222,7 +229,7 @@ class LexisSummaryControllerTest {
   @Test
   void offersPlacedShouldUseLegacyPageAliasAndResolvedClientScope() {
     LexisSummaryController controller =
-        new LexisSummaryController(summaryServiceProvider, "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY");
+        new LexisSummaryController(summaryServiceProvider, sessionService);
     when(summaryServiceProvider.getIfAvailable()).thenReturn(summaryService);
 
     TestingAuthenticationToken authentication =
@@ -230,6 +237,7 @@ class LexisSummaryControllerTest {
             "idir\\jsmith",
             "n/a",
             List.of(new SimpleGrantedAuthority("LOG_EXPORT_INDUSTRY_00077881")));
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
 
     SummaryOffersResponseDto payload =
         new SummaryOffersResponseDto(
@@ -250,7 +258,7 @@ class LexisSummaryControllerTest {
   @Test
   void applicationsPaginationShouldReturnLegacyPaginationHtml() {
     LexisSummaryController controller =
-        new LexisSummaryController(summaryServiceProvider, "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY");
+        new LexisSummaryController(summaryServiceProvider, sessionService);
     when(summaryServiceProvider.getIfAvailable()).thenReturn(summaryService);
 
     TestingAuthenticationToken authentication =
@@ -258,6 +266,7 @@ class LexisSummaryControllerTest {
             "idir\\jsmith",
             "n/a",
             List.of(new SimpleGrantedAuthority("LEXIS_INDUSTRY_00077881")));
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
 
     when(summaryService.applications("00077881", 2, 10, null))
         .thenReturn(new SummaryApplicationsResponseDto(List.of(), 25, 2, 10));
@@ -275,7 +284,7 @@ class LexisSummaryControllerTest {
   @Test
   void offersPlacedPaginationShouldReturnNoContentWhenServiceMissing() {
     LexisSummaryController controller =
-        new LexisSummaryController(summaryServiceProvider, "LEXIS_INDUSTRY,LOG_EXPORT_INDUSTRY");
+        new LexisSummaryController(summaryServiceProvider, sessionService);
     when(summaryServiceProvider.getIfAvailable()).thenReturn(null);
 
     ResponseEntity<SummaryPaginationResponseDto> response =
