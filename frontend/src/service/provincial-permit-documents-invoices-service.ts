@@ -47,6 +47,22 @@ export type PermitInvoiceConversionRateResult = {
   source: PermitDocumentAndInvoiceSource
 }
 
+export type AddPermitInvoiceRequest = {
+  permitNumber: string
+  salesInvoiceNumber: string
+  invoiceExportValue: string
+  invoiceConversionRate: string
+  invoiceFeeInLieu: string
+}
+
+export type AddPermitInvoiceResult = {
+  success: boolean
+  message: string
+  errors: string[]
+  warnings: string[]
+  source: PermitDocumentAndInvoiceSource
+}
+
 export type RemovePermitDocumentResult = {
   success: boolean
   source: PermitDocumentAndInvoiceSource
@@ -132,6 +148,16 @@ const parseArrayPayload = (payload: unknown): unknown[] | null => {
   }
 
   return null
+}
+
+const parseStringArrayPayload = (payload: unknown): string[] => {
+  if (!Array.isArray(payload)) {
+    return []
+  }
+
+  return payload
+    .map((entry) => asString(entry))
+    .filter((entry): entry is string => entry.length > 0)
 }
 
 const shouldFallbackToLegacy = (error: unknown): boolean => {
@@ -466,6 +492,62 @@ export const fetchPermitInvoiceConversionRate =
       }
     }
   }
+
+const postFormData = async (path: string, payload: Record<string, string>): Promise<unknown> => {
+  const response = await apiService.getAxiosInstance().post<unknown>(path, new URLSearchParams(payload), {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+  })
+
+  return response.data
+}
+
+const parseAddPermitInvoiceResponse = (
+  payload: unknown,
+  source: PermitDocumentAndInvoiceSource,
+): AddPermitInvoiceResult => {
+  const objectPayload = (payload ?? {}) as Record<string, unknown>
+  const success = asBoolean(objectPayload.success ?? objectPayload.valid)
+  const message = asString(objectPayload.message)
+  const errors = parseStringArrayPayload(objectPayload.errors)
+  const warnings = parseStringArrayPayload(objectPayload.warnings)
+
+  return {
+    success,
+    message: message || (success ? 'Invoice saved successfully.' : 'Unable to save invoice.'),
+    errors,
+    warnings,
+    source,
+  }
+}
+
+export const addPermitInvoice = async (
+  request: AddPermitInvoiceRequest,
+): Promise<AddPermitInvoiceResult> => {
+  const normalizedPayload = {
+    permitNumber: request.permitNumber.trim(),
+    salesInvoiceNumber: request.salesInvoiceNumber.trim(),
+    invoiceExportValue: request.invoiceExportValue.trim(),
+    invoiceConversionRate: request.invoiceConversionRate.trim(),
+    invoiceFeeInLieu: request.invoiceFeeInLieu.trim(),
+  }
+
+  try {
+    const payload = await postFormData('/lexis/rpc/permit-details/add-invoice', normalizedPayload)
+    return parseAddPermitInvoiceResponse(payload, 'api')
+  } catch (error) {
+    if (!shouldFallbackToLegacy(error)) {
+      throw error
+    }
+
+    const payload = await postFormData('/lexis/permitDetailsRPC', {
+      ...normalizedPayload,
+      actionMapping: 'addInvoice',
+    })
+    return parseAddPermitInvoiceResponse(payload, 'legacy')
+  }
+}
 
 const removeDocumentWithFallback = async (
   apiPath: string,

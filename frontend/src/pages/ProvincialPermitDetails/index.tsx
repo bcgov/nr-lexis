@@ -21,6 +21,7 @@ import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
 import {
+  addPermitInvoice,
   fetchPermitDocuments,
   fetchPermitInvoiceConversionRate,
   fetchPermitInvoices,
@@ -152,6 +153,10 @@ const ProvincialPermitDetailsPage: FC = () => {
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isOpeningPermitReport, setIsOpeningPermitReport] = useState(false)
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [invoiceDraftNumber, setInvoiceDraftNumber] = useState('')
+  const [invoiceDraftExportValue, setInvoiceDraftExportValue] = useState('')
+  const [invoiceDraftFeeInLieu, setInvoiceDraftFeeInLieu] = useState('')
+  const [isAddingInvoice, setIsAddingInvoice] = useState(false)
   const itemsFilter = searchParams.get('itemsFilter') ?? ''
   const feesFilter = searchParams.get('feesFilter') ?? ''
   const gbmsFilter = searchParams.get('gbmsFilter') ?? ''
@@ -537,6 +542,89 @@ const ProvincialPermitDetailsPage: FC = () => {
     ],
   )
 
+  const onAddInvoice = useCallback(async () => {
+    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    if (!resolvedPermitNumber) {
+      return
+    }
+
+    const salesInvoiceNumber = invoiceDraftNumber.trim()
+    const invoiceExportValue = invoiceDraftExportValue.trim()
+    const invoiceFeeInLieu = invoiceDraftFeeInLieu.trim() || invoiceExportValue
+
+    if (!salesInvoiceNumber) {
+      setActionErrorMessage('Invoice number is required before adding an invoice.')
+      return
+    }
+    if (!invoiceExportValue) {
+      setActionErrorMessage('Invoice export value is required before adding an invoice.')
+      return
+    }
+    if (!invoiceFeeInLieu) {
+      setActionErrorMessage('Fee in lieu is required before adding an invoice.')
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setIsAddingInvoice(true)
+    try {
+      let conversionRate = '1.00'
+      try {
+        const conversionResult = await fetchPermitInvoiceConversionRate()
+        conversionRate = conversionResult.conversionRate || conversionRate
+        if (conversionResult.source === 'legacy') {
+          setActionInfoMessage(
+            'Invoice conversion-rate API is not available yet. Used legacy conversion-rate lookup.',
+          )
+        }
+      } catch (error) {
+        console.error(error)
+        setActionInfoMessage(
+          'Unable to retrieve conversion rate for invoice add. Using default conversion rate of 1.00.',
+        )
+      }
+
+      const addResult = await addPermitInvoice({
+        permitNumber: resolvedPermitNumber,
+        salesInvoiceNumber,
+        invoiceExportValue,
+        invoiceConversionRate: conversionRate,
+        invoiceFeeInLieu,
+      })
+
+      if (!addResult.success) {
+        setActionErrorMessage(addResult.errors[0] || addResult.message || 'Unable to add invoice.')
+        return
+      }
+
+      if (addResult.source === 'legacy') {
+        setActionInfoMessage(
+          'Add-invoice API is not available yet. Used legacy add-invoice endpoint.',
+        )
+      }
+
+      const refreshedInvoices = await fetchPermitInvoices(resolvedPermitNumber)
+      setInvoiceRows(refreshedInvoices.rows)
+      setInvoiceSource(refreshedInvoices.source)
+      setDocumentsInvoicesErrorMessage('')
+      setInvoiceDraftNumber('')
+      setInvoiceDraftExportValue('')
+      setInvoiceDraftFeeInLieu('')
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to add invoice.')
+    } finally {
+      setIsAddingInvoice(false)
+    }
+  }, [
+    detail?.permitNumber,
+    invoiceDraftExportValue,
+    invoiceDraftFeeInLieu,
+    invoiceDraftNumber,
+    permitNumber,
+  ])
+
   const onOpenInvoiceUpload = useCallback(async () => {
     if (!detail?.permitNumber) {
       return
@@ -845,6 +933,39 @@ const ProvincialPermitDetailsPage: FC = () => {
                   )}
                 </TableBody>
               </Table>
+              <div className="legacy-search-grid">
+                <TextInput
+                  id="permitInvoiceDraftNumber"
+                  labelText="Invoice Number"
+                  value={invoiceDraftNumber}
+                  onChange={(event) => setInvoiceDraftNumber(event.target.value)}
+                  placeholder="Enter sales invoice number"
+                />
+                <TextInput
+                  id="permitInvoiceDraftExportValue"
+                  labelText="Export Value"
+                  value={invoiceDraftExportValue}
+                  onChange={(event) => setInvoiceDraftExportValue(event.target.value)}
+                  placeholder="Enter export value"
+                />
+                <TextInput
+                  id="permitInvoiceDraftFeeInLieu"
+                  labelText="Fee In Lieu"
+                  value={invoiceDraftFeeInLieu}
+                  onChange={(event) => setInvoiceDraftFeeInLieu(event.target.value)}
+                  placeholder="Enter fee in lieu (defaults to export value)"
+                />
+              </div>
+              <div className="legacy-search-actions">
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={!canDeleteInvoiceDocuments || isAddingInvoice || !detail.permitNumber}
+                  onClick={() => void onAddInvoice()}
+                >
+                  {isAddingInvoice ? 'Adding Invoice...' : 'Add Invoice'}
+                </Button>
+              </div>
             </Tile>
           </Column>
 

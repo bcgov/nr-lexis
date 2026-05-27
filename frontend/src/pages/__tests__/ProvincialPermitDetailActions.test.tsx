@@ -11,6 +11,7 @@ import {
   type ProvincialPermitDetailTabsResult,
 } from '@/service/provincial-permit-detail-tabs-service'
 import {
+  addPermitInvoice,
   fetchPermitDocuments,
   fetchPermitInvoiceConversionRate,
   fetchPermitInvoices,
@@ -33,6 +34,7 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
 }))
 
 vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
+  addPermitInvoice: vi.fn(),
   fetchPermitDocuments: vi.fn(),
   fetchPermitInvoices: vi.fn(),
   fetchPermitInvoiceConversionRate: vi.fn(),
@@ -48,6 +50,7 @@ vi.mock('@/service/report-service', () => ({
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailTabs)
+const mockedAddPermitInvoice = vi.mocked(addPermitInvoice)
 const mockedFetchPermitDocuments = vi.mocked(fetchPermitDocuments)
 const mockedFetchPermitInvoices = vi.mocked(fetchPermitInvoices)
 const mockedFetchPermitInvoiceConversionRate = vi.mocked(fetchPermitInvoiceConversionRate)
@@ -109,6 +112,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     } as any)
     mockedFetchProvincialPermitDetail.mockResolvedValue(permitDetail)
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
+    mockedAddPermitInvoice.mockResolvedValue({
+      success: true,
+      message: 'Invoice saved successfully.',
+      errors: [],
+      warnings: [],
+      source: 'api',
+    })
     mockedFetchPermitDocuments.mockResolvedValue({
       rows: [],
       source: 'api',
@@ -134,6 +144,61 @@ describe('Provincial Permit Detail Action Smoke', () => {
     mockedRemovePermitInvoiceDocument.mockResolvedValue({
       success: true,
       source: 'api',
+    })
+  })
+
+  it('adds invoice and refreshes invoice rows', async () => {
+    mockedFetchPermitInvoiceConversionRate.mockResolvedValue({
+      conversionRate: '1.25',
+      source: 'api',
+    })
+    mockedFetchPermitInvoices
+      .mockResolvedValueOnce({
+        rows: [],
+        source: 'api',
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'INV-NEW-1',
+            invoiceNumber: 'INV-NEW',
+            exportValueCad: '$100.00',
+            conversionRate: '1.25',
+            feeInLieu: '$100.00',
+            invoiceFound: true,
+          },
+        ],
+        source: 'api',
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const invoiceNumberInput = await screen.findByLabelText('Invoice Number')
+    const exportValueInput = await screen.findByLabelText('Export Value')
+    const addInvoiceButton = await screen.findByRole('button', { name: 'Add Invoice' })
+    await userEvent.type(invoiceNumberInput, 'INV-NEW')
+    await userEvent.type(exportValueInput, '100')
+    await userEvent.click(addInvoiceButton)
+
+    await waitFor(() => {
+      expect(mockedAddPermitInvoice).toHaveBeenCalledWith({
+        permitNumber: '777',
+        salesInvoiceNumber: 'INV-NEW',
+        invoiceExportValue: '100',
+        invoiceConversionRate: '1.25',
+        invoiceFeeInLieu: '100',
+      })
+      expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(2)
+      expect(screen.getByText('INV-NEW')).toBeInTheDocument()
     })
   })
 
