@@ -5,6 +5,9 @@ This suite validates core frontend availability after migration work.
 ## What it covers
 
 - Landing/login shell renders.
+- Auth transition compatibility:
+  - `LEXIS_ADMIN` and legacy `ADMIN` map to the same protected access.
+  - Root redirect parity to `/provincial/summary`.
 - Core protected routes render:
   - `/provincial/application`
   - `/provincial/exemption`
