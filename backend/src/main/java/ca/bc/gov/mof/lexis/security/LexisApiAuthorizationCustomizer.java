@@ -193,6 +193,22 @@ public class LexisApiAuthorizationCustomizer
     authorizeAction(
         authorize,
         HttpMethod.GET,
+        new String[] {"/api/lexis/rpc/application-details/**", "/api/lexis/applicationDetailsRPC"},
+        "/applicationDetails");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {"/api/lexis/rpc/application-details/**", "/api/lexis/applicationDetailsRPC"},
+        "/applicationDetails");
+    authorizeAction(
+        authorize,
+        HttpMethod.DELETE,
+        new String[] {"/api/lexis/rpc/application-details/**"},
+        "/applicationDetails");
+
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
         new String[] {"/api/lexis/rpc/offer-details/**"},
         "/offerDetails");
     authorizeAction(
