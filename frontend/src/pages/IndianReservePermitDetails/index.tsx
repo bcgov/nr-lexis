@@ -1,8 +1,23 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
-import { Column, Grid, InlineLoading, InlineNotification } from '@carbon/react'
-import { useParams } from 'react-router-dom'
+import {
+  Button,
+  Column,
+  Grid,
+  InlineLoading,
+  InlineNotification,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TextInput,
+  Tile,
+} from '@carbon/react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '@/context/auth/useAuth'
 import type { IndianReservePermitDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldTile, DetailListTile, type DetailListItem } from '@/pages/shared/DetailSections'
+import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import { fetchIndianReservePermitDetail } from '@/service/lexis-detail-service'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -12,11 +27,16 @@ const displayValue = (value: string | number | null | undefined): string => {
   return String(value)
 }
 
+const normalizeText = (value: string): string => value.trim().toLowerCase()
+
 const IndianReservePermitDetailsPage: FC = () => {
+  const navigate = useNavigate()
+  const { canPerform } = useAuth()
   const { permitNumber } = useParams()
   const [detail, setDetail] = useState<IndianReservePermitDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [packageFilter, setPackageFilter] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -45,12 +65,15 @@ const IndianReservePermitDetailsPage: FC = () => {
     void load()
   }, [permitNumber])
 
-  const packageItems = useMemo<DetailListItem[]>(() => {
-    return (detail?.packages ?? []).map((item, index) => ({
-      key: `package-${index}-${item}`,
-      content: item,
-    }))
-  }, [detail?.packages])
+  const filteredPackages = useMemo(() => {
+    const rows = detail?.packages ?? []
+    if (!packageFilter.trim()) {
+      return rows
+    }
+
+    const normalizedFilter = normalizeText(packageFilter)
+    return rows.filter((item) => normalizeText(item).includes(normalizedFilter))
+  }, [detail?.packages, packageFilter])
 
   return (
     <Grid fullWidth className="default-grid">
@@ -81,6 +104,34 @@ const IndianReservePermitDetailsPage: FC = () => {
       {!loading && detail && (
         <>
           <Column sm={4} md={8} lg={16}>
+            <Tile>
+              <h2 className="detail-tile-title">Actions</h2>
+              <div className="legacy-search-actions">
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={
+                    !canPerform('/indianReservePermitSearch') && !canPerform('viewOICApplication')
+                  }
+                  onClick={() => navigate('/indian-reserve')}
+                >
+                  Open Reserve Search
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={
+                    !canPerform('/indianReservePermitSearch') && !canPerform('viewOICApplication')
+                  }
+                  onClick={() => navigate('/indian-reserve/permit/create')}
+                >
+                  Create Reserve Permit
+                </Button>
+              </div>
+            </Tile>
+          </Column>
+
+          <Column sm={4} md={8} lg={16}>
             <DetailFieldTile
               title="Permit Summary"
               fields={[
@@ -107,11 +158,35 @@ const IndianReservePermitDetailsPage: FC = () => {
           </Column>
 
           <Column sm={4} md={8} lg={16}>
-            <DetailListTile
-              title="Packages"
-              items={packageItems}
-              emptyLabel="No packages available."
-            />
+            <Tile>
+              <h2 className="detail-tile-title">Packages</h2>
+              <TextInput
+                id="reservePermitPackageFilter"
+                labelText="Filter packages"
+                value={packageFilter}
+                onChange={(event) => setPackageFilter(event.target.value)}
+                placeholder="Filter package identifiers"
+              />
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Package</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredPackages.map((item) => (
+                    <TableRow key={item}>
+                      <TableCell>{item}</TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredPackages.length === 0 && (
+                    <TableRow>
+                      <TableCell>No packages matched the current filter.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Tile>
           </Column>
         </>
       )}
