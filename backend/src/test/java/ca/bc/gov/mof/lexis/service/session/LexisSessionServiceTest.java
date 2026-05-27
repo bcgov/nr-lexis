@@ -54,6 +54,15 @@ class LexisSessionServiceTest {
   }
 
   @Test
+  void shouldRouteLegacyIndustryScopedAliasToCanonicalIndustrySummary() {
+    LexisSessionWelcomeDto response =
+        service.resolveWelcomeRoute("idir\\jsmith", List.of("industry_00001234"));
+
+    assertThat(response.welcomeTarget()).isEqualTo("industryUser");
+    assertThat(response.roles()).containsExactly("LEXIS_INDUSTRY");
+  }
+
+  @Test
   void shouldNotTreatUnconfiguredIndustryLikeRolesAsIndustryUsers() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\jsmith", List.of("industry_submitter"));
@@ -134,6 +143,17 @@ class LexisSessionServiceTest {
   }
 
   @Test
+  void shouldCollapseLegacyIndustryScopedAuthorities() {
+    List<String> roles =
+        service.parseAuthorities(
+            List.of(
+                new SimpleGrantedAuthority("industry_00009999"),
+                new SimpleGrantedAuthority("READ_ONLY")));
+
+    assertThat(roles).containsExactly("LEXIS_INDUSTRY", "LEXIS_READ_ONLY");
+  }
+
+  @Test
   void shouldParseRolesFromAuthenticationPrincipal() {
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a", "lexis_industry", "read_only");
@@ -153,6 +173,13 @@ class LexisSessionServiceTest {
   @Test
   void shouldResolveForestClientNumberFromLegacyScopedRoleAlias() {
     String clientNumber = service.resolveForestClientNumber(List.of("log_export_industry_00077881"));
+
+    assertThat(clientNumber).isEqualTo("00077881");
+  }
+
+  @Test
+  void shouldResolveForestClientNumberFromLegacyIndustryScopedRoleAlias() {
+    String clientNumber = service.resolveForestClientNumber(List.of("industry_00077881"));
 
     assertThat(clientNumber).isEqualTo("00077881");
   }

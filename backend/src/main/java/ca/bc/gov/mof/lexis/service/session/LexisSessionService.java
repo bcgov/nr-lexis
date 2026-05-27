@@ -20,6 +20,7 @@ public class LexisSessionService {
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
+  private static final String ROLE_INDUSTRY = "LEXIS_INDUSTRY";
   private static final String ROLE_LOG_EXPORT_INDUSTRY = "LEXIS_LOG_EXPORT_INDUSTRY";
 
   private static final Map<String, String> ROLE_ALIASES =
@@ -28,6 +29,7 @@ public class LexisSessionService {
           "READ_ONLY", ROLE_READ_ONLY,
           "APPLICATION_APPROVER", ROLE_APPLICATION_APPROVER,
           "EXEMPTION_APPROVER", ROLE_EXEMPTION_APPROVER,
+          "INDUSTRY", ROLE_INDUSTRY,
           "LOG_EXPORT_INDUSTRY", ROLE_LOG_EXPORT_INDUSTRY);
 
   private final Set<String> configuredIndustryRoles;

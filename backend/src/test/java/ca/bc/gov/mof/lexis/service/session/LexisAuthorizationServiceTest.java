@@ -36,9 +36,13 @@ class LexisAuthorizationServiceTest {
                 "LEXIS_INDUSTRY", List.of("/summary"),
                 "LEXIS_LOG_EXPORT_INDUSTRY", List.of("/offersSearch")));
 
+    List<String> canonicalIndustryScoped = service.resolveGrantedActions(List.of("LEXIS_INDUSTRY_00005678"));
+    List<String> legacyIndustryScoped = service.resolveGrantedActions(List.of("INDUSTRY_00005678"));
     List<String> canonicalScoped = service.resolveGrantedActions(List.of("LEXIS_LOG_EXPORT_INDUSTRY_00001234"));
     List<String> legacyScoped = service.resolveGrantedActions(List.of("LOG_EXPORT_INDUSTRY_00001234"));
 
+    assertThat(canonicalIndustryScoped).containsExactly("/summary");
+    assertThat(legacyIndustryScoped).containsExactly("/summary");
     assertThat(canonicalScoped).containsExactly("/offersSearch");
     assertThat(legacyScoped).containsExactly("/offersSearch");
   }
@@ -90,8 +94,8 @@ class LexisAuthorizationServiceTest {
     Set<String> roles = service.resolveRolesForAction("/summary");
 
     assertThat(roles)
-        .contains("LEXIS_INDUSTRY", "LEXIS_LOG_EXPORT_INDUSTRY", "LOG_EXPORT_INDUSTRY")
-        .doesNotContain("INDUSTRY");
+        .contains("LEXIS_INDUSTRY", "LEXIS_LOG_EXPORT_INDUSTRY", "INDUSTRY", "LOG_EXPORT_INDUSTRY")
+        .doesNotContain("INDUSTRY_00001234");
   }
 
   @Test
@@ -116,6 +120,7 @@ class LexisAuthorizationServiceTest {
             Map.of(
                 "LEXIS_ADMIN", List.of("*"),
                 "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_INDUSTRY", List.of("/summary"),
                 "LEXIS_LOG_EXPORT_INDUSTRY", List.of("/summary")));
 
     Set<String> roles = service.getConfiguredRoles();
@@ -124,9 +129,11 @@ class LexisAuthorizationServiceTest {
         .contains(
             "LEXIS_ADMIN",
             "LEXIS_READ_ONLY",
+            "LEXIS_INDUSTRY",
             "LEXIS_LOG_EXPORT_INDUSTRY",
             "ADMIN",
             "READ_ONLY",
+            "INDUSTRY",
             "LOG_EXPORT_INDUSTRY");
   }
 

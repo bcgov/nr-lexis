@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ public class LexisAuthorizationService {
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
+  private static final String ROLE_INDUSTRY = "LEXIS_INDUSTRY";
   private static final String ROLE_LOG_EXPORT_INDUSTRY = "LEXIS_LOG_EXPORT_INDUSTRY";
 
   private static final Map<String, String> LEGACY_ROLE_ALIASES =
@@ -25,6 +27,7 @@ public class LexisAuthorizationService {
           ROLE_READ_ONLY, "READ_ONLY",
           ROLE_APPLICATION_APPROVER, "APPLICATION_APPROVER",
           ROLE_EXEMPTION_APPROVER, "EXEMPTION_APPROVER",
+          ROLE_INDUSTRY, "INDUSTRY",
           ROLE_LOG_EXPORT_INDUSTRY, "LOG_EXPORT_INDUSTRY");
 
   private final Set<String> configuredIndustryRoles;
@@ -128,7 +131,7 @@ public class LexisAuthorizationService {
     }
 
     roleActions.forEach((roleName, actionList) -> {
-      String normalizedRole = normalizeRole(roleName);
+      String normalizedRole = normalizeConfiguredRole(roleName);
       if (normalizedRole == null || actionList == null) {
         return;
       }
@@ -162,7 +165,7 @@ public class LexisAuthorizationService {
     }
     LinkedHashSet<String> normalized = new LinkedHashSet<>();
     for (String role : rawRoles) {
-      String normalizedRole = normalizeRole(role);
+      String normalizedRole = normalizeRuntimeRole(role);
       if (normalizedRole != null) {
         normalized.add(normalizedRole);
       }
@@ -170,7 +173,21 @@ public class LexisAuthorizationService {
     return List.copyOf(normalized);
   }
 
-  private String normalizeRole(String role) {
+  private String normalizeConfiguredRole(String role) {
+    if (role == null) {
+      return null;
+    }
+    String normalized = role.trim().toUpperCase(Locale.ROOT);
+    if (normalized.isEmpty()) {
+      return null;
+    }
+    if (INDUSTRY_ROLE_KEY.equals(normalized)) {
+      return INDUSTRY_ROLE_KEY;
+    }
+    return normalizeRuntimeRole(normalized);
+  }
+
+  private String normalizeRuntimeRole(String role) {
     return sessionService.normalizeRole(role);
   }
 

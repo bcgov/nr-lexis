@@ -95,6 +95,16 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyOfferDetailsRpcShouldAllowLegacyIndustryAliasDuringTransition() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/offerDetailsRPC")
+                .param("actionMapping", "getApplicationVolume")
+                .param("applicationNumber", "1000456")
+                .with(jwt().authorities(new SimpleGrantedAuthority("INDUSTRY"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
   void legacyOfferDetailsRpcShouldAllowClientLookupAction() throws Exception {
     mockMvc.perform(
             post("/api/lexis/offerDetailsRPC")
