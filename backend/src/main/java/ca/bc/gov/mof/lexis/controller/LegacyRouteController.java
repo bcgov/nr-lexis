@@ -1,11 +1,14 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
@@ -75,6 +78,7 @@ public class LegacyRouteController {
   private static final String ACTION_REMOVE_PERMIT_DOCUMENT = "removePermitDocument";
   private static final String ACTION_REMOVE_APPLICATION_DOCUMENT = "removeApplicationDocument";
   private static final String ACTION_REMOVE_INVOICE_DOCUMENT = "removeInvoiceDocument";
+  private static final String LEGACY_ACTION_SAVE_PERMIT = "savePermit";
 
   private final LexisApplicationController applicationController;
   private final ExemptionController exemptionController;
@@ -87,6 +91,8 @@ public class LegacyRouteController {
   private final LexisSummaryController summaryController;
   private final OfferDetailsRpcController offerDetailsRpcController;
   private final PermitDetailsRpcController permitDetailsRpcController;
+  private final LexisSessionService sessionService;
+  private final LexisAuthorizationService authorizationService;
 
   public LegacyRouteController(
       LexisApplicationController applicationController,
@@ -99,7 +105,9 @@ public class LegacyRouteController {
       FeeDetailsController feeDetailsController,
       LexisSummaryController summaryController,
       OfferDetailsRpcController offerDetailsRpcController,
-      PermitDetailsRpcController permitDetailsRpcController) {
+      PermitDetailsRpcController permitDetailsRpcController,
+      LexisSessionService sessionService,
+      LexisAuthorizationService authorizationService) {
     this.applicationController = applicationController;
     this.exemptionController = exemptionController;
     this.federalApplicationController = federalApplicationController;
@@ -111,6 +119,8 @@ public class LegacyRouteController {
     this.summaryController = summaryController;
     this.offerDetailsRpcController = offerDetailsRpcController;
     this.permitDetailsRpcController = permitDetailsRpcController;
+    this.sessionService = sessionService;
+    this.authorizationService = authorizationService;
   }
 
   @GetMapping({"/applicationSearch", "/applicationSearch.do"})
@@ -481,6 +491,12 @@ public class LegacyRouteController {
       @RequestParam(name = "documentId", required = false) String documentId,
       HttpServletRequest request,
       Authentication authentication) {
+    if (requiresSavePermitAuthorization(actionMapping)
+        && !authorizationService.canPerformAction(
+            sessionService.parseRolesFromPrincipal(authentication), LEGACY_ACTION_SAVE_PERMIT)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     if (ACTION_GET_PERMIT_SUMMARY.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPermitSummary(
           permitNumber, countryCode, applicationDate, packageNumber, authentication);
@@ -654,5 +670,18 @@ public class LegacyRouteController {
       return legacyPage;
     }
     return 0;
+  }
+
+  private boolean requiresSavePermitAuthorization(String actionMapping) {
+    if (actionMapping == null || actionMapping.isBlank()) {
+      return false;
+    }
+    return ACTION_ADD_PERMIT.equalsIgnoreCase(actionMapping)
+        || ACTION_UPDATE_PERMIT.equalsIgnoreCase(actionMapping)
+        || ACTION_UPDATE_SHIPPING.equalsIgnoreCase(actionMapping)
+        || ACTION_ADD_INVOICE.equalsIgnoreCase(actionMapping)
+        || ACTION_REMOVE_PERMIT_DOCUMENT.equalsIgnoreCase(actionMapping)
+        || ACTION_REMOVE_APPLICATION_DOCUMENT.equalsIgnoreCase(actionMapping)
+        || ACTION_REMOVE_INVOICE_DOCUMENT.equalsIgnoreCase(actionMapping);
   }
 }

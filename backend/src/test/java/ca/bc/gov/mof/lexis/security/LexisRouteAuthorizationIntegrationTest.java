@@ -134,6 +134,26 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyPermitDetailsRpcWriteActionShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/permitDetailsRPC")
+                .param("actionMapping", "updateShipping")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyPermitDetailsRpcWriteActionShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/permitDetailsRPC")
+                .param("actionMapping", "updateShipping")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void applicationReviewSearchShouldRejectIndustryRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/application-reviews/search")

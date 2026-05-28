@@ -84,6 +84,7 @@ lexis:
         - "/feeReport"
         - "/tenureReport"
         - "/approvedExemptionReport"
+        - "savePermit"
         - "viewFederalApplication"
         - "viewOICApplication"
       EXEMPTION_APPROVER:
@@ -110,6 +111,7 @@ lexis:
         - "/feeReport"
         - "/tenureReport"
         - "/approvedExemptionReport"
+        - "savePermit"
         - "viewFederalApplication"
         - "viewOICApplication"
       PROVINCIAL_SUBMITTER:
