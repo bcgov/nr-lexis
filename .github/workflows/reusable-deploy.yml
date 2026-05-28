@@ -1,99 +1,135 @@
-# Reusable Deploy - Lite Mode Verification
 name: Reusable Deploy
 
 on:
   workflow_call:
     inputs:
       environment:
-        description: GitHub/OpenShift environment
+        description: GitHub/OpenShift environment (e.g. dev, test, prod)
         default: ""
         type: string
       target:
-        description: Deployment target; usually PR number, test or prod
+        description: Deployment target; usually PR number, 'test' or 'prod'
         default: ${{ github.event.number }}
+        type: string
+      slot:
+        description: |
+          Route hostname slot — PR # mod-50'd into a fixed pool for callback
+          URLs. Omit for TEST/PROD; defaults to target.
+        default: ""
+        type: string
+      backend_replicas:
+        description: Backend replica count (also HPA min/max)
+        default: "1"
+        type: string
+      frontend_replicas:
+        description: Frontend replica count
+        default: "2"
         type: string
       tag:
         description: Container tag
         default: ${{ github.event.number }}
         type: string
       triggers:
-        description: Triggers for deployment
+        description: Triggers for deployment (paths that must change)
         default: ""
         type: string
 
     secrets:
-      db_password:
-        description: Database password
-        required: true
       oc_namespace:
         description: OpenShift namespace
         required: true
       oc_token:
         description: OpenShift token
         required: true
+      database_user:
+        description: Oracle DATABASE_USER
+        required: true
+      database_password:
+        description: Oracle DATABASE_PASSWORD
+        required: true
+      database_host:
+        description: Oracle host
+        required: true
+      database_service_name:
+        description: Oracle service name
+        required: true
+      keystore_secret:
+        description: Oracle keystore passphrase
+        required: true
 
     outputs:
       triggered:
         description: Has deployment been triggered?
-        value: ${{ jobs.init.outputs.triggered }}
+        value: ${{ jobs.frontend.outputs.triggered }}
 
 permissions: {}
 
 jobs:
-  init:
-    name: Deploy (init)
+  backend:
+    name: Deploy (backend)
     environment: ${{ inputs.environment }}
-    outputs:
-      triggered: ${{ steps.deploy.outputs.triggered }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
-        id: deploy
-        with:
-          file: common/openshift.init.yml
-          oc_namespace: ${{ secrets.oc_namespace }}
-          oc_server: ${{ vars.oc_server }}
-          oc_token: ${{ secrets.oc_token }}
-          overwrite: true
-          parameters:
-            -p DB_PASSWORD="${{ secrets.db_password }}"
-            -p ZONE="${{ inputs.target }}"
-            -p NAME="${{ github.event.repository.name }}"
-          triggers: ${{ inputs.triggers }}
-          debug: true
-
-  deploy:
-    name: Deploy (${{ matrix.name }})
-    environment: ${{ inputs.environment }}
-    needs: [init]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    strategy:
-      matrix:
-        name: [database, backend, frontend]
-        include:
-          - name: database
-            file: common/openshift.database.yml
-            parameters: -p DB_PVC_SIZE="256Mi"
-          - name: backend
-            file: backend/openshift.deploy.yml
-            parameters: -p IMAGE_TAG="${{ inputs.tag }}"
-          - name: frontend
-            file: frontend/openshift.deploy.yml
-            parameters: -p IMAGE_TAG="${{ inputs.tag }}"
+    permissions:
+      contents: read
+    outputs:
+      triggered: ${{ steps.deploy.outputs.triggered }}
+    env:
+      DATABASE_PASSWORD: ${{ secrets.database_password }}
+      KEYSTORE_SECRET: ${{ secrets.keystore_secret }}
+    steps:
+      - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
+        id: deploy
+        with:
+          file: backend/openshift.deploy.yml
+          oc_namespace: ${{ secrets.oc_namespace }}
+          oc_server: ${{ vars.oc_server }}
+          oc_token: ${{ secrets.oc_token }}
+          debug: false
+          overwrite: true
+          parameters:
+            -p ZONE="${{ inputs.target }}"
+            -p NAME="${{ github.event.repository.name }}"
+            -p IMAGE_TAG="${{ inputs.tag }}"
+            -p MIN_REPLICAS="${{ inputs.backend_replicas }}"
+            -p MAX_REPLICAS="${{ inputs.backend_replicas }}"
+            -p DATABASE_HOST="${{ secrets.database_host }}"
+            -p DATABASE_SERVICE_NAME="${{ secrets.database_service_name }}"
+            -p DATABASE_USER="${{ secrets.database_user }}"
+            -p DATABASE_PASSWORD="$DATABASE_PASSWORD"
+            -p KEYSTORE_SECRET="$KEYSTORE_SECRET"
+          triggers: ${{ inputs.triggers }}
+
+  frontend:
+    name: Deploy (frontend)
+    environment: ${{ inputs.environment }}
+    needs: [backend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
     outputs:
       triggered: ${{ steps.deploy.outputs.triggered }}
     steps:
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
         with:
-          file: ${{ matrix.file }}
+          file: frontend/openshift.deploy.yml
           oc_namespace: ${{ secrets.oc_namespace }}
           oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}
-          debug: true
+          debug: false
+          overwrite: true
           parameters:
             -p ZONE="${{ inputs.target }}"
+            -p SLOT="${{ inputs.slot || inputs.target }}"
             -p NAME="${{ github.event.repository.name }}"
-            ${{ matrix.parameters }}
+            -p IMAGE_TAG="${{ inputs.tag }}"
+            -p REPLICAS="${{ inputs.frontend_replicas }}"
+            -p VITE_LOGIN_URL="${{ vars.VITE_LOGIN_URL }}"
+            -p VITE_LOGOUT_URL="${{ vars.VITE_LOGOUT_URL }}"
+            -p VITE_ENABLE_DEV_ROLE_SIMULATION="${{ vars.VITE_ENABLE_DEV_ROLE_SIMULATION }}"
+            -p VITE_ENABLE_SEARCH_MOCK_FALLBACK="${{ vars.VITE_ENABLE_SEARCH_MOCK_FALLBACK }}"
+            -p VITE_LEXIS_REPORT_ENDPOINT_BASE="${{ vars.VITE_LEXIS_REPORT_ENDPOINT_BASE }}"
+            -p VITE_LEXIS_REPORT_API_BASE="${{ vars.VITE_LEXIS_REPORT_API_BASE }}"
           triggers: ${{ inputs.triggers }}

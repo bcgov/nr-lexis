@@ -80,7 +80,6 @@ jobs:
           supply_scan: true
           triggers: ('frontend/')
 
-  # https://github.com/marketplace/actions/aqua-security-trivy
   trivy:
     name: Trivy Security Scan
     if: (! github.event.pull_request.draft)
