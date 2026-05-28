@@ -747,8 +747,10 @@ const ReportsPage: FC = () => {
     return reportValuesById[selectedReport.id] ?? {}
   }, [reportValuesById, selectedReport.id])
 
-  const selectedActionMapping =
-    selectedActionById[selectedReport.id] ?? selectedReport.actionMappings[0].value
+  const selectedActionMapping = resolveActionMapping(
+    selectedReport,
+    selectedActionById[selectedReport.id] ?? null,
+  )
 
   useEffect(() => {
     const nextParams = buildReportSearchParams({
@@ -973,25 +975,27 @@ const ReportsPage: FC = () => {
             Required action: <code>{selectedReport.action}</code>
           </p>
           <div className="legacy-search-grid">
-            <Select
-              id="reportActionMapping"
-              labelText="Action Mapping"
-              value={selectedActionMapping}
-              onChange={(event) =>
-                setSelectedActionById((current) => ({
-                  ...current,
-                  [selectedReport.id]: event.target.value,
-                }))
-              }
-            >
-              {selectedReport.actionMappings.map((actionMapping) => (
-                <SelectItem
-                  key={actionMapping.value}
-                  value={actionMapping.value}
-                  text={actionMapping.label}
-                />
-              ))}
-            </Select>
+            {selectedReport.actionMappings.length > 1 && (
+              <Select
+                id="reportActionMapping"
+                labelText="Report Variant"
+                value={selectedActionMapping}
+                onChange={(event) =>
+                  setSelectedActionById((current) => ({
+                    ...current,
+                    [selectedReport.id]: event.target.value,
+                  }))
+                }
+              >
+                {selectedReport.actionMappings.map((actionMapping) => (
+                  <SelectItem
+                    key={actionMapping.value}
+                    value={actionMapping.value}
+                    text={actionMapping.label}
+                  />
+                ))}
+              </Select>
+            )}
             {selectedReport.fields.map((field) => {
               const currentValue =
                 selectedReportValues[field.key] ?? (field.key === 'outputFormat' ? 'PDF' : '')
