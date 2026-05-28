@@ -3,7 +3,7 @@ import apiService from '@/service/api-service'
 
 export type RunReportRequest = {
   reportId: string
-  actionMapping: string
+  actionMapping?: string
   values: Record<string, string>
 }
 
@@ -39,6 +39,14 @@ const getModernReportApiBasePath = (): string => {
   return configured.endsWith('/') ? configured.slice(0, -1) : configured
 }
 
+const shouldIncludeActionMapping = (): boolean => {
+  const configured = (import.meta.env.VITE_LEXIS_REPORT_INCLUDE_ACTION_MAPPING ?? 'true')
+    .toString()
+    .trim()
+    .toLowerCase()
+  return configured !== '0' && configured !== 'false' && configured !== 'no'
+}
+
 const buildModernReportEndpoint = (reportId: string): string => {
   const basePath = getModernReportApiBasePath()
   return `${basePath}/${encodeURIComponent(reportId)}`
@@ -46,10 +54,12 @@ const buildModernReportEndpoint = (reportId: string): string => {
 
 const buildReportPayload = (
   values: Record<string, string>,
-  actionMapping: string,
+  actionMapping?: string,
 ): Record<string, unknown> => {
-  const payload: Record<string, unknown> = {
-    actionMapping,
+  const payload: Record<string, unknown> = {}
+
+  if (shouldIncludeActionMapping() && actionMapping && actionMapping.trim().length > 0) {
+    payload.actionMapping = actionMapping.trim()
   }
 
   Object.entries(values).forEach(([key, rawValue]) => {

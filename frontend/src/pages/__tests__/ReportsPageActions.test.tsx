@@ -109,4 +109,65 @@ describe('Reports Page Actions', () => {
       })
     })
   })
+
+  it('downloads CSV reports without opening a popup window', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => true,
+    } as any)
+    const anchorClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Reports' })
+    await userEvent.selectOptions(screen.getByLabelText('Output Format'), 'CSV')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'applicationReport',
+        actionMapping: 'generate',
+        values: { outputFormat: 'CSV' },
+      })
+    })
+    expect(window.open).not.toHaveBeenCalled()
+    expect(anchorClickSpy).toHaveBeenCalled()
+  })
+
+  it('falls back to download and shows error when pdf popup is blocked', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => true,
+    } as any)
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    const anchorClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Reports' })
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Popup blocked while opening report preview. Downloaded the generated file instead.',
+        ),
+      ).toBeInTheDocument()
+    })
+    expect(anchorClickSpy).toHaveBeenCalled()
+  })
 })
