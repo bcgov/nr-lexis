@@ -56,6 +56,7 @@ public class PermitDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PermitDetailsRpcController.class);
   private static final String ROLE_READ_ONLY = "READ_ONLY";
+  private static final String LEGACY_PERMIT_LOCK_SESSION_KEY = "PERMIT_LOCK";
 
   private final ObjectProvider<PermitDetailsRpcService> serviceProvider;
   private final LexisSessionService sessionService;
@@ -387,15 +388,25 @@ public class PermitDetailsRpcController {
   }
 
   @GetMapping("/check-form-changes")
-  public ResponseEntity<CheckFormChangesResponseDto> checkFormChanges() {
-    // Lock-aware form diffing has not been reintroduced yet in Spring Boot;
-    // preserve legacy client contract with a stable no-op response.
-    return ResponseEntity.ok(new CheckFormChangesResponseDto(false));
+  public ResponseEntity<CheckFormChangesResponseDto> checkFormChanges(HttpServletRequest request) {
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning default check-form-changes payload");
+      return ResponseEntity.ok(new CheckFormChangesResponseDto(false));
+    }
+
+    boolean permitChanged = service.hasFormChanges(buildPermitMutationRequest(request));
+    return ResponseEntity.ok(new CheckFormChangesResponseDto(permitChanged));
   }
 
   @PostMapping("/release-lock")
-  public ResponseEntity<ReleaseLockResponseDto> releaseLock() {
-    // Legacy lock release is currently a no-op until lock manager parity is implemented.
+  public ResponseEntity<ReleaseLockResponseDto> releaseLock(HttpServletRequest request) {
+    if (request != null) {
+      var session = request.getSession(false);
+      if (session != null) {
+        session.removeAttribute(LEGACY_PERMIT_LOCK_SESSION_KEY);
+      }
+    }
     return ResponseEntity.ok(new ReleaseLockResponseDto("ok"));
   }
 

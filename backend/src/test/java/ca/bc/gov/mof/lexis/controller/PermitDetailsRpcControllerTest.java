@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -39,6 +40,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -59,6 +61,7 @@ class PermitDetailsRpcControllerTest {
   @Mock private PermitDetailsRpcService service;
   @Mock private LexisSessionService sessionService;
   @Mock private HttpServletRequest request;
+  @Mock private HttpSession session;
 
   private PermitDetailsRpcController controller;
 
@@ -672,8 +675,10 @@ class PermitDetailsRpcControllerTest {
 
   @Test
   void checkFormChangesShouldReturnLegacyNoOpPayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+
     ResponseEntity<PermitDetailsRpcController.CheckFormChangesResponseDto> response =
-        controller.checkFormChanges();
+        controller.checkFormChanges(request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -681,12 +686,29 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void releaseLockShouldReturnLegacyOkPayload() {
+  void checkFormChangesShouldReturnServicePayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.hasFormChanges(any(PermitMutationRequestDto.class))).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.CheckFormChangesResponseDto> response =
+        controller.checkFormChanges(request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().permitChanged()).isTrue();
+    verify(service).hasFormChanges(any(PermitMutationRequestDto.class));
+  }
+
+  @Test
+  void releaseLockShouldReturnLegacyOkPayloadAndClearSessionLock() {
+    when(request.getSession(false)).thenReturn(session);
+
     ResponseEntity<PermitDetailsRpcController.ReleaseLockResponseDto> response =
-        controller.releaseLock();
+        controller.releaseLock(request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().release()).isEqualTo("ok");
+    verify(session).removeAttribute("PERMIT_LOCK");
   }
 }

@@ -525,41 +525,7 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Test
   void updateShippingShouldRejectInvalidDate() {
-    PermitMutationRequestDto request =
-        new PermitMutationRequestDto(
-            "7000123",
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            "bad-date",
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null);
+    PermitMutationRequestDto request = updateShippingRequest("bad-date");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(
             Optional.of(
@@ -805,6 +771,30 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.ageClass()).isEqualTo("Standing");
   }
 
+  @Test
+  void hasFormChangesShouldReturnFalseWhenTrackedFieldsMatch() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+
+    PermitMutationRequestDto request = formCheckRequest(" ACT ", "42", " Legacy notes ");
+
+    boolean changed = service.hasFormChanges(request);
+
+    assertThat(changed).isFalse();
+  }
+
+  @Test
+  void hasFormChangesShouldReturnTrueWhenTrackedFieldDiffers() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+
+    PermitMutationRequestDto request = formCheckRequest("ACT", "43", "Legacy notes");
+
+    boolean changed = service.hasFormChanges(request);
+
+    assertThat(changed).isTrue();
+  }
+
   private PermitScaleDetailRow scale(
       String id,
       String timbermark,
@@ -828,6 +818,120 @@ class OraclePermitDetailsRpcServiceTest {
         "100.00",
         "12.0",
         "1.5");
+  }
+
+  private PermitMutationRow permitMutationRow() {
+    return new PermitMutationRow(
+        7000123L,
+        "Destination Co",
+        "MV North",
+        LocalDate.of(2026, 4, 1),
+        null,
+        LocalDate.of(2026, 3, 15),
+        LocalDate.of(2026, 3, 15),
+        LocalDate.of(2026, 3, 16),
+        "RCPT-100",
+        LocalDate.of(2026, 12, 31),
+        100.0d,
+        42L,
+        0L,
+        null,
+        "Legacy notes",
+        "idir\\jsmith",
+        null,
+        "SEA",
+        "W",
+        "00077881",
+        "01",
+        "00077880",
+        "01",
+        "EX-700",
+        1835L,
+        "VAN",
+        "ACT",
+        "S",
+        "US",
+        null,
+        null,
+        null,
+        null,
+        null,
+        "T");
+  }
+
+  private PermitMutationRequestDto formCheckRequest(
+      String permitStatus, String permitNumberOfPieces, String permitRemarks) {
+    return new PermitMutationRequestDto(
+        "7000123",
+        permitStatus,
+        "03/15/2026",
+        "03/16/2026",
+        "12/31/2026",
+        null,
+        null,
+        "Destination Co",
+        "US",
+        "SEA",
+        "MV North",
+        "04/01/2026",
+        "VAN",
+        null,
+        "RCPT-100",
+        permitRemarks,
+        null,
+        null,
+        permitNumberOfPieces,
+        "1835",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  private PermitMutationRequestDto updateShippingRequest(String estimatedShippingDate) {
+    return new PermitMutationRequestDto(
+        "7000123",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        estimatedShippingDate,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   private ExemptionDetailDto exemptionDetail(String exemptionNumber, double remainingVolume) {

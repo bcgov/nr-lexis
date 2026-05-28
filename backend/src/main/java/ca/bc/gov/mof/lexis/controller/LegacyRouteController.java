@@ -597,10 +597,10 @@ public class LegacyRouteController {
           authentication);
     }
     if (ACTION_CHECK_FORM_CHANGES.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.checkFormChanges();
+      return permitDetailsRpcController.checkFormChanges(request);
     }
     if (ACTION_RELEASE_LOCK.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.releaseLock();
+      return permitDetailsRpcController.releaseLock(request);
     }
     if (ACTION_GET_INVOICES_FOR_PERMIT.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getInvoicesForPermit(permitNumber);

@@ -540,6 +540,43 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
+  public boolean hasFormChanges(PermitMutationRequestDto request) {
+    if (request == null) {
+      return false;
+    }
+
+    Long permitNumber = parsePositiveLong(request.permitNumber());
+    if (permitNumber == null) {
+      return false;
+    }
+
+    Optional<PermitMutationRow> storedPermitOptional =
+        repository.findPermitMutationByPermitNumber(permitNumber);
+    if (storedPermitOptional.isEmpty()) {
+      return false;
+    }
+
+    PermitMutationRow storedPermit = storedPermitOptional.get();
+    return hasStringChanged(storedPermit.permitStatusCode(), request.permitStatus())
+        || hasDateChanged(storedPermit.expiryDate(), parseDate(request.permitExpiryDate()))
+        || hasDateChanged(storedPermit.permitIssueDate(), parseDate(request.permitIssueDate()))
+        || hasDateChanged(storedPermit.applicationDate(), parseDate(request.permitSubmitDate()))
+        || hasLongChanged(
+            storedPermit.orgUnitNo(),
+            parseLongOrZero(firstNonNull(request.orgUnitNumber(), request.oicRegion())))
+        || hasStringChanged(storedPermit.remarks(), request.permitRemarks())
+        || hasStringChanged(storedPermit.destinationCompanyName(), request.destinationCompanyName())
+        || hasStringChanged(storedPermit.countryCode(), request.destinationCountry())
+        || hasStringChanged(storedPermit.transportTypeCode(), request.transportType())
+        || hasStringChanged(storedPermit.transportName(), request.transportName())
+        || hasDateChanged(
+            storedPermit.estimatedShippingDate(), parseDate(request.estimatedShippingDate()))
+        || hasStringChanged(storedPermit.portOfExportCode(), request.portOfExport())
+        || hasStringChanged(storedPermit.receiptNumber(), request.permitReceiptNo())
+        || hasLongChanged(storedPermit.numberOfPieces(), parseLongOrZero(request.permitNumberOfPieces()));
+  }
+
+  @Override
   public PermitMutationRpcResponseDto addPermit(PermitMutationRequestDto request, String userId) {
     String normalizedUserId = trimToNull(userId);
     List<String> errors = new ArrayList<>();
@@ -1460,6 +1497,30 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private PermitMutationRpcResponseDto failureMutationResponse(List<String> errors, Long permitNumber) {
     return new PermitMutationRpcResponseDto(
         false, "", errors, List.of(), permitNumber, null, null, null, null, null);
+  }
+
+  private boolean hasStringChanged(String stored, String formValue) {
+    return !java.util.Objects.equals(trimToNull(stored), trimToNull(formValue));
+  }
+
+  private boolean hasDateChanged(LocalDate stored, LocalDate formValue) {
+    return !java.util.Objects.equals(stored, formValue);
+  }
+
+  private boolean hasLongChanged(Long stored, long formValue) {
+    return firstNonNull(stored, 0L) != formValue;
+  }
+
+  private long parseLongOrZero(String value) {
+    String normalized = trimToNull(value);
+    if (normalized == null) {
+      return 0L;
+    }
+    try {
+      return Long.parseLong(normalized);
+    } catch (NumberFormatException ex) {
+      return 0L;
+    }
   }
 
   private Long parsePositiveLong(String value) {

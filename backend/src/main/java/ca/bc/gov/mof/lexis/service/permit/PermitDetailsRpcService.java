@@ -98,6 +98,8 @@ public interface PermitDetailsRpcService {
 
   PermitMutationRpcResponseDto updateShipping(PermitMutationRequestDto request, String userId);
 
+  boolean hasFormChanges(PermitMutationRequestDto request);
+
   PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber);
 
   PermitInvoiceDetailsRpcResponseDto getInvoiceDetails(Long permitNumber, String salesInvoiceNumber);
