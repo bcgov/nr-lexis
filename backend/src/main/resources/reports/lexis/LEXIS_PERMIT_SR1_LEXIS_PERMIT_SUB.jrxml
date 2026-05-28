@@ -1,0 +1,356 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="LEXIS_PERMIT_SUB" pageWidth="792" pageHeight="612" orientation="Landscape" whenNoDataType="AllSectionsNoDetail" columnWidth="792" leftMargin="0" rightMargin="0" topMargin="0" bottomMargin="0" uuid="21214f4c-477d-46f6-b3f8-d21b0c17b4c4">
+	<property name="ireport.zoom" value="2.1435888100000016"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<property name="ireport.jasperserver.reportUnit" value="/JCRS/LEXIS/Reports/LEXIS/LEXIS_PERMIT.rpt"/>
+	<property name="ireport.jasperserver.url" value="http://10.10.30.118:8080/jasperserver/services/repository"/>
+	<parameter name="P_EXPORT_PERMIT_NUMBER" class="java.math.BigDecimal"/>
+	<parameter name="ORACLE_REF_CURSOR" class="java.sql.ResultSet" isForPrompting="false"/>
+	<parameter name="LoggedInUser" class="com.jaspersoft.jasperserver.api.metadata.user.domain.User" isForPrompting="false"/>
+	<parameter name="p_report_id" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["LEXIS_PERMIT_SUB"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? "repo:" : "H:\\"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_EXT" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? ".jrxml" : ".jasper"]]></defaultValueExpression>
+	</parameter>
+	<queryString language="plsql">
+		<![CDATA[{call LEXIS_REPORTING.PERMIT_REPORT_SUB(
+P_PERMIT_REPORT_SUB => $P{ORACLE_REF_CURSOR},
+P_EXPORT_PERMIT_NUMBER => $P{P_EXPORT_PERMIT_NUMBER}
+)}]]>
+	</queryString>
+	<field name="EXEMPTION_NUMBER" class="java.lang.String"/>
+	<field name="APPLICATION_NUMBER" class="java.math.BigDecimal"/>
+	<field name="SPECIES_END_USE" class="java.lang.String"/>
+	<field name="PACKAGE_NUMBER" class="java.lang.String"/>
+	<field name="PACKAGE_SPECIES_CODE" class="java.lang.String"/>
+	<field name="PACKAGE_TIMBER_MARK" class="java.lang.String"/>
+	<field name="SUM_PIECES" class="java.math.BigDecimal"/>
+	<field name="SUM_VOLUME" class="java.math.BigDecimal"/>
+	<field name="TIMBER_MARK_HOLDER" class="java.lang.String"/>
+	<field name="AGE_CLASS" class="java.lang.String"/>
+	<variable name="CCF2_Formatted_TimberMarkHolder" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[// Replace(), " :- ", ":" + ChrW(13) + "   - ")
+//Replace({PERMIT_REPORT_SUB.TIMBER_MARK_HOLDER}, ",, ", ChrW(13)
+$F{TIMBER_MARK_HOLDER}.replace(",, ", "\n").replace(" :- ", ":\n   - ")]]></variableExpression>
+	</variable>
+	<variable name="CCF3_Formatted_PackageSpeciesCode" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//Replace({PERMIT_REPORT_SUB.PACKAGE_SPECIES_CODE}, ",,", ChrW(13));
+$F{PACKAGE_SPECIES_CODE}.replace(",,", "\n")]]></variableExpression>
+	</variable>
+	<variable name="CCF0_ShowPH" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[" "]]></variableExpression>
+	</variable>
+	<group name="Group 0" isReprintHeaderOnEachPage="true">
+		<groupExpression><![CDATA[$V{CCF0_ShowPH}]]></groupExpression>
+		<groupHeader>
+			<band height="55" splitType="Prevent">
+				<elementGroup>
+					<staticText>
+						<reportElement uuid="fefc23ec-58b5-4bce-8282-f7f738b41b24" stretchType="RelativeToTallestObject" x="244" y="0" width="104" height="55" forecolor="#000000"/>
+						<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+							<pen lineWidth="1.0"/>
+							<topPen lineWidth="1.0"/>
+							<leftPen lineWidth="1.0"/>
+							<bottomPen lineWidth="1.0"/>
+							<rightPen lineWidth="1.0"/>
+						</box>
+						<textElement textAlignment="Center" verticalAlignment="Middle">
+							<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+						</textElement>
+						<text><![CDATA[Timber Mark Holder Name : - Timber Mark]]></text>
+					</staticText>
+					<staticText>
+						<reportElement uuid="5831b551-d85e-4e39-80d3-5570354863c2" stretchType="RelativeToTallestObject" x="348" y="0" width="90" height="55" forecolor="#000000"/>
+						<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+							<pen lineWidth="1.0"/>
+							<topPen lineWidth="1.0"/>
+							<leftPen lineWidth="1.0"/>
+							<bottomPen lineWidth="1.0"/>
+							<rightPen lineWidth="1.0"/>
+						</box>
+						<textElement textAlignment="Center" verticalAlignment="Middle">
+							<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+						</textElement>
+						<text><![CDATA[Description of Timber
+Species - Grade]]></text>
+					</staticText>
+					<textField>
+						<reportElement uuid="25b1558d-03e2-45e4-afa2-835789501857" stretchType="RelativeToTallestObject" x="648" y="0" width="102" height="55" forecolor="#000000"/>
+						<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+							<pen lineWidth="1.0"/>
+							<topPen lineWidth="1.0"/>
+							<leftPen lineWidth="1.0"/>
+							<bottomPen lineWidth="1.0"/>
+							<rightPen lineWidth="1.0"/>
+						</box>
+						<textElement textAlignment="Center" verticalAlignment="Middle" markup="html">
+							<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+						</textElement>
+						<textFieldExpression><![CDATA["Permit Volume (m" + "<sup>3</sup>" + ")"]]></textFieldExpression>
+					</textField>
+					<staticText>
+						<reportElement uuid="de0a74be-f9c3-4b99-af14-7905b6904827" stretchType="RelativeToTallestObject" x="144" y="0" width="100" height="55" forecolor="#000000"/>
+						<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+							<pen lineWidth="1.0"/>
+							<topPen lineWidth="1.0"/>
+							<leftPen lineWidth="1.0"/>
+							<bottomPen lineWidth="1.0"/>
+							<rightPen lineWidth="1.0"/>
+						</box>
+						<textElement textAlignment="Center" verticalAlignment="Middle">
+							<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+						</textElement>
+						<text><![CDATA[Boom or
+Package No.]]></text>
+					</staticText>
+					<staticText>
+						<reportElement uuid="93eab65a-e8ba-48f0-9b5d-05e758deffb6" stretchType="RelativeToTallestObject" x="6" y="0" width="67" height="55" forecolor="#000000"/>
+						<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+							<pen lineWidth="1.0"/>
+							<topPen lineWidth="1.0"/>
+							<leftPen lineWidth="1.0"/>
+							<bottomPen lineWidth="1.0"/>
+							<rightPen lineWidth="1.0"/>
+						</box>
+						<textElement textAlignment="Center" verticalAlignment="Middle">
+							<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+						</textElement>
+						<text><![CDATA[Approved
+Exemption No.]]></text>
+					</staticText>
+					<staticText>
+						<reportElement uuid="64260294-2ced-4b24-89bb-51871ba02f05" stretchType="RelativeToTallestObject" x="73" y="0" width="71" height="55" forecolor="#000000"/>
+						<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+							<pen lineWidth="1.0"/>
+							<topPen lineWidth="1.0"/>
+							<leftPen lineWidth="1.0"/>
+							<bottomPen lineWidth="1.0"/>
+							<rightPen lineWidth="1.0"/>
+						</box>
+						<textElement textAlignment="Center" verticalAlignment="Middle">
+							<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+						</textElement>
+						<text><![CDATA[Application No.]]></text>
+					</staticText>
+					<staticText>
+						<reportElement uuid="6c39ceb5-1768-4c57-8b7b-11cc8c333997" stretchType="RelativeToTallestObject" x="603" y="0" width="45" height="55" forecolor="#000000"/>
+						<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+							<pen lineWidth="1.0"/>
+							<topPen lineWidth="1.0"/>
+							<leftPen lineWidth="1.0"/>
+							<bottomPen lineWidth="1.0"/>
+							<rightPen lineWidth="1.0"/>
+						</box>
+						<textElement textAlignment="Center" verticalAlignment="Middle">
+							<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+						</textElement>
+						<text><![CDATA[Permit Pieces]]></text>
+					</staticText>
+				</elementGroup>
+				<staticText>
+					<reportElement uuid="5831b551-d85e-4e39-80d3-5570354863c2" stretchType="RelativeToTallestObject" x="438" y="0" width="51" height="55" forecolor="#000000"/>
+					<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+						<pen lineWidth="1.0"/>
+						<topPen lineWidth="1.0"/>
+						<leftPen lineWidth="1.0"/>
+						<bottomPen lineWidth="1.0"/>
+						<rightPen lineWidth="1.0"/>
+					</box>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Age Class]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="5831b551-d85e-4e39-80d3-5570354863c2" stretchType="RelativeToTallestObject" x="489" y="0" width="114" height="55" forecolor="#000000"/>
+					<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+						<pen lineWidth="1.0"/>
+						<topPen lineWidth="1.0"/>
+						<leftPen lineWidth="1.0"/>
+						<bottomPen lineWidth="1.0"/>
+						<rightPen lineWidth="1.0"/>
+					</box>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Species End Use]]></text>
+				</staticText>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band height="34" splitType="Prevent">
+				<printWhenExpression><![CDATA[//false
+$V{REPORT_COUNT} == 0]]></printWhenExpression>
+				<rectangle>
+					<reportElement uuid="4767c5ba-525e-4c00-8f3c-e4de4663559f" x="6" y="0" width="744" height="33"/>
+				</rectangle>
+				<line>
+					<reportElement uuid="ccc9dc79-04ce-4485-82f3-dc3513afd4bb" x="72" y="0" width="1" height="33"/>
+				</line>
+				<line>
+					<reportElement uuid="ccc9dc79-04ce-4485-82f3-dc3513afd4bb" x="143" y="0" width="1" height="33"/>
+				</line>
+				<line>
+					<reportElement uuid="ccc9dc79-04ce-4485-82f3-dc3513afd4bb" x="243" y="0" width="1" height="33"/>
+				</line>
+				<line>
+					<reportElement uuid="ccc9dc79-04ce-4485-82f3-dc3513afd4bb" x="347" y="0" width="1" height="33"/>
+				</line>
+				<line>
+					<reportElement uuid="ccc9dc79-04ce-4485-82f3-dc3513afd4bb" x="603" y="0" width="1" height="33"/>
+				</line>
+				<line>
+					<reportElement uuid="ccc9dc79-04ce-4485-82f3-dc3513afd4bb" x="648" y="0" width="1" height="33"/>
+				</line>
+				<line>
+					<reportElement uuid="ccc9dc79-04ce-4485-82f3-dc3513afd4bb" x="489" y="0" width="1" height="33"/>
+				</line>
+				<line>
+					<reportElement uuid="ccc9dc79-04ce-4485-82f3-dc3513afd4bb" x="437" y="0" width="1" height="33"/>
+				</line>
+			</band>
+		</groupFooter>
+	</group>
+	<title>
+		<band height="17" splitType="Prevent">
+			<printWhenExpression><![CDATA[false]]></printWhenExpression>
+		</band>
+	</title>
+	<detail>
+		<band height="34" splitType="Prevent">
+			<elementGroup>
+				<textField isStretchWithOverflow="true">
+					<reportElement uuid="a503bbd1-5b75-4660-82dc-0d15fac4cb94" stretchType="RelativeToTallestObject" x="348" y="0" width="90" height="34" forecolor="#000000"/>
+					<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+						<pen lineWidth="1.0"/>
+						<topPen lineWidth="1.0"/>
+						<leftPen lineWidth="1.0"/>
+						<bottomPen lineWidth="1.0"/>
+						<rightPen lineWidth="1.0"/>
+					</box>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{CCF3_Formatted_PackageSpeciesCode}]]></textFieldExpression>
+				</textField>
+				<textField>
+					<reportElement uuid="acb6d23a-5513-4d69-9c5a-00061cdd8516" stretchType="RelativeToTallestObject" x="6" y="0" width="67" height="34" forecolor="#000000"/>
+					<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+						<pen lineWidth="1.0"/>
+						<topPen lineWidth="1.0"/>
+						<leftPen lineWidth="1.0"/>
+						<bottomPen lineWidth="1.0"/>
+						<rightPen lineWidth="1.0"/>
+					</box>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{EXEMPTION_NUMBER}]]></textFieldExpression>
+				</textField>
+				<textField pattern="#,##0;(#,##0)">
+					<reportElement uuid="cbf7c9f1-f7ae-4ebd-b262-6fd308e5825b" stretchType="RelativeToTallestObject" x="603" y="0" width="45" height="34" forecolor="#000000"/>
+					<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+						<pen lineWidth="1.0"/>
+						<topPen lineWidth="1.0"/>
+						<leftPen lineWidth="1.0"/>
+						<bottomPen lineWidth="1.0"/>
+						<rightPen lineWidth="1.0"/>
+					</box>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{SUM_PIECES}]]></textFieldExpression>
+				</textField>
+				<textField pattern="#,##0.0;-#,##0.0">
+					<reportElement uuid="5b41285d-05ff-40a6-b31b-ed9395a8ac7a" stretchType="RelativeToTallestObject" x="648" y="0" width="102" height="34" forecolor="#000000"/>
+					<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+						<pen lineWidth="1.0"/>
+						<topPen lineWidth="1.0"/>
+						<leftPen lineWidth="1.0"/>
+						<bottomPen lineWidth="1.0"/>
+						<rightPen lineWidth="1.0"/>
+					</box>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{SUM_VOLUME}]]></textFieldExpression>
+				</textField>
+				<textField>
+					<reportElement uuid="ec9673cc-c72a-4abb-91b6-0cafaa2d8096" stretchType="RelativeToTallestObject" x="144" y="0" width="100" height="34" forecolor="#000000"/>
+					<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+						<pen lineWidth="1.0"/>
+						<topPen lineWidth="1.0"/>
+						<leftPen lineWidth="1.0"/>
+						<bottomPen lineWidth="1.0"/>
+						<rightPen lineWidth="1.0"/>
+					</box>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{PACKAGE_NUMBER}]]></textFieldExpression>
+				</textField>
+				<textField isStretchWithOverflow="true">
+					<reportElement uuid="ae6894c0-ce97-4cf2-8101-7c6903d840ac" stretchType="RelativeToTallestObject" x="244" y="0" width="104" height="34" forecolor="#000000"/>
+					<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+						<pen lineWidth="1.0"/>
+						<topPen lineWidth="1.0"/>
+						<leftPen lineWidth="1.0"/>
+						<bottomPen lineWidth="1.0"/>
+						<rightPen lineWidth="1.0"/>
+					</box>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{CCF2_Formatted_TimberMarkHolder}]]></textFieldExpression>
+				</textField>
+				<textField pattern="0;(0)" isBlankWhenNull="true">
+					<reportElement uuid="3491f279-7c35-4a94-8643-2de5e26a2ee6" stretchType="RelativeToTallestObject" x="73" y="0" width="71" height="34" forecolor="#000000"/>
+					<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+						<pen lineWidth="1.0"/>
+						<topPen lineWidth="1.0"/>
+						<leftPen lineWidth="1.0"/>
+						<bottomPen lineWidth="1.0"/>
+						<rightPen lineWidth="1.0"/>
+					</box>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{APPLICATION_NUMBER}]]></textFieldExpression>
+				</textField>
+			</elementGroup>
+			<textField>
+				<reportElement uuid="ec9673cc-c72a-4abb-91b6-0cafaa2d8096" stretchType="RelativeToTallestObject" x="489" y="0" width="114" height="34" forecolor="#000000"/>
+				<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+					<pen lineWidth="1.0"/>
+					<topPen lineWidth="1.0"/>
+					<leftPen lineWidth="1.0"/>
+					<bottomPen lineWidth="1.0"/>
+					<rightPen lineWidth="1.0"/>
+				</box>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{SPECIES_END_USE}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement uuid="ec9673cc-c72a-4abb-91b6-0cafaa2d8096" stretchType="RelativeToTallestObject" x="438" y="0" width="51" height="34" forecolor="#000000"/>
+				<box topPadding="2" leftPadding="3" bottomPadding="2" rightPadding="3">
+					<pen lineWidth="1.0"/>
+					<topPen lineWidth="1.0"/>
+					<leftPen lineWidth="1.0"/>
+					<bottomPen lineWidth="1.0"/>
+					<rightPen lineWidth="1.0"/>
+				</box>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{AGE_CLASS}]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+</jasperReport>

@@ -1,0 +1,441 @@
+package ca.bc.gov.mof.lexis.security;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.web.servlet.MockMvc;
+
+@SpringBootTest(
+    properties = {
+      "lexis.auth.cognito.enforce-route-auth=true",
+      "ALLOWED_ORIGINS=http://localhost:3000"
+    })
+@AutoConfigureMockMvc
+class LexisRouteAuthorizationIntegrationTest {
+
+  @Autowired private MockMvc mockMvc;
+
+  @Test
+  void applicationsSearchShouldRejectAnonymousRequests() throws Exception {
+    mockMvc.perform(get("/api/lexis/applications/search")).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void corsPreflightShouldAllowConfiguredOriginOnProtectedRoute() throws Exception {
+    mockMvc
+        .perform(
+            options("/api/lexis/applications/search")
+                .header("Origin", "http://localhost:3000")
+                .header("Access-Control-Request-Method", "GET")
+                .header("Access-Control-Request-Headers", "Authorization"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"))
+        .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+  }
+
+  @Test
+  void corsPreflightShouldRejectDisallowedOriginOnProtectedRoute() throws Exception {
+    mockMvc
+        .perform(
+            options("/api/lexis/applications/search")
+                .header("Origin", "https://disallowed.example.com")
+                .header("Access-Control-Request-Method", "GET")
+                .header("Access-Control-Request-Headers", "Authorization"))
+        .andExpect(status().isForbidden())
+        .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+  }
+
+  @Test
+  void applicationsSearchShouldAllowCanonicalReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/applications/search")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void applicationsSearchShouldRejectLegacyReadOnlyAlias() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/applications/search")
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyApplicationSearchRouteShouldAllowCanonicalReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/applicationSearch")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
+  void legacyApplicationDetailsAddShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/applicationDetails")
+                .param("actionMapping", "add")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyApplicationDetailsAddShouldAllowProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/applicationDetails")
+                .param("actionMapping", "add")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void applicationDetailsRpcShouldRejectAnonymousRequests() throws Exception {
+    mockMvc.perform(get("/api/lexis/rpc/application-details/document-details")).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void applicationDetailsRpcShouldAllowCanonicalReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/rpc/application-details/document-details")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void exemptionDetailsRpcShouldRejectAnonymousRequests() throws Exception {
+    mockMvc.perform(get("/api/lexis/rpc/exemption-details/applications")).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void exemptionDetailsRpcShouldAllowCanonicalExemptionApproverRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/rpc/exemption-details/applications")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyOfferDetailsRpcShouldRequireAuthentication() throws Exception {
+    mockMvc
+        .perform(get("/api/lexis/offerDetailsRPC").param("actionMapping", "getApplicationVolume"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyOfferDetailsRpcShouldAllowIndustryRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/offerDetailsRPC")
+                .param("actionMapping", "getApplicationVolume")
+                .param("applicationNumber", "1000456")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void legacyOfferDetailsRpcShouldRejectLegacyIndustryAlias() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/offerDetailsRPC")
+                .param("actionMapping", "getApplicationVolume")
+                .param("applicationNumber", "1000456")
+                .with(jwt().authorities(new SimpleGrantedAuthority("INDUSTRY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyOfferDetailsRpcShouldAllowClientLookupAction() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/offerDetailsRPC")
+                .param("actionMapping", "getClientLocations")
+                .param("clientNumber", "77881")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyOfferDetailsAddShouldAllowProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/offerDetails")
+                .param("actionMapping", "add")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyPermitDetailsRpcShouldAllowReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/permitDetailsRPC")
+                .param("actionMapping", "getPackageList")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyPermitDetailsRpcShouldAllowCountryListAction() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/permitDetailsRPC")
+                .param("actionMapping", "getCountryList")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyPermitDetailsRpcWriteActionShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/permitDetailsRPC")
+                .param("actionMapping", "updateShipping")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyPermitDetailsRpcWriteActionShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/permitDetailsRPC")
+                .param("actionMapping", "updateShipping")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyPermitDetailsRpcWriteActionShouldAllowProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/permitDetailsRPC")
+                .param("actionMapping", "updateShipping")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyPermitDetailsAddShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/permitDetails")
+                .param("actionMapping", "add")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyPermitDetailsAddShouldAllowProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/permitDetails")
+                .param("actionMapping", "add")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyExemptionDetailsCreateShouldAllowExemptionApproverRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/exemptionDetails")
+                .param("actionMapping", "create")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void applicationReviewSearchShouldRejectIndustryRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/application-reviews/search")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void applicationReviewApproveShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/application-reviews/1000123/approve")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void applicationReviewApproveShouldRejectLegacyApproverAlias() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/application-reviews/1000123/approve")
+                .with(jwt().authorities(new SimpleGrantedAuthority("APPLICATION_APPROVER"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyAgentAdminShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/lexisAgentAdmin.do")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyAgentAdminShouldAllowAdminRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/lexisAgentAdmin.do")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
+  void legacyPolicyAdminRpcShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/lexisPolicyAdminRPC")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyPolicyAdminRpcShouldAllowAdminRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/lexisPolicyAdminRPC")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
+  void legacyFilAdminRpcShouldAllowAdminRoleForDoRoute() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/lexisFILAdminRPC.do")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
+  void sessionWelcomeShouldUseTokenAuthoritiesForRoleResolution() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/welcome")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void sessionCanPerformActionShouldEvaluateTokenAuthorities() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "/summary")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(true));
+  }
+
+  @Test
+  void sessionCanPerformActionShouldAllowCreateExemptionForProvincialSubmitter() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "/createExemption")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(true));
+  }
+
+  @Test
+  void sessionCanPerformActionShouldRejectCreateExemptionForReadOnly() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "/createExemption")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(false));
+  }
+
+  @Test
+  void sessionCanPerformActionShouldAllowApproveExemptionForExemptionApprover() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "approveExemption")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(true));
+  }
+
+  @Test
+  void legacySummaryRouteShouldAllowPostForIndustryRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/summary")
+                .param("actionMapping", "getApplications")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyReportRouteShouldRejectAnonymousRequests() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/lexis/offerReport")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyReportRouteShouldAllowAdminRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/offerReport")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV")
+                .param("fromDate", "2026-01-01")
+                .param("toDate", "2026-01-31")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void legacyReportRouteShouldAllowViewWithAdminRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/offerReport.do")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyReportRouteShouldAllowReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/offerReport")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV")
+                .param("fromDate", "2026-01-01")
+                .param("toDate", "2026-01-31")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void legacyOfferReportShouldRejectProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/offerReport")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV")
+                .param("fromDate", "2026-01-01")
+                .param("toDate", "2026-01-31")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyBiweeklyListingShouldAllowProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/biweeklyListing")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV")
+                .param("fromDate", "2026-01-01")
+                .param("toDate", "2026-01-31")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isOk());
+  }
+}

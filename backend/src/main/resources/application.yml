@@ -1,0 +1,153 @@
+spring:
+  application:
+    name: lexis-backend
+  # Keep bootstrap runnable before Oracle config is introduced.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AWS_COGNITO_ISSUER_URI:}
+          jwk-set-uri: ${AWS_COGNITO_JWK_SET_URI:${AWS_COGNITO_ISSUER_URI:}/.well-known/jwks.json}
+
+server:
+  port: 8080
+  forward-headers-strategy: framework
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+lexis:
+  auth:
+    cognito:
+      enabled: ${LEXIS_COGNITO_ENABLED:false}
+      enforce-route-auth: ${LEXIS_ENFORCE_ROUTE_AUTH:false}
+    # Mirrors legacy WebADE "industry-roles" behaviour with renamed submitter roles.
+    industry-roles: "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER"
+  authz:
+    # Temporary parity scaffold:
+    # role names should match FAM roles exactly, and actions should match legacy canPerformAction/grantedAction keys.
+    # Replace with finalized matrix as modernization proceeds.
+    role-actions:
+      LEXIS_ADMIN: ["*"]
+      LEXIS_READ_ONLY:
+        - "/applicationSearch"
+        - "/applicationDetails"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "/permitSearch"
+        - "/permitDetails"
+        - "/indianReservePermitSearch"
+        - "/indianReservePermitDetails"
+        - "mofrListing"
+        - "/applicationReport"
+        - "/offerReport"
+        - "/teacReport"
+        - "/exemptionReport"
+        - "/permitReport"
+        - "/permitLedgerReport"
+        - "/transportReport"
+        - "/speciesGradeReport"
+        - "/feeReport"
+        - "/tenureReport"
+        - "/approvedExemptionReport"
+        - "viewFederalApplication"
+        - "viewOICApplication"
+      LEXIS_APPLICATION_APPROVER:
+        - "/applicationsReview"
+        - "/createExemption"
+        - "/applicationSearch"
+        - "/applicationDetails"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "/permitSearch"
+        - "/permitDetails"
+        - "/indianReservePermitSearch"
+        - "/indianReservePermitDetails"
+        - "approveExemption"
+        - "createApplication"
+        - "createOffer"
+        - "createPermit"
+        - "mofrListing"
+        - "saveExemption"
+        - "/applicationReport"
+        - "/offerReport"
+        - "/teacReport"
+        - "/exemptionReport"
+        - "/permitReport"
+        - "/permitLedgerReport"
+        - "/transportReport"
+        - "/speciesGradeReport"
+        - "/feeReport"
+        - "/tenureReport"
+        - "/approvedExemptionReport"
+        - "savePermit"
+        - "viewFederalApplication"
+        - "viewOICApplication"
+      LEXIS_EXEMPTION_APPROVER:
+        - "/createExemption"
+        - "/exemptionSearch"
+        - "/exemptionDetails"
+        - "/applicationSearch"
+        - "/applicationDetails"
+        - "/applicationsReview"
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "/permitSearch"
+        - "/permitDetails"
+        - "/indianReservePermitSearch"
+        - "/indianReservePermitDetails"
+        - "approveExemption"
+        - "createPermit"
+        - "mofrListing"
+        - "saveExemption"
+        - "/applicationReport"
+        - "/offerReport"
+        - "/teacReport"
+        - "/exemptionReport"
+        - "/permitReport"
+        - "/permitLedgerReport"
+        - "/transportReport"
+        - "/speciesGradeReport"
+        - "/feeReport"
+        - "/tenureReport"
+        - "/approvedExemptionReport"
+        - "savePermit"
+        - "viewFederalApplication"
+        - "viewOICApplication"
+      LEXIS_PROVINCIAL_SUBMITTER:
+        - "/createExemption"
+        - "createApplication"
+        - "createOffer"
+        - "createPermit"
+        - "industryListing"
+        - "mofrListing"
+        - "saveExemption"
+        - "savePermit"
+        - "/summary"
+        - "/exemptionSearch"
+        - "/applicationSearch"
+        - "/applicationDetails"
+        - "/offersSearch"
+        - "/offerDetails"
+        - "/permitSearch"
+        - "/permitDetails"
+      LEXIS_FEDERAL_SUBMITTER:
+        - "industryListing"
+        - "mofrListing"
+        - "/summary"
+        - "/exemptionSearch"
+        - "/applicationSearch"
+        - "/applicationDetails"
+        - "/offersSearch"
+        - "/offerDetails"

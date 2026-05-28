@@ -13,3 +13,40 @@ KSV021
 # OpenShift restricted SCC forbids seccomp: "seccomp may not be set".
 KSV030
 KSV104
+
+# KSV0013: "Image tag ':latest' used" false-positive on templated image refs.
+# backend/openshift/deployment.yaml uses env-substituted image refs and
+# backend/openshift.deploy.yml enforces REGISTRY:IMAGE_TAG. The deployment
+# pipeline sets IMAGE_TAG per build (PR number/test/prod), so runtime images
+# are always tagged explicitly.
+KSV0013
+KSV-0013
+
+# CVE-2025-10492: JasperReports Java deserialization issue.
+#
+# Severity: HIGH. Fixed upstream in JR 7.0.4, but JR 7.x currently breaks this
+# codebase's legacy JRXML compilation path ("Unable to load report"), including
+# OracleLegacyJasperTableReportServiceTest.
+#
+# Scope/risk in this service:
+#   - We compile JRXML files bundled in src/main/resources only.
+#   - We do not load attacker-controlled .jasper binaries.
+#   - No user upload path feeds Jasper binary deserialization.
+#
+# Re-evaluate when Jasper 7.x supports our legacy templates without breaking
+# report parity.
+CVE-2025-10492
+
+# CVE-2026-3260: Undertow Denial of Service via premature multipart/form-data
+# parsing on GET requests.
+#
+# Severity: MEDIUM. Backend intentionally uses Undertow to align with nr-rept.
+# The only fixed Undertow release currently available is 2.4.0.Beta1.
+#
+# Current mitigations:
+#   - Request body limits are enforced upstream.
+#   - /api surface is Cognito/JWT protected.
+#   - Pod memory limits bound blast radius to pod restart.
+#
+# Re-evaluate when a stable Undertow fix lands in a non-beta release.
+CVE-2026-3260

@@ -1,0 +1,1034 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="LEXIS_biweekly.rpt" pageWidth="612" pageHeight="792" whenNoDataType="AllSectionsNoDetail" columnWidth="504" leftMargin="54" rightMargin="54" topMargin="54" bottomMargin="54" isSummaryNewPage="true" uuid="501d2437-fe70-4cf3-be1a-5fe3411ebfd1">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<property name="ireport.jasperserver.reportUnit" value="/JCRS/LEXIS/Reports/LEXIS/LEXIS_biweekly.rpt"/>
+	<property name="ireport.jasperserver.url" value="http://10.10.30.118:8080/jasperserver/services/repository"/>
+	<parameter name="P_ORG_UNIT" class="java.lang.String"/>
+	<parameter name="P_JURISDICTION" class="java.lang.String"/>
+	<parameter name="P_FROM_DATE" class="java.lang.String"/>
+	<parameter name="P_TO_DATE" class="java.lang.String"/>
+	<parameter name="ORACLE_REF_CURSOR" class="java.sql.ResultSet" isForPrompting="false"/>
+	<parameter name="LoggedInUser" class="com.jaspersoft.jasperserver.api.metadata.user.domain.User" isForPrompting="false"/>
+	<parameter name="p_report_id" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["LEXIS_biweekly.rpt"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? "repo:" : "\\"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_EXT" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? ".jrxml" : ".jasper"]]></defaultValueExpression>
+	</parameter>
+	<queryString language="plsql">
+		<![CDATA[{call LEXIS_REPORTING.BIWEEKLY_RPT(
+P_BIWEEKLY => $P{ORACLE_REF_CURSOR},
+P_ORG_UNIT => $P{P_ORG_UNIT},
+P_JURISDICTION => $P{P_JURISDICTION},
+P_FROM_DATE => $P{P_FROM_DATE},
+P_TO_DATE => $P{P_TO_DATE}
+)}]]>
+	</queryString>
+	<field name="EXPORT_JURISDICTION_CODE" class="java.lang.String"/>
+	<field name="JURISDICTION_CODE" class="java.lang.String"/>
+	<field name="APPLICATION_NUMBER" class="java.math.BigDecimal"/>
+	<field name="FED_APPLICATION_NUMBER" class="java.math.BigDecimal"/>
+	<field name="EXPORT_APPLICATION_STATUS_CODE" class="java.lang.String"/>
+	<field name="APPLICATION_STATUS" class="java.lang.String"/>
+	<field name="AGENT_CLIENT_NUMBER" class="java.lang.String"/>
+	<field name="AGENT_CLIENT_LOCATION_CODE" class="java.lang.String"/>
+	<field name="AGENT_CONTACT_NAME" class="java.lang.String"/>
+	<field name="OWNER_CLIENT_NUMBER" class="java.lang.String"/>
+	<field name="OWNER_CLIENT_LOCATION_CODE" class="java.lang.String"/>
+	<field name="OWNER_CONTACT_NAME" class="java.lang.String"/>
+	<field name="SPECIES_ENDUSE" class="java.lang.String"/>
+	<field name="PRODUCT_LOCATION" class="java.lang.String"/>
+	<field name="EXPORT_PRODUCT_TYPE_CODE" class="java.lang.String"/>
+	<field name="PRODUCT_TYPE" class="java.lang.String"/>
+	<field name="EXEMPTION_APPLICATION_VOLUME" class="java.math.BigDecimal"/>
+	<field name="AVERAGE_LOG_VOLUME" class="java.math.BigDecimal"/>
+	<field name="ORG_UNIT_NO" class="java.math.BigDecimal"/>
+	<field name="ORG_UNIT" class="java.lang.String"/>
+	<field name="ADVERTISING_DATE" class="java.sql.Timestamp"/>
+	<field name="CLIENT_NAME" class="java.lang.String"/>
+	<field name="CLIENT_TYPE_CODE" class="java.lang.String"/>
+	<field name="ADDRESS_1" class="java.lang.String"/>
+	<field name="ADDRESS_2" class="java.lang.String"/>
+	<field name="ADDRESS_3" class="java.lang.String"/>
+	<field name="CITY" class="java.lang.String"/>
+	<field name="PROVINCE" class="java.lang.String"/>
+	<field name="POSTAL_CODE" class="java.lang.String"/>
+	<field name="BUSINESS_PHONE" class="java.lang.String"/>
+	<field name="HOME_PHONE" class="java.lang.String"/>
+	<field name="FAX_NUMBER" class="java.lang.String"/>
+	<field name="EMAIL_ADDRESS" class="java.lang.String"/>
+	<field name="AGENT_CLIENT_NAME" class="java.lang.String"/>
+	<field name="AGENT_ADDRESS_1" class="java.lang.String"/>
+	<field name="AGENT_ADDRESS_2" class="java.lang.String"/>
+	<field name="AGENT_ADDRESS_3" class="java.lang.String"/>
+	<field name="AGENT_CITY" class="java.lang.String"/>
+	<field name="AGENT_PROV" class="java.lang.String"/>
+	<field name="AGENT_POSTAL" class="java.lang.String"/>
+	<field name="AGENT_BUS_PHONE" class="java.lang.String"/>
+	<field name="AGENT_HOME_PHONE" class="java.lang.String"/>
+	<field name="AGENT_FAX" class="java.lang.String"/>
+	<field name="AGENT_EMAIL" class="java.lang.String"/>
+	<variable name="CCF2_OWNER_TXT" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA["Owner :"]]></variableExpression>
+	</variable>
+	<variable name="CCF3_AGENT_TXT" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA["Agent :"]]></variableExpression>
+	</variable>
+	<variable name="CCF4_CLIENT_NAME" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.CLIENT_NAME}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.CLIENT_NAME}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.CLIENT_NAME} & chr(13)
+
+$F{CLIENT_NAME}==null || $F{CLIENT_NAME}.isEmpty() || ($F{CLIENT_NAME}.trim()).isEmpty()
+?   ""
+:   $F{CLIENT_NAME} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF6_CLIENT_ADDRESS_1" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.ADDRESS_1}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.ADDRESS_1}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.ADDRESS_1} & chr(13)
+
+$F{ADDRESS_1} == null || $F{ADDRESS_1}.isEmpty() || ($F{ADDRESS_1}.trim()).isEmpty()
+?   ""
+:   $F{ADDRESS_1} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF7_CLIENT_ADDRESS_2" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.ADDRESS_2}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.ADDRESS_2}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.ADDRESS_2} & chr(13)
+
+$F{ADDRESS_2} == null || $F{ADDRESS_2}.isEmpty() || ($F{ADDRESS_2}.trim()).isEmpty()
+?   ""
+:   $F{ADDRESS_2} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF8_CLIENT_ADDRESS_3" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.ADDRESS_3}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.ADDRESS_3}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.ADDRESS_3} & chr(13)
+
+$F{ADDRESS_3} == null || $F{ADDRESS_3}.isEmpty() || ($F{ADDRESS_3}.trim()).isEmpty()
+?   ""
+:   $F{ADDRESS_3} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF9_CLIENT_CITY" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.CITY}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.CITY}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.CITY}
+
+$F{CITY} == null || $F{CITY}.isEmpty() || ($F{CITY}.trim()).isEmpty()
+?   ""
+:   $F{CITY}]]></variableExpression>
+	</variable>
+	<variable name="CCF10_CLIENT_PROVINCE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.PROVINCE}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.PROVINCE}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.PROVINCE} & chr(13)
+
+$F{PROVINCE} == null || $F{PROVINCE}.isEmpty() || ($F{PROVINCE}.trim()).isEmpty()
+?   ""
+:   $F{PROVINCE} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF11_CLIENT_POSTAL_CODE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.POSTAL_CODE}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.POSTAL_CODE}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.POSTAL_CODE} & chr(13)
+
+$F{POSTAL_CODE} == null || $F{POSTAL_CODE}.isEmpty() || ($F{POSTAL_CODE}.trim()).isEmpty()
+?   ""
+:   $F{POSTAL_CODE} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF12_REGION_SUMMARY" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//GetRegionName({?P_ORG_UNIT})
+//Function (StringVar P_ORG_UNIT)
+//Local StringVar org_unit_name := "";
+//Local NumberVar counter := 0;
+//if (P_ORG_UNIT LIKE "*1903*") then ( org_unit_name := org_unit_name & ", RCB";
+//    counter := counter + 1; );
+//if (P_ORG_UNIT LIKE "*1904*") then(     org_unit_name := org_unit_name & ", RKB";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1905*") then(    org_unit_name := org_unit_name & ", RNO";
+//    counter := counter + 1; );
+//if (P_ORG_UNIT LIKE "*1906*") then(    org_unit_name := org_unit_name & ", ROM";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1907*") then(    org_unit_name := org_unit_name & ", RTO";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1908*") then(    org_unit_name := org_unit_name & ", RSK";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1909*") then(    org_unit_name := org_unit_name & ", RSC";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1910*") then(    org_unit_name := org_unit_name & ", RWC";
+//    counter := counter + 1;);
+//if Len(org_unit_name) > 0 then
+//(  if counter = 8 then
+//        "All"
+//  else
+//      Right(org_unit_name, len(org_unit_name) - 2)
+//)else
+//    org_unit_name;
+
+( $P{P_ORG_UNIT} == null ? "" :
+  ( $P{P_ORG_UNIT}.contains( "1903" )&& $P{P_ORG_UNIT}.contains( "1904" ) && $P{P_ORG_UNIT}.contains( "1905" ) && $P{P_ORG_UNIT}.contains( "1906" ) &&
+    $P{P_ORG_UNIT}.contains( "1907" )&& $P{P_ORG_UNIT}.contains( "1908" ) && $P{P_ORG_UNIT}.contains( "1909" ) && $P{P_ORG_UNIT}.contains( "1910" )
+    ?   "All"
+    :   org.apache.commons.lang.StringUtils.chomp(
+            (
+                ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1903" ) ? "RCB, " : "" ) +
+                ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1904" ) ? "RKB, " : "" ) +
+                ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1905" ) ? "RNO, " : "" ) +
+                ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1906" ) ? "ROM, " : "" ) +
+                ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1907" ) ? "RTO, " : "" ) +
+                ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1908" ) ? "RSK, " : "" ) +
+                ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1909" ) ? "RSC, " : "" ) +
+                ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1910" ) ? "RWC, " : "" )
+            ), ", "
+        )
+  )
+)]]></variableExpression>
+	</variable>
+	<variable name="CCF13_CLIENT_PHONE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.BUSINESS_PHONE}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.BUSINESS_PHONE}) = '') THEN
+//''
+//ELSE
+//"Bus. Phone: " & {BIWEEKLY_RPT.BUSINESS_PHONE} & chr(13)
+
+$F{BUSINESS_PHONE} == null || $F{BUSINESS_PHONE}.isEmpty() || ($F{BUSINESS_PHONE}.trim()).isEmpty()
+?   ""
+:   "Bus. Phone: " + $F{BUSINESS_PHONE} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF14_CLIENT_FAX" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.FAX_NUMBER}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.FAX_NUMBER}) = '') THEN
+//''
+//ELSE
+//"Fax: " & {BIWEEKLY_RPT.FAX_NUMBER} & chr(13)
+
+$F{FAX_NUMBER} == null || $F{FAX_NUMBER}.isEmpty() || ($F{FAX_NUMBER}.trim()).isEmpty()
+?   ""
+:   "Fax: " + $F{FAX_NUMBER} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF15_CLIENT_EMAIL" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.EMAIL_ADDRESS}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.EMAIL_ADDRESS}) = '') THEN
+//''
+//ELSE
+//"Email: " & {BIWEEKLY_RPT.EMAIL_ADDRESS} & chr(13)
+
+$F{EMAIL_ADDRESS} == null || $F{EMAIL_ADDRESS}.isEmpty() || ($F{EMAIL_ADDRESS}.trim()).isEmpty()
+?   ""
+:   "Email: " + $F{EMAIL_ADDRESS} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF16_CLIENT_HOME_PHONE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.HOME_PHONE}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.HOME_PHONE}) = '') THEN
+//''
+//ELSE
+//"Home Phone: " & {BIWEEKLY_RPT.HOME_PHONE} & chr(13)
+
+$F{HOME_PHONE} == null || $F{HOME_PHONE}.isEmpty() || ($F{HOME_PHONE}.trim()).isEmpty()
+?   ""
+:   "Home Phone: " + $F{HOME_PHONE} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF17_CLIENT_CONTACT_NAME" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.OWNER_CONTACT_NAME}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.OWNER_CONTACT_NAME}) = '') THEN
+//''
+//ELSE
+//"Contact: " & {BIWEEKLY_RPT.OWNER_CONTACT_NAME} & chr(13)
+
+$F{OWNER_CONTACT_NAME} == null || $F{OWNER_CONTACT_NAME}.isEmpty() || ($F{OWNER_CONTACT_NAME}.trim()).isEmpty()
+?   ""
+:   "Contact: " + $F{OWNER_CONTACT_NAME} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF5_CLIENT_RPT_ADDRESS" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//{@CLIENT_NAME} &
+//{@CLIENT_ADDRESS_1} &
+//@CLIENT_ADDRESS_2} &
+//{@CLIENT_ADDRESS_3} &
+//{@CLIENT_CITY} & ", " & {@CLIENT_PROVINCE} &
+//{@CLIENT_POSTAL_CODE} &
+//Chr(13) &
+//{@CLIENT_CONTACT_NAME} &
+//{@CLIENT_HOME_PHONE} &
+//{@CLIENT_PHONE} &
+//{@CLIENT_FAX} &
+//{@CLIENT_EMAIL}
+
+$V{CCF4_CLIENT_NAME} +
+$V{CCF6_CLIENT_ADDRESS_1} +
+$V{CCF7_CLIENT_ADDRESS_2} +
+$V{CCF8_CLIENT_ADDRESS_3} +
+$V{CCF9_CLIENT_CITY} + ", " + $V{CCF10_CLIENT_PROVINCE} +
+$V{CCF11_CLIENT_POSTAL_CODE} +
+System.getProperty("line.separator") +
+$V{CCF17_CLIENT_CONTACT_NAME}+
+$V{CCF16_CLIENT_HOME_PHONE} +
+$V{CCF13_CLIENT_PHONE} +
+$V{CCF14_CLIENT_FAX} +
+$V{CCF15_CLIENT_EMAIL}]]></variableExpression>
+	</variable>
+	<variable name="CCF18_JURIS_CODE_SUMMARY" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({?P_JURISDICTION}) THEN
+//"All"
+//ELSE
+//IF ({?P_JURISDICTION} = "P") THEN
+//"Provincial"
+//ELSE
+//IF ({?P_JURISDICTION} = "F") THEN
+//"Federal"
+//ELSE
+//"All"
+
+$P{P_JURISDICTION} == null || $P{P_JURISDICTION}.isEmpty()
+?   "All"
+:   $P{P_JURISDICTION}.equalsIgnoreCase( "P" )
+    ?   "Provincial"
+    :   $P{P_JURISDICTION}.equalsIgnoreCase( "F" )
+        ?   "Federal"
+        :   "All"]]></variableExpression>
+	</variable>
+	<variable name="CCF19_AGENT_CONTACT_NAME" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_CONTACT_NAME}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_CONTACT_NAME}) = '') THEN
+//''
+//ELSE
+//'Contact: ' & {BIWEEKLY_RPT.AGENT_CONTACT_NAME} & chr(13)
+
+$F{AGENT_CONTACT_NAME} == null || $F{AGENT_CONTACT_NAME}.isEmpty() || ($F{AGENT_CONTACT_NAME}.trim()).isEmpty()
+?   ""
+:   "Contact: " + $F{AGENT_CONTACT_NAME} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF20_AGENT_CLIENT_NAME" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_CLIENT_NAME}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_CLIENT_NAME}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.AGENT_CLIENT_NAME} & chr(13)
+
+$F{AGENT_CLIENT_NAME} == null || $F{AGENT_CLIENT_NAME}.isEmpty() || ($F{AGENT_CLIENT_NAME}.trim()).isEmpty()
+?   ""
+:   $F{AGENT_CLIENT_NAME} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF21_AGENT_ADDRESS_1" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_ADDRESS_1}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_ADDRESS_1}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.AGENT_ADDRESS_1} & chr(13)
+
+$F{AGENT_ADDRESS_1} == null || $F{AGENT_ADDRESS_1}.isEmpty() || ($F{AGENT_ADDRESS_1}.trim()).isEmpty()
+?   ""
+:   $F{AGENT_ADDRESS_1} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF22_AGENT_ADDRESS_2" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_ADDRESS_2}) THEN
+//'
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_ADDRESS_2}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.AGENT_ADDRESS_2} & chr(13)
+
+$F{AGENT_ADDRESS_2} == null || $F{AGENT_ADDRESS_2}.isEmpty() || ($F{AGENT_ADDRESS_2}.trim()).isEmpty()
+?   ""
+:   $F{AGENT_ADDRESS_2} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF23_AGENT_ADDRESS_3" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_ADDRESS_3}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_ADDRESS_3}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.AGENT_ADDRESS_3} & chr(13)
+
+$F{AGENT_ADDRESS_3} == null || $F{AGENT_ADDRESS_3}.isEmpty() || ($F{AGENT_ADDRESS_3}.trim()).isEmpty()
+?   ""
+:   $F{AGENT_ADDRESS_3} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF24_AGENT_CITY" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_CITY}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_CITY}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.AGENT_CITY}
+
+$F{AGENT_CITY} == null || $F{AGENT_CITY}.isEmpty() || ($F{AGENT_CITY}.trim()).isEmpty()
+?   ""
+:   $F{AGENT_CITY}]]></variableExpression>
+	</variable>
+	<variable name="CCF25_AGENT_PROVINCE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_PROV}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_PROV}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.AGENT_PROV} & chr(13)
+
+$F{AGENT_PROV} == null || $F{AGENT_PROV}.isEmpty() || ($F{AGENT_PROV}.trim()).isEmpty()
+?   ""
+:   $F{AGENT_PROV} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF26_AGENT_POSTAL" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_POSTAL}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_POSTAL}) = '') THEN
+//''
+//ELSE
+//{BIWEEKLY_RPT.AGENT_POSTAL} & chr(13)
+
+$F{AGENT_POSTAL} == null || $F{AGENT_POSTAL}.isEmpty() || ($F{AGENT_POSTAL}.trim()).isEmpty()
+?   ""
+:   $F{AGENT_POSTAL} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF27_AGENT_HOME_PHONE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_HOME_PHONE}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_HOME_PHONE}) = '') THEN
+//''
+//ELSE
+//"Home Phone: " & {BIWEEKLY_RPT.AGENT_HOME_PHONE} & chr(13)
+
+$F{AGENT_HOME_PHONE} == null || $F{AGENT_HOME_PHONE}.isEmpty() || ($F{AGENT_HOME_PHONE}.trim()).isEmpty()
+?   ""
+:   "Home Phone: " + $F{AGENT_HOME_PHONE} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF28_AGENT_BUS_PHONE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_BUS_PHONE}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_BUS_PHONE}) = '') THEN
+//''
+//ELSE
+//"Bus. Phone: " & {BIWEEKLY_RPT.AGENT_BUS_PHONE} & chr(13)
+
+$F{AGENT_BUS_PHONE} == null || $F{AGENT_BUS_PHONE}.isEmpty() || ($F{AGENT_BUS_PHONE}.trim()).isEmpty()
+?   ""
+:   "Bus. Phone: " + $F{AGENT_BUS_PHONE} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF29_AGENT_FAX" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_FAX}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_FAX}) = '') THEN
+//''
+//ELSE
+//"Fax: " & {BIWEEKLY_RPT.AGENT_FAX} & chr(13)
+
+$F{AGENT_FAX} == null || $F{AGENT_FAX}.isEmpty() || ($F{AGENT_FAX}.trim()).isEmpty()
+?   ""
+:   "Fax: " + $F{AGENT_FAX} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF31_AGENT_EMAIL" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//IF ISNULL ({BIWEEKLY_RPT.AGENT_EMAIL}) THEN
+//''
+//ELSE
+//IF (Trim({BIWEEKLY_RPT.AGENT_EMAIL}) = '') THEN
+//''
+//ELSE
+//"Email: " & {BIWEEKLY_RPT.AGENT_EMAIL} & chr(13)
+
+$F{AGENT_EMAIL} == null || $F{AGENT_EMAIL}.isEmpty() || ($F{AGENT_EMAIL}.trim()).isEmpty()
+?   ""
+:   "Email: " + $F{AGENT_EMAIL} + System.getProperty("line.separator")]]></variableExpression>
+	</variable>
+	<variable name="CCF30_AGENT_RPT_ADDRESS" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//{@AGENT_CLIENT_NAME} &
+//{@AGENT_ADDRESS_1} &
+//{@AGENT_ADDRESS_2} &
+//{@AGENT_ADDRESS_3} &
+//{@AGENT_CITY} & ", " & {@AGENT_PROVINCE} &
+//{@AGENT_POSTAL} &
+//Chr(13) &
+//@AGENT_CONTACT_NAME} &
+//{@AGENT_HOME_PHONE} &
+//{@AGENT_BUS_PHONE} &
+//{@AGENT_FAX} &
+//{@AGENT_EMAIL}
+
+$V{CCF20_AGENT_CLIENT_NAME} +
+$V{CCF21_AGENT_ADDRESS_1} +
+$V{CCF22_AGENT_ADDRESS_2} +
+$V{CCF23_AGENT_ADDRESS_3} +
+$V{CCF24_AGENT_CITY} + ", " + $V{CCF25_AGENT_PROVINCE} +
+$V{CCF26_AGENT_POSTAL} +
+System.getProperty("line.separator") +
+$V{CCF19_AGENT_CONTACT_NAME} +
+$V{CCF27_AGENT_HOME_PHONE} +
+$V{CCF28_AGENT_BUS_PHONE} +
+$V{CCF29_AGENT_FAX} +
+$V{CCF31_AGENT_EMAIL}]]></variableExpression>
+	</variable>
+	<variable name="CCF32_F_APPLICATION_NUMBER" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if ({BIWEEKLY_RPT.EXPORT_JURISDICTION_CODE} = "F") Then
+//    {BIWEEKLY_RPT.EXPORT_JURISDICTION_CODE} + ToText({BIWEEKLY_RPT.FED_APPLICATION_NUMBER}, 0, "")
+//else if ({BIWEEKLY_RPT.EXPORT_JURISDICTION_CODE} = "P") Then
+//    {BIWEEKLY_RPT.EXPORT_JURISDICTION_CODE} + ToText({BIWEEKLY_RPT.APPLICATION_NUMBER}, 0, "")
+//else
+//""
+
+$F{EXPORT_JURISDICTION_CODE} == null || $F{EXPORT_JURISDICTION_CODE}.isEmpty()
+?   ""
+:   $F{EXPORT_JURISDICTION_CODE}.equalsIgnoreCase( "F" )
+    ?   $F{EXPORT_JURISDICTION_CODE} + ( $F{FED_APPLICATION_NUMBER} == null ? "" : new DecimalFormat("###0").format( $F{FED_APPLICATION_NUMBER} ) )
+    :   $F{EXPORT_JURISDICTION_CODE}.equalsIgnoreCase( "P" )
+        ?   $F{EXPORT_JURISDICTION_CODE} + ( $F{APPLICATION_NUMBER} == null ? "" : new DecimalFormat("###0").format( $F{APPLICATION_NUMBER} ) )
+        :   ""]]></variableExpression>
+	</variable>
+	<group name="Group 0">
+		<groupExpression><![CDATA[$F{ADVERTISING_DATE}]]></groupExpression>
+		<groupHeader>
+			<band height="12" splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+				<textField isStretchWithOverflow="true" pattern="yyyy-MM-dd HH.mm.ss" isBlankWhenNull="true">
+					<reportElement uuid="8a860e2c-9a74-4803-bf65-bcf29671486b" x="0" y="0" width="128" height="12" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{ADVERTISING_DATE}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+	</group>
+	<group name="Group 1">
+		<groupExpression><![CDATA[$F{ORG_UNIT}]]></groupExpression>
+		<groupHeader>
+			<band height="13" splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="861cbdb9-7982-43f9-82c6-b79a7b8451fe" x="0" y="0" width="128" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{ORG_UNIT}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+	</group>
+	<group name="Group 2" isStartNewPage="true">
+		<groupExpression><![CDATA[$F{OWNER_CLIENT_NUMBER}]]></groupExpression>
+		<groupHeader>
+			<band height="16" splitType="Prevent">
+				<printWhenExpression><![CDATA[//@NOT [if isnull({BIWEEKLY_RPT.AGENT_CLIENT_NUMBER}) then
+//false
+//else
+//if (Trim({BIWEEKLY_RPT.AGENT_CLIENT_NUMBER}) = '') then
+//false
+//else
+//true]@
+
+($F{AGENT_CLIENT_NUMBER} == null) || (($F{AGENT_CLIENT_NUMBER}.trim()).isEmpty())]]></printWhenExpression>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="21c5bad3-eb2f-43c3-8401-33f1b3cf51fe" x="54" y="1" width="420" height="15" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{CCF5_CLIENT_RPT_ADDRESS}]]></textFieldExpression>
+				</textField>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="2f280898-bcf5-4cc8-a191-aeb533fb7ae6" x="4" y="0" width="44" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{CCF2_OWNER_TXT}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+	</group>
+	<group name="Group 3" isStartNewPage="true">
+		<groupExpression><![CDATA[$F{AGENT_CLIENT_NUMBER}]]></groupExpression>
+		<groupHeader>
+			<band height="16" splitType="Prevent">
+				<printWhenExpression><![CDATA[//@NOT [if isnull({BIWEEKLY_RPT.AGENT_CLIENT_NUMBER}) then
+//true
+//else
+//if (Trim({BIWEEKLY_RPT.AGENT_CLIENT_NUMBER}) = '') then
+//true
+//else
+//false]@
+
+$F{AGENT_CLIENT_NUMBER} != null && !(($F{AGENT_CLIENT_NUMBER}.trim()).isEmpty())]]></printWhenExpression>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="2e6b2681-c7a6-4751-b930-724852cba130" x="54" y="1" width="420" height="15" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{CCF5_CLIENT_RPT_ADDRESS}]]></textFieldExpression>
+				</textField>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="6ee15d65-0c0d-49c9-9963-419474457696" x="5" y="1" width="44" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{CCF2_OWNER_TXT}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+	</group>
+	<group name="Group 4">
+		<groupExpression><![CDATA[$F{AGENT_CLIENT_NUMBER}]]></groupExpression>
+		<groupHeader>
+			<band height="13" splitType="Prevent">
+				<printWhenExpression><![CDATA[//@NOT [if isnull({BIWEEKLY_RPT.AGENT_CLIENT_NUMBER}) then
+//true
+//else
+//if (Trim({BIWEEKLY_RPT.AGENT_CLIENT_NUMBER}) = '') then
+//true
+//else
+//false]@
+
+$F{AGENT_CLIENT_NUMBER} != null && !(($F{AGENT_CLIENT_NUMBER}.trim()).isEmpty())]]></printWhenExpression>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="5dcdc1c7-1406-4c44-80e3-939ee8769fc9" x="54" y="0" width="419" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{CCF30_AGENT_RPT_ADDRESS}]]></textFieldExpression>
+				</textField>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="f69d5182-9ae0-42a0-ae9a-f4867ec7f877" x="5" y="0" width="48" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{CCF3_AGENT_TXT}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+	</group>
+	<group name="Group 5">
+		<groupExpression><![CDATA[$F{APPLICATION_NUMBER}]]></groupExpression>
+		<groupHeader>
+			<band height="76" splitType="Prevent">
+				<line>
+					<reportElement uuid="c0f0165e-5cb4-4799-b12a-d3b3978d4936" x="6" y="3" width="459" height="1"/>
+					<graphicElement>
+						<pen lineStyle="Solid"/>
+					</graphicElement>
+				</line>
+				<staticText>
+					<reportElement uuid="d61676a2-d7b7-4e47-8099-91666c2eb52e" x="8" y="9" width="95" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Application:]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="8a865c31-f266-4c16-97b9-ae7895529eed" x="8" y="24" width="78" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Product Type:  ]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="304fb840-efdd-4cc2-8b8c-d1bd9e24579d" x="8" y="37" width="78" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Location:]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="218a47ba-4d0c-473a-af4d-5e6cc75fbc3d" positionType="Float" x="8" y="52" width="132" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Application Volume (m3):]]></text>
+				</staticText>
+				<staticText>
+					<reportElement uuid="2e749a0c-97a7-4d1e-a547-e187cc37a63a" positionType="Float" x="8" y="63" width="132" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Average Log Volume (m3):]]></text>
+				</staticText>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="1790c5a5-c283-439c-930c-56b046e071be" x="141" y="9" width="100" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{CCF32_F_APPLICATION_NUMBER}]]></textFieldExpression>
+				</textField>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="5780e875-ae90-4d51-9ed7-58e385c68fa9" x="246" y="9" width="192" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{SPECIES_ENDUSE}]]></textFieldExpression>
+				</textField>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="5fe620e4-0b7e-4d22-b2ef-ab6074fa36be" x="141" y="24" width="325" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{PRODUCT_TYPE}]]></textFieldExpression>
+				</textField>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+					<reportElement uuid="0cec7862-16d7-4800-8a92-17543037305f" x="141" y="37" width="326" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{PRODUCT_LOCATION}]]></textFieldExpression>
+				</textField>
+				<textField isStretchWithOverflow="true" pattern="#,##0.0;-#,##0.0" isBlankWhenNull="true">
+					<reportElement uuid="072028b1-9ac1-47ac-a05d-228f6686a387" positionType="Float" x="141" y="52" width="78" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{EXEMPTION_APPLICATION_VOLUME}]]></textFieldExpression>
+				</textField>
+				<textField isStretchWithOverflow="true" pattern="#,##0.0;-#,##0.0" isBlankWhenNull="true">
+					<reportElement uuid="c27e2a9a-e534-413e-a1ac-57fbfac38db8" positionType="Float" x="141" y="63" width="78" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{AVERAGE_LOG_VOLUME}]]></textFieldExpression>
+				</textField>
+				<textField>
+					<reportElement uuid="55c11eb6-4e9e-4a1b-8404-8a5ba2cdd67b" positionType="Float" x="367" y="56" width="100" height="20">
+						<printWhenExpression><![CDATA[false]]></printWhenExpression>
+					</reportElement>
+					<textElement/>
+					<textFieldExpression><![CDATA[$F{AGENT_CLIENT_NUMBER}]]></textFieldExpression>
+				</textField>
+				<staticText>
+					<reportElement uuid="4b2d2dbc-495a-4a3b-a6c5-c25af7f21c52" positionType="Float" x="268" y="56" width="91" height="14" forecolor="#000000">
+						<printWhenExpression><![CDATA[false]]></printWhenExpression>
+					</reportElement>
+					<textElement textAlignment="Left">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[Agent Client #]]></text>
+				</staticText>
+				<line>
+					<reportElement uuid="c0f0165e-5cb4-4799-b12a-d3b3978d4936" positionType="Float" x="14" y="51" width="459" height="1" forecolor="#FFFFFF"/>
+					<graphicElement>
+						<pen lineStyle="Solid"/>
+					</graphicElement>
+				</line>
+			</band>
+		</groupHeader>
+	</group>
+	<background>
+		<band height="684">
+			<rectangle>
+				<reportElement uuid="abfb3b4d-bb9d-4dc4-9df9-aa4fe533bd75" x="0" y="0" width="504" height="684"/>
+			</rectangle>
+		</band>
+	</background>
+	<pageHeader>
+		<band height="83" splitType="Prevent">
+			<line>
+				<reportElement uuid="4712c7e4-08d3-4480-a121-878e46c1efff" x="0" y="0" width="504" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="4712c7e4-08d3-4480-a121-878e46c1efff" x="0" y="80" width="504" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<image>
+				<reportElement uuid="2fff8836-c065-4ba2-8808-af1a274a5900" x="4" y="4" width="78" height="74"/>
+				<imageExpression><![CDATA[($P{SUBREPORT_DIR} + "lexis_flnr_bc_mark_v.png" )]]></imageExpression>
+			</image>
+			<subreport>
+				<reportElement uuid="a765783c-2656-4a88-9714-de3353b6a392" x="72" y="0" width="360" height="15"/>
+				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
+				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
+			</subreport>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="f4f1bc56-cb16-4617-88d4-70d6911a2481" x="116" y="15" width="217" height="30" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA["Province of British Columbia" + System.getProperty("line.separator") + $F{JURISDICTION_CODE} + " Bi-Weekly List"]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="yyyy-MM-dd" isBlankWhenNull="true">
+				<reportElement uuid="84ddedc7-6f33-4ede-802b-6ef6e1dcf844" x="179" y="50" width="103" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{ADVERTISING_DATE}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="3e475837-600b-4c4a-ba21-7ed129849b46" x="100" y="64" width="259" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{ORG_UNIT}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="0554c008-29c7-49f2-b79d-c122ed6757cc" x="359" y="23" width="46" height="14"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="10" isBold="false"/>
+				</textElement>
+				<text><![CDATA[Page]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="0dcb51ff-60bf-4cbd-90d8-502e71a638f7" x="405" y="23" width="10" height="14"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="8" isBold="true"/>
+				</textElement>
+				<text><![CDATA[ : ]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="89706437-ec18-4a0b-91c9-a0ee9f6b2765" x="415" y="23" width="12" height="14"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report" isBlankWhenNull="true">
+				<reportElement uuid="57d6a0f4-120c-4f5e-954a-6814d7003c6a" x="427" y="23" width="72" height="14"/>
+				<textElement>
+					<font fontName="Arial" size="10" isBold="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[" of " + $V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+		</band>
+	</pageHeader>
+	<detail>
+		<band height="22" splitType="Prevent">
+			<subreport>
+				<reportElement uuid="46f9ea86-36c0-4766-8cc9-fd9faba8767b" x="0" y="4" width="498" height="16"/>
+				<subreportParameter name="P_APPLICATION_NUMBER">
+					<subreportParameterExpression><![CDATA[$F{APPLICATION_NUMBER}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="P_JURISDICTION">
+					<subreportParameterExpression><![CDATA[$F{EXPORT_JURISDICTION_CODE}]]></subreportParameterExpression>
+				</subreportParameter>
+				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
+				<subreportExpression><![CDATA[($P{SUBREPORT_DIR} + "LEXIS_biweekly_SR1_packages_sub_report" + $P{SUBREPORT_EXT})]]></subreportExpression>
+			</subreport>
+		</band>
+	</detail>
+	<summary>
+		<band height="199">
+			<line>
+				<reportElement uuid="d2fb2d2f-254c-4380-b420-60603fbd8162" x="0" y="0" width="504" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="d2fb2d2f-254c-4380-b420-60603fbd8162" x="0" y="80" width="504" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<image>
+				<reportElement uuid="2a86f968-9513-4d91-b111-0a57dbee7c5b" x="4" y="4" width="78" height="74"/>
+				<imageExpression><![CDATA[($P{SUBREPORT_DIR} + "lexis_flnr_bc_mark_v.png" )]]></imageExpression>
+			</image>
+			<subreport>
+				<reportElement uuid="a765783c-2656-4a88-9714-de3353b6a392" x="72" y="0" width="360" height="15"/>
+				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
+				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
+			</subreport>
+			<staticText>
+				<reportElement uuid="2862ae01-596c-43be-a782-892b565858bc" x="116" y="15" width="216" height="60" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Province of British Columbia
+Log Exemption Information System
+Bi-Weekly Listing]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="4b2d2dbc-495a-4a3b-a6c5-c25af7f21c52" x="359" y="23" width="46" height="14" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Page]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="84502a07-8726-40f7-a04a-366875a8dfb1" x="415" y="37" width="84" height="14" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[new SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date())]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="8d6d3d85-836d-4490-8fa1-3f2bdf9da21a" x="118" y="92" width="212" height="15" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Run Time Selection Options]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="2939024b-a856-4735-8c6a-d18ec4a8591c" x="234" y="114" width="258" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF12_REGION_SUMMARY}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="4d9aa395-277e-4b05-a2a4-eb70002c4bba" x="4" y="185" width="77" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[End of Report]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="f37811a9-99c8-49f0-ad7d-eee64b66adca" x="138" y="114" width="90" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Region]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="f37811a9-99c8-49f0-ad7d-eee64b66adca" x="138" y="127" width="90" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[From Date]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="f37811a9-99c8-49f0-ad7d-eee64b66adca" x="138" y="153" width="90" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Jurisdiction Code]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="f37811a9-99c8-49f0-ad7d-eee64b66adca" x="138" y="140" width="90" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[To Date]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="2939024b-a856-4735-8c6a-d18ec4a8591c" x="234" y="127" width="258" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $P{P_FROM_DATE}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="2939024b-a856-4735-8c6a-d18ec4a8591c" x="234" y="153" width="258" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF18_JURIS_CODE_SUMMARY}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="2939024b-a856-4735-8c6a-d18ec4a8591c" x="234" y="140" width="258" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $P{P_TO_DATE}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="4b2d2dbc-495a-4a3b-a6c5-c25af7f21c52" x="359" y="37" width="46" height="14" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Date]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="4b2d2dbc-495a-4a3b-a6c5-c25af7f21c52" x="359" y="51" width="46" height="14" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Time]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="0dcb51ff-60bf-4cbd-90d8-502e71a638f7" x="405" y="23" width="10" height="14"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="10" isBold="true"/>
+				</textElement>
+				<text><![CDATA[ : ]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="89706437-ec18-4a0b-91c9-a0ee9f6b2765" x="415" y="23" width="12" height="14"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report" isBlankWhenNull="true">
+				<reportElement uuid="57d6a0f4-120c-4f5e-954a-6814d7003c6a" x="427" y="23" width="72" height="14"/>
+				<textElement>
+					<font fontName="Arial" size="10" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[" of " + $V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="84502a07-8726-40f7-a04a-366875a8dfb1" x="415" y="51" width="84" height="14" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[new SimpleDateFormat(((SimpleDateFormat)DateFormat.getTimeInstance(DateFormat.SHORT,$P{REPORT_LOCALE})).toPattern()).format(new java.util.Date())]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="0dcb51ff-60bf-4cbd-90d8-502e71a638f7" x="405" y="37" width="10" height="14"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="10" isBold="true"/>
+				</textElement>
+				<text><![CDATA[ : ]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="0dcb51ff-60bf-4cbd-90d8-502e71a638f7" x="405" y="51" width="10" height="14"/>
+				<textElement textAlignment="Left" markup="none">
+					<font fontName="Arial" size="10" isBold="true"/>
+				</textElement>
+				<text><![CDATA[ : ]]></text>
+			</staticText>
+		</band>
+	</summary>
+</jasperReport>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="LEXIS_DYNAMIC_TABLE" pageWidth="792" pageHeight="612" orientation="Landscape" whenNoDataType="NoDataSection" columnWidth="752" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20" uuid="cb0840e4-b9b8-4ec4-b45e-28a76a02035f">
+	<parameter name="REPORT_TITLE" class="java.lang.String"/>
+	<parameter name="REPORT_SUBTITLE" class="java.lang.String"/>
+	<parameter name="REPORT_GENERATED_DATE" class="java.lang.String"/>
+	<parameter name="P_COLUMN_COUNT" class="java.lang.Integer"/>
+	<parameter name="P_COL_HEADER_1" class="java.lang.String"/>
+	<parameter name="P_COL_HEADER_2" class="java.lang.String"/>
+	<parameter name="P_COL_HEADER_3" class="java.lang.String"/>
+	<parameter name="P_COL_HEADER_4" class="java.lang.String"/>
+	<parameter name="P_COL_HEADER_5" class="java.lang.String"/>
+	<parameter name="P_COL_HEADER_6" class="java.lang.String"/>
+	<parameter name="P_COL_HEADER_7" class="java.lang.String"/>
+	<parameter name="P_COL_HEADER_8" class="java.lang.String"/>
+	<parameter name="P_COL_HEADER_9" class="java.lang.String"/>
+	<parameter name="P_COL_HEADER_10" class="java.lang.String"/>
+	<parameter name="P_COL_HEADER_11" class="java.lang.String"/>
+	<parameter name="P_COL_HEADER_12" class="java.lang.String"/>
+	<field name="COL_1" class="java.lang.String"/>
+	<field name="COL_2" class="java.lang.String"/>
+	<field name="COL_3" class="java.lang.String"/>
+	<field name="COL_4" class="java.lang.String"/>
+	<field name="COL_5" class="java.lang.String"/>
+	<field name="COL_6" class="java.lang.String"/>
+	<field name="COL_7" class="java.lang.String"/>
+	<field name="COL_8" class="java.lang.String"/>
+	<field name="COL_9" class="java.lang.String"/>
+	<field name="COL_10" class="java.lang.String"/>
+	<field name="COL_11" class="java.lang.String"/>
+	<field name="COL_12" class="java.lang.String"/>
+	<title>
+		<band height="50" splitType="Stretch">
+			<textField><reportElement x="0" y="0" width="560" height="20" uuid="f933b75b-2368-4c65-9aa1-b7d82259b102"/><textElement><font size="14" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{REPORT_TITLE} == null ? "LEXIS Report" : $P{REPORT_TITLE}]]></textFieldExpression></textField>
+			<textField><reportElement x="0" y="22" width="752" height="16" uuid="137e7ad1-fdb8-48a0-a5b3-e365d5f2df93"/><textElement><font size="9"/></textElement><textFieldExpression><![CDATA[$P{REPORT_SUBTITLE} == null ? "" : $P{REPORT_SUBTITLE}]]></textFieldExpression></textField>
+			<textField><reportElement x="560" y="0" width="192" height="16" uuid="250f65f1-ce80-4229-901f-b8f7f71156a7"/><textElement textAlignment="Right"><font size="9"/></textElement><textFieldExpression><![CDATA["Generated: " + ($P{REPORT_GENERATED_DATE} == null ? "" : $P{REPORT_GENERATED_DATE})]]></textFieldExpression></textField>
+		</band>
+	</title>
+	<columnHeader>
+		<band height="20" splitType="Stretch">
+			<frame>
+				<reportElement x="0" y="0" width="752" height="20" uuid="06193fb2-e70e-45b7-9eec-2a2c5f2ba690"/>
+				<box><pen lineWidth="0.8"/></box>
+				<textField><reportElement x="0" y="0" width="62" height="20" uuid="4c81a1dc-d836-4e8e-a567-fd90d65c9e5b"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_1}]]></textFieldExpression></textField>
+				<textField><reportElement x="62" y="0" width="62" height="20" uuid="2b30b96e-95a6-4f57-baa1-3b43b5c1850f"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_2}]]></textFieldExpression></textField>
+				<textField><reportElement x="124" y="0" width="62" height="20" uuid="672092f2-8f81-4e98-a129-991ef47d48cd"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_3}]]></textFieldExpression></textField>
+				<textField><reportElement x="186" y="0" width="62" height="20" uuid="8f4d56f0-0bf6-4f56-920f-86787d218f6d"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_4}]]></textFieldExpression></textField>
+				<textField><reportElement x="248" y="0" width="62" height="20" uuid="ca3437bf-6ee8-45be-aec0-cf16ba22dcc2"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_5}]]></textFieldExpression></textField>
+				<textField><reportElement x="310" y="0" width="62" height="20" uuid="69c8209f-0365-4e2c-9518-e8e5e7f14640"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_6}]]></textFieldExpression></textField>
+				<textField><reportElement x="372" y="0" width="62" height="20" uuid="e767c4af-74cc-44eb-afd3-8175304d1a98"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_7}]]></textFieldExpression></textField>
+				<textField><reportElement x="434" y="0" width="62" height="20" uuid="c320bcf9-cf1e-4c3e-8515-f0e008b4457c"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_8}]]></textFieldExpression></textField>
+				<textField><reportElement x="496" y="0" width="62" height="20" uuid="69f5b20b-9fd6-4bc7-8f20-3a31d2fc8b10"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_9}]]></textFieldExpression></textField>
+				<textField><reportElement x="558" y="0" width="62" height="20" uuid="f1889f0a-7d01-4568-815c-d4f86a741746"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_10}]]></textFieldExpression></textField>
+				<textField><reportElement x="620" y="0" width="62" height="20" uuid="18bc5907-fb95-4352-a4f8-a8382b6446eb"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_11}]]></textFieldExpression></textField>
+				<textField><reportElement x="682" y="0" width="70" height="20" uuid="287074e2-b537-4cd0-b625-b8f8f1e75ce6"></reportElement><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement><textFieldExpression><![CDATA[$P{P_COL_HEADER_12}]]></textFieldExpression></textField>
+			</frame>
+		</band>
+	</columnHeader>
+	<detail>
+		<band height="18" splitType="Stretch">
+			<frame>
+				<reportElement x="0" y="0" width="752" height="18" uuid="4888a664-3e0f-4305-b760-f97069d435f1"/>
+				<textField textAdjust="StretchHeight"><reportElement x="0" y="0" width="62" height="18" uuid="a3c6e18b-32af-45cf-b694-c511015f2222"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_1}]]></textFieldExpression></textField>
+				<textField textAdjust="StretchHeight"><reportElement x="62" y="0" width="62" height="18" uuid="a96e1c5a-f7aa-49df-b0a1-70f13e947527"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_2}]]></textFieldExpression></textField>
+				<textField textAdjust="StretchHeight"><reportElement x="124" y="0" width="62" height="18" uuid="8daa7328-a56a-47f6-a938-b91735f7f2ef"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_3}]]></textFieldExpression></textField>
+				<textField textAdjust="StretchHeight"><reportElement x="186" y="0" width="62" height="18" uuid="1b1b8bcf-6a41-4c52-a219-f57b8a74f163"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_4}]]></textFieldExpression></textField>
+				<textField textAdjust="StretchHeight"><reportElement x="248" y="0" width="62" height="18" uuid="46d6b51d-1f12-4440-a275-f0e9554683e6"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_5}]]></textFieldExpression></textField>
+				<textField textAdjust="StretchHeight"><reportElement x="310" y="0" width="62" height="18" uuid="f91042f8-ef1e-4d80-bb07-e8d482cba63d"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_6}]]></textFieldExpression></textField>
+				<textField textAdjust="StretchHeight"><reportElement x="372" y="0" width="62" height="18" uuid="e5f6991d-9f75-47e4-8dcc-a2fb57f7cf20"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_7}]]></textFieldExpression></textField>
+				<textField textAdjust="StretchHeight"><reportElement x="434" y="0" width="62" height="18" uuid="194244da-01f5-4f85-b966-0bfbe6b4fb31"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_8}]]></textFieldExpression></textField>
+				<textField textAdjust="StretchHeight"><reportElement x="496" y="0" width="62" height="18" uuid="e8a9e0ad-d734-4a92-ba00-a1eb8f7e9f07"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_9}]]></textFieldExpression></textField>
+				<textField textAdjust="StretchHeight"><reportElement x="558" y="0" width="62" height="18" uuid="beadca57-e4f8-46d5-aae9-dce0f2394a0e"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_10}]]></textFieldExpression></textField>
+				<textField textAdjust="StretchHeight"><reportElement x="620" y="0" width="62" height="18" uuid="a08a0ea5-255f-4fca-b8f0-a164085f5272"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_11}]]></textFieldExpression></textField>
+				<textField textAdjust="StretchHeight"><reportElement x="682" y="0" width="70" height="18" uuid="d23b62c4-1f0a-4e0f-ac88-3164f1702fd6"></reportElement><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font size="8"/></textElement><textFieldExpression><![CDATA[$F{COL_12}]]></textFieldExpression></textField>
+			</frame>
+		</band>
+	</detail>
+	<noData>
+		<band height="40">
+			<staticText><reportElement x="0" y="8" width="752" height="20" uuid="2cbf6e37-4607-4dbb-b2b5-c3f81dd5a14c"/><textElement textAlignment="Center" verticalAlignment="Middle"><font size="11" isBold="true"/></textElement><text><![CDATA[No rows returned for this report criteria.]]></text></staticText>
+		</band>
+	</noData>
+</jasperReport>

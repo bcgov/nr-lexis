@@ -1,0 +1,113 @@
+package ca.bc.gov.mof.lexis.service.federal;
+
+import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
+import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
+import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
+import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResponseDto;
+import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Service;
+
+@Service
+@Profile("oracle")
+public class FederalApplicationOracleService implements FederalApplicationService {
+
+  private final FederalApplicationRepository repository;
+
+  public FederalApplicationOracleService(FederalApplicationRepository repository) {
+    this.repository = repository;
+  }
+
+  @Override
+  public FederalApplicationSearchOptionsDto searchOptions() {
+    return new FederalApplicationSearchOptionsDto(
+        safeList(repository.loadApplicationStatusOptions()),
+        safeList(repository.loadFederalExemptionTypeOptions()));
+  }
+
+  @Override
+  public FederalApplicationSearchResponseDto search(FederalApplicationSearchCriteria criteria) {
+    FederalApplicationSearchCriteria normalized = normalizeCriteria(criteria);
+    int page = normalized.page();
+    int size = normalized.size();
+
+    List<FederalApplicationSearchResultDto> results = safeList(repository.search(normalized));
+    int fromIndex = Math.min(page * size, results.size());
+    int toIndex = Math.min(fromIndex + size, results.size());
+
+    return new FederalApplicationSearchResponseDto(
+        results.subList(fromIndex, toIndex),
+        results.size(),
+        page,
+        size);
+  }
+
+  @Override
+  public Optional<FederalApplicationDetailDto> findByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return repository.findByApplicationNumber(applicationNumber);
+  }
+
+  @Override
+  public Optional<FederalApplicationPermitDto> findPermitByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return repository.findPermitByApplicationNumber(applicationNumber);
+  }
+
+  @Override
+  public boolean verifyApplicationClients(List<Long> applicationNumbers) {
+    List<Long> validNumbers = normalizeApplicationNumbers(applicationNumbers);
+    if (validNumbers.isEmpty()) {
+      return false;
+    }
+    return repository.verifyApplicationClients(validNumbers);
+  }
+
+  private FederalApplicationSearchCriteria normalizeCriteria(FederalApplicationSearchCriteria input) {
+    if (input == null) {
+      return new FederalApplicationSearchCriteria(
+          null, null, null, null, null, null, null, null, null, null, 0, 25);
+    }
+
+    return new FederalApplicationSearchCriteria(
+        trimToNull(input.federalApplicationNumber()),
+        trimToNull(input.packageNumber()),
+        trimToNull(input.exemptionNumber()),
+        trimToNull(input.applicationStatus()),
+        input.receivedFromDate(),
+        input.receivedToDate(),
+        input.listingFromDate(),
+        input.listingToDate(),
+        trimToNull(input.ownerClientNumber()),
+        trimToNull(input.agentClientNumber()),
+        Math.max(0, input.page()),
+        Math.max(1, input.size()));
+  }
+
+  private List<Long> normalizeApplicationNumbers(List<Long> rawValues) {
+    if (rawValues == null) {
+      return List.of();
+    }
+    return rawValues.stream().filter(value -> value != null && value > 0).distinct().toList();
+  }
+
+  private String trimToNull(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private static <T> List<T> safeList(List<T> input) {
+    return input == null ? List.of() : input;
+  }
+}

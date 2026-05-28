@@ -1,0 +1,122 @@
+package ca.bc.gov.mof.lexis.service.permit;
+
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitGbmsInvoiceHistoryItemRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRequestDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+
+public interface PermitDetailsRpcService {
+
+  PermitSummaryRpcResponseDto getPermitSummary(
+      Long permitNumber,
+      String countryCode,
+      String applicationDate,
+      String packageNumber,
+      boolean ministryUser);
+
+  PermitTotalFeesRpcResponseDto getTotalFeesForPermit(
+      Long permitNumber,
+      String countryCode,
+      String applicationDate);
+
+  PermitScaleFeesRpcResponseDto getScaleFeesForPackage(
+      String packageNumber,
+      Long permitNumber,
+      boolean ministryUser);
+
+  PermitScalesForPackageRpcResponseDto getScalesForPackage(String packageNumber);
+
+  PermitDataAfterScaleUpdateRpcResponseDto getPermitDataAfterScaleUpdate(Long permitNumber);
+
+  PermitPackageVolumeSumRpcResponseDto getPackageVolumeSum(Long permitNumber, String packageNumber);
+
+  PermitPackageInfoRpcResponseDto getPackageInfo(String packageNumber);
+
+  PermitPackageDetailsRpcResponseDto getPackageDetails(String packageNumber);
+
+  PermitPackageListRpcResponseDto getPackageList(Long permitNumber);
+
+  PermitPackageListRpcResponseDto getOicPackageList(Long permitNumber);
+
+  PermitHasApplicationsRpcResponseDto getPermitHasApplications(Long permitNumber);
+
+  PermitCountryListRpcResponseDto getCountryList();
+
+  PermitNumberAvailabilityRpcResponseDto checkPermitNumber(Long permitNumber);
+
+  PermitApplicationListRpcResponseDto getApplicationList(Long permitNumber);
+
+  PermitAvailableApplicationListRpcResponseDto getAvailableApplicationList(
+      String exemptionNumber, String selectedApplicationsCsv);
+
+  PermitAvailablePackageListRpcResponseDto getAvailablePackageList(
+      String exemptionNumber, String selectedPackagesCsv);
+
+  PermitApprovedExemptionVolumeRpcResponseDto getApprovedExemptionVolume(String exemptionNumber);
+
+  PermitExemptionVolumeRemainingRpcResponseDto getExemptionVolumeRemaining(String exemptionNumber);
+
+  List<PermitGbmsInvoiceHistoryItemRpcResponseDto> getGbmsInvoiceHistory(
+      String receiptNumber, Long permitNumber, boolean readOnlyUser);
+
+  PermitPersistenceRpcResponseDto addInvoice(
+      Long permitNumber,
+      String salesInvoiceNumber,
+      BigDecimal invoiceExportValue,
+      BigDecimal invoiceConversionRate,
+      BigDecimal invoiceFeeInLieu,
+      String userId);
+
+  PermitMutationRpcResponseDto addPermit(PermitMutationRequestDto request, String userId);
+
+  PermitMutationRpcResponseDto updatePermit(PermitMutationRequestDto request, String userId);
+
+  PermitMutationRpcResponseDto updateShipping(PermitMutationRequestDto request, String userId);
+
+  boolean hasFormChanges(PermitMutationRequestDto request);
+
+  PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber);
+
+  PermitInvoiceDetailsRpcResponseDto getInvoiceDetails(Long permitNumber, String salesInvoiceNumber);
+
+  PermitConversionRateRpcResponseDto getConversionRate();
+
+  List<PermitFileTypeRpcResponseDto> getFileTypes();
+
+  List<PermitDocumentItemRpcResponseDto> getDocumentDetails(Long permitNumber);
+
+  Optional<DocumentContent> getDocument(Long fileId);
+
+  boolean removePermitDocument(Long documentId);
+
+  boolean removeApplicationDocument(Long documentId);
+
+  boolean removeInvoiceDocument(Long documentId);
+
+  record DocumentContent(byte[] bytes) {}
+}

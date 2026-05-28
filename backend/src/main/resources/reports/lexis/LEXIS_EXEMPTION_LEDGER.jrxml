@@ -1,0 +1,705 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="LEXIS_EXEMPTION_LEDGER.rpt" pageWidth="792" pageHeight="612" orientation="Landscape" whenNoDataType="NoDataSection" columnWidth="684" leftMargin="54" rightMargin="54" topMargin="54" bottomMargin="54" isSummaryNewPage="true" uuid="1880686a-fe32-46d2-8d16-dc728275aced">
+	<property name="ireport.zoom" value="0.75"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<property name="ireport.jasperserver.reportUnit" value="/JCRS/LEXIS/Reports/LEXIS/LEXIS_EXEMPTION_LEDGER.rpt"/>
+	<property name="ireport.jasperserver.url" value="http://localhost:8080/jasperserver/services/repository"/>
+	<parameter name="P_FROM_DATE" class="java.lang.String"/>
+	<parameter name="P_TO_DATE" class="java.lang.String"/>
+	<parameter name="P_ORG_UNIT" class="java.lang.String"/>
+	<parameter name="P_EXEMPTION_REASON" class="java.lang.String"/>
+	<parameter name="P_EXEMPTION_TYPE" class="java.lang.String"/>
+	<parameter name="P_CLIENT" class="java.lang.String"/>
+	<parameter name="P_GROWTH_TYPE" class="java.lang.String"/>
+	<parameter name="P_LISTING_FROM_DATE" class="java.lang.String"/>
+	<parameter name="P_LISTING_TO_DATE" class="java.lang.String"/>
+	<parameter name="P_EXEMPTION_NUMBER" class="java.lang.String"/>
+	<parameter name="P_EXEMPTION_STATUS" class="java.lang.String"/>
+	<parameter name="ORACLE_REF_CURSOR" class="java.sql.ResultSet" isForPrompting="false"/>
+	<parameter name="LoggedInUser" class="com.jaspersoft.jasperserver.api.metadata.user.domain.User" isForPrompting="false"/>
+	<parameter name="p_report_id" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["LEXIS_EXEMPTION_LEDGER.rpt"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? "repo:" : "\\"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_EXT" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? ".jrxml" : ".jasper"]]></defaultValueExpression>
+	</parameter>
+	<queryString language="plsql">
+		<![CDATA[{call LEXIS_REPORTING.EXEMPTION_LEDGER_RPT(
+P_EXEMPTIONS => $P{ORACLE_REF_CURSOR},
+P_FROM_DATE => $P{P_FROM_DATE},
+P_TO_DATE => $P{P_TO_DATE},
+P_ORG_UNIT => $P{P_ORG_UNIT},
+P_EXEMPTION_REASON => $P{P_EXEMPTION_REASON},
+P_EXEMPTION_TYPE => $P{P_EXEMPTION_TYPE},
+P_CLIENT => $P{P_CLIENT},
+P_GROWTH_TYPE => $P{P_GROWTH_TYPE},
+P_LISTING_FROM_DATE => $P{P_LISTING_FROM_DATE},
+P_LISTING_TO_DATE => $P{P_LISTING_TO_DATE},
+P_EXEMPTION_NUMBER => $P{P_EXEMPTION_NUMBER},
+P_EXEMPTION_STATUS => $P{P_EXEMPTION_STATUS}
+)}]]>
+	</queryString>
+	<field name="ORG_UNIT_CODE" class="java.lang.String"/>
+	<field name="ORG_UNIT_NAME" class="java.lang.String"/>
+	<field name="EXPORT_EXEMPTION_REASON_DESC" class="java.lang.String"/>
+	<field name="EXPORT_EXEMPTION_TYPE_DESC" class="java.lang.String"/>
+	<field name="EXEMPTION_NUMBER" class="java.lang.String"/>
+	<field name="CLIENT_NAME" class="java.lang.String"/>
+	<field name="LEGAL_FIRST_NAME" class="java.lang.String"/>
+	<field name="LEGAL_MIDDLE_NAME" class="java.lang.String"/>
+	<field name="CLIENT_TYPE_CODE" class="java.lang.String"/>
+	<field name="EXPIRY_DATE" class="java.sql.Timestamp"/>
+	<field name="APPROVED_VOLUME" class="java.math.BigDecimal"/>
+	<field name="EXPORT_JURISDICTION_CODE" class="java.lang.String"/>
+	<field name="APPLICATION_NUMBER" class="java.math.BigDecimal"/>
+	<field name="FED_APPLICATION_NUMBER" class="java.math.BigDecimal"/>
+	<field name="EXEMPTION_APPLICATION_VOLUME" class="java.math.BigDecimal"/>
+	<variable name="CCF0_SUMMARY_REGION" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//GetRegionName({?P_ORG_UNIT})
+//Function (StringVar P_ORG_UNIT)
+//Local StringVar org_unit_name := "";
+//Local NumberVar counter := 0;
+//if (P_ORG_UNIT LIKE "*1903*") then ( org_unit_name := org_unit_name & ", RCB";
+//    counter := counter + 1; );
+//if (P_ORG_UNIT LIKE "*1904*") then(     org_unit_name := org_unit_name & ", RKB";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1905*") then(    org_unit_name := org_unit_name & ", RNO";
+//    counter := counter + 1; );
+//if (P_ORG_UNIT LIKE "*1906*") then(    org_unit_name := org_unit_name & ", ROM";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1907*") then(    org_unit_name := org_unit_name & ", RTO";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1908*") then(    org_unit_name := org_unit_name & ", RSK";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1909*") then(    org_unit_name := org_unit_name & ", RSC";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1910*") then(    org_unit_name := org_unit_name & ", RWC";
+//    counter := counter + 1;);
+//if Len(org_unit_name) > 0 then
+//(  if counter = 8 then
+//        "All"
+//  else
+//      Right(org_unit_name, len(org_unit_name) - 2)
+//)else
+//    org_unit_name;
+
+$P{P_ORG_UNIT}!=null &&
+$P{P_ORG_UNIT}.contains( "1903" )&& $P{P_ORG_UNIT}.contains( "1904" ) && $P{P_ORG_UNIT}.contains( "1905" ) && $P{P_ORG_UNIT}.contains( "1906" ) &&
+$P{P_ORG_UNIT}.contains( "1907" )&& $P{P_ORG_UNIT}.contains( "1908" ) && $P{P_ORG_UNIT}.contains( "1909" ) && $P{P_ORG_UNIT}.contains( "1910" )
+?   "All"
+:   org.apache.commons.lang.StringUtils.chop(
+       (($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1903" ) ? "RCB, " : "" ) +
+       ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1904" ) ? "RKB, " : "" ) +
+       ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1905" ) ? "RNO, " : "" ) +
+       ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1906" ) ? "ROM, " : "" ) +
+       ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1907" ) ? "RTO, " : "" ) +
+       ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1908" ) ? "RSK, " : "" ) +
+       ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1909" ) ? "RSC, " : "" ) +
+       ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1910" ) ? "RWC, " : "" )).trim()
+   )]]></variableExpression>
+	</variable>
+	<variable name="CCF1_SUMMARY_REASON" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if ({?P_EXEMPTION_REASON} = 'S') then
+//'Surplus'
+//else if ({?P_EXEMPTION_REASON} = 'U') then
+//'Utilization'
+//else if ({?P_EXEMPTION_REASON} = 'E') then
+//'Economic'
+//else
+//'All'
+
+$P{P_EXEMPTION_REASON}!=null && $P{P_EXEMPTION_REASON}.equalsIgnoreCase( "S" )
+?   "Surplus"
+:   $P{P_EXEMPTION_REASON}!=null && $P{P_EXEMPTION_REASON}.equalsIgnoreCase( "U" )
+    ?   "Utilization"
+    :   $P{P_EXEMPTION_REASON}!=null && $P{P_EXEMPTION_REASON}.equalsIgnoreCase( "E" )
+        ?   "Economic"
+        :   "All"]]></variableExpression>
+	</variable>
+	<variable name="CCF2_SUMMARY_TYPE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if ({?P_EXEMPTION_TYPE} = 'M') then
+//'Ministerial'
+//else if ({?P_EXEMPTION_TYPE} = 'F') then
+//'Federal'
+//else if ({?P_EXEMPTION_TYPE} = 'O') then
+//'Order In Council'
+//else
+//'All'
+
+$P{P_EXEMPTION_TYPE}!=null && $P{P_EXEMPTION_TYPE}.equalsIgnoreCase( "M" )
+?   "Ministerial"
+:   $P{P_EXEMPTION_TYPE}!=null && $P{P_EXEMPTION_TYPE}.equalsIgnoreCase( "F" )
+    ?   "Federal"
+    :   $P{P_EXEMPTION_TYPE}!=null && $P{P_EXEMPTION_TYPE}.equalsIgnoreCase( "O" )
+        ?   "Order In Council"
+        :   "All"]]></variableExpression>
+	</variable>
+	<variable name="CCF3_TITLE_DATE_RANGE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if ((isnull({?P_FROM_DATE}) or {?P_FROM_DATE} = '')and(isnull({?P_TO_DATE}) or {?P_TO_DATE} = '')
+//    ) then
+//'All Dates'
+//else if (
+//    isnull({?P_FROM_DATE}) or {?P_FROM_DATE} = ''
+//    ) then
+//{?P_TO_DATE} + ' and Previous'
+//else if (
+//    isnull({?P_TO_DATE}) or {?P_TO_DATE} = ''
+//    ) then
+//{?P_FROM_DATE} + ' and After'
+//else
+//{?P_FROM_DATE} + ' to ' + {?P_TO_DATE}
+
+($P{P_FROM_DATE}==null || $P{P_FROM_DATE}.isEmpty()) &&
+($P{P_TO_DATE}==null || $P{P_TO_DATE}.isEmpty())
+?   "All Dates"
+:   $P{P_FROM_DATE}==null || $P{P_FROM_DATE}.isEmpty()
+    ?   $P{P_TO_DATE} + "  and Previous"
+    :   $P{P_TO_DATE}==null || $P{P_TO_DATE}.isEmpty()
+        ?   $P{P_FROM_DATE} + " and After"
+        :   $P{P_FROM_DATE} + " to " + $P{P_TO_DATE}]]></variableExpression>
+	</variable>
+	<variable name="CCF4_F_CLIENT" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_CLIENT}) or {?P_CLIENT} = '' then
+//    'All'
+//else
+//    {?P_CLIENT}
+
+$P{P_CLIENT} == null ||$P{P_CLIENT}.isEmpty()
+?   "All"
+:   $P{P_CLIENT}]]></variableExpression>
+	</variable>
+	<variable name="CCF5_F_DATE_FROM" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_LISTING_FROM_DATE}) or {?P_LISTING_FROM_DATE} = '' then
+//    'Not Entered'
+//else
+//    {?P_LISTING_FROM_DATE}
+
+$P{P_LISTING_FROM_DATE}==null || $P{P_LISTING_FROM_DATE}.isEmpty()
+?   "Not Entered"
+:   $P{P_LISTING_FROM_DATE}]]></variableExpression>
+	</variable>
+	<variable name="CCF6_F_DATE_TO" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_LISTING_TO_DATE}) or {?P_LISTING_TO_DATE} = '' then
+//    'Not Entered'
+//else
+//    {?P_LISTING_TO_DATE}
+
+$P{P_LISTING_TO_DATE}==null || $P{P_LISTING_TO_DATE}.isEmpty()
+?   "Not Entered"
+:   $P{P_LISTING_TO_DATE}]]></variableExpression>
+	</variable>
+	<variable name="CCF7_F_APPLICATION_NUMBER" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if ({EXEMPTION_LEDGER_RPT.EXPORT_JURISDICTION_CODE} = "F") Then
+//    ToText({EXEMPTION_LEDGER_RPT.FED_APPLICATION_NUMBER}, 0, "")
+//else if ({EXEMPTION_LEDGER_RPT.EXPORT_JURISDICTION_CODE} = "P") Then
+//    ToText({EXEMPTION_LEDGER_RPT.APPLICATION_NUMBER}, 0, "")
+//else
+//""
+
+$F{EXPORT_JURISDICTION_CODE}!=null && $F{EXPORT_JURISDICTION_CODE}.equalsIgnoreCase( "F" )
+?   $F{FED_APPLICATION_NUMBER}.toString()
+:   $F{EXPORT_JURISDICTION_CODE}!=null || $F{EXPORT_JURISDICTION_CODE}.equalsIgnoreCase( "P" )
+    ?   $F{APPLICATION_NUMBER}.toString()
+    :   ""]]></variableExpression>
+	</variable>
+	<variable name="CCF8_F_EXEMPTION_NUMBER" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_EXEMPTION_NUMBER}) or {?P_EXEMPTION_NUMBER} = '' then
+//    'All'
+//else
+//    {?P_EXEMPTION_NUMBER}
+
+$P{P_EXEMPTION_NUMBER}==null || $P{P_EXEMPTION_NUMBER}.isEmpty()
+?   "All"
+:   $P{P_EXEMPTION_NUMBER}]]></variableExpression>
+	</variable>
+	<variable name="CCF9_SUMMARY_STATUS" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if ({?P_EXEMPTION_STATUS} = 'NEW') then
+//'New'
+//else if ({?P_EXEMPTION_STATUS} = 'ACT') then
+//'Active'
+//else if ({?P_EXEMPTION_STATUS} = 'CAN') then
+//'Cancelled'
+//else if ({?P_EXEMPTION_STATUS} = 'EXP') then
+//'Expired'
+//else
+//'All'
+
+$P{P_EXEMPTION_STATUS}!=null && $P{P_EXEMPTION_STATUS}.equalsIgnoreCase( "NEW" )
+?   "New"
+:   $P{P_EXEMPTION_STATUS}!=null && $P{P_EXEMPTION_STATUS}.equalsIgnoreCase( "NEW" )
+    ?   "Active"
+    :   $P{P_EXEMPTION_STATUS}!=null && $P{P_EXEMPTION_STATUS}.equalsIgnoreCase( "NEW" )
+        ?   "Cancelled"
+        :   $P{P_EXEMPTION_STATUS}!=null && $P{P_EXEMPTION_STATUS}.equalsIgnoreCase( "NEW" )
+            ?   "Expired"
+            :   "All"]]></variableExpression>
+	</variable>
+	<group name="Group 0" isStartNewPage="true">
+		<groupExpression><![CDATA[$F{ORG_UNIT_NAME}]]></groupExpression>
+		<groupHeader>
+			<band splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+			</band>
+		</groupFooter>
+	</group>
+	<background>
+		<band height="504">
+			<frame>
+				<reportElement uuid="8e5595d5-8c8f-4232-a3a5-a6db528ac426" stretchType="RelativeToBandHeight" x="0" y="0" width="684" height="504"/>
+				<box>
+					<pen lineWidth="1.0"/>
+					<topPen lineWidth="1.0"/>
+					<leftPen lineWidth="1.0"/>
+					<bottomPen lineWidth="1.0"/>
+					<rightPen lineWidth="1.0"/>
+				</box>
+			</frame>
+		</band>
+	</background>
+	<pageHeader>
+		<band height="161" splitType="Prevent">
+			<printWhenExpression><![CDATA[//@NOT [ISNULL({EXEMPTION_LEDGER_RPT.EXEMPTION_NUMBER}) OR PageNumber = TotalPageCount
+
+$F{EXEMPTION_NUMBER}!=null]]></printWhenExpression>
+			<line>
+				<reportElement uuid="fcd6967b-72c7-49bc-bf7a-4c8ed4be8af9" x="0" y="87" width="682" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="38600f4c-d317-462d-b95b-19be80d171db" x="6" y="125" width="247" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="b7c6e70c-35f9-40c0-bc3f-2900d7a3f900" x="542" y="125" width="25" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="80f13d8e-445c-4e4c-8297-aba4b1d20db8" x="329" y="125" width="196" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="4ce5c34a-d52b-4174-9a0d-5b7f6cc40971" x="645" y="125" width="20" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="1a16c0d3-a039-490a-99cf-716f350a7841" x="0" y="153" width="681" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="28476973-76a6-4971-a1bf-3b0b663f7809" x="0" y="108" width="682" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<image>
+				<reportElement uuid="15f59233-0f59-45d8-a578-44b90e45ff7b" x="12" y="6" width="59" height="69"/>
+				<imageExpression><![CDATA[($P{SUBREPORT_DIR} + "lexis_flnr_logo.png" )]]></imageExpression>
+			</image>
+			<textField isStretchWithOverflow="true">
+				<reportElement uuid="d9046e3f-9594-42d6-9512-4d5e9a1ba1aa" x="72" y="15" width="432" height="56" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA["Province of British Columbia" + System.getProperty("line.separator") + "Log Exemption Information System" + System.getProperty("line.separator") + "Exemption Report" + System.getProperty("line.separator") + $V{CCF3_TITLE_DATE_RANGE}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="ac7a2303-3948-44aa-9ec0-68332a457dea" x="504" y="0" width="72" height="54" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Page
+Date/Time Printed	]]></text>
+			</staticText>
+			<textField>
+				<reportElement uuid="2be0a969-eddc-47f5-8157-640ec702469e" x="582" y="11" width="96" height="38" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + new SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date()) + " " + new SimpleDateFormat(((SimpleDateFormat)DateFormat.getTimeInstance(DateFormat.SHORT,$P{REPORT_LOCALE})).toPattern()).format(new java.util.Date())]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="89d1953e-0588-483d-acbf-79fda5ddf746" x="542" y="138" width="63" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Application #]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="c946e3fb-b49a-4ced-89fb-5d8d68f9d84f" x="470" y="139" width="55" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Vol. (m3)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="3db2edfb-5d9c-466f-ac6b-e12ee5959a53" x="618" y="138" width="46" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Vol. (m3)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="c4ec0004-1c84-48da-ad30-28542601e9c3" x="384" y="138" width="67" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Expiry Date]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="e649073a-7bad-412e-8148-bf3a97b616a0" x="90" y="138" width="126" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Exemption Holder Name]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="4be00826-6325-4625-9a8f-976ecd24025c" x="6" y="138" width="74" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Exemption #]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="73a8ef4f-b373-4175-8a6c-154ce141ad35" x="474" y="126" width="51" height="13" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Approved]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="db9400f2-b359-44c2-b5f5-765a993a22f0" x="256" y="120" width="70" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Exemption Detail]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="c8be9f32-ea6f-4a86-a920-0397b93c7273" x="570" y="120" width="72" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Application Detail]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="47b58b1e-f484-47b6-a4ea-31aeb20b0266" x="6" y="90" width="42" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Region:]]></text>
+			</staticText>
+			<textField>
+				<reportElement uuid="be17d764-b8e5-413e-919b-b0609006e0f8" x="54" y="90" width="282" height="12" forecolor="#000000"/>
+				<textElement>
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{ORG_UNIT_NAME}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement uuid="e355c04c-26ff-4ea4-a177-cc1d2213518a" x="582" y="0" width="36" height="11"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": Page "]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report">
+				<reportElement uuid="0817af1d-b938-436b-8966-2fca2eff48c2" x="635" y="0" width="40" height="11"/>
+				<textElement>
+					<font fontName="Arial" size="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement uuid="e355c04c-26ff-4ea4-a177-cc1d2213518a" x="618" y="0" width="17" height="11"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$V{PAGE_NUMBER} + " of "]]></textFieldExpression>
+			</textField>
+			<subreport>
+				<reportElement uuid="1ef64501-c702-406a-a3de-33038ac8fad4" x="108" y="0" width="360" height="15"/>
+				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
+				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
+			</subreport>
+		</band>
+	</pageHeader>
+	<detail>
+		<band height="20" splitType="Prevent">
+			<printWhenExpression><![CDATA[//@NOT [PageNumber = TotalPageCount
+
+true]]></printWhenExpression>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="14072178-6a3e-4a18-8f5b-88b04e62b836" x="4" y="0" width="70" height="12" forecolor="#000000"/>
+				<textElement>
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{EXEMPTION_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="a1cdaa44-fc1e-421b-934f-77e3f5f5ec53" x="84" y="0" width="278" height="12" forecolor="#000000"/>
+				<textElement>
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{CLIENT_NAME}]]></textFieldExpression>
+			</textField>
+			<textField pattern="yyyy-MM-dd" isBlankWhenNull="true">
+				<reportElement uuid="67a1534f-b55d-4baa-99f2-eb38c03fd008" x="372" y="0" width="67" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{EXPIRY_DATE}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.0;-#,##0.0" isBlankWhenNull="true">
+				<reportElement uuid="c2af0727-53e6-4ab3-9519-dccff487105e" x="448" y="0" width="65" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{APPROVED_VOLUME}]]></textFieldExpression>
+			</textField>
+			<textField pattern="0.0;-0.0" isBlankWhenNull="true">
+				<reportElement uuid="ad41ee26-afa2-4ba0-a2e0-d2302d40ffbd" x="616" y="0" width="36" height="12" forecolor="#000000"/>
+				<textElement>
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{EXEMPTION_APPLICATION_VOLUME}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="a373b631-b0db-4c9c-8f24-7751ebdc4d05" x="533" y="0" width="60" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$V{CCF7_F_APPLICATION_NUMBER}]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<summary>
+		<band height="227">
+			<line>
+				<reportElement uuid="61c27a91-e418-452e-abba-fe3c6f9cad38" x="0" y="72" width="682" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<image>
+				<reportElement uuid="8b85378a-20f9-45e4-8f4a-8908b53d9bfa" x="12" y="1" width="59" height="69"/>
+				<imageExpression><![CDATA[($P{SUBREPORT_DIR} + "lexis_flnr_logo.png" )]]></imageExpression>
+			</image>
+			<subreport>
+				<reportElement uuid="1ef64501-c702-406a-a3de-33038ac8fad4" x="108" y="0" width="360" height="15"/>
+				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
+				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
+			</subreport>
+			<staticText>
+				<reportElement uuid="914dca9d-d423-47d6-b3b9-72fee2f78f28" x="180" y="15" width="324" height="57" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Province of British Columbia
+Log Exemption Information System
+Exemption Report
+Report Run Summary]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="c9c8b7ca-58cf-4c4d-bbd4-2c78712cedc8" x="504" y="0" width="72" height="54" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Page
+Date/Time Printed	]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="3588745e-7b06-4d90-b69f-f79b9dabcc03" x="180" y="80" width="324" height="16" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Run Time Selection Options]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="a6d1b285-a22e-4a52-9526-f14cbe0b6b18" x="216" y="201" width="206" height="12" forecolor="#000000">
+					<printWhenExpression><![CDATA[//@NOT [NOT ISNULL({EXEMPTION_LEDGER_RPT.EXEMPTION_NUMBER})
+
+$F{EXEMPTION_NUMBER}==null]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[No data found matching selection options.]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="ea4fd492-d570-4ff0-bc6c-5f471e2d5abb" x="216" y="104" width="102" height="84" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Listing From Date
+Listing To Date
+Region
+Exemption Reason
+Exemption Type
+Exemption Number
+Exemption Status
+Client Number
+]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="2904b3af-a5a1-4a21-964e-e6d381e52d87" x="4" y="201" width="65" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[End of Report]]></text>
+			</staticText>
+			<textField>
+				<reportElement uuid="3ea49816-16ef-4171-b06d-9dd297f37f74" x="582" y="11" width="96" height="43" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + new SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date()) + " " + new SimpleDateFormat(((SimpleDateFormat)DateFormat.getTimeInstance(DateFormat.SHORT,$P{REPORT_LOCALE})).toPattern()).format(new java.util.Date())]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement uuid="ae4d45f0-826f-4b6a-8170-e8eb0c131156" x="324" y="104" width="348" height="84" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF5_F_DATE_FROM} + System.getProperty("line.separator") + ": " + $V{CCF6_F_DATE_TO} + System.getProperty("line.separator") + ": " + $V{CCF0_SUMMARY_REGION} + System.getProperty("line.separator") + ": " + $V{CCF1_SUMMARY_REASON} + System.getProperty("line.separator") + ": " + $V{CCF2_SUMMARY_TYPE} + System.getProperty("line.separator") + ": " + $V{CCF8_F_EXEMPTION_NUMBER} + System.getProperty("line.separator") + ": " + $V{CCF9_SUMMARY_STATUS} + System.getProperty("line.separator") + ": " + $V{CCF4_F_CLIENT}]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Page">
+				<reportElement uuid="e355c04c-26ff-4ea4-a177-cc1d2213518a" x="618" y="0" width="17" height="11"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$V{PAGE_NUMBER} + " of "]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement uuid="e355c04c-26ff-4ea4-a177-cc1d2213518a" x="582" y="0" width="36" height="11"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": Page "]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report">
+				<reportElement uuid="0817af1d-b938-436b-8966-2fca2eff48c2" x="635" y="0" width="40" height="11"/>
+				<textElement>
+					<font fontName="Arial" size="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+		</band>
+	</summary>
+	<noData>
+		<band height="227">
+			<line>
+				<reportElement uuid="61c27a91-e418-452e-abba-fe3c6f9cad38" x="0" y="72" width="682" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<image>
+				<reportElement uuid="8b85378a-20f9-45e4-8f4a-8908b53d9bfa" x="12" y="1" width="59" height="69"/>
+				<imageExpression><![CDATA[($P{SUBREPORT_DIR} + "lexis_flnr_logo.png" )]]></imageExpression>
+			</image>
+			<subreport>
+				<reportElement uuid="1ef64501-c702-406a-a3de-33038ac8fad4" x="108" y="0" width="360" height="15"/>
+				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
+				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
+			</subreport>
+			<staticText>
+				<reportElement uuid="914dca9d-d423-47d6-b3b9-72fee2f78f28" x="180" y="15" width="324" height="57" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Province of British Columbia
+Log Exemption Information System
+Exemption Report
+Report Run Summary]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="c9c8b7ca-58cf-4c4d-bbd4-2c78712cedc8" x="504" y="0" width="72" height="54" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Page
+Date/Time Printed	]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="3588745e-7b06-4d90-b69f-f79b9dabcc03" x="180" y="80" width="324" height="16" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Run Time Selection Options]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="a6d1b285-a22e-4a52-9526-f14cbe0b6b18" x="216" y="201" width="206" height="12" forecolor="#000000">
+					<printWhenExpression><![CDATA[//@NOT [NOT ISNULL({EXEMPTION_LEDGER_RPT.EXEMPTION_NUMBER})
+
+$F{EXEMPTION_NUMBER}==null]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[No data found matching selection options.]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="ea4fd492-d570-4ff0-bc6c-5f471e2d5abb" x="216" y="104" width="102" height="84" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Listing From Date
+Listing To Date
+Region
+Exemption Reason
+Exemption Type
+Exemption Number
+Exemption Status
+Client Number
+]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="2904b3af-a5a1-4a21-964e-e6d381e52d87" x="4" y="201" width="65" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[End of Report]]></text>
+			</staticText>
+			<textField>
+				<reportElement uuid="3ea49816-16ef-4171-b06d-9dd297f37f74" x="582" y="11" width="96" height="43" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + new SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date()) + " " + new SimpleDateFormat(((SimpleDateFormat)DateFormat.getTimeInstance(DateFormat.SHORT,$P{REPORT_LOCALE})).toPattern()).format(new java.util.Date())]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement uuid="ae4d45f0-826f-4b6a-8170-e8eb0c131156" x="324" y="104" width="348" height="84" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{CCF5_F_DATE_FROM} + System.getProperty("line.separator") + ": " + $V{CCF6_F_DATE_TO} + System.getProperty("line.separator") + ": " + $V{CCF0_SUMMARY_REGION} + System.getProperty("line.separator") + ": " + $V{CCF1_SUMMARY_REASON} + System.getProperty("line.separator") + ": " + $V{CCF2_SUMMARY_TYPE} + System.getProperty("line.separator") + ": " + $V{CCF8_F_EXEMPTION_NUMBER} + System.getProperty("line.separator") + ": " + $V{CCF9_SUMMARY_STATUS} + System.getProperty("line.separator") + ": " + $V{CCF4_F_CLIENT}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement uuid="e355c04c-26ff-4ea4-a177-cc1d2213518a" x="582" y="0" width="96" height="11"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": Page 1 of 1"]]></textFieldExpression>
+			</textField>
+		</band>
+	</noData>
+</jasperReport>

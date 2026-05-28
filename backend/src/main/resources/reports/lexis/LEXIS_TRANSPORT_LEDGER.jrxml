@@ -1,0 +1,763 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="LEXIS_TRANSPORT_LEDGER.rpt" pageWidth="792" pageHeight="612" orientation="Landscape" whenNoDataType="AllSectionsNoDetail" columnWidth="684" leftMargin="54" rightMargin="54" topMargin="54" bottomMargin="54" isSummaryNewPage="true" uuid="47e1e559-b6bc-4ebf-aec4-8bdc1ea13b16">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="22"/>
+	<property name="ireport.jasperserver.reportUnit" value="/JCRS/LEXIS/Reports/LEXIS/LEXIS_TRANSPORT_LEDGER.rpt"/>
+	<property name="ireport.jasperserver.url" value="http://localhost:8080/jasperserver/services/repository"/>
+	<parameter name="P_FROM_DATE" class="java.lang.String"/>
+	<parameter name="P_TO_DATE" class="java.lang.String"/>
+	<parameter name="P_ORG_UNIT_NUMBER" class="java.lang.String"/>
+	<parameter name="P_DESTINATION_COUNTRY" class="java.lang.String"/>
+	<parameter name="P_PORT_OF_EXPORT" class="java.lang.String"/>
+	<parameter name="P_STATUS" class="java.lang.String"/>
+	<parameter name="P_JURISDICTION" class="java.lang.String"/>
+	<parameter name="ORACLE_REF_CURSOR" class="java.sql.ResultSet" isForPrompting="false"/>
+	<parameter name="LoggedInUser" class="com.jaspersoft.jasperserver.api.metadata.user.domain.User" isForPrompting="false"/>
+	<parameter name="p_report_id" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["LEXIS_TRANSPORT_LEDGER.rpt"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? "repo:" : "I:\\!Project\\VM Application Revitalization\\Application Sub-Projects\\CIA\\5 Development QA\\CrystalReports\\LEXIS\\lexis_02_08_00\\Jasper\\"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="SUBREPORT_EXT" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA[($P{REPORT_CONTEXT} != null) ? ".jrxml" : ".jasper"]]></defaultValueExpression>
+	</parameter>
+	<queryString language="plsql">
+		<![CDATA[{call LEXIS_REPORTING.TRANSPORT_LEDGER_RPT(
+P_TRANSPORT_REPORT => $P{ORACLE_REF_CURSOR},
+P_FROM_DATE => $P{P_FROM_DATE},
+P_TO_DATE => $P{P_TO_DATE},
+P_ORG_UNIT_NUMBER => $P{P_ORG_UNIT_NUMBER},
+P_DESTINATION_COUNTRY => $P{P_DESTINATION_COUNTRY},
+P_PORT_OF_EXPORT => $P{P_PORT_OF_EXPORT},
+P_STATUS => $P{P_STATUS},
+P_JURISDICTION => $P{P_JURISDICTION}
+)}]]>
+	</queryString>
+	<field name="ORG_UNIT_NO" class="java.math.BigDecimal"/>
+	<field name="REGION" class="java.lang.String"/>
+	<field name="EXPORT_TRANSPORT_TYPE_CODE" class="java.lang.String"/>
+	<field name="TRANSPORT" class="java.lang.String"/>
+	<field name="EXPORT_PORT_OF_EXPORT_CODE" class="java.lang.String"/>
+	<field name="PORT" class="java.lang.String"/>
+	<field name="TRANSPORT_NAME" class="java.lang.String"/>
+	<field name="ESTIMATED_SHIPPING_DATE" class="java.sql.Timestamp"/>
+	<field name="EXPORT_PERMIT_DETAIL_NUMBER" class="java.math.BigDecimal"/>
+	<field name="EXPORT_PERMIT_STATUS_CODE" class="java.lang.String"/>
+	<field name="STATUS" class="java.lang.String"/>
+	<field name="CLIENT_NUMBER" class="java.lang.String"/>
+	<field name="CLIENT_NAME" class="java.lang.String"/>
+	<field name="LEGAL_FIRST_NAME" class="java.lang.String"/>
+	<field name="LEGAL_MIDDLE_NAME" class="java.lang.String"/>
+	<field name="CLIENT_TYPE_CODE" class="java.lang.String"/>
+	<field name="PERMIT_VOLUME" class="java.math.BigDecimal"/>
+	<field name="EXPORT_COUNTRY_CODE" class="java.lang.String"/>
+	<field name="COUNTRY" class="java.lang.String"/>
+	<field name="EXEMPTION_NUMBER" class="java.lang.String"/>
+	<sortField name="REGION"/>
+	<sortField name="TRANSPORT"/>
+	<sortField name="PORT"/>
+	<sortField name="TRANSPORT_NAME"/>
+	<sortField name="ESTIMATED_SHIPPING_DATE"/>
+	<variable name="v_TRANSPORT_NAME" class="java.lang.String">
+		<variableExpression><![CDATA[( $F{TRANSPORT} == null || $F{TRANSPORT}.isEmpty() ? "" : $F{TRANSPORT}.toUpperCase() )]]></variableExpression>
+	</variable>
+	<variable name="CCF4_TITLE_DATE_RANGE" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if (
+//    (isnull({?P_FROM_DATE}) or {?P_FROM_DATE} = '') and
+//    (isnull({?P_TO_DATE}) or {?P_TO_DATE} = '')
+//    ) then
+//'All Dates'
+//else if (
+//    isnull({?P_FROM_DATE}) or {?P_FROM_DATE} = ''
+//    ) then
+//{?P_TO_DATE} + ' and Previous'
+//else if (
+//    isnull({?P_TO_DATE}) or {?P_TO_DATE} = ''
+//    ) then
+//{?P_FROM_DATE} + ' and After'
+//else
+//{?P_FROM_DATE} + ' to ' + {?P_TO_DATE}
+
+($P{P_FROM_DATE} == null || $P{P_FROM_DATE}.isEmpty() ) &&
+($P{P_TO_DATE} == null || $P{P_TO_DATE}.isEmpty())
+?   "All Dates" + " and Previous"
+:   $P{P_FROM_DATE} == null || $P{P_FROM_DATE}.isEmpty()
+    ?   $P{P_TO_DATE}
+    :   $P{P_TO_DATE} == null || $P{P_TO_DATE}.isEmpty()
+        ?   $P{P_FROM_DATE} + " and After"
+        :   $P{P_FROM_DATE} + " to " + $P{P_TO_DATE}]]></variableExpression>
+	</variable>
+	<variable name="CCF5_F_REGION" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//GetRegionName({?P_ORG_UNIT_NUMBER})
+//Function (StringVar P_ORG_UNIT)
+//Local StringVar org_unit_name := "";
+//Local NumberVar counter := 0;
+//if (P_ORG_UNIT LIKE "*1903*") then ( org_unit_name := org_unit_name & ", RCB";
+//    counter := counter + 1; );
+//if (P_ORG_UNIT LIKE "*1904*") then(     org_unit_name := org_unit_name & ", RKB";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1905*") then(    org_unit_name := org_unit_name & ", RNO";
+//    counter := counter + 1; );
+//if (P_ORG_UNIT LIKE "*1906*") then(    org_unit_name := org_unit_name & ", ROM";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1907*") then(    org_unit_name := org_unit_name & ", RTO";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1908*") then(    org_unit_name := org_unit_name & ", RSK";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1909*") then(    org_unit_name := org_unit_name & ", RSC";
+//    counter := counter + 1;);
+//if (P_ORG_UNIT LIKE "*1910*") then(    org_unit_name := org_unit_name & ", RWC";
+//    counter := counter + 1;);
+//if Len(org_unit_name) > 0 then
+//(  if counter = 8 then
+//        "All"
+//  else
+//      Right(org_unit_name, len(org_unit_name) - 2)
+//)else
+//    org_unit_name;
+
+$P{P_ORG_UNIT_NUMBER} == null ? "" :
+$P{P_ORG_UNIT_NUMBER}!=null &&
+$P{P_ORG_UNIT_NUMBER}.contains( "1903" )&& $P{P_ORG_UNIT_NUMBER}.contains( "1904" ) && $P{P_ORG_UNIT_NUMBER}.contains( "1905" ) && $P{P_ORG_UNIT_NUMBER}.contains( "1906" ) &&
+$P{P_ORG_UNIT_NUMBER}.contains( "1907" )&& $P{P_ORG_UNIT_NUMBER}.contains( "1908" ) && $P{P_ORG_UNIT_NUMBER}.contains( "1909" ) && $P{P_ORG_UNIT_NUMBER}.contains( "1910" )
+?   "All"
+:   org.apache.commons.lang.StringUtils.chomp(
+    (
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1903" ) ? "RCB, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1904" ) ? "RKB, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1905" ) ? "RNO, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1906" ) ? "ROM, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1907" ) ? "RTO, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1908" ) ? "RSK, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1909" ) ? "RSC, " : "" ) +
+        ($P{P_ORG_UNIT_NUMBER}!=null && $P{P_ORG_UNIT_NUMBER}.contains( "1910" ) ? "RWC, " : "" )
+    ), ", ")]]></variableExpression>
+	</variable>
+	<variable name="CCF6_F_STATUS" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_STATUS}) or {?P_STATUS} = '' then
+//    'All'
+//else if {?P_STATUS} = 'ACT' then
+//    'Active'
+//else if {?P_STATUS} = 'CAN' then
+//    'Cancelled'
+//else if {?P_STATUS} = 'COM' then
+//    'Complete'
+//else
+//    'All'
+
+$P{P_STATUS}== null || $P{P_STATUS}.isEmpty()
+?   "All"
+:   $P{P_STATUS}.equalsIgnoreCase( "ACT" )
+    ?   "Active"
+    :   $P{P_STATUS}.equalsIgnoreCase( "CAN" )
+        ?   "Cancelled"
+        :   $P{P_STATUS}.equalsIgnoreCase( "COM" )
+            ?   "Complete"
+            :   "All"]]></variableExpression>
+	</variable>
+	<variable name="CCF7_F_PORT_OF_EXPORT" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_PORT_OF_EXPORT}) or {?P_PORT_OF_EXPORT} = '' then
+//    'All'
+//else
+//    {?P_PORT_OF_EXPORT}
+
+$P{P_PORT_OF_EXPORT} == null || $P{P_PORT_OF_EXPORT}.isEmpty()
+?   "All"
+:   $P{P_PORT_OF_EXPORT}]]></variableExpression>
+	</variable>
+	<variable name="CCF8_F_DEST_COUNTRY" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_DESTINATION_COUNTRY}) or {?P_DESTINATION_COUNTRY} = '' then
+//    'All'
+//else
+//    {?P_DESTINATION_COUNTRY}
+
+$P{P_DESTINATION_COUNTRY} == null || $P{P_DESTINATION_COUNTRY}.isEmpty()
+?   "All"
+:   $P{P_DESTINATION_COUNTRY}]]></variableExpression>
+	</variable>
+	<variable name="CCF9_F_JURISDICTION" class="java.lang.String" resetType="None">
+		<variableExpression><![CDATA[//if isnull({?P_JURISDICTION}) or {?P_JURISDICTION} = '' then
+//    'All'
+//else if {?P_JURISDICTION} = 'P' then
+//    'Provincial'
+//else if {?P_JURISDICTION} = 'F' then
+//    'Federal'
+//else if {?P_JURISDICTION} = 'I' then
+//    'Indian Reserve'
+//else
+//    'All'
+
+$P{P_JURISDICTION} == null || $P{P_JURISDICTION}.isEmpty()
+?   "All"
+:   $P{P_JURISDICTION}.equalsIgnoreCase( "P" )
+    ?   "Provincial"
+    :   $P{P_JURISDICTION}.equalsIgnoreCase( "F" )
+        ?   "Federal"
+        :   $P{P_JURISDICTION}.equalsIgnoreCase( "I" )
+            ?   "Indian Reserve"
+            :   "All"]]></variableExpression>
+	</variable>
+	<variable name="Sum (TRANSPORT_LEDGER_RPT.PERMIT_VOLUME)" class="java.math.BigDecimal" calculation="Sum">
+		<variableExpression><![CDATA[$F{PERMIT_VOLUME}]]></variableExpression>
+	</variable>
+	<variable name="Sum (TRANSPORT_LEDGER_RPT.PERMIT_VOLUME, TRANSPORT_LEDGER_RPT.ESTIMATED_SHIPPING_DATE, &quot;weekly&quot;)" class="java.math.BigDecimal" resetType="Group" resetGroup="Group 4" calculation="Sum">
+		<variableExpression><![CDATA[$F{PERMIT_VOLUME}]]></variableExpression>
+	</variable>
+	<variable name="Sum (TRANSPORT_LEDGER_RPT.PERMIT_VOLUME, TRANSPORT_LEDGER_RPT.TRANSPORT)" class="java.math.BigDecimal" resetType="Group" resetGroup="Group 1" calculation="Sum">
+		<variableExpression><![CDATA[$F{PERMIT_VOLUME}]]></variableExpression>
+	</variable>
+	<variable name="Sum (TRANSPORT_LEDGER_RPT.PERMIT_VOLUME, TRANSPORT_LEDGER_RPT.REGION)" class="java.math.BigDecimal" resetType="Group" resetGroup="Group 0" calculation="Sum">
+		<variableExpression><![CDATA[$F{PERMIT_VOLUME}]]></variableExpression>
+	</variable>
+	<variable name="v_dummy" class="java.lang.String">
+		<variableExpression><![CDATA[""]]></variableExpression>
+	</variable>
+	<group name="dummy_group">
+		<groupExpression><![CDATA[$V{v_dummy}]]></groupExpression>
+		<groupFooter>
+			<band height="40">
+				<line>
+					<reportElement uuid="fbd20089-0ba2-4f44-8a8d-1fa08b93195a" x="462" y="4" width="43" height="1">
+						<printWhenExpression><![CDATA[$F{EXPORT_PORT_OF_EXPORT_CODE} != null && !($F{EXPORT_PORT_OF_EXPORT_CODE}.isEmpty())]]></printWhenExpression>
+					</reportElement>
+					<graphicElement>
+						<pen lineWidth="1.0" lineStyle="Solid"/>
+					</graphicElement>
+				</line>
+				<staticText>
+					<reportElement uuid="f66f9671-2c38-426b-8b07-45af1e62bfc1" x="285" y="8" width="161" height="13" forecolor="#000000">
+						<printWhenExpression><![CDATA[$F{EXPORT_PORT_OF_EXPORT_CODE} != null && !($F{EXPORT_PORT_OF_EXPORT_CODE}.isEmpty())]]></printWhenExpression>
+					</reportElement>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[>>> Grand Total <<<]]></text>
+				</staticText>
+				<textField pattern="###0.0;-###0.0" isBlankWhenNull="true">
+					<reportElement uuid="2faa634e-5f26-45a0-bdba-d17868e01f66" x="447" y="8" width="60" height="13" forecolor="#000000">
+						<printWhenExpression><![CDATA[$F{EXPORT_PORT_OF_EXPORT_CODE} != null && !($F{EXPORT_PORT_OF_EXPORT_CODE}.isEmpty())]]></printWhenExpression>
+					</reportElement>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{Sum (TRANSPORT_LEDGER_RPT.PERMIT_VOLUME)}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupFooter>
+	</group>
+	<group name="Group 0" isStartNewPage="true">
+		<groupExpression><![CDATA[$F{REGION}]]></groupExpression>
+		<groupHeader>
+			<band height="13" splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+				<textField isBlankWhenNull="true">
+					<reportElement uuid="d137694d-89d4-4a98-a07c-399a0570f897" x="0" y="0" width="233" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{REGION}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band height="40" splitType="Prevent">
+				<line>
+					<reportElement uuid="54486479-4c59-4e11-8e74-b55ef7831402" x="459" y="1" width="45" height="1"/>
+					<graphicElement>
+						<pen lineWidth="1.0" lineStyle="Solid"/>
+					</graphicElement>
+				</line>
+				<staticText>
+					<reportElement uuid="e12d2744-54a9-4bdd-ac46-a7a7cd48ff31" x="282" y="7" width="161" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[>>> Region Total <<<]]></text>
+				</staticText>
+				<textField pattern="###0.0;-###0.0" isBlankWhenNull="true">
+					<reportElement uuid="b7922404-65bc-467d-867d-aa16056ecd6e" x="460" y="6" width="46" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{Sum (TRANSPORT_LEDGER_RPT.PERMIT_VOLUME, TRANSPORT_LEDGER_RPT.REGION)}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupFooter>
+	</group>
+	<group name="Group 1" isStartNewPage="true">
+		<groupExpression><![CDATA[$F{TRANSPORT}]]></groupExpression>
+		<groupHeader>
+			<band height="13" splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+				<textField isBlankWhenNull="true">
+					<reportElement uuid="081b4568-92d5-4183-afe8-44923cd600af" x="0" y="0" width="233" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{TRANSPORT}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band height="37" splitType="Prevent">
+				<line>
+					<reportElement uuid="df927054-7480-40fc-b9af-0071e591038d" x="459" y="3" width="45" height="1"/>
+					<graphicElement>
+						<pen lineWidth="1.0" lineStyle="Solid"/>
+					</graphicElement>
+				</line>
+				<staticText>
+					<reportElement uuid="98e2a121-1151-4259-bb35-882e39896944" x="282" y="6" width="161" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[### Transport Method Total ###]]></text>
+				</staticText>
+				<textField pattern="###0.0;-###0.0" isBlankWhenNull="true">
+					<reportElement uuid="31959c1f-624a-402e-8bb3-75be5288f362" x="461" y="5" width="45" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{Sum (TRANSPORT_LEDGER_RPT.PERMIT_VOLUME, TRANSPORT_LEDGER_RPT.TRANSPORT)}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupFooter>
+	</group>
+	<group name="Group 2">
+		<groupExpression><![CDATA[$F{PORT}]]></groupExpression>
+		<groupHeader>
+			<band height="13" splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+				<textField isBlankWhenNull="true">
+					<reportElement uuid="d6d8209b-13f2-48ec-ac64-827468620ca2" x="8" y="0" width="233" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{PORT}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+			</band>
+		</groupFooter>
+	</group>
+	<group name="Group 3">
+		<groupExpression><![CDATA[$F{TRANSPORT_NAME}]]></groupExpression>
+		<groupHeader>
+			<band height="13" splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+				<textField isBlankWhenNull="true">
+					<reportElement uuid="626b94f3-6e24-4633-8cb2-9c356b8c4205" x="84" y="0" width="233" height="13" forecolor="#000000"/>
+					<textElement>
+						<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{TRANSPORT_NAME}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+			</band>
+		</groupFooter>
+	</group>
+	<group name="Group 4">
+		<groupExpression><![CDATA[$F{ESTIMATED_SHIPPING_DATE}]]></groupExpression>
+		<groupHeader>
+			<band height="13" splitType="Prevent">
+				<printWhenExpression><![CDATA[false]]></printWhenExpression>
+				<textField pattern="yyyy-MM-dd" isBlankWhenNull="true">
+					<reportElement uuid="f8dcb4e6-e291-4e40-9c86-a499762512ea" isPrintRepeatedValues="false" x="211" y="0" width="47" height="12" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$F{ESTIMATED_SHIPPING_DATE}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band height="36" splitType="Prevent">
+				<line>
+					<reportElement uuid="348b6e95-f980-4b9d-8021-b48d72c03590" x="461" y="2" width="45" height="1"/>
+					<graphicElement>
+						<pen lineWidth="1.0" lineStyle="Solid"/>
+					</graphicElement>
+				</line>
+				<staticText>
+					<reportElement uuid="8e23cec0-9178-41aa-8ff3-01470d240841" x="341" y="5" width="105" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<text><![CDATA[*** Shipment Total ***]]></text>
+				</staticText>
+				<textField pattern="###0.0;-###0.0" isBlankWhenNull="true">
+					<reportElement uuid="a2748ea0-20be-4955-b7df-48cc7535e23c" x="461" y="5" width="45" height="13" forecolor="#000000"/>
+					<textElement textAlignment="Right">
+						<font fontName="Arial" size="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+					</textElement>
+					<textFieldExpression><![CDATA[$V{Sum (TRANSPORT_LEDGER_RPT.PERMIT_VOLUME, TRANSPORT_LEDGER_RPT.ESTIMATED_SHIPPING_DATE, "weekly")}]]></textFieldExpression>
+				</textField>
+			</band>
+		</groupFooter>
+	</group>
+	<background>
+		<band height="504">
+			<rectangle>
+				<reportElement uuid="abfb3b4d-bb9d-4dc4-9df9-aa4fe533bd75" x="0" y="0" width="682" height="504"/>
+			</rectangle>
+		</band>
+	</background>
+	<pageHeader>
+		<band height="167">
+			<line>
+				<reportElement uuid="86051ff9-57f8-4d77-b29c-879db3d7f036" x="0" y="77" width="682" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="17109085-5457-4661-8e55-c17182c6a56e" x="0" y="123" width="682" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="c5a8adee-4a9c-48de-99c5-fc42b845e521" x="0" y="159" width="682" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="bbcf4f54-8487-49dc-8f3a-606223371743" x="261" y="132" width="154" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line>
+				<reportElement uuid="ceaf3e4f-1db8-4f00-a989-31f98fbb1061" x="471" y="132" width="155" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<image>
+				<reportElement uuid="44cc2aba-d0e9-477c-b5cb-b667e7a1f9ed" x="8" y="6" width="59" height="69"/>
+				<imageExpression><![CDATA[($P{SUBREPORT_DIR} + "lexis_flnr_logo.png" )]]></imageExpression>
+			</image>
+			<subreport>
+				<reportElement uuid="d09cf0f2-6159-4ed2-9d81-2762ac519087" x="141" y="0" width="360" height="15"/>
+				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
+				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
+			</subreport>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="7e539647-605f-432a-aece-c42e510b9c98" x="180" y="15" width="324" height="71" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA["Province of British Columbia" + System.getProperty("line.separator") + "Log Exemption Information System" + System.getProperty("line.separator") + "Transport Ledger" + System.getProperty("line.separator") + $V{CCF4_TITLE_DATE_RANGE}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="6420c6fb-e4cf-4030-8cca-54eb02018cd6" x="504" y="0" width="72" height="55" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Page
+Date Printed]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="929f6641-3ff3-4961-81d1-799315bbd095" x="581" y="0" width="21" height="11" isPrintWhenDetailOverflows="true"/>
+				<textElement>
+					<font size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{PAGE_NUMBER} + " of "]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report" isBlankWhenNull="true">
+				<reportElement uuid="07086298-0a8b-474a-9067-14388dcb94bd" x="602" y="0" width="40" height="11"/>
+				<textElement>
+					<font size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[" " + $V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="f3d9fb51-60e8-4522-b5d3-35833bef29b4" x="582" y="11" width="96" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + new SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date()) + " " + new SimpleDateFormat("H:mm:ss").format(new java.util.Date())]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="e11bb5d4-e1b5-4590-824b-41e6886968bb" x="4" y="89" width="501" height="22" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA["Region	: " + ( $F{REGION} == null || $F{REGION}.isEmpty() ? "" : $F{REGION} ) + System.getProperty("line.separator") + "Method of Transport	: " + ( $F{TRANSPORT} == null || $F{TRANSPORT}.isEmpty() ? "" : $F{TRANSPORT} )]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="62026e3a-747c-45ae-b62d-ee7eea9f315c" x="416" y="128" width="54" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Permit Detail]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="3601ee47-8d2c-4679-8f18-6ab96243363d" x="8" y="139" width="65" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Port of Export]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="02156013-d23d-4e45-b123-5c337c55f528" x="83" y="139" width="76" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Vessel Name]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="8884f4d8-a7bb-4af1-b602-33960055cd89" x="200" y="139" width="58" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Shipment Date]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="8edbb238-f016-4ee1-9594-414af0ca3672" x="262" y="139" width="26" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Permit]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="c144e333-9d0b-4924-a4de-b631d34b0a03" x="304" y="139" width="29" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Status]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="d003d123-2136-42e9-b5ad-98c81e87bd6b" x="348" y="139" width="74" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Exporter Name]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="0564dfcb-9b7a-4844-ab07-440e514afd24" x="470" y="139" width="36" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Volume]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="af4b3f35-7935-4a28-97bf-4b23e5b258a3" x="511" y="139" width="40" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Country]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="f2af0c1b-5a52-465c-a93b-352cca60c2c9" x="626" y="127" width="53" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Exemption]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="8eb78e66-6e82-4c6c-a677-ff25112ad70a" x="626" y="141" width="48" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Number]]></text>
+			</staticText>
+		</band>
+	</pageHeader>
+	<detail>
+		<band height="12">
+			<printWhenExpression><![CDATA[//@NOT [isnull({TRANSPORT_LEDGER_RPT.EXPORT_PORT_OF_EXPORT_CODE})
+
+$F{EXPORT_PORT_OF_EXPORT_CODE}!=null]]></printWhenExpression>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="77d5090e-da5f-4e31-9f2b-23f7b9bc97cf" isPrintRepeatedValues="false" x="8" y="0" width="65" height="12" forecolor="#000000">
+					<printWhenExpression><![CDATA[$V{Group 2_COUNT} == 1]]></printWhenExpression>
+				</reportElement>
+				<textElement>
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{PORT}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="220d441c-7802-4137-a3af-62162d37fe7a" isPrintRepeatedValues="false" x="84" y="0" width="128" height="12" forecolor="#000000">
+					<printWhenExpression><![CDATA[$V{Group 3_COUNT} == 1]]></printWhenExpression>
+				</reportElement>
+				<textElement>
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{TRANSPORT_NAME}]]></textFieldExpression>
+			</textField>
+			<textField pattern="yyyy-MM-dd" isBlankWhenNull="true">
+				<reportElement uuid="f8dcb4e6-e291-4e40-9c86-a499762512ea" isPrintRepeatedValues="false" x="211" y="0" width="47" height="12" forecolor="#000000">
+					<printWhenExpression><![CDATA[$V{Group 4_COUNT} == 1]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{ESTIMATED_SHIPPING_DATE}]]></textFieldExpression>
+			</textField>
+			<textField pattern="###0;-###0" isBlankWhenNull="true">
+				<reportElement uuid="aa7c8665-a87e-4125-b154-ed7401203c2e" x="255" y="0" width="38" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{EXPORT_PERMIT_DETAIL_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="889a71f1-9acc-4ec5-8439-d7b2575230fd" x="303" y="0" width="40" height="12" forecolor="#000000"/>
+				<textElement>
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{STATUS}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="82bbc5f7-7ac3-43bb-a37e-cd89bc71ef8f" x="348" y="0" width="120" height="12" forecolor="#000000"/>
+				<textElement>
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{CLIENT_NAME}]]></textFieldExpression>
+			</textField>
+			<textField pattern="###0.0;-###0.0" isBlankWhenNull="true">
+				<reportElement uuid="e192086d-7778-4b0f-be16-42a4d703e0d9" x="472" y="0" width="34" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{PERMIT_VOLUME}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="94bf41a6-a84d-47fe-8fb0-ef63a5167d3c" x="511" y="0" width="122" height="12" forecolor="#000000"/>
+				<textElement>
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{COUNTRY}]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="22887356-8fc9-47fa-8232-fd763290fc2c" x="635" y="0" width="38" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Right">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{EXEMPTION_NUMBER}]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<summary>
+		<band height="232">
+			<line>
+				<reportElement uuid="dd04121c-e121-42fb-8754-a5c8a45c832a" x="0" y="84" width="682" height="1"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<image>
+				<reportElement uuid="d10877de-e1b7-4ef0-aa5e-0500a15b8496" x="8" y="8" width="59" height="69"/>
+				<imageExpression><![CDATA[($P{SUBREPORT_DIR} + "lexis_flnr_logo.png" )]]></imageExpression>
+			</image>
+			<subreport>
+				<reportElement uuid="d09cf0f2-6159-4ed2-9d81-2762ac519087" x="141" y="2" width="360" height="15"/>
+				<connectionExpression><![CDATA[$P{REPORT_CONNECTION}]]></connectionExpression>
+				<subreportExpression><![CDATA[$P{SUBREPORT_DIR} + "LEXIS_HEADER" + $P{SUBREPORT_EXT}]]></subreportExpression>
+			</subreport>
+			<staticText>
+				<reportElement uuid="afa48adb-5c21-44a7-8ceb-92a5e0dbc2c7" x="180" y="16" width="324" height="57" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Ministry of Forests - Province of British Columbia
+Log Exemption Information System
+Transport Ledger
+Report Run Summary]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="5c464924-3796-4d65-9444-7100c5f90dff" x="504" y="0" width="72" height="22" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Page
+Date Printed]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="20fcfed5-2521-44b1-9daf-490e81dc1ed2" x="582" y="11" width="96" height="11" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + new SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date()) + " " + new SimpleDateFormat("H:mm:ss").format(new java.util.Date())]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="175bc36c-1305-4eb8-a4d2-427b93aee894" x="180" y="92" width="324" height="16" forecolor="#000000"/>
+				<textElement textAlignment="Center">
+					<font fontName="Arial" size="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Run Time Selection Options]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="03c45a84-f725-476a-979e-ea202a400044" x="183" y="110" width="150" height="85" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[Permit  From Date
+Permit  To Date
+Permit Status
+Region
+Port of Export
+Destination Country
+Jurisdiction
+]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement uuid="41911265-96a9-4064-a9ef-e662dba00cf5" x="336" y="110" width="330" height="92" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<textFieldExpression><![CDATA[( $P{P_FROM_DATE} == null || $P{P_FROM_DATE}.isEmpty() ? "" : $P{P_FROM_DATE} ) + System.getProperty("line.separator") +
+( $P{P_TO_DATE} == null || $P{P_TO_DATE}.isEmpty() ? "" : $P{P_TO_DATE} ) + System.getProperty("line.separator") +
+$V{CCF6_F_STATUS} + System.getProperty("line.separator") +
+$V{CCF5_F_REGION} + System.getProperty("line.separator") +
+$V{CCF7_F_PORT_OF_EXPORT} + System.getProperty("line.separator") +
+$V{CCF8_F_DEST_COUNTRY} + System.getProperty("line.separator") +
+$V{CCF9_F_JURISDICTION} + System.getProperty("line.separator") + "" + System.getProperty("line.separator") + ""]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement uuid="318a0971-c550-4d4f-83a1-e1950a028e19" x="4" y="211" width="65" height="12" forecolor="#000000"/>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[End of Report]]></text>
+			</staticText>
+			<staticText>
+				<reportElement uuid="f563ca6f-53af-42cb-b8d2-f747e3bab1dd" x="216" y="200" width="206" height="12" forecolor="#000000">
+					<printWhenExpression><![CDATA[//@NOT [NOT isnull({TRANSPORT_LEDGER_RPT.EXPORT_PORT_OF_EXPORT_CODE})
+
+$F{EXPORT_PORT_OF_EXPORT_CODE} == null || $F{EXPORT_PORT_OF_EXPORT_CODE}.isEmpty()]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Left">
+					<font fontName="Arial" size="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
+				</textElement>
+				<text><![CDATA[No Data Found Matching Selection Options.]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement uuid="929f6641-3ff3-4961-81d1-799315bbd095" x="581" y="0" width="21" height="11" isPrintWhenDetailOverflows="true"/>
+				<textElement>
+					<font size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[": " + $V{PAGE_NUMBER} + " of "]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report" isBlankWhenNull="true">
+				<reportElement uuid="07086298-0a8b-474a-9067-14388dcb94bd" x="602" y="0" width="40" height="11"/>
+				<textElement>
+					<font size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[" " + $V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+		</band>
+	</summary>
+</jasperReport>
