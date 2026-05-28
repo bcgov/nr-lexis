@@ -252,8 +252,7 @@ const AdminUploadsPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <p className="landing-help-text">
-            Upload API calls are native-first and will use legacy endpoints only as fallback during
-            backend transition.
+            Upload workflows submit directly to the Spring backend upload APIs.
           </p>
           <div className="legacy-search-grid">
             <Select

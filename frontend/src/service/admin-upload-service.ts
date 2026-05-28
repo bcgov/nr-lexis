@@ -41,41 +41,6 @@ const MODERN_UPLOAD_ENDPOINTS: Record<UploadWorkflowType, string> = {
   invoice: '/lexis/admin/uploads/invoices',
 }
 
-const LEGACY_UPLOAD_ENDPOINTS: Record<
-  UploadWorkflowType,
-  {
-    path: string
-    actionMapping: string
-  }
-> = {
-  application: {
-    path: '/fileApplicationUpload.do',
-    actionMapping: 'upload',
-  },
-  exemption: {
-    path: '/fileExemptionUpload.do',
-    actionMapping: 'upload',
-  },
-  permit: {
-    path: '/filePermitUpload.do',
-    actionMapping: 'upload',
-  },
-  invoice: {
-    path: '/fileInvoiceUpload.do',
-    actionMapping: 'upload',
-  },
-}
-
-const FALLBACK_STATUSES = new Set([404, 405, 500, 501, 502, 503])
-
-const shouldFallbackToLegacy = (error: unknown): boolean => {
-  const status = (error as any)?.response?.status
-  if (typeof status === 'number') {
-    return FALLBACK_STATUSES.has(status)
-  }
-  return true
-}
-
 const appendBaseFormData = (formData: FormData, request: UploadRequestBase): void => {
   formData.append('formFile', request.file)
   formData.append('fileDescription', request.fileDescription)
@@ -111,62 +76,15 @@ const buildModernPayload = <TType extends UploadWorkflowType>(
   return formData
 }
 
-const submitLegacyUpload = async <TType extends UploadWorkflowType>(
-  workflowType: TType,
-  request: UploadRequestByType[TType],
-): Promise<void> => {
-  const endpoint = LEGACY_UPLOAD_ENDPOINTS[workflowType]
-  const params = new URLSearchParams({
-    actionMapping: endpoint.actionMapping,
-  })
-  const formData = new FormData()
-
-  appendBaseFormData(formData, request)
-
-  if (workflowType === 'application') {
-    params.set('applicationNumber', request.applicationNumber)
-  }
-
-  if (workflowType === 'exemption') {
-    params.set('exemptionNumber', request.exemptionNumber)
-  }
-
-  if (workflowType === 'permit') {
-    params.set('permitNumber', request.permitNumber)
-  }
-
-  if (workflowType === 'invoice') {
-    params.set('permitNumber', request.permitNumber)
-    params.set('invoiceConversionRate', request.invoiceConversionRate)
-    params.set('invoiceFeeInLieu', request.invoiceFeeInLieu)
-    formData.append('salesInvoiceNumber', request.salesInvoiceNumber)
-    formData.append('invoiceExportValue', request.invoiceExportValue)
-  }
-
-  await apiService.getAxiosInstance().post(`${endpoint.path}?${params.toString()}`, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  })
-}
-
 export const submitAdminUpload = async <TType extends UploadWorkflowType>(
   workflowType: TType,
   request: UploadRequestByType[TType],
 ): Promise<void> => {
   const modernEndpoint = MODERN_UPLOAD_ENDPOINTS[workflowType]
   const modernPayload = buildModernPayload(workflowType, request)
-
-  try {
-    await apiService.getAxiosInstance().post(modernEndpoint, modernPayload, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
-    await submitLegacyUpload(workflowType, request)
-  }
+  await apiService.getAxiosInstance().post(modernEndpoint, modernPayload, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
 }
