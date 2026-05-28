@@ -9,7 +9,8 @@ public enum LexisJasperReportDefinition {
   SPECIES_GRADE_REPORT("speciesGradeReport", "speciesGradeReport", null),
   EXEMPTION_REPORT("exemptionReport", "exemptionReport", "LEXIS_EXEMPTION_LEDGER"),
   APPLICATION_REPORT("applicationReport", "applicationReport", "LEXIS_application_ledger"),
-  APPROVED_EXEMPTION_REPORT("approvedExemptionReport", "approvedExemptionReport", null),
+  APPROVED_EXEMPTION_REPORT(
+      "approvedExemptionReport", "approvedExemptionReport", "LEXIS_EXEMPTION_LEDGER"),
   PERMIT_REPORT("permitReport", "permitReport", "LEXIS_PERMIT"),
   PERMIT_LEDGER_REPORT("permitLedgerReport", "permitLedgerReport", "LEXIS_PERMIT_LEDGER"),
   FEE_REPORT("feeReport", "feeReport", "EXPORT_FEE_SUMMARY"),

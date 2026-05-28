@@ -2,8 +2,10 @@ package ca.bc.gov.mof.lexis.service.report;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.io.File;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -21,6 +23,9 @@ import net.sf.jasperreports.engine.JasperExportManager;
 import net.sf.jasperreports.engine.JasperFillManager;
 import net.sf.jasperreports.engine.JasperPrint;
 import net.sf.jasperreports.engine.JasperReport;
+import net.sf.jasperreports.engine.export.JRCsvExporter;
+import net.sf.jasperreports.export.SimpleExporterInput;
+import net.sf.jasperreports.export.SimpleWriterExporterOutput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
@@ -86,24 +91,27 @@ public class OracleLexisReportService implements LexisReportService {
     }
 
     LexisJasperReportDefinition definition = definitionOptional.get();
-    LexisReportFormat format = LexisReportFormat.fromNullable(request == null ? null : request.format());
+    LexisReportFormat requestedFormat =
+        LexisReportFormat.fromNullable(request == null ? null : request.format());
+    LexisReportFormat effectiveFormat = normalizeRequestedFormat(requestedFormat);
+
     Optional<LexisGeneratedReport> legacyCsvReport =
-        legacyCsvReportService.generateLegacyCsvReport(definition, request, format);
+        legacyCsvReportService.generateLegacyCsvReport(definition, request, effectiveFormat);
     if (legacyCsvReport.isPresent()) {
       return legacyCsvReport;
     }
 
     Optional<LexisGeneratedReport> legacyPdfReport =
-        legacyJasperTableReportService.generateLegacyPdfReport(definition, request, format);
+        legacyJasperTableReportService.generateLegacyPdfReport(definition, request, effectiveFormat);
     if (legacyPdfReport.isPresent()) {
       return legacyPdfReport;
     }
 
-    if (format != LexisReportFormat.PDF) {
+    if (!isTemplateFormatSupported(effectiveFormat)) {
       LOGGER.warn(
           "Report action [{}] requested unsupported format [{}] in current migration state",
           definition.action(),
-          format.name());
+          requestedFormat.name());
       return Optional.empty();
     }
 
@@ -127,11 +135,11 @@ public class OracleLexisReportService implements LexisReportService {
 
     try (Connection connection = dataSource.getConnection()) {
       JasperPrint print = JasperFillManager.fillReport(jasperReport, parameters, connection);
-      byte[] reportBytes = JasperExportManager.exportReportToPdf(print);
+      byte[] reportBytes = exportTemplateReport(print, effectiveFormat, definition);
       return Optional.of(
           new LexisGeneratedReport(
-              definition.resolveFilename(format),
-              format.mediaType(),
+              definition.resolveFilename(effectiveFormat),
+              effectiveFormat.mediaType(),
               reportBytes));
     } catch (JRException ex) {
       LOGGER.error("Jasper fill/export failed for report action [{}]", definition.action(), ex);
@@ -140,6 +148,43 @@ public class OracleLexisReportService implements LexisReportService {
       LOGGER.error("Oracle connection failed for report action [{}]", definition.action(), ex);
       throw new IllegalStateException("Failed to connect to Oracle for report " + definition.action(), ex);
     }
+  }
+
+  LexisReportFormat normalizeRequestedFormat(LexisReportFormat format) {
+    if (format == LexisReportFormat.XLS || format == LexisReportFormat.XLSX) {
+      // Legacy Struts routes used XLS UI labels while generating CSV output.
+      return LexisReportFormat.CSV;
+    }
+    return format;
+  }
+
+  boolean isTemplateFormatSupported(LexisReportFormat format) {
+    return format == LexisReportFormat.PDF || format == LexisReportFormat.CSV;
+  }
+
+  byte[] exportTemplateReport(
+      JasperPrint print,
+      LexisReportFormat format,
+      LexisJasperReportDefinition definition)
+      throws JRException {
+    if (format == LexisReportFormat.PDF) {
+      return JasperExportManager.exportReportToPdf(print);
+    }
+    if (format == LexisReportFormat.CSV) {
+      return exportTemplateCsv(print);
+    }
+    throw new IllegalStateException(
+        "Unsupported template export format [" + format.name() + "] for action " + definition.action());
+  }
+
+  byte[] exportTemplateCsv(JasperPrint print) throws JRException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream(32 * 1024);
+    JRCsvExporter exporter = new JRCsvExporter();
+    exporter.setExporterInput(new SimpleExporterInput(print));
+    exporter.setExporterOutput(
+        new SimpleWriterExporterOutput(output, StandardCharsets.UTF_8.name()));
+    exporter.exportReport();
+    return output.toByteArray();
   }
 
   private JasperReport compileTemplate(LexisJasperReportDefinition definition) {

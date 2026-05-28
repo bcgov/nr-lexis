@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.report;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
@@ -101,7 +102,18 @@ public class LexisJasperReportParameterProvider {
 
   private Map<String, Object> approvedExemptionReport(Map<String, String> parameters) {
     Map<String, Object> reportParameters = new HashMap<>();
+    // Temporary migration fallback until the dedicated approved-exemption template is ported.
+    reportParameters.put("P_FROM_DATE", DEFAULT_FROM_DATE);
+    reportParameters.put("P_TO_DATE", DEFAULT_TO_DATE);
+    reportParameters.put("P_LISTING_FROM_DATE", "");
+    reportParameters.put("P_LISTING_TO_DATE", "");
+    reportParameters.put("P_ORG_UNIT", "");
+    reportParameters.put("P_EXEMPTION_REASON", "");
+    reportParameters.put("P_EXEMPTION_TYPE", "");
+    reportParameters.put("P_CLIENT", "");
+    reportParameters.put("P_GROWTH_TYPE", "");
     reportParameters.put("P_EXEMPTION_NUMBER", first(parameters, "exemptionNumber"));
+    reportParameters.put("P_EXEMPTION_STATUS", "");
     return reportParameters;
   }
 
@@ -160,6 +172,20 @@ public class LexisJasperReportParameterProvider {
   }
 
   private Map<String, Object> tenureReport(Map<String, String> parameters) {
+    String legacyActionMapping = normalizeLegacyAction(first(parameters, "legacyActionMapping"));
+    if ("generatetenurereport".equals(legacyActionMapping)) {
+      return tenureTypeAnalysisReport(parameters);
+    }
+    if ("generatemarkreport".equals(legacyActionMapping)) {
+      return tenureMarkAnalysisReport(parameters);
+    }
+    if ("generatefilereport".equals(legacyActionMapping)) {
+      return tenureFileAnalysisReport(parameters);
+    }
+    return tenurePermitAnalysisReport(parameters);
+  }
+
+  private Map<String, Object> tenurePermitAnalysisReport(Map<String, String> parameters) {
     Map<String, Object> reportParameters = new HashMap<>();
 
     String clientNumber = first(parameters, "clientNumber");
@@ -191,6 +217,98 @@ public class LexisJasperReportParameterProvider {
     reportParameters.put("P_FOREST_FILE_ID", first(parameters, "forestFileId"));
 
     return reportParameters;
+  }
+
+  private Map<String, Object> tenureTypeAnalysisReport(Map<String, String> parameters) {
+    Map<String, Object> reportParameters = new HashMap<>();
+
+    reportParameters.put("P_ORG_UNIT_NUMBER", "-1");
+    reportParameters.put("P_EXEMPTION_REASON", "");
+    reportParameters.put("P_EXEMPTION_TYPE", "");
+    reportParameters.put("P_EXEMPTION_NUMBER", "");
+    reportParameters.put("P_CLIENT_NUMBER", "");
+    reportParameters.put("P_CLIENT_TYPE", "");
+    reportParameters.put("P_FROM_DATE", first(parameters, "fromDate"));
+    reportParameters.put("P_TO_DATE", first(parameters, "toDate"));
+    reportParameters.put("P_TENURE_TYPE_1", emptyIfNull(first(parameters, "tenureType1")));
+    reportParameters.put("P_TENURE_TYPE_2", emptyIfNull(first(parameters, "tenureType2")));
+    reportParameters.put("P_TENURE_TYPE_3", emptyIfNull(first(parameters, "tenureType3")));
+    reportParameters.put("P_TENURE_TYPE_4", emptyIfNull(first(parameters, "tenureType4")));
+    reportParameters.put("P_TENURE_TYPE_5", emptyIfNull(first(parameters, "tenureType5")));
+    reportParameters.put("P_TENURE_TYPE_6", emptyIfNull(first(parameters, "tenureType6")));
+    reportParameters.put("P_TIMBER_MARK_1", "");
+    reportParameters.put("P_TIMBER_MARK_2", "");
+    reportParameters.put("P_TIMBER_MARK_3", "");
+    reportParameters.put("P_TIMBER_MARK_4", "");
+    reportParameters.put("P_TIMBER_MARK_5", "");
+    reportParameters.put("P_TIMBER_MARK_6", "");
+    reportParameters.put("P_FOREST_FILE_ID", "");
+
+    return reportParameters;
+  }
+
+  private Map<String, Object> tenureMarkAnalysisReport(Map<String, String> parameters) {
+    Map<String, Object> reportParameters = new HashMap<>();
+
+    reportParameters.put("P_ORG_UNIT_NUMBER", "-1");
+    reportParameters.put("P_EXEMPTION_REASON", "");
+    reportParameters.put("P_EXEMPTION_TYPE", "");
+    reportParameters.put("P_EXEMPTION_NUMBER", "");
+    reportParameters.put("P_CLIENT_NUMBER", "");
+    reportParameters.put("P_CLIENT_TYPE", "");
+    reportParameters.put("P_FROM_DATE", first(parameters, "fromDate"));
+    reportParameters.put("P_TO_DATE", first(parameters, "toDate"));
+    reportParameters.put("P_TENURE_TYPE_1", "");
+    reportParameters.put("P_TENURE_TYPE_2", "");
+    reportParameters.put("P_TENURE_TYPE_3", "");
+    reportParameters.put("P_TENURE_TYPE_4", "");
+    reportParameters.put("P_TENURE_TYPE_5", "");
+    reportParameters.put("P_TENURE_TYPE_6", "");
+    reportParameters.put("P_TIMBER_MARK_1", emptyIfNull(first(parameters, "timberMark1")));
+    reportParameters.put("P_TIMBER_MARK_2", emptyIfNull(first(parameters, "timberMark2")));
+    reportParameters.put("P_TIMBER_MARK_3", emptyIfNull(first(parameters, "timberMark3")));
+    reportParameters.put("P_TIMBER_MARK_4", emptyIfNull(first(parameters, "timberMark4")));
+    reportParameters.put("P_TIMBER_MARK_5", emptyIfNull(first(parameters, "timberMark5")));
+    reportParameters.put("P_TIMBER_MARK_6", emptyIfNull(first(parameters, "timberMark6")));
+    reportParameters.put("P_FOREST_FILE_ID", "");
+
+    return reportParameters;
+  }
+
+  private Map<String, Object> tenureFileAnalysisReport(Map<String, String> parameters) {
+    Map<String, Object> reportParameters = new HashMap<>();
+
+    reportParameters.put("P_ORG_UNIT_NUMBER", "-1");
+    reportParameters.put("P_EXEMPTION_REASON", "");
+    reportParameters.put("P_EXEMPTION_TYPE", "");
+    reportParameters.put("P_EXEMPTION_NUMBER", "");
+    reportParameters.put("P_CLIENT_NUMBER", "");
+    reportParameters.put("P_CLIENT_TYPE", "");
+    reportParameters.put("P_FROM_DATE", first(parameters, "fromDate"));
+    reportParameters.put("P_TO_DATE", first(parameters, "toDate"));
+    reportParameters.put("P_TENURE_TYPE_1", "");
+    reportParameters.put("P_TENURE_TYPE_2", "");
+    reportParameters.put("P_TENURE_TYPE_3", "");
+    reportParameters.put("P_TENURE_TYPE_4", "");
+    reportParameters.put("P_TENURE_TYPE_5", "");
+    reportParameters.put("P_TENURE_TYPE_6", "");
+    reportParameters.put("P_TIMBER_MARK_1", "");
+    reportParameters.put("P_TIMBER_MARK_2", "");
+    reportParameters.put("P_TIMBER_MARK_3", "");
+    reportParameters.put("P_TIMBER_MARK_4", "");
+    reportParameters.put("P_TIMBER_MARK_5", "");
+    reportParameters.put("P_TIMBER_MARK_6", "");
+    reportParameters.put("P_FOREST_FILE_ID", first(parameters, "forestFileId"));
+
+    return reportParameters;
+  }
+
+  private String normalizeLegacyAction(String actionMapping) {
+    if (actionMapping == null) {
+      return null;
+    }
+    String normalized = actionMapping.trim();
+    return normalized.isEmpty() ? null : normalized.toLowerCase(Locale.ROOT);
   }
 
   private String first(Map<String, String> parameters, String... keys) {

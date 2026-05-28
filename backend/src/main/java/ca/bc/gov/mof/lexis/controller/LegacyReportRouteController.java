@@ -85,14 +85,17 @@ public class LegacyReportRouteController {
       return ResponseEntity.noContent().build();
     }
 
-    String format = resolveFormat(actionMapping, requestParams.get("outputFormat"));
+    String format = resolveFormat(reportAction, actionMapping, requestParams.get("outputFormat"));
     if (format == null) {
       return ResponseEntity.noContent().build();
     }
 
+    Map<String, String> normalizedParameters =
+        normalizeReportParameters(requestParams, multiValueRequestParams);
+    normalizedParameters.put("legacyActionMapping", actionMapping);
+
     LexisReportRequestDto requestDto =
-        new LexisReportRequestDto(
-            normalizeReportParameters(requestParams, multiValueRequestParams), format);
+        new LexisReportRequestDto(normalizedParameters, format);
     return dispatch(reportAction, requestDto);
   }
 
@@ -129,7 +132,7 @@ public class LegacyReportRouteController {
     return LEGACY_REPORT_ACTIONS.contains(leaf) ? leaf : null;
   }
 
-  private String resolveFormat(String actionMapping, String outputFormat) {
+  private String resolveFormat(String reportAction, String actionMapping, String outputFormat) {
     String normalizedAction = actionMapping.toLowerCase(Locale.ROOT);
     if (normalizedAction.contains("csv")) {
       return "CSV";
@@ -138,13 +141,22 @@ public class LegacyReportRouteController {
       return "PDF";
     }
 
-    if (ACTION_GENERATE.equalsIgnoreCase(actionMapping)) {
+    if (ACTION_GENERATE.equalsIgnoreCase(actionMapping) || normalizedAction.startsWith(ACTION_GENERATE)) {
       String explicitFormat = trimToNull(outputFormat);
-      if (explicitFormat == null) {
-        // Struts legacy behavior defaulted to CSV when outputFormat was absent.
-        return "CSV";
+      if (explicitFormat != null) {
+        // Legacy pages label spreadsheet output as XLS while posting CSV.
+        if ("XLS".equalsIgnoreCase(explicitFormat) || "XLSX".equalsIgnoreCase(explicitFormat)) {
+          return "CSV";
+        }
+        return explicitFormat.toUpperCase(Locale.ROOT);
       }
-      return explicitFormat.toUpperCase(Locale.ROOT);
+
+      if ("approvedExemptionReport".equals(reportAction)) {
+        return "PDF";
+      }
+
+      // Struts legacy behavior defaulted to CSV when outputFormat was absent.
+      return "CSV";
     }
     return null;
   }

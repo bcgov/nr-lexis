@@ -26,8 +26,26 @@
     <ojdbc.version>21.3.0.0</ojdbc.version>
     <resilience4j.version>2.3.0</resilience4j.version>
     <!--
-      Jasper 7.x currently fails to compile standard JRXML templates in this modernization path.
-      Keep parity with nr-rept on 6.21.5 until the 7.x loader/parser path is stable for our templates.
+      Pinned to JR 6.21.5 (last stable 6.x). JR 7.x removed the legacy
+      SAX/Digester JRXmlLoader and the replacement (JacksonReportLoader)
+      is shipped unregistered, with a namespace-detection bug, and no
+      Jackson annotations on JasperDesign — `JasperCompileManager.compileReport`
+      fails on standard JRXML templates across the 7.0.0–7.0.6 line.
+      Reassess once JR 7.x finishes the migration path.
+
+      CVE posture on 6.21.5:
+        - CVE-2025-48734 (commons-beanutils): cleared. 6.21.5's pom pins
+          commons-beanutils 1.11.0.
+        - iText 2.x CVEs: cleared. 6.21.5 ships OpenPDF 1.3.32; legacy iText
+          is no longer a transitive dependency.
+        - CVE-2025-10492 (Jasper Java deserialization on .jasper load):
+          accepted. Exploit requires attacker-controlled .jasper input;
+          this app only loads JRXML from its own classpath resources and does
+          not accept user-supplied report binaries.
+
+      JR 6.x bundles the Eclipse JDT expression compiler (ecj) and PDF
+      exporter into the core jar, so no jasperreports-jdt / jasperreports-pdf
+      sub-artifacts are needed (those are 7.x split artifacts).
     -->
     <jasperreports.version>6.21.5</jasperreports.version>
   </properties>

@@ -32,7 +32,13 @@ class LexisJasperReportDefinitionTest {
   void unsupportedDefinitionsShouldBeExplicit() {
     assertThat(LexisJasperReportDefinition.TEAC_REPORT.supportsJasperTemplate()).isFalse();
     assertThat(LexisJasperReportDefinition.SPECIES_GRADE_REPORT.supportsJasperTemplate()).isFalse();
-    assertThat(LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT.supportsJasperTemplate()).isFalse();
+  }
+
+  @Test
+  void approvedExemptionShouldUseTemporaryTemplateFallback() {
+    assertThat(LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT.supportsJasperTemplate()).isTrue();
+    assertThat(LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT.templateName())
+        .isEqualTo("LEXIS_EXEMPTION_LEDGER");
   }
 
   @Test
