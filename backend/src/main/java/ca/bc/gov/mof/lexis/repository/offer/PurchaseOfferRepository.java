@@ -70,6 +70,10 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     if (criteria.excludeWithdrawn()) {
       where.addRaw(" AND PO.OFFER_WITHDRAWAL_DATE IS NULL");
     }
+    if (criteria.restrictToProvincialOrNullJurisdiction()) {
+      where.addRaw(
+          " AND (EEA.EXPORT_JURISDICTION_CODE = 'P' OR EEA.EXPORT_JURISDICTION_CODE IS NULL)");
+    }
 
     String orderBy =
         sanitizedSort(

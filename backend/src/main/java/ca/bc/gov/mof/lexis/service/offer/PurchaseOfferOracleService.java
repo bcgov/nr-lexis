@@ -58,7 +58,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   private PurchaseOfferSearchCriteria normalizeCriteria(PurchaseOfferSearchCriteria input) {
     if (input == null) {
       return new PurchaseOfferSearchCriteria(
-          null, null, null, null, null, null, null, null, false, List.of(), null, 0, 25);
+          null, null, null, null, null, null, null, null, false, false, List.of(), null, 0, 25);
     }
 
     return new PurchaseOfferSearchCriteria(
@@ -71,6 +71,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         trimToNull(input.clientNumber()),
         trimToNull(input.offeringClientNumber()),
         input.excludeWithdrawn(),
+        input.restrictToProvincialOrNullJurisdiction(),
         normalizeRegions(input.regionNumbers()),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),

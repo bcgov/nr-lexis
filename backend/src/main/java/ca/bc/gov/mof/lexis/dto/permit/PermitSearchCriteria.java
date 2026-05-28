@@ -13,7 +13,40 @@ public record PermitSearchCriteria(
     String invoiceNumber,
     String applicantClientNumber,
     String ownerClientNumber,
+    boolean requireScalePermit,
     List<Long> regionNumbers,
     String sortField,
     int page,
-    int size) {}
+    int size) {
+
+  public PermitSearchCriteria(
+      String applicationNumber,
+      String packageNumber,
+      String permitNumber,
+      LocalDate issuedFromDate,
+      LocalDate issuedToDate,
+      String permitStatus,
+      String invoiceNumber,
+      String applicantClientNumber,
+      String ownerClientNumber,
+      List<Long> regionNumbers,
+      String sortField,
+      int page,
+      int size) {
+    this(
+        applicationNumber,
+        packageNumber,
+        permitNumber,
+        issuedFromDate,
+        issuedToDate,
+        permitStatus,
+        invoiceNumber,
+        applicantClientNumber,
+        ownerClientNumber,
+        false,
+        regionNumbers,
+        sortField,
+        page,
+        size);
+  }
+}
