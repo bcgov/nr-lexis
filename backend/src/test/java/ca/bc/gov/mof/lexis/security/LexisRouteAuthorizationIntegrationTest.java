@@ -53,6 +53,24 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyApplicationDetailsAddShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/applicationDetails")
+                .param("actionMapping", "add")
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyApplicationDetailsAddShouldAllowProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/applicationDetails")
+                .param("actionMapping", "add")
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void applicationDetailsRpcShouldRejectAnonymousRequests() throws Exception {
     mockMvc.perform(get("/api/lexis/rpc/application-details/document-details")).andExpect(status().isForbidden());
   }
@@ -116,6 +134,15 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyOfferDetailsAddShouldAllowProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/offerDetails")
+                .param("actionMapping", "add")
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void legacyPermitDetailsRpcShouldAllowReadOnlyRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/permitDetailsRPC")
@@ -161,6 +188,33 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("actionMapping", "updateShipping")
                 .param("permitNumber", "7000123")
                 .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyPermitDetailsAddShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/permitDetails")
+                .param("actionMapping", "add")
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyPermitDetailsAddShouldAllowProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/permitDetails")
+                .param("actionMapping", "add")
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyExemptionDetailsCreateShouldAllowExemptionApproverRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/exemptionDetails")
+                .param("actionMapping", "create")
+                .with(jwt().authorities(new SimpleGrantedAuthority("EXEMPTION_APPROVER"))))
         .andExpect(status().isNoContent());
   }
 

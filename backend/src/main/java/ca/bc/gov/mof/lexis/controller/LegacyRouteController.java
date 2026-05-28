@@ -24,6 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class LegacyRouteController {
 
   private static final String ACTION_VIEW = "view";
+  private static final String ACTION_ADD = "add";
+  private static final String ACTION_CREATE = "create";
   private static final String ACTION_VERIFY_APPLICATION_CLIENTS = "verifyApplicationClients";
   private static final String ACTION_HAS_VALID_OFFER = "hasValidOffer";
   private static final String ACTION_GET_APPLICATIONS = "getApplications";
@@ -79,6 +81,10 @@ public class LegacyRouteController {
   private static final String ACTION_REMOVE_APPLICATION_DOCUMENT = "removeApplicationDocument";
   private static final String ACTION_REMOVE_INVOICE_DOCUMENT = "removeInvoiceDocument";
   private static final String LEGACY_ACTION_SAVE_PERMIT = "savePermit";
+  private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
+  private static final String LEGACY_ACTION_CREATE_EXEMPTION = "/createExemption";
+  private static final String LEGACY_ACTION_CREATE_OFFER = "createOffer";
+  private static final String LEGACY_ACTION_CREATE_PERMIT = "createPermit";
 
   private final LexisApplicationController applicationController;
   private final ExemptionController exemptionController;
@@ -173,7 +179,12 @@ public class LegacyRouteController {
 
   @GetMapping({"/applicationDetails", "/applicationDetails.do"})
   public ResponseEntity<?> applicationDetails(
-      @RequestParam(name = "applicationNumber", required = false) @Positive Long applicationNumber) {
+      @RequestParam(name = "actionMapping", required = false) String actionMapping,
+      @RequestParam(name = "applicationNumber", required = false) @Positive Long applicationNumber,
+      Authentication authentication) {
+    if (isLegacyAddOrCreateAction(actionMapping)) {
+      return authorizeLegacyAction(authentication, LEGACY_ACTION_CREATE_APPLICATION);
+    }
     if (applicationNumber == null) {
       return ResponseEntity.noContent().build();
     }
@@ -256,7 +267,12 @@ public class LegacyRouteController {
 
   @GetMapping({"/exemptionDetails", "/exemptionDetails.do"})
   public ResponseEntity<?> exemptionDetails(
-      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber) {
+      @RequestParam(name = "actionMapping", required = false) String actionMapping,
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      Authentication authentication) {
+    if (isLegacyAddOrCreateAction(actionMapping)) {
+      return authorizeLegacyAction(authentication, LEGACY_ACTION_CREATE_EXEMPTION);
+    }
     if (exemptionNumber == null || exemptionNumber.isBlank()) {
       return ResponseEntity.noContent().build();
     }
@@ -376,7 +392,12 @@ public class LegacyRouteController {
 
   @GetMapping({"/offerDetails", "/offerDetails.do"})
   public ResponseEntity<?> offerDetails(
-      @RequestParam(name = "offerNumber", required = false) @Positive Long offerNumber) {
+      @RequestParam(name = "actionMapping", required = false) String actionMapping,
+      @RequestParam(name = "offerNumber", required = false) @Positive Long offerNumber,
+      Authentication authentication) {
+    if (isLegacyAddOrCreateAction(actionMapping)) {
+      return authorizeLegacyAction(authentication, LEGACY_ACTION_CREATE_OFFER);
+    }
     if (offerNumber == null) {
       return ResponseEntity.noContent().build();
     }
@@ -420,7 +441,12 @@ public class LegacyRouteController {
 
   @GetMapping({"/permitDetails", "/permitDetails.do"})
   public ResponseEntity<?> permitDetails(
-      @RequestParam(name = "permitNumber", required = false) @Positive Long permitNumber) {
+      @RequestParam(name = "actionMapping", required = false) String actionMapping,
+      @RequestParam(name = "permitNumber", required = false) @Positive Long permitNumber,
+      Authentication authentication) {
+    if (isLegacyAddOrCreateAction(actionMapping)) {
+      return authorizeLegacyAction(authentication, LEGACY_ACTION_CREATE_PERMIT);
+    }
     if (permitNumber == null) {
       return ResponseEntity.noContent().build();
     }
@@ -683,5 +709,23 @@ public class LegacyRouteController {
         || ACTION_REMOVE_PERMIT_DOCUMENT.equalsIgnoreCase(actionMapping)
         || ACTION_REMOVE_APPLICATION_DOCUMENT.equalsIgnoreCase(actionMapping)
         || ACTION_REMOVE_INVOICE_DOCUMENT.equalsIgnoreCase(actionMapping);
+  }
+
+  private boolean isLegacyAddOrCreateAction(String actionMapping) {
+    if (actionMapping == null || actionMapping.isBlank()) {
+      return false;
+    }
+    return ACTION_ADD.equalsIgnoreCase(actionMapping) || ACTION_CREATE.equalsIgnoreCase(actionMapping);
+  }
+
+  private ResponseEntity<?> authorizeLegacyAction(Authentication authentication, String action) {
+    boolean authorized =
+        authorizationService.canPerformAction(
+            sessionService.parseRolesFromPrincipal(authentication), action);
+    if (!authorized) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    // Legacy "add/create" loaded JSP pages; REST shim preserves only authorization semantics.
+    return ResponseEntity.noContent().build();
   }
 }
