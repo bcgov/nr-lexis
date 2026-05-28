@@ -5,7 +5,7 @@
 
 # LEXIS - Log Exemption Information System
 
-Full-stack LEXIS application for log export workflows. This repository uses the modern `nr-rept`-style structure and tooling while preserving business behavior from `nr-lexis-main`.
+Full-stack LEXIS application for log export workflows.
 
 | Component | Technology |
 |-----------|------------|
@@ -53,7 +53,7 @@ curl http://localhost:8080/actuator/prometheus
 ```bash
 cd frontend
 npm ci
-PORT=3000 npm run dev
+npm run dev
 ```
 
 Frontend: `http://localhost:3000`
@@ -79,4 +79,4 @@ GitHub Actions handles PR checks, image builds, and OpenShift deployments. Names
 ## Notes
 
 - Source-of-truth legacy behavior reference: `nr-lexis-main`.
-- Modern structure and operational conventions reference: `nr-rept`.
+- Repository structure and operational conventions reference: `nr-rept`.
