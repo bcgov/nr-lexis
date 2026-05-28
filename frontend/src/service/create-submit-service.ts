@@ -22,6 +22,8 @@ type LegacyCreateResponse = {
   permitNumber?: unknown
 }
 
+type CreateSubmitRequestMode = 'form' | 'json'
+
 const asString = (value: unknown): string | undefined => {
   if (value === null || value === undefined) {
     return undefined
@@ -51,6 +53,59 @@ const toUrlEncodedParams = (payload: Record<string, string | undefined>): URLSea
     }
   })
   return params
+}
+
+const getConfiguredPath = (configured: unknown, fallback: string): string => {
+  if (typeof configured !== 'string') {
+    return fallback
+  }
+
+  const trimmed = configured.trim()
+  return trimmed.length > 0 ? trimmed : fallback
+}
+
+const getCreateSubmitRequestMode = (): CreateSubmitRequestMode => {
+  const configured = (import.meta.env.VITE_LEXIS_CREATE_SUBMIT_REQUEST_MODE ?? 'form')
+    .toString()
+    .trim()
+    .toLowerCase()
+
+  return configured === 'json' ? 'json' : 'form'
+}
+
+const getProvincialApplicationCreatePath = (): string => {
+  return getConfiguredPath(
+    import.meta.env.VITE_LEXIS_CREATE_APPLICATION_ENDPOINT,
+    '/lexis/applicationDetailsRPC',
+  )
+}
+
+const getProvincialExemptionCreatePath = (): string => {
+  return getConfiguredPath(
+    import.meta.env.VITE_LEXIS_CREATE_EXEMPTION_ENDPOINT,
+    '/lexis/exemptionDetailsRPC',
+  )
+}
+
+const getProvincialOfferCreatePath = (): string => {
+  return getConfiguredPath(
+    import.meta.env.VITE_LEXIS_CREATE_OFFER_ENDPOINT,
+    '/lexis/offerDetailsRPC',
+  )
+}
+
+const getProvincialPermitCreatePath = (): string => {
+  return getConfiguredPath(
+    import.meta.env.VITE_LEXIS_CREATE_PERMIT_ENDPOINT,
+    '/lexis/rpc/permit-details/add-permit',
+  )
+}
+
+const getIndigenousReservePermitCreatePath = (): string => {
+  return getConfiguredPath(
+    import.meta.env.VITE_LEXIS_CREATE_INDIGENOUS_PERMIT_ENDPOINT,
+    '/lexis/indianReservePermitDetails',
+  )
 }
 
 const parseCreateResponse = (
@@ -112,11 +167,16 @@ const postLegacyForm = async (
   path: string,
   payload: Record<string, string | undefined>,
 ): Promise<LegacyCreateResponse> => {
+  const requestMode = getCreateSubmitRequestMode()
+  const requestBody = requestMode === 'json' ? payload : toUrlEncodedParams(payload)
+  const contentType =
+    requestMode === 'json' ? 'application/json' : 'application/x-www-form-urlencoded'
+
   const response = await apiService
     .getAxiosInstance()
-    .post<LegacyCreateResponse>(path, toUrlEncodedParams(payload), {
+    .post<LegacyCreateResponse>(path, requestBody, {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': contentType,
       },
     })
   return response.data ?? {}
@@ -139,7 +199,7 @@ export const submitProvincialApplicationCreate = async (
   form: ProvincialApplicationCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
   try {
-    const payload = await postLegacyForm('/lexis/applicationDetailsRPC', {
+    const payload = await postLegacyForm(getProvincialApplicationCreatePath(), {
       actionMapping: 'addApplication',
       applicationNumber: form.applicationNumber,
       packageNumber: form.packageNumber,
@@ -180,7 +240,7 @@ export const submitProvincialExemptionCreate = async (
   form: ProvincialExemptionCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
   try {
-    const payload = await postLegacyForm('/lexis/exemptionDetailsRPC', {
+    const payload = await postLegacyForm(getProvincialExemptionCreatePath(), {
       actionMapping: 'addExemption',
       exemptionNumber: form.exemptionNumber,
       applicationNumber: form.applicationNumber,
@@ -218,7 +278,7 @@ export const submitProvincialOfferCreate = async (
   form: ProvincialOfferCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
   try {
-    const payload = await postLegacyForm('/lexis/offerDetailsRPC', {
+    const payload = await postLegacyForm(getProvincialOfferCreatePath(), {
       actionMapping: 'addOffer',
       offerNumber: form.offerNumber,
       exportPurchaseOfferNumber: form.offerNumber,
@@ -258,7 +318,7 @@ export const submitProvincialPermitCreate = async (
   form: ProvincialPermitCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
   try {
-    const payload = await postLegacyForm('/lexis/rpc/permit-details/add-permit', {
+    const payload = await postLegacyForm(getProvincialPermitCreatePath(), {
       actionMapping: 'addPermit',
       permitNumber: form.permitNumber,
       permitStatus: form.permitStatus,
@@ -296,7 +356,7 @@ export const submitIndianReservePermitCreate = async (
   form: IndianReservePermitCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
   try {
-    const payload = await postLegacyForm('/lexis/indianReservePermitDetails', {
+    const payload = await postLegacyForm(getIndigenousReservePermitCreatePath(), {
       actionMapping: 'saveReservePermit',
       applicationNumber: '0',
       clientNumber: form.clientNumber,

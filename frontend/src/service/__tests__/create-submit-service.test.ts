@@ -19,6 +19,7 @@ vi.mock('@/service/api-service', () => ({
 describe('create-submit-service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.unstubAllEnvs()
   })
 
   it('posts provincial application create payload as url-encoded form', async () => {
@@ -88,6 +89,70 @@ describe('create-submit-service', () => {
     })
 
     expect(result.createdId).toBe('OP-900')
+  })
+
+  it('uses configured create endpoint overrides when provided', async () => {
+    vi.stubEnv('VITE_LEXIS_CREATE_APPLICATION_ENDPOINT', '/lexis/rpc/application-details/add')
+    postMock.mockResolvedValue({
+      data: {
+        success: true,
+        message: 'saved',
+        applicationNumber: '1001',
+      },
+    })
+
+    await submitProvincialApplicationCreate({
+      applicationNumber: '1001',
+      packageNumber: 'PKG-1',
+      ownerClientNumber: '00011111',
+      applicantClientNumber: '00022222',
+      productTypeCode: 'LOG',
+      exemptionType: 'SECTION_1',
+      region: '11',
+      receivedDate: '2026-01-01',
+      listingDate: '2026-01-02',
+      comments: 'ready',
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    expect(postMock.mock.calls[0][0]).toBe('/lexis/rpc/application-details/add')
+  })
+
+  it('submits json payload when create submit request mode is json', async () => {
+    vi.stubEnv('VITE_LEXIS_CREATE_SUBMIT_REQUEST_MODE', 'json')
+    postMock.mockResolvedValue({
+      data: {
+        success: true,
+        message: 'saved',
+        applicationNumber: '1001',
+      },
+    })
+
+    await submitProvincialApplicationCreate({
+      applicationNumber: '1001',
+      packageNumber: 'PKG-1',
+      ownerClientNumber: '00011111',
+      applicantClientNumber: '00022222',
+      productTypeCode: 'LOG',
+      exemptionType: 'SECTION_1',
+      region: '11',
+      receivedDate: '2026-01-01',
+      listingDate: '2026-01-02',
+      comments: 'ready',
+    })
+
+    const [, body, config] = postMock.mock.calls[0]
+    expect(body).toEqual(
+      expect.objectContaining({
+        actionMapping: 'addApplication',
+        applicationNumber: '1001',
+      }),
+    )
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
   })
 
   it('returns status-specific message when permit submit endpoint is unavailable', async () => {
