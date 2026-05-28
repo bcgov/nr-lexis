@@ -15,12 +15,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class LexisSessionService {
 
-  private static final String ROLE_ADMIN = "ADMIN";
-  private static final String ROLE_READ_ONLY = "READ_ONLY";
-  private static final String ROLE_APPLICATION_APPROVER = "APPLICATION_APPROVER";
-  private static final String ROLE_EXEMPTION_APPROVER = "EXEMPTION_APPROVER";
-  private static final String ROLE_PROVINCIAL_SUBMITTER = "PROVINCIAL_SUBMITTER";
-  private static final String ROLE_FEDERAL_SUBMITTER = "FEDERAL_SUBMITTER";
+  private static final String ROLE_ADMIN = "LEXIS_ADMIN";
+  private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
+  private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
+  private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
+  private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
+  private static final String ROLE_FEDERAL_SUBMITTER = "LEXIS_FEDERAL_SUBMITTER";
 
   private static final Set<String> CANONICAL_ROLES =
       Set.of(

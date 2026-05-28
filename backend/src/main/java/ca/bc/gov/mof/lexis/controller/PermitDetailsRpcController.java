@@ -55,7 +55,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PermitDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PermitDetailsRpcController.class);
-  private static final String ROLE_READ_ONLY = "READ_ONLY";
+  private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
   private static final String LEGACY_PERMIT_LOCK_SESSION_KEY = "PERMIT_LOCK";
 
   private final ObjectProvider<PermitDetailsRpcService> serviceProvider;

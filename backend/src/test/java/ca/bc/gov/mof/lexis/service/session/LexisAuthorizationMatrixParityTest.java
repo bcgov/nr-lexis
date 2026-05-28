@@ -30,11 +30,11 @@ class LexisAuthorizationMatrixParityTest {
   void configuredRolesShouldContainFinalFamRoleModel() {
     assertThat(authorizationService.getConfiguredRoles())
         .contains(
-            "ADMIN",
-            "READ_ONLY",
-            "APPLICATION_APPROVER",
-            "EXEMPTION_APPROVER",
-            "PROVINCIAL_SUBMITTER",
-            "FEDERAL_SUBMITTER");
+            "LEXIS_ADMIN",
+            "LEXIS_READ_ONLY",
+            "LEXIS_APPLICATION_APPROVER",
+            "LEXIS_EXEMPTION_APPROVER",
+            "LEXIS_PROVINCIAL_SUBMITTER",
+            "LEXIS_FEDERAL_SUBMITTER");
   }
 }

@@ -17,12 +17,12 @@ class LexisAuthorizationServiceTest {
   void shouldGrantAllKnownActionsForWildcardRoleMapping() {
     LexisAuthorizationService service =
         createService(
-            "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
             Map.of(
-                "ADMIN", List.of("*"),
-                "READ_ONLY", List.of("/applicationSearch")));
+                "LEXIS_ADMIN", List.of("*"),
+                "LEXIS_READ_ONLY", List.of("/applicationSearch")));
 
-    List<String> granted = service.resolveGrantedActions(List.of("ADMIN"));
+    List<String> granted = service.resolveGrantedActions(List.of("LEXIS_ADMIN"));
 
     assertThat(granted).containsExactlyElementsOf(service.getKnownActions());
   }
@@ -31,14 +31,14 @@ class LexisAuthorizationServiceTest {
   void shouldApplyCanonicalIndustryMappingsForCanonicalRolesOnly() {
     LexisAuthorizationService service =
         createService(
-            "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
             Map.of(
-                "PROVINCIAL_SUBMITTER", List.of("/summary"),
-                "FEDERAL_SUBMITTER", List.of("/offersSearch")));
+                "LEXIS_PROVINCIAL_SUBMITTER", List.of("/summary"),
+                "LEXIS_FEDERAL_SUBMITTER", List.of("/offersSearch")));
 
-    List<String> canonicalIndustryScoped = service.resolveGrantedActions(List.of("PROVINCIAL_SUBMITTER_00005678"));
-    List<String> federalConcrete = service.resolveGrantedActions(List.of("FEDERAL_SUBMITTER"));
-    List<String> federalScoped = service.resolveGrantedActions(List.of("FEDERAL_SUBMITTER_00001234"));
+    List<String> canonicalIndustryScoped = service.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER_00005678"));
+    List<String> federalConcrete = service.resolveGrantedActions(List.of("LEXIS_FEDERAL_SUBMITTER"));
+    List<String> federalScoped = service.resolveGrantedActions(List.of("LEXIS_FEDERAL_SUBMITTER_00001234"));
     List<String> legacyIndustryScoped = service.resolveGrantedActions(List.of("INDUSTRY_00005678"));
     List<String> legacyScoped = service.resolveGrantedActions(List.of("LOG_EXPORT_INDUSTRY_00001234"));
 
@@ -50,53 +50,54 @@ class LexisAuthorizationServiceTest {
   }
 
   @Test
-  void shouldNotNormalizeLegacyRoleAliases() {
+  void shouldNormalizeCanonicalRolesAndRejectLegacyAliases() {
     LexisAuthorizationService service =
         createService(
-            "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
             Map.of(
-                "READ_ONLY", List.of("/applicationSearch"),
-                "ADMIN", List.of("/lexisAgentAdmin")));
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_ADMIN", List.of("/lexisAgentAdmin")));
 
-    List<String> granted = service.resolveGrantedActions(List.of("lexis_read_only", "lexis_admin", "ADMIN"));
+    List<String> granted =
+        service.resolveGrantedActions(List.of("lexis_read_only", "READ_ONLY", "lexis_admin", "LEXIS_ADMIN"));
 
-    assertThat(granted).containsExactly("/lexisAgentAdmin");
+    assertThat(granted).containsExactly("/applicationSearch", "/lexisAgentAdmin");
   }
 
   @Test
   void shouldResolveRolesForConfiguredAction() {
     LexisAuthorizationService service =
         createService(
-            "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
             Map.of(
-                "ADMIN", List.of("*"),
-                "READ_ONLY", List.of("/applicationSearch"),
-                "APPLICATION_APPROVER", List.of("/applicationsReview")));
+                "LEXIS_ADMIN", List.of("*"),
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_APPLICATION_APPROVER", List.of("/applicationsReview")));
 
     Set<String> roles = service.resolveRolesForAction("/applicationSearch");
 
     assertThat(roles)
         .contains(
-            "ADMIN",
-            "READ_ONLY")
-        .doesNotContain("APPLICATION_APPROVER");
+            "LEXIS_ADMIN",
+            "LEXIS_READ_ONLY")
+        .doesNotContain("LEXIS_APPLICATION_APPROVER");
   }
 
   @Test
   void shouldResolveIndustryActionRoles() {
     LexisAuthorizationService service =
         createService(
-            "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
             Map.of(
-                "PROVINCIAL_SUBMITTER", List.of("/summary"),
-                "FEDERAL_SUBMITTER", List.of("/summary")));
+                "LEXIS_PROVINCIAL_SUBMITTER", List.of("/summary"),
+                "LEXIS_FEDERAL_SUBMITTER", List.of("/summary")));
 
     Set<String> roles = service.resolveRolesForAction("/summary");
 
     assertThat(roles)
         .contains(
-            "PROVINCIAL_SUBMITTER",
-            "FEDERAL_SUBMITTER")
+            "LEXIS_PROVINCIAL_SUBMITTER",
+            "LEXIS_FEDERAL_SUBMITTER")
         .doesNotContain("INDUSTRY_00001234", "LEXIS_INDUSTRY", "LOG_EXPORT_INDUSTRY");
   }
 
@@ -104,10 +105,10 @@ class LexisAuthorizationServiceTest {
   void shouldReturnEmptyRolesWhenActionNotConfigured() {
     LexisAuthorizationService service =
         createService(
-            "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
             Map.of(
-                "READ_ONLY", List.of("/applicationSearch"),
-                "APPLICATION_APPROVER", List.of("/applicationsReview")));
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_APPLICATION_APPROVER", List.of("/applicationsReview")));
 
     Set<String> roles = service.resolveRolesForAction("/notMapped");
 
@@ -118,50 +119,50 @@ class LexisAuthorizationServiceTest {
   void shouldExposeConfiguredCanonicalRolesForRouteAuth() {
     LexisAuthorizationService service =
         createService(
-            "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
             Map.of(
-                "ADMIN", List.of("*"),
-                "READ_ONLY", List.of("/applicationSearch"),
-                "PROVINCIAL_SUBMITTER", List.of("/summary"),
-                "FEDERAL_SUBMITTER", List.of("/summary")));
+                "LEXIS_ADMIN", List.of("*"),
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_PROVINCIAL_SUBMITTER", List.of("/summary"),
+                "LEXIS_FEDERAL_SUBMITTER", List.of("/summary")));
 
     Set<String> roles = service.getConfiguredRoles();
 
     assertThat(roles)
         .contains(
-            "ADMIN",
-            "READ_ONLY",
-            "PROVINCIAL_SUBMITTER",
-            "FEDERAL_SUBMITTER")
-        .doesNotContain("LEXIS_ADMIN", "LEXIS_READ_ONLY", "LEXIS_INDUSTRY", "LOG_EXPORT_INDUSTRY");
+            "LEXIS_ADMIN",
+            "LEXIS_READ_ONLY",
+            "LEXIS_PROVINCIAL_SUBMITTER",
+            "LEXIS_FEDERAL_SUBMITTER")
+        .doesNotContain("ADMIN", "READ_ONLY", "PROVINCIAL_SUBMITTER", "FEDERAL_SUBMITTER", "LEXIS_INDUSTRY", "LOG_EXPORT_INDUSTRY");
   }
 
   @Test
   void canPerformActionShouldSupportActionNamesWithOrWithoutLeadingSlash() {
     LexisAuthorizationService service =
         createService(
-            "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
             Map.of(
-                "READ_ONLY", List.of("/applicationSearch"),
-                "ADMIN", List.of("*")));
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_ADMIN", List.of("*")));
 
-    assertThat(service.canPerformAction(List.of("READ_ONLY"), "/applicationSearch")).isTrue();
-    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "applicationSearch")).isFalse();
-    assertThat(service.canPerformAction(List.of("READ_ONLY"), "/offersSearch")).isFalse();
+    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "/applicationSearch")).isTrue();
+    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "applicationSearch")).isTrue();
+    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "/offersSearch")).isFalse();
   }
 
   @Test
   void canPerformActionShouldSupportNonRouteActionsForLegacyVisibilityChecks() {
     LexisAuthorizationService service =
         createService(
-            "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
             Map.of(
-                "READ_ONLY", List.of("viewFederalApplication", "viewOICApplication"),
-                "PROVINCIAL_SUBMITTER", List.of("industryListing")));
+                "LEXIS_READ_ONLY", List.of("viewFederalApplication", "viewOICApplication"),
+                "LEXIS_PROVINCIAL_SUBMITTER", List.of("industryListing")));
 
-    assertThat(service.canPerformAction(List.of("READ_ONLY"), "viewFederalApplication")).isTrue();
-    assertThat(service.canPerformAction(List.of("READ_ONLY"), "viewOICApplication")).isTrue();
-    assertThat(service.canPerformAction(List.of("PROVINCIAL_SUBMITTER"), "viewFederalApplication")).isFalse();
+    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "viewFederalApplication")).isTrue();
+    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "viewOICApplication")).isTrue();
+    assertThat(service.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "viewFederalApplication")).isFalse();
   }
 
   private LexisAuthorizationService createService(

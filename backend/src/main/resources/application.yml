@@ -15,6 +15,7 @@ spring:
 
 server:
   port: 8080
+  forward-headers-strategy: framework
 
 management:
   endpoint:
@@ -32,14 +33,14 @@ lexis:
       enabled: ${LEXIS_COGNITO_ENABLED:false}
       enforce-route-auth: ${LEXIS_ENFORCE_ROUTE_AUTH:false}
     # Mirrors legacy WebADE "industry-roles" behaviour with renamed submitter roles.
-    industry-roles: "PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER"
+    industry-roles: "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER"
   authz:
     # Temporary parity scaffold:
     # role names should match FAM roles exactly, and actions should match legacy canPerformAction/grantedAction keys.
     # Replace with finalized matrix as modernization proceeds.
     role-actions:
-      ADMIN: ["*"]
-      READ_ONLY:
+      LEXIS_ADMIN: ["*"]
+      LEXIS_READ_ONLY:
         - "/applicationSearch"
         - "/applicationDetails"
         - "/federalApplicationSearch"
@@ -62,7 +63,7 @@ lexis:
         - "/approvedExemptionReport"
         - "viewFederalApplication"
         - "viewOICApplication"
-      APPLICATION_APPROVER:
+      LEXIS_APPLICATION_APPROVER:
         - "/applicationsReview"
         - "/createExemption"
         - "/applicationSearch"
@@ -93,7 +94,7 @@ lexis:
         - "savePermit"
         - "viewFederalApplication"
         - "viewOICApplication"
-      EXEMPTION_APPROVER:
+      LEXIS_EXEMPTION_APPROVER:
         - "/createExemption"
         - "/exemptionSearch"
         - "/exemptionDetails"
@@ -124,7 +125,7 @@ lexis:
         - "savePermit"
         - "viewFederalApplication"
         - "viewOICApplication"
-      PROVINCIAL_SUBMITTER:
+      LEXIS_PROVINCIAL_SUBMITTER:
         - "/createExemption"
         - "createApplication"
         - "createOffer"
@@ -141,7 +142,7 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
-      FEDERAL_SUBMITTER:
+      LEXIS_FEDERAL_SUBMITTER:
         - "industryListing"
         - "mofrListing"
         - "/summary"

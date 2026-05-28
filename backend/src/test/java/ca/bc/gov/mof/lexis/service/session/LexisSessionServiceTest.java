@@ -13,22 +13,22 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 class LexisSessionServiceTest {
 
   private final LexisSessionService service =
-      new LexisSessionService("PROVINCIAL_SUBMITTER,FEDERAL_SUBMITTER");
+      new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER");
 
   @Test
   void shouldRouteReadOnlyUsersToApplicationSearch() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\jsmith", List.of("admin", "read_only"));
+        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_admin", "lexis_read_only"));
 
     assertThat(response.welcomeTarget()).isEqualTo("readOnly");
     assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
-    assertThat(response.roles()).containsExactly("ADMIN", "READ_ONLY");
+    assertThat(response.roles()).containsExactly("LEXIS_ADMIN", "LEXIS_READ_ONLY");
   }
 
   @Test
   void shouldRouteIndustryUsersToSummary() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\jsmith", List.of("provincial_submitter"));
+        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter"));
 
     assertThat(response.welcomeTarget()).isEqualTo("industryUser");
     assertThat(response.legacyPath()).isEqualTo("/summary.do?actionMapping=view");
@@ -37,11 +37,11 @@ class LexisSessionServiceTest {
   @Test
   void shouldRouteForestClientScopedIndustryUsersToSummary() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\jsmith", List.of("provincial_submitter_00001234"));
+        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter_00001234"));
 
     assertThat(response.welcomeTarget()).isEqualTo("industryUser");
     assertThat(response.legacyPath()).isEqualTo("/summary.do?actionMapping=view");
-    assertThat(response.roles()).containsExactly("PROVINCIAL_SUBMITTER");
+    assertThat(response.roles()).containsExactly("LEXIS_PROVINCIAL_SUBMITTER");
   }
 
   @Test
@@ -74,38 +74,38 @@ class LexisSessionServiceTest {
   @Test
   void shouldRouteSingleAdminToAdminLanding() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\admin", List.of("admin"));
+        service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin"));
 
     assertThat(response.welcomeTarget()).isEqualTo("adminUser");
     assertThat(response.legacyPath()).isEqualTo("/lexisAgentAdmin.do?actionMapping=view");
-    assertThat(response.roles()).containsExactly("ADMIN");
+    assertThat(response.roles()).containsExactly("LEXIS_ADMIN");
   }
 
   @Test
   void shouldRouteExemptionApproverToExemptionSearch() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\approver", List.of("exemption_approver", "other_role"));
+        service.resolveWelcomeRoute("idir\\approver", List.of("lexis_exemption_approver", "other_role"));
 
     assertThat(response.welcomeTarget()).isEqualTo("exemptionApprover");
     assertThat(response.legacyPath()).isEqualTo("/exemptionSearch.do?actionMapping=view");
-    assertThat(response.roles()).containsExactly("EXEMPTION_APPROVER", "OTHER_ROLE");
+    assertThat(response.roles()).containsExactly("LEXIS_EXEMPTION_APPROVER", "OTHER_ROLE");
   }
 
   @Test
   void shouldDefaultToMofrLanding() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\staff", List.of("application_approver"));
+        service.resolveWelcomeRoute("idir\\staff", List.of("lexis_application_approver"));
 
     assertThat(response.welcomeTarget()).isEqualTo("mofrUser");
     assertThat(response.legacyPath()).isEqualTo("/applicationsReview.do?actionMapping=view");
-    assertThat(response.roles()).containsExactly("APPLICATION_APPROVER");
+    assertThat(response.roles()).containsExactly("LEXIS_APPLICATION_APPROVER");
   }
 
   @Test
   void shouldParseRoleHeaderIntoCanonicalDistinctRoles() {
-    List<String> roles = service.parseRoleHeader(" admin, read_only,ADMIN ,, ");
+    List<String> roles = service.parseRoleHeader(" lexis_admin, lexis_read_only,LEXIS_ADMIN ,, ");
 
-    assertThat(roles).containsExactly("ADMIN", "READ_ONLY");
+    assertThat(roles).containsExactly("LEXIS_ADMIN", "LEXIS_READ_ONLY");
   }
 
   @Test
@@ -113,11 +113,11 @@ class LexisSessionServiceTest {
     List<String> roles =
         service.parseAuthorities(
             List.of(
-                new SimpleGrantedAuthority(" read_only "),
-                new SimpleGrantedAuthority("ADMIN"),
-                new SimpleGrantedAuthority("admin")));
+                new SimpleGrantedAuthority("lexis_read_only"),
+                new SimpleGrantedAuthority("LEXIS_ADMIN"),
+                new SimpleGrantedAuthority("lexis_admin")));
 
-    assertThat(roles).containsExactly("READ_ONLY", "ADMIN");
+    assertThat(roles).containsExactly("LEXIS_READ_ONLY", "LEXIS_ADMIN");
   }
 
   @Test
@@ -125,10 +125,10 @@ class LexisSessionServiceTest {
     List<String> roles =
         service.parseAuthorities(
             List.of(
-                new SimpleGrantedAuthority("provincial_submitter_00009999"),
-                new SimpleGrantedAuthority("READ_ONLY")));
+                new SimpleGrantedAuthority("lexis_provincial_submitter_00009999"),
+                new SimpleGrantedAuthority("LEXIS_READ_ONLY")));
 
-    assertThat(roles).containsExactly("PROVINCIAL_SUBMITTER", "READ_ONLY");
+    assertThat(roles).containsExactly("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_READ_ONLY");
   }
 
   @Test
@@ -137,9 +137,9 @@ class LexisSessionServiceTest {
         service.parseAuthorities(
             List.of(
                 new SimpleGrantedAuthority("log_export_industry_00009999"),
-                new SimpleGrantedAuthority("READ_ONLY")));
+                new SimpleGrantedAuthority("LEXIS_READ_ONLY")));
 
-    assertThat(roles).containsExactly("LOG_EXPORT_INDUSTRY_00009999", "READ_ONLY");
+    assertThat(roles).containsExactly("LOG_EXPORT_INDUSTRY_00009999", "LEXIS_READ_ONLY");
   }
 
   @Test
@@ -148,24 +148,28 @@ class LexisSessionServiceTest {
         service.parseAuthorities(
             List.of(
                 new SimpleGrantedAuthority("industry_00009999"),
-                new SimpleGrantedAuthority("READ_ONLY")));
+                new SimpleGrantedAuthority("LEXIS_READ_ONLY")));
 
-    assertThat(roles).containsExactly("INDUSTRY_00009999", "READ_ONLY");
+    assertThat(roles).containsExactly("INDUSTRY_00009999", "LEXIS_READ_ONLY");
   }
 
   @Test
   void shouldParseRolesFromAuthenticationPrincipal() {
     TestingAuthenticationToken authentication =
-        new TestingAuthenticationToken("idir\\jsmith", "n/a", "provincial_submitter", "read_only");
+        new TestingAuthenticationToken(
+            "idir\\jsmith",
+            "n/a",
+            "lexis_provincial_submitter",
+            "lexis_read_only");
 
     List<String> roles = service.parseRolesFromPrincipal(authentication);
 
-    assertThat(roles).containsExactly("PROVINCIAL_SUBMITTER", "READ_ONLY");
+    assertThat(roles).containsExactly("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_READ_ONLY");
   }
 
   @Test
   void shouldResolveForestClientNumberFromCanonicalScopedRole() {
-    String clientNumber = service.resolveForestClientNumber(List.of("provincial_submitter_00077881"));
+    String clientNumber = service.resolveForestClientNumber(List.of("lexis_provincial_submitter_00077881"));
 
     assertThat(clientNumber).isEqualTo("00077881");
   }
@@ -191,8 +195,8 @@ class LexisSessionServiceTest {
             "idir\\jsmith",
             "n/a",
             List.of(
-                new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER_00055667"),
-                new SimpleGrantedAuthority("READ_ONLY")));
+                new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00055667"),
+                new SimpleGrantedAuthority("LEXIS_READ_ONLY")));
 
     String clientNumber = service.resolveForestClientNumber(authentication);
 
@@ -201,7 +205,7 @@ class LexisSessionServiceTest {
 
   @Test
   void shouldNotResolveForestClientNumberFromFederalSubmitterSuffix() {
-    String clientNumber = service.resolveForestClientNumber(List.of("FEDERAL_SUBMITTER_00055667"));
+    String clientNumber = service.resolveForestClientNumber(List.of("LEXIS_FEDERAL_SUBMITTER_00055667"));
 
     assertThat(clientNumber).isNull();
   }
@@ -215,7 +219,7 @@ class LexisSessionServiceTest {
 
   @Test
   void shouldReturnNullWhenNoScopedForestClientRolePresent() {
-    String clientNumber = service.resolveForestClientNumber(List.of("ADMIN", "READ_ONLY"));
+    String clientNumber = service.resolveForestClientNumber(List.of("LEXIS_ADMIN", "LEXIS_READ_ONLY"));
 
     assertThat(clientNumber).isNull();
   }
