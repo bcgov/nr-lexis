@@ -93,7 +93,7 @@ public class OracleLexisReportService implements LexisReportService {
     LexisJasperReportDefinition definition = definitionOptional.get();
     LexisReportFormat requestedFormat =
         LexisReportFormat.fromNullable(request == null ? null : request.format());
-    LexisReportFormat effectiveFormat = normalizeRequestedFormat(requestedFormat);
+    LexisReportFormat effectiveFormat = resolveEffectiveFormat(definition, requestedFormat);
 
     Optional<LexisGeneratedReport> legacyCsvReport =
         legacyCsvReportService.generateLegacyCsvReport(definition, request, effectiveFormat);
@@ -156,6 +156,16 @@ public class OracleLexisReportService implements LexisReportService {
       return LexisReportFormat.CSV;
     }
     return format;
+  }
+
+  LexisReportFormat resolveEffectiveFormat(
+      LexisJasperReportDefinition definition, LexisReportFormat requestedFormat) {
+    LexisReportFormat normalizedFormat = normalizeRequestedFormat(requestedFormat);
+    if (definition == LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT
+        && normalizedFormat != LexisReportFormat.PDF) {
+      return LexisReportFormat.PDF;
+    }
+    return normalizedFormat;
   }
 
   boolean isTemplateFormatSupported(LexisReportFormat format) {

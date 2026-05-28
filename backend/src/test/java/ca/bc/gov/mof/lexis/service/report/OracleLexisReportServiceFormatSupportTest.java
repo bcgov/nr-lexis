@@ -22,6 +22,30 @@ class OracleLexisReportServiceFormatSupportTest {
   }
 
   @Test
+  void shouldForceApprovedExemptionReportToPdf() {
+    OracleLexisReportService service = createService();
+
+    assertThat(
+            service.resolveEffectiveFormat(
+                LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT, LexisReportFormat.CSV))
+        .isEqualTo(LexisReportFormat.PDF);
+    assertThat(
+            service.resolveEffectiveFormat(
+                LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT, LexisReportFormat.XLS))
+        .isEqualTo(LexisReportFormat.PDF);
+  }
+
+  @Test
+  void shouldKeepNonApprovedReportsOnNormalizedFormat() {
+    OracleLexisReportService service = createService();
+
+    assertThat(
+            service.resolveEffectiveFormat(
+                LexisJasperReportDefinition.EXEMPTION_REPORT, LexisReportFormat.CSV))
+        .isEqualTo(LexisReportFormat.CSV);
+  }
+
+  @Test
   void shouldOnlySupportPdfAndCsvForTemplateExports() {
     OracleLexisReportService service = createService();
 
