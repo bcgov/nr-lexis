@@ -19,4 +19,15 @@ describe('Protected route access matrix', () => {
     expect(route.requiredActionsMatch).toBe('any')
     expect(route.requiredActions).toEqual(['/indianReservePermitDetails', 'viewOICApplication'])
   })
+
+  it('allows upload center access from admin or document upload actions', () => {
+    const route = findRoute('/admin/uploads')
+    expect(route.requiredActions).toEqual([
+      '/lexisAgentAdmin',
+      '/fileApplicationUpload',
+      '/fileExemptionUpload',
+      '/filePermitUpload',
+      '/fileInvoiceUpload',
+    ])
+  })
 })
