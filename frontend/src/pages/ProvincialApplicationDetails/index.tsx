@@ -326,8 +326,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
           <InlineNotification
-            kind={detail ? 'warning' : 'error'}
-            title={detail ? 'Using fallback detail' : 'Detail unavailable'}
+            kind="error"
+            title="Detail unavailable"
             subtitle={errorMessage}
             lowContrast
           />

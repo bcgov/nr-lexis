@@ -65,11 +65,13 @@ const IndianReservePermitDetailsPage: FC = () => {
     const load = async () => {
       if (!permitNumber) {
         setErrorMessage('Permit number is missing from the route.')
+        setDetail(null)
         setLoading(false)
         return
       }
 
       setLoading(true)
+      setDetail(null)
       setErrorMessage('')
       try {
         const response = await fetchIndianReservePermitDetail(permitNumber)
@@ -80,6 +82,7 @@ const IndianReservePermitDetailsPage: FC = () => {
       } catch (error) {
         console.error(error)
         setErrorMessage('Unable to retrieve indigenous reserve permit detail.')
+        setDetail(null)
       } finally {
         setLoading(false)
       }
@@ -116,8 +119,8 @@ const IndianReservePermitDetailsPage: FC = () => {
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
           <InlineNotification
-            kind={detail ? 'warning' : 'error'}
-            title={detail ? 'Using fallback detail' : 'Detail unavailable'}
+            kind="error"
+            title="Detail unavailable"
             subtitle={errorMessage}
             lowContrast
           />

@@ -33,11 +33,13 @@ const ProvincialOfferDetailsPage: FC = () => {
     const load = async () => {
       if (!offerNumber) {
         setErrorMessage('Offer number is missing from the route.')
+        setDetail(null)
         setLoading(false)
         return
       }
 
       setLoading(true)
+      setDetail(null)
       setErrorMessage('')
       try {
         const response = await fetchProvincialOfferDetail(offerNumber)
@@ -48,6 +50,7 @@ const ProvincialOfferDetailsPage: FC = () => {
       } catch (error) {
         console.error(error)
         setErrorMessage('Unable to retrieve provincial offer detail.')
+        setDetail(null)
       } finally {
         setLoading(false)
       }
@@ -74,8 +77,8 @@ const ProvincialOfferDetailsPage: FC = () => {
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
           <InlineNotification
-            kind={detail ? 'warning' : 'error'}
-            title={detail ? 'Using fallback detail' : 'Detail unavailable'}
+            kind="error"
+            title="Detail unavailable"
             subtitle={errorMessage}
             lowContrast
           />

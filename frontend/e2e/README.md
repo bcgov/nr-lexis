@@ -43,7 +43,7 @@ This suite validates core frontend availability after migration work.
 - Defaults to `E2E_BASE_URL=http://127.0.0.1:4173`.
 - Playwright launches the Vite dev server automatically via `webServer` in config.
 - Tests bootstrap `ADMIN` into local storage so protected routes are reachable without external auth.
-- Search/detail services are API-first by default (`VITE_ENABLE_SEARCH_MOCK_FALLBACK=false`).
+- Search/detail services are API-only and require backend endpoints to be available.
 
 ## Run commands
 
@@ -57,10 +57,4 @@ Override base URL when needed:
 
 ```bash
 E2E_BASE_URL=http://localhost:4173 npm run e2e
-```
-
-Run in frontend-only fallback mode when backend endpoints are offline:
-
-```bash
-VITE_ENABLE_SEARCH_MOCK_FALLBACK=true npm run e2e
 ```
