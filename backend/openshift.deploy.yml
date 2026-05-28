@@ -28,6 +28,12 @@ parameters:
     value: "500Mi"
   - name: APP_LOG_LEVEL
     value: INFO
+  - name: SPRING_SECURITY_LOG_LEVEL
+    value: INFO
+  - name: SPRING_WEB_LOG_LEVEL
+    value: INFO
+  - name: SPRING_BOOT_AUTOCONFIG_LOG_LEVEL
+    value: INFO
   - name: SPRING_JPA_SHOW_SQL
     value: "false"
   - name: AWS_COGNITO_ISSUER_URI
@@ -144,6 +150,12 @@ objects:
                       key: DATABASE_PASSWORD
                 - name: APP_LOG_LEVEL
                   value: ${APP_LOG_LEVEL}
+                - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY
+                  value: ${SPRING_SECURITY_LOG_LEVEL}
+                - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB
+                  value: ${SPRING_WEB_LOG_LEVEL}
+                - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_BOOT_AUTOCONFIGURE
+                  value: ${SPRING_BOOT_AUTOCONFIG_LOG_LEVEL}
                 - name: SPRING_JPA_SHOW_SQL
                   value: ${SPRING_JPA_SHOW_SQL}
                 - name: KEYSTORE_SECRET
