@@ -71,9 +71,15 @@ spec:
               protocol: TCP
           env:
             - name: SPRING_PROFILES_ACTIVE
-              value: ${SPRING_PROFILES_ACTIVE}
+              value: oracle
             - name: SERVER_PORT
               value: "8080"
+            - name: AWS_COGNITO_ISSUER_URI
+              value: ${AWS_COGNITO_ISSUER_URI}
+            - name: COGNITO_USERINFO_URI
+              value: ${COGNITO_USERINFO_URI}
+            - name: IDENTITY_LOOKUP_BASE_URL
+              value: ${IDENTITY_LOOKUP_BASE_URL}
             - name: DATABASE_HOST
               value: ${DATABASE_HOST}
             - name: DATABASE_SERVICE_NAME

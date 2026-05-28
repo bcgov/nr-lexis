@@ -1,49 +1,58 @@
-import { defineConfig } from 'vite'
 import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
+import { defineConfig, loadEnv } from 'vite'
 
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: parseInt(process.env.PORT),
-    fs: {
-      // Allow serving files from one level up to the project root
-      allow: ['..'],
-    },
-    proxy: {
-      // Proxy API requests to the backend
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const devHost = env.VITE_DEV_HOST ?? 'localhost'
+  const devPort = Number(env.VITE_DEV_PORT ?? 3000)
+  const backendTarget = env.VITE_DEV_BACKEND_TARGET ?? 'http://localhost:8080'
+  const hmrPort = env.VITE_HMR_PORT ? Number(env.VITE_HMR_PORT) : devPort
+  const hmrHost = env.VITE_HMR_HOST ?? devHost
+  const hmrProtocol = (env.VITE_HMR_PROTOCOL ?? 'ws') === 'wss' ? 'wss' : 'ws'
+
+  return {
+    plugins: [react()],
+    server: {
+      host: devHost,
+      port: devPort,
+      fs: {
+        allow: ['..'],
+      },
+      hmr: {
+        overlay: false,
+        protocol: hmrProtocol,
+        host: hmrHost,
+        port: hmrPort,
+      },
+      proxy: {
+        '/api': {
+          target: backendTarget,
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
-  },
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    preview: {
+      host: devHost,
+      port: devPort,
     },
-    extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx'],
-  },
-  build: {
-    // Build Target
-    // https://vitejs.dev/config/build-options.html#build-target
-    target: 'esnext',
-    // Rollup Options
-    // https://vitejs.dev/config/build-options.html#build-rollupoptions
-    rollupOptions: {},
-  },
-  css: {
-    preprocessorOptions: {
-      scss: {
-        // Silence deprecation warnings caused by Bootstrap SCSS
-        // which is out of our control.
-        silenceDeprecations: [
-          'color-functions',
-          'global-builtin',
-          'import',
-        ],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+      },
+      extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx'],
+    },
+    build: {
+      target: 'esnext',
+      rollupOptions: {},
+    },
+    css: {
+      preprocessorOptions: {
+        scss: {
+          silenceDeprecations: ['color-functions', 'global-builtin', 'import'],
+        },
       },
     },
-  },
+  }
 })

@@ -44,6 +44,9 @@ jobs:
         working-directory: backend
         env:
           SONAR_TOKEN: ${{ secrets.sonar_token_backend }}
+        # Sonar is gated on the secret so fork PRs do not fail.
+        # Project key is currently the BC Gov starter-kit default; update
+        # once a dedicated LEXIS SonarCloud project is provisioned.
         run: |
           mvn -B sonar:sonar \
             -Dsonar.host.url=https://sonarcloud.io \
@@ -68,6 +71,7 @@ jobs:
             npm run test:cov
           dir: frontend
           node_version: "22"
+          # Keep starter-kit project key until dedicated LEXIS project exists.
           sonar_args: >
             -Dsonar.exclusions=**/coverage/**,**/node_modules/**,**/*spec.ts
             -Dsonar.organization=bcgov-sonarcloud

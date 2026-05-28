@@ -13,6 +13,13 @@ on:
           it defaults to target.
         default: ""
         type: string
+    secrets:
+      e2e_idir_user:
+        description: IDIR service account username for Playwright auth
+        required: true
+      e2e_idir_password:
+        description: IDIR service account password for Playwright auth
+        required: true
 
 env:
   DOMAIN: apps.silver.devops.gov.bc.ca
@@ -51,6 +58,8 @@ jobs:
       - name: Run Playwright
         env:
           E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
+          E2E_IDIR_USER: ${{ secrets.e2e_idir_user }}
+          E2E_IDIR_PASSWORD: ${{ secrets.e2e_idir_password }}
           CI: "true"
         run: |
           npx playwright test --project="${{ matrix.project }}" --reporter=html,list
