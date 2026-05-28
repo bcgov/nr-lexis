@@ -440,7 +440,6 @@ class PermitDetailsRpcControllerTest {
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
             "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("ADMIN")));
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("ADMIN"));
 
     ResponseEntity<PermitPersistenceRpcResponseDto> response =
         controller.addInvoice(
@@ -461,6 +460,7 @@ class PermitDetailsRpcControllerTest {
   @Test
   void addPermitShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameter(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
     when(request.getParameter("permitNumber")).thenReturn("7000123");
     when(request.getParameter("permitStatus")).thenReturn("ACT");
     when(request.getParameter("permitSubmitDate")).thenReturn("2026-05-27");
@@ -504,6 +504,7 @@ class PermitDetailsRpcControllerTest {
   @Test
   void updatePermitShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameter(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
     when(request.getParameter("permitNumber")).thenReturn("7000123");
     when(request.getParameter("permitStatus")).thenReturn("PPD");
 
@@ -540,6 +541,7 @@ class PermitDetailsRpcControllerTest {
   @Test
   void updateShippingShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameter(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
     when(request.getParameter("permitNumber")).thenReturn("7000123");
     when(request.getParameter("estimatedShippingDate")).thenReturn("2026-06-10");
 
