@@ -37,11 +37,6 @@ type ProvincialOfferCreateForm = {
 
 const MODULE_KEY = 'provincial-offer'
 
-const FALLBACK_REGIONS: SearchOption[] = [
-  { value: '11', label: 'Cariboo' },
-  { value: '12', label: 'Coast' },
-]
-
 const INITIAL_FORM: ProvincialOfferCreateForm = {
   offerNumber: '',
   applicationNumber: '',
@@ -88,7 +83,7 @@ const ProvincialOfferCreatePage: FC = () => {
   const [form, setForm] = useState<ProvincialOfferCreateForm>(() =>
     buildInitialFormFromQuery(searchParams),
   )
-  const [regions, setRegions] = useState<SearchOption[]>(FALLBACK_REGIONS)
+  const [regions, setRegions] = useState<SearchOption[]>([])
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -98,9 +93,7 @@ const ProvincialOfferCreatePage: FC = () => {
   useEffect(() => {
     const loadOptions = async () => {
       const options = await fetchProvincialOfferOptions()
-      if (options.regions.length > 0) {
-        setRegions(options.regions)
-      }
+      setRegions(options.regions)
     }
 
     void loadOptions()

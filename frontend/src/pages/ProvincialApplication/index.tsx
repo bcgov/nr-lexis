@@ -57,12 +57,6 @@ type ExemptionCreatePrefillState = {
   ownerClientNumber: string
 }
 
-const FALLBACK_REGION_OPTIONS: RegionOption[] = [
-  { id: '11', text: 'Cariboo (11)' },
-  { id: '12', text: 'Coast (12)' },
-  { id: '24', text: 'Skeena (24)' },
-]
-
 const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
@@ -86,23 +80,6 @@ const EMPTY_RESULTS: ProvincialApplicationSearchResponse = {
     totalPages: 1,
   },
 }
-
-const FALLBACK_EXEMPTION_TYPE_OPTIONS: SearchOption[] = [
-  { value: 'ALL', label: 'All' },
-  { value: 'FEE', label: 'Fee in Lieu' },
-  { value: 'APP', label: 'Application Exemption' },
-]
-
-const FALLBACK_APPLICATION_STATUS_OPTIONS: SearchOption[] = [
-  { value: 'NEW', label: 'New' },
-  { value: 'REV', label: 'In Review' },
-  { value: 'PER', label: 'Permitted' },
-]
-
-const FALLBACK_PRODUCT_TYPE_OPTIONS: SearchOption[] = [
-  { value: 'LOG', label: 'Logs' },
-  { value: 'LUM', label: 'Lumber' },
-]
 
 const isValidIsoDate = (value: string): boolean => {
   if (!value.trim()) return true
@@ -169,16 +146,10 @@ const ProvincialApplicationPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
-  const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>(
-    FALLBACK_EXEMPTION_TYPE_OPTIONS,
-  )
-  const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>(
-    FALLBACK_APPLICATION_STATUS_OPTIONS,
-  )
-  const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>(
-    FALLBACK_PRODUCT_TYPE_OPTIONS,
-  )
+  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
+  const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
+  const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
+  const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
   const [results, setResults] = useState<ProvincialApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -300,23 +271,15 @@ const ProvincialApplicationPage: FC = () => {
     const loadOptions = async () => {
       const options = await fetchProvincialApplicationOptions()
 
-      if (options.exemptionTypes.length > 0) {
-        setExemptionTypeOptions(options.exemptionTypes)
-      }
-      if (options.applicationStatuses.length > 0) {
-        setApplicationStatusOptions(options.applicationStatuses)
-      }
-      if (options.productTypes.length > 0) {
-        setProductTypeOptions(options.productTypes)
-      }
-      if (options.regions.length > 0) {
-        setRegionOptions(
-          options.regions.map((option) => ({
-            id: option.value,
-            text: `${option.label} (${option.value})`,
-          })),
-        )
-      }
+      setExemptionTypeOptions(options.exemptionTypes)
+      setApplicationStatusOptions(options.applicationStatuses)
+      setProductTypeOptions(options.productTypes)
+      setRegionOptions(
+        options.regions.map((option) => ({
+          id: option.value,
+          text: `${option.label} (${option.value})`,
+        })),
+      )
     }
 
     void loadOptions()

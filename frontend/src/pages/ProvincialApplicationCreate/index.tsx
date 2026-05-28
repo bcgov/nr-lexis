@@ -40,21 +40,6 @@ type ProvincialApplicationCreateForm = {
 
 const MODULE_KEY = 'provincial-application'
 
-const FALLBACK_PRODUCT_TYPES: SearchOption[] = [
-  { value: 'LOG', label: 'Logs' },
-  { value: 'LUM', label: 'Lumber' },
-]
-
-const FALLBACK_EXEMPTION_TYPES: SearchOption[] = [
-  { value: 'SECTION_1', label: 'Section 1' },
-  { value: 'SECTION_2', label: 'Section 2' },
-]
-
-const FALLBACK_REGIONS: SearchOption[] = [
-  { value: '11', label: 'Cariboo' },
-  { value: '12', label: 'Coast' },
-]
-
 const INITIAL_FORM: ProvincialApplicationCreateForm = {
   applicationNumber: '',
   packageNumber: '',
@@ -107,9 +92,9 @@ const ProvincialApplicationCreatePage: FC = () => {
   const [form, setForm] = useState<ProvincialApplicationCreateForm>(() =>
     buildInitialFormFromQuery(searchParams),
   )
-  const [productTypes, setProductTypes] = useState<SearchOption[]>(FALLBACK_PRODUCT_TYPES)
-  const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>(FALLBACK_EXEMPTION_TYPES)
-  const [regions, setRegions] = useState<SearchOption[]>(FALLBACK_REGIONS)
+  const [productTypes, setProductTypes] = useState<SearchOption[]>([])
+  const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
+  const [regions, setRegions] = useState<SearchOption[]>([])
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -119,15 +104,9 @@ const ProvincialApplicationCreatePage: FC = () => {
   useEffect(() => {
     const loadOptions = async () => {
       const options = await fetchProvincialApplicationOptions()
-      if (options.productTypes.length > 0) {
-        setProductTypes(options.productTypes)
-      }
-      if (options.exemptionTypes.length > 0) {
-        setExemptionTypes(options.exemptionTypes)
-      }
-      if (options.regions.length > 0) {
-        setRegions(options.regions)
-      }
+      setProductTypes(options.productTypes)
+      setExemptionTypes(options.exemptionTypes)
+      setRegions(options.regions)
     }
 
     void loadOptions()

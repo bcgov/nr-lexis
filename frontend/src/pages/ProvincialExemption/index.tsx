@@ -51,28 +51,6 @@ type ApprovalStatus = {
   message: string
 }
 
-const FALLBACK_REGION_OPTIONS: RegionOption[] = [
-  { id: 'CAR', text: 'Cariboo (CAR)' },
-  { id: 'KAM', text: 'Kamloops (KAM)' },
-  { id: 'NEL', text: 'Northeast (NEL)' },
-  { id: 'OMI', text: 'Omineca (OMI)' },
-  { id: 'SKE', text: 'Skeena (SKE)' },
-]
-
-const FALLBACK_EXEMPTION_TYPE_OPTIONS: SearchOption[] = [
-  { value: 'SECTION_1', label: 'Section 1' },
-  { value: 'SECTION_2', label: 'Section 2' },
-  { value: 'SECTION_3', label: 'Section 3' },
-]
-
-const FALLBACK_EXEMPTION_STATUS_OPTIONS: SearchOption[] = [
-  { value: 'NEW', label: 'New' },
-  { value: 'APPROVED', label: 'Approved' },
-  { value: 'CLOSED', label: 'Closed' },
-  { value: 'EXPIRED', label: 'Expired' },
-  { value: 'CANCELLED', label: 'Cancelled' },
-]
-
 const INITIAL_FILTERS: ProvincialExemptionSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
@@ -161,13 +139,9 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 const ProvincialExemptionPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
-  const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>(
-    FALLBACK_EXEMPTION_TYPE_OPTIONS,
-  )
-  const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>(
-    FALLBACK_EXEMPTION_STATUS_OPTIONS,
-  )
+  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
+  const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
+  const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>([])
   const [results, setResults] = useState<ProvincialExemptionSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -289,20 +263,14 @@ const ProvincialExemptionPage: FC = () => {
     const loadOptions = async () => {
       const options = await fetchProvincialExemptionOptions()
 
-      if (options.exemptionTypes.length > 0) {
-        setExemptionTypeOptions(options.exemptionTypes)
-      }
-      if (options.exemptionStatuses.length > 0) {
-        setExemptionStatusOptions(options.exemptionStatuses)
-      }
-      if (options.regions.length > 0) {
-        setRegionOptions(
-          options.regions.map((option) => ({
-            id: option.value,
-            text: `${option.label} (${option.value})`,
-          })),
-        )
-      }
+      setExemptionTypeOptions(options.exemptionTypes)
+      setExemptionStatusOptions(options.exemptionStatuses)
+      setRegionOptions(
+        options.regions.map((option) => ({
+          id: option.value,
+          text: `${option.label} (${option.value})`,
+        })),
+      )
     }
 
     void loadOptions()

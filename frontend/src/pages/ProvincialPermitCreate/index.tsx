@@ -38,11 +38,6 @@ type ProvincialPermitCreateForm = {
 
 const MODULE_KEY = 'provincial-permit'
 
-const FALLBACK_PERMIT_STATUSES: SearchOption[] = [
-  { value: 'Issued', label: 'Issued' },
-  { value: 'Active', label: 'Active' },
-]
-
 const INITIAL_FORM: ProvincialPermitCreateForm = {
   permitNumber: '',
   applicationNumber: '',
@@ -97,7 +92,7 @@ const ProvincialPermitCreatePage: FC = () => {
   const [searchParams] = useSearchParams()
   const initialForm = useMemo(() => buildInitialFormFromQuery(searchParams), [searchParams])
   const [form, setForm] = useState<ProvincialPermitCreateForm>(() => initialForm)
-  const [permitStatuses, setPermitStatuses] = useState<SearchOption[]>(FALLBACK_PERMIT_STATUSES)
+  const [permitStatuses, setPermitStatuses] = useState<SearchOption[]>([])
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -107,9 +102,7 @@ const ProvincialPermitCreatePage: FC = () => {
   useEffect(() => {
     const loadOptions = async () => {
       const options = await fetchProvincialPermitOptions()
-      if (options.permitStatuses.length > 0) {
-        setPermitStatuses(options.permitStatuses)
-      }
+      setPermitStatuses(options.permitStatuses)
     }
 
     void loadOptions()

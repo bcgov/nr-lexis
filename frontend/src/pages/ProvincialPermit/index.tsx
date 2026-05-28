@@ -40,21 +40,6 @@ type RegionOption = {
   text: string
 }
 
-const FALLBACK_REGION_OPTIONS: RegionOption[] = [
-  { id: 'CAR', text: 'Cariboo (CAR)' },
-  { id: 'KAM', text: 'Kamloops (KAM)' },
-  { id: 'NEL', text: 'Northeast (NEL)' },
-  { id: 'OMI', text: 'Omineca (OMI)' },
-  { id: 'SKE', text: 'Skeena (SKE)' },
-]
-
-const FALLBACK_PERMIT_STATUS_OPTIONS: SearchOption[] = [
-  { value: 'Active', label: 'Active' },
-  { value: 'Issued', label: 'Issued' },
-  { value: 'Expired', label: 'Expired' },
-  { value: 'Cancelled', label: 'Cancelled' },
-]
-
 const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
@@ -138,10 +123,8 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 const ProvincialPermitPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
-  const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>(
-    FALLBACK_PERMIT_STATUS_OPTIONS,
-  )
+  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
+  const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
   const [results, setResults] = useState<ProvincialPermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -249,17 +232,13 @@ const ProvincialPermitPage: FC = () => {
   useEffect(() => {
     const loadOptions = async () => {
       const options = await fetchProvincialPermitOptions()
-      if (options.permitStatuses.length > 0) {
-        setPermitStatusOptions(options.permitStatuses)
-      }
-      if (options.regions.length > 0) {
-        setRegionOptions(
-          options.regions.map((option) => ({
-            id: option.value,
-            text: `${option.label} (${option.value})`,
-          })),
-        )
-      }
+      setPermitStatusOptions(options.permitStatuses)
+      setRegionOptions(
+        options.regions.map((option) => ({
+          id: option.value,
+          text: `${option.label} (${option.value})`,
+        })),
+      )
     }
 
     void loadOptions()

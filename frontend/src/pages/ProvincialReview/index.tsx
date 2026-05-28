@@ -53,23 +53,6 @@ type ReviewActionStatus = {
   message: string
 }
 
-const FALLBACK_PRODUCT_TYPE_OPTIONS: SearchOption[] = [
-  { value: 'LOG', label: 'Logs' },
-  { value: 'LUM', label: 'Lumber' },
-]
-
-const FALLBACK_REVIEW_STATUS_OPTIONS: SearchOption[] = [
-  { value: 'REJ', label: 'Rejected' },
-  { value: 'WDN', label: 'Withdrawn' },
-  { value: 'EXP', label: 'Expired' },
-]
-
-const FALLBACK_REGION_OPTIONS: RegionOption[] = [
-  { id: '11', text: 'Cariboo (11)' },
-  { id: '12', text: 'Coast (12)' },
-  { id: '24', text: 'Skeena (24)' },
-]
-
 const INITIAL_FILTERS: ApplicationReviewSearchFilters = {
   applicationNumber: '',
   productTypeCode: '',
@@ -154,13 +137,9 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 const ProvincialReviewPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>(
-    FALLBACK_PRODUCT_TYPE_OPTIONS,
-  )
-  const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>(
-    FALLBACK_REVIEW_STATUS_OPTIONS,
-  )
-  const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
+  const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
+  const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
+  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
   const [results, setResults] = useState<ApplicationReviewSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -317,22 +296,14 @@ const ProvincialReviewPage: FC = () => {
     const loadOptions = async () => {
       const options = await fetchApplicationReviewOptions()
 
-      if (options.productTypes.length > 0) {
-        setProductTypeOptions(options.productTypes)
-      }
-
-      if (options.reviewStatuses.length > 0) {
-        setReviewStatusOptions(options.reviewStatuses)
-      }
-
-      if (options.regions.length > 0) {
-        setRegionOptions(
-          options.regions.map((option) => ({
-            id: option.value,
-            text: `${option.label} (${option.value})`,
-          })),
-        )
-      }
+      setProductTypeOptions(options.productTypes)
+      setReviewStatusOptions(options.reviewStatuses)
+      setRegionOptions(
+        options.regions.map((option) => ({
+          id: option.value,
+          text: `${option.label} (${option.value})`,
+        })),
+      )
     }
 
     void loadOptions()

@@ -46,16 +46,6 @@ type ExemptionCreatePrefillState = {
 
 const MODULE_KEY = 'provincial-exemption'
 
-const FALLBACK_EXEMPTION_TYPES: SearchOption[] = [
-  { value: 'SECTION_1', label: 'Section 1' },
-  { value: 'SECTION_2', label: 'Section 2' },
-]
-
-const FALLBACK_EXEMPTION_STATUSES: SearchOption[] = [
-  { value: 'NEW', label: 'New' },
-  { value: 'APPROVED', label: 'Approved' },
-]
-
 const INITIAL_FORM: ProvincialExemptionCreateForm = {
   exemptionNumber: '',
   applicationNumber: '',
@@ -196,10 +186,8 @@ const ProvincialExemptionCreatePage: FC = () => {
   const [form, setForm] = useState<ProvincialExemptionCreateForm>(() =>
     buildInitialForm(prefillState),
   )
-  const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>(FALLBACK_EXEMPTION_TYPES)
-  const [exemptionStatuses, setExemptionStatuses] = useState<SearchOption[]>(
-    FALLBACK_EXEMPTION_STATUSES,
-  )
+  const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
+  const [exemptionStatuses, setExemptionStatuses] = useState<SearchOption[]>([])
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -220,12 +208,8 @@ const ProvincialExemptionCreatePage: FC = () => {
   useEffect(() => {
     const loadOptions = async () => {
       const options = await fetchProvincialExemptionOptions()
-      if (options.exemptionTypes.length > 0) {
-        setExemptionTypes(options.exemptionTypes)
-      }
-      if (options.exemptionStatuses.length > 0) {
-        setExemptionStatuses(options.exemptionStatuses)
-      }
+      setExemptionTypes(options.exemptionTypes)
+      setExemptionStatuses(options.exemptionStatuses)
     }
 
     void loadOptions()

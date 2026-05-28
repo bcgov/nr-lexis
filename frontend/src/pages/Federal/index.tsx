@@ -36,14 +36,6 @@ import {
 import { searchFederalApplications } from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions, type SearchOption } from '@/service/search-options-service'
 
-const FALLBACK_APPLICATION_STATUS_OPTIONS: SearchOption[] = [
-  { value: 'Draft', label: 'Draft' },
-  { value: 'Submitted', label: 'Submitted' },
-  { value: 'Returned', label: 'Returned' },
-  { value: 'Approved', label: 'Approved' },
-  { value: 'Closed', label: 'Closed' },
-]
-
 const INITIAL_FILTERS: FederalApplicationSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
@@ -130,9 +122,7 @@ const FederalPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>(
-    FALLBACK_APPLICATION_STATUS_OPTIONS,
-  )
+  const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
   const [results, setResults] = useState<FederalApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -252,9 +242,7 @@ const FederalPage: FC = () => {
   useEffect(() => {
     const loadOptions = async () => {
       const options = await fetchFederalApplicationOptions()
-      if (options.applicationStatuses.length > 0) {
-        setApplicationStatusOptions(options.applicationStatuses)
-      }
+      setApplicationStatusOptions(options.applicationStatuses)
     }
 
     void loadOptions()

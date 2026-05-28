@@ -38,14 +38,6 @@ type RegionOption = {
   text: string
 }
 
-const FALLBACK_REGION_OPTIONS: RegionOption[] = [
-  { id: 'CAR', text: 'Cariboo (CAR)' },
-  { id: 'KAM', text: 'Kamloops (KAM)' },
-  { id: 'NEL', text: 'Northeast (NEL)' },
-  { id: 'OMI', text: 'Omineca (OMI)' },
-  { id: 'SKE', text: 'Skeena (SKE)' },
-]
-
 const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
@@ -126,7 +118,7 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 const ProvincialOffersPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [regionOptions, setRegionOptions] = useState<RegionOption[]>(FALLBACK_REGION_OPTIONS)
+  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -247,14 +239,12 @@ const ProvincialOffersPage: FC = () => {
   useEffect(() => {
     const loadOptions = async () => {
       const options = await fetchProvincialOfferOptions()
-      if (options.regions.length > 0) {
-        setRegionOptions(
-          options.regions.map((option) => ({
-            id: option.value,
-            text: `${option.label} (${option.value})`,
-          })),
-        )
-      }
+      setRegionOptions(
+        options.regions.map((option) => ({
+          id: option.value,
+          text: `${option.label} (${option.value})`,
+        })),
+      )
     }
 
     void loadOptions()
