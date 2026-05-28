@@ -262,8 +262,8 @@ const AdminPoliciesPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <p className="landing-help-text">
-            Policy administration is API-first and falls back to local draft storage only when
-            policy endpoints are unavailable in the current environment.
+            Policy administration is API-first. Local draft fallback is available only when
+            explicitly enabled with <code>VITE_LEXIS_ENABLE_ADMIN_POLICY_LOCAL_FALLBACK=true</code>.
           </p>
           <div>
             Fee policy access:{' '}

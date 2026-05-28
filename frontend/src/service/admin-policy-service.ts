@@ -80,6 +80,15 @@ const asString = (value: unknown): string => {
 }
 
 const shouldFallbackToLocal = (error: unknown): boolean => {
+  const enabled = (import.meta.env.VITE_LEXIS_ENABLE_ADMIN_POLICY_LOCAL_FALLBACK ?? 'false')
+    .toString()
+    .trim()
+    .toLowerCase()
+  const localFallbackEnabled = enabled === '1' || enabled === 'true' || enabled === 'yes'
+  if (!localFallbackEnabled) {
+    return false
+  }
+
   const status = (error as any)?.response?.status
   if (typeof status === 'number') {
     return FALLBACK_STATUSES.has(status)
