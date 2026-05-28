@@ -1,21 +1,21 @@
 import type { FC } from 'react'
-import { Button } from 'react-bootstrap'
-import { useNavigate } from '@tanstack/react-router'
+import { Button } from '@carbon/react'
+import { useNavigate } from 'react-router-dom'
 
 const NotFound: FC = () => {
   const navigate = useNavigate()
   const buttonClicked = () => {
-    navigate({
-      to: '/',
-    })
+    navigate('/')
   }
   return (
-    <div className="d-flex flex-column justify-content-center align-items-center">
-      <h1>404</h1>
-      <h6>The page you’re looking for does not exist.</h6>
-      <Button name="homeBtn" id="homeBtn" onClick={() => buttonClicked()} variant="contained">
-        Back Home
-      </Button>
+    <div className="not-found-page">
+      <div>
+        <h1>404</h1>
+        <p>The page you're looking for does not exist.</p>
+        <Button kind="secondary" name="homeBtn" id="homeBtn" onClick={() => buttonClicked()}>
+          Back Home
+        </Button>
+      </div>
     </div>
   )
 }

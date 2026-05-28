@@ -22,6 +22,16 @@ export const restHandlers = [
 
 const server = setupServer(...restHandlers)
 
+const ResizeObserverMock = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+if (!('ResizeObserver' in globalThis)) {
+  ;(globalThis as any).ResizeObserver = ResizeObserverMock
+}
+
 // Start server before all tests
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 
