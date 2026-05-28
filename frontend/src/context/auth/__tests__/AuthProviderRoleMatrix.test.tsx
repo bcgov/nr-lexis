@@ -170,4 +170,23 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/exemptionSearch')).toHaveTextContent('true')
   })
+
+  it('can disable role-derived action fallback when backend action claims are expected', async () => {
+    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'false')
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\read-only',
+      roles: ['READ_ONLY'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: [],
+    })
+
+    renderProbe(['/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('READ_ONLY')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+  })
 })

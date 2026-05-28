@@ -263,6 +263,14 @@ const shouldUseLegacyPathRouting = (): boolean => {
   return configured === '1' || configured === 'true' || configured === 'yes'
 }
 
+const shouldUseRoleActionFallback = (): boolean => {
+  const configured = (import.meta.env.VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK ?? 'true')
+    .toString()
+    .trim()
+    .toLowerCase()
+  return configured !== '0' && configured !== 'false' && configured !== 'no'
+}
+
 const sanitizeCapabilities = (
   payload: Partial<LexisSessionCapabilities>,
 ): LexisSessionCapabilities => {
@@ -386,20 +394,30 @@ export const AuthProvider: FC<Props> = ({ children }) => {
     }
   }, [])
 
+  const canonicalDevRoles = useMemo(() => canonicalizeRoles(devRoles), [devRoles])
+
   const effectiveRoles = useMemo(() => {
-    const canonicalDevRoles = canonicalizeRoles(devRoles)
     if (capabilities.roles.length > 0) {
       return capabilities.roles
     }
     return canonicalDevRoles
-  }, [capabilities.roles, devRoles])
+  }, [capabilities.roles, canonicalDevRoles])
 
   const effectiveGrantedActions = useMemo(() => {
     if (capabilities.grantedActions.length > 0) {
       return capabilities.grantedActions
     }
+    const hasDevRoleSimulation = capabilities.roles.length === 0 && canonicalDevRoles.length > 0
+    if (!shouldUseRoleActionFallback() && !hasDevRoleSimulation) {
+      return []
+    }
     return deriveGrantedActionsFromRoles(effectiveRoles)
-  }, [capabilities.grantedActions, effectiveRoles])
+  }, [
+    capabilities.grantedActions,
+    capabilities.roles.length,
+    canonicalDevRoles.length,
+    effectiveRoles,
+  ])
 
   const effectiveCapabilities = useMemo(
     () => ({
@@ -432,7 +450,7 @@ export const AuthProvider: FC<Props> = ({ children }) => {
     hasAnyRole,
     usesExternalLogin,
     defaultRoute,
-    devRoles: canonicalizeRoles(devRoles),
+    devRoles: canonicalDevRoles,
     refresh,
     login,
     logout,
