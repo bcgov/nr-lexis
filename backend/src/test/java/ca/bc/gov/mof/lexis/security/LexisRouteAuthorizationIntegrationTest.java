@@ -243,6 +243,51 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyAgentAdminShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/lexisAgentAdmin.do")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyAgentAdminShouldAllowAdminRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/lexisAgentAdmin.do")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ADMIN"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
+  void legacyPolicyAdminRpcShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/lexisPolicyAdminRPC")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyPolicyAdminRpcShouldAllowAdminRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/lexisPolicyAdminRPC")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ADMIN"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
+  void legacyFilAdminRpcShouldAllowAdminRoleForDoRoute() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/lexisFILAdminRPC.do")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ADMIN"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
   void sessionWelcomeShouldUseTokenAuthoritiesForRoleResolution() throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/welcome")

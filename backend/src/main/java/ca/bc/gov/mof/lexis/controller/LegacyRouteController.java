@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -94,6 +95,7 @@ public class LegacyRouteController {
   private final PermitController permitController;
   private final ApplicationReviewController applicationReviewController;
   private final FeeDetailsController feeDetailsController;
+  private final LexisAdminController adminController;
   private final LexisSummaryController summaryController;
   private final OfferDetailsRpcController offerDetailsRpcController;
   private final PermitDetailsRpcController permitDetailsRpcController;
@@ -109,6 +111,7 @@ public class LegacyRouteController {
       PermitController permitController,
       ApplicationReviewController applicationReviewController,
       FeeDetailsController feeDetailsController,
+      LexisAdminController adminController,
       LexisSummaryController summaryController,
       OfferDetailsRpcController offerDetailsRpcController,
       PermitDetailsRpcController permitDetailsRpcController,
@@ -122,6 +125,7 @@ public class LegacyRouteController {
     this.permitController = permitController;
     this.applicationReviewController = applicationReviewController;
     this.feeDetailsController = feeDetailsController;
+    this.adminController = adminController;
     this.summaryController = summaryController;
     this.offerDetailsRpcController = offerDetailsRpcController;
     this.permitDetailsRpcController = permitDetailsRpcController;
@@ -460,6 +464,49 @@ public class LegacyRouteController {
       return ResponseEntity.noContent().build();
     }
     return feeDetailsController.permitSummary(permitNumber);
+  }
+
+  @GetMapping({"/lexisAgentAdmin", "/lexisAgentAdmin.do"})
+  public ResponseEntity<?> lexisAgentAdmin(
+      @RequestParam(name = "actionMapping", required = false) String actionMapping) {
+    if (actionMapping == null || actionMapping.isBlank() || ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
+      return adminController.agentAdmin();
+    }
+    return ResponseEntity.noContent().build();
+  }
+
+  @GetMapping({"/lexisPolicyAdmin", "/lexisPolicyAdmin.do"})
+  public ResponseEntity<?> lexisPolicyAdmin(
+      @RequestParam(name = "actionMapping", required = false) String actionMapping) {
+    if (actionMapping == null || actionMapping.isBlank() || ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
+      return adminController.feePolicyAdmin();
+    }
+    return ResponseEntity.noContent().build();
+  }
+
+  @RequestMapping(
+      path = {"/lexisPolicyAdminRPC", "/lexisPolicyAdminRPC.do"},
+      method = {RequestMethod.GET, RequestMethod.POST})
+  public ResponseEntity<?> lexisPolicyAdminRpc(
+      @RequestParam(required = false) Map<String, String> requestParameters) {
+    return adminController.feePolicyRpcForm(requestParameters);
+  }
+
+  @GetMapping({"/lexisFILAdmin", "/lexisFILAdmin.do"})
+  public ResponseEntity<?> lexisFilAdmin(
+      @RequestParam(name = "actionMapping", required = false) String actionMapping) {
+    if (actionMapping == null || actionMapping.isBlank() || ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
+      return adminController.filPolicyAdmin();
+    }
+    return ResponseEntity.noContent().build();
+  }
+
+  @RequestMapping(
+      path = {"/lexisFILAdminRPC", "/lexisFILAdminRPC.do"},
+      method = {RequestMethod.GET, RequestMethod.POST})
+  public ResponseEntity<?> lexisFilAdminRpc(
+      @RequestParam(required = false) Map<String, String> requestParameters) {
+    return adminController.filPolicyRpcForm(requestParameters);
   }
 
   @RequestMapping(

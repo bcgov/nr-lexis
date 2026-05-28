@@ -197,7 +197,17 @@ public class LexisApiAuthorizationCustomizer
     authorizeAction(
         authorize,
         HttpMethod.GET,
+        new String[] {"/api/lexis/lexisAgentAdmin", "/api/lexis/lexisAgentAdmin.do"},
+        "/lexisAgentAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
         new String[] {"/api/lexis/admin/policy", "/api/lexis/admin/lexisPolicyAdmin"},
+        "/lexisPolicyAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/lexisPolicyAdmin", "/api/lexis/lexisPolicyAdmin.do"},
         "/lexisPolicyAdmin");
     authorizeAction(
         authorize,
@@ -206,13 +216,38 @@ public class LexisApiAuthorizationCustomizer
         "/lexisFILAdmin");
     authorizeAction(
         authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/lexisFILAdmin", "/api/lexis/lexisFILAdmin.do"},
+        "/lexisFILAdmin");
+    authorizeAction(
+        authorize,
         HttpMethod.POST,
         new String[] {"/api/lexis/admin/policy/rpc", "/api/lexis/admin/lexisPolicyAdminRPC"},
         "/lexisPolicyAdmin");
     authorizeAction(
         authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/lexisPolicyAdminRPC", "/api/lexis/lexisPolicyAdminRPC.do"},
+        "/lexisPolicyAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {"/api/lexis/lexisPolicyAdminRPC", "/api/lexis/lexisPolicyAdminRPC.do"},
+        "/lexisPolicyAdmin");
+    authorizeAction(
+        authorize,
         HttpMethod.POST,
         new String[] {"/api/lexis/admin/fil-policy/rpc", "/api/lexis/admin/lexisFILAdminRPC"},
+        "/lexisFILAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/lexisFILAdminRPC", "/api/lexis/lexisFILAdminRPC.do"},
+        "/lexisFILAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {"/api/lexis/lexisFILAdminRPC", "/api/lexis/lexisFILAdminRPC.do"},
         "/lexisFILAdmin");
 
     authorizeAction(
