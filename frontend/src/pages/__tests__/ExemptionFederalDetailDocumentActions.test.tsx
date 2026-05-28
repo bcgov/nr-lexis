@@ -419,4 +419,41 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(deleteButton).toBeDisabled()
     expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
   })
+
+  it('shows detail error contract when exemption detail endpoint fails', async () => {
+    mockedFetchProvincialExemptionDetail.mockRejectedValue(new Error('backend down'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText('Unable to retrieve provincial exemption detail.'),
+    ).toBeInTheDocument()
+    expect(mockedFetchExemptionDocuments).not.toHaveBeenCalled()
+  })
+
+  it('shows detail error contract when federal detail endpoint fails', async () => {
+    mockedFetchFederalApplicationDetail.mockRejectedValue(new Error('backend down'))
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText('Unable to retrieve federal application detail.'),
+    ).toBeInTheDocument()
+    expect(mockedFetchFederalApplicationDocuments).not.toHaveBeenCalled()
+  })
 })

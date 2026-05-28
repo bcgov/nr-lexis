@@ -230,4 +230,24 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(deleteButton).toBeDisabled()
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
   })
+
+  it('shows detail error contract when application detail endpoint fails', async () => {
+    mockedFetchProvincialApplicationDetail.mockRejectedValue(new Error('backend down'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText('Unable to retrieve provincial application detail.'),
+    ).toBeInTheDocument()
+    expect(mockedFetchApplicationDocuments).not.toHaveBeenCalled()
+  })
 })

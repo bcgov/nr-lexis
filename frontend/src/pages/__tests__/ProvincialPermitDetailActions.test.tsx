@@ -451,4 +451,26 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect.any(String),
     )
   })
+
+  it('shows detail error contract when permit detail endpoint fails', async () => {
+    mockedFetchProvincialPermitDetail.mockRejectedValue(new Error('backend down'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText('Unable to retrieve provincial permit detail.'),
+    ).toBeInTheDocument()
+    expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()
+    expect(mockedFetchPermitDocuments).not.toHaveBeenCalled()
+    expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
+  })
 })
