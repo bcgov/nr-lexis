@@ -48,7 +48,7 @@ jobs:
           mvn -B sonar:sonar \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.organization=bcgov-sonarcloud \
-            -Dsonar.projectKey=quickstart-openshift_backend \
+            -Dsonar.projectKey=nr-lexis_backend \
             -Dsonar.token="$SONAR_TOKEN"
 
   frontend-tests:
@@ -71,7 +71,7 @@ jobs:
           sonar_args: >
             -Dsonar.exclusions=**/coverage/**,**/node_modules/**,**/*spec.ts
             -Dsonar.organization=bcgov-sonarcloud
-            -Dsonar.projectKey=quickstart-openshift_frontend
+            -Dsonar.projectKey=nr-lexis_frontend
             -Dsonar.sources=src
             -Dsonar.test.inclusions=**/*spec.ts
             -Dsonar.javascript.lcov.reportPaths=./coverage/lcov.info

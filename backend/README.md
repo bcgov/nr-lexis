@@ -101,9 +101,9 @@ backend/
 
 ## Origins
 
-This backend follows the modern Spring Boot layout used in `nr-rept`, while functionality is being ported incrementally from `nr-lexis-main`.
+This backend is the Spring Boot service for `nr-lexis`.
 
-Upstream CI/CD and OpenShift template conventions come from [bcgov/quickstart-openshift](https://github.com/bcgov/quickstart-openshift).
+CI/CD and OpenShift workflow conventions derive from [bcgov/quickstart-openshift](https://github.com/bcgov/quickstart-openshift).
 
 ## Resources
 
