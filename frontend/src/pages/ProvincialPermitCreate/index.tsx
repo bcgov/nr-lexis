@@ -123,6 +123,7 @@ const ProvincialPermitCreatePage: FC = () => {
       !isValidIsoDate(form.estimatedShippingDate)
     )
   }, [form])
+  const missingRequiredOptions = permitStatuses.length === 0
 
   const onSaveDraft = () => {
     setStatus(null)
@@ -209,6 +210,18 @@ const ProvincialPermitCreatePage: FC = () => {
         <h1>Create Provincial Permit</h1>
         <p>Base create form for provincial permit migration.</p>
       </Column>
+
+      {missingRequiredOptions && (
+        <Column sm={4} md={8} lg={16}>
+          <InlineNotification
+            kind="warning"
+            title="Required options unavailable"
+            subtitle="Permit status values are unavailable from backend options. Submit remains disabled until a valid status is available."
+            lowContrast
+            hideCloseButton
+          />
+        </Column>
+      )}
 
       {!!status && (
         <Column sm={4} md={8} lg={16}>

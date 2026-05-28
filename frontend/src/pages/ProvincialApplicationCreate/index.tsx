@@ -124,6 +124,7 @@ const ProvincialApplicationCreatePage: FC = () => {
       !isValidIsoDate(form.listingDate)
     )
   }, [form])
+  const missingRequiredOptions = productTypes.length === 0
 
   const onSaveDraft = () => {
     setStatus(null)
@@ -210,6 +211,18 @@ const ProvincialApplicationCreatePage: FC = () => {
         <h1>Create Provincial Application</h1>
         <p>Base create form for provincial application migration.</p>
       </Column>
+
+      {missingRequiredOptions && (
+        <Column sm={4} md={8} lg={16}>
+          <InlineNotification
+            kind="warning"
+            title="Required options unavailable"
+            subtitle="Product type values are unavailable from backend options. Submit remains disabled until a valid product type is available."
+            lowContrast
+            hideCloseButton
+          />
+        </Column>
+      )}
 
       {!!status && (
         <Column sm={4} md={8} lg={16}>

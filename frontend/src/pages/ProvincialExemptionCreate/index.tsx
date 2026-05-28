@@ -228,6 +228,7 @@ const ProvincialExemptionCreatePage: FC = () => {
       !isValidIsoDate(form.expiryDate)
     )
   }, [form])
+  const missingRequiredOptions = exemptionTypes.length === 0
 
   const onSaveDraft = () => {
     setStatus(null)
@@ -319,6 +320,18 @@ const ProvincialExemptionCreatePage: FC = () => {
         <h1>Create Provincial Exemption</h1>
         <p>Base create form for provincial exemption migration.</p>
       </Column>
+
+      {missingRequiredOptions && (
+        <Column sm={4} md={8} lg={16}>
+          <InlineNotification
+            kind="warning"
+            title="Required options unavailable"
+            subtitle="Exemption type values are unavailable from backend options. Submit remains disabled until a valid type is available."
+            lowContrast
+            hideCloseButton
+          />
+        </Column>
+      )}
 
       {!!prefillState && (
         <Column sm={4} md={8} lg={16}>
