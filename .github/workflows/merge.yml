@@ -63,7 +63,7 @@ jobs:
       target: test
 
   deploy-prod:
-    # TODO(xyz): Re-enable PROD deployment once prod environment approvals,
+    # TODO(infra): Re-enable PROD deployment once prod environment approvals,
     # secrets, and readiness checks are finalized.
     if: false
     name: PROD Deploys (${{ needs.init.outputs.pr }})
@@ -90,7 +90,7 @@ jobs:
   # record of "this is the image running in production right now" and a
   # rollback target.
   promote:
-    # TODO(xyz): Re-enable image promotion when deploy-prod is re-enabled.
+    # TODO(infra): Re-enable image promotion when deploy-prod is re-enabled.
     if: false
     name: Promote Images
     needs: [deploy-prod, init]

@@ -49,8 +49,8 @@ jobs:
         run: |
           mvn -B sonar:sonar \
             -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.organization=bcgov-sonarcloud
-            -Dsonar.projectKey=quickstart-openshift_backend
+            -Dsonar.organization=bcgov-sonarcloud \
+            -Dsonar.projectKey=quickstart-openshift_backend \
             -Dsonar.token="$SONAR_TOKEN"
 
   frontend-tests:
