@@ -18,7 +18,7 @@ export type PermitInvoiceRow = {
   invoiceFound: boolean
 }
 
-export type PermitDocumentAndInvoiceSource = 'api' | 'legacy'
+export type PermitDocumentAndInvoiceSource = 'api'
 
 export type PermitDocumentsResult = {
   rows: PermitDocumentRow[]
@@ -30,17 +30,11 @@ export type PermitInvoicesResult = {
   source: PermitDocumentAndInvoiceSource
 }
 
-export type OpenPermitDocumentResult =
-  | {
-      source: 'api'
-      blob: Blob
-      filename: string
-      legacyUrl: string
-    }
-  | {
-      source: 'legacy'
-      legacyUrl: string
-    }
+export type OpenPermitDocumentResult = {
+  source: 'api'
+  blob: Blob
+  filename: string
+}
 
 export type PermitInvoiceConversionRateResult = {
   conversionRate: string
@@ -75,7 +69,6 @@ type PermitInvoiceDetailsPayload = {
   value?: unknown
 }
 
-const FALLBACK_STATUSES = new Set([204, 404, 405, 500, 501, 502, 503])
 const DEFAULT_CONVERSION_RATE = '1.00'
 
 const asString = (value: unknown): string => {
@@ -160,38 +153,6 @@ const parseStringArrayPayload = (payload: unknown): string[] => {
     .filter((entry): entry is string => entry.length > 0)
 }
 
-const shouldFallbackToLegacy = (error: unknown): boolean => {
-  const status = (error as any)?.response?.status
-  if (typeof status === 'number') {
-    return FALLBACK_STATUSES.has(status)
-  }
-  return true
-}
-
-const getLegacyActionBasePath = (): string => {
-  const configured = (import.meta.env.VITE_LEXIS_LEGACY_ENDPOINT_BASE ?? '/api').trim()
-  if (!configured) {
-    return '/api'
-  }
-  return configured.endsWith('/') ? configured.slice(0, -1) : configured
-}
-
-const buildLegacyPermitDetailsActionUrl = (
-  actionMapping: string,
-  values: Record<string, string | undefined>,
-): string => {
-  const basePath = getLegacyActionBasePath()
-  const url = new URL(`${window.location.origin}${basePath}/lexis/permitDetailsRPC`)
-  url.searchParams.set('actionMapping', actionMapping)
-  Object.entries(values).forEach(([key, value]) => {
-    const normalized = (value ?? '').trim()
-    if (normalized.length > 0) {
-      url.searchParams.set(key, normalized)
-    }
-  })
-  return url.toString()
-}
-
 const normalizeDocumentRow = (row: unknown, index: number): PermitDocumentRow => {
   const source = (row ?? {}) as Record<string, unknown>
   const fallbackId = `document-${index + 1}`
@@ -244,114 +205,64 @@ const extractFilename = (
   return requestedFileName
 }
 
-type PermitInvoiceDetailsResult = {
-  details: PermitInvoiceDetailsPayload
-  source: PermitDocumentAndInvoiceSource
-}
-
 const fetchInvoiceDetails = async (
   permitNumber: string,
   invoiceNumber: string,
-): Promise<PermitInvoiceDetailsResult> => {
-  try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<PermitInvoiceDetailsPayload>('/lexis/rpc/permit-details/invoice-details', {
-        params: {
-          permitNumber,
-          salesInvoiceNumber: invoiceNumber,
-        },
-      })
-
-    if (response.status === 204) {
-      return {
-        details: {
-          invoicefound: false,
-          rate: '',
-          fee: '',
-          value: '',
-        },
-        source: 'api',
-      }
-    }
-
-    return {
-      details: response.data ?? {
-        invoicefound: false,
-        rate: '',
-        fee: '',
-        value: '',
+): Promise<PermitInvoiceDetailsPayload> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .get<PermitInvoiceDetailsPayload>('/lexis/rpc/permit-details/invoice-details', {
+      params: {
+        permitNumber,
+        salesInvoiceNumber: invoiceNumber,
       },
-      source: 'api',
-    }
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
-
-    const legacyUrl = buildLegacyPermitDetailsActionUrl('getInvoiceDetails', {
-      permitNumber,
-      salesInvoiceNumber: invoiceNumber,
     })
-    const legacyResponse = await apiService
-      .getAxiosInstance()
-      .get<PermitInvoiceDetailsPayload>(legacyUrl)
 
+  if (response.status === 204) {
     return {
-      details: legacyResponse.data ?? {
-        invoicefound: false,
-        rate: '',
-        fee: '',
-        value: '',
-      },
-      source: 'legacy',
+      invoicefound: false,
+      rate: '',
+      fee: '',
+      value: '',
     }
   }
+
+  return (
+    response.data ?? {
+      invoicefound: false,
+      rate: '',
+      fee: '',
+      value: '',
+    }
+  )
 }
 
 export const fetchPermitDocuments = async (
   permitNumber: string,
 ): Promise<PermitDocumentsResult> => {
-  try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<unknown>('/lexis/rpc/permit-details/document-details', {
-        params: {
-          permitNumber,
-        },
-      })
+  const response = await apiService
+    .getAxiosInstance()
+    .get<unknown>('/lexis/rpc/permit-details/document-details', {
+      params: {
+        permitNumber,
+      },
+    })
 
-    if (response.status === 204) {
-      return {
-        rows: [],
-        source: 'api',
-      }
-    }
-
-    const rows = parseArrayPayload(response.data)
-    if (!rows) {
-      throw new Error('Unexpected document list payload.')
-    }
-
+  if (response.status === 204) {
     return {
-      rows: rows.map(normalizeDocumentRow),
+      rows: [],
       source: 'api',
     }
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
+  }
 
-    const legacyUrl = buildLegacyPermitDetailsActionUrl('getDocumentDetails', {
-      permitNumber,
-    })
-    const legacyResponse = await apiService.getAxiosInstance().get<unknown>(legacyUrl)
-    const rows = parseArrayPayload(legacyResponse.data) ?? []
+  const rows = parseArrayPayload(response.data)
+  if (!rows) {
+    throw new Error('Unexpected document list payload.')
+  }
 
-    return {
-      rows: rows.map(normalizeDocumentRow),
-      source: 'legacy',
-    }
+  return {
+    rows: rows.map(normalizeDocumentRow),
+    source: 'api',
   }
 }
 
@@ -359,146 +270,83 @@ export const openPermitDocument = async (
   fileId: string,
   fileName: string,
 ): Promise<OpenPermitDocumentResult> => {
-  const legacyUrl = buildLegacyPermitDetailsActionUrl('getDocument', {
-    fileID: fileId,
-    fileName,
-  })
+  const response = await apiService
+    .getAxiosInstance()
+    .get<Blob>('/lexis/rpc/permit-details/document', {
+      params: {
+        fileId,
+        fileName,
+      },
+      responseType: 'blob',
+      headers: {
+        Accept: 'application/octet-stream',
+      },
+    })
 
-  try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<Blob>('/lexis/rpc/permit-details/document', {
-        params: {
-          fileId,
-          fileName,
-        },
-        responseType: 'blob',
-        headers: {
-          Accept: 'application/octet-stream',
-        },
-      })
+  if (response.status === 204) {
+    throw new Error('Permit document payload was empty.')
+  }
 
-    if (response.status === 204) {
-      return {
-        source: 'legacy',
-        legacyUrl,
-      }
-    }
-
-    return {
-      source: 'api',
-      blob: response.data,
-      filename: extractFilename(response.headers, fileName),
-      legacyUrl,
-    }
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
-
-    return {
-      source: 'legacy',
-      legacyUrl,
-    }
+  return {
+    source: 'api',
+    blob: response.data,
+    filename: extractFilename(response.headers, fileName),
   }
 }
 
 export const fetchPermitInvoices = async (permitNumber: string): Promise<PermitInvoicesResult> => {
-  let invoiceNumbers: string[] = []
-  let listSource: PermitDocumentAndInvoiceSource = 'api'
-
-  try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<{ invoiceList?: unknown }>('/lexis/rpc/permit-details/invoices-for-permit', {
-        params: {
-          permitNumber,
-        },
-      })
-
-    if (response.status === 204) {
-      return {
-        rows: [],
-        source: 'api',
-      }
-    }
-
-    const listRaw = Array.isArray(response.data?.invoiceList)
-      ? response.data.invoiceList
-      : parseArrayPayload(response.data)
-    if (!listRaw) {
-      throw new Error('Unexpected invoice list payload.')
-    }
-    invoiceNumbers = listRaw.map((entry) => asString(entry)).filter((entry) => entry.length > 0)
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
-
-    listSource = 'legacy'
-    const legacyUrl = buildLegacyPermitDetailsActionUrl('getInvoicesForPermit', {
-      permitNumber,
+  const response = await apiService
+    .getAxiosInstance()
+    .get<{ invoiceList?: unknown }>('/lexis/rpc/permit-details/invoices-for-permit', {
+      params: {
+        permitNumber,
+      },
     })
-    const legacyResponse = await apiService
-      .getAxiosInstance()
-      .get<{ invoiceList?: unknown }>(legacyUrl)
-    const listRaw = Array.isArray(legacyResponse.data?.invoiceList)
-      ? legacyResponse.data.invoiceList
-      : parseArrayPayload(legacyResponse.data)
-    invoiceNumbers = (listRaw ?? [])
-      .map((entry) => asString(entry))
-      .filter((entry) => entry.length > 0)
+
+  if (response.status === 204) {
+    return {
+      rows: [],
+      source: 'api',
+    }
   }
+
+  const listRaw = Array.isArray(response.data?.invoiceList)
+    ? response.data.invoiceList
+    : parseArrayPayload(response.data)
+  if (!listRaw) {
+    throw new Error('Unexpected invoice list payload.')
+  }
+
+  const invoiceNumbers = listRaw.map((entry) => asString(entry)).filter((entry) => entry.length > 0)
 
   const detailsResults = await Promise.all(
     invoiceNumbers.map((invoiceNumber) => fetchInvoiceDetails(permitNumber, invoiceNumber)),
   )
 
-  const detailsSource = detailsResults.some((result) => result.source === 'legacy')
-    ? 'legacy'
-    : 'api'
-
   return {
     rows: detailsResults.map((result, index) => ({
       id: `${invoiceNumbers[index]}-${index + 1}`,
       invoiceNumber: invoiceNumbers[index],
-      exportValueCad: asString(result.details.value),
-      conversionRate: asString(result.details.rate),
-      feeInLieu: asString(result.details.fee),
-      invoiceFound: asBoolean(result.details.invoicefound),
+      exportValueCad: asString(result.value),
+      conversionRate: asString(result.rate),
+      feeInLieu: asString(result.fee),
+      invoiceFound: asBoolean(result.invoicefound),
     })),
-    source: listSource === 'legacy' || detailsSource === 'legacy' ? 'legacy' : 'api',
+    source: 'api',
   }
 }
 
 export const fetchPermitInvoiceConversionRate =
   async (): Promise<PermitInvoiceConversionRateResult> => {
-    try {
-      const response = await apiService.getAxiosInstance().get<{
-        success?: boolean
-        conversionRate?: unknown
-      }>('/lexis/rpc/permit-details/conversion-rate')
+    const response = await apiService.getAxiosInstance().get<{
+      success?: boolean
+      conversionRate?: unknown
+    }>('/lexis/rpc/permit-details/conversion-rate')
 
-      const conversionRate = asString(response.data?.conversionRate) || DEFAULT_CONVERSION_RATE
-      return {
-        conversionRate,
-        source: 'api',
-      }
-    } catch (error) {
-      if (!shouldFallbackToLegacy(error)) {
-        throw error
-      }
-
-      const legacyUrl = buildLegacyPermitDetailsActionUrl('getConversionRate', {})
-      const legacyResponse = await apiService
-        .getAxiosInstance()
-        .get<{ success?: boolean; conversionRate?: unknown }>(legacyUrl)
-      const conversionRate =
-        asString(legacyResponse.data?.conversionRate) || DEFAULT_CONVERSION_RATE
-      return {
-        conversionRate,
-        source: 'legacy',
-      }
+    const conversionRate = asString(response.data?.conversionRate) || DEFAULT_CONVERSION_RATE
+    return {
+      conversionRate,
+      source: 'api',
     }
   }
 
@@ -544,90 +392,48 @@ export const addPermitInvoice = async (
     invoiceFeeInLieu: request.invoiceFeeInLieu.trim(),
   }
 
-  try {
-    const payload = await postFormData('/lexis/rpc/permit-details/add-invoice', normalizedPayload)
-    return parseAddPermitInvoiceResponse(payload, 'api')
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
-
-    const payload = await postFormData('/lexis/permitDetailsRPC', {
-      ...normalizedPayload,
-      actionMapping: 'addInvoice',
-    })
-    return parseAddPermitInvoiceResponse(payload, 'legacy')
-  }
+  const payload = await postFormData('/lexis/rpc/permit-details/add-invoice', normalizedPayload)
+  return parseAddPermitInvoiceResponse(payload, 'api')
 }
 
-const removeDocumentWithFallback = async (
+const removeDocument = async (
   apiPath: string,
-  legacyActionMapping: string,
   documentId: string,
 ): Promise<RemovePermitDocumentResult> => {
   const normalizedDocumentId = documentId.trim()
-  const legacyUrl = buildLegacyPermitDetailsActionUrl(legacyActionMapping, {
-    documentId: normalizedDocumentId,
+  const response = await apiService.getAxiosInstance().delete<unknown>(apiPath, {
+    params: {
+      documentId: normalizedDocumentId,
+    },
   })
 
-  try {
-    const response = await apiService.getAxiosInstance().delete<unknown>(apiPath, {
-      params: {
-        documentId: normalizedDocumentId,
-      },
-    })
-
-    if (response.status === 204) {
-      const fallbackResponse = await apiService.getAxiosInstance().get<unknown>(legacyUrl)
-      return {
-        success: parseRemoveDocumentSuccess(fallbackResponse.data),
-        source: 'legacy',
-      }
-    }
-
+  if (response.status === 204) {
     return {
-      success: parseRemoveDocumentSuccess(response.data),
+      success: true,
       source: 'api',
     }
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
+  }
 
-    const fallbackResponse = await apiService.getAxiosInstance().get<unknown>(legacyUrl)
-    return {
-      success: parseRemoveDocumentSuccess(fallbackResponse.data),
-      source: 'legacy',
-    }
+  return {
+    success: parseRemoveDocumentSuccess(response.data),
+    source: 'api',
   }
 }
 
 export const removePermitDocument = async (
   documentId: string,
 ): Promise<RemovePermitDocumentResult> => {
-  return removeDocumentWithFallback(
-    '/lexis/rpc/permit-details/document/permit',
-    'removePermitDocument',
-    documentId,
-  )
+  return removeDocument('/lexis/rpc/permit-details/document/permit', documentId)
 }
 
 export const removePermitInvoiceDocument = async (
   documentId: string,
 ): Promise<RemovePermitDocumentResult> => {
-  return removeDocumentWithFallback(
-    '/lexis/rpc/permit-details/document/invoice',
-    'removeInvoiceDocument',
-    documentId,
-  )
+  return removeDocument('/lexis/rpc/permit-details/document/invoice', documentId)
 }
 
 export const removePermitApplicationDocument = async (
   documentId: string,
 ): Promise<RemovePermitDocumentResult> => {
-  return removeDocumentWithFallback(
-    '/lexis/rpc/permit-details/document/application',
-    'removeApplicationDocument',
-    documentId,
-  )
+  return removeDocument('/lexis/rpc/permit-details/document/application', documentId)
 }

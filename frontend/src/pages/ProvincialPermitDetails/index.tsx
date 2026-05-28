@@ -29,7 +29,6 @@ import {
   removePermitApplicationDocument,
   removePermitDocument,
   removePermitInvoiceDocument,
-  type PermitDocumentAndInvoiceSource,
   type PermitDocumentRow,
   type PermitInvoiceRow,
 } from '@/service/provincial-permit-documents-invoices-service'
@@ -148,8 +147,8 @@ const ProvincialPermitDetailsPage: FC = () => {
   const [tabsSources, setTabsSources] = useState<ProvincialPermitDetailTabsSources | null>(null)
   const [documentRows, setDocumentRows] = useState<PermitDocumentRow[]>([])
   const [invoiceRows, setInvoiceRows] = useState<PermitInvoiceRow[]>([])
-  const [documentSource, setDocumentSource] = useState<PermitDocumentAndInvoiceSource>('api')
-  const [invoiceSource, setInvoiceSource] = useState<PermitDocumentAndInvoiceSource>('api')
+  const [documentSource, setDocumentSource] = useState('api')
+  const [invoiceSource, setInvoiceSource] = useState('api')
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [tabsErrorMessage, setTabsErrorMessage] = useState('')
@@ -455,18 +454,7 @@ const ProvincialPermitDetailsPage: FC = () => {
     setActionInfoMessage('')
     try {
       const result = await openPermitDocument(row.id, row.name)
-      if (result.source === 'api') {
-        triggerBrowserDownload(result.blob, result.filename)
-        return
-      }
-
-      setActionInfoMessage(
-        'Document download API is not available yet. Opened the legacy document endpoint.',
-      )
-      const popup = window.open(result.legacyUrl, 'permitDocumentWindow')
-      if (!popup) {
-        setActionErrorMessage('Unable to open document window. Enable popups and retry.')
-      }
+      triggerBrowserDownload(result.blob, result.filename)
     } catch (error) {
       console.error(error)
       setActionErrorMessage('Unable to open permit document.')
@@ -498,12 +486,6 @@ const ProvincialPermitDetailsPage: FC = () => {
         if (!removeResult.success) {
           setActionErrorMessage('Unable to remove selected document.')
           return
-        }
-
-        if (removeResult.source === 'legacy') {
-          setActionInfoMessage(
-            'Document delete API is not available yet. Used legacy document delete endpoint.',
-          )
         }
 
         const [documentsResult, invoicesResult] = await Promise.all([
@@ -563,11 +545,6 @@ const ProvincialPermitDetailsPage: FC = () => {
       try {
         const conversionResult = await fetchPermitInvoiceConversionRate()
         conversionRate = conversionResult.conversionRate || conversionRate
-        if (conversionResult.source === 'legacy') {
-          setActionInfoMessage(
-            'Invoice conversion-rate API is not available yet. Used legacy conversion-rate lookup.',
-          )
-        }
       } catch (error) {
         console.error(error)
         setActionInfoMessage(
@@ -586,12 +563,6 @@ const ProvincialPermitDetailsPage: FC = () => {
       if (!addResult.success) {
         setActionErrorMessage(addResult.errors[0] || addResult.message || 'Unable to add invoice.')
         return
-      }
-
-      if (addResult.source === 'legacy') {
-        setActionInfoMessage(
-          'Add-invoice API is not available yet. Used legacy add-invoice endpoint.',
-        )
       }
 
       const refreshedInvoices = await fetchPermitInvoices(resolvedPermitNumber)
@@ -626,11 +597,6 @@ const ProvincialPermitDetailsPage: FC = () => {
     try {
       const conversionResult = await fetchPermitInvoiceConversionRate()
       conversionRate = conversionResult.conversionRate || conversionRate
-      if (conversionResult.source === 'legacy') {
-        setActionInfoMessage(
-          'Invoice conversion-rate API is not available yet. Used legacy conversion-rate lookup.',
-        )
-      }
     } catch (error) {
       console.error(error)
       setActionInfoMessage('Unable to retrieve conversion rate. Using 1.00 for invoice upload.')
@@ -783,7 +749,7 @@ const ProvincialPermitDetailsPage: FC = () => {
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <InlineNotification
                 kind="info"
-                title="Legacy Fallback Used"
+                title="Action Info"
                 subtitle={actionInfoMessage}
                 lowContrast
                 onCloseButtonClick={() => setActionInfoMessage('')}

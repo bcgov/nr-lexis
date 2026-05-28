@@ -25,7 +25,6 @@ import {
   openApplicationDocument,
   removeApplicationDocument,
   type ProvincialApplicationDocumentRow,
-  type ProvincialApplicationDocumentSource,
 } from '@/service/provincial-application-documents-service'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -90,7 +89,6 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
   const [documentRows, setDocumentRows] = useState<ProvincialApplicationDocumentRow[]>([])
-  const [documentSource, setDocumentSource] = useState<ProvincialApplicationDocumentSource>('api')
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
@@ -130,7 +128,6 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setErrorMessage('Application number is missing from the route.')
         setDetail(null)
         setDocumentRows([])
-        setDocumentSource('api')
         setDocumentsErrorMessage('')
         setActionErrorMessage('')
         setActionInfoMessage('')
@@ -150,18 +147,15 @@ const ProvincialApplicationDetailsPage: FC = () => {
         if (!response) {
           setErrorMessage(`No provincial application found for ${applicationNumber}.`)
           setDocumentRows([])
-          setDocumentSource('api')
           return
         }
 
         try {
           const documentsResult = await fetchApplicationDocuments(applicationNumber)
           setDocumentRows(documentsResult.rows)
-          setDocumentSource(documentsResult.source)
         } catch (error) {
           console.error(error)
           setDocumentRows([])
-          setDocumentSource('api')
           setDocumentsErrorMessage('Unable to retrieve application documents.')
         }
       } catch (error) {
@@ -169,7 +163,6 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setErrorMessage('Unable to retrieve provincial application detail.')
         setDetail(null)
         setDocumentRows([])
-        setDocumentSource('api')
         setDocumentsErrorMessage('')
       } finally {
         setLoading(false)
@@ -279,14 +272,6 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
     try {
       const result = await openApplicationDocument(row.id, row.name)
-      if (result.source === 'legacy') {
-        const openedWindow = window.open(result.legacyUrl, 'applicationDocumentWindow')
-        if (!openedWindow) {
-          setActionErrorMessage('Unable to open the document window. Allow popups and retry.')
-        }
-        return
-      }
-
       triggerBrowserDownload(result.blob, result.filename || row.name)
     } catch (error) {
       console.error(error)
@@ -313,11 +298,6 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
         const documentsResult = await fetchApplicationDocuments(applicationNumber)
         setDocumentRows(documentsResult.rows)
-        setDocumentSource(documentsResult.source)
-
-        if (removeResult.source === 'legacy' || documentsResult.source === 'legacy') {
-          setActionInfoMessage('Document action completed through legacy fallback.')
-        }
       } catch (error) {
         console.error(error)
         setActionErrorMessage('Unable to remove the selected document.')
@@ -616,10 +596,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Documents{' '}
-                <Tag type={documentSource === 'api' ? 'green' : 'gray'}>
-                  {documentSource === 'api' ? 'API' : 'Fallback'}
-                </Tag>
+                Documents <Tag type="green">API</Tag>
               </h2>
               <TextInput
                 id="applicationDetailDocumentsFilter"

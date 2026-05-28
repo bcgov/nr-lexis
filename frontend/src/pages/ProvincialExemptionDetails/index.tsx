@@ -25,7 +25,6 @@ import {
   openExemptionDocument,
   removeExemptionDocument,
   type ProvincialExemptionDocumentRow,
-  type ProvincialExemptionDocumentSource,
 } from '@/service/provincial-exemption-documents-service'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -90,7 +89,6 @@ const ProvincialExemptionDetailsPage: FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<ProvincialExemptionDetail | null>(null)
   const [documentRows, setDocumentRows] = useState<ProvincialExemptionDocumentRow[]>([])
-  const [documentSource, setDocumentSource] = useState<ProvincialExemptionDocumentSource>('api')
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
@@ -129,7 +127,6 @@ const ProvincialExemptionDetailsPage: FC = () => {
         setErrorMessage('Exemption number is missing from the route.')
         setDetail(null)
         setDocumentRows([])
-        setDocumentSource('api')
         setDocumentsErrorMessage('')
         setActionErrorMessage('')
         setActionInfoMessage('')
@@ -149,18 +146,15 @@ const ProvincialExemptionDetailsPage: FC = () => {
         if (!response) {
           setErrorMessage(`No provincial exemption found for ${exemptionNumber}.`)
           setDocumentRows([])
-          setDocumentSource('api')
           return
         }
 
         try {
           const documentsResult = await fetchExemptionDocuments(exemptionNumber)
           setDocumentRows(documentsResult.rows)
-          setDocumentSource(documentsResult.source)
         } catch (error) {
           console.error(error)
           setDocumentRows([])
-          setDocumentSource('api')
           setDocumentsErrorMessage('Unable to retrieve exemption documents.')
         }
       } catch (error) {
@@ -168,7 +162,6 @@ const ProvincialExemptionDetailsPage: FC = () => {
         setErrorMessage('Unable to retrieve provincial exemption detail.')
         setDetail(null)
         setDocumentRows([])
-        setDocumentSource('api')
         setDocumentsErrorMessage('')
       } finally {
         setLoading(false)
@@ -269,14 +262,6 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
     try {
       const result = await openExemptionDocument(row.id, row.name)
-      if (result.source === 'legacy') {
-        const openedWindow = window.open(result.legacyUrl, 'exemptionDocumentWindow')
-        if (!openedWindow) {
-          setActionErrorMessage('Unable to open the document window. Allow popups and retry.')
-        }
-        return
-      }
-
       triggerBrowserDownload(result.blob, result.filename || row.name)
     } catch (error) {
       console.error(error)
@@ -303,11 +288,6 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
         const documentsResult = await fetchExemptionDocuments(exemptionNumber)
         setDocumentRows(documentsResult.rows)
-        setDocumentSource(documentsResult.source)
-
-        if (removeResult.source === 'legacy' || documentsResult.source === 'legacy') {
-          setActionInfoMessage('Document action completed through legacy fallback.')
-        }
       } catch (error) {
         console.error(error)
         setActionErrorMessage('Unable to remove the selected document.')
@@ -536,10 +516,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Documents{' '}
-                <Tag type={documentSource === 'api' ? 'green' : 'gray'}>
-                  {documentSource === 'api' ? 'API' : 'Fallback'}
-                </Tag>
+                Documents <Tag type="green">API</Tag>
               </h2>
               <TextInput
                 id="exemptionDetailDocumentsFilter"

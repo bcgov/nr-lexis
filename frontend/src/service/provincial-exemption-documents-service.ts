@@ -8,31 +8,23 @@ export type ProvincialExemptionDocumentRow = {
   type: string
 }
 
-export type ProvincialExemptionDocumentSource = 'api' | 'legacy'
+export type ProvincialExemptionDocumentSource = 'api'
 
 export type ProvincialExemptionDocumentsResult = {
   rows: ProvincialExemptionDocumentRow[]
   source: ProvincialExemptionDocumentSource
 }
 
-export type OpenProvincialExemptionDocumentResult =
-  | {
-      source: 'api'
-      blob: Blob
-      filename: string
-      legacyUrl: string
-    }
-  | {
-      source: 'legacy'
-      legacyUrl: string
-    }
+export type OpenProvincialExemptionDocumentResult = {
+  source: 'api'
+  blob: Blob
+  filename: string
+}
 
 export type RemoveProvincialExemptionDocumentResult = {
   success: boolean
   source: ProvincialExemptionDocumentSource
 }
-
-const FALLBACK_STATUSES = new Set([204, 404, 405, 500, 501, 502, 503])
 
 const asString = (value: unknown): string => {
   if (typeof value === 'string') {
@@ -78,38 +70,6 @@ const parseArrayPayload = (payload: unknown): unknown[] | null => {
   }
 
   return null
-}
-
-const shouldFallbackToLegacy = (error: unknown): boolean => {
-  const status = (error as any)?.response?.status
-  if (typeof status === 'number') {
-    return FALLBACK_STATUSES.has(status)
-  }
-  return true
-}
-
-const getLegacyActionBasePath = (): string => {
-  const configured = (import.meta.env.VITE_LEXIS_LEGACY_ENDPOINT_BASE ?? '/api').trim()
-  if (!configured) {
-    return '/api'
-  }
-  return configured.endsWith('/') ? configured.slice(0, -1) : configured
-}
-
-const buildLegacyExemptionDetailsActionUrl = (
-  actionMapping: string,
-  values: Record<string, string | undefined>,
-): string => {
-  const basePath = getLegacyActionBasePath()
-  const url = new URL(`${window.location.origin}${basePath}/lexis/exemptionDetailsRPC`)
-  url.searchParams.set('actionMapping', actionMapping)
-  Object.entries(values).forEach(([key, value]) => {
-    const normalized = (value ?? '').trim()
-    if (normalized.length > 0) {
-      url.searchParams.set(key, normalized)
-    }
-  })
-  return url.toString()
 }
 
 const normalizeDocumentRow = (row: unknown, index: number): ProvincialExemptionDocumentRow => {
@@ -186,59 +146,32 @@ const parseRemoveDocumentSuccess = (payload: unknown): boolean => {
   return false
 }
 
-const postLegacyForm = async (payload: Record<string, string>): Promise<unknown> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .post<unknown>('/lexis/exemptionDetailsRPC', new URLSearchParams(payload), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-    })
-  return response.data
-}
-
 export const fetchExemptionDocuments = async (
   exemptionNumber: string,
 ): Promise<ProvincialExemptionDocumentsResult> => {
-  try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<unknown>('/lexis/rpc/exemption-details/document-details', {
-        params: {
-          exemptionNumber,
-        },
-      })
+  const response = await apiService
+    .getAxiosInstance()
+    .get<unknown>('/lexis/rpc/exemption-details/document-details', {
+      params: {
+        exemptionNumber,
+      },
+    })
 
-    if (response.status === 204) {
-      return {
-        rows: [],
-        source: 'api',
-      }
-    }
-
-    const rows = parseArrayPayload(response.data)
-    if (!rows) {
-      throw new Error('Unexpected exemption document payload.')
-    }
-
+  if (response.status === 204) {
     return {
-      rows: rows.map(normalizeDocumentRow),
+      rows: [],
       source: 'api',
     }
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
+  }
 
-    const legacyUrl = buildLegacyExemptionDetailsActionUrl('getDocumentDetails', {
-      exemptionNumber,
-    })
-    const legacyResponse = await apiService.getAxiosInstance().get<unknown>(legacyUrl)
-    const rows = parseArrayPayload(legacyResponse.data) ?? []
-    return {
-      rows: rows.map(normalizeDocumentRow),
-      source: 'legacy',
-    }
+  const rows = parseArrayPayload(response.data)
+  if (!rows) {
+    throw new Error('Unexpected exemption document payload.')
+  }
+
+  return {
+    rows: rows.map(normalizeDocumentRow),
+    source: 'api',
   }
 }
 
@@ -246,47 +179,27 @@ export const openExemptionDocument = async (
   fileId: string,
   fileName: string,
 ): Promise<OpenProvincialExemptionDocumentResult> => {
-  const legacyUrl = buildLegacyExemptionDetailsActionUrl('getDocument', {
-    fileID: fileId,
-    fileName,
-  })
+  const response = await apiService
+    .getAxiosInstance()
+    .get<Blob>('/lexis/rpc/exemption-details/document', {
+      params: {
+        fileId,
+        fileName,
+      },
+      responseType: 'blob',
+      headers: {
+        Accept: 'application/octet-stream',
+      },
+    })
 
-  try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<Blob>('/lexis/rpc/exemption-details/document', {
-        params: {
-          fileId,
-          fileName,
-        },
-        responseType: 'blob',
-        headers: {
-          Accept: 'application/octet-stream',
-        },
-      })
+  if (response.status === 204) {
+    throw new Error('Exemption document payload was empty.')
+  }
 
-    if (response.status === 204) {
-      return {
-        source: 'legacy',
-        legacyUrl,
-      }
-    }
-
-    return {
-      source: 'api',
-      blob: response.data,
-      filename: extractFilename(response.headers, fileName),
-      legacyUrl,
-    }
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
-
-    return {
-      source: 'legacy',
-      legacyUrl,
-    }
+  return {
+    source: 'api',
+    blob: response.data,
+    filename: extractFilename(response.headers, fileName),
   }
 }
 
@@ -294,42 +207,23 @@ export const removeExemptionDocument = async (
   documentId: string,
 ): Promise<RemoveProvincialExemptionDocumentResult> => {
   const normalizedDocumentId = documentId.trim()
-  try {
-    const response = await apiService
-      .getAxiosInstance()
-      .delete<unknown>('/lexis/rpc/exemption-details/document', {
-        params: {
-          documentId: normalizedDocumentId,
-        },
-      })
-
-    if (response.status === 204) {
-      const payload = await postLegacyForm({
-        actionMapping: 'removeDocument',
+  const response = await apiService
+    .getAxiosInstance()
+    .delete<unknown>('/lexis/rpc/exemption-details/document', {
+      params: {
         documentId: normalizedDocumentId,
-      })
-      return {
-        success: parseRemoveDocumentSuccess(payload),
-        source: 'legacy',
-      }
-    }
+      },
+    })
 
+  if (response.status === 204) {
     return {
-      success: parseRemoveDocumentSuccess(response.data),
+      success: true,
       source: 'api',
     }
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
+  }
 
-    const payload = await postLegacyForm({
-      actionMapping: 'removeDocument',
-      documentId: normalizedDocumentId,
-    })
-    return {
-      success: parseRemoveDocumentSuccess(payload),
-      source: 'legacy',
-    }
+  return {
+    success: parseRemoveDocumentSuccess(response.data),
+    source: 'api',
   }
 }

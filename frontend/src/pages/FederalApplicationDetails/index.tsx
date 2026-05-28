@@ -25,7 +25,6 @@ import {
   openFederalApplicationDocument,
   removeFederalApplicationDocument,
   type FederalApplicationDocumentRow,
-  type FederalApplicationDocumentSource,
 } from '@/service/federal-application-documents-service'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -90,7 +89,6 @@ const FederalApplicationDetailsPage: FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<FederalApplicationDetail | null>(null)
   const [documentRows, setDocumentRows] = useState<FederalApplicationDocumentRow[]>([])
-  const [documentSource, setDocumentSource] = useState<FederalApplicationDocumentSource>('api')
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
@@ -130,7 +128,6 @@ const FederalApplicationDetailsPage: FC = () => {
         setErrorMessage('Application number is missing from the route.')
         setDetail(null)
         setDocumentRows([])
-        setDocumentSource('api')
         setDocumentsErrorMessage('')
         setActionErrorMessage('')
         setActionInfoMessage('')
@@ -149,18 +146,15 @@ const FederalApplicationDetailsPage: FC = () => {
         if (!response) {
           setErrorMessage(`No federal application found for ${applicationNumber}.`)
           setDocumentRows([])
-          setDocumentSource('api')
           return
         }
 
         try {
           const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
           setDocumentRows(documentsResult.rows)
-          setDocumentSource(documentsResult.source)
         } catch (error) {
           console.error(error)
           setDocumentRows([])
-          setDocumentSource('api')
           setDocumentsErrorMessage('Unable to retrieve federal application documents.')
         }
       } catch (error) {
@@ -168,7 +162,6 @@ const FederalApplicationDetailsPage: FC = () => {
         setErrorMessage('Unable to retrieve federal application detail.')
         setDetail(null)
         setDocumentRows([])
-        setDocumentSource('api')
         setDocumentsErrorMessage('')
       } finally {
         setLoading(false)
@@ -248,14 +241,6 @@ const FederalApplicationDetailsPage: FC = () => {
 
     try {
       const result = await openFederalApplicationDocument(row.id, row.name)
-      if (result.source === 'legacy') {
-        const openedWindow = window.open(result.legacyUrl, 'federalApplicationDocumentWindow')
-        if (!openedWindow) {
-          setActionErrorMessage('Unable to open the document window. Allow popups and retry.')
-        }
-        return
-      }
-
       triggerBrowserDownload(result.blob, result.filename || row.name)
     } catch (error) {
       console.error(error)
@@ -282,11 +267,6 @@ const FederalApplicationDetailsPage: FC = () => {
 
         const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
         setDocumentRows(documentsResult.rows)
-        setDocumentSource(documentsResult.source)
-
-        if (removeResult.source === 'legacy' || documentsResult.source === 'legacy') {
-          setActionInfoMessage('Document action completed through legacy fallback.')
-        }
       } catch (error) {
         console.error(error)
         setActionErrorMessage('Unable to remove the selected document.')
@@ -560,10 +540,7 @@ const FederalApplicationDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Documents{' '}
-                <Tag type={documentSource === 'api' ? 'green' : 'gray'}>
-                  {documentSource === 'api' ? 'API' : 'Fallback'}
-                </Tag>
+                Documents <Tag type="green">API</Tag>
               </h2>
               <TextInput
                 id="federalDetailDocumentsFilter"

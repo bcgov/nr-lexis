@@ -138,7 +138,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
       source: 'api',
       blob: new Blob(['test']),
       filename: 'test.pdf',
-      legacyUrl: 'https://example.test/api/lexis/permitDetailsRPC',
     })
     mockedRemovePermitDocument.mockResolvedValue({
       success: true,
@@ -268,7 +267,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
-  it('opens permit document via legacy fallback when document API is unavailable', async () => {
+  it('opens permit document from API response', async () => {
     mockedFetchPermitDocuments.mockResolvedValue({
       rows: [
         {
@@ -279,12 +278,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
           typeCode: 'INV',
         },
       ],
-      source: 'legacy',
+      source: 'api',
     })
     mockedOpenPermitDocument.mockResolvedValue({
-      source: 'legacy',
-      legacyUrl:
-        'https://example.test/api/lexis/permitDetailsRPC?actionMapping=getDocument&fileID=500&fileName=permit-doc.pdf',
+      source: 'api',
+      blob: new Blob(['test']),
+      filename: 'permit-doc.pdf',
     })
     const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
 
@@ -305,11 +304,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await waitFor(() => {
       expect(mockedOpenPermitDocument).toHaveBeenCalledWith('500', 'permit-doc.pdf')
-      expect(openSpy).toHaveBeenCalledWith(
-        'https://example.test/api/lexis/permitDetailsRPC?actionMapping=getDocument&fileID=500&fileName=permit-doc.pdf',
-        'permitDocumentWindow',
-      )
     })
+    expect(openSpy).not.toHaveBeenCalled()
   })
 
   it('removes invoice document rows and refreshes tables', async () => {

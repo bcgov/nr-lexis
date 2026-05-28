@@ -8,31 +8,23 @@ export type ProvincialApplicationDocumentRow = {
   type: string
 }
 
-export type ProvincialApplicationDocumentSource = 'api' | 'legacy'
+export type ProvincialApplicationDocumentSource = 'api'
 
 export type ProvincialApplicationDocumentsResult = {
   rows: ProvincialApplicationDocumentRow[]
   source: ProvincialApplicationDocumentSource
 }
 
-export type OpenApplicationDocumentResult =
-  | {
-      source: 'api'
-      blob: Blob
-      filename: string
-      legacyUrl: string
-    }
-  | {
-      source: 'legacy'
-      legacyUrl: string
-    }
+export type OpenApplicationDocumentResult = {
+  source: 'api'
+  blob: Blob
+  filename: string
+}
 
 export type RemoveApplicationDocumentResult = {
   success: boolean
   source: ProvincialApplicationDocumentSource
 }
-
-const FALLBACK_STATUSES = new Set([204, 404, 405, 500, 501, 502, 503])
 
 const asString = (value: unknown): string => {
   if (typeof value === 'string') {
@@ -78,38 +70,6 @@ const parseArrayPayload = (payload: unknown): unknown[] | null => {
   }
 
   return null
-}
-
-const shouldFallbackToLegacy = (error: unknown): boolean => {
-  const status = (error as any)?.response?.status
-  if (typeof status === 'number') {
-    return FALLBACK_STATUSES.has(status)
-  }
-  return true
-}
-
-const getLegacyActionBasePath = (): string => {
-  const configured = (import.meta.env.VITE_LEXIS_LEGACY_ENDPOINT_BASE ?? '/api').trim()
-  if (!configured) {
-    return '/api'
-  }
-  return configured.endsWith('/') ? configured.slice(0, -1) : configured
-}
-
-const buildLegacyApplicationDetailsActionUrl = (
-  actionMapping: string,
-  values: Record<string, string | undefined>,
-): string => {
-  const basePath = getLegacyActionBasePath()
-  const url = new URL(`${window.location.origin}${basePath}/lexis/applicationDetailsRPC`)
-  url.searchParams.set('actionMapping', actionMapping)
-  Object.entries(values).forEach(([key, value]) => {
-    const normalized = (value ?? '').trim()
-    if (normalized.length > 0) {
-      url.searchParams.set(key, normalized)
-    }
-  })
-  return url.toString()
 }
 
 const normalizeDocumentRow = (row: unknown, index: number): ProvincialApplicationDocumentRow => {
@@ -186,59 +146,32 @@ const parseRemoveDocumentSuccess = (payload: unknown): boolean => {
   return false
 }
 
-const postLegacyForm = async (payload: Record<string, string>): Promise<unknown> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .post<unknown>('/lexis/applicationDetailsRPC', new URLSearchParams(payload), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-    })
-  return response.data
-}
-
 export const fetchApplicationDocuments = async (
   applicationNumber: string,
 ): Promise<ProvincialApplicationDocumentsResult> => {
-  try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<unknown>('/lexis/rpc/application-details/document-details', {
-        params: {
-          applicationNumber,
-        },
-      })
+  const response = await apiService
+    .getAxiosInstance()
+    .get<unknown>('/lexis/rpc/application-details/document-details', {
+      params: {
+        applicationNumber,
+      },
+    })
 
-    if (response.status === 204) {
-      return {
-        rows: [],
-        source: 'api',
-      }
-    }
-
-    const rows = parseArrayPayload(response.data)
-    if (!rows) {
-      throw new Error('Unexpected application document payload.')
-    }
-
+  if (response.status === 204) {
     return {
-      rows: rows.map(normalizeDocumentRow),
+      rows: [],
       source: 'api',
     }
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
+  }
 
-    const legacyUrl = buildLegacyApplicationDetailsActionUrl('getDocumentDetails', {
-      applicationNumber,
-    })
-    const legacyResponse = await apiService.getAxiosInstance().get<unknown>(legacyUrl)
-    const rows = parseArrayPayload(legacyResponse.data) ?? []
-    return {
-      rows: rows.map(normalizeDocumentRow),
-      source: 'legacy',
-    }
+  const rows = parseArrayPayload(response.data)
+  if (!rows) {
+    throw new Error('Unexpected application document payload.')
+  }
+
+  return {
+    rows: rows.map(normalizeDocumentRow),
+    source: 'api',
   }
 }
 
@@ -246,47 +179,27 @@ export const openApplicationDocument = async (
   fileId: string,
   fileName: string,
 ): Promise<OpenApplicationDocumentResult> => {
-  const legacyUrl = buildLegacyApplicationDetailsActionUrl('getDocument', {
-    fileID: fileId,
-    fileName,
-  })
+  const response = await apiService
+    .getAxiosInstance()
+    .get<Blob>('/lexis/rpc/application-details/document', {
+      params: {
+        fileId,
+        fileName,
+      },
+      responseType: 'blob',
+      headers: {
+        Accept: 'application/octet-stream',
+      },
+    })
 
-  try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<Blob>('/lexis/rpc/application-details/document', {
-        params: {
-          fileId,
-          fileName,
-        },
-        responseType: 'blob',
-        headers: {
-          Accept: 'application/octet-stream',
-        },
-      })
+  if (response.status === 204) {
+    throw new Error('Application document payload was empty.')
+  }
 
-    if (response.status === 204) {
-      return {
-        source: 'legacy',
-        legacyUrl,
-      }
-    }
-
-    return {
-      source: 'api',
-      blob: response.data,
-      filename: extractFilename(response.headers, fileName),
-      legacyUrl,
-    }
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
-
-    return {
-      source: 'legacy',
-      legacyUrl,
-    }
+  return {
+    source: 'api',
+    blob: response.data,
+    filename: extractFilename(response.headers, fileName),
   }
 }
 
@@ -294,42 +207,23 @@ export const removeApplicationDocument = async (
   documentId: string,
 ): Promise<RemoveApplicationDocumentResult> => {
   const normalizedDocumentId = documentId.trim()
-  try {
-    const response = await apiService
-      .getAxiosInstance()
-      .delete<unknown>('/lexis/rpc/application-details/document', {
-        params: {
-          documentId: normalizedDocumentId,
-        },
-      })
-
-    if (response.status === 204) {
-      const payload = await postLegacyForm({
-        actionMapping: 'removeDocument',
+  const response = await apiService
+    .getAxiosInstance()
+    .delete<unknown>('/lexis/rpc/application-details/document', {
+      params: {
         documentId: normalizedDocumentId,
-      })
-      return {
-        success: parseRemoveDocumentSuccess(payload),
-        source: 'legacy',
-      }
-    }
+      },
+    })
 
+  if (response.status === 204) {
     return {
-      success: parseRemoveDocumentSuccess(response.data),
+      success: true,
       source: 'api',
     }
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
+  }
 
-    const payload = await postLegacyForm({
-      actionMapping: 'removeDocument',
-      documentId: normalizedDocumentId,
-    })
-    return {
-      success: parseRemoveDocumentSuccess(payload),
-      source: 'legacy',
-    }
+  return {
+    success: parseRemoveDocumentSuccess(response.data),
+    source: 'api',
   }
 }

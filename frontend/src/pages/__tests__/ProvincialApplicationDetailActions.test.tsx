@@ -71,9 +71,9 @@ describe('Provincial Application Detail Document Actions', () => {
       source: 'api',
     })
     mockedOpenApplicationDocument.mockResolvedValue({
-      source: 'legacy',
-      legacyUrl:
-        'https://example.test/api/lexis/applicationDetailsRPC?actionMapping=getDocument&fileID=100&fileName=app-doc.pdf',
+      source: 'api',
+      blob: new Blob(['test']),
+      filename: 'app-doc.pdf',
     })
     mockedRemoveApplicationDocument.mockResolvedValue({
       success: true,
@@ -106,17 +106,17 @@ describe('Provincial Application Detail Document Actions', () => {
     )
   })
 
-  it('opens application document using legacy fallback URL', async () => {
+  it('opens application document from API response', async () => {
     mockedFetchApplicationDocuments.mockResolvedValue({
       rows: [
         {
           id: '100',
           name: 'app-doc.pdf',
-          description: 'Legacy file',
+          description: 'API file',
           type: 'Attachment',
         },
       ],
-      source: 'legacy',
+      source: 'api',
     })
     const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
 
@@ -141,11 +141,8 @@ describe('Provincial Application Detail Document Actions', () => {
 
     await waitFor(() => {
       expect(mockedOpenApplicationDocument).toHaveBeenCalledWith('100', 'app-doc.pdf')
-      expect(openSpy).toHaveBeenCalledWith(
-        'https://example.test/api/lexis/applicationDetailsRPC?actionMapping=getDocument&fileID=100&fileName=app-doc.pdf',
-        'applicationDocumentWindow',
-      )
     })
+    expect(openSpy).not.toHaveBeenCalled()
   })
 
   it('removes application documents and refreshes rows', async () => {

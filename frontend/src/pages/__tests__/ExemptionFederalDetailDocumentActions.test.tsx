@@ -120,14 +120,14 @@ describe('Exemption and Federal Detail Document Actions', () => {
       source: 'api',
     })
     mockedOpenExemptionDocument.mockResolvedValue({
-      source: 'legacy',
-      legacyUrl:
-        'https://example.test/api/lexis/exemptionDetailsRPC?actionMapping=getDocument&fileID=700&fileName=exemption-doc.pdf',
+      source: 'api',
+      blob: new Blob(['test']),
+      filename: 'exemption-doc.pdf',
     })
     mockedOpenFederalApplicationDocument.mockResolvedValue({
-      source: 'legacy',
-      legacyUrl:
-        'https://example.test/api/lexis/applicationDetailsRPC?actionMapping=getDocument&fileID=800&fileName=federal-doc.pdf',
+      source: 'api',
+      blob: new Blob(['test']),
+      filename: 'federal-doc.pdf',
     })
     mockedRemoveExemptionDocument.mockResolvedValue({
       success: true,
@@ -164,17 +164,17 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
   })
 
-  it('opens exemption document using legacy fallback URL', async () => {
+  it('opens exemption document from API response', async () => {
     mockedFetchExemptionDocuments.mockResolvedValue({
       rows: [
         {
           id: '700',
           name: 'exemption-doc.pdf',
-          description: 'Legacy file',
+          description: 'API file',
           type: 'Attachment',
         },
       ],
-      source: 'legacy',
+      source: 'api',
     })
     const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
 
@@ -199,11 +199,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await waitFor(() => {
       expect(mockedOpenExemptionDocument).toHaveBeenCalledWith('700', 'exemption-doc.pdf')
-      expect(openSpy).toHaveBeenCalledWith(
-        'https://example.test/api/lexis/exemptionDetailsRPC?actionMapping=getDocument&fileID=700&fileName=exemption-doc.pdf',
-        'exemptionDocumentWindow',
-      )
     })
+    expect(openSpy).not.toHaveBeenCalled()
   })
 
   it('removes exemption documents and refreshes rows', async () => {
@@ -312,17 +309,17 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
   })
 
-  it('opens federal document using legacy fallback URL', async () => {
+  it('opens federal document from API response', async () => {
     mockedFetchFederalApplicationDocuments.mockResolvedValue({
       rows: [
         {
           id: '800',
           name: 'federal-doc.pdf',
-          description: 'Legacy file',
+          description: 'API file',
           type: 'Attachment',
         },
       ],
-      source: 'legacy',
+      source: 'api',
     })
     const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
 
@@ -344,11 +341,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await waitFor(() => {
       expect(mockedOpenFederalApplicationDocument).toHaveBeenCalledWith('800', 'federal-doc.pdf')
-      expect(openSpy).toHaveBeenCalledWith(
-        'https://example.test/api/lexis/applicationDetailsRPC?actionMapping=getDocument&fileID=800&fileName=federal-doc.pdf',
-        'federalApplicationDocumentWindow',
-      )
     })
+    expect(openSpy).not.toHaveBeenCalled()
   })
 
   it('removes federal documents and refreshes rows', async () => {
