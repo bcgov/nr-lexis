@@ -132,6 +132,8 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             normalizedClientNumber,
+            null,
+            true,
             regions,
             firstPresent(sortField, OFFER_SORT_DEFAULT),
             normalizedPage,
@@ -295,28 +297,19 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             null,
+            null,
             normalizedClientNumber,
+            true,
             regions,
             firstPresent(sortField, OFFER_SORT_DEFAULT),
-            DEFAULT_PAGE,
-            MAX_SIZE);
+            normalizedPage,
+            normalizedSize);
 
     var response = offerService.search(criteria);
-    List<SummaryOfferItemDto> unwithdrawnOffers =
-        response.results().stream()
-            .filter(offer -> offer.offerWithdrawalDate() == null)
-            .map(this::toSummaryOffer)
-            .toList();
+    List<SummaryOfferItemDto> results =
+        response.results().stream().map(this::toSummaryOffer).toList();
 
-    int fromIndex = Math.min(normalizedPage * normalizedSize, unwithdrawnOffers.size());
-    int toIndex = Math.min(fromIndex + normalizedSize, unwithdrawnOffers.size());
-    List<SummaryOfferItemDto> pagedResults = unwithdrawnOffers.subList(fromIndex, toIndex);
-
-    return new SummaryOffersResponseDto(
-        pagedResults,
-        unwithdrawnOffers.size(),
-        normalizedPage,
-        normalizedSize);
+    return new SummaryOffersResponseDto(results, response.total(), response.page(), response.size());
   }
 
   private SummaryApplicationItemDto toSummaryApplication(LexisApplicationSearchResultDto result) {

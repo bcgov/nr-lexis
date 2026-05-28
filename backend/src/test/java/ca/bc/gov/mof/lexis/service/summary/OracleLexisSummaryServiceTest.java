@@ -172,6 +172,8 @@ class OracleLexisSummaryServiceTest {
 
     PurchaseOfferSearchCriteria criteria = criteriaCaptor.getValue();
     assertThat(criteria.clientNumber()).isEqualTo("00077881");
+    assertThat(criteria.offeringClientNumber()).isNull();
+    assertThat(criteria.excludeWithdrawn()).isTrue();
     assertThat(criteria.regionNumbers()).containsExactly(12L);
     assertThat(criteria.sortField()).isEqualTo("offerNumber DESC");
 
@@ -393,7 +395,7 @@ class OracleLexisSummaryServiceTest {
   }
 
   @Test
-  void offersPlacedShouldFilterWithdrawnOffersAndPaginateLocally() {
+  void offersPlacedShouldUseOfferingClientScopeAndExcludeWithdrawn() {
     when(offerService.searchOptions())
         .thenReturn(new PurchaseOfferSearchOptionsDto(List.of(new CodeNameDto("12", "Coast"))));
 
@@ -402,29 +404,15 @@ class OracleLexisSummaryServiceTest {
             new PurchaseOfferSearchResponseDto(
                 List.of(
                     new PurchaseOfferSearchResultDto(
-                        81001L,
-                        1000401L,
-                        "PKG-901",
-                        LocalDate.of(2026, 2, 20),
-                        "R2",
-                        null),
-                    new PurchaseOfferSearchResultDto(
-                        81002L,
-                        1000402L,
-                        "PKG-902",
-                        LocalDate.of(2026, 2, 21),
-                        "R2",
-                        LocalDate.of(2026, 3, 1)),
-                    new PurchaseOfferSearchResultDto(
                         81003L,
                         1000403L,
                         "PKG-903",
                         LocalDate.of(2026, 2, 22),
                         "R2",
                         null)),
-                3,
-                0,
-                200));
+                1,
+                1,
+                1));
 
     SummaryOffersResponseDto response = service.offersPlaced("00077881", 1, 1, null);
 
@@ -433,11 +421,13 @@ class OracleLexisSummaryServiceTest {
     verify(offerService).search(criteriaCaptor.capture());
 
     PurchaseOfferSearchCriteria criteria = criteriaCaptor.getValue();
-    assertThat(criteria.clientNumber()).isEqualTo("00077881");
-    assertThat(criteria.page()).isZero();
-    assertThat(criteria.size()).isEqualTo(200);
+    assertThat(criteria.clientNumber()).isNull();
+    assertThat(criteria.offeringClientNumber()).isEqualTo("00077881");
+    assertThat(criteria.excludeWithdrawn()).isTrue();
+    assertThat(criteria.page()).isEqualTo(1);
+    assertThat(criteria.size()).isEqualTo(1);
 
-    assertThat(response.total()).isEqualTo(2);
+    assertThat(response.total()).isEqualTo(1);
     assertThat(response.results()).hasSize(1);
     assertThat(response.results().get(0).offerNumber()).isEqualTo(81003L);
   }

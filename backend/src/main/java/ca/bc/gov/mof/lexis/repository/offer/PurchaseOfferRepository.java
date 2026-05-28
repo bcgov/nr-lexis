@@ -66,6 +66,10 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
           clientNumber,
           clientNumber);
     }
+    where.addLike("PO.OFFERING_CLIENT_NUMBER", criteria.offeringClientNumber());
+    if (criteria.excludeWithdrawn()) {
+      where.addRaw(" AND PO.OFFER_WITHDRAWAL_DATE IS NULL");
+    }
 
     String orderBy =
         sanitizedSort(

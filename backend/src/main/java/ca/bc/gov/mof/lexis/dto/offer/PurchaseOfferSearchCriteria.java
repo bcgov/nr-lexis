@@ -11,7 +11,38 @@ public record PurchaseOfferSearchCriteria(
     LocalDate withdrawalFromDate,
     LocalDate withdrawalToDate,
     String clientNumber,
+    String offeringClientNumber,
+    boolean excludeWithdrawn,
     List<Long> regionNumbers,
     String sortField,
     int page,
-    int size) {}
+    int size) {
+
+  public PurchaseOfferSearchCriteria(
+      String applicationNumber,
+      String packageNumber,
+      LocalDate listingFromDate,
+      LocalDate listingToDate,
+      LocalDate withdrawalFromDate,
+      LocalDate withdrawalToDate,
+      String clientNumber,
+      List<Long> regionNumbers,
+      String sortField,
+      int page,
+      int size) {
+    this(
+        applicationNumber,
+        packageNumber,
+        listingFromDate,
+        listingToDate,
+        withdrawalFromDate,
+        withdrawalToDate,
+        clientNumber,
+        null,
+        false,
+        regionNumbers,
+        sortField,
+        page,
+        size);
+  }
+}
