@@ -1,8 +1,3 @@
-# Reusable Deploy
-#
-# Adapted from the BCGov quickstart-openshift template to:
-#   - Deploy backend and frontend as explicit jobs.
-#   - Target shared Oracle (no per-PR Postgres deployment).
 name: Reusable Deploy
 
 on:

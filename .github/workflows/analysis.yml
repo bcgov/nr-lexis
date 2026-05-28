@@ -26,7 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # Sonar uses git blame for new-code detection; shallow clones break it.
           fetch-depth: 0
 
       - name: Set up Java 21 (Temurin) + Maven cache
@@ -36,7 +35,6 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # `-DskipITs` skips integration tests bound to failsafe where present.
       - name: Maven verify (unit tests + jacoco coverage)
         working-directory: backend
         run: mvn -B -DskipITs verify
@@ -82,7 +80,6 @@ jobs:
           supply_scan: true
           triggers: ('frontend/')
 
-  # https://github.com/marketplace/actions/aqua-security-trivy
   trivy:
     name: Trivy Security Scan
     if: (! github.event.pull_request.draft)

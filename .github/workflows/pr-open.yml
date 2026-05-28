@@ -10,9 +10,6 @@ concurrency:
 permissions: {}
 
 jobs:
-  # Callback URLs are bucketed by slot (PR % 50). The PR's
-  # OpenShift objects still carry the full PR # (so cleanup is unambiguous),
-  # but the frontend Route's `spec.host` uses the slot.
   vars:
     name: Variables
     runs-on: ubuntu-24.04
@@ -25,9 +22,6 @@ jobs:
           echo "slot=${slot}" >> "$GITHUB_OUTPUT"
           echo "PR ${{ github.event.number }} -> Cognito slot ${slot}"
 
-  # Build per-PR images tagged with the PR number. `tag_fallback: latest`
-  # means a frontend-only PR doesn't trigger a backend rebuild — the action
-  # aliases the existing :latest digest forward as :<PR#> instantly.
   builds:
     name: Builds
     permissions:
@@ -47,14 +41,6 @@ jobs:
           tag_fallback: latest
           triggers: ('${{ matrix.package }}/', '.github/workflows/')
 
-  # Deploy the PR's images to a preview environment in the dev namespace.
-  # `environment: dev` resolves secrets/vars from the dev GitHub Environment.
-  #
-  # `permissions: contents: read` is required HERE on the calling job — GitHub
-  # bounds a called workflow's permissions by the caller. Without this, the
-  # workflow-level `permissions: {}` above propagates as contents=none and
-  # the nested deploy jobs error: "is requesting 'contents: read', but is
-  # only allowed 'contents: none'".
   deploys:
     name: Deploys (${{ github.event.number }})
     needs: [builds, vars]

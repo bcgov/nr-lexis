@@ -24,17 +24,12 @@ jobs:
       pr: ${{ steps.pr.outputs.pr }}
     runs-on: ubuntu-24.04
     steps:
-      # Find the PR number associated with this squash-merged commit on main,
-      # so we can deploy the same image tag that the PR was running.
       - id: pr
         uses: bcgov/action-get-pr@3931962bf13b3f4702d0013ec7c836f752ff1a3b # v0.3.0
 
   deploy-test:
     name: TEST Deploys (${{ needs.init.outputs.pr }})
     needs: [init]
-    # contents:read here so the nested reusable-deploy jobs can checkout.
-    # Workflow-level `permissions: {}` above sets all scopes to none; the
-    # called workflow can't grant itself more than the caller has.
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-deploy.yml
@@ -86,9 +81,6 @@ jobs:
       backend_replicas: "3"
       frontend_replicas: "3"
 
-  # After PROD is up, alias the PR image as :prod in GHCR. Creates a durable
-  # record of "this is the image running in production right now" and a
-  # rollback target.
   promote:
     # TODO(infra): Re-enable image promotion when deploy-prod is re-enabled.
     if: false
