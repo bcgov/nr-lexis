@@ -54,35 +54,6 @@ const formatAmount = (value: number): string => {
 
 const normalizeText = (value: string): string => value.trim().toLowerCase()
 
-const getLegacyActionBasePath = (): string => {
-  const configured = (import.meta.env.VITE_LEXIS_LEGACY_ENDPOINT_BASE ?? '/api').trim()
-  if (!configured) {
-    return '/api'
-  }
-  return configured.endsWith('/') ? configured.slice(0, -1) : configured
-}
-
-const buildLegacyActionUrl = (
-  legacyPath: string,
-  values: Record<string, string | undefined>,
-): string => {
-  const basePath = getLegacyActionBasePath()
-  const url = new URL(`${window.location.origin}${basePath}${legacyPath}`)
-
-  Object.entries(values).forEach(([key, value]) => {
-    if (!value) {
-      return
-    }
-    const trimmed = value.trim()
-    if (!trimmed) {
-      return
-    }
-    url.searchParams.set(key, trimmed)
-  })
-
-  return url.toString()
-}
-
 const triggerBrowserDownload = (blob: Blob, filename: string): void => {
   const objectUrl = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
@@ -404,19 +375,12 @@ const ProvincialPermitDetailsPage: FC = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
-    const uploadUrl = buildLegacyActionUrl('/filePermitUpload.do', {
-      actionMapping: 'view',
+    const params = new URLSearchParams({
+      type: 'permit',
       permitNumber: String(detail.permitNumber),
     })
-    const popup = window.open(
-      uploadUrl,
-      'permitUploadWindow',
-      'height=350,width=700,menubar=0,status=1,resizable=1,scrollbars=1',
-    )
-    if (!popup) {
-      setActionErrorMessage('Unable to open permit upload window. Enable popups and retry.')
-    }
-  }, [detail?.permitNumber])
+    navigate(`/admin/uploads?${params.toString()}`)
+  }, [detail?.permitNumber, navigate])
 
   const onOpenDocument = useCallback(async (row: PermitDocumentRow) => {
     setActionErrorMessage('')
@@ -568,20 +532,13 @@ const ProvincialPermitDetailsPage: FC = () => {
       setActionInfoMessage('Unable to retrieve conversion rate. Using 1.00 for invoice upload.')
     }
 
-    const uploadUrl = buildLegacyActionUrl('/fileInvoiceUpload.do', {
-      actionMapping: 'view',
+    const params = new URLSearchParams({
+      type: 'invoice',
       permitNumber: String(detail.permitNumber),
       invoiceConversionRate: conversionRate,
     })
-    const popup = window.open(
-      uploadUrl,
-      'invoiceUploadWindow',
-      'height=550,width=760,menubar=0,status=1,resizable=1,scrollbars=1',
-    )
-    if (!popup) {
-      setActionErrorMessage('Unable to open invoice upload window. Enable popups and retry.')
-    }
-  }, [detail?.permitNumber])
+    navigate(`/admin/uploads?${params.toString()}`)
+  }, [detail?.permitNumber, navigate])
 
   return (
     <Grid fullWidth className="default-grid">

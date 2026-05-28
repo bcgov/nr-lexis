@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
@@ -59,6 +59,11 @@ const applicationDetail: ProvincialApplicationDetail = {
   offers: [],
 }
 
+const LocationProbe = () => {
+  const location = useLocation()
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
+}
+
 describe('Provincial Application Detail Document Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -81,9 +86,7 @@ describe('Provincial Application Detail Document Actions', () => {
     })
   })
 
-  it('opens application upload popup with application number', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
-
+  it('navigates to upload center with application context', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -91,6 +94,7 @@ describe('Provincial Application Detail Document Actions', () => {
             path="/provincial/application/:applicationNumber"
             element={<ProvincialApplicationDetailsPage />}
           />
+          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -99,11 +103,8 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    expect(openSpy).toHaveBeenCalledWith(
-      expect.stringContaining('/fileApplicationUpload.do?actionMapping=view&applicationNumber=321'),
-      'applicationUploadWindow',
-      expect.any(String),
-    )
+    const location = await screen.findByTestId('location')
+    expect(location.textContent).toBe('/admin/uploads?type=application&applicationNumber=321')
   })
 
   it('opens application document from API response', async () => {

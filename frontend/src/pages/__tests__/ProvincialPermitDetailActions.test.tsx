@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
@@ -96,6 +96,11 @@ const tabsResult: ProvincialPermitDetailTabsData = {
   gbmsEvents: [],
   oicItems: [],
   boicItems: [],
+}
+
+const LocationProbe = () => {
+  const location = useLocation()
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
 }
 
 describe('Provincial Permit Detail Action Smoke', () => {
@@ -199,9 +204,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
-  it('opens permit document upload popup with permit number', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
-
+  it('navigates to upload center with permit context', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -209,6 +212,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
             path="/provincial/permit/:permitNumber"
             element={<ProvincialPermitDetailsPage />}
           />
+          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -217,19 +221,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    expect(openSpy).toHaveBeenCalledWith(
-      expect.stringContaining('/filePermitUpload.do?actionMapping=view&permitNumber=777'),
-      'permitUploadWindow',
-      expect.any(String),
-    )
+    const location = await screen.findByTestId('location')
+    expect(location.textContent).toBe('/admin/uploads?type=permit&permitNumber=777')
   })
 
-  it('opens invoice upload popup with permit number and conversion rate lookup', async () => {
+  it('navigates to invoice upload context with conversion rate lookup', async () => {
     mockedFetchPermitInvoiceConversionRate.mockResolvedValue({
       conversionRate: '1.37',
       source: 'api',
     })
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
 
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
@@ -238,6 +238,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
             path="/provincial/permit/:permitNumber"
             element={<ProvincialPermitDetailsPage />}
           />
+          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -248,12 +249,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await waitFor(() => {
       expect(mockedFetchPermitInvoiceConversionRate).toHaveBeenCalledTimes(1)
-      expect(openSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
-          '/fileInvoiceUpload.do?actionMapping=view&permitNumber=777&invoiceConversionRate=1.37',
-        ),
-        'invoiceUploadWindow',
-        expect.any(String),
+      expect(screen.getByTestId('location').textContent).toBe(
+        '/admin/uploads?type=invoice&permitNumber=777&invoiceConversionRate=1.37',
       )
     })
   })

@@ -36,29 +36,6 @@ const displayValue = (value: string | number | null | undefined): string => {
 
 const normalizeText = (value: string): string => value.trim().toLowerCase()
 
-const getLegacyActionBasePath = (): string => {
-  const configured = (import.meta.env.VITE_LEXIS_LEGACY_ENDPOINT_BASE ?? '/api').trim()
-  if (!configured) {
-    return '/api'
-  }
-  return configured.endsWith('/') ? configured.slice(0, -1) : configured
-}
-
-const buildLegacyActionUrl = (
-  legacyPath: string,
-  values: Record<string, string | undefined>,
-): string => {
-  const basePath = getLegacyActionBasePath()
-  const url = new URL(`${window.location.origin}${basePath}${legacyPath}`)
-  Object.entries(values).forEach(([key, value]) => {
-    const normalized = (value ?? '').trim()
-    if (normalized.length > 0) {
-      url.searchParams.set(key, normalized)
-    }
-  })
-  return url.toString()
-}
-
 const triggerBrowserDownload = (blob: Blob, filename: string): void => {
   const objectUrl = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
@@ -215,25 +192,21 @@ const FederalApplicationDetailsPage: FC = () => {
     if (!detail) {
       return
     }
-
-    const uploadUrl = buildLegacyActionUrl('/fileApplicationUpload.do', {
-      actionMapping: 'view',
-      applicationNumber: String(detail.applicationNumber ?? ''),
-    })
-    const uploadWindow = window.open(
-      uploadUrl,
-      'federalApplicationUploadWindow',
-      'height=250,width=500,menubar=0,resizable=0,status=1,scrollbars=0',
-    )
-
-    if (!uploadWindow) {
-      setActionErrorMessage('Unable to open the application upload window. Allow popups and retry.')
+    const resolvedApplicationNumber = String(
+      detail.applicationNumber ?? applicationNumber ?? '',
+    ).trim()
+    if (!resolvedApplicationNumber) {
+      setActionErrorMessage('Application number is missing for upload.')
       return
     }
-
     setActionErrorMessage('')
     setActionInfoMessage('')
-  }, [detail])
+    const params = new URLSearchParams({
+      type: 'application',
+      applicationNumber: resolvedApplicationNumber,
+    })
+    navigate(`/admin/uploads?${params.toString()}`)
+  }, [applicationNumber, detail, navigate])
 
   const onOpenDocument = useCallback(async (row: FederalApplicationDocumentRow) => {
     setActionErrorMessage('')

@@ -91,13 +91,36 @@ const getWorkflowFromQuery = (value: string | null): UploadWorkflowType => {
   return 'application'
 }
 
+const normalizeQueryValue = (value: string | null): string => {
+  return (value ?? '').trim()
+}
+
+const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState => {
+  const invoiceConversionRate = normalizeQueryValue(query.get('invoiceConversionRate'))
+  const invoiceFeeInLieu = normalizeQueryValue(query.get('invoiceFeeInLieu'))
+
+  return {
+    ...INITIAL_FORM_STATE,
+    applicationNumber: normalizeQueryValue(query.get('applicationNumber')),
+    exemptionNumber: normalizeQueryValue(query.get('exemptionNumber')),
+    permitNumber: normalizeQueryValue(query.get('permitNumber')),
+    salesInvoiceNumber: normalizeQueryValue(query.get('salesInvoiceNumber')),
+    invoiceExportValue: normalizeQueryValue(query.get('invoiceExportValue')),
+    invoiceConversionRate: invoiceConversionRate || INITIAL_FORM_STATE.invoiceConversionRate,
+    invoiceFeeInLieu: invoiceFeeInLieu || INITIAL_FORM_STATE.invoiceFeeInLieu,
+    fileDescription: normalizeQueryValue(query.get('fileDescription')),
+  }
+}
+
 const AdminUploadsPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const initialWorkflow = getWorkflowFromQuery(searchParams.get('type'))
   const [selectedWorkflowType, setSelectedWorkflowType] =
     useState<UploadWorkflowType>(initialWorkflow)
-  const [formState, setFormState] = useState<UploadFormState>(INITIAL_FORM_STATE)
+  const [formState, setFormState] = useState<UploadFormState>(() =>
+    buildInitialFormStateFromQuery(searchParams),
+  )
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
