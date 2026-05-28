@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.security;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Test;
@@ -154,6 +155,16 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyPermitDetailsRpcWriteActionShouldAllowProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/permitDetailsRPC")
+                .param("actionMapping", "updateShipping")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void applicationReviewSearchShouldRejectIndustryRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/application-reviews/search")
@@ -191,7 +202,38 @@ class LexisRouteAuthorizationIntegrationTest {
             get("/api/lexis/session/canPerformAction")
                 .param("action", "/summary")
                 .with(jwt().authorities(new SimpleGrantedAuthority("FEDERAL_SUBMITTER"))))
-        .andExpect(status().isOk());
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(true));
+  }
+
+  @Test
+  void sessionCanPerformActionShouldAllowCreateExemptionForProvincialSubmitter() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "/createExemption")
+                .with(jwt().authorities(new SimpleGrantedAuthority("PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(true));
+  }
+
+  @Test
+  void sessionCanPerformActionShouldRejectCreateExemptionForReadOnly() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "/createExemption")
+                .with(jwt().authorities(new SimpleGrantedAuthority("READ_ONLY"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(false));
+  }
+
+  @Test
+  void sessionCanPerformActionShouldAllowApproveExemptionForExemptionApprover() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "approveExemption")
+                .with(jwt().authorities(new SimpleGrantedAuthority("EXEMPTION_APPROVER"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(true));
   }
 
   @Test
