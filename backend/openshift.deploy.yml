@@ -30,6 +30,12 @@ parameters:
     value: INFO
   - name: SPRING_JPA_SHOW_SQL
     value: "false"
+  - name: AWS_COGNITO_ISSUER_URI
+    required: true
+  - name: COGNITO_USERINFO_URI
+    required: true
+  - name: IDENTITY_LOOKUP_BASE_URL
+    required: true
   - name: DATABASE_HOST
     required: true
   - name: DATABASE_SERVICE_NAME
@@ -116,6 +122,12 @@ objects:
                   value: ${SPRING_PROFILES_ACTIVE}
                 - name: SERVER_PORT
                   value: "8080"
+                - name: AWS_COGNITO_ISSUER_URI
+                  value: ${AWS_COGNITO_ISSUER_URI}
+                - name: COGNITO_USERINFO_URI
+                  value: ${COGNITO_USERINFO_URI}
+                - name: IDENTITY_LOOKUP_BASE_URL
+                  value: ${IDENTITY_LOOKUP_BASE_URL}
                 - name: DATABASE_HOST
                   value: ${DATABASE_HOST}
                 - name: DATABASE_SERVICE_NAME
