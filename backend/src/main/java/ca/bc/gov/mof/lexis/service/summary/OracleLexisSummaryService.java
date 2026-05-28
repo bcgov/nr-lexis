@@ -217,16 +217,19 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             null,
-            normalizedClientNumber,
+            null,
             regions,
             firstPresent(sortField, PERMIT_SORT_DEFAULT),
-            normalizedPage,
-            normalizedSize);
+            DEFAULT_PAGE,
+            Integer.MAX_VALUE);
 
     var response = permitService.search(criteria);
-    List<SummaryPermitItemDto> results = response.results().stream().map(this::toSummaryPermit).toList();
+    List<PermitSearchResultDto> scopedResults =
+        filterPermitResultsForClient(response.results(), normalizedClientNumber);
+    List<SummaryPermitItemDto> results =
+        pageSlice(scopedResults, normalizedPage, normalizedSize).stream().map(this::toSummaryPermit).toList();
 
-    return new SummaryPermitsResponseDto(results, response.total(), response.page(), response.size());
+    return new SummaryPermitsResponseDto(results, scopedResults.size(), normalizedPage, normalizedSize);
   }
 
   @Override
@@ -258,16 +261,19 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             null,
-            normalizedClientNumber,
+            null,
             regions,
             firstPresent(sortField, FEE_SORT_DEFAULT),
-            normalizedPage,
-            normalizedSize);
+            DEFAULT_PAGE,
+            Integer.MAX_VALUE);
 
     var response = permitService.search(criteria);
-    List<SummaryFeeItemDto> results = response.results().stream().map(this::toSummaryFee).toList();
+    List<PermitSearchResultDto> scopedResults =
+        filterPermitResultsForClient(response.results(), normalizedClientNumber);
+    List<SummaryFeeItemDto> results =
+        pageSlice(scopedResults, normalizedPage, normalizedSize).stream().map(this::toSummaryFee).toList();
 
-    return new SummaryFeesResponseDto(results, response.total(), response.page(), response.size());
+    return new SummaryFeesResponseDto(results, scopedResults.size(), normalizedPage, normalizedSize);
   }
 
   @Override
@@ -446,5 +452,35 @@ public class OracleLexisSummaryService implements LexisSummaryService {
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private List<PermitSearchResultDto> filterPermitResultsForClient(
+      List<PermitSearchResultDto> results,
+      String clientNumber) {
+    if (results == null || results.isEmpty() || clientNumber == null || clientNumber.isBlank()) {
+      return List.of();
+    }
+
+    return results.stream()
+        .filter(result -> hasClientNumber(result.ownerClientNumber(), clientNumber)
+            || hasClientNumber(result.applicantClientNumber(), clientNumber))
+        .toList();
+  }
+
+  private <T> List<T> pageSlice(List<T> results, int page, int size) {
+    if (results == null || results.isEmpty()) {
+      return List.of();
+    }
+    int fromIndex = Math.min(page * size, results.size());
+    int toIndex = Math.min(fromIndex + size, results.size());
+    return results.subList(fromIndex, toIndex);
+  }
+
+  private boolean hasClientNumber(String value, String clientNumber) {
+    String normalizedValue = trimToNull(value);
+    if (normalizedValue == null) {
+      return false;
+    }
+    return normalizedValue.equalsIgnoreCase(clientNumber);
   }
 }

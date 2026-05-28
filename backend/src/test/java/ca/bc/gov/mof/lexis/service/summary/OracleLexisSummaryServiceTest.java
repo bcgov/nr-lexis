@@ -266,8 +266,8 @@ class OracleLexisSummaryServiceTest {
                     new PermitSearchResultDto(
                         7000123L,
                         "Issued",
-                        "00055667",
                         "00077881",
+                        "00055667",
                         95.0,
                         LocalDate.of(2026, 3, 15),
                         "R2")),
@@ -312,9 +312,12 @@ class OracleLexisSummaryServiceTest {
     verify(permitService).search(criteriaCaptor.capture());
 
     PermitSearchCriteria criteria = criteriaCaptor.getValue();
-    assertThat(criteria.ownerClientNumber()).isEqualTo("00077881");
+    assertThat(criteria.ownerClientNumber()).isNull();
+    assertThat(criteria.applicantClientNumber()).isNull();
     assertThat(criteria.regionNumbers()).containsExactly(12L, 24L);
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
+    assertThat(criteria.page()).isZero();
+    assertThat(criteria.size()).isEqualTo(Integer.MAX_VALUE);
 
     assertThat(response.total()).isEqualTo(1);
     assertThat(response.results()).hasSize(1);
@@ -338,8 +341,8 @@ class OracleLexisSummaryServiceTest {
                     new PermitSearchResultDto(
                         7000123L,
                         "Issued",
-                        "00055667",
                         "00077881",
+                        "00055667",
                         95.0,
                         LocalDate.of(2026, 3, 15),
                         "R2")),
@@ -384,8 +387,11 @@ class OracleLexisSummaryServiceTest {
     verify(permitService).search(criteriaCaptor.capture());
 
     PermitSearchCriteria criteria = criteriaCaptor.getValue();
-    assertThat(criteria.ownerClientNumber()).isEqualTo("00077881");
+    assertThat(criteria.ownerClientNumber()).isNull();
+    assertThat(criteria.applicantClientNumber()).isNull();
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
+    assertThat(criteria.page()).isZero();
+    assertThat(criteria.size()).isEqualTo(Integer.MAX_VALUE);
 
     assertThat(response.total()).isEqualTo(1);
     assertThat(response.results()).hasSize(1);
