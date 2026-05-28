@@ -255,6 +255,14 @@ const normalizeLegacyActionFromPath = (legacyPath: string | null): string | null
   return normalizeAction(withoutQuery)
 }
 
+const shouldUseLegacyPathRouting = (): boolean => {
+  const configured = (import.meta.env.VITE_LEXIS_ENABLE_LEGACY_PATH_ROUTING ?? '')
+    .toString()
+    .trim()
+    .toLowerCase()
+  return configured === '1' || configured === 'true' || configured === 'yes'
+}
+
 const sanitizeCapabilities = (
   payload: Partial<LexisSessionCapabilities>,
 ): LexisSessionCapabilities => {
@@ -271,9 +279,11 @@ const sanitizeCapabilities = (
 }
 
 const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => {
-  const legacyAction = normalizeLegacyActionFromPath(capabilities.legacyPath)
-  if (legacyAction && LEGACY_ACTION_ROUTE_MAP[legacyAction]) {
-    return LEGACY_ACTION_ROUTE_MAP[legacyAction]
+  if (shouldUseLegacyPathRouting()) {
+    const legacyAction = normalizeLegacyActionFromPath(capabilities.legacyPath)
+    if (legacyAction && LEGACY_ACTION_ROUTE_MAP[legacyAction]) {
+      return LEGACY_ACTION_ROUTE_MAP[legacyAction]
+    }
   }
 
   const roleSet = new Set(capabilities.roles)

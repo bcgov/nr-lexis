@@ -52,6 +52,7 @@ const waitForAuthLoad = async () => {
 describe('Auth Provider Role Matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.unstubAllEnvs()
     localStorage.clear()
   })
 
@@ -97,6 +98,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('preserves legacy path routing precedence when legacyPath is present', async () => {
+    vi.stubEnv('VITE_LEXIS_ENABLE_LEGACY_PATH_ROUTING', 'true')
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\approver',
@@ -110,6 +112,23 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/permit')
+    expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
+  })
+
+  it('ignores legacy path routing by default when legacy routing is not enabled', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\approver',
+      roles: ['APPLICATION_APPROVER'],
+      welcomeTarget: null,
+      legacyPath: '/permitSearch.do?actionMapping=view',
+      grantedActions: [],
+    })
+
+    renderProbe(['/applicationsReview'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
   })
 
