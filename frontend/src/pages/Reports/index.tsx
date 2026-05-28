@@ -21,7 +21,7 @@ import {
 } from '@carbon/react'
 import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
-import { buildLegacyReportUrl, runReport } from '@/service/report-service'
+import { runReport } from '@/service/report-service'
 import {
   fetchProvincialApplicationOptions,
   fetchProvincialExemptionOptions,
@@ -726,7 +726,6 @@ const ReportsPage: FC = () => {
     Record<string, SearchOption[]>
   >({})
   const [launchErrorMessage, setLaunchErrorMessage] = useState('')
-  const [legacyFallbackMessage, setLegacyFallbackMessage] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
 
   const visibleReports = useMemo(() => {
@@ -810,18 +809,9 @@ const ReportsPage: FC = () => {
     void loadReportFieldOptions()
   }, [])
 
-  const previewUrl = useMemo(() => {
-    return buildLegacyReportUrl(
-      selectedReport.legacyPath,
-      selectedReportValues,
-      selectedActionMapping,
-    )
-  }, [selectedActionMapping, selectedReport, selectedReportValues])
-
   const onSelectReport = (reportId: string): void => {
     setSelectedReportId(reportId)
     setLaunchErrorMessage('')
-    setLegacyFallbackMessage('')
   }
 
   const onUpdateField = (fieldKey: string, value: string): void => {
@@ -840,7 +830,6 @@ const ReportsPage: FC = () => {
       [selectedReport.id]: {},
     }))
     setLaunchErrorMessage('')
-    setLegacyFallbackMessage('')
   }
 
   const onResetReportFilters = (): void => {
@@ -851,48 +840,28 @@ const ReportsPage: FC = () => {
 
   const onOpenReportRequest = async (): Promise<void> => {
     setLaunchErrorMessage('')
-    setLegacyFallbackMessage('')
     setIsGenerating(true)
 
     try {
       const runResult = await runReport({
         reportId: selectedReport.id,
-        legacyPath: selectedReport.legacyPath,
         actionMapping: selectedActionMapping,
         values: selectedReportValues,
       })
 
-      if (runResult.source === 'api') {
-        const outputFormat = (selectedReportValues.outputFormat ?? 'PDF').trim().toUpperCase()
-        const shouldDownload = outputFormat === 'CSV'
+      const outputFormat = (selectedReportValues.outputFormat ?? 'PDF').trim().toUpperCase()
+      const shouldDownload = outputFormat === 'CSV'
 
-        if (shouldDownload) {
-          triggerBrowserDownload(runResult.blob, runResult.filename)
-          return
-        }
-
-        const opened = openBlobInNewTab(runResult.blob)
-        if (!opened) {
-          triggerBrowserDownload(runResult.blob, runResult.filename)
-          setLaunchErrorMessage(
-            'Popup blocked while opening report preview. Downloaded the generated file instead.',
-          )
-        }
+      if (shouldDownload) {
+        triggerBrowserDownload(runResult.blob, runResult.filename)
         return
       }
 
-      setLegacyFallbackMessage(
-        'Report API is not available for this request yet. Opened the legacy endpoint for parity.',
-      )
-      const fallbackWindow = window.open(
-        runResult.legacyUrl,
-        'reportWindow',
-        'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
-      )
-
-      if (!fallbackWindow) {
+      const opened = openBlobInNewTab(runResult.blob)
+      if (!opened) {
+        triggerBrowserDownload(runResult.blob, runResult.filename)
         setLaunchErrorMessage(
-          'Unable to open report window. Enable popups for this site and retry.',
+          'Popup blocked while opening report preview. Downloaded the generated file instead.',
         )
       }
     } catch (error) {
@@ -907,10 +876,7 @@ const ReportsPage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Reports</h1>
-        <p>
-          API-first report generation for key LEXIS actions with automatic legacy fallback while
-          Spring report endpoints are being finalized.
-        </p>
+        <p>Report generation is served through Spring report endpoints only.</p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -1014,9 +980,6 @@ const ReportsPage: FC = () => {
         <Tile>
           <h2 className="dashboard-title">{selectedReport.title}</h2>
           <p>{selectedReport.description}</p>
-          <p>
-            Fallback endpoint: <code>{selectedReport.legacyPath}</code>
-          </p>
           <p>
             Required action: <code>{selectedReport.action}</code>
           </p>
@@ -1130,22 +1093,6 @@ const ReportsPage: FC = () => {
             <p className="landing-help-text">
               This report is blocked because the required action is not granted.
             </p>
-          )}
-          <TextArea
-            id="reportRequestPreviewUrl"
-            labelText="Legacy Fallback Request URL"
-            value={previewUrl}
-            readOnly
-            rows={6}
-          />
-          {legacyFallbackMessage && (
-            <InlineNotification
-              kind="info"
-              title="Legacy Fallback"
-              subtitle={legacyFallbackMessage}
-              lowContrast
-              onCloseButtonClick={() => setLegacyFallbackMessage('')}
-            />
           )}
           {launchErrorMessage && (
             <InlineNotification

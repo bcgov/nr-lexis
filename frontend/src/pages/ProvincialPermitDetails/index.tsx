@@ -407,7 +407,6 @@ const ProvincialPermitDetailsPage: FC = () => {
     try {
       const runResult = await runReport({
         reportId: 'permitReport',
-        legacyPath: '/permitReport.do',
         actionMapping: 'generate',
         values: {
           permitNumber: String(detail.permitNumber ?? permitNumber ?? ''),
@@ -415,28 +414,12 @@ const ProvincialPermitDetailsPage: FC = () => {
         },
       })
 
-      if (runResult.source === 'api') {
-        const opened = openBlobInNewTab(runResult.blob)
-        if (!opened) {
-          triggerBrowserDownload(runResult.blob, runResult.filename)
-          setActionErrorMessage(
-            'Popup blocked while opening permit report preview. Downloaded the report file instead.',
-          )
-        }
-        return
-      }
-
-      setActionInfoMessage(
-        'Permit report API is not available yet. Opened the legacy permit report endpoint.',
-      )
-      const fallbackWindow = window.open(
-        runResult.legacyUrl,
-        'permitReportWindow',
-        'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
-      )
-
-      if (!fallbackWindow) {
-        setActionErrorMessage('Unable to open permit report window. Enable popups and retry.')
+      const opened = openBlobInNewTab(runResult.blob)
+      if (!opened) {
+        triggerBrowserDownload(runResult.blob, runResult.filename)
+        setActionErrorMessage(
+          'Popup blocked while opening permit report preview. Downloaded the report file instead.',
+        )
       }
     } catch (error) {
       console.error(error)

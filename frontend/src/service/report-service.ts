@@ -3,25 +3,16 @@ import apiService from '@/service/api-service'
 
 export type RunReportRequest = {
   reportId: string
-  legacyPath: string
   actionMapping: string
   values: Record<string, string>
 }
 
-export type RunReportResult =
-  | {
-      source: 'api'
-      blob: Blob
-      filename: string
-      contentType: string
-      legacyUrl: string
-    }
-  | {
-      source: 'legacy'
-      legacyUrl: string
-    }
-
-const FALLBACK_STATUSES = new Set([404, 405, 500, 501, 502, 503])
+export type RunReportResult = {
+  source: 'api'
+  blob: Blob
+  filename: string
+  contentType: string
+}
 
 const splitCsv = (value: string): string[] =>
   value
@@ -40,14 +31,6 @@ const normalizeClientNumber = (value: string): string => {
 
 const normalizeUppercase = (value: string): string => value.trim().toUpperCase()
 
-const getLegacyReportBasePath = (): string => {
-  const configured = (import.meta.env.VITE_LEXIS_REPORT_ENDPOINT_BASE ?? '/api').trim()
-  if (!configured) {
-    return '/api'
-  }
-  return configured.endsWith('/') ? configured.slice(0, -1) : configured
-}
-
 const getModernReportApiBasePath = (): string => {
   const configured = (import.meta.env.VITE_LEXIS_REPORT_API_BASE ?? '/lexis/reports').trim()
   if (!configured) {
@@ -59,54 +42,6 @@ const getModernReportApiBasePath = (): string => {
 const buildModernReportEndpoint = (reportId: string): string => {
   const basePath = getModernReportApiBasePath()
   return `${basePath}/${encodeURIComponent(reportId)}`
-}
-
-export const buildLegacyReportUrl = (
-  legacyPath: string,
-  values: Record<string, string>,
-  actionMapping: string,
-): string => {
-  const basePath = getLegacyReportBasePath()
-  const url = new URL(`${window.location.origin}${basePath}${legacyPath}`)
-
-  url.searchParams.set('actionMapping', actionMapping)
-
-  Object.entries(values).forEach(([key, rawValue]) => {
-    const value = rawValue.trim()
-    if (!value || key === 'tenureTypes' || key === 'timberMarks') {
-      return
-    }
-
-    if (key === 'clientNumber') {
-      url.searchParams.set(key, normalizeClientNumber(value))
-      return
-    }
-
-    if (key === 'forestFileId' || key === 'timberMark') {
-      url.searchParams.set(key, normalizeUppercase(value))
-      return
-    }
-
-    if (key === 'region' || key === 'orgUnitNumber') {
-      splitCsv(value).forEach((entry) => url.searchParams.append(key, entry))
-      return
-    }
-
-    url.searchParams.set(key, value)
-  })
-
-  const tenureTypes = splitCsv(values.tenureTypes ?? '').slice(0, 6)
-  const timberMarks = splitCsv(values.timberMarks ?? '').slice(0, 6)
-
-  tenureTypes.forEach((value, index) => {
-    url.searchParams.set(`tenureType${index + 1}`, normalizeUppercase(value))
-  })
-
-  timberMarks.forEach((value, index) => {
-    url.searchParams.set(`timberMark${index + 1}`, normalizeUppercase(value))
-  })
-
-  return url.toString()
 }
 
 const buildReportPayload = (
@@ -166,14 +101,6 @@ const buildReportPayload = (
   return payload
 }
 
-const shouldFallbackToLegacy = (error: unknown): boolean => {
-  const status = (error as any)?.response?.status
-  if (typeof status === 'number') {
-    return FALLBACK_STATUSES.has(status)
-  }
-  return true
-}
-
 const getResponseHeaderValue = (
   headers: RawAxiosResponseHeaders | AxiosResponseHeaders,
   name: string,
@@ -221,44 +148,30 @@ const extractFilename = (
 }
 
 export const runReport = async (request: RunReportRequest): Promise<RunReportResult> => {
-  const legacyUrl = buildLegacyReportUrl(request.legacyPath, request.values, request.actionMapping)
+  const requestConfig: AxiosRequestConfig<Record<string, unknown>> = {
+    responseType: 'blob',
+    headers: {
+      Accept: 'application/octet-stream',
+      'Content-Type': 'application/json',
+    },
+  }
 
-  try {
-    const requestConfig: AxiosRequestConfig<Record<string, unknown>> = {
-      responseType: 'blob',
-      headers: {
-        Accept: 'application/octet-stream',
-        'Content-Type': 'application/json',
-      },
-    }
+  const response = await apiService
+    .getAxiosInstance()
+    .post<Blob>(
+      buildModernReportEndpoint(request.reportId),
+      buildReportPayload(request.values, request.actionMapping),
+      requestConfig,
+    )
 
-    const response = await apiService
-      .getAxiosInstance()
-      .post<Blob>(
-        buildModernReportEndpoint(request.reportId),
-        buildReportPayload(request.values, request.actionMapping),
-        requestConfig,
-      )
+  const contentType =
+    getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream'
+  const filename = extractFilename(response.headers, request.reportId, request.values)
 
-    const contentType =
-      getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream'
-    const filename = extractFilename(response.headers, request.reportId, request.values)
-
-    return {
-      source: 'api',
-      blob: response.data,
-      filename,
-      contentType,
-      legacyUrl,
-    }
-  } catch (error) {
-    if (!shouldFallbackToLegacy(error)) {
-      throw error
-    }
-
-    return {
-      source: 'legacy',
-      legacyUrl,
-    }
+  return {
+    source: 'api',
+    blob: response.data,
+    filename,
+    contentType,
   }
 }

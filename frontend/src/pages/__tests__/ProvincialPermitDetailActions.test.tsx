@@ -429,10 +429,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
-  it('uses report service and legacy fallback URL when opening permit report', async () => {
+  it('uses report service blob response when opening permit report', async () => {
     mockedRunReport.mockResolvedValue({
-      source: 'legacy',
-      legacyUrl: 'https://example.test/api/permitReport.do?actionMapping=generate&permitNumber=777',
+      source: 'api',
+      blob: new Blob(['permit-report']),
+      filename: 'permit-report.pdf',
+      contentType: 'application/pdf',
     })
     const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
 
@@ -453,7 +455,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(mockedRunReport).toHaveBeenCalledWith({
       reportId: 'permitReport',
-      legacyPath: '/permitReport.do',
       actionMapping: 'generate',
       values: {
         permitNumber: '777',
@@ -461,7 +462,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       },
     })
     expect(openSpy).toHaveBeenCalledWith(
-      'https://example.test/api/permitReport.do?actionMapping=generate&permitNumber=777',
+      expect.stringContaining('blob:'),
       'permitReportWindow',
       expect.any(String),
     )
