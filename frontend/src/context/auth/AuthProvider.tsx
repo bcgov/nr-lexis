@@ -264,7 +264,7 @@ const shouldUseLegacyPathRouting = (): boolean => {
 }
 
 const shouldUseRoleActionFallback = (): boolean => {
-  const configured = (import.meta.env.VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK ?? 'true')
+  const configured = (import.meta.env.VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK ?? 'false')
     .toString()
     .trim()
     .toLowerCase()

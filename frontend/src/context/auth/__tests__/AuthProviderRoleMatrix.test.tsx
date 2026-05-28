@@ -57,6 +57,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('normalizes final and legacy concrete submitter roles and grants expected actions', async () => {
+    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\tester',
@@ -79,6 +80,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('maps legacy admin alias to canonical admin role and admin route', async () => {
+    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\admin',
@@ -99,6 +101,7 @@ describe('Auth Provider Role Matrix', () => {
 
   it('preserves legacy path routing precedence when legacyPath is present', async () => {
     vi.stubEnv('VITE_LEXIS_ENABLE_LEGACY_PATH_ROUTING', 'true')
+    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\approver',
@@ -116,6 +119,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('ignores legacy path routing by default when legacy routing is not enabled', async () => {
+    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\approver',
@@ -133,6 +137,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('treats FEDERAL_SUBMITTER suffixed values as concrete federal role', async () => {
+    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\federal',
@@ -152,6 +157,7 @@ describe('Auth Provider Role Matrix', () => {
   })
 
   it('grants exemption approval actions to EXEMPTION_APPROVER', async () => {
+    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\exemption-approver',
@@ -187,6 +193,23 @@ describe('Auth Provider Role Matrix', () => {
 
     expect(screen.getByTestId('roles')).toHaveTextContent('READ_ONLY')
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+  })
+
+  it('defaults role-derived action fallback to disabled when env is not configured', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\read-only',
+      roles: ['READ_ONLY'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: [],
+    })
+
+    renderProbe(['/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('READ_ONLY')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 })
