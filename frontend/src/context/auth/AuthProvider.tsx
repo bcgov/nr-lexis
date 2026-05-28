@@ -228,7 +228,7 @@ const resolveFallbackActionsForRole = (role: string): string[] => {
     return DEV_ROLE_ACTIONS[role]
   }
 
-  // TODO: replace this fallback with action claims from backend once Cognito/FAM authz is fully wired.
+  // Compatibility fallback for concrete provincial submitter roles during authz cutover.
   if (DEV_CONCRETE_ROLE_PREFIXES.some((prefix) => role.startsWith(prefix))) {
     return DEV_PROVINCIAL_SUBMITTER_ACTIONS
   }

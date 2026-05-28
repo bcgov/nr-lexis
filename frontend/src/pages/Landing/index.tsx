@@ -232,8 +232,8 @@ const LandingPage: FC = () => {
                     suffix). Legacy placeholder aliases are normalized during transition.
                   </p>
                   <p className="landing-help-text">
-                    TODO: replace manual concrete role simulation with live Cognito/FAM role claims
-                    once backend-auth integration is complete.
+                    Development role simulation is for local testing only. Production access is
+                    driven by Cognito/FAM role claims.
                   </p>
                   <div className="landing-actions">
                     <Select
