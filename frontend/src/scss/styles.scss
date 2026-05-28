@@ -1,15 +1,203 @@
-// A custom theme for this app, see: https://getbootstrap.com/docs/5.3/customize/sass/#maps-and-loops
-$primary: #ffffff;
-$secondary: #385a8a;
-$success: #234720;
-$warning: #81692c;
-$danger: #712024;
+@use '@carbon/react/scss/themes';
+@use '@carbon/react/scss/theme' with (
+  $fallback: themes.$white,
+  $theme: themes.$white
+);
+@use '@carbon/react';
 
-// Import Bootstrap and Bootstrap Icons
-@import '../../node_modules/bootstrap/scss/bootstrap';
-$bootstrap-icons-font-src:
-  url('../../node_modules/bootstrap-icons/font/fonts/bootstrap-icons.woff2')
-    format('woff2'),
-  url('../../node_modules/bootstrap-icons/font/fonts/bootstrap-icons.woff')
-    format('woff');
-@import '../../node_modules/bootstrap-icons/font/bootstrap-icons.scss';
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main {
+  flex: 1;
+  padding: 1rem;
+}
+
+.app-header-nav-link {
+  text-decoration: none;
+}
+
+.app-footer {
+  border-top: 1px solid var(--cds-border-subtle-01);
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+  padding: 1rem;
+}
+
+.landing-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  background:
+    radial-gradient(circle at top right, #e0f4ff 0%, transparent 45%),
+    linear-gradient(180deg, #f4f8fb 0%, #ffffff 65%);
+}
+
+.landing-grid {
+  row-gap: 1rem;
+}
+
+.landing-logo {
+  max-width: 16rem;
+  height: auto;
+}
+
+.landing-actions {
+  display: grid;
+  gap: 1rem;
+}
+
+.landing-help-text {
+  color: var(--cds-text-secondary);
+  margin: 0;
+}
+
+.landing-dev-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.landing-role-tags {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.unauthorized-page {
+  max-width: 56rem;
+  margin: 2rem auto;
+}
+
+.unauthorized-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.dashboard-page {
+  max-width: 70rem;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.dashboard-title {
+  margin-block: 0 1rem;
+}
+
+.user-details-json {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.not-found-page {
+  display: flex;
+  min-height: 55vh;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+}
+
+.module-link-list {
+  margin: 1rem 0 0;
+  padding-left: 1rem;
+}
+
+.module-link-list li {
+  margin-bottom: 0.5rem;
+}
+
+.legacy-search-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.legacy-search-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.legacy-search-error {
+  color: var(--cds-support-error);
+}
+
+.legacy-inline-notification {
+  margin-top: 1rem;
+}
+
+.legacy-sort-button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.legacy-sort-button:hover {
+  text-decoration: underline;
+}
+
+.summary-metric-value {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.detail-page-header {
+  margin-bottom: 0.5rem;
+}
+
+.detail-page-error {
+  margin-bottom: 1rem;
+}
+
+.detail-tile-title {
+  margin: 0 0 1rem;
+}
+
+.detail-field-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 0;
+}
+
+.detail-field-item {
+  margin: 0;
+}
+
+.detail-field-label {
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+  margin: 0 0 0.25rem;
+}
+
+.detail-field-value {
+  font-weight: 600;
+  margin: 0;
+}
+
+.detail-list {
+  margin: 0;
+  padding-left: 1rem;
+}

@@ -1,11 +1,12 @@
 import { cleanup, render } from '@testing-library/react'
+import type { ReactElement } from 'react'
 import { afterEach } from 'vitest'
 
 afterEach(() => {
   cleanup()
 })
 
-function customRender(ui: React.ReactElement, options = {}) {
+function customRender(ui: ReactElement, options = {}) {
   return render(ui, {
     // wrap provider(s) here if needed
     wrapper: ({ children }) => children,

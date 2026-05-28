@@ -1,0 +1,188 @@
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAuth } from '@/context/auth/useAuth'
+import type {
+  ProvincialApplicationDetail,
+  ProvincialExemptionDetail,
+} from '@/interfaces/LexisDetails'
+import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
+import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
+import {
+  fetchProvincialApplicationDetail,
+  fetchProvincialExemptionDetail,
+} from '@/service/lexis-detail-service'
+
+const mockNavigate = vi.fn()
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom')
+  return {
+    ...(actual as object),
+    useNavigate: () => mockNavigate,
+  }
+})
+
+vi.mock('@/context/auth/useAuth', () => ({
+  useAuth: vi.fn(),
+}))
+
+vi.mock('@/service/lexis-detail-service', () => ({
+  fetchProvincialApplicationDetail: vi.fn(),
+  fetchProvincialExemptionDetail: vi.fn(),
+}))
+
+const mockedUseAuth = vi.mocked(useAuth)
+const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
+const mockedFetchProvincialExemptionDetail = vi.mocked(fetchProvincialExemptionDetail)
+
+const defaultCanPerform = () => true
+
+const applicationDetail: ProvincialApplicationDetail = {
+  applicationNumber: 321,
+  exemptionNumber: 'EX-555',
+  applicationStatusCode: 'ACTIVE',
+  statusDescription: 'Active',
+  ownerClientNumber: '00011122',
+  agentClientNumber: '00033344',
+  orgUnitNumber: 12,
+  orgUnitName: 'Coast',
+  productTypeCode: 'LOG',
+  exemptionReasonCode: 'R1',
+  applicationDate: '2026-01-01',
+  receivedDate: '2026-01-02',
+  listingDate: '2026-01-03',
+  termDays: 30,
+  applicationVolume: 100,
+  averageLogVolume: 2,
+  canCreateOffers: true,
+  industryUser: false,
+  readOnly: false,
+  exemptionApprover: false,
+  locked: false,
+  packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 5 }],
+  remarks: [{ title: 'Note', remark: 'ok' }],
+  offers: [{ offerNumber: 'OFF-1', validOffer: true, withdrawalDate: null }],
+}
+
+const exemptionDetail: ProvincialExemptionDetail = {
+  exemptionNumber: 'EX-777',
+  exemptionTypeCode: 'TYPE1',
+  exemptionTypeDescription: 'Type 1',
+  exemptionStatusCode: 'ACTIVE',
+  exemptionStatusDescription: 'Active',
+  ownerClientNumber: '00055566',
+  agentClientNumber: '00077788',
+  applicationNumber: 654,
+  applicationStatus: 'OPEN',
+  approvalDate: '2026-02-01',
+  expiryDate: '2026-12-31',
+  approvedVolume: 99,
+  usedVolume: 5,
+  remainingVolume: 94,
+  otherConditions: 'none',
+  blanketOic: false,
+  permitNumbers: ['P1'],
+  remarks: [{ title: 'Remark', remark: 'ok' }],
+}
+
+describe('Detail Create Action Smoke', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockedUseAuth.mockReturnValue({
+      canPerform: defaultCanPerform,
+    } as any)
+  })
+
+  it('enables Create Offer and navigates with prefill from provincial application detail', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue(applicationDetail)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createOfferButton = await screen.findByRole('button', { name: 'Create Offer' })
+    expect(createOfferButton).toBeEnabled()
+
+    await userEvent.click(createOfferButton)
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/provincial/offers/create?applicationNumber=321&packageNumber=PKG-1&offeringClientNumber=00011122&region=12',
+    )
+  })
+
+  it('disables Create Offer when application cannot create offers', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      canCreateOffers: false,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createOfferButton = await screen.findByRole('button', { name: 'Create Offer' })
+    expect(createOfferButton).toBeDisabled()
+  })
+
+  it('enables Create Permit and navigates with prefill from provincial exemption detail', async () => {
+    mockedFetchProvincialExemptionDetail.mockResolvedValue(exemptionDetail)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createPermitButton = await screen.findByRole('button', { name: 'Create Permit' })
+    expect(createPermitButton).toBeEnabled()
+
+    await userEvent.click(createPermitButton)
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/provincial/permit/create?exemptionNumber=EX-777&applicationNumber=654&ownerClientNumber=00055566&applicantClientNumber=00077788',
+    )
+  })
+
+  it('disables Create Permit when exemption is not active', async () => {
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionStatusCode: 'CLOSED',
+      exemptionStatusDescription: 'Closed',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createPermitButton = await screen.findByRole('button', { name: 'Create Permit' })
+    expect(createPermitButton).toBeDisabled()
+  })
+})

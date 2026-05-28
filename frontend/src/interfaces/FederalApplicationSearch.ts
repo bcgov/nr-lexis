@@ -1,0 +1,50 @@
+export type FederalApplicationSearchFilters = {
+  applicationNumber: string
+  packageNumber: string
+  applicationStatus: string
+  clientNumber: string
+  receivedFromDate: string
+  receivedToDate: string
+  listingFromDate: string
+  listingToDate: string
+}
+
+export type FederalApplicationSearchItem = {
+  applicationNumber: string
+  federalApplicationNumber: string
+  status: string
+  clientNumber: string
+  reason: string
+  exemptionType: string
+  exemptionNumber: string
+  receivedDate: string
+  listingDate: string
+  packageNumber: string
+  allowCreateExemption: boolean
+}
+
+export type FederalApplicationSearchSortField =
+  | 'federalApplicationNumber'
+  | 'status'
+  | 'clientNumber'
+  | 'reason'
+  | 'receivedDate'
+  | 'listingDate'
+
+export type FederalApplicationSearchRequest = {
+  filters: FederalApplicationSearchFilters
+  sortField: FederalApplicationSearchSortField
+  sortDirection: 'asc' | 'desc'
+  page: number
+  pageSize: number
+}
+
+export type FederalApplicationSearchResponse = {
+  content: FederalApplicationSearchItem[]
+  page: {
+    number: number
+    size: number
+    totalElements: number
+    totalPages: number
+  }
+}
