@@ -35,7 +35,6 @@ type ReportDefinition = {
   category: 'Provincial' | 'Federal' | 'Cross-Module'
   action: string
   description: string
-  legacyPath: string
   fields: ReportFieldDefinition[]
   actionMappings: ReportActionMapping[]
 }
@@ -90,7 +89,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Provincial',
     action: '/applicationReport',
     description: 'Applications by status and timeline.',
-    legacyPath: '/applicationReport.do',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       REGION_CODES_FIELD,
@@ -133,7 +131,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Provincial',
     action: '/offerReport',
     description: 'Offer activity and approval outcomes.',
-    legacyPath: '/offerReport.do',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       REGION_CODES_FIELD,
@@ -176,7 +173,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Cross-Module',
     action: '/teacReport',
     description: 'TEAC package readiness and review data.',
-    legacyPath: '/teacReport.do',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       REGION_CODES_FIELD,
@@ -200,7 +196,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Provincial',
     action: '/exemptionReport',
     description: 'Exemption volumes, balances, and status.',
-    legacyPath: '/exemptionReport.do',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       REGION_CODES_FIELD,
@@ -253,7 +248,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Provincial',
     action: '/permitLedgerReport',
     description: 'Permit issuance and ledger summary.',
-    legacyPath: '/permitLedgerReport.do',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       REGION_CODES_FIELD,
@@ -316,7 +310,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Cross-Module',
     action: '/transportReport',
     description: 'Destination and transport statistics.',
-    legacyPath: '/transportReport.do',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       {
@@ -359,7 +352,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Provincial',
     action: '/speciesGradeReport',
     description: 'Species/grade composition analytics.',
-    legacyPath: '/speciesGradeReport.do',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       REGION_CODES_FIELD,
@@ -417,7 +409,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Provincial',
     action: '/feeReport',
     description: 'Fee in lieu and invoice totals.',
-    legacyPath: '/feeReport.do',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       ORG_UNIT_CODES_FIELD,
@@ -460,7 +451,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Cross-Module',
     action: '/tenureReport',
     description: 'Tenure trends by region and period.',
-    legacyPath: '/tenureReport.do',
     actionMappings: [
       { value: 'generatePermitReport', label: 'Permit Details Report' },
       { value: 'generateTenureReport', label: 'Tenure Types Report' },
@@ -535,7 +525,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Federal',
     action: 'mofrListing',
     description: 'Exportable listing output for MOFR workflows.',
-    legacyPath: '/biweeklyListing.do',
     actionMappings: [
       { value: 'generateIndustryPDF', label: 'Advertising List PDF' },
       { value: 'generateIndustryCSV', label: 'Advertising List CSV' },
