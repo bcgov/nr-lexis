@@ -20,6 +20,13 @@ import { useAuth } from '@/context/auth/useAuth'
 import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import { fetchFederalApplicationDetail } from '@/service/lexis-detail-service'
+import {
+  fetchFederalApplicationDocuments,
+  openFederalApplicationDocument,
+  removeFederalApplicationDocument,
+  type FederalApplicationDocumentRow,
+  type FederalApplicationDocumentSource,
+} from '@/service/federal-application-documents-service'
 
 const displayValue = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined || value === '') {
@@ -30,17 +37,70 @@ const displayValue = (value: string | number | null | undefined): string => {
 
 const normalizeText = (value: string): string => value.trim().toLowerCase()
 
+const getLegacyActionBasePath = (): string => {
+  const configured = (import.meta.env.VITE_LEXIS_LEGACY_ENDPOINT_BASE ?? '/api').trim()
+  if (!configured) {
+    return '/api'
+  }
+  return configured.endsWith('/') ? configured.slice(0, -1) : configured
+}
+
+const buildLegacyActionUrl = (
+  legacyPath: string,
+  values: Record<string, string | undefined>,
+): string => {
+  const basePath = getLegacyActionBasePath()
+  const url = new URL(`${window.location.origin}${basePath}${legacyPath}`)
+  Object.entries(values).forEach(([key, value]) => {
+    const normalized = (value ?? '').trim()
+    if (normalized.length > 0) {
+      url.searchParams.set(key, normalized)
+    }
+  })
+  return url.toString()
+}
+
+const triggerBrowserDownload = (blob: Blob, filename: string): void => {
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(objectUrl)
+}
+
+const matchesFilter = (
+  values: Array<string | number | null | undefined>,
+  filterValue: string,
+): boolean => {
+  if (!filterValue.trim()) {
+    return true
+  }
+
+  const normalizedFilter = normalizeText(filterValue)
+  return values.some((value) => normalizeText(String(value ?? '')).includes(normalizedFilter))
+}
+
 const FederalApplicationDetailsPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const { applicationNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<FederalApplicationDetail | null>(null)
+  const [documentRows, setDocumentRows] = useState<FederalApplicationDocumentRow[]>([])
+  const [documentSource, setDocumentSource] = useState<FederalApplicationDocumentSource>('api')
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
+  const [actionErrorMessage, setActionErrorMessage] = useState('')
+  const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
+  const documentsFilter = searchParams.get('documentsFilter') ?? ''
   const withCurrentSearch = useCallback(
     (path: string): string => {
       const query = searchParams.toString()
@@ -49,7 +109,10 @@ const FederalApplicationDetailsPage: FC = () => {
     [searchParams],
   )
   const updateFilterParam = useCallback(
-    (key: 'packageFilter' | 'offerFilter' | 'remarkFilter', value: string) => {
+    (
+      key: 'packageFilter' | 'offerFilter' | 'remarkFilter' | 'documentsFilter',
+      value: string,
+    ) => {
       const nextSearchParams = new URLSearchParams(searchParams)
       if (value.trim().length > 0) {
         nextSearchParams.set(key, value)
@@ -68,21 +131,48 @@ const FederalApplicationDetailsPage: FC = () => {
     const load = async () => {
       if (!applicationNumber) {
         setErrorMessage('Application number is missing from the route.')
+        setDetail(null)
+        setDocumentRows([])
+        setDocumentSource('api')
+        setDocumentsErrorMessage('')
+        setActionErrorMessage('')
+        setActionInfoMessage('')
         setLoading(false)
         return
       }
 
       setLoading(true)
       setErrorMessage('')
+      setDocumentsErrorMessage('')
+      setActionErrorMessage('')
+      setActionInfoMessage('')
       try {
         const response = await fetchFederalApplicationDetail(applicationNumber)
         setDetail(response)
         if (!response) {
           setErrorMessage(`No federal application found for ${applicationNumber}.`)
+          setDocumentRows([])
+          setDocumentSource('api')
+          return
+        }
+
+        try {
+          const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
+          setDocumentRows(documentsResult.rows)
+          setDocumentSource(documentsResult.source)
+        } catch (error) {
+          console.error(error)
+          setDocumentRows([])
+          setDocumentSource('api')
+          setDocumentsErrorMessage('Unable to retrieve federal application documents.')
         }
       } catch (error) {
         console.error(error)
         setErrorMessage('Unable to retrieve federal application detail.')
+        setDetail(null)
+        setDocumentRows([])
+        setDocumentSource('api')
+        setDocumentsErrorMessage('')
       } finally {
         setLoading(false)
       }
@@ -121,8 +211,94 @@ const FederalApplicationDetailsPage: FC = () => {
     return rows.filter((item) => normalizeText(item).includes(normalizedFilter))
   }, [detail?.remarks, remarkFilter])
 
+  const filteredDocumentRows = useMemo(() => {
+    return documentRows.filter((row) =>
+      matchesFilter([row.name, row.description, row.type, row.id], documentsFilter),
+    )
+  }, [documentRows, documentsFilter])
+
   const canAccessFederalSearch =
     canPerform('/federalApplicationSearch') || canPerform('viewFederalApplication')
+  const canManageDocuments = canPerform('/fileApplicationUpload')
+
+  const onOpenApplicationUpload = useCallback(() => {
+    if (!detail) {
+      return
+    }
+
+    const uploadUrl = buildLegacyActionUrl('/fileApplicationUpload.do', {
+      actionMapping: 'view',
+      applicationNumber: String(detail.applicationNumber ?? ''),
+    })
+    const uploadWindow = window.open(
+      uploadUrl,
+      'federalApplicationUploadWindow',
+      'height=250,width=500,menubar=0,resizable=0,status=1,scrollbars=0',
+    )
+
+    if (!uploadWindow) {
+      setActionErrorMessage('Unable to open the application upload window. Allow popups and retry.')
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+  }, [detail])
+
+  const onOpenDocument = useCallback(async (row: FederalApplicationDocumentRow) => {
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+
+    try {
+      const result = await openFederalApplicationDocument(row.id, row.name)
+      if (result.source === 'legacy') {
+        const openedWindow = window.open(result.legacyUrl, 'federalApplicationDocumentWindow')
+        if (!openedWindow) {
+          setActionErrorMessage('Unable to open the document window. Allow popups and retry.')
+        }
+        return
+      }
+
+      triggerBrowserDownload(result.blob, result.filename || row.name)
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to open the selected document.')
+    }
+  }, [])
+
+  const onRemoveDocument = useCallback(
+    async (row: FederalApplicationDocumentRow) => {
+      if (!applicationNumber) {
+        return
+      }
+
+      setIsRemovingDocumentId(row.id)
+      setActionErrorMessage('')
+      setActionInfoMessage('')
+
+      try {
+        const removeResult = await removeFederalApplicationDocument(row.id)
+        if (!removeResult.success) {
+          setActionErrorMessage('Document removal failed. Refresh and try again.')
+          return
+        }
+
+        const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
+        setDocumentRows(documentsResult.rows)
+        setDocumentSource(documentsResult.source)
+
+        if (removeResult.source === 'legacy' || documentsResult.source === 'legacy') {
+          setActionInfoMessage('Document action completed through legacy fallback.')
+        }
+      } catch (error) {
+        console.error(error)
+        setActionErrorMessage('Unable to remove the selected document.')
+      } finally {
+        setIsRemovingDocumentId(null)
+      }
+    },
+    [applicationNumber],
+  )
 
   return (
     <Grid fullWidth className="default-grid">
@@ -152,6 +328,37 @@ const FederalApplicationDetailsPage: FC = () => {
 
       {!loading && detail && (
         <>
+          {!!documentsErrorMessage && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <InlineNotification
+                kind="warning"
+                title="Documents unavailable"
+                subtitle={documentsErrorMessage}
+                lowContrast
+              />
+            </Column>
+          )}
+          {!!actionErrorMessage && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <InlineNotification
+                kind="error"
+                title="Action failed"
+                subtitle={actionErrorMessage}
+                lowContrast
+              />
+            </Column>
+          )}
+          {!!actionInfoMessage && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <InlineNotification
+                kind="info"
+                title="Action completed"
+                subtitle={actionInfoMessage}
+                lowContrast
+              />
+            </Column>
+          )}
+
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">Actions</h2>
@@ -181,6 +388,14 @@ const FederalApplicationDetailsPage: FC = () => {
                   }}
                 >
                   Open Provincial Application
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={!canManageDocuments || !detail.applicationNumber}
+                  onClick={onOpenApplicationUpload}
+                >
+                  Upload Application Document
                 </Button>
               </div>
             </Tile>
@@ -338,6 +553,63 @@ const FederalApplicationDetailsPage: FC = () => {
                   {filteredOffers.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={2}>No offers matched the current filter.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Tile>
+          </Column>
+
+          <Column sm={4} md={8} lg={16}>
+            <Tile>
+              <h2 className="detail-tile-title">
+                Documents{' '}
+                <Tag type={documentSource === 'api' ? 'green' : 'gray'}>
+                  {documentSource === 'api' ? 'API' : 'Fallback'}
+                </Tag>
+              </h2>
+              <TextInput
+                id="federalDetailDocumentsFilter"
+                labelText="Filter document rows"
+                value={documentsFilter}
+                onChange={(event) => updateFilterParam('documentsFilter', event.target.value)}
+                placeholder="Filter by file name, description, type, or id"
+              />
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>File Name</TableHeader>
+                    <TableHeader>Description</TableHeader>
+                    <TableHeader>Type</TableHeader>
+                    <TableHeader>Actions</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredDocumentRows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>{row.name || '-'}</TableCell>
+                      <TableCell>{row.description || '-'}</TableCell>
+                      <TableCell>{row.type || '-'}</TableCell>
+                      <TableCell>
+                        <div className="legacy-search-actions">
+                          <Button kind="ghost" size="sm" onClick={() => void onOpenDocument(row)}>
+                            Open
+                          </Button>
+                          <Button
+                            kind="danger--ghost"
+                            size="sm"
+                            disabled={!canManageDocuments || isRemovingDocumentId === row.id}
+                            onClick={() => void onRemoveDocument(row)}
+                          >
+                            {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredDocumentRows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4}>No document rows matched the current filter.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
