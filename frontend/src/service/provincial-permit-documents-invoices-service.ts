@@ -293,7 +293,9 @@ const fetchInvoiceDetails = async (
       permitNumber,
       salesInvoiceNumber: invoiceNumber,
     })
-    const legacyResponse = await apiService.getAxiosInstance().get<PermitInvoiceDetailsPayload>(legacyUrl)
+    const legacyResponse = await apiService
+      .getAxiosInstance()
+      .get<PermitInvoiceDetailsPayload>(legacyUrl)
 
     return {
       details: legacyResponse.data ?? {
@@ -307,7 +309,9 @@ const fetchInvoiceDetails = async (
   }
 }
 
-export const fetchPermitDocuments = async (permitNumber: string): Promise<PermitDocumentsResult> => {
+export const fetchPermitDocuments = async (
+  permitNumber: string,
+): Promise<PermitDocumentsResult> => {
   try {
     const response = await apiService
       .getAxiosInstance()
@@ -361,9 +365,9 @@ export const openPermitDocument = async (
   })
 
   try {
-    const response = await apiService.getAxiosInstance().get<Blob>(
-      '/lexis/rpc/permit-details/document',
-      {
+    const response = await apiService
+      .getAxiosInstance()
+      .get<Blob>('/lexis/rpc/permit-details/document', {
         params: {
           fileId,
           fileName,
@@ -372,8 +376,7 @@ export const openPermitDocument = async (
         headers: {
           Accept: 'application/octet-stream',
         },
-      },
-    )
+      })
 
     if (response.status === 204) {
       return {
@@ -436,18 +439,24 @@ export const fetchPermitInvoices = async (permitNumber: string): Promise<PermitI
     const legacyUrl = buildLegacyPermitDetailsActionUrl('getInvoicesForPermit', {
       permitNumber,
     })
-    const legacyResponse = await apiService.getAxiosInstance().get<{ invoiceList?: unknown }>(legacyUrl)
+    const legacyResponse = await apiService
+      .getAxiosInstance()
+      .get<{ invoiceList?: unknown }>(legacyUrl)
     const listRaw = Array.isArray(legacyResponse.data?.invoiceList)
       ? legacyResponse.data.invoiceList
       : parseArrayPayload(legacyResponse.data)
-    invoiceNumbers = (listRaw ?? []).map((entry) => asString(entry)).filter((entry) => entry.length > 0)
+    invoiceNumbers = (listRaw ?? [])
+      .map((entry) => asString(entry))
+      .filter((entry) => entry.length > 0)
   }
 
   const detailsResults = await Promise.all(
     invoiceNumbers.map((invoiceNumber) => fetchInvoiceDetails(permitNumber, invoiceNumber)),
   )
 
-  const detailsSource = detailsResults.some((result) => result.source === 'legacy') ? 'legacy' : 'api'
+  const detailsSource = detailsResults.some((result) => result.source === 'legacy')
+    ? 'legacy'
+    : 'api'
 
   return {
     rows: detailsResults.map((result, index) => ({
@@ -465,11 +474,10 @@ export const fetchPermitInvoices = async (permitNumber: string): Promise<PermitI
 export const fetchPermitInvoiceConversionRate =
   async (): Promise<PermitInvoiceConversionRateResult> => {
     try {
-      const response = await apiService
-        .getAxiosInstance()
-        .get<{ success?: boolean; conversionRate?: unknown }>(
-          '/lexis/rpc/permit-details/conversion-rate',
-        )
+      const response = await apiService.getAxiosInstance().get<{
+        success?: boolean
+        conversionRate?: unknown
+      }>('/lexis/rpc/permit-details/conversion-rate')
 
       const conversionRate = asString(response.data?.conversionRate) || DEFAULT_CONVERSION_RATE
       return {
@@ -485,7 +493,8 @@ export const fetchPermitInvoiceConversionRate =
       const legacyResponse = await apiService
         .getAxiosInstance()
         .get<{ success?: boolean; conversionRate?: unknown }>(legacyUrl)
-      const conversionRate = asString(legacyResponse.data?.conversionRate) || DEFAULT_CONVERSION_RATE
+      const conversionRate =
+        asString(legacyResponse.data?.conversionRate) || DEFAULT_CONVERSION_RATE
       return {
         conversionRate,
         source: 'legacy',
@@ -494,11 +503,13 @@ export const fetchPermitInvoiceConversionRate =
   }
 
 const postFormData = async (path: string, payload: Record<string, string>): Promise<unknown> => {
-  const response = await apiService.getAxiosInstance().post<unknown>(path, new URLSearchParams(payload), {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-  })
+  const response = await apiService
+    .getAxiosInstance()
+    .post<unknown>(path, new URLSearchParams(payload), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
 
   return response.data
 }

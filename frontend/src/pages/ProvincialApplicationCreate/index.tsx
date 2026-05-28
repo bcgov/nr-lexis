@@ -79,9 +79,7 @@ const mapDraftPayloadToForm = (payload: unknown): ProvincialApplicationCreateFor
   }
 }
 
-const buildInitialFormFromQuery = (
-  query: URLSearchParams,
-): ProvincialApplicationCreateForm => {
+const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicationCreateForm => {
   return {
     ...INITIAL_FORM,
     applicationNumber: query.get('applicationNumber') ?? '',
@@ -106,10 +104,7 @@ type PageStatus = {
 const ProvincialApplicationCreatePage: FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const initialForm = useMemo(
-    () => buildInitialFormFromQuery(searchParams),
-    [searchParams],
-  )
+  const initialForm = useMemo(() => buildInitialFormFromQuery(searchParams), [searchParams])
   const [form, setForm] = useState<ProvincialApplicationCreateForm>(initialForm)
   const [productTypes, setProductTypes] = useState<SearchOption[]>(FALLBACK_PRODUCT_TYPES)
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>(FALLBACK_EXEMPTION_TYPES)

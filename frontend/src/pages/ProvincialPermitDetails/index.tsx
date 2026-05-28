@@ -1182,8 +1182,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                   {filteredDocumentRows.map((row) => {
                     const invoiceDocument = isInvoiceDocumentRow(row)
                     const canDeleteRow =
-                      canDeletePermitDocuments &&
-                      (!invoiceDocument || canDeleteInvoiceDocuments)
+                      canDeletePermitDocuments && (!invoiceDocument || canDeleteInvoiceDocuments)
                     return (
                       <TableRow key={row.id}>
                         <TableCell>{row.name || '-'}</TableCell>

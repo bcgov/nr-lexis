@@ -582,7 +582,9 @@ const ProvincialExemptionDetailsPage: FC = () => {
                   ))}
                   {filteredDocumentRows.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4}>No document rows matched the current filter.</TableCell>
+                      <TableCell colSpan={4}>
+                        No document rows matched the current filter.
+                      </TableCell>
                     </TableRow>
                   )}
                 </TableBody>

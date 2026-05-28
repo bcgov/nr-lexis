@@ -147,8 +147,7 @@ const mergePrefillState = (
 
   return {
     selectedApplicationNumbers: mergedApplicationNumbers,
-    ownerClientNumber:
-      locationPrefill?.ownerClientNumber || queryPrefill?.ownerClientNumber || '',
+    ownerClientNumber: locationPrefill?.ownerClientNumber || queryPrefill?.ownerClientNumber || '',
     applicantClientNumber:
       locationPrefill?.applicantClientNumber || queryPrefill?.applicantClientNumber || '',
   }
@@ -279,7 +278,9 @@ const ProvincialExemptionCreatePage: FC = () => {
     try {
       const result = await submitProvincialExemptionCreate({
         ...form,
-        linkedApplicationNumbers: prefillState?.selectedApplicationNumbers ?? [form.applicationNumber],
+        linkedApplicationNumbers: prefillState?.selectedApplicationNumbers ?? [
+          form.applicationNumber,
+        ],
       })
       const responseMessage = [result.message, ...result.errors, ...result.warnings]
         .filter((value) => value.trim().length > 0)

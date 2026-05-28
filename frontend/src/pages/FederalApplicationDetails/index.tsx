@@ -109,10 +109,7 @@ const FederalApplicationDetailsPage: FC = () => {
     [searchParams],
   )
   const updateFilterParam = useCallback(
-    (
-      key: 'packageFilter' | 'offerFilter' | 'remarkFilter' | 'documentsFilter',
-      value: string,
-    ) => {
+    (key: 'packageFilter' | 'offerFilter' | 'remarkFilter' | 'documentsFilter', value: string) => {
       const nextSearchParams = new URLSearchParams(searchParams)
       if (value.trim().length > 0) {
         nextSearchParams.set(key, value)
@@ -609,7 +606,9 @@ const FederalApplicationDetailsPage: FC = () => {
                   ))}
                   {filteredDocumentRows.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4}>No document rows matched the current filter.</TableCell>
+                      <TableCell colSpan={4}>
+                        No document rows matched the current filter.
+                      </TableCell>
                     </TableRow>
                   )}
                 </TableBody>

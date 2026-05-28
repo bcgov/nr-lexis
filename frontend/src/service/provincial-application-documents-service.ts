@@ -112,10 +112,7 @@ const buildLegacyApplicationDetailsActionUrl = (
   return url.toString()
 }
 
-const normalizeDocumentRow = (
-  row: unknown,
-  index: number,
-): ProvincialApplicationDocumentRow => {
+const normalizeDocumentRow = (row: unknown, index: number): ProvincialApplicationDocumentRow => {
   const source = (row ?? {}) as Record<string, unknown>
   const fallbackId = `document-${index + 1}`
   return {
@@ -189,9 +186,7 @@ const parseRemoveDocumentSuccess = (payload: unknown): boolean => {
   return false
 }
 
-const postLegacyForm = async (
-  payload: Record<string, string>,
-): Promise<unknown> => {
+const postLegacyForm = async (payload: Record<string, string>): Promise<unknown> => {
   const response = await apiService
     .getAxiosInstance()
     .post<unknown>('/lexis/applicationDetailsRPC', new URLSearchParams(payload), {
@@ -257,9 +252,9 @@ export const openApplicationDocument = async (
   })
 
   try {
-    const response = await apiService.getAxiosInstance().get<Blob>(
-      '/lexis/rpc/application-details/document',
-      {
+    const response = await apiService
+      .getAxiosInstance()
+      .get<Blob>('/lexis/rpc/application-details/document', {
         params: {
           fileId,
           fileName,
@@ -268,8 +263,7 @@ export const openApplicationDocument = async (
         headers: {
           Accept: 'application/octet-stream',
         },
-      },
-    )
+      })
 
     if (response.status === 204) {
       return {
@@ -301,14 +295,13 @@ export const removeApplicationDocument = async (
 ): Promise<RemoveApplicationDocumentResult> => {
   const normalizedDocumentId = documentId.trim()
   try {
-    const response = await apiService.getAxiosInstance().delete<unknown>(
-      '/lexis/rpc/application-details/document',
-      {
+    const response = await apiService
+      .getAxiosInstance()
+      .delete<unknown>('/lexis/rpc/application-details/document', {
         params: {
           documentId: normalizedDocumentId,
         },
-      },
-    )
+      })
 
     if (response.status === 204) {
       const payload = await postLegacyForm({
