@@ -430,5 +430,5 @@ export const AuthProvider: FC<Props> = ({ children }) => {
     canPerform,
   }
 
-  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
+  return <AuthContext value={contextValue}>{children}</AuthContext>
 }

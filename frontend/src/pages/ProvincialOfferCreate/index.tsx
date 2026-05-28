@@ -85,8 +85,9 @@ type PageStatus = {
 const ProvincialOfferCreatePage: FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const initialForm = useMemo(() => buildInitialFormFromQuery(searchParams), [searchParams])
-  const [form, setForm] = useState<ProvincialOfferCreateForm>(initialForm)
+  const [form, setForm] = useState<ProvincialOfferCreateForm>(() =>
+    buildInitialFormFromQuery(searchParams),
+  )
   const [regions, setRegions] = useState<SearchOption[]>(FALLBACK_REGIONS)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
@@ -104,10 +105,6 @@ const ProvincialOfferCreatePage: FC = () => {
 
     void loadOptions()
   }, [])
-
-  useEffect(() => {
-    setForm(initialForm)
-  }, [initialForm])
 
   const hasValidationError = useMemo(() => {
     return (

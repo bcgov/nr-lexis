@@ -185,15 +185,20 @@ const FederalPage: FC = () => {
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const clearSelection = useCallback(() => {
+    setSelectedRowsById({})
+    setExemptionSelectionStatus(null)
+  }, [])
   const updateFilter = useCallback(
     (key: keyof FederalApplicationSearchFilters, value: string) => {
       const nextFilters = { ...filters, [key]: value }
+      clearSelection()
       setSearchParams(
         buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
         { replace: true },
       )
     },
-    [filters, pageSize, setSearchParams, sortDirection, sortField],
+    [clearSelection, filters, pageSize, setSearchParams, sortDirection, sortField],
   )
 
   const hasDateValidationError = useMemo(() => {
@@ -235,11 +240,6 @@ const FederalPage: FC = () => {
   }, [])
 
   useEffect(() => {
-    setSelectedRowsById({})
-    setExemptionSelectionStatus(null)
-  }, [urlState])
-
-  useEffect(() => {
     void runSearch({
       filters: urlState.filters,
       sortField: urlState.sortField,
@@ -261,14 +261,12 @@ const FederalPage: FC = () => {
   }, [])
 
   const onSearch = () => {
-    setSelectedRowsById({})
-    setExemptionSelectionStatus(null)
+    clearSelection()
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
   const onClearFilters = () => {
-    setSelectedRowsById({})
-    setExemptionSelectionStatus(null)
+    clearSelection()
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -282,8 +280,7 @@ const FederalPage: FC = () => {
 
   const onHeaderClick = (column: FederalApplicationSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
-    setSelectedRowsById({})
-    setExemptionSelectionStatus(null)
+    clearSelection()
     setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
   }
 
@@ -569,8 +566,7 @@ const FederalPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                setSelectedRowsById({})
-                setExemptionSelectionStatus(null)
+                clearSelection()
                 setSearchParams(
                   buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
                 )

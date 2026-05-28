@@ -220,6 +220,10 @@ const ProvincialReviewPage: FC = () => {
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const clearSelection = useCallback(() => {
+    setSelectedRowsById({})
+    setReviewActionStatus(null)
+  }, [])
   const updateFilter = useCallback(
     <K extends keyof ApplicationReviewSearchFilters>(
       key: K,
@@ -229,12 +233,13 @@ const ProvincialReviewPage: FC = () => {
         ...filters,
         [key]: value,
       }
+      clearSelection()
       setSearchParams(
         buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
         { replace: true },
       )
     },
-    [filters, pageSize, setSearchParams, sortDirection, sortField],
+    [clearSelection, filters, pageSize, setSearchParams, sortDirection, sortField],
   )
 
   const selectedRegions = useMemo(
@@ -299,11 +304,6 @@ const ProvincialReviewPage: FC = () => {
   }, [])
 
   useEffect(() => {
-    setSelectedRowsById({})
-    setReviewActionStatus(null)
-  }, [urlState])
-
-  useEffect(() => {
     void runSearch({
       filters: urlState.filters,
       page: urlState.page - 1,
@@ -339,10 +339,12 @@ const ProvincialReviewPage: FC = () => {
   }, [])
 
   const onSearch = () => {
+    clearSelection()
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
   const onClearFilters = () => {
+    clearSelection()
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -356,6 +358,7 @@ const ProvincialReviewPage: FC = () => {
 
   const onHeaderClick = (column: ApplicationReviewSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
+    clearSelection()
     setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
   }
 
@@ -848,6 +851,7 @@ const ProvincialReviewPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
+                clearSelection()
                 setSearchParams(
                   buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
                 )

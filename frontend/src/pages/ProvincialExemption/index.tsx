@@ -222,6 +222,10 @@ const ProvincialExemptionPage: FC = () => {
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const clearSelection = useCallback(() => {
+    setSelectedRowsById({})
+    setApprovalStatus(null)
+  }, [])
   const updateFilter = useCallback(
     <K extends keyof ProvincialExemptionSearchFilters>(
       key: K,
@@ -231,12 +235,13 @@ const ProvincialExemptionPage: FC = () => {
         ...filters,
         [key]: value,
       }
+      clearSelection()
       setSearchParams(
         buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
         { replace: true },
       )
     },
-    [filters, pageSize, setSearchParams, sortDirection, sortField],
+    [clearSelection, filters, pageSize, setSearchParams, sortDirection, sortField],
   )
 
   const selectedRegions = useMemo(
@@ -269,11 +274,6 @@ const ProvincialExemptionPage: FC = () => {
       setLoading(false)
     }
   }, [])
-
-  useEffect(() => {
-    setSelectedRowsById({})
-    setApprovalStatus(null)
-  }, [urlState])
 
   useEffect(() => {
     void runSearch({
@@ -309,12 +309,12 @@ const ProvincialExemptionPage: FC = () => {
   }, [])
 
   const onSearch = () => {
-    setSelectedRowsById({})
-    setApprovalStatus(null)
+    clearSelection()
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
   const onClearFilters = () => {
+    clearSelection()
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -328,8 +328,7 @@ const ProvincialExemptionPage: FC = () => {
 
   const onHeaderClick = (column: ProvincialExemptionSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
-    setSelectedRowsById({})
-    setApprovalStatus(null)
+    clearSelection()
     setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
   }
 
@@ -628,8 +627,7 @@ const ProvincialExemptionPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                setSelectedRowsById({})
-                setApprovalStatus(null)
+                clearSelection()
                 setSearchParams(
                   buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
                 )

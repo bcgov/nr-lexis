@@ -104,8 +104,9 @@ type PageStatus = {
 const ProvincialApplicationCreatePage: FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const initialForm = useMemo(() => buildInitialFormFromQuery(searchParams), [searchParams])
-  const [form, setForm] = useState<ProvincialApplicationCreateForm>(initialForm)
+  const [form, setForm] = useState<ProvincialApplicationCreateForm>(() =>
+    buildInitialFormFromQuery(searchParams),
+  )
   const [productTypes, setProductTypes] = useState<SearchOption[]>(FALLBACK_PRODUCT_TYPES)
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>(FALLBACK_EXEMPTION_TYPES)
   const [regions, setRegions] = useState<SearchOption[]>(FALLBACK_REGIONS)
@@ -114,10 +115,6 @@ const ProvincialApplicationCreatePage: FC = () => {
   )
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  useEffect(() => {
-    setForm(initialForm)
-  }, [initialForm])
 
   useEffect(() => {
     const loadOptions = async () => {

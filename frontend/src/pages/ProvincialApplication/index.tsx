@@ -234,6 +234,10 @@ const ProvincialApplicationPage: FC = () => {
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
+  const clearSelection = useCallback(() => {
+    setSelectedRowsById({})
+    setExemptionStatus(null)
+  }, [])
   const updateFilter = useCallback(
     <K extends keyof ProvincialApplicationSearchFilters>(
       key: K,
@@ -243,12 +247,13 @@ const ProvincialApplicationPage: FC = () => {
         ...filters,
         [key]: value,
       }
+      clearSelection()
       setSearchParams(
         buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
         { replace: true },
       )
     },
-    [filters, pageSize, setSearchParams, sortDirection, sortField],
+    [clearSelection, filters, pageSize, setSearchParams, sortDirection, sortField],
   )
 
   const selectedRegions = useMemo(
@@ -280,11 +285,6 @@ const ProvincialApplicationPage: FC = () => {
       setLoading(false)
     }
   }, [])
-
-  useEffect(() => {
-    setSelectedRowsById({})
-    setExemptionStatus(null)
-  }, [urlState])
 
   useEffect(() => {
     void runSearch({
@@ -323,12 +323,12 @@ const ProvincialApplicationPage: FC = () => {
   }, [])
 
   const onSearch = () => {
-    setSelectedRowsById({})
-    setExemptionStatus(null)
+    clearSelection()
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
 
   const onClearFilters = () => {
+    clearSelection()
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -342,8 +342,7 @@ const ProvincialApplicationPage: FC = () => {
 
   const onHeaderClick = (column: ProvincialApplicationSearchSortField) => {
     const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
-    setSelectedRowsById({})
-    setExemptionStatus(null)
+    clearSelection()
     setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
   }
 
@@ -666,8 +665,7 @@ const ProvincialApplicationPage: FC = () => {
               pageSizes={[10, 20, 30]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                setSelectedRowsById({})
-                setExemptionStatus(null)
+                clearSelection()
                 setSearchParams(
                   buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
                 )

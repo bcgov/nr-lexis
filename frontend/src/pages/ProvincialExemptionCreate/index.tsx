@@ -193,7 +193,9 @@ const ProvincialExemptionCreatePage: FC = () => {
     [location.state, searchParams],
   )
   const initialForm = useMemo(() => buildInitialForm(prefillState), [prefillState])
-  const [form, setForm] = useState<ProvincialExemptionCreateForm>(initialForm)
+  const [form, setForm] = useState<ProvincialExemptionCreateForm>(() =>
+    buildInitialForm(prefillState),
+  )
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>(FALLBACK_EXEMPTION_TYPES)
   const [exemptionStatuses, setExemptionStatuses] = useState<SearchOption[]>(
     FALLBACK_EXEMPTION_STATUSES,
@@ -228,10 +230,6 @@ const ProvincialExemptionCreatePage: FC = () => {
 
     void loadOptions()
   }, [])
-
-  useEffect(() => {
-    setForm(initialForm)
-  }, [initialForm])
 
   const hasValidationError = useMemo(() => {
     return (
