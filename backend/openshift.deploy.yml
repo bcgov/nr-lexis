@@ -1,174 +1,233 @@
+---
 apiVersion: template.openshift.io/v1
 kind: Template
+metadata:
+  name: nr-lexis-backend-deploy
 parameters:
   - name: NAME
-    description: Module name
-    required: true
-  - name: COMPONENT
-    description: Component name
-    value: backend
+    description: App name prefix
+    value: nr-lexis
   - name: ZONE
-    description: Deployment zone, e.g. pr-### or prod
+    description: PR number, 'test', or 'prod'
     required: true
   - name: IMAGE_TAG
-    description: Image tag to use
-    required: true
+    description: Container image tag (PR number, 'test', or 'prod')
+    value: latest
   - name: REGISTRY
-    description: Container registry to import from
-    value: ghcr.io
-  - name: ORG_NAME
-    description: Organization name
-    value: bcgov
-  - name: DOMAIN
-    value: apps.silver.devops.gov.bc.ca
+    description: Image registry path (no tag)
+    value: ghcr.io/bcgov/nr-lexis/backend
+  - name: SPRING_PROFILES_ACTIVE
+    value: oracle
   - name: MIN_REPLICAS
-    description: The minimum amount of replicas for the horizontal pod autoscaler.
-    value: "3"
+    value: "1"
   - name: MAX_REPLICAS
-    description: The maximum amount of replicas for the horizontal pod autoscaler.
-    value: "5"
-  - name: CPU_REQUEST
-    value: "50m"
-  - name: MEMORY_REQUEST
-    value: "128Mi"
-  - name: LOG_LEVEL
-    description: Application log level (debug|info|warn|error)
-    value: "info"
+    value: "2"
+  - name: MIN_CPU
+    value: "200m"
+  - name: MIN_MEM
+    value: "500Mi"
+  - name: APP_LOG_LEVEL
+    value: INFO
+  - name: SPRING_JPA_SHOW_SQL
+    value: "false"
+  - name: DATABASE_HOST
+    required: true
+  - name: DATABASE_SERVICE_NAME
+    required: true
+  - name: DATABASE_USER
+    required: true
+  - name: DATABASE_PASSWORD
+    required: true
+  - name: KEYSTORE_SECRET
+    required: true
+
 objects:
   - apiVersion: apps/v1
     kind: Deployment
     metadata:
+      name: ${NAME}-backend-${ZONE}
       labels:
-        app: ${NAME}-${ZONE}
-      name: ${NAME}-${ZONE}-${COMPONENT}
+        app: ${NAME}-backend-${ZONE}
+        app.kubernetes.io/name: ${NAME}-backend
+        app.kubernetes.io/instance: ${ZONE}
     spec:
+      replicas: ${{MIN_REPLICAS}}
       selector:
         matchLabels:
-          deployment: ${NAME}-${ZONE}-${COMPONENT}
+          app: ${NAME}-backend-${ZONE}
       strategy:
-        type: RollingUpdate
+        type: Recreate
       template:
         metadata:
           labels:
-            app: ${NAME}-${ZONE}
-            deployment: ${NAME}-${ZONE}-${COMPONENT}
+            app: ${NAME}-backend-${ZONE}
+            app.kubernetes.io/instance: ${ZONE}
+          annotations:
+            prometheus.io/path: /actuator/prometheus
+            prometheus.io/port: '8080'
+            prometheus.io/scrape: 'true'
         spec:
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
           initContainers:
-            - name: wait-for-db
-              image: ${REGISTRY}/${ORG_NAME}/${NAME}/migrations:${IMAGE_TAG}
-              command:
-                - /bin/sh
-                - -c
-                - |
-                  echo "Waiting for database to be reachable..."
-                  max_retries=30
-                  attempt=1
-                  until nc -z -v -w3 ${NAME}-${ZONE}-database 5432; do
-                    if [ "$attempt" -ge "$max_retries" ]; then
-                      echo "ERROR: Database ${NAME}-${ZONE}-database:5432 is not reachable after ${max_retries} attempts." >&2
-                      exit 1
-                    fi
-                    echo "Database not ready (attempt ${attempt}/${max_retries}), sleeping..."
-                    attempt=$((attempt + 1))
-                    sleep 2
-                  done
-                  echo "Database is UP!"
-            - name: migrations
-              image: ${REGISTRY}/${ORG_NAME}/${NAME}/migrations:${IMAGE_TAG}
+            - name: ${NAME}-backend-init
+              image: ghcr.io/bcgov/nr-forest-client/common:prod
               imagePullPolicy: Always
               env:
-                - name: POSTGRES_DATABASE
+                - name: ORACLEDB_HOST
+                  value: ${DATABASE_HOST}
+                - name: ORACLEDB_SECRET
                   valueFrom:
                     secretKeyRef:
-                      name: ${NAME}-${ZONE}-database
-                      key: database-name
-                - name: FLYWAY_URL
-                  value: jdbc:postgresql://${NAME}-${ZONE}-database:5432/$(POSTGRES_DATABASE)
-                - name: FLYWAY_USER
-                  valueFrom:
-                    secretKeyRef:
-                      name: ${NAME}-${ZONE}-database
-                      key: database-user
-                - name: FLYWAY_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: ${NAME}-${ZONE}-database
-                      key: database-password
-                - name: FLYWAY_DEFAULT_SCHEMA
-                  value: "users"
-                - name: FLYWAY_BASELINE_ON_MIGRATE
-                  value: "true"
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: KEYSTORE_SECRET
+                - name: ORACLEDB_PORT
+                  value: "1543"
+              volumeMounts:
+                - name: api-cert
+                  mountPath: /cert
+                - name: init-tmp-storage
+                  mountPath: /tmp
               resources:
                 requests:
-                  cpu: 10m
-                  memory: 50Mi
+                  cpu: "200m"
+                  memory: "300Mi"
+                  ephemeral-storage: "50Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "500Mi"
+                  ephemeral-storage: "100Mi"
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
           containers:
-            - name: ${NAME}
-              image: ${REGISTRY}/${ORG_NAME}/${NAME}/${COMPONENT}:${IMAGE_TAG}
+            - name: ${NAME}-backend
+              image: ${REGISTRY}:${IMAGE_TAG}
               imagePullPolicy: Always
               ports:
-                - name: http
-                  containerPort: 3000
+                - containerPort: 8080
+                  protocol: TCP
               env:
-                - name: LOG_LEVEL
-                  value: ${LOG_LEVEL}
-                - name: POSTGRES_HOST
-                  value: ${NAME}-${ZONE}-database
-                - name: POSTGRES_PORT
-                  value: "5432"
-                - name: POSTGRES_DATABASE
+                - name: SPRING_PROFILES_ACTIVE
+                  value: ${SPRING_PROFILES_ACTIVE}
+                - name: SERVER_PORT
+                  value: "8080"
+                - name: DATABASE_HOST
+                  value: ${DATABASE_HOST}
+                - name: DATABASE_SERVICE_NAME
+                  value: ${DATABASE_SERVICE_NAME}
+                - name: DATABASE_USER
                   valueFrom:
                     secretKeyRef:
-                      name: ${NAME}-${ZONE}-database
-                      key: database-name
-                - name: POSTGRES_USER
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: DATABASE_USER
+                - name: DATABASE_PASSWORD
                   valueFrom:
                     secretKeyRef:
-                      name: ${NAME}-${ZONE}-database
-                      key: database-user
-                - name: POSTGRES_PASSWORD
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: DATABASE_PASSWORD
+                - name: APP_LOG_LEVEL
+                  value: ${APP_LOG_LEVEL}
+                - name: SPRING_JPA_SHOW_SQL
+                  value: ${SPRING_JPA_SHOW_SQL}
+                - name: KEYSTORE_SECRET
                   valueFrom:
                     secretKeyRef:
-                      name: ${NAME}-${ZONE}-database
-                      key: database-password
-                - name: POSTGRES_SCHEMA
-                  value: "users"
+                      name: ${NAME}-backend-secret-${ZONE}
+                      key: KEYSTORE_SECRET
               resources:
                 requests:
-                  cpu: ${CPU_REQUEST}
-                  memory: ${MEMORY_REQUEST}
-              readinessProbe:
-                httpGet:
-                  path: /api/health
-                  port: http
+                  cpu: ${MIN_CPU}
+                  memory: ${MIN_MEM}
+                  ephemeral-storage: "200Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "800Mi"
+                  ephemeral-storage: "500Mi"
               livenessProbe:
                 httpGet:
-                  path: /api/health
-                  port: http
+                  path: /actuator/health
+                  port: 8080
+                initialDelaySeconds: 300
+                periodSeconds: 30
+                timeoutSeconds: 5
+                failureThreshold: 5
+                successThreshold: 1
+              readinessProbe:
+                tcpSocket:
+                  port: 8080
+                initialDelaySeconds: 30
+                periodSeconds: 10
+                timeoutSeconds: 5
+                failureThreshold: 20
+                successThreshold: 1
+              volumeMounts:
+                - name: api-cert
+                  mountPath: /cert
+                - name: tls-certs
+                  mountPath: /etc/tls-certs
+                  readOnly: true
+                - name: log-storage
+                  mountPath: /logs
+                - name: app-storage
+                  mountPath: /temp
+                - name: tmp-storage
+                  mountPath: /tmp
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+          volumes:
+            - name: tls-certs
+              secret:
+                secretName: ${NAME}-backend-cert-${ZONE}
+            - name: log-storage
+              emptyDir: {}
+            - name: app-storage
+              emptyDir: {}
+            - name: tmp-storage
+              emptyDir: {}
+            - name: init-tmp-storage
+              emptyDir: {}
+            - name: api-cert
+              persistentVolumeClaim:
+                claimName: ${NAME}-backend-api-cert-${ZONE}
+
   - apiVersion: v1
     kind: Service
     metadata:
+      name: ${NAME}-backend-${ZONE}
       labels:
-        app: ${NAME}-${ZONE}
-      name: ${NAME}-${ZONE}-${COMPONENT}
+        app: ${NAME}-backend-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
+      annotations:
+        service.alpha.openshift.io/serving-cert-secret-name: ${NAME}-backend-cert-${ZONE}
     spec:
-      ports:
-        - name: http
-          port: 80
-          targetPort: 3000
       selector:
-        deployment: ${NAME}-${ZONE}-${COMPONENT}
+        app: ${NAME}-backend-${ZONE}
+      ports:
+        - name: 8080-tcp
+          port: 8080
+          protocol: TCP
+
   - apiVersion: autoscaling/v2
     kind: HorizontalPodAutoscaler
     metadata:
+      name: ${NAME}-backend-${ZONE}-cpu
       labels:
-        app: ${NAME}-${ZONE}
-      name: ${NAME}-${ZONE}-${COMPONENT}
+        app: ${NAME}-backend-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
     spec:
       scaleTargetRef:
         apiVersion: apps/v1
         kind: Deployment
-        name: ${NAME}-${ZONE}-${COMPONENT}
+        name: ${NAME}-backend-${ZONE}
       minReplicas: ${{MIN_REPLICAS}}
       maxReplicas: ${{MAX_REPLICAS}}
       metrics:
@@ -177,4 +236,54 @@ objects:
             name: cpu
             target:
               type: Utilization
-              averageUtilization: 80
+              averageUtilization: 200
+
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: ${NAME}-backend-api-cert-${ZONE}
+      labels:
+        app: ${NAME}-backend-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
+    spec:
+      accessModes:
+        - ReadWriteMany
+      resources:
+        requests:
+          storage: 50Mi
+      storageClassName: netapp-file-standard
+
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: ${NAME}-backend-secret-${ZONE}
+      labels:
+        app: ${NAME}-backend-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
+    type: Opaque
+    stringData:
+      DATABASE_USER: ${DATABASE_USER}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      KEYSTORE_SECRET: ${KEYSTORE_SECRET}
+
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: ${NAME}-backend-${ZONE}-ingress
+      labels:
+        app: ${NAME}-backend-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
+    spec:
+      podSelector:
+        matchLabels:
+          app: ${NAME}-backend-${ZONE}
+      ingress:
+        - from:
+            - podSelector:
+                matchLabels:
+                  app: ${NAME}-frontend-${ZONE}
+            - namespaceSelector:
+                matchLabels:
+                  network.openshift.io/policy-group: monitoring
+      policyTypes:
+        - Ingress
