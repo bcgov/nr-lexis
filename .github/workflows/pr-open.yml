@@ -10,7 +10,18 @@ concurrency:
 permissions: {}
 
 jobs:
-  # https://github.com/bcgov/action-builder-ghcr
+  vars:
+    name: Variables
+    runs-on: ubuntu-24.04
+    outputs:
+      slot: ${{ steps.calc.outputs.slot }}
+    steps:
+      - id: calc
+        run: |
+          slot=$(( ${{ github.event.number }} % 50 ))
+          echo "slot=${slot}" >> "$GITHUB_OUTPUT"
+          echo "PR ${{ github.event.number }} -> Cognito slot ${slot}"
+
   builds:
     name: Builds
     permissions:
@@ -20,7 +31,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        package: [backend, frontend, migrations]
+        package: [backend, frontend]
     timeout-minutes: 10
     steps:
       - uses: bcgov/action-builder-ghcr@de3d575cf158e16f5dc2789630f6d587483b911c # v4.4.0
@@ -32,21 +43,34 @@ jobs:
 
   deploys:
     name: Deploys (${{ github.event.number }})
-    needs: [builds]
+    needs: [builds, vars]
+    permissions:
+      contents: read
     uses: ./.github/workflows/reusable-deploy.yml
     secrets:
-      db_password: ${{ secrets.db_password }}
       oc_namespace: ${{ secrets.oc_namespace }}
       oc_token: ${{ secrets.oc_token }}
+      database_user: ${{ secrets.database_user }}
+      database_password: ${{ secrets.database_password }}
+      database_host: ${{ secrets.database_host }}
+      database_service_name: ${{ secrets.database_service_name }}
+      keystore_secret: ${{ secrets.keystore_secret }}
     with:
+      environment: dev
       target: ${{ github.event.number }}
-      triggers: ('backend/', 'frontend/', 'migrations/', 'common/', '.github/workflows/')
+      slot: ${{ needs.vars.outputs.slot }}
+      triggers: ('backend/', 'frontend/', '.github/workflows/')
 
   tests:
-     name: Tests
-     if: needs.deploys.outputs.triggered == 'true'
-     needs: [deploys]
-     uses: ./.github/workflows/reusable-tests.yml
+    name: Tests
+    if: needs.deploys.outputs.triggered == 'true'
+    needs: [deploys, vars]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/reusable-tests.yml
+    with:
+      target: ${{ github.event.number }}
+      slot: ${{ needs.vars.outputs.slot }}
 
   results:
     name: PR Results
