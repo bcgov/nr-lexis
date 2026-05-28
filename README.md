@@ -58,6 +58,15 @@ PORT=3000 npm run dev
 
 Frontend: `http://localhost:3000`
 
+### Optional Docker Compose flow
+
+```bash
+docker compose up
+docker compose --profile caddy up caddy
+```
+
+This runs Spring Boot + Vite locally with the same Oracle-backed assumptions (VPN + local Oracle config files).
+
 ## CI/CD
 
 GitHub Actions handles PR checks, image builds, and OpenShift deployments. Namespace and credential values are environment-driven through repository/environment secrets and variables.
