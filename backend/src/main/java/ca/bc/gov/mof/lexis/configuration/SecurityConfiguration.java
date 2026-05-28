@@ -2,6 +2,8 @@ package ca.bc.gov.mof.lexis.configuration;
 
 import ca.bc.gov.mof.lexis.security.LexisApiAuthorizationCustomizer;
 import ca.bc.gov.mof.lexis.security.Oauth2SecurityCustomizer;
+import ca.bc.gov.mof.lexis.security.CsrfCookieFilter;
+import ca.bc.gov.mof.lexis.security.CsrfSecurityCustomizer;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
@@ -13,6 +15,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -27,6 +30,8 @@ public class SecurityConfiguration {
   @Bean
   public SecurityFilterChain filterChain(
       HttpSecurity http,
+      CsrfSecurityCustomizer csrfCustomizer,
+      CsrfCookieFilter csrfCookieFilter,
       ObjectProvider<Oauth2SecurityCustomizer> oauth2CustomizerProvider,
       ObjectProvider<LexisApiAuthorizationCustomizer> apiAuthorizationCustomizerProvider,
       @Value("${lexis.auth.cognito.enabled:false}") boolean cognitoEnabled,
@@ -34,7 +39,8 @@ public class SecurityConfiguration {
       throws Exception {
 
     http
-        .csrf(AbstractHttpConfigurer::disable)
+        .csrf(csrfCustomizer)
+        .addFilterAfter(csrfCookieFilter, BasicAuthenticationFilter.class)
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .cors(Customizer.withDefaults());
