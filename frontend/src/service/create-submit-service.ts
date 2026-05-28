@@ -73,6 +73,28 @@ const getCreateSubmitRequestMode = (): CreateSubmitRequestMode => {
   return configured === 'json' ? 'json' : 'form'
 }
 
+const shouldIncludeCreateSubmitActionMapping = (): boolean => {
+  const configured = (import.meta.env.VITE_LEXIS_CREATE_SUBMIT_INCLUDE_ACTION_MAPPING ?? 'true')
+    .toString()
+    .trim()
+    .toLowerCase()
+  return configured !== '0' && configured !== 'false' && configured !== 'no'
+}
+
+const withCreateActionMapping = (
+  actionMapping: string,
+  payload: Record<string, string | undefined>,
+): Record<string, string | undefined> => {
+  if (!shouldIncludeCreateSubmitActionMapping()) {
+    return payload
+  }
+
+  return {
+    actionMapping,
+    ...payload,
+  }
+}
+
 const getProvincialApplicationCreatePath = (): string => {
   return getConfiguredPath(
     import.meta.env.VITE_LEXIS_CREATE_APPLICATION_ENDPOINT,
@@ -199,23 +221,25 @@ export const submitProvincialApplicationCreate = async (
   form: ProvincialApplicationCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
   try {
-    const payload = await postLegacyForm(getProvincialApplicationCreatePath(), {
-      actionMapping: 'addApplication',
-      applicationNumber: form.applicationNumber,
-      packageNumber: form.packageNumber,
-      ownerClientNumber: form.ownerClientNumber,
-      applicantClientNumber: form.applicantClientNumber,
-      agentClientNumber: form.applicantClientNumber,
-      productTypeCode: form.productTypeCode,
-      exemptionType: form.exemptionType,
-      exemptionTypeCode: form.exemptionType,
-      region: form.region,
-      orgUnitNumber: form.region,
-      receivedDate: form.receivedDate,
-      listingDate: form.listingDate,
-      comments: form.comments,
-      additionalRemarks: form.comments,
-    })
+    const payload = await postLegacyForm(
+      getProvincialApplicationCreatePath(),
+      withCreateActionMapping('addApplication', {
+        applicationNumber: form.applicationNumber,
+        packageNumber: form.packageNumber,
+        ownerClientNumber: form.ownerClientNumber,
+        applicantClientNumber: form.applicantClientNumber,
+        agentClientNumber: form.applicantClientNumber,
+        productTypeCode: form.productTypeCode,
+        exemptionType: form.exemptionType,
+        exemptionTypeCode: form.exemptionType,
+        region: form.region,
+        orgUnitNumber: form.region,
+        receivedDate: form.receivedDate,
+        listingDate: form.listingDate,
+        comments: form.comments,
+        additionalRemarks: form.comments,
+      }),
+    )
     return parseCreateResponse(payload, ['applicationNumber'])
   } catch (error) {
     return buildFailureResult('Unable to submit provincial application create request.', error)
@@ -240,21 +264,23 @@ export const submitProvincialExemptionCreate = async (
   form: ProvincialExemptionCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
   try {
-    const payload = await postLegacyForm(getProvincialExemptionCreatePath(), {
-      actionMapping: 'addExemption',
-      exemptionNumber: form.exemptionNumber,
-      applicationNumber: form.applicationNumber,
-      applications: form.linkedApplicationNumbers.join(','),
-      exemptionTypeCode: form.exemptionTypeCode,
-      exemptionStatusCode: form.exemptionStatusCode,
-      ownerClientNumber: form.ownerClientNumber,
-      applicantClientNumber: form.applicantClientNumber,
-      agentClientNumber: form.applicantClientNumber,
-      approvalDate: form.approvalDate,
-      expiryDate: form.expiryDate,
-      approvedVolume: form.approvedVolume,
-      otherConditions: form.otherConditions,
-    })
+    const payload = await postLegacyForm(
+      getProvincialExemptionCreatePath(),
+      withCreateActionMapping('addExemption', {
+        exemptionNumber: form.exemptionNumber,
+        applicationNumber: form.applicationNumber,
+        applications: form.linkedApplicationNumbers.join(','),
+        exemptionTypeCode: form.exemptionTypeCode,
+        exemptionStatusCode: form.exemptionStatusCode,
+        ownerClientNumber: form.ownerClientNumber,
+        applicantClientNumber: form.applicantClientNumber,
+        agentClientNumber: form.applicantClientNumber,
+        approvalDate: form.approvalDate,
+        expiryDate: form.expiryDate,
+        approvedVolume: form.approvedVolume,
+        otherConditions: form.otherConditions,
+      }),
+    )
     return parseCreateResponse(payload, ['exemptionNumber'])
   } catch (error) {
     return buildFailureResult('Unable to submit provincial exemption create request.', error)
@@ -278,22 +304,24 @@ export const submitProvincialOfferCreate = async (
   form: ProvincialOfferCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
   try {
-    const payload = await postLegacyForm(getProvincialOfferCreatePath(), {
-      actionMapping: 'addOffer',
-      offerNumber: form.offerNumber,
-      exportPurchaseOfferNumber: form.offerNumber,
-      applicationNumber: form.applicationNumber,
-      packageNumber: form.packageNumber,
-      offeringClientNumber: form.offeringClientNumber,
-      clientNumber: form.offeringClientNumber,
-      region: form.region,
-      purchaseOfferAmount: form.purchaseOfferAmount,
-      purchaseOfferDate: form.purchaseOfferDate,
-      offerEndDate: form.offerEndDate,
-      pickupLocation: form.pickupLocation,
-      offerCondition: form.offerCondition,
-      offerRemark: form.offerCondition,
-    })
+    const payload = await postLegacyForm(
+      getProvincialOfferCreatePath(),
+      withCreateActionMapping('addOffer', {
+        offerNumber: form.offerNumber,
+        exportPurchaseOfferNumber: form.offerNumber,
+        applicationNumber: form.applicationNumber,
+        packageNumber: form.packageNumber,
+        offeringClientNumber: form.offeringClientNumber,
+        clientNumber: form.offeringClientNumber,
+        region: form.region,
+        purchaseOfferAmount: form.purchaseOfferAmount,
+        purchaseOfferDate: form.purchaseOfferDate,
+        offerEndDate: form.offerEndDate,
+        pickupLocation: form.pickupLocation,
+        offerCondition: form.offerCondition,
+        offerRemark: form.offerCondition,
+      }),
+    )
     return parseCreateResponse(payload, ['exportPurchaseOfferNumber', 'offerNumber'])
   } catch (error) {
     return buildFailureResult('Unable to submit provincial offer create request.', error)
@@ -318,20 +346,22 @@ export const submitProvincialPermitCreate = async (
   form: ProvincialPermitCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
   try {
-    const payload = await postLegacyForm(getProvincialPermitCreatePath(), {
-      actionMapping: 'addPermit',
-      permitNumber: form.permitNumber,
-      permitStatus: form.permitStatus,
-      permitIssueDate: form.issueDate,
-      estimatedShippingDate: form.estimatedShippingDate,
-      exemptionNumber: form.exemptionNumber,
-      permitTotalVolume: form.permitVolume,
-      ownerClientNumber: form.ownerClientNumber,
-      agentClientNumber: form.applicantClientNumber,
-      permitRemarks: form.remarks,
-      oicApplicationNumber: form.applicationNumber,
-      packageNumber: form.packageNumber,
-    })
+    const payload = await postLegacyForm(
+      getProvincialPermitCreatePath(),
+      withCreateActionMapping('addPermit', {
+        permitNumber: form.permitNumber,
+        permitStatus: form.permitStatus,
+        permitIssueDate: form.issueDate,
+        estimatedShippingDate: form.estimatedShippingDate,
+        exemptionNumber: form.exemptionNumber,
+        permitTotalVolume: form.permitVolume,
+        ownerClientNumber: form.ownerClientNumber,
+        agentClientNumber: form.applicantClientNumber,
+        permitRemarks: form.remarks,
+        oicApplicationNumber: form.applicationNumber,
+        packageNumber: form.packageNumber,
+      }),
+    )
     return parseCreateResponse(payload, ['permitNumber'])
   } catch (error) {
     return buildFailureResult('Unable to submit provincial permit create request.', error)
@@ -356,21 +386,23 @@ export const submitIndianReservePermitCreate = async (
   form: IndianReservePermitCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
   try {
-    const payload = await postLegacyForm(getIndigenousReservePermitCreatePath(), {
-      actionMapping: 'saveReservePermit',
-      applicationNumber: '0',
-      clientNumber: form.clientNumber,
-      permitNumber: form.permitNumber,
-      applicationDate: form.applicationDate,
-      permitIssueDate: form.permitIssueDate,
-      estShippingDate: form.estimatedShippingDate,
-      destinationCountry: form.destinationCountry,
-      transportTypeCode: form.transportTypeCode,
-      transportName: form.transportName,
-      portOfExport: form.portOfExport,
-      permitRemarks: form.remarks,
-      packageNumber: form.packageNumber,
-    })
+    const payload = await postLegacyForm(
+      getIndigenousReservePermitCreatePath(),
+      withCreateActionMapping('saveReservePermit', {
+        applicationNumber: '0',
+        clientNumber: form.clientNumber,
+        permitNumber: form.permitNumber,
+        applicationDate: form.applicationDate,
+        permitIssueDate: form.permitIssueDate,
+        estShippingDate: form.estimatedShippingDate,
+        destinationCountry: form.destinationCountry,
+        transportTypeCode: form.transportTypeCode,
+        transportName: form.transportName,
+        portOfExport: form.portOfExport,
+        permitRemarks: form.remarks,
+        packageNumber: form.packageNumber,
+      }),
+    )
     return parseCreateResponse(payload, ['permitNumber'])
   } catch (error) {
     return buildFailureResult('Unable to submit indigenous reserve permit create request.', error)

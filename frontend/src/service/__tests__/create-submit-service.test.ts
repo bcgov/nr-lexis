@@ -155,6 +155,41 @@ describe('create-submit-service', () => {
     })
   })
 
+  it('can omit create actionMapping when include-action-mapping toggle is disabled', async () => {
+    vi.stubEnv('VITE_LEXIS_CREATE_SUBMIT_REQUEST_MODE', 'json')
+    vi.stubEnv('VITE_LEXIS_CREATE_SUBMIT_INCLUDE_ACTION_MAPPING', 'false')
+    postMock.mockResolvedValue({
+      data: {
+        success: true,
+        message: 'saved',
+        permitNumber: '101',
+      },
+    })
+
+    await submitProvincialPermitCreate({
+      permitNumber: '101',
+      applicationNumber: '2',
+      packageNumber: 'PKG',
+      exemptionNumber: 'EX-1',
+      permitStatus: 'Issued',
+      applicantClientNumber: '00011111',
+      ownerClientNumber: '00022222',
+      issueDate: '2026-01-01',
+      estimatedShippingDate: '2026-01-02',
+      permitVolume: '10',
+      remarks: '',
+    })
+
+    const [, body] = postMock.mock.calls[0]
+    expect(body).toEqual(
+      expect.objectContaining({
+        permitNumber: '101',
+        permitStatus: 'Issued',
+      }),
+    )
+    expect(body).not.toHaveProperty('actionMapping')
+  })
+
   it('returns status-specific message when permit submit endpoint is unavailable', async () => {
     postMock.mockRejectedValue({
       isAxiosError: true,
