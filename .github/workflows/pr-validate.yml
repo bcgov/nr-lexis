@@ -11,16 +11,28 @@ concurrency:
 permissions: {}
 
 jobs:
+  vars:
+    name: Variables
+    runs-on: ubuntu-24.04
+    outputs:
+      slot: ${{ steps.calc.outputs.slot }}
+    steps:
+      - id: calc
+        run: |
+          slot=$(( ${{ github.event.number }} % 50 ))
+          echo "slot=${slot}" >> "$GITHUB_OUTPUT"
+
   validate:
     name: Validate PR
     if: (! github.event.pull_request.draft)
+    needs: [vars]
     permissions:
       pull-requests: write
-    uses: bcgov/quickstart-openshift-helpers/.github/workflows/.pr-validate.yml@18a043020cdc4f1125ec592524e8163edc767f4a # v1.2.0
+    uses: bcgov/quickstart-openshift-helpers/.github/workflows/.pr-validate.yml@ca6579bdadf383a2513397081f963889b92823a4 # v1.1.0
     with:
       markdown_links: |
-        - [Frontend](https://${{ github.event.repository.name }}-${{ github.event.number }}.apps.silver.devops.gov.bc.ca)
-        - [Backend](https://${{ github.event.repository.name }}-${{ github.event.number }}.apps.silver.devops.gov.bc.ca/api)
+        - [Frontend](https://${{ github.event.repository.name }}-${{ needs.vars.outputs.slot }}.apps.silver.devops.gov.bc.ca)
+        - [Backend](https://${{ github.event.repository.name }}-${{ needs.vars.outputs.slot }}.apps.silver.devops.gov.bc.ca/api)
 
   results:
     name: Validate Results

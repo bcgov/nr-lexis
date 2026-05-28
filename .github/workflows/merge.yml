@@ -5,9 +5,7 @@ on:
     branches: [main]
     paths-ignore:
       - '*.md'
-      - '.github/**'
       - '.github/graphics/**'
-      - '!.github/workflows/**'
   workflow_dispatch:
 
 concurrency:
@@ -26,25 +24,40 @@ jobs:
       pr: ${{ steps.pr.outputs.pr }}
     runs-on: ubuntu-24.04
     steps:
-      # Get PR number for squash merges to main
+      # Find the PR number associated with this squash-merged commit on main,
+      # so we can deploy the same image tag that the PR was running.
       - id: pr
         uses: bcgov/action-get-pr@3931962bf13b3f4702d0013ec7c836f752ff1a3b # v0.3.0
+
   deploy-test:
     name: TEST Deploys (${{ needs.init.outputs.pr }})
     needs: [init]
+    # contents:read here so the nested reusable-deploy jobs can checkout.
+    # Workflow-level `permissions: {}` above sets all scopes to none; the
+    # called workflow can't grant itself more than the caller has.
+    permissions:
+      contents: read
     uses: ./.github/workflows/reusable-deploy.yml
     secrets:
-      db_password: ${{ secrets.db_password }}
       oc_namespace: ${{ secrets.oc_namespace }}
       oc_token: ${{ secrets.oc_token }}
+      database_user: ${{ secrets.database_user }}
+      database_password: ${{ secrets.database_password }}
+      database_host: ${{ secrets.database_host }}
+      database_service_name: ${{ secrets.database_service_name }}
+      keystore_secret: ${{ secrets.keystore_secret }}
     with:
       environment: test
       target: test
       tag: ${{ needs.init.outputs.pr }}
+      backend_replicas: "2"
+      frontend_replicas: "2"
 
   tests:
     name: Tests
     needs: [deploy-test]
+    permissions:
+      contents: read
     uses: ./.github/workflows/reusable-tests.yml
     with:
       target: test
@@ -52,16 +65,27 @@ jobs:
   deploy-prod:
     name: PROD Deploys (${{ needs.init.outputs.pr }})
     needs: [tests, init]
+    permissions:
+      contents: read
     uses: ./.github/workflows/reusable-deploy.yml
     secrets:
-      db_password: ${{ secrets.db_password }}
       oc_namespace: ${{ secrets.oc_namespace }}
       oc_token: ${{ secrets.oc_token }}
+      database_user: ${{ secrets.database_user }}
+      database_password: ${{ secrets.database_password }}
+      database_host: ${{ secrets.database_host }}
+      database_service_name: ${{ secrets.database_service_name }}
+      keystore_secret: ${{ secrets.keystore_secret }}
     with:
       environment: prod
       target: prod
       tag: ${{ needs.init.outputs.pr }}
+      backend_replicas: "3"
+      frontend_replicas: "3"
 
+  # After PROD is up, alias the PR image as :prod in GHCR. Creates a durable
+  # record of "this is the image running in production right now" and a
+  # rollback target.
   promote:
     name: Promote Images
     needs: [deploy-prod, init]
@@ -70,7 +94,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        package: [migrations, backend, frontend]
+        package: [backend, frontend]
     timeout-minutes: 1
     steps:
       - uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
