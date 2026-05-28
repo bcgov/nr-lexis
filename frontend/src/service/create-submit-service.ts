@@ -83,8 +83,7 @@ const buildFailureResult = (defaultMessage: string, error: unknown): CreateSubmi
 
     let message = defaultMessage
     if (status === 404 || status === 405) {
-      message =
-        'Submit endpoint is not available in this environment yet. Keep using drafts until backend create APIs are deployed.'
+      message = `${defaultMessage} Submit endpoint is unavailable in this environment (status ${status}).`
     } else if (responseMessage) {
       message = responseMessage
     } else if (status) {
