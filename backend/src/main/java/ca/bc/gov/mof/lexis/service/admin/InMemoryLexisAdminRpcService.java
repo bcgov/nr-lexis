@@ -1,7 +1,6 @@
 package ca.bc.gov.mof.lexis.service.admin;
 
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcRequestDto;
-import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcResponseDto;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -13,30 +12,28 @@ import org.springframework.stereotype.Service;
 public class InMemoryLexisAdminRpcService implements LexisAdminRpcService {
 
   @Override
-  public Optional<LexisAdminRpcResponseDto> executeFeePolicyRpc(LexisAdminRpcRequestDto request) {
+  public Optional<Object> executeFeePolicyRpc(LexisAdminRpcRequestDto request) {
     return Optional.of(buildResponse("fee-policy", request));
   }
 
   @Override
-  public Optional<LexisAdminRpcResponseDto> executeFilPolicyRpc(LexisAdminRpcRequestDto request) {
+  public Optional<Object> executeFilPolicyRpc(LexisAdminRpcRequestDto request) {
     return Optional.of(buildResponse("fil-policy", request));
   }
 
-  private LexisAdminRpcResponseDto buildResponse(String scope, LexisAdminRpcRequestDto request) {
+  private Map<String, Object> buildResponse(String scope, LexisAdminRpcRequestDto request) {
     String action = normalizeAction(request);
     Map<String, String> parameters = normalizeParameters(request);
 
-    LinkedHashMap<String, String> payload = new LinkedHashMap<>();
+    LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+    payload.put("success", true);
     payload.put("scope", scope);
     payload.put("action", action);
     payload.put("mode", "in-memory");
-    payload.put("parameterCount", Integer.toString(parameters.size()));
+    payload.put("parameterCount", parameters.size());
     payload.putAll(parameters);
 
-    return new LexisAdminRpcResponseDto(
-        true,
-        "Accepted in local profile; persistence-backed policy mutation is not enabled.",
-        Map.copyOf(payload));
+    return Map.copyOf(payload);
   }
 
   private String normalizeAction(LexisAdminRpcRequestDto request) {

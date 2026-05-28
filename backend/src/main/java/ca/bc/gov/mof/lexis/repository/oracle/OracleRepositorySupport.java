@@ -34,6 +34,7 @@ public abstract class OracleRepositorySupport {
   protected static final String LEXIS_GROUP_5_PACKAGE = "LEXIS_GROUP_5.";
   protected static final String LEXIS_GROUP_9_PACKAGE = "LEXIS_GROUP_9.";
   protected static final String LEXIS_GROUP_11_PACKAGE = "LEXIS_GROUP_11.";
+  protected static final String LEXIS_GROUP_12_PACKAGE = "LEXIS_GROUP_12.";
   protected static final String LEXIS_GROUP_13_PACKAGE = "LEXIS_GROUP_13.";
   protected static final String LEXIS_GROUP_14_PACKAGE = "LEXIS_GROUP_14.";
   protected static final String LEXIS_READ_ONLY_PACKAGE = "LEXIS_READ_ONLY.";

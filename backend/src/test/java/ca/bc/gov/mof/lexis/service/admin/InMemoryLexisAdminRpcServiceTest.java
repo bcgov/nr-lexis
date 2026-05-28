@@ -3,7 +3,6 @@ package ca.bc.gov.mof.lexis.service.admin;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcRequestDto;
-import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcResponseDto;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,10 +15,13 @@ class InMemoryLexisAdminRpcServiceTest {
     InMemoryLexisAdminRpcService service = new InMemoryLexisAdminRpcService();
     LexisAdminRpcRequestDto request = new LexisAdminRpcRequestDto("save", Map.of("code", "FEE01"));
 
-    LexisAdminRpcResponseDto response = service.executeFeePolicyRpc(request).orElseThrow();
+    Object response = service.executeFeePolicyRpc(request).orElseThrow();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> payload = (Map<String, Object>) response;
 
-    assertThat(response.success()).isTrue();
-    assertThat(response.payload())
+    assertThat(response).isInstanceOf(Map.class);
+    assertThat(payload)
+        .containsEntry("success", true)
         .containsEntry("scope", "fee-policy")
         .containsEntry("action", "save")
         .containsEntry("mode", "in-memory")
@@ -30,12 +32,15 @@ class InMemoryLexisAdminRpcServiceTest {
   void shouldDefaultNullFilPolicyRpcRequestToViewAction() {
     InMemoryLexisAdminRpcService service = new InMemoryLexisAdminRpcService();
 
-    LexisAdminRpcResponseDto response = service.executeFilPolicyRpc(null).orElseThrow();
+    Object response = service.executeFilPolicyRpc(null).orElseThrow();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> payload = (Map<String, Object>) response;
 
-    assertThat(response.success()).isTrue();
-    assertThat(response.payload())
+    assertThat(response).isInstanceOf(Map.class);
+    assertThat(payload)
+        .containsEntry("success", true)
         .containsEntry("scope", "fil-policy")
         .containsEntry("action", "view")
-        .containsEntry("parameterCount", "0");
+        .containsEntry("parameterCount", 0);
   }
 }
