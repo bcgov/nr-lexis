@@ -160,6 +160,7 @@ const DEV_EXEMPTION_APPROVER_ACTIONS: string[] = [
   '/exemptionSearch',
   '/exemptionDetails',
   '/applicationsReview',
+  'approveExemption',
 ]
 
 const DEV_PROVINCIAL_SUBMITTER_ACTIONS: string[] = [

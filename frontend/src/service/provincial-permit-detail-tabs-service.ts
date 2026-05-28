@@ -1,5 +1,5 @@
 import apiService from '@/service/api-service'
-import { isMockFallbackEnabled, toSearchServiceError } from '@/service/search-service-fallback'
+import { toSearchServiceError } from '@/service/search-service-fallback'
 
 export type ProvincialPermitItemRow = {
   id: string
@@ -35,39 +35,6 @@ export type ProvincialPermitDetailTabsData = {
   gbmsEvents: ProvincialPermitEventRow[]
   oicItems: ProvincialPermitEventRow[]
   boicItems: ProvincialPermitEventRow[]
-}
-
-export type ProvincialPermitTabSource = 'api' | 'mock'
-
-export type ProvincialPermitDetailTabsSources = {
-  items: ProvincialPermitTabSource
-  fees: ProvincialPermitTabSource
-  gbmsEvents: ProvincialPermitTabSource
-  oicItems: ProvincialPermitTabSource
-  boicItems: ProvincialPermitTabSource
-}
-
-export type ProvincialPermitTabsFallbackContext = {
-  permitVolume: number | null
-  numberOfPieces: number | null
-  invoiceNumber: string | null
-  receiptNumber: string | null
-  issueDate: string | null
-}
-
-export type ProvincialPermitDetailTabsResult = {
-  data: ProvincialPermitDetailTabsData
-  sources: ProvincialPermitDetailTabsSources
-}
-
-const FALLBACK_STATUSES = new Set([204, 404, 405, 500, 501, 502, 503])
-
-const shouldFallbackToMock = (error: unknown): boolean => {
-  const status = (error as any)?.response?.status
-  if (typeof status === 'number') {
-    return FALLBACK_STATUSES.has(status)
-  }
-  return true
 }
 
 const parseArrayPayload = (payload: unknown): unknown[] | null => {
@@ -156,92 +123,14 @@ const normalizePermitEventRow = (row: unknown, index: number): ProvincialPermitE
   }
 }
 
-const buildMockItems = (
-  context: ProvincialPermitTabsFallbackContext,
-): ProvincialPermitItemRow[] => {
-  const pieces = context.numberOfPieces && context.numberOfPieces > 0 ? context.numberOfPieces : 120
-  const volume = context.permitVolume && context.permitVolume > 0 ? context.permitVolume : 760
-
-  return [
-    {
-      id: 'ITEM-1',
-      timberMark: 'TMK-A100',
-      species: 'HEM',
-      grade: 'J',
-      pieces: Math.round(pieces * 0.6),
-      volume: Number((volume * 0.62).toFixed(2)),
-    },
-    {
-      id: 'ITEM-2',
-      timberMark: 'TMK-A101',
-      species: 'FIR',
-      grade: '2',
-      pieces: Math.round(pieces * 0.4),
-      volume: Number((volume * 0.38).toFixed(2)),
-    },
-  ]
-}
-
-const buildMockFees = (context: ProvincialPermitTabsFallbackContext): ProvincialPermitFeeRow[] => {
-  return [
-    {
-      id: 'FEE-1',
-      feeCode: 'FIL',
-      feeDescription: 'Fee In Lieu',
-      amount: 1280.45,
-      status: 'Posted',
-      invoiceNumber: context.invoiceNumber ?? 'INV-MOCK-1001',
-      receiptNumber: context.receiptNumber ?? 'RCP-MOCK-2001',
-    },
-    {
-      id: 'FEE-2',
-      feeCode: 'ADM',
-      feeDescription: 'Administration',
-      amount: 145.75,
-      status: 'Posted',
-      invoiceNumber: context.invoiceNumber ?? 'INV-MOCK-1001',
-      receiptNumber: context.receiptNumber ?? 'RCP-MOCK-2001',
-    },
-  ]
-}
-
-const buildMockEvents = (
-  prefix: string,
-  context: ProvincialPermitTabsFallbackContext,
-): ProvincialPermitEventRow[] => {
-  const issueDate = context.issueDate ?? '2026-01-01'
-
-  return [
-    {
-      id: `${prefix}-1`,
-      eventDate: issueDate,
-      eventType: `${prefix}_CREATE`,
-      status: 'Open',
-      reference: `${prefix}-REF-001`,
-      notes: `${prefix} event seeded from migration fallback data.`,
-    },
-    {
-      id: `${prefix}-2`,
-      eventDate: issueDate,
-      eventType: `${prefix}_UPDATE`,
-      status: 'Pending',
-      reference: `${prefix}-REF-002`,
-      notes: `${prefix} event pending backend endpoint parity.`,
-    },
-  ]
-}
-
 const fetchRows = async <TRow>(
   path: string,
   normalize: (row: unknown, index: number) => TRow,
-): Promise<{ rows: TRow[]; source: ProvincialPermitTabSource }> => {
+): Promise<TRow[]> => {
   try {
     const response = await apiService.getAxiosInstance().get(path)
     if (response.status === 204) {
-      return {
-        rows: [],
-        source: 'api',
-      }
+      return []
     }
 
     const payloadRows = parseArrayPayload(response.data)
@@ -249,26 +138,16 @@ const fetchRows = async <TRow>(
       throw new Error(`Invalid list response from ${path}`)
     }
 
-    return {
-      rows: payloadRows.map(normalize),
-      source: 'api',
-    }
+    return payloadRows.map(normalize)
   } catch (error) {
-    if (shouldFallbackToMock(error) && isMockFallbackEnabled()) {
-      return {
-        rows: [],
-        source: 'mock',
-      }
-    }
     throw toSearchServiceError(`Unable to load permit tab data from ${path}.`, error)
   }
 }
 
 export const fetchProvincialPermitDetailTabs = async (
   permitNumber: string,
-  context: ProvincialPermitTabsFallbackContext,
-): Promise<ProvincialPermitDetailTabsResult> => {
-  const [itemsResult, feesResult, gbmsResult, oicResult, boicResult] = await Promise.all([
+): Promise<ProvincialPermitDetailTabsData> => {
+  const [items, fees, gbmsEvents, oicItems, boicItems] = await Promise.all([
     fetchRows(`/lexis/permits/${encodeURIComponent(permitNumber)}/items`, normalizePermitItemRow),
     fetchRows(`/lexis/permits/${encodeURIComponent(permitNumber)}/fees`, normalizePermitFeeRow),
     fetchRows(`/lexis/permits/${encodeURIComponent(permitNumber)}/gbms`, normalizePermitEventRow),
@@ -282,27 +161,11 @@ export const fetchProvincialPermitDetailTabs = async (
     ),
   ])
 
-  const items = itemsResult.source === 'api' ? itemsResult.rows : buildMockItems(context)
-  const fees = feesResult.source === 'api' ? feesResult.rows : buildMockFees(context)
-  const gbmsEvents =
-    gbmsResult.source === 'api' ? gbmsResult.rows : buildMockEvents('GBMS', context)
-  const oicItems = oicResult.source === 'api' ? oicResult.rows : buildMockEvents('OIC', context)
-  const boicItems = boicResult.source === 'api' ? boicResult.rows : buildMockEvents('BOIC', context)
-
   return {
-    data: {
-      items,
-      fees,
-      gbmsEvents,
-      oicItems,
-      boicItems,
-    },
-    sources: {
-      items: itemsResult.source,
-      fees: feesResult.source,
-      gbmsEvents: gbmsResult.source,
-      oicItems: oicResult.source,
-      boicItems: boicResult.source,
-    },
+    items,
+    fees,
+    gbmsEvents,
+    oicItems,
+    boicItems,
   }
 }

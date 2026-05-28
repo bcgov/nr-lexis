@@ -131,4 +131,24 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-viewFederalApplication')).toHaveTextContent('true')
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/summary')
   })
+
+  it('grants exemption approval actions to EXEMPTION_APPROVER', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\exemption-approver',
+      roles: ['EXEMPTION_APPROVER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: [],
+    })
+
+    renderProbe(['approveExemption', '/applicationsReview', '/exemptionSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('EXEMPTION_APPROVER')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/exemption')
+    expect(screen.getByTestId('action-approveExemption')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/exemptionSearch')).toHaveTextContent('true')
+  })
 })

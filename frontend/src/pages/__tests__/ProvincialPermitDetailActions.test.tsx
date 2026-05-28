@@ -8,7 +8,7 @@ import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
 import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
 import {
   fetchProvincialPermitDetailTabs,
-  type ProvincialPermitDetailTabsResult,
+  type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
 import {
   addPermitInvoice,
@@ -90,21 +90,12 @@ const permitDetail: ProvincialPermitDetail = {
   region: '12',
 }
 
-const tabsResult: ProvincialPermitDetailTabsResult = {
-  data: {
-    items: [],
-    fees: [],
-    gbmsEvents: [],
-    oicItems: [],
-    boicItems: [],
-  },
-  sources: {
-    items: 'api',
-    fees: 'api',
-    gbmsEvents: 'api',
-    oicItems: 'api',
-    boicItems: 'api',
-  },
+const tabsResult: ProvincialPermitDetailTabsData = {
+  items: [],
+  fees: [],
+  gbmsEvents: [],
+  oicItems: [],
+  boicItems: [],
 }
 
 describe('Provincial Permit Detail Action Smoke', () => {

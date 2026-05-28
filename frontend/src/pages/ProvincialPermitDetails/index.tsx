@@ -35,7 +35,6 @@ import {
 import {
   fetchProvincialPermitDetailTabs,
   type ProvincialPermitDetailTabsData,
-  type ProvincialPermitDetailTabsSources,
 } from '@/service/provincial-permit-detail-tabs-service'
 import { runReport } from '@/service/report-service'
 
@@ -144,11 +143,8 @@ const ProvincialPermitDetailsPage: FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<ProvincialPermitDetail | null>(null)
   const [tabsData, setTabsData] = useState<ProvincialPermitDetailTabsData | null>(null)
-  const [tabsSources, setTabsSources] = useState<ProvincialPermitDetailTabsSources | null>(null)
   const [documentRows, setDocumentRows] = useState<PermitDocumentRow[]>([])
   const [invoiceRows, setInvoiceRows] = useState<PermitInvoiceRow[]>([])
-  const [documentSource, setDocumentSource] = useState('api')
-  const [invoiceSource, setInvoiceSource] = useState('api')
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [tabsErrorMessage, setTabsErrorMessage] = useState('')
@@ -207,7 +203,6 @@ const ProvincialPermitDetailsPage: FC = () => {
         setErrorMessage('Permit number is missing from the route.')
         setDetail(null)
         setTabsData(null)
-        setTabsSources(null)
         setDocumentRows([])
         setInvoiceRows([])
         setDocumentsInvoicesErrorMessage('')
@@ -227,28 +222,17 @@ const ProvincialPermitDetailsPage: FC = () => {
         if (!response) {
           setErrorMessage(`No provincial permit found for ${permitNumber}.`)
           setTabsData(null)
-          setTabsSources(null)
           setDocumentRows([])
           setInvoiceRows([])
-          setDocumentSource('api')
-          setInvoiceSource('api')
           return
         }
 
         try {
-          const tabsResult = await fetchProvincialPermitDetailTabs(permitNumber, {
-            permitVolume: response.permitVolume,
-            numberOfPieces: response.numberOfPieces,
-            invoiceNumber: response.invoiceNumber,
-            receiptNumber: response.receiptNumber,
-            issueDate: response.issueDate,
-          })
-          setTabsData(tabsResult.data)
-          setTabsSources(tabsResult.sources)
+          const tabsResult = await fetchProvincialPermitDetailTabs(permitNumber)
+          setTabsData(tabsResult)
         } catch (error) {
           console.error(error)
           setTabsData(null)
-          setTabsSources(null)
           setTabsErrorMessage('Unable to retrieve permit item and fee tables.')
         }
 
@@ -259,14 +243,10 @@ const ProvincialPermitDetailsPage: FC = () => {
           ])
           setDocumentRows(documentsResult.rows)
           setInvoiceRows(invoicesResult.rows)
-          setDocumentSource(documentsResult.source)
-          setInvoiceSource(invoicesResult.source)
         } catch (error) {
           console.error(error)
           setDocumentRows([])
           setInvoiceRows([])
-          setDocumentSource('api')
-          setInvoiceSource('api')
           setDocumentsInvoicesErrorMessage(
             'Unable to retrieve permit documents or invoice details.',
           )
@@ -276,11 +256,8 @@ const ProvincialPermitDetailsPage: FC = () => {
         setErrorMessage('Unable to retrieve provincial permit detail.')
         setDetail(null)
         setTabsData(null)
-        setTabsSources(null)
         setDocumentRows([])
         setInvoiceRows([])
-        setDocumentSource('api')
-        setInvoiceSource('api')
         setDocumentsInvoicesErrorMessage('')
       } finally {
         setLoading(false)
@@ -384,14 +361,6 @@ const ProvincialPermitDetailsPage: FC = () => {
     )
   }, [invoiceRows, invoicesFilter])
 
-  const usesAnyMockTabData = useMemo(() => {
-    if (!tabsSources) {
-      return false
-    }
-
-    return Object.values(tabsSources).some((source) => source === 'mock')
-  }, [tabsSources])
-
   const canDeletePermitDocuments = canPerform('/filePermitUpload')
   const canDeleteInvoiceDocuments = canPerform('/fileInvoiceUpload')
 
@@ -494,8 +463,6 @@ const ProvincialPermitDetailsPage: FC = () => {
         ])
         setDocumentRows(documentsResult.rows)
         setInvoiceRows(invoicesResult.rows)
-        setDocumentSource(documentsResult.source)
-        setInvoiceSource(invoicesResult.source)
         setDocumentsInvoicesErrorMessage('')
       } catch (error) {
         console.error(error)
@@ -567,7 +534,6 @@ const ProvincialPermitDetailsPage: FC = () => {
 
       const refreshedInvoices = await fetchPermitInvoices(resolvedPermitNumber)
       setInvoiceRows(refreshedInvoices.rows)
-      setInvoiceSource(refreshedInvoices.source)
       setDocumentsInvoicesErrorMessage('')
       setInvoiceDraftNumber('')
       setInvoiceDraftExportValue('')
@@ -769,17 +735,6 @@ const ProvincialPermitDetailsPage: FC = () => {
             </Column>
           )}
 
-          {usesAnyMockTabData && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
-                kind="info"
-                title="Using Fallback Tab Data"
-                subtitle="One or more permit detail tabs are currently using local fallback rows while Spring endpoints are finalized."
-                lowContrast
-              />
-            </Column>
-          )}
-
           <Column sm={4} md={8} lg={16}>
             <DetailFieldTile
               title="Permit Summary"
@@ -846,10 +801,7 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Permit Items{' '}
-                <Tag type={tabsSources?.items === 'api' ? 'green' : 'gray'}>
-                  {tabsSources?.items === 'api' ? 'API' : 'Fallback'}
-                </Tag>
+                Permit Items <Tag type="green">API</Tag>
               </h2>
               <TextInput
                 id="permitItemsFilter"
@@ -928,10 +880,7 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Fee Ledger{' '}
-                <Tag type={tabsSources?.fees === 'api' ? 'green' : 'gray'}>
-                  {tabsSources?.fees === 'api' ? 'API' : 'Fallback'}
-                </Tag>
+                Fee Ledger <Tag type="green">API</Tag>
               </h2>
               <TextInput
                 id="permitFeesFilter"
@@ -975,10 +924,7 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                GBMS Events{' '}
-                <Tag type={tabsSources?.gbmsEvents === 'api' ? 'green' : 'gray'}>
-                  {tabsSources?.gbmsEvents === 'api' ? 'API' : 'Fallback'}
-                </Tag>
+                GBMS Events <Tag type="green">API</Tag>
               </h2>
               <TextInput
                 id="permitGbmsFilter"
@@ -1020,10 +966,7 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={8}>
             <Tile>
               <h2 className="detail-tile-title">
-                OIC Items{' '}
-                <Tag type={tabsSources?.oicItems === 'api' ? 'green' : 'gray'}>
-                  {tabsSources?.oicItems === 'api' ? 'API' : 'Fallback'}
-                </Tag>
+                OIC Items <Tag type="green">API</Tag>
               </h2>
               <TextInput
                 id="permitOicFilter"
@@ -1063,10 +1006,7 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={8}>
             <Tile>
               <h2 className="detail-tile-title">
-                BOIC Items{' '}
-                <Tag type={tabsSources?.boicItems === 'api' ? 'green' : 'gray'}>
-                  {tabsSources?.boicItems === 'api' ? 'API' : 'Fallback'}
-                </Tag>
+                BOIC Items <Tag type="green">API</Tag>
               </h2>
               <TextInput
                 id="permitBoicFilter"
@@ -1106,10 +1046,7 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Permit Documents{' '}
-                <Tag type={documentSource === 'api' ? 'green' : 'gray'}>
-                  {documentSource === 'api' ? 'API' : 'Fallback'}
-                </Tag>
+                Permit Documents <Tag type="green">API</Tag>
               </h2>
               <TextInput
                 id="permitDocumentsFilter"
@@ -1175,10 +1112,7 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Invoices{' '}
-                <Tag type={invoiceSource === 'api' ? 'green' : 'gray'}>
-                  {invoiceSource === 'api' ? 'API' : 'Fallback'}
-                </Tag>
+                Invoices <Tag type="green">API</Tag>
               </h2>
               <TextInput
                 id="permitInvoicesFilter"
@@ -1221,19 +1155,13 @@ const ProvincialPermitDetailsPage: FC = () => {
             <DetailFieldTile
               title="Tab Data Sources"
               fields={[
-                { label: 'Items', value: tabsSources?.items === 'api' ? 'API' : 'Fallback' },
-                { label: 'Fees', value: tabsSources?.fees === 'api' ? 'API' : 'Fallback' },
-                {
-                  label: 'GBMS Events',
-                  value: tabsSources?.gbmsEvents === 'api' ? 'API' : 'Fallback',
-                },
-                { label: 'OIC Items', value: tabsSources?.oicItems === 'api' ? 'API' : 'Fallback' },
-                {
-                  label: 'BOIC Items',
-                  value: tabsSources?.boicItems === 'api' ? 'API' : 'Fallback',
-                },
-                { label: 'Documents', value: documentSource === 'api' ? 'API' : 'Fallback' },
-                { label: 'Invoices', value: invoiceSource === 'api' ? 'API' : 'Fallback' },
+                { label: 'Items', value: 'API' },
+                { label: 'Fees', value: 'API' },
+                { label: 'GBMS Events', value: 'API' },
+                { label: 'OIC Items', value: 'API' },
+                { label: 'BOIC Items', value: 'API' },
+                { label: 'Documents', value: 'API' },
+                { label: 'Invoices', value: 'API' },
               ]}
             />
           </Column>
