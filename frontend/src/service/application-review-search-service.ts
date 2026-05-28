@@ -1,113 +1,9 @@
 import type {
-  ApplicationReviewSearchItem,
   ApplicationReviewSearchRequest,
   ApplicationReviewSearchResponse,
-  ApplicationReviewSearchSortField,
 } from '@/interfaces/ApplicationReviewSearch'
 import apiService from '@/service/api-service'
-import {
-  isSearchServiceMockFallbackEnabled,
-  toSearchServiceError,
-} from '@/service/search-service-fallback'
-
-const MOCK_APPLICATION_REVIEWS: ApplicationReviewSearchItem[] = [
-  {
-    applicationNumber: '1000123',
-    volume: 210.5,
-    speciesEndUse: 'LOG',
-    listingDate: '2026-02-01',
-    status: 'NEW',
-    region: '11',
-    showInfoIcon: true,
-  },
-  {
-    applicationNumber: '1000456',
-    volume: 95,
-    speciesEndUse: 'LUM',
-    listingDate: '2026-02-26',
-    status: 'REV',
-    region: '12',
-    showInfoIcon: false,
-  },
-  {
-    applicationNumber: '1000999',
-    volume: 325.75,
-    speciesEndUse: 'LOG',
-    listingDate: '2025-11-30',
-    status: 'PER',
-    region: '24',
-    showInfoIcon: false,
-  },
-]
-
-const SORTERS: Record<
-  ApplicationReviewSearchSortField,
-  (row: ApplicationReviewSearchItem) => string | number
-> = {
-  applicationNumber: (row) => row.applicationNumber,
-  volume: (row) => row.volume,
-  speciesEndUse: (row) => row.speciesEndUse,
-  listingDate: (row) => row.listingDate,
-  status: (row) => row.status,
-  region: (row) => row.region,
-}
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
-
-const includesText = (source: string, filter: string): boolean => {
-  if (!filter.trim()) return true
-  return normalizeText(source).includes(normalizeText(filter))
-}
-
-const isAfterOrEqual = (value: string, from: string): boolean => {
-  if (!from.trim()) return true
-  return value >= from
-}
-
-const isBeforeOrEqual = (value: string, to: string): boolean => {
-  if (!to.trim()) return true
-  return value <= to
-}
-
-const applyMockSearch = (
-  request: ApplicationReviewSearchRequest,
-): ApplicationReviewSearchResponse => {
-  const { filters, sortField, sortDirection, page, pageSize } = request
-
-  let rows = MOCK_APPLICATION_REVIEWS.filter((item) => {
-    return (
-      includesText(item.applicationNumber, filters.applicationNumber) &&
-      (!filters.productTypeCode || item.speciesEndUse === filters.productTypeCode) &&
-      (filters.region.length === 0 || filters.region.includes(item.region)) &&
-      isAfterOrEqual(item.listingDate, filters.listingFromDate) &&
-      isBeforeOrEqual(item.listingDate, filters.listingToDate)
-    )
-  })
-
-  rows = rows.sort((a, b) => {
-    const aValue = SORTERS[sortField](a)
-    const bValue = SORTERS[sortField](b)
-    if (aValue === bValue) return 0
-    const result = aValue > bValue ? 1 : -1
-    return sortDirection === 'asc' ? result : -result
-  })
-
-  const totalElements = rows.length
-  const totalPages = Math.max(1, Math.ceil(totalElements / pageSize))
-  const pageNumber = Math.min(page, totalPages - 1)
-  const start = pageNumber * pageSize
-  const end = start + pageSize
-
-  return {
-    content: rows.slice(start, end),
-    page: {
-      number: pageNumber,
-      size: pageSize,
-      totalElements,
-      totalPages,
-    },
-  }
-}
+import { toSearchServiceError } from '@/service/search-service-fallback'
 
 type BackendApplicationReviewSearchResult = {
   applicationNumber: number
@@ -225,10 +121,6 @@ export const searchApplicationReviews = async (
 
     return parsed
   } catch (error) {
-    if (isSearchServiceMockFallbackEnabled()) {
-      console.warn('Using mock application review search data.', error)
-      return applyMockSearch(request)
-    }
     throw toSearchServiceError('Unable to load provincial review search results.', error)
   }
 }
