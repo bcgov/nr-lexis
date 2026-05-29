@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
@@ -123,7 +124,7 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void previewScaleXmlUploadShouldParseApplicationPackageScaleRows() {
+  void previewScaleXmlUploadShouldParseMultipleRowsForSelectedApplicationPackage() {
     arrangeScaleUploadLookups();
     MockMultipartFile file =
         new MockMultipartFile(
@@ -138,21 +139,28 @@ class OracleApplicationDetailsRpcServiceTest {
                 <gradeCode>J</gradeCode>
                 <pieces>12</pieces>
                 <scaleVolume>10.45</scaleVolume>
-                <packageNumber>PKG-1</packageNumber>
+              </scale>
+              <scale>
+                <timberMark>TM2</timberMark>
+                <speciesCode>CED</speciesCode>
+                <gradeCode>K</gradeCode>
+                <pieces>8</pieces>
+                <scaleVolume>4.95</scaleVolume>
               </scale>
             </scales>
             """
                 .getBytes());
 
     ApplicationScaleUploadPreviewResponseDto response =
-        service.previewScaleXmlUpload(file, 1000456L, null);
+        service.previewScaleXmlUpload(file, 1000456L, "PKG-1");
 
     assertThat(response.errors()).isEmpty();
-    assertThat(response.totalRows()).isEqualTo(1);
-    assertThat(response.validRows()).isEqualTo(1);
-    assertThat(response.totalPieces()).isEqualTo(12L);
-    assertThat(response.totalVolume()).isEqualByComparingTo("10.5");
+    assertThat(response.totalRows()).isEqualTo(2);
+    assertThat(response.validRows()).isEqualTo(2);
+    assertThat(response.totalPieces()).isEqualTo(20L);
+    assertThat(response.totalVolume()).isEqualByComparingTo("15.5");
     assertThat(response.rows().get(0).applicationNumber()).isEqualTo(1000456L);
+    assertThat(response.rows()).allSatisfy(row -> assertThat(row.packageNumber()).isEqualTo("PKG-1"));
     assertThat(response.rows().get(0).speciesDescription()).isEqualTo("Hemlock");
   }
 
@@ -171,16 +179,47 @@ class OracleApplicationDetailsRpcServiceTest {
                 1000456L,
                 List.of(
                     new ApplicationScaleUploadSubmitRequestDto.ScaleRow(
-                        1, "TM1", "HEM", "J", 12L, BigDecimal.valueOf(10.5d), "PKG-1", 1000456L))),
+                        1, "TM1", "HEM", "J", 12L, BigDecimal.valueOf(10.5d), "PKG-1", 1000456L),
+                    new ApplicationScaleUploadSubmitRequestDto.ScaleRow(
+                        2, "TM2", "CED", "K", 8L, BigDecimal.valueOf(5.0d), "PKG-1", 1000456L))),
             "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
-    assertThat(response.submittedRows()).isEqualTo(1);
+    assertThat(response.submittedRows()).isEqualTo(2);
     ArgumentCaptor<ScaleUploadInsertRow> rowCaptor = ArgumentCaptor.forClass(ScaleUploadInsertRow.class);
-    verify(repository).insertScaleDetail(rowCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
-    assertThat(rowCaptor.getValue().packageNumber()).isEqualTo("PKG-1");
-    assertThat(rowCaptor.getValue().speciesGradeVolume()).isEqualByComparingTo("10.5");
-    assertThat(rowCaptor.getValue().exemptionOverrideRate()).isEqualByComparingTo(BigDecimal.ZERO);
+    verify(repository, times(2))
+        .insertScaleDetail(rowCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(rowCaptor.getAllValues()).allSatisfy(row -> assertThat(row.packageNumber()).isEqualTo("PKG-1"));
+    assertThat(rowCaptor.getAllValues().get(0).speciesGradeVolume()).isEqualByComparingTo("10.5");
+    assertThat(rowCaptor.getAllValues().get(1).speciesGradeVolume()).isEqualByComparingTo("5.0");
+    assertThat(rowCaptor.getAllValues())
+        .allSatisfy(row -> assertThat(row.exemptionOverrideRate()).isEqualByComparingTo(BigDecimal.ZERO));
+  }
+
+  @Test
+  void previewScaleXmlUploadShouldRejectRowsForDifferentPackageInOneUpload() {
+    arrangeScaleUploadLookups();
+    when(applicationService.findPackageByPackageNumber("PKG-2"))
+        .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-2", 1000456L, 20.0d, "O")));
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "file",
+            "scales.xml",
+            "application/xml",
+            """
+            <scales>
+              <scale timberMark="TM1" speciesCode="HEM" gradeCode="J" pieces="12" volume="10.5" packageNumber="PKG-1" />
+              <scale timberMark="TM2" speciesCode="CED" gradeCode="K" pieces="8" volume="5.0" packageNumber="PKG-2" />
+            </scales>
+            """
+                .getBytes());
+
+    ApplicationScaleUploadPreviewResponseDto response =
+        service.previewScaleXmlUpload(file, 1000456L, null);
+
+    assertThat(response.validRows()).isEqualTo(1);
+    assertThat(response.rows().get(1).errors())
+        .contains("Row 2 must use the same package as the other uploaded rows.");
   }
 
   private void arrangeScaleUploadLookups() {
@@ -188,8 +227,11 @@ class OracleApplicationDetailsRpcServiceTest {
         .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-1", 1000456L, 20.0d, "O")));
     when(applicationService.findByApplicationNumber(1000456L)).thenReturn(Optional.of(applicationDetail()));
     when(repository.findTimberMark("TM1")).thenReturn(Optional.of(new TimberMarkRow("TM1", "ACT", "B01")));
+    when(repository.findTimberMark("TM2")).thenReturn(Optional.of(new TimberMarkRow("TM2", "ACT", "B01")));
     when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
+    when(repository.findSpeciesDescription("CED")).thenReturn(Optional.of("Cedar"));
     when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
+    when(repository.findGradeDescription("K")).thenReturn(Optional.of("Grade K"));
     when(repository.findScaleDetailsByPackageNumber(anyString())).thenReturn(List.of());
   }
 

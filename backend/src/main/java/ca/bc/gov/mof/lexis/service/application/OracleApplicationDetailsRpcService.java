@@ -374,8 +374,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     String gradeCode = normalizeCode(readField(element, GRADE_ALIASES));
     Long pieces = parseNonNegativeLong(readField(element, PIECES_ALIASES));
     BigDecimal volume = parseNonNegativeDecimal(readField(element, VOLUME_ALIASES));
-    String packageNumber =
-        firstNonNull(trimToNull(readField(element, PACKAGE_ALIASES)), trimToNull(defaultPackageNumber));
+    String rowPackageNumber = trimToNull(readField(element, PACKAGE_ALIASES));
+    String selectedPackageNumber = trimToNull(defaultPackageNumber);
+    String packageNumber = firstNonNull(selectedPackageNumber, rowPackageNumber);
+    boolean packageMismatch =
+        selectedPackageNumber != null
+            && rowPackageNumber != null
+            && !normalizePackageNumber(selectedPackageNumber).equals(normalizePackageNumber(rowPackageNumber));
     Long rowApplicationNumber = parsePositiveLong(readField(element, APPLICATION_ALIASES));
     Long applicationNumber = firstNonNull(defaultApplicationNumber, rowApplicationNumber);
     boolean applicationMismatch =
@@ -393,6 +398,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         packageNumber,
         applicationNumber,
         applicationMismatch,
+        packageMismatch,
         context);
   }
 
@@ -416,6 +422,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         trimToNull(row.packageNumber()),
         applicationNumber,
         applicationMismatch,
+        false,
         context);
   }
 
@@ -429,6 +436,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       String packageNumber,
       Long applicationNumber,
       boolean applicationMismatch,
+      boolean packageMismatch,
       ScaleUploadValidationContext context) {
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
@@ -438,9 +446,18 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (applicationMismatch) {
       errors.add("Row " + lineNumber + " application number does not match the selected application.");
     }
+    if (packageMismatch) {
+      errors.add("Row " + lineNumber + " package number does not match the selected package.");
+    }
     if (packageNumber == null) {
       errors.add("Row " + lineNumber + " requires a package number.");
     } else {
+      String normalizedPackageNumber = normalizePackageNumber(packageNumber);
+      if (context.uploadPackageNumber == null) {
+        context.uploadPackageNumber = normalizedPackageNumber;
+      } else if (!context.uploadPackageNumber.equals(normalizedPackageNumber)) {
+        errors.add("Row " + lineNumber + " must use the same package as the other uploaded rows.");
+      }
       Optional<LexisPackageLookupDto> packageLookup =
           context.packageInfoByNumber.computeIfAbsent(
               packageNumber, applicationService::findPackageByPackageNumber);
@@ -780,5 +797,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     private final Map<String, List<ApplicationScaleDetailRow>> scalesByPackageNumber = new HashMap<>();
     private final Map<String, BigDecimal> uploadedVolumeByPackageNumber = new HashMap<>();
     private final Set<String> uploadCombinationKeys = new LinkedHashSet<>();
+    private String uploadPackageNumber;
   }
 }

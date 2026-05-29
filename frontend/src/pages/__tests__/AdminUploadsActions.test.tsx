@@ -41,10 +41,10 @@ describe('Admin upload workflow smoke', () => {
     mockedSubmitAdminUpload.mockResolvedValue(undefined)
     mockedPreviewScaleXmlUpload.mockResolvedValue({
       fileName: 'scales.xml',
-      totalRows: 1,
-      validRows: 1,
-      totalPieces: 12,
-      totalVolume: 10.5,
+      totalRows: 2,
+      validRows: 2,
+      totalPieces: 20,
+      totalVolume: 15.5,
       errors: [],
       warnings: [],
       rows: [
@@ -63,12 +63,27 @@ describe('Admin upload workflow smoke', () => {
           errors: [],
           warnings: [],
         },
+        {
+          lineNumber: 2,
+          timberMark: 'TM2',
+          speciesCode: 'CED',
+          speciesDescription: 'Cedar',
+          gradeCode: 'K',
+          gradeDescription: 'Grade K',
+          pieces: 8,
+          volume: 5,
+          packageNumber: 'PKG-903',
+          applicationNumber: 1000456,
+          valid: true,
+          errors: [],
+          warnings: [],
+        },
       ],
     })
     mockedSubmitScaleXmlUpload.mockResolvedValue({
       success: true,
-      message: '1 scale row(s) saved successfully.',
-      submittedRows: 1,
+      message: '2 scale row(s) saved successfully.',
+      submittedRows: 2,
       applicationNumber: 1000456,
       errors: [],
       warnings: [],
@@ -139,6 +154,8 @@ describe('Admin upload workflow smoke', () => {
       })
     })
     expect(screen.getByText('Hemlock')).toBeInTheDocument()
+    expect(screen.getByText('Cedar')).toBeInTheDocument()
+    expect(screen.getByText(/Parsed 2 row\(s\), 2 valid/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Submit Reviewed Scales' }))
     await waitFor(() => {
