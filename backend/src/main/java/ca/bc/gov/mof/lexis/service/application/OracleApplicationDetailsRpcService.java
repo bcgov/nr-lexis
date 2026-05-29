@@ -21,6 +21,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import javax.xml.XMLConstants;
@@ -144,41 +145,60 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   @Override
   public ApplicationScaleUploadPreviewResponseDto previewScaleXmlUpload(
-      MultipartFile file, Long applicationNumber, String packageNumber) {
+      List<MultipartFile> files, Long applicationNumber, String packageNumber) {
     List<String> errors = new ArrayList<>();
-    if (file == null || file.isEmpty()) {
-      errors.add("Choose an XML file to preview.");
+    List<MultipartFile> selectedFiles =
+        files == null ? List.of() : files.stream().filter(Objects::nonNull).toList();
+    if (selectedFiles.isEmpty()) {
+      errors.add("Choose one or more XML files to preview.");
       return emptyScaleUploadPreview(null, errors);
-    }
-
-    String fileName = resolveFileName(file);
-    if (!fileName.toLowerCase(Locale.ROOT).endsWith(".xml")) {
-      errors.add("Scale upload must be an XML file.");
-      return emptyScaleUploadPreview(fileName, errors);
-    }
-
-    Document document;
-    try {
-      document = parseXml(file);
-    } catch (IOException | ParserConfigurationException | SAXException ex) {
-      errors.add("Unable to parse XML file. Confirm the file is well-formed XML.");
-      return emptyScaleUploadPreview(fileName, errors);
-    }
-
-    List<Element> scaleElements = findScaleRowElements(document);
-    if (scaleElements.isEmpty()) {
-      errors.add("No scale rows were found in the XML file.");
-      return emptyScaleUploadPreview(fileName, errors);
     }
 
     ScaleUploadValidationContext context = new ScaleUploadValidationContext();
     List<ApplicationScaleUploadRowDto> rows = new ArrayList<>();
+    List<String> fileNames = new ArrayList<>();
     int lineNumber = 1;
-    for (Element element : scaleElements) {
-      rows.add(toScaleUploadRow(element, lineNumber++, applicationNumber, packageNumber, context));
+
+    for (MultipartFile file : selectedFiles) {
+      String fileName = resolveFileName(file);
+      fileNames.add(fileName);
+
+      if (file.isEmpty()) {
+        errors.add("Scale XML file " + fileName + " is empty.");
+        continue;
+      }
+
+      if (!fileName.toLowerCase(Locale.ROOT).endsWith(".xml")) {
+        errors.add("Scale upload file " + fileName + " must be XML.");
+        continue;
+      }
+
+      Document document;
+      try {
+        document = parseXml(file);
+      } catch (IOException | ParserConfigurationException | SAXException ex) {
+        errors.add("Unable to parse XML file " + fileName + ". Confirm the file is well-formed XML.");
+        continue;
+      }
+
+      List<Element> scaleElements = findScaleRowElements(document);
+      if (scaleElements.isEmpty()) {
+        errors.add("No scale rows were found in " + fileName + ".");
+        continue;
+      }
+
+      for (Element element : scaleElements) {
+        rows.add(
+            toScaleUploadRow(
+                element, lineNumber++, fileName, applicationNumber, packageNumber, context));
+      }
     }
 
-    return scaleUploadPreview(fileName, rows, errors, List.of());
+    if (rows.isEmpty() && errors.isEmpty()) {
+      errors.add("No scale rows were found in the XML file(s).");
+    }
+
+    return scaleUploadPreview(scaleUploadFileNameSummary(fileNames), rows, errors, List.of());
   }
 
   @Override
@@ -366,6 +386,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private ApplicationScaleUploadRowDto toScaleUploadRow(
       Element element,
       int lineNumber,
+      String sourceFileName,
       Long defaultApplicationNumber,
       String defaultPackageNumber,
       ScaleUploadValidationContext context) {
@@ -390,6 +411,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     return validateScaleUploadRow(
         lineNumber,
+        sourceFileName,
         timberMark,
         speciesCode,
         gradeCode,
@@ -414,6 +436,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             && !defaultApplicationNumber.equals(rowApplicationNumber);
     return validateScaleUploadRow(
         row.lineNumber(),
+        trimToNull(row.sourceFileName()),
         trimToNull(row.timberMark()),
         normalizeCode(row.speciesCode()),
         normalizeCode(row.gradeCode()),
@@ -428,6 +451,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private ApplicationScaleUploadRowDto validateScaleUploadRow(
       int lineNumber,
+      String sourceFileName,
       String timberMark,
       String speciesCode,
       String gradeCode,
@@ -604,6 +628,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     return new ApplicationScaleUploadRowDto(
         lineNumber,
+        sourceFileName,
         timberMark,
         speciesCode,
         speciesDescription,
@@ -743,6 +768,16 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return original.substring(slashIndex + 1);
     }
     return original;
+  }
+
+  private String scaleUploadFileNameSummary(List<String> fileNames) {
+    if (fileNames == null || fileNames.isEmpty()) {
+      return null;
+    }
+    if (fileNames.size() == 1) {
+      return fileNames.get(0);
+    }
+    return fileNames.size() + " XML(s)";
   }
 
   private String normalizeCode(String value) {

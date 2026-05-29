@@ -5,7 +5,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.application.rpc.ApplicationScaleUploadPreviewResponseDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +21,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ApplicationDetailsRpcController")
@@ -127,5 +130,26 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().remarkId()).isEqualTo(44L);
     assertThat(response.getBody().user()).isEqualTo("idir\\jsmith");
     verify(service).persistRemark("new", 1000456L, "Long remark", "idir\\jsmith");
+  }
+
+  @Test
+  void scaleUploadPreviewShouldPassMultipleXmlFilesToService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    MockMultipartFile firstFile =
+        new MockMultipartFile("file", "scale-a.xml", "application/xml", "<scales />".getBytes());
+    MockMultipartFile secondFile =
+        new MockMultipartFile("file", "scale-b.xml", "application/xml", "<scales />".getBytes());
+    ApplicationScaleUploadPreviewResponseDto serviceResponse =
+        new ApplicationScaleUploadPreviewResponseDto(
+            "2 XML(s)", 0, 0, 0L, BigDecimal.ZERO, List.of(), List.of(), List.of());
+    when(service.previewScaleXmlUpload(List.of(firstFile, secondFile), 1000456L, "PKG-1"))
+        .thenReturn(serviceResponse);
+
+    ResponseEntity<ApplicationScaleUploadPreviewResponseDto> response =
+        controller.previewScaleXmlUpload(List.of(firstFile, secondFile), 1000456L, "PKG-1");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(serviceResponse);
+    verify(service).previewScaleXmlUpload(List.of(firstFile, secondFile), 1000456L, "PKG-1");
   }
 }

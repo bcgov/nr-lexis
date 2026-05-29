@@ -22,7 +22,7 @@ public interface ApplicationDetailsRpcService {
       String remarkId, Long applicationNumber, String remarkBody, String userId);
 
   ApplicationScaleUploadPreviewResponseDto previewScaleXmlUpload(
-      MultipartFile file, Long applicationNumber, String packageNumber);
+      List<MultipartFile> files, Long applicationNumber, String packageNumber);
 
   ApplicationScaleUploadSubmitResponseDto submitScaleXmlUpload(
       ApplicationScaleUploadSubmitRequestDto request, String userId);

@@ -120,7 +120,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Scale XML' })
+    const uploadButton = await screen.findByRole('button', { name: 'Upload Scale XML(s)' })
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 

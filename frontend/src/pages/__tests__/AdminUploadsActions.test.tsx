@@ -50,6 +50,7 @@ describe('Admin upload workflow smoke', () => {
       rows: [
         {
           lineNumber: 1,
+          sourceFileName: 'scale-a.xml',
           timberMark: 'TM1',
           speciesCode: 'HEM',
           speciesDescription: 'Hemlock',
@@ -65,6 +66,7 @@ describe('Admin upload workflow smoke', () => {
         },
         {
           lineNumber: 2,
+          sourceFileName: 'scale-b.xml',
           timberMark: 'TM2',
           speciesCode: 'CED',
           speciesDescription: 'Cedar',
@@ -142,20 +144,23 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByLabelText('Application Number')).toHaveValue('1000456')
     expect(screen.getByLabelText('Package Number')).toHaveValue('PKG-903')
 
-    const file = new File(['<scales />'], 'scales.xml', { type: 'application/xml' })
-    await userEvent.upload(screen.getByLabelText('Scale XML File'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Preview XML' }))
+    const firstFile = new File(['<scales />'], 'scale-a.xml', { type: 'application/xml' })
+    const secondFile = new File(['<scales />'], 'scale-b.xml', { type: 'application/xml' })
+    await userEvent.upload(screen.getByLabelText('Scale XML(s)'), [firstFile, secondFile])
+    await userEvent.click(screen.getByRole('button', { name: 'Preview XML(s)' }))
 
     await waitFor(() => {
       expect(mockedPreviewScaleXmlUpload).toHaveBeenCalledWith({
         applicationNumber: '1000456',
         packageNumber: 'PKG-903',
-        file,
+        files: [firstFile, secondFile],
       })
     })
+    expect(screen.getByText('scale-a.xml')).toBeInTheDocument()
+    expect(screen.getByText('scale-b.xml')).toBeInTheDocument()
     expect(screen.getByText('Hemlock')).toBeInTheDocument()
     expect(screen.getByText('Cedar')).toBeInTheDocument()
-    expect(screen.getByText(/Parsed 2 row\(s\), 2 valid/)).toBeInTheDocument()
+    expect(screen.getByText(/Parsed 2 scale row\(s\) from XML\(s\), 2 valid/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Submit Reviewed Scales' }))
     await waitFor(() => {

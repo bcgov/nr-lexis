@@ -37,6 +37,7 @@ type UploadRequestByType = {
 
 export type ScaleUploadPreviewRow = {
   lineNumber: number
+  sourceFileName?: string | null
   timberMark: string
   speciesCode: string
   speciesDescription: string
@@ -75,7 +76,7 @@ export type ScaleUploadSubmitResponse = {
 export type ScaleXmlPreviewRequest = {
   applicationNumber: string
   packageNumber: string
-  file: File
+  files: File[]
 }
 
 export type ScaleXmlSubmitRequest = {
@@ -142,7 +143,9 @@ export const previewScaleXmlUpload = async (
   request: ScaleXmlPreviewRequest,
 ): Promise<ScaleUploadPreviewResponse> => {
   const formData = new FormData()
-  formData.append('file', request.file)
+  request.files.forEach((file) => {
+    formData.append('file', file)
+  })
   formData.append('applicationNumber', request.applicationNumber)
   if (request.packageNumber.trim()) {
     formData.append('packageNumber', request.packageNumber.trim())
@@ -171,6 +174,7 @@ export const submitScaleXmlUpload = async (
       applicationNumber: Number.parseInt(request.applicationNumber, 10),
       rows: request.rows.map((row) => ({
         lineNumber: row.lineNumber,
+        sourceFileName: row.sourceFileName ?? null,
         timberMark: row.timberMark,
         speciesCode: row.speciesCode,
         gradeCode: row.gradeCode,

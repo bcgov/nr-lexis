@@ -126,10 +126,10 @@ class OracleApplicationDetailsRpcServiceTest {
   @Test
   void previewScaleXmlUploadShouldParseMultipleRowsForSelectedApplicationPackage() {
     arrangeScaleUploadLookups();
-    MockMultipartFile file =
+    MockMultipartFile firstFile =
         new MockMultipartFile(
             "file",
-            "scales.xml",
+            "scale-a.xml",
             "application/xml",
             """
             <scales>
@@ -140,6 +140,16 @@ class OracleApplicationDetailsRpcServiceTest {
                 <pieces>12</pieces>
                 <scaleVolume>10.45</scaleVolume>
               </scale>
+            </scales>
+            """
+                .getBytes());
+    MockMultipartFile secondFile =
+        new MockMultipartFile(
+            "file",
+            "scale-b.xml",
+            "application/xml",
+            """
+            <scales>
               <scale>
                 <timberMark>TM2</timberMark>
                 <speciesCode>CED</speciesCode>
@@ -152,14 +162,17 @@ class OracleApplicationDetailsRpcServiceTest {
                 .getBytes());
 
     ApplicationScaleUploadPreviewResponseDto response =
-        service.previewScaleXmlUpload(file, 1000456L, "PKG-1");
+        service.previewScaleXmlUpload(List.of(firstFile, secondFile), 1000456L, "PKG-1");
 
     assertThat(response.errors()).isEmpty();
+    assertThat(response.fileName()).isEqualTo("2 XML(s)");
     assertThat(response.totalRows()).isEqualTo(2);
     assertThat(response.validRows()).isEqualTo(2);
     assertThat(response.totalPieces()).isEqualTo(20L);
     assertThat(response.totalVolume()).isEqualByComparingTo("15.5");
     assertThat(response.rows().get(0).applicationNumber()).isEqualTo(1000456L);
+    assertThat(response.rows().get(0).sourceFileName()).isEqualTo("scale-a.xml");
+    assertThat(response.rows().get(1).sourceFileName()).isEqualTo("scale-b.xml");
     assertThat(response.rows()).allSatisfy(row -> assertThat(row.packageNumber()).isEqualTo("PKG-1"));
     assertThat(response.rows().get(0).speciesDescription()).isEqualTo("Hemlock");
   }
@@ -179,9 +192,25 @@ class OracleApplicationDetailsRpcServiceTest {
                 1000456L,
                 List.of(
                     new ApplicationScaleUploadSubmitRequestDto.ScaleRow(
-                        1, "TM1", "HEM", "J", 12L, BigDecimal.valueOf(10.5d), "PKG-1", 1000456L),
+                        1,
+                        "scale-a.xml",
+                        "TM1",
+                        "HEM",
+                        "J",
+                        12L,
+                        BigDecimal.valueOf(10.5d),
+                        "PKG-1",
+                        1000456L),
                     new ApplicationScaleUploadSubmitRequestDto.ScaleRow(
-                        2, "TM2", "CED", "K", 8L, BigDecimal.valueOf(5.0d), "PKG-1", 1000456L))),
+                        2,
+                        "scale-b.xml",
+                        "TM2",
+                        "CED",
+                        "K",
+                        8L,
+                        BigDecimal.valueOf(5.0d),
+                        "PKG-1",
+                        1000456L))),
             "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
@@ -215,7 +244,7 @@ class OracleApplicationDetailsRpcServiceTest {
                 .getBytes());
 
     ApplicationScaleUploadPreviewResponseDto response =
-        service.previewScaleXmlUpload(file, 1000456L, null);
+        service.previewScaleXmlUpload(List.of(file), 1000456L, null);
 
     assertThat(response.validRows()).isEqualTo(1);
     assertThat(response.rows().get(1).errors())

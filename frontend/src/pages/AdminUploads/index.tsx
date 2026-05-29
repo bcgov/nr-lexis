@@ -66,7 +66,7 @@ const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   },
   {
     type: 'applicationScaleXml',
-    label: 'Application Scale XML Upload',
+    label: 'Application Scale XML(s)',
     requiredAction: '/applicationDetails',
     numberFieldLabel: 'Application Number',
     numberFieldPlaceholder: 'Enter application number for scales',
@@ -148,7 +148,7 @@ const AdminUploadsPage: FC = () => {
   const [formState, setFormState] = useState<UploadFormState>(() =>
     buildInitialFormStateFromQuery(searchParams),
   )
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [scalePreview, setScalePreview] = useState<ScaleUploadPreviewResponse | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -163,11 +163,16 @@ const AdminUploadsPage: FC = () => {
   }, [selectedWorkflowType])
 
   const hasUploadAccess = canPerform(selectedWorkflow.requiredAction)
+  const isScaleXmlWorkflow = selectedWorkflowType === 'applicationScaleXml'
+  const selectedFile = selectedFiles[0] ?? null
+  const selectedFileNames = selectedFiles.map((file) => file.name).join(', ')
 
   const validate = (): string[] => {
     const errors: string[] = []
-    if (!selectedFile) {
-      errors.push('Choose a file to upload.')
+    if (selectedFiles.length === 0) {
+      errors.push(
+        isScaleXmlWorkflow ? 'Choose one or more XML files to preview.' : 'Choose a file to upload.',
+      )
     }
 
     if (selectedWorkflowType === 'application' && !formState.applicationNumber.trim()) {
@@ -185,16 +190,15 @@ const AdminUploadsPage: FC = () => {
       errors.push('Permit number is required.')
     }
 
-    if (selectedWorkflowType === 'applicationScaleXml' && !formState.applicationNumber.trim()) {
+    if (isScaleXmlWorkflow && !formState.applicationNumber.trim()) {
       errors.push('Application number is required.')
     }
 
     if (
-      selectedWorkflowType === 'applicationScaleXml' &&
-      selectedFile &&
-      !selectedFile.name.toLowerCase().endsWith('.xml')
+      isScaleXmlWorkflow &&
+      selectedFiles.some((file) => !file.name.toLowerCase().endsWith('.xml'))
     ) {
-      errors.push('Scale upload file must be XML.')
+      errors.push('Scale upload file(s) must be XML.')
     }
 
     if (selectedWorkflowType === 'invoice') {
@@ -223,6 +227,7 @@ const AdminUploadsPage: FC = () => {
 
   const setWorkflowType = (workflowType: UploadWorkflowType): void => {
     setSelectedWorkflowType(workflowType)
+    setSelectedFiles([])
     setScalePreview(null)
     setErrorMessage('')
     setSuccessMessage('')
@@ -245,8 +250,8 @@ const AdminUploadsPage: FC = () => {
       return
     }
 
-    if (!selectedFile) {
-      setErrorMessage('Choose an XML file to preview.')
+    if (selectedFiles.length === 0) {
+      setErrorMessage('Choose one or more XML files to preview.')
       return
     }
 
@@ -255,13 +260,13 @@ const AdminUploadsPage: FC = () => {
       const preview = await previewScaleXmlUpload({
         applicationNumber: formState.applicationNumber.trim(),
         packageNumber: formState.packageNumber.trim(),
-        file: selectedFile,
+        files: selectedFiles,
       })
       setScalePreview(preview)
       if (preview.errors.length > 0) {
         setErrorMessage(preview.errors.join(' '))
       } else if (preview.validRows === 0) {
-        setErrorMessage('No valid scale rows were found in the XML file.')
+        setErrorMessage('No valid scale rows were found in the XML(s).')
       }
     } catch (error) {
       const status = (error as any)?.response?.status
@@ -280,7 +285,12 @@ const AdminUploadsPage: FC = () => {
     setSuccessMessage('')
 
     if (!scalePreview || scalePreview.validRows === 0) {
-      setErrorMessage('Preview a valid XML file before submitting scales.')
+      setErrorMessage('Preview valid XML(s) before submitting scales.')
+      return
+    }
+
+    if (scalePreview.errors.length > 0) {
+      setErrorMessage('Resolve XML preview errors before submitting scales.')
       return
     }
 
@@ -302,7 +312,7 @@ const AdminUploadsPage: FC = () => {
       }
       setSuccessMessage(response.message || 'Scale rows saved successfully.')
       setScalePreview(null)
-      setSelectedFile(null)
+      setSelectedFiles([])
     } catch (error) {
       const status = (error as any)?.response?.status
       setErrorMessage(
@@ -319,8 +329,8 @@ const AdminUploadsPage: FC = () => {
     setErrorMessage('')
     setSuccessMessage('')
 
-    if (selectedWorkflowType === 'applicationScaleXml') {
-      setErrorMessage('Preview the XML file before submitting scale rows.')
+    if (isScaleXmlWorkflow) {
+      setErrorMessage('Preview the XML(s) before submitting scale rows.')
       return
     }
 
@@ -376,7 +386,7 @@ const AdminUploadsPage: FC = () => {
       setSuccessMessage(
         'Upload request submitted. Verify document and invoice updates in the target details view.',
       )
-      setSelectedFile(null)
+      setSelectedFiles([])
     } catch (error) {
       const status = (error as any)?.response?.status
       if (status) {
@@ -391,7 +401,7 @@ const AdminUploadsPage: FC = () => {
 
   const onReset = (): void => {
     setFormState(INITIAL_FORM_STATE)
-    setSelectedFile(null)
+    setSelectedFiles([])
     setScalePreview(null)
     setErrorMessage('')
     setSuccessMessage('')
@@ -400,16 +410,20 @@ const AdminUploadsPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Upload Center</h1>
+        <h1>{isScaleXmlWorkflow ? 'Application Scale XML(s)' : 'Upload Center'}</h1>
         <p>
-          Native React upload workflows for application, exemption, permit, and invoice documents.
+          {isScaleXmlWorkflow
+            ? 'Upload XML(s), review the parsed scale rows, then submit them to the application package.'
+            : 'Native React upload workflows for application, exemption, permit, and invoice documents.'}
         </p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <p className="landing-help-text">
-            Upload workflows submit directly to the Spring backend upload APIs.
+            {isScaleXmlWorkflow
+              ? 'Scale XML(s) are parsed for review before scale rows are saved.'
+              : 'Upload workflows submit directly to the Spring backend upload APIs.'}
           </p>
           <div className="legacy-search-grid">
             <Select
@@ -432,8 +446,7 @@ const AdminUploadsPage: FC = () => {
               </Tag>
             </div>
 
-            {(selectedWorkflowType === 'application' ||
-              selectedWorkflowType === 'applicationScaleXml') && (
+            {(selectedWorkflowType === 'application' || isScaleXmlWorkflow) && (
               <TextInput
                 id="applicationNumber"
                 labelText={selectedWorkflow.numberFieldLabel}
@@ -479,7 +492,7 @@ const AdminUploadsPage: FC = () => {
               />
             )}
 
-            {selectedWorkflowType === 'applicationScaleXml' && (
+            {isScaleXmlWorkflow && (
               <TextInput
                 id="packageNumber"
                 labelText="Package Number"
@@ -546,21 +559,16 @@ const AdminUploadsPage: FC = () => {
             <TextInput
               id="uploadFile"
               type="file"
-              labelText={
-                selectedWorkflowType === 'applicationScaleXml' ? 'Scale XML File' : 'Document File'
-              }
-              accept={
-                selectedWorkflowType === 'applicationScaleXml'
-                  ? '.xml,text/xml,application/xml'
-                  : undefined
-              }
+              labelText={isScaleXmlWorkflow ? 'Scale XML(s)' : 'Document File'}
+              accept={isScaleXmlWorkflow ? '.xml,text/xml,application/xml' : undefined}
+              multiple={isScaleXmlWorkflow}
               onChange={(event) => {
                 const target = event.target as HTMLInputElement
-                setSelectedFile(target.files?.[0] ?? null)
+                setSelectedFiles(Array.from(target.files ?? []))
                 setScalePreview(null)
               }}
             />
-            {selectedWorkflowType !== 'applicationScaleXml' && (
+            {!isScaleXmlWorkflow && (
               <TextArea
                 id="fileDescription"
                 labelText="Document Description"
@@ -576,14 +584,14 @@ const AdminUploadsPage: FC = () => {
             )}
           </div>
           <div className="legacy-search-actions">
-            {selectedWorkflowType === 'applicationScaleXml' ? (
+            {isScaleXmlWorkflow ? (
               <>
                 <Button
                   kind="primary"
                   onClick={() => void onPreviewScaleXml()}
                   disabled={isPreviewing || isSubmitting || !hasUploadAccess}
                 >
-                  {isPreviewing ? 'Parsing XML...' : 'Preview XML'}
+                  {isPreviewing ? 'Parsing XML(s)...' : 'Preview XML(s)'}
                 </Button>
                 <Button
                   kind="secondary"
@@ -593,6 +601,7 @@ const AdminUploadsPage: FC = () => {
                     !hasUploadAccess ||
                     !scalePreview ||
                     scalePreview.validRows === 0 ||
+                    scalePreview.errors.length > 0 ||
                     scalePreview.rows.some((row) => !row.valid)
                   }
                 >
@@ -613,23 +622,25 @@ const AdminUploadsPage: FC = () => {
             </Button>
           </div>
 
-          {selectedFile && (
+          {selectedFiles.length > 0 && (
             <p className="landing-help-text">
-              Selected file: <strong>{selectedFile.name}</strong>
+              {isScaleXmlWorkflow ? 'Selected XML(s)' : 'Selected file'}:{' '}
+              <strong>{selectedFileNames}</strong>
             </p>
           )}
 
-          {selectedWorkflowType === 'applicationScaleXml' && scalePreview && (
+          {isScaleXmlWorkflow && scalePreview && (
             <div>
               <p className="landing-help-text">
-                Parsed {scalePreview.totalRows} row(s), {scalePreview.validRows} valid. Total:{' '}
-                {scalePreview.totalPieces.toLocaleString()} pieces /{' '}
+                Parsed {scalePreview.totalRows} scale row(s) from XML(s), {scalePreview.validRows}{' '}
+                valid. Total: {scalePreview.totalPieces.toLocaleString()} pieces /{' '}
                 {scalePreview.totalVolume.toLocaleString()} m3.
               </p>
               <Table useZebraStyles>
                 <TableHead>
                   <TableRow>
                     <TableHeader>Row</TableHeader>
+                    <TableHeader>Source XML</TableHeader>
                     <TableHeader>Package</TableHeader>
                     <TableHeader>Timber Mark</TableHeader>
                     <TableHeader>Species</TableHeader>
@@ -641,8 +652,9 @@ const AdminUploadsPage: FC = () => {
                 </TableHead>
                 <TableBody>
                   {scalePreview.rows.map((row) => (
-                    <TableRow key={row.lineNumber}>
+                    <TableRow key={`${row.sourceFileName ?? 'xml'}-${row.lineNumber}`}>
                       <TableCell>{row.lineNumber}</TableCell>
+                      <TableCell>{row.sourceFileName || '-'}</TableCell>
                       <TableCell>{row.packageNumber || '-'}</TableCell>
                       <TableCell>{row.timberMark || '-'}</TableCell>
                       <TableCell>{row.speciesDescription || row.speciesCode || '-'}</TableCell>

@@ -8,6 +8,7 @@ public record ApplicationScaleUploadSubmitRequestDto(
 
   public record ScaleRow(
       int lineNumber,
+      String sourceFileName,
       String timberMark,
       String speciesCode,
       String gradeCode,

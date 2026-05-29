@@ -403,7 +403,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   disabled={!canUploadScaleXml || !detail.applicationNumber || detail.packages.length === 0}
                   onClick={onOpenScaleXmlUpload}
                 >
-                  Upload Scale XML
+                  Upload Scale XML(s)
                 </Button>
                 <Button
                   kind="primary"

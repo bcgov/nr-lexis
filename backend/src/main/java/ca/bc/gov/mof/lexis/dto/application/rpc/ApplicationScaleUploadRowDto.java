@@ -5,6 +5,7 @@ import java.util.List;
 
 public record ApplicationScaleUploadRowDto(
     int lineNumber,
+    String sourceFileName,
     String timberMark,
     String speciesCode,
     String speciesDescription,

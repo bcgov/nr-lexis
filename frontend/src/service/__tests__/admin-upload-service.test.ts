@@ -92,13 +92,14 @@ describe('admin-upload-service', () => {
   })
 
   it('posts scale XML preview uploads to the preview endpoint', async () => {
-    const file = new File(['<scales />'], 'scales.xml', { type: 'application/xml' })
+    const firstFile = new File(['<scales />'], 'scale-a.xml', { type: 'application/xml' })
+    const secondFile = new File(['<scales />'], 'scale-b.xml', { type: 'application/xml' })
     postMock.mockResolvedValue({ data: { rows: [] } })
 
     await previewScaleXmlUpload({
       applicationNumber: '1000456',
       packageNumber: 'PKG-903',
-      file,
+      files: [firstFile, secondFile],
     })
 
     const [path, payload, config] = postMock.mock.calls[0]
@@ -113,7 +114,10 @@ describe('admin-upload-service', () => {
     const formData = payload as FormData
     expect(formData.get('applicationNumber')).toBe('1000456')
     expect(formData.get('packageNumber')).toBe('PKG-903')
-    expect((formData.get('file') as File).name).toBe('scales.xml')
+    expect(formData.getAll('file').map((file) => (file as File).name)).toEqual([
+      'scale-a.xml',
+      'scale-b.xml',
+    ])
   })
 
   it('posts reviewed scale rows to the submit endpoint', async () => {
@@ -124,6 +128,7 @@ describe('admin-upload-service', () => {
       rows: [
         {
           lineNumber: 1,
+          sourceFileName: 'scale-a.xml',
           timberMark: 'TM1',
           speciesCode: 'HEM',
           speciesDescription: 'Hemlock',
@@ -139,6 +144,7 @@ describe('admin-upload-service', () => {
         },
         {
           lineNumber: 2,
+          sourceFileName: 'scale-b.xml',
           timberMark: 'TM2',
           speciesCode: 'CED',
           speciesDescription: 'Cedar',
@@ -162,6 +168,7 @@ describe('admin-upload-service', () => {
       rows: [
         {
           lineNumber: 1,
+          sourceFileName: 'scale-a.xml',
           timberMark: 'TM1',
           speciesCode: 'HEM',
           gradeCode: 'J',
@@ -172,6 +179,7 @@ describe('admin-upload-service', () => {
         },
         {
           lineNumber: 2,
+          sourceFileName: 'scale-b.xml',
           timberMark: 'TM2',
           speciesCode: 'CED',
           gradeCode: 'K',

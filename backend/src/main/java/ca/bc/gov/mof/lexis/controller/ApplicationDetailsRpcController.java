@@ -186,7 +186,7 @@ public class ApplicationDetailsRpcController {
       value = "/rpc/application-details/scale-upload/preview",
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<ApplicationScaleUploadPreviewResponseDto> previewScaleXmlUpload(
-      @RequestParam("file") MultipartFile file,
+      @RequestParam("file") List<MultipartFile> files,
       @RequestParam(name = "applicationNumber", required = false) Long applicationNumber,
       @RequestParam(name = "packageNumber", required = false) String packageNumber) {
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
@@ -195,7 +195,7 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    return ResponseEntity.ok(service.previewScaleXmlUpload(file, applicationNumber, packageNumber));
+    return ResponseEntity.ok(service.previewScaleXmlUpload(files, applicationNumber, packageNumber));
   }
 
   @PostMapping(
