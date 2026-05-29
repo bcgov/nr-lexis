@@ -382,6 +382,23 @@ const ProvincialPermitDetailsPage: FC = () => {
     navigate(`/admin/uploads?${params.toString()}`)
   }, [detail?.permitNumber, navigate])
 
+  const onOpenScaleXmlUpload = useCallback(() => {
+    if (!detail?.permitNumber) {
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    const params = new URLSearchParams({
+      type: 'scaleXml',
+      permitNumber: String(detail.permitNumber),
+    })
+    if (detail.packageNumber) {
+      params.set('packageNumber', detail.packageNumber)
+    }
+    navigate(`/admin/uploads?${params.toString()}`)
+  }, [detail?.packageNumber, detail?.permitNumber, navigate])
+
   const onOpenDocument = useCallback(async (row: PermitDocumentRow) => {
     setActionErrorMessage('')
     setActionInfoMessage('')
@@ -655,6 +672,14 @@ const ProvincialPermitDetailsPage: FC = () => {
                   onClick={onOpenPermitUpload}
                 >
                   Upload Permit Document
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={!detail.permitNumber || !canPerform('savePermit')}
+                  onClick={onOpenScaleXmlUpload}
+                >
+                  Upload Scale XML
                 </Button>
                 <Button
                   kind="secondary"

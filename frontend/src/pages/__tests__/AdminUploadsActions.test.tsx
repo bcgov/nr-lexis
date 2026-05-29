@@ -4,18 +4,26 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminUploadsPage from '@/pages/AdminUploads'
-import { submitAdminUpload } from '@/service/admin-upload-service'
+import {
+  previewScaleXmlUpload,
+  submitAdminUpload,
+  submitScaleXmlUpload,
+} from '@/service/admin-upload-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
 vi.mock('@/service/admin-upload-service', () => ({
+  previewScaleXmlUpload: vi.fn(),
   submitAdminUpload: vi.fn(),
+  submitScaleXmlUpload: vi.fn(),
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+const mockedPreviewScaleXmlUpload = vi.mocked(previewScaleXmlUpload)
+const mockedSubmitScaleXmlUpload = vi.mocked(submitScaleXmlUpload)
 
 const renderPage = (path = '/admin/uploads?type=permit') => {
   render(
@@ -31,6 +39,42 @@ describe('Admin upload workflow smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedSubmitAdminUpload.mockResolvedValue(undefined)
+    mockedPreviewScaleXmlUpload.mockResolvedValue({
+      fileName: 'scales.xml',
+      totalRows: 1,
+      validRows: 1,
+      totalPieces: 12,
+      totalVolume: 10.5,
+      errors: [],
+      warnings: [],
+      rows: [
+        {
+          lineNumber: 1,
+          timberMark: 'TM1',
+          speciesCode: 'HEM',
+          speciesDescription: 'Hemlock',
+          gradeCode: 'J',
+          gradeDescription: 'Grade J',
+          pieces: 12,
+          volume: 10.5,
+          packageNumber: 'PKG-903',
+          applicationNumber: 1000456,
+          permitNumber: 7000123,
+          valid: true,
+          errors: [],
+          warnings: [],
+        },
+      ],
+    })
+    mockedSubmitScaleXmlUpload.mockResolvedValue({
+      success: true,
+      message: '1 scale row(s) saved successfully.',
+      submittedRows: 1,
+      permitNumber: 7000123,
+      errors: [],
+      warnings: [],
+      rows: [],
+    })
   })
 
   it('submits permit upload with query-prefilled number', async () => {
@@ -72,5 +116,40 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('Not Granted')).toBeInTheDocument()
     expect(screen.getByText('/fileInvoiceUpload')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit Upload' })).toBeDisabled()
+  })
+
+  it('previews and submits scale XML rows after user review', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'savePermit',
+    } as any)
+
+    renderPage('/admin/uploads?type=scaleXml&permitNumber=7000123&packageNumber=PKG-903')
+
+    expect(screen.getByLabelText('Permit Number')).toHaveValue('7000123')
+    expect(screen.getByLabelText('Package Number')).toHaveValue('PKG-903')
+
+    const file = new File(['<scales />'], 'scales.xml', { type: 'application/xml' })
+    await userEvent.upload(screen.getByLabelText('Scale XML File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Preview XML' }))
+
+    await waitFor(() => {
+      expect(mockedPreviewScaleXmlUpload).toHaveBeenCalledWith({
+        permitNumber: '7000123',
+        packageNumber: 'PKG-903',
+        file,
+      })
+    })
+    expect(screen.getByText('Hemlock')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Reviewed Scales' }))
+    await waitFor(() => {
+      expect(mockedSubmitScaleXmlUpload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitNumber: '7000123',
+          rows: expect.arrayContaining([expect.objectContaining({ timberMark: 'TM1' })]),
+        }),
+      )
+    })
+    expect(screen.getByText('Upload Submitted')).toBeInTheDocument()
   })
 })

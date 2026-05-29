@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { submitAdminUpload } from '@/service/admin-upload-service'
+import {
+  previewScaleXmlUpload,
+  submitAdminUpload,
+  submitScaleXmlUpload,
+} from '@/service/admin-upload-service'
 
 const postMock = vi.fn()
 
@@ -85,5 +89,75 @@ describe('admin-upload-service', () => {
     expect(formData.get('invoiceConversionRate')).toBe('1.25')
     expect(formData.get('invoiceFeeInLieu')).toBe('100.00')
     expect(formData.get('fileDescription')).toBe('Invoice attachment')
+  })
+
+  it('posts scale XML preview uploads to the preview endpoint', async () => {
+    const file = new File(['<scales />'], 'scales.xml', { type: 'application/xml' })
+    postMock.mockResolvedValue({ data: { rows: [] } })
+
+    await previewScaleXmlUpload({
+      permitNumber: '7000123',
+      packageNumber: 'PKG-903',
+      file,
+    })
+
+    const [path, payload, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/scale-upload/preview')
+    expect(config).toEqual(
+      expect.objectContaining({
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }),
+    )
+    const formData = payload as FormData
+    expect(formData.get('permitNumber')).toBe('7000123')
+    expect(formData.get('packageNumber')).toBe('PKG-903')
+    expect((formData.get('file') as File).name).toBe('scales.xml')
+  })
+
+  it('posts reviewed scale rows to the submit endpoint', async () => {
+    postMock.mockResolvedValue({ data: { success: true } })
+
+    await submitScaleXmlUpload({
+      permitNumber: '7000123',
+      rows: [
+        {
+          lineNumber: 1,
+          timberMark: 'TM1',
+          speciesCode: 'HEM',
+          speciesDescription: 'Hemlock',
+          gradeCode: 'J',
+          gradeDescription: 'Grade J',
+          pieces: 12,
+          volume: 10.5,
+          packageNumber: 'PKG-903',
+          applicationNumber: 1000456,
+          permitNumber: 7000123,
+          valid: true,
+          errors: [],
+          warnings: [],
+        },
+      ],
+    })
+
+    const [path, payload] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/scale-upload/submit')
+    expect(payload).toEqual({
+      permitNumber: 7000123,
+      rows: [
+        {
+          lineNumber: 1,
+          timberMark: 'TM1',
+          speciesCode: 'HEM',
+          gradeCode: 'J',
+          pieces: 12,
+          volume: 10.5,
+          packageNumber: 'PKG-903',
+          applicationNumber: 1000456,
+          permitNumber: 7000123,
+        },
+      ],
+    })
   })
 })

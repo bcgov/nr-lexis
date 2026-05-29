@@ -6,6 +6,12 @@ import {
   InlineNotification,
   Select,
   SelectItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   Tag,
   TextArea,
   TextInput,
@@ -13,7 +19,13 @@ import {
 } from '@carbon/react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
-import { submitAdminUpload, type UploadWorkflowType } from '@/service/admin-upload-service'
+import {
+  previewScaleXmlUpload,
+  submitAdminUpload,
+  submitScaleXmlUpload,
+  type ScaleUploadPreviewResponse,
+  type UploadWorkflowType,
+} from '@/service/admin-upload-service'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -52,6 +64,13 @@ const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
     numberFieldLabel: 'Permit Number',
     numberFieldPlaceholder: 'Enter permit number for invoice',
   },
+  {
+    type: 'scaleXml',
+    label: 'Scale XML Upload',
+    requiredAction: 'savePermit',
+    numberFieldLabel: 'Permit Number',
+    numberFieldPlaceholder: 'Enter permit number for scales',
+  },
 ]
 
 type UploadFormState = {
@@ -62,6 +81,7 @@ type UploadFormState = {
   invoiceExportValue: string
   invoiceConversionRate: string
   invoiceFeeInLieu: string
+  packageNumber: string
   fileDescription: string
 }
 
@@ -73,6 +93,7 @@ const INITIAL_FORM_STATE: UploadFormState = {
   invoiceExportValue: '',
   invoiceConversionRate: '1.00',
   invoiceFeeInLieu: '1.00',
+  packageNumber: '',
   fileDescription: '',
 }
 
@@ -83,7 +104,8 @@ const getWorkflowFromQuery = (value: string | null): UploadWorkflowType => {
     value === 'application' ||
     value === 'exemption' ||
     value === 'permit' ||
-    value === 'invoice'
+    value === 'invoice' ||
+    value === 'scaleXml'
   ) {
     return value
   }
@@ -108,6 +130,7 @@ const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState
     invoiceExportValue: normalizeQueryValue(query.get('invoiceExportValue')),
     invoiceConversionRate: invoiceConversionRate || INITIAL_FORM_STATE.invoiceConversionRate,
     invoiceFeeInLieu: invoiceFeeInLieu || INITIAL_FORM_STATE.invoiceFeeInLieu,
+    packageNumber: normalizeQueryValue(query.get('packageNumber')),
     fileDescription: normalizeQueryValue(query.get('fileDescription')),
   }
 }
@@ -122,8 +145,10 @@ const AdminUploadsPage: FC = () => {
     buildInitialFormStateFromQuery(searchParams),
   )
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [scalePreview, setScalePreview] = useState<ScaleUploadPreviewResponse | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [isPreviewing, setIsPreviewing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const selectedWorkflow = useMemo(() => {
@@ -150,10 +175,20 @@ const AdminUploadsPage: FC = () => {
     }
 
     if (
-      (selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') &&
+      (selectedWorkflowType === 'permit' ||
+        selectedWorkflowType === 'invoice' ||
+        selectedWorkflowType === 'scaleXml') &&
       !formState.permitNumber.trim()
     ) {
       errors.push('Permit number is required.')
+    }
+
+    if (
+      selectedWorkflowType === 'scaleXml' &&
+      selectedFile &&
+      !selectedFile.name.toLowerCase().endsWith('.xml')
+    ) {
+      errors.push('Scale upload file must be XML.')
     }
 
     if (selectedWorkflowType === 'invoice') {
@@ -182,14 +217,106 @@ const AdminUploadsPage: FC = () => {
 
   const setWorkflowType = (workflowType: UploadWorkflowType): void => {
     setSelectedWorkflowType(workflowType)
+    setScalePreview(null)
     setErrorMessage('')
     setSuccessMessage('')
     setSearchParams({ type: workflowType }, { replace: true })
   }
 
+  const onPreviewScaleXml = async (): Promise<void> => {
+    setErrorMessage('')
+    setSuccessMessage('')
+    setScalePreview(null)
+
+    if (!hasUploadAccess) {
+      setErrorMessage('Your session does not include the required upload action for this workflow.')
+      return
+    }
+
+    const validationErrors = validate()
+    if (validationErrors.length > 0) {
+      setErrorMessage(validationErrors.join(' '))
+      return
+    }
+
+    if (!selectedFile) {
+      setErrorMessage('Choose an XML file to preview.')
+      return
+    }
+
+    setIsPreviewing(true)
+    try {
+      const preview = await previewScaleXmlUpload({
+        permitNumber: formState.permitNumber.trim(),
+        packageNumber: formState.packageNumber.trim(),
+        file: selectedFile,
+      })
+      setScalePreview(preview)
+      if (preview.errors.length > 0) {
+        setErrorMessage(preview.errors.join(' '))
+      } else if (preview.validRows === 0) {
+        setErrorMessage('No valid scale rows were found in the XML file.')
+      }
+    } catch (error) {
+      const status = (error as any)?.response?.status
+      setErrorMessage(
+        status
+          ? `Scale XML preview failed with status ${status}.`
+          : 'Scale XML preview failed. Confirm backend scale upload endpoints are available.',
+      )
+    } finally {
+      setIsPreviewing(false)
+    }
+  }
+
+  const onSubmitScaleXml = async (): Promise<void> => {
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    if (!scalePreview || scalePreview.validRows === 0) {
+      setErrorMessage('Preview a valid XML file before submitting scales.')
+      return
+    }
+
+    const invalidRows = scalePreview.rows.filter((row) => !row.valid)
+    if (invalidRows.length > 0) {
+      setErrorMessage('Fix or remove invalid XML rows before submitting scales.')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const response = await submitScaleXmlUpload({
+        permitNumber: formState.permitNumber.trim(),
+        rows: scalePreview.rows,
+      })
+      if (!response.success) {
+        setErrorMessage(response.errors[0] || 'Scale XML submit failed.')
+        return
+      }
+      setSuccessMessage(response.message || 'Scale rows saved successfully.')
+      setScalePreview(null)
+      setSelectedFile(null)
+    } catch (error) {
+      const status = (error as any)?.response?.status
+      setErrorMessage(
+        status
+          ? `Scale XML submit failed with status ${status}.`
+          : 'Scale XML submit failed. Confirm backend scale upload endpoints are available.',
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const onSubmitUpload = async (): Promise<void> => {
     setErrorMessage('')
     setSuccessMessage('')
+
+    if (selectedWorkflowType === 'scaleXml') {
+      setErrorMessage('Preview the XML file before submitting scale rows.')
+      return
+    }
 
     if (!hasUploadAccess) {
       setErrorMessage('Your session does not include the required upload action for this workflow.')
@@ -228,7 +355,7 @@ const AdminUploadsPage: FC = () => {
           file: selectedFile,
           fileDescription: formState.fileDescription.trim(),
         })
-      } else {
+      } else if (selectedWorkflowType === 'invoice') {
         await submitAdminUpload('invoice', {
           permitNumber: formState.permitNumber.trim(),
           salesInvoiceNumber: formState.salesInvoiceNumber.trim(),
@@ -259,6 +386,7 @@ const AdminUploadsPage: FC = () => {
   const onReset = (): void => {
     setFormState(INITIAL_FORM_STATE)
     setSelectedFile(null)
+    setScalePreview(null)
     setErrorMessage('')
     setSuccessMessage('')
   }
@@ -328,7 +456,9 @@ const AdminUploadsPage: FC = () => {
               />
             )}
 
-            {(selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') && (
+            {(selectedWorkflowType === 'permit' ||
+              selectedWorkflowType === 'invoice' ||
+              selectedWorkflowType === 'scaleXml') && (
               <TextInput
                 id="permitNumber"
                 labelText={selectedWorkflow.numberFieldLabel}
@@ -338,6 +468,21 @@ const AdminUploadsPage: FC = () => {
                   setFormState((current) => ({
                     ...current,
                     permitNumber: event.target.value,
+                  }))
+                }
+              />
+            )}
+
+            {selectedWorkflowType === 'scaleXml' && (
+              <TextInput
+                id="packageNumber"
+                labelText="Package Number"
+                value={formState.packageNumber}
+                placeholder="Optional when XML rows include package numbers"
+                onChange={(event) =>
+                  setFormState((current) => ({
+                    ...current,
+                    packageNumber: event.target.value,
                   }))
                 }
               />
@@ -395,33 +540,64 @@ const AdminUploadsPage: FC = () => {
             <TextInput
               id="uploadFile"
               type="file"
-              labelText="Document File"
+              labelText={selectedWorkflowType === 'scaleXml' ? 'Scale XML File' : 'Document File'}
+              accept={
+                selectedWorkflowType === 'scaleXml' ? '.xml,text/xml,application/xml' : undefined
+              }
               onChange={(event) => {
                 const target = event.target as HTMLInputElement
                 setSelectedFile(target.files?.[0] ?? null)
+                setScalePreview(null)
               }}
             />
-            <TextArea
-              id="fileDescription"
-              labelText="Document Description"
-              value={formState.fileDescription}
-              onChange={(event) =>
-                setFormState((current) => ({
-                  ...current,
-                  fileDescription: event.target.value,
-                }))
-              }
-              rows={4}
-            />
+            {selectedWorkflowType !== 'scaleXml' && (
+              <TextArea
+                id="fileDescription"
+                labelText="Document Description"
+                value={formState.fileDescription}
+                onChange={(event) =>
+                  setFormState((current) => ({
+                    ...current,
+                    fileDescription: event.target.value,
+                  }))
+                }
+                rows={4}
+              />
+            )}
           </div>
           <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={() => void onSubmitUpload()}
-              disabled={isSubmitting || !hasUploadAccess}
-            >
-              {isSubmitting ? 'Submitting Upload...' : 'Submit Upload'}
-            </Button>
+            {selectedWorkflowType === 'scaleXml' ? (
+              <>
+                <Button
+                  kind="primary"
+                  onClick={() => void onPreviewScaleXml()}
+                  disabled={isPreviewing || isSubmitting || !hasUploadAccess}
+                >
+                  {isPreviewing ? 'Parsing XML...' : 'Preview XML'}
+                </Button>
+                <Button
+                  kind="secondary"
+                  onClick={() => void onSubmitScaleXml()}
+                  disabled={
+                    isSubmitting ||
+                    !hasUploadAccess ||
+                    !scalePreview ||
+                    scalePreview.validRows === 0 ||
+                    scalePreview.rows.some((row) => !row.valid)
+                  }
+                >
+                  {isSubmitting ? 'Submitting Scales...' : 'Submit Reviewed Scales'}
+                </Button>
+              </>
+            ) : (
+              <Button
+                kind="primary"
+                onClick={() => void onSubmitUpload()}
+                disabled={isSubmitting || !hasUploadAccess}
+              >
+                {isSubmitting ? 'Submitting Upload...' : 'Submit Upload'}
+              </Button>
+            )}
             <Button kind="ghost" onClick={onReset} disabled={isSubmitting}>
               Reset
             </Button>
@@ -431,6 +607,48 @@ const AdminUploadsPage: FC = () => {
             <p className="landing-help-text">
               Selected file: <strong>{selectedFile.name}</strong>
             </p>
+          )}
+
+          {selectedWorkflowType === 'scaleXml' && scalePreview && (
+            <div>
+              <p className="landing-help-text">
+                Parsed {scalePreview.totalRows} row(s), {scalePreview.validRows} valid. Total:{' '}
+                {scalePreview.totalPieces.toLocaleString()} pieces /{' '}
+                {scalePreview.totalVolume.toLocaleString()} m3.
+              </p>
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Row</TableHeader>
+                    <TableHeader>Package</TableHeader>
+                    <TableHeader>Timber Mark</TableHeader>
+                    <TableHeader>Species</TableHeader>
+                    <TableHeader>Grade</TableHeader>
+                    <TableHeader>Pieces</TableHeader>
+                    <TableHeader>Volume (m3)</TableHeader>
+                    <TableHeader>Status</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {scalePreview.rows.map((row) => (
+                    <TableRow key={row.lineNumber}>
+                      <TableCell>{row.lineNumber}</TableCell>
+                      <TableCell>{row.packageNumber || '-'}</TableCell>
+                      <TableCell>{row.timberMark || '-'}</TableCell>
+                      <TableCell>{row.speciesDescription || row.speciesCode || '-'}</TableCell>
+                      <TableCell>{row.gradeDescription || row.gradeCode || '-'}</TableCell>
+                      <TableCell>{row.pieces?.toLocaleString() ?? '-'}</TableCell>
+                      <TableCell>{row.volume?.toLocaleString() ?? '-'}</TableCell>
+                      <TableCell>
+                        <Tag type={row.valid ? 'green' : 'red'}>
+                          {row.valid ? 'Valid' : row.errors.join(' ')}
+                        </Tag>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
 
           {successMessage && (
