@@ -182,13 +182,41 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .filter(scale -> permitNumberString.equals(trimToNull(scale.exportPermitDetailNumber())))
             .toList();
 
-    BigDecimal totalFeeForPackage = sumFees(scales, feeContext);
     boolean maskScaleFees = shouldMaskScaleFeesForPackageView(feeContext);
     boolean maskTotalFeeForPackage = shouldMaskTotalFeeForPackage(feeContext);
-    List<PermitRpcScaleItemDto> scaleList =
-        scales.stream()
-            .map(scale -> toPackageScaleItem(scale, ministryUser, feeContext, maskScaleFees))
-            .toList();
+    boolean countryCanada = isCanadaCountryCode(feeContext.exportCountryCode());
+    Map<String, String> speciesDescriptionByCode = new HashMap<>();
+    Map<String, String> gradeDescriptionByCode = new HashMap<>();
+    List<PermitRpcScaleItemDto> scaleList = new ArrayList<>(scales.size());
+    BigDecimal totalFeeForPackage = BigDecimal.ZERO;
+    for (PermitScaleDetailRow scale : scales) {
+      String species =
+          resolveSpeciesDescription(scale.exportSpeciesCode(), speciesDescriptionByCode);
+      String grade = resolveGradeDescription(scale.exportGradeCode(), gradeDescriptionByCode);
+      BigDecimal fee = calculateRoundedFeeForScale(scale, feeContext);
+      BigDecimal amv = getScaleDisplayAmv(scale, feeContext);
+      String ewb = countryCanada ? "" : formatCurrencyNoScale(trimToNull(scale.ewb()));
+      String fil = countryCanada ? "" : appendPercent(trimToNull(scale.fil()));
+      String mf = countryCanada ? "" : nonNull(scale.mf());
+
+      totalFeeForPackage = totalFeeForPackage.add(fee);
+      scaleList.add(
+          new PermitRpcScaleItemDto(
+              nonNull(scale.timberMark()),
+              species,
+              grade,
+              formatCurrency(amv),
+              formatVolume(scale.speciesGradeVolume()),
+              ministryUser,
+              ewb,
+              scale.piecesCount(),
+              fil,
+              mf,
+              maskScaleFees ? "$" : formatCurrency(fee),
+              "",
+              nonNull(scale.exportScaleDetailId()),
+              nonNull(scale.exportPermitDetailNumber())));
+    }
 
     return new PermitScaleFeesRpcResponseDto(
         maskTotalFeeForPackage ? "$" : formatCurrency(totalFeeForPackage),
@@ -204,18 +232,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     Map<Long, String> regionByApplication = new HashMap<>();
+    Map<String, String> speciesDescriptionByCode = new HashMap<>();
+    Map<String, String> gradeDescriptionByCode = new HashMap<>();
     List<PermitScaleItemRpcResponseDto> scaleList =
         repository.findScaleDetailsByPackageNumber(normalizedPackageNumber).stream()
             .map(
                 scale -> {
                   String species =
-                      repository
-                          .findSpeciesDescription(scale.exportSpeciesCode())
-                          .orElse(nonNull(scale.exportSpeciesCode()));
+                      resolveSpeciesDescription(scale.exportSpeciesCode(), speciesDescriptionByCode);
                   String grade =
-                      repository
-                          .findGradeDescription(scale.exportGradeCode())
-                          .orElse(nonNull(scale.exportGradeCode()));
+                      resolveGradeDescription(scale.exportGradeCode(), gradeDescriptionByCode);
                   String region =
                       resolveRegionForApplication(scale.applicationNumber(), regionByApplication);
                   String permit = firstNonNull(trimToNull(scale.exportPermitDetailNumber()), "");
@@ -485,25 +511,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     Set<String> selectedPackages = parseCsvSet(selectedPackagesCsv);
-    List<String> packageList = new ArrayList<>();
-    for (Long applicationNumber :
-        repository.findApplicationNumbersByExemptionNumber(normalizedExemptionNumber)) {
-      for (PackageCandidateRow row : repository.findPackagesByApplicationNumber(applicationNumber)) {
-        String packageNumber = trimToNull(row.packageNumber());
-        if (packageNumber == null) {
-          continue;
-        }
-        if (selectedPackages.contains(packageNumber)) {
-          continue;
-        }
-        if (row.exportPermitNumber() != null && row.exportPermitNumber() > 0) {
-          continue;
-        }
-        packageList.add(packageNumber);
-      }
-    }
-
-    List<String> distinctPackages = packageList.stream().distinct().sorted().toList();
+    List<String> distinctPackages =
+        repository.findPackagesByExemptionNumber(normalizedExemptionNumber).stream()
+            .filter(row -> row.exportPermitNumber() == null || row.exportPermitNumber() < 1)
+            .map(PackageCandidateRow::packageNumber)
+            .map(this::trimToNull)
+            .filter(java.util.Objects::nonNull)
+            .filter(packageNumber -> !selectedPackages.contains(packageNumber))
+            .distinct()
+            .sorted()
+            .toList();
     return new PermitAvailablePackageListRpcResponseDto(
         distinctPackages,
         distinctPackages.isEmpty() ? "No applications are currently available." : null);
@@ -1158,6 +1175,36 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     return resolved;
   }
 
+  private String resolveSpeciesDescription(String speciesCode, Map<String, String> speciesDescriptionByCode) {
+    String normalizedCode = trimToNull(speciesCode);
+    if (normalizedCode == null) {
+      return "";
+    }
+    String cached = speciesDescriptionByCode.get(normalizedCode);
+    if (cached != null) {
+      return cached;
+    }
+
+    String resolved = repository.findSpeciesDescription(normalizedCode).orElse(normalizedCode);
+    speciesDescriptionByCode.put(normalizedCode, resolved);
+    return resolved;
+  }
+
+  private String resolveGradeDescription(String gradeCode, Map<String, String> gradeDescriptionByCode) {
+    String normalizedCode = trimToNull(gradeCode);
+    if (normalizedCode == null) {
+      return "";
+    }
+    String cached = gradeDescriptionByCode.get(normalizedCode);
+    if (cached != null) {
+      return cached;
+    }
+
+    String resolved = repository.findGradeDescription(normalizedCode).orElse(normalizedCode);
+    gradeDescriptionByCode.put(normalizedCode, resolved);
+    return resolved;
+  }
+
   private PermitGbmsInvoiceHistoryItemRpcResponseDto toGbmsInvoiceHistoryItem(
       GbmsInvoiceHistoryRow row) {
     return new PermitGbmsInvoiceHistoryItemRpcResponseDto(
@@ -1200,41 +1247,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         nonNull(scale.cascadeSplitCode()),
         nonNull(scale.exportScaleDetailId()),
         trimToNull(scale.exportPermitDetailNumber()) == null ? "" : permitNumber);
-  }
-
-  private PermitRpcScaleItemDto toPackageScaleItem(
-      PermitScaleDetailRow scale,
-      boolean ministryUser,
-      FeeCalculationContext feeContext,
-      boolean maskScaleFees) {
-    String species =
-        repository
-            .findSpeciesDescription(scale.exportSpeciesCode())
-            .orElse(nonNull(scale.exportSpeciesCode()));
-    String grade =
-        repository.findGradeDescription(scale.exportGradeCode()).orElse(nonNull(scale.exportGradeCode()));
-    BigDecimal fee = calculateRoundedFeeForScale(scale, feeContext);
-    BigDecimal amv = getScaleDisplayAmv(scale, feeContext);
-    boolean countryCanada = isCanadaCountryCode(feeContext.exportCountryCode());
-    String ewb = countryCanada ? "" : formatCurrencyNoScale(trimToNull(scale.ewb()));
-    String fil = countryCanada ? "" : appendPercent(trimToNull(scale.fil()));
-    String mf = countryCanada ? "" : nonNull(scale.mf());
-
-    return new PermitRpcScaleItemDto(
-        nonNull(scale.timberMark()),
-        species,
-        grade,
-        formatCurrency(amv),
-        formatVolume(scale.speciesGradeVolume()),
-        ministryUser,
-        ewb,
-        scale.piecesCount(),
-        fil,
-        mf,
-        maskScaleFees ? "$" : formatCurrency(fee),
-        "",
-        nonNull(scale.exportScaleDetailId()),
-        nonNull(scale.exportPermitDetailNumber()));
   }
 
   private String resolveGrowthType(String packageNumber) {

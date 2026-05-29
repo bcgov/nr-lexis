@@ -1,6 +1,10 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
@@ -151,6 +155,28 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.scaleList().get(0).species()).isEqualTo("Hemlock");
     assertThat(response.scaleList().get(0).grade()).isEqualTo("Grade J");
     assertThat(response.scaleList().get(0).fee()).isEqualTo("$7.60");
+  }
+
+  @Test
+  void scaleFeesShouldResolveRepeatedSpeciesAndGradeDescriptionsOncePerRequest() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903"),
+                scale("102", "TM2", "HEM", "J", 3.40d, 5L, "7000123", "PKG-903")));
+    when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
+    when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
+    when(applicationService.findPackageByPackageNumber("PKG-903"))
+        .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-903", 1000456L, 11.0d, "S")));
+    when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
+
+    PermitScaleFeesRpcResponseDto response =
+        service.getScaleFeesForPackage("PKG-903", 7000123L, true);
+
+    assertThat(response.totalFeeForPackage()).isEqualTo("$11.00");
+    assertThat(response.scaleList()).hasSize(2);
+    verify(repository, times(1)).findSpeciesDescription("HEM");
+    verify(repository, times(1)).findGradeDescription("J");
   }
 
   @Test
@@ -330,21 +356,21 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Test
   void availablePackageListShouldExcludeSelectedAndAssignedPackages() {
-    when(repository.findApplicationNumbersByExemptionNumber("EX-700"))
-        .thenReturn(List.of(1000456L, 1000457L));
-    when(repository.findPackagesByApplicationNumber(1000456L))
+    when(repository.findPackagesByExemptionNumber("EX-700"))
         .thenReturn(
             List.of(
                 new PackageCandidateRow(1000456L, "PKG-901", 0L),
-                new PackageCandidateRow(1000456L, "PKG-902", 7000123L)));
-    when(repository.findPackagesByApplicationNumber(1000457L))
-        .thenReturn(List.of(new PackageCandidateRow(1000457L, "PKG-903", 0L)));
+                new PackageCandidateRow(1000456L, "PKG-902", 7000123L),
+                new PackageCandidateRow(1000457L, "PKG-903", 0L)));
 
     PermitAvailablePackageListRpcResponseDto response =
         service.getAvailablePackageList("EX-700", "PKG-903");
 
     assertThat(response.packageList()).containsExactly("PKG-901");
     assertThat(response.errorMessage()).isNull();
+    verify(repository, times(1)).findPackagesByExemptionNumber("EX-700");
+    verify(repository, never()).findApplicationNumbersByExemptionNumber("EX-700");
+    verify(repository, never()).findPackagesByApplicationNumber(anyLong());
   }
 
   @Test
