@@ -57,6 +57,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "UPDATE_PERMIT_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String INSERT_SALES_INVOICE =
       LEXIS_GROUP_9_PACKAGE + "INSERT_SALES_INVOICE(?,?,?,?,?,?,?,?,?,?)";
+  private static final String INSERT_SCALE_DETAIL =
+      LEXIS_GROUP_9_PACKAGE + "INSERT_SCALE_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String FIND_GBMS_INVOICE_HISTORY =
       LEXIS_GROUP_9_PACKAGE + "FIND_GBMS_INVOICE_HISTORY(?,?,?)";
@@ -101,21 +103,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         FIND_SCALE_DETAIL_BY_PERMIT,
         cs -> cs.setString(1, permitNumber.toString()),
         2,
-        rs ->
-            new PermitScaleDetailRow(
-                getString(rs, "EXPORT_SCALE_DETAIL_ID"),
-                getString(rs, "TIMBER_MARK"),
-                getString(rs, "EXPORT_SPECIES_CODE"),
-                getString(rs, "EXPORT_GRADE_CODE"),
-                coalesce(getDouble(rs, "SPECIES_GRADE_VOLUME"), 0.0d),
-                coalesce(getLong(rs, "PIECES_COUNT"), 0L),
-                getLong(rs, "APPLICATION_NUMBER"),
-                getString(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-                getString(rs, "PACKAGE_NUMBER"),
-                getString(rs, "CASCADE_SPLIT_CODE"),
-                getString(rs, "EWB"),
-                getString(rs, "FIL"),
-                getString(rs, "MF")));
+        this::mapScaleDetailRow);
   }
 
   public List<String> findPackageNumbersByPermitNumber(Long permitNumber) {
@@ -597,21 +585,45 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         FIND_SCALE_DETAIL_BY_PACKAGE,
         cs -> cs.setString(1, normalized),
         2,
-        rs ->
-            new PermitScaleDetailRow(
-                getString(rs, "EXPORT_SCALE_DETAIL_ID"),
-                getString(rs, "TIMBER_MARK"),
-                getString(rs, "EXPORT_SPECIES_CODE"),
-                getString(rs, "EXPORT_GRADE_CODE"),
-                coalesce(getDouble(rs, "SPECIES_GRADE_VOLUME"), 0.0d),
-                coalesce(getLong(rs, "PIECES_COUNT"), 0L),
-                getLong(rs, "APPLICATION_NUMBER"),
-                getString(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-                getString(rs, "PACKAGE_NUMBER"),
-                getString(rs, "CASCADE_SPLIT_CODE"),
-                getString(rs, "EWB"),
-                getString(rs, "FIL"),
-                getString(rs, "MF")));
+        this::mapScaleDetailRow);
+  }
+
+  public Optional<PermitScaleDetailRow> insertScaleDetail(ScaleUploadInsertRow row, String entryUserId) {
+    String normalizedEntryUserId = trim(entryUserId);
+    if (row == null
+        || normalizedEntryUserId == null
+        || trim(row.timberMark()) == null
+        || trim(row.packageNumber()) == null
+        || trim(row.speciesCode()) == null
+        || trim(row.gradeCode()) == null
+        || row.piecesCount() == null
+        || row.speciesGradeVolume() == null) {
+      return Optional.empty();
+    }
+
+    Timestamp now = new Timestamp(System.currentTimeMillis());
+    return queryCursorSingle(
+        INSERT_SCALE_DETAIL,
+        cs -> {
+          cs.setString(1, trim(row.timberMark()));
+          setLongOrNull(cs, 2, row.piecesCount());
+          cs.setBigDecimal(3, row.speciesGradeVolume());
+          cs.setString(4, normalizedEntryUserId);
+          cs.setTimestamp(5, now);
+          cs.setNull(6, Types.VARCHAR);
+          cs.setNull(7, Types.TIMESTAMP);
+          cs.setString(8, trim(row.packageNumber()));
+          cs.setString(9, trim(row.speciesCode()));
+          cs.setString(10, trim(row.gradeCode()));
+          setLongOrNull(cs, 11, row.permitNumber());
+          if (row.exemptionOverrideRate() == null) {
+            cs.setNull(12, Types.NUMERIC);
+          } else {
+            cs.setBigDecimal(12, row.exemptionOverrideRate());
+          }
+        },
+        13,
+        this::mapScaleDetailRow);
   }
 
   public Optional<PermitPolicyContextRow> findPermitPolicyContextByPermitNumber(Long permitNumber) {
@@ -969,6 +981,23 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         getString(rs, "EXPORT_PRODUCT_TYPE_CODE"));
   }
 
+  private PermitScaleDetailRow mapScaleDetailRow(ResultSet rs) {
+    return new PermitScaleDetailRow(
+        getString(rs, "EXPORT_SCALE_DETAIL_ID"),
+        getString(rs, "TIMBER_MARK"),
+        getString(rs, "EXPORT_SPECIES_CODE"),
+        getString(rs, "EXPORT_GRADE_CODE"),
+        coalesce(getDouble(rs, "SPECIES_GRADE_VOLUME"), 0.0d),
+        coalesce(getLong(rs, "PIECES_COUNT"), 0L),
+        getLong(rs, "APPLICATION_NUMBER"),
+        getString(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+        getString(rs, "PACKAGE_NUMBER"),
+        getString(rs, "CASCADE_SPLIT_CODE"),
+        getString(rs, "EWB"),
+        getString(rs, "FIL"),
+        getString(rs, "MF"));
+  }
+
   private Timestamp getTimestamp(ResultSet rs, String column) {
     try {
       return rs.getTimestamp(column);
@@ -1041,6 +1070,16 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String ewb,
       String fil,
       String mf) {}
+
+  public record ScaleUploadInsertRow(
+      String timberMark,
+      Long piecesCount,
+      BigDecimal speciesGradeVolume,
+      String packageNumber,
+      String speciesCode,
+      String gradeCode,
+      Long permitNumber,
+      BigDecimal exemptionOverrideRate) {}
 
   public record PermitPolicyContextRow(
       Long permitNumber,
