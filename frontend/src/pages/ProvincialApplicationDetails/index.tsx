@@ -245,7 +245,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
     if (detail.packages.length === 1 && detail.packages[0]?.packageNumber) {
       params.set('packageNumber', detail.packages[0].packageNumber)
     }
-    navigate(`/admin/uploads?${params.toString()}`)
+    navigate(`/provincial/application/scale-upload?${params.toString()}`)
   }, [detail, navigate])
 
   const onOpenDocument = useCallback(async (row: ProvincialApplicationDocumentRow) => {

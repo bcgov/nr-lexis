@@ -115,7 +115,7 @@ describe('Provincial Application Detail Document Actions', () => {
             path="/provincial/application/:applicationNumber"
             element={<ProvincialApplicationDetailsPage />}
           />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
+          <Route path="/provincial/application/scale-upload" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -126,7 +126,7 @@ describe('Provincial Application Detail Document Actions', () => {
 
     const location = await screen.findByTestId('location')
     expect(location.textContent).toBe(
-      '/admin/uploads?type=applicationScaleXml&applicationNumber=321&packageNumber=PKG-1',
+      '/provincial/application/scale-upload?type=applicationScaleXml&applicationNumber=321&packageNumber=PKG-1',
     )
   })
 

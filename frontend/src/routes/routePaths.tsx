@@ -169,6 +169,17 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
+    path: '/provincial/application/scale-upload',
+    id: 'Application Scale Upload',
+    requiredActions: ['/applicationDetails'],
+    element: (
+      <Layout>
+        <AdminUploadsPage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
     path: '/provincial/exemption',
     id: 'Provincial Exemption',
     requiredActions: ['/exemptionSearch'],

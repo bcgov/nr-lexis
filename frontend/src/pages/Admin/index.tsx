@@ -22,7 +22,7 @@ type LegacyLaunchTool = {
   label: string
   requiredAction: string
   description: string
-  reactUploadType?: 'application' | 'exemption' | 'permit' | 'invoice' | 'applicationScaleXml'
+  reactUploadType?: 'application' | 'exemption' | 'permit' | 'invoice'
   reactPath?: string
 }
 
@@ -78,13 +78,6 @@ const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
     requiredAction: '/fileInvoiceUpload',
     description: 'Legacy file upload workflow for invoices.',
     reactUploadType: 'invoice',
-  },
-  {
-    id: 'scaleXmlUpload',
-    label: 'Application Scale XML Upload',
-    requiredAction: '/applicationDetails',
-    description: 'Parse application package scale rows from XML before saving them.',
-    reactUploadType: 'applicationScaleXml',
   },
 ]
 

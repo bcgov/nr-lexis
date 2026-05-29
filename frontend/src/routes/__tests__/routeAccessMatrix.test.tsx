@@ -15,6 +15,11 @@ describe('Protected route access matrix', () => {
       requiredActionsMatch: 'all',
     },
     {
+      path: '/provincial/application/scale-upload',
+      requiredActions: ['/applicationDetails'],
+      requiredActionsMatch: 'any',
+    },
+    {
       path: '/provincial/exemption/create',
       requiredActions: ['/exemptionSearch', '/createExemption'],
       requiredActionsMatch: 'all',
