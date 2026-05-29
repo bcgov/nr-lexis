@@ -96,13 +96,13 @@ describe('admin-upload-service', () => {
     postMock.mockResolvedValue({ data: { rows: [] } })
 
     await previewScaleXmlUpload({
-      permitNumber: '7000123',
+      applicationNumber: '1000456',
       packageNumber: 'PKG-903',
       file,
     })
 
     const [path, payload, config] = postMock.mock.calls[0]
-    expect(path).toBe('/lexis/rpc/permit-details/scale-upload/preview')
+    expect(path).toBe('/lexis/rpc/application-details/scale-upload/preview')
     expect(config).toEqual(
       expect.objectContaining({
         headers: {
@@ -111,7 +111,7 @@ describe('admin-upload-service', () => {
       }),
     )
     const formData = payload as FormData
-    expect(formData.get('permitNumber')).toBe('7000123')
+    expect(formData.get('applicationNumber')).toBe('1000456')
     expect(formData.get('packageNumber')).toBe('PKG-903')
     expect((formData.get('file') as File).name).toBe('scales.xml')
   })
@@ -120,7 +120,7 @@ describe('admin-upload-service', () => {
     postMock.mockResolvedValue({ data: { success: true } })
 
     await submitScaleXmlUpload({
-      permitNumber: '7000123',
+      applicationNumber: '1000456',
       rows: [
         {
           lineNumber: 1,
@@ -133,7 +133,6 @@ describe('admin-upload-service', () => {
           volume: 10.5,
           packageNumber: 'PKG-903',
           applicationNumber: 1000456,
-          permitNumber: 7000123,
           valid: true,
           errors: [],
           warnings: [],
@@ -142,9 +141,9 @@ describe('admin-upload-service', () => {
     })
 
     const [path, payload] = postMock.mock.calls[0]
-    expect(path).toBe('/lexis/rpc/permit-details/scale-upload/submit')
+    expect(path).toBe('/lexis/rpc/application-details/scale-upload/submit')
     expect(payload).toEqual({
-      permitNumber: 7000123,
+      applicationNumber: 1000456,
       rows: [
         {
           lineNumber: 1,
@@ -155,7 +154,6 @@ describe('admin-upload-service', () => {
           volume: 10.5,
           packageNumber: 'PKG-903',
           applicationNumber: 1000456,
-          permitNumber: 7000123,
         },
       ],
     })

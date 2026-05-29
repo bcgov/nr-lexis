@@ -1,9 +1,9 @@
-package ca.bc.gov.mof.lexis.dto.permit.rpc;
+package ca.bc.gov.mof.lexis.dto.application.rpc;
 
 import java.math.BigDecimal;
 import java.util.List;
 
-public record PermitScaleUploadPreviewResponseDto(
+public record ApplicationScaleUploadPreviewResponseDto(
     String fileName,
     int totalRows,
     int validRows,
@@ -11,4 +11,4 @@ public record PermitScaleUploadPreviewResponseDto(
     BigDecimal totalVolume,
     List<String> errors,
     List<String> warnings,
-    List<PermitScaleUploadRowDto> rows) {}
+    List<ApplicationScaleUploadRowDto> rows) {}

@@ -23,16 +23,12 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRequestDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleUploadPreviewResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleUploadSubmitRequestDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleUploadSubmitResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
-import org.springframework.web.multipart.MultipartFile;
 
 public interface PermitDetailsRpcService {
 
@@ -58,12 +54,6 @@ public interface PermitDetailsRpcService {
   PermitDataAfterScaleUpdateRpcResponseDto getPermitDataAfterScaleUpdate(Long permitNumber);
 
   PermitPackageVolumeSumRpcResponseDto getPackageVolumeSum(Long permitNumber, String packageNumber);
-
-  PermitScaleUploadPreviewResponseDto previewScaleXmlUpload(
-      MultipartFile file, Long permitNumber, String packageNumber);
-
-  PermitScaleUploadSubmitResponseDto submitScaleXmlUpload(
-      PermitScaleUploadSubmitRequestDto request, String userId);
 
   PermitPackageInfoRpcResponseDto getPackageInfo(String packageNumber);
 

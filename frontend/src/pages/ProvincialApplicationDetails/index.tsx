@@ -196,6 +196,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   }, [documentRows, documentsFilter])
 
   const canManageDocuments = canPerform('/fileApplicationUpload')
+  const canUploadScaleXml = canPerform('/applicationDetails')
 
   const onCreateOffer = useCallback(() => {
     if (!detail) {
@@ -228,6 +229,22 @@ const ProvincialApplicationDetailsPage: FC = () => {
       type: 'application',
       applicationNumber: String(detail.applicationNumber),
     })
+    navigate(`/admin/uploads?${params.toString()}`)
+  }, [detail, navigate])
+
+  const onOpenScaleXmlUpload = useCallback(() => {
+    if (!detail) {
+      return
+    }
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    const params = new URLSearchParams({
+      type: 'applicationScaleXml',
+      applicationNumber: String(detail.applicationNumber),
+    })
+    if (detail.packages.length === 1 && detail.packages[0]?.packageNumber) {
+      params.set('packageNumber', detail.packages[0].packageNumber)
+    }
     navigate(`/admin/uploads?${params.toString()}`)
   }, [detail, navigate])
 
@@ -379,6 +396,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   onClick={onOpenApplicationUpload}
                 >
                   Upload Application Document
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={!canUploadScaleXml || !detail.applicationNumber || detail.packages.length === 0}
+                  onClick={onOpenScaleXmlUpload}
+                >
+                  Upload Scale XML
                 </Button>
                 <Button
                   kind="primary"

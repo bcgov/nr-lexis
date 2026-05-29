@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.application.rpc.ApplicationScaleUploadPreviewResponseDto;
+import ca.bc.gov.mof.lexis.dto.application.rpc.ApplicationScaleUploadSubmitRequestDto;
+import ca.bc.gov.mof.lexis.dto.application.rpc.ApplicationScaleUploadSubmitResponseDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -16,9 +19,11 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/lexis")
@@ -175,6 +180,38 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "remarkBody", required = false) String remarkBody,
       Authentication authentication) {
     return persistRemark(remarkId, applicationNumber, remarkBody, authentication);
+  }
+
+  @PostMapping(
+      value = "/rpc/application-details/scale-upload/preview",
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity<ApplicationScaleUploadPreviewResponseDto> previewScaleXmlUpload(
+      @RequestParam("file") MultipartFile file,
+      @RequestParam(name = "applicationNumber", required = false) Long applicationNumber,
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for scale upload preview");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.previewScaleXmlUpload(file, applicationNumber, packageNumber));
+  }
+
+  @PostMapping(
+      value = "/rpc/application-details/scale-upload/submit",
+      consumes = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<ApplicationScaleUploadSubmitResponseDto> submitScaleXmlUpload(
+      @RequestBody ApplicationScaleUploadSubmitRequestDto request,
+      Authentication authentication) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for scale upload submit");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.submitScaleXmlUpload(request, authentication == null ? null : authentication.getName()));
   }
 
   private Long parsePositiveLong(String rawValue) {

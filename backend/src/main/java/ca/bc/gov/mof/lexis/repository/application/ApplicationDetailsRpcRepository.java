@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.repository.application;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -27,10 +28,17 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_APP(?,?)";
+  private static final String FIND_SCALE_DETAIL_BY_PACKAGE =
+      LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PKG(?,?)";
   private static final String FIND_ATTACHMENT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
+  private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
+  private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
+  private static final String FIND_TIMBER_MARK = LEXIS_CODES_PACKAGE + "FIND_TIMBER_MARK(?,?)";
   private static final String DELETE_APPLICATION_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "DELETE_APPL_FILE_ATTACHMENT(?)";
+  private static final String INSERT_SCALE_DETAIL =
+      LEXIS_GROUP_9_PACKAGE + "INSERT_SCALE_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String FIND_REMARK_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_REMARK_BY_NUMBER(?,?)";
   private static final String INSERT_REMARK =
@@ -92,6 +100,81 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
             2,
             rs -> trim(getString(rs, "DESCRIPTION")))
         .filter(value -> value != null && !value.isBlank());
+  }
+
+  public List<ApplicationScaleDetailRow> findScaleDetailsByPackageNumber(String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_SCALE_DETAIL_BY_PACKAGE,
+        cs -> cs.setString(1, normalized),
+        2,
+        this::mapScaleDetailRow);
+  }
+
+  public Optional<ApplicationScaleDetailRow> insertScaleDetail(
+      ScaleUploadInsertRow row, String entryUserId) {
+    String normalizedEntryUserId = trim(entryUserId);
+    if (row == null
+        || normalizedEntryUserId == null
+        || trim(row.timberMark()) == null
+        || trim(row.packageNumber()) == null
+        || trim(row.speciesCode()) == null
+        || trim(row.gradeCode()) == null
+        || row.piecesCount() == null
+        || row.speciesGradeVolume() == null) {
+      return Optional.empty();
+    }
+
+    Timestamp now = new Timestamp(System.currentTimeMillis());
+    return queryCursorSingle(
+        INSERT_SCALE_DETAIL,
+        cs -> {
+          cs.setString(1, trim(row.timberMark()));
+          setLongOrNull(cs, 2, row.piecesCount());
+          cs.setBigDecimal(3, row.speciesGradeVolume());
+          cs.setString(4, normalizedEntryUserId);
+          cs.setTimestamp(5, now);
+          cs.setNull(6, Types.VARCHAR);
+          cs.setNull(7, Types.TIMESTAMP);
+          cs.setString(8, trim(row.packageNumber()));
+          cs.setString(9, trim(row.speciesCode()));
+          cs.setString(10, trim(row.gradeCode()));
+          cs.setNull(11, Types.NUMERIC);
+          if (row.exemptionOverrideRate() == null) {
+            cs.setNull(12, Types.NUMERIC);
+          } else {
+            cs.setBigDecimal(12, row.exemptionOverrideRate());
+          }
+        },
+        13,
+        this::mapScaleDetailRow);
+  }
+
+  public Optional<String> findSpeciesDescription(String speciesCode) {
+    return findCodeDescription(FIND_SPECIES_CODE, speciesCode);
+  }
+
+  public Optional<String> findGradeDescription(String gradeCode) {
+    return findCodeDescription(FIND_GRADE_CODE, gradeCode);
+  }
+
+  public Optional<TimberMarkRow> findTimberMark(String timberMark) {
+    String normalized = trim(timberMark);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_TIMBER_MARK,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new TimberMarkRow(
+                getString(rs, "TIMBER_MARK"),
+                getString(rs, "MARK_STATUS_ST"),
+                getString(rs, "FILE_TYPE_CODE")));
   }
 
   public Optional<byte[]> findFileAttachmentBytes(Long fileId) {
@@ -223,6 +306,18 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     return new RemarkRow(remarkId == null ? 0L : remarkId, remark == null ? "" : remark, user, date);
   }
 
+  private ApplicationScaleDetailRow mapScaleDetailRow(ResultSet rs) {
+    return new ApplicationScaleDetailRow(
+        getString(rs, "EXPORT_SCALE_DETAIL_ID"),
+        getString(rs, "TIMBER_MARK"),
+        getString(rs, "EXPORT_SPECIES_CODE"),
+        getString(rs, "EXPORT_GRADE_CODE"),
+        coalesce(getDouble(rs, "SPECIES_GRADE_VOLUME"), 0.0d),
+        coalesce(getLong(rs, "PIECES_COUNT"), 0L),
+        getLong(rs, "APPLICATION_NUMBER"),
+        getString(rs, "PACKAGE_NUMBER"));
+  }
+
   private Instant getInstant(ResultSet rs, String column) {
     try {
       Timestamp value = rs.getTimestamp(column);
@@ -249,6 +344,36 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     return remarkBody == null ? "" : remarkBody;
   }
 
+  private Optional<String> findCodeDescription(String procedureSignature, String code) {
+    String normalized = trim(code);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+            procedureSignature,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> trim(rs.getString(2)))
+        .filter(value -> value != null && !value.isBlank());
+  }
+
+  private void setLongOrNull(java.sql.CallableStatement cs, int index, Long value)
+      throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.NUMERIC);
+      return;
+    }
+    cs.setLong(index, value);
+  }
+
+  private double coalesce(Double value, double fallback) {
+    return value == null ? fallback : value;
+  }
+
+  private long coalesce(Long value, long fallback) {
+    return value == null ? fallback : value;
+  }
+
   private String safeFileName(String value) {
     if (value == null || value.isBlank()) {
       return value;
@@ -264,4 +389,25 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       long id, String fileName, String description, String attachmentTypeCode) {}
 
   public record RemarkRow(long remarkId, String remark, String user, Instant date) {}
+
+  public record ApplicationScaleDetailRow(
+      String exportScaleDetailId,
+      String timberMark,
+      String exportSpeciesCode,
+      String exportGradeCode,
+      double speciesGradeVolume,
+      long piecesCount,
+      Long applicationNumber,
+      String packageNumber) {}
+
+  public record ScaleUploadInsertRow(
+      String timberMark,
+      Long piecesCount,
+      BigDecimal speciesGradeVolume,
+      String packageNumber,
+      String speciesCode,
+      String gradeCode,
+      BigDecimal exemptionOverrideRate) {}
+
+  public record TimberMarkRow(String timberMark, String markStatus, String fileTypeCode) {}
 }

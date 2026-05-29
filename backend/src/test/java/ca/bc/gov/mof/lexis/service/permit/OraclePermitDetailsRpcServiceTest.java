@@ -1,10 +1,6 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
@@ -32,9 +28,6 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleUploadPreviewResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleUploadSubmitRequestDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleUploadSubmitResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
@@ -51,7 +44,6 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyCon
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
-import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleUploadInsertRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
@@ -65,7 +57,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | OraclePermitDetailsRpcService")
@@ -802,81 +793,6 @@ class OraclePermitDetailsRpcServiceTest {
     boolean changed = service.hasFormChanges(request);
 
     assertThat(changed).isTrue();
-  }
-
-  @Test
-  void scaleXmlPreviewShouldParseAndValidateRowsBeforePersistence() {
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
-    when(repository.findSpeciesDescription("FIR")).thenReturn(Optional.of("Douglas-fir"));
-    when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
-    when(repository.findGradeDescription("K")).thenReturn(Optional.of("Grade K"));
-    when(repository.findPackageInfoByPackageNumber("PKG-903"))
-        .thenReturn(Optional.of(new PackageInfoRow("PKG-903", 1000456L, 10.0d, 1.0d, 2.0d, "S", "T")));
-    when(repository.findPackageNumbersByPermitNumber(7000123L)).thenReturn(List.of("PKG-903"));
-    when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of());
-    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
-    MockMultipartFile file =
-        new MockMultipartFile(
-            "file",
-            "scales.xml",
-            "application/xml",
-            """
-            <scales>
-              <scale timberMark="TM1" speciesCode="HEM" gradeCode="J" pieces="12" volume="10.25" />
-              <scale>
-                <timberMark>TM2</timberMark>
-                <species>FIR</species>
-                <grade>K</grade>
-                <pieces>8</pieces>
-                <volume>5.5</volume>
-              </scale>
-            </scales>
-            """
-                .getBytes());
-
-    PermitScaleUploadPreviewResponseDto response =
-        service.previewScaleXmlUpload(file, 7000123L, "PKG-903");
-
-    assertThat(response.errors()).isEmpty();
-    assertThat(response.totalRows()).isEqualTo(2);
-    assertThat(response.validRows()).isEqualTo(2);
-    assertThat(response.totalPieces()).isEqualTo(20L);
-    assertThat(response.totalVolume()).isEqualByComparingTo("15.8");
-    assertThat(response.rows().get(0).speciesDescription()).isEqualTo("Hemlock");
-    assertThat(response.rows().get(0).applicationNumber()).isEqualTo(1000456L);
-  }
-
-  @Test
-  void scaleXmlSubmitShouldInsertRowsAndRefreshPermitTotals() {
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
-    when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
-    when(repository.findPackageInfoByPackageNumber("PKG-903"))
-        .thenReturn(Optional.of(new PackageInfoRow("PKG-903", 1000456L, 10.0d, 1.0d, 2.0d, "S", "T")));
-    when(repository.findPackageNumbersByPermitNumber(7000123L)).thenReturn(List.of("PKG-903"));
-    when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of());
-    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
-    when(repository.insertScaleDetail(any(ScaleUploadInsertRow.class), eq("idir\\jsmith")))
-        .thenReturn(Optional.of(scale("201", "TM1", "HEM", "J", 10.5d, 12L, "7000123", "PKG-903")));
-    when(repository.findScaleDetailsByPermitNumber(7000123L))
-        .thenReturn(List.of(scale("201", "TM1", "HEM", "J", 10.5d, 12L, "7000123", "PKG-903")));
-    PermitScaleUploadSubmitRequestDto request =
-        new PermitScaleUploadSubmitRequestDto(
-            7000123L,
-            List.of(
-                new PermitScaleUploadSubmitRequestDto.ScaleRow(
-                    1, "TM1", "HEM", "J", 12L, BigDecimal.valueOf(10.5d), "PKG-903", 1000456L, 7000123L)));
-
-    PermitScaleUploadSubmitResponseDto response =
-        service.submitScaleXmlUpload(request, "idir\\jsmith");
-
-    assertThat(response.success()).isTrue();
-    assertThat(response.submittedRows()).isEqualTo(1);
-    verify(repository).insertScaleDetail(any(ScaleUploadInsertRow.class), eq("idir\\jsmith"));
-    verify(repository).updatePermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith"), isNull());
   }
 
   private PermitScaleDetailRow scale(

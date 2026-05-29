@@ -31,16 +31,11 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageVolumeSumRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleItemRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleUploadPreviewResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleUploadRowDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleUploadSubmitRequestDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleUploadSubmitResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -57,7 +52,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | PermitDetailsRpcController")
@@ -188,69 +182,6 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).getPackageVolumeSum(7000123L, "PKG-903");
-  }
-
-  @Test
-  void scaleUploadPreviewShouldForwardMultipartFileToService() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    MockMultipartFile file =
-        new MockMultipartFile("file", "scales.xml", "application/xml", "<scales />".getBytes());
-    PermitScaleUploadPreviewResponseDto dto =
-        new PermitScaleUploadPreviewResponseDto(
-            "scales.xml", 0, 0, 0L, BigDecimal.ZERO, List.of(), List.of(), List.of());
-    when(service.previewScaleXmlUpload(file, 7000123L, "PKG-903")).thenReturn(dto);
-
-    ResponseEntity<PermitScaleUploadPreviewResponseDto> response =
-        controller.previewScaleXmlUpload(file, 7000123L, "PKG-903");
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).previewScaleXmlUpload(file, 7000123L, "PKG-903");
-  }
-
-  @Test
-  void scaleUploadSubmitShouldForwardRequestAndUserToService() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitScaleUploadSubmitRequestDto request =
-        new PermitScaleUploadSubmitRequestDto(
-            7000123L,
-            List.of(
-                new PermitScaleUploadSubmitRequestDto.ScaleRow(
-                    1, "TM1", "HEM", "J", 12L, BigDecimal.valueOf(10.5d), "PKG-903", 100L, 7000123L)));
-    PermitScaleUploadSubmitResponseDto dto =
-        new PermitScaleUploadSubmitResponseDto(
-            true,
-            "1 scale row(s) saved successfully.",
-            1,
-            7000123L,
-            List.of(),
-            List.of(),
-            List.of(
-                new PermitScaleUploadRowDto(
-                    1,
-                    "TM1",
-                    "HEM",
-                    "Hemlock",
-                    "J",
-                    "Grade J",
-                    12L,
-                    BigDecimal.valueOf(10.5d),
-                    "PKG-903",
-                    100L,
-                    7000123L,
-                    true,
-                    List.of(),
-                    List.of())));
-    TestingAuthenticationToken authentication =
-        new TestingAuthenticationToken("idir\\jsmith", "n/a");
-    when(service.submitScaleXmlUpload(request, "idir\\jsmith")).thenReturn(dto);
-
-    ResponseEntity<PermitScaleUploadSubmitResponseDto> response =
-        controller.submitScaleXmlUpload(request, authentication);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).submitScaleXmlUpload(request, "idir\\jsmith");
   }
 
   @Test

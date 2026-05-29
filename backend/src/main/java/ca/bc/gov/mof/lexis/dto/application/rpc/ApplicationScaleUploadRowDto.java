@@ -1,9 +1,9 @@
-package ca.bc.gov.mof.lexis.dto.permit.rpc;
+package ca.bc.gov.mof.lexis.dto.application.rpc;
 
 import java.math.BigDecimal;
 import java.util.List;
 
-public record PermitScaleUploadRowDto(
+public record ApplicationScaleUploadRowDto(
     int lineNumber,
     String timberMark,
     String speciesCode,
@@ -14,7 +14,6 @@ public record PermitScaleUploadRowDto(
     BigDecimal volume,
     String packageNumber,
     Long applicationNumber,
-    Long permitNumber,
     boolean valid,
     List<String> errors,
     List<String> warnings) {}

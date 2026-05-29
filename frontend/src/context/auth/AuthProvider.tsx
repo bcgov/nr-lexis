@@ -131,7 +131,6 @@ const BASE_WORKFLOW_ACTIONS: string[] = [
   'approveExemption',
   'viewFederalApplication',
   'viewOICApplication',
-  'savePermit',
 ]
 
 const BASE_ADMIN_ACTIONS: string[] = [

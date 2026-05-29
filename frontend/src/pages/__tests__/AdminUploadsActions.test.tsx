@@ -59,7 +59,6 @@ describe('Admin upload workflow smoke', () => {
           volume: 10.5,
           packageNumber: 'PKG-903',
           applicationNumber: 1000456,
-          permitNumber: 7000123,
           valid: true,
           errors: [],
           warnings: [],
@@ -70,7 +69,7 @@ describe('Admin upload workflow smoke', () => {
       success: true,
       message: '1 scale row(s) saved successfully.',
       submittedRows: 1,
-      permitNumber: 7000123,
+      applicationNumber: 1000456,
       errors: [],
       warnings: [],
       rows: [],
@@ -120,12 +119,12 @@ describe('Admin upload workflow smoke', () => {
 
   it('previews and submits scale XML rows after user review', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'savePermit',
+      canPerform: (action: string) => action === '/applicationDetails',
     } as any)
 
-    renderPage('/admin/uploads?type=scaleXml&permitNumber=7000123&packageNumber=PKG-903')
+    renderPage('/admin/uploads?type=applicationScaleXml&applicationNumber=1000456&packageNumber=PKG-903')
 
-    expect(screen.getByLabelText('Permit Number')).toHaveValue('7000123')
+    expect(screen.getByLabelText('Application Number')).toHaveValue('1000456')
     expect(screen.getByLabelText('Package Number')).toHaveValue('PKG-903')
 
     const file = new File(['<scales />'], 'scales.xml', { type: 'application/xml' })
@@ -134,7 +133,7 @@ describe('Admin upload workflow smoke', () => {
 
     await waitFor(() => {
       expect(mockedPreviewScaleXmlUpload).toHaveBeenCalledWith({
-        permitNumber: '7000123',
+        applicationNumber: '1000456',
         packageNumber: 'PKG-903',
         file,
       })
@@ -145,7 +144,7 @@ describe('Admin upload workflow smoke', () => {
     await waitFor(() => {
       expect(mockedSubmitScaleXmlUpload).toHaveBeenCalledWith(
         expect.objectContaining({
-          permitNumber: '7000123',
+          applicationNumber: '1000456',
           rows: expect.arrayContaining([expect.objectContaining({ timberMark: 'TM1' })]),
         }),
       )

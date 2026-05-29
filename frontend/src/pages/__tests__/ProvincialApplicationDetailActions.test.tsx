@@ -107,6 +107,29 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(location.textContent).toBe('/admin/uploads?type=application&applicationNumber=321')
   })
 
+  it('navigates to scale XML upload with application and package context', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+          <Route path="/admin/uploads" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const uploadButton = await screen.findByRole('button', { name: 'Upload Scale XML' })
+    expect(uploadButton).toBeEnabled()
+    await userEvent.click(uploadButton)
+
+    const location = await screen.findByTestId('location')
+    expect(location.textContent).toBe(
+      '/admin/uploads?type=applicationScaleXml&applicationNumber=321&packageNumber=PKG-1',
+    )
+  })
+
   it('opens application document from API response', async () => {
     mockedFetchApplicationDocuments.mockResolvedValue({
       rows: [

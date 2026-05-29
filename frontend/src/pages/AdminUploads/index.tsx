@@ -65,11 +65,11 @@ const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
     numberFieldPlaceholder: 'Enter permit number for invoice',
   },
   {
-    type: 'scaleXml',
-    label: 'Scale XML Upload',
-    requiredAction: 'savePermit',
-    numberFieldLabel: 'Permit Number',
-    numberFieldPlaceholder: 'Enter permit number for scales',
+    type: 'applicationScaleXml',
+    label: 'Application Scale XML Upload',
+    requiredAction: '/applicationDetails',
+    numberFieldLabel: 'Application Number',
+    numberFieldPlaceholder: 'Enter application number for scales',
   },
 ]
 
@@ -105,9 +105,13 @@ const getWorkflowFromQuery = (value: string | null): UploadWorkflowType => {
     value === 'exemption' ||
     value === 'permit' ||
     value === 'invoice' ||
-    value === 'scaleXml'
+    value === 'applicationScaleXml'
   ) {
     return value
+  }
+
+  if (value === 'scaleXml') {
+    return 'applicationScaleXml'
   }
 
   return 'application'
@@ -175,16 +179,18 @@ const AdminUploadsPage: FC = () => {
     }
 
     if (
-      (selectedWorkflowType === 'permit' ||
-        selectedWorkflowType === 'invoice' ||
-        selectedWorkflowType === 'scaleXml') &&
+      (selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') &&
       !formState.permitNumber.trim()
     ) {
       errors.push('Permit number is required.')
     }
 
+    if (selectedWorkflowType === 'applicationScaleXml' && !formState.applicationNumber.trim()) {
+      errors.push('Application number is required.')
+    }
+
     if (
-      selectedWorkflowType === 'scaleXml' &&
+      selectedWorkflowType === 'applicationScaleXml' &&
       selectedFile &&
       !selectedFile.name.toLowerCase().endsWith('.xml')
     ) {
@@ -247,7 +253,7 @@ const AdminUploadsPage: FC = () => {
     setIsPreviewing(true)
     try {
       const preview = await previewScaleXmlUpload({
-        permitNumber: formState.permitNumber.trim(),
+        applicationNumber: formState.applicationNumber.trim(),
         packageNumber: formState.packageNumber.trim(),
         file: selectedFile,
       })
@@ -287,7 +293,7 @@ const AdminUploadsPage: FC = () => {
     setIsSubmitting(true)
     try {
       const response = await submitScaleXmlUpload({
-        permitNumber: formState.permitNumber.trim(),
+        applicationNumber: formState.applicationNumber.trim(),
         rows: scalePreview.rows,
       })
       if (!response.success) {
@@ -313,7 +319,7 @@ const AdminUploadsPage: FC = () => {
     setErrorMessage('')
     setSuccessMessage('')
 
-    if (selectedWorkflowType === 'scaleXml') {
+    if (selectedWorkflowType === 'applicationScaleXml') {
       setErrorMessage('Preview the XML file before submitting scale rows.')
       return
     }
@@ -426,7 +432,8 @@ const AdminUploadsPage: FC = () => {
               </Tag>
             </div>
 
-            {selectedWorkflowType === 'application' && (
+            {(selectedWorkflowType === 'application' ||
+              selectedWorkflowType === 'applicationScaleXml') && (
               <TextInput
                 id="applicationNumber"
                 labelText={selectedWorkflow.numberFieldLabel}
@@ -457,8 +464,7 @@ const AdminUploadsPage: FC = () => {
             )}
 
             {(selectedWorkflowType === 'permit' ||
-              selectedWorkflowType === 'invoice' ||
-              selectedWorkflowType === 'scaleXml') && (
+              selectedWorkflowType === 'invoice') && (
               <TextInput
                 id="permitNumber"
                 labelText={selectedWorkflow.numberFieldLabel}
@@ -473,7 +479,7 @@ const AdminUploadsPage: FC = () => {
               />
             )}
 
-            {selectedWorkflowType === 'scaleXml' && (
+            {selectedWorkflowType === 'applicationScaleXml' && (
               <TextInput
                 id="packageNumber"
                 labelText="Package Number"
@@ -540,9 +546,13 @@ const AdminUploadsPage: FC = () => {
             <TextInput
               id="uploadFile"
               type="file"
-              labelText={selectedWorkflowType === 'scaleXml' ? 'Scale XML File' : 'Document File'}
+              labelText={
+                selectedWorkflowType === 'applicationScaleXml' ? 'Scale XML File' : 'Document File'
+              }
               accept={
-                selectedWorkflowType === 'scaleXml' ? '.xml,text/xml,application/xml' : undefined
+                selectedWorkflowType === 'applicationScaleXml'
+                  ? '.xml,text/xml,application/xml'
+                  : undefined
               }
               onChange={(event) => {
                 const target = event.target as HTMLInputElement
@@ -550,7 +560,7 @@ const AdminUploadsPage: FC = () => {
                 setScalePreview(null)
               }}
             />
-            {selectedWorkflowType !== 'scaleXml' && (
+            {selectedWorkflowType !== 'applicationScaleXml' && (
               <TextArea
                 id="fileDescription"
                 labelText="Document Description"
@@ -566,7 +576,7 @@ const AdminUploadsPage: FC = () => {
             )}
           </div>
           <div className="legacy-search-actions">
-            {selectedWorkflowType === 'scaleXml' ? (
+            {selectedWorkflowType === 'applicationScaleXml' ? (
               <>
                 <Button
                   kind="primary"
@@ -609,7 +619,7 @@ const AdminUploadsPage: FC = () => {
             </p>
           )}
 
-          {selectedWorkflowType === 'scaleXml' && scalePreview && (
+          {selectedWorkflowType === 'applicationScaleXml' && scalePreview && (
             <div>
               <p className="landing-help-text">
                 Parsed {scalePreview.totalRows} row(s), {scalePreview.validRows} valid. Total:{' '}

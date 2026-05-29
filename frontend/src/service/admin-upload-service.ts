@@ -1,7 +1,7 @@
 import apiService from '@/service/api-service'
 
 export type DocumentUploadWorkflowType = 'application' | 'exemption' | 'permit' | 'invoice'
-export type UploadWorkflowType = DocumentUploadWorkflowType | 'scaleXml'
+export type UploadWorkflowType = DocumentUploadWorkflowType | 'applicationScaleXml'
 
 type UploadRequestBase = {
   file: File
@@ -46,7 +46,6 @@ export type ScaleUploadPreviewRow = {
   volume: number | null
   packageNumber: string
   applicationNumber: number | null
-  permitNumber: number | null
   valid: boolean
   errors: string[]
   warnings: string[]
@@ -67,20 +66,20 @@ export type ScaleUploadSubmitResponse = {
   success: boolean
   message: string
   submittedRows: number
-  permitNumber: number | null
+  applicationNumber: number | null
   errors: string[]
   warnings: string[]
   rows: ScaleUploadPreviewRow[]
 }
 
 export type ScaleXmlPreviewRequest = {
-  permitNumber: string
+  applicationNumber: string
   packageNumber: string
   file: File
 }
 
 export type ScaleXmlSubmitRequest = {
-  permitNumber: string
+  applicationNumber: string
   rows: ScaleUploadPreviewRow[]
 }
 
@@ -144,18 +143,22 @@ export const previewScaleXmlUpload = async (
 ): Promise<ScaleUploadPreviewResponse> => {
   const formData = new FormData()
   formData.append('file', request.file)
-  formData.append('permitNumber', request.permitNumber)
+  formData.append('applicationNumber', request.applicationNumber)
   if (request.packageNumber.trim()) {
     formData.append('packageNumber', request.packageNumber.trim())
   }
 
   const response = await apiService
     .getAxiosInstance()
-    .post<ScaleUploadPreviewResponse>('/lexis/rpc/permit-details/scale-upload/preview', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
+    .post<ScaleUploadPreviewResponse>(
+      '/lexis/rpc/application-details/scale-upload/preview',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       },
-    })
+    )
   return response.data
 }
 
@@ -164,8 +167,8 @@ export const submitScaleXmlUpload = async (
 ): Promise<ScaleUploadSubmitResponse> => {
   const response = await apiService
     .getAxiosInstance()
-    .post<ScaleUploadSubmitResponse>('/lexis/rpc/permit-details/scale-upload/submit', {
-      permitNumber: Number.parseInt(request.permitNumber, 10),
+    .post<ScaleUploadSubmitResponse>('/lexis/rpc/application-details/scale-upload/submit', {
+      applicationNumber: Number.parseInt(request.applicationNumber, 10),
       rows: request.rows.map((row) => ({
         lineNumber: row.lineNumber,
         timberMark: row.timberMark,
@@ -175,7 +178,6 @@ export const submitScaleXmlUpload = async (
         volume: row.volume,
         packageNumber: row.packageNumber,
         applicationNumber: row.applicationNumber,
-        permitNumber: row.permitNumber,
       })),
     })
   return response.data

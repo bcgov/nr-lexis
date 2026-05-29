@@ -1,11 +1,10 @@
-package ca.bc.gov.mof.lexis.dto.permit.rpc;
+package ca.bc.gov.mof.lexis.dto.application.rpc;
 
 import java.math.BigDecimal;
 import java.util.List;
 
-public record PermitScaleUploadSubmitRequestDto(
-    Long permitNumber,
-    List<ScaleRow> rows) {
+public record ApplicationScaleUploadSubmitRequestDto(
+    Long applicationNumber, List<ScaleRow> rows) {
 
   public record ScaleRow(
       int lineNumber,
@@ -15,6 +14,5 @@ public record PermitScaleUploadSubmitRequestDto(
       Long pieces,
       BigDecimal volume,
       String packageNumber,
-      Long applicationNumber,
-      Long permitNumber) {}
+      Long applicationNumber) {}
 }
