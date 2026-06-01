@@ -31,6 +31,8 @@ parameters:
     value: apps.silver.devops.gov.bc.ca
   - name: FRONTEND_LOG_LEVEL
     value: INFO
+  - name: AWS_COGNITO_ISSUER_URI
+    value: ""
   - name: VITE_LOGIN_URL
     value: ""
   - name: VITE_LOGOUT_URL
@@ -105,6 +107,8 @@ objects:
                   value: /tmp
                 - name: XDG_CONFIG_HOME
                   value: /tmp
+                - name: AWS_COGNITO_ISSUER_URI
+                  value: ${AWS_COGNITO_ISSUER_URI}
                 - name: VITE_LOGIN_URL
                   value: ${VITE_LOGIN_URL}
                 - name: VITE_LOGOUT_URL

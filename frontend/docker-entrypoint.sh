@@ -16,6 +16,8 @@ escape() {
 cat > "$CONFIG_FILE" <<EOF2
 // Generated at container start by docker-entrypoint.sh from VITE_* env vars.
 window.config = {
+  AWS_COGNITO_ISSUER_URI: "$(escape "${AWS_COGNITO_ISSUER_URI:-}")",
+  VITE_AWS_COGNITO_ISSUER_URI: "$(escape "${VITE_AWS_COGNITO_ISSUER_URI:-${AWS_COGNITO_ISSUER_URI:-}}")",
   VITE_LOGIN_URL: "$(escape "${VITE_LOGIN_URL:-}")",
   VITE_LOGOUT_URL: "$(escape "${VITE_LOGOUT_URL:-}")",
   VITE_LEXIS_REPORT_ENDPOINT_BASE: "$(escape "${VITE_LEXIS_REPORT_ENDPOINT_BASE:-/api}")",

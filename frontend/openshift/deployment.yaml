@@ -62,6 +62,8 @@ spec:
               value: /tmp
             - name: XDG_CONFIG_HOME
               value: /tmp
+            - name: AWS_COGNITO_ISSUER_URI
+              value: ${AWS_COGNITO_ISSUER_URI}
             - name: VITE_LOGIN_URL
               value: ${VITE_LOGIN_URL}
             - name: VITE_LOGOUT_URL

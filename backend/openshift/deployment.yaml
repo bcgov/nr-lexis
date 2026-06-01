@@ -74,6 +74,8 @@ spec:
               value: oracle
             - name: SERVER_PORT
               value: "8080"
+            - name: LEXIS_COGNITO_ENABLED
+              value: "true"
             - name: AWS_COGNITO_ISSUER_URI
               value: ${AWS_COGNITO_ISSUER_URI}
             - name: COGNITO_USERINFO_URI

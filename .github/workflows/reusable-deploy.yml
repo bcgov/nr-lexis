@@ -83,7 +83,7 @@ jobs:
         with:
           file: backend/openshift.deploy.yml
           oc_namespace: ${{ secrets.oc_namespace }}
-          oc_server: ${{ vars.oc_server }}
+          oc_server: ${{ vars.OC_SERVER }}
           oc_token: ${{ secrets.oc_token }}
           debug: false
           overwrite: true
@@ -119,7 +119,7 @@ jobs:
         with:
           file: frontend/openshift.deploy.yml
           oc_namespace: ${{ secrets.oc_namespace }}
-          oc_server: ${{ vars.oc_server }}
+          oc_server: ${{ vars.OC_SERVER }}
           oc_token: ${{ secrets.oc_token }}
           debug: false
           overwrite: true
@@ -129,6 +129,7 @@ jobs:
             -p NAME="${{ github.event.repository.name }}"
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p REPLICAS="${{ inputs.frontend_replicas }}"
+            -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
             -p VITE_LOGIN_URL="${{ vars.VITE_LOGIN_URL }}"
             -p VITE_LOGOUT_URL="${{ vars.VITE_LOGOUT_URL }}"
             -p VITE_LEXIS_REPORT_ENDPOINT_BASE="${{ vars.VITE_LEXIS_REPORT_ENDPOINT_BASE }}"

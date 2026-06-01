@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
+import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth'
+import { isCognitoConfigured } from '@/config/fam/config'
 import { AuthContext } from '@/context/auth/AuthContext'
 import type { AuthContextType } from '@/context/auth/types'
 import { env } from '@/env'
@@ -172,12 +174,20 @@ export const AuthProvider: FC<Props> = ({ children }) => {
   const [capabilities, setCapabilities] = useState<LexisSessionCapabilities>(DEFAULT_CAPABILITIES)
   const [isLoading, setIsLoading] = useState(true)
   const externalLoginUrl = (env.VITE_LOGIN_URL ?? '').trim()
-  const usesExternalLogin = externalLoginUrl.length > 0
+  const usesExternalLogin = isCognitoConfigured || externalLoginUrl.length > 0
 
   const refresh = useCallback(async () => {
     setIsLoading(true)
 
     try {
+      if (isCognitoConfigured) {
+        try {
+          await fetchAuthSession({ forceRefresh: false })
+        } catch {
+          // Ignore here; capabilities endpoint still returns anonymous when no token exists.
+        }
+      }
+
       const data = await fetchSessionCapabilities()
       setCapabilities(sanitizeCapabilities(data))
     } catch (error) {
@@ -193,6 +203,11 @@ export const AuthProvider: FC<Props> = ({ children }) => {
   }, [refresh])
 
   const login = useCallback(async () => {
+    if (isCognitoConfigured) {
+      await signInWithRedirect()
+      return
+    }
+
     if (externalLoginUrl) {
       window.location.assign(externalLoginUrl)
       return
@@ -203,6 +218,9 @@ export const AuthProvider: FC<Props> = ({ children }) => {
   const logout = useCallback(async () => {
     try {
       await performLogoff()
+      if (isCognitoConfigured) {
+        await signOut()
+      }
     } catch (error) {
       console.warn('Unable to complete backend logoff. Clearing local auth state.', error)
     } finally {

@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  readonly AWS_COGNITO_ISSUER_URI?: string
+  readonly VITE_AWS_COGNITO_ISSUER_URI?: string
   readonly VITE_LOGIN_URL?: string
   readonly VITE_LOGOUT_URL?: string
   readonly VITE_LEXIS_REPORT_ENDPOINT_BASE?: string
