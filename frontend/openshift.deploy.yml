@@ -31,12 +31,20 @@ parameters:
     value: apps.silver.devops.gov.bc.ca
   - name: FRONTEND_LOG_LEVEL
     value: INFO
-  - name: AWS_COGNITO_ISSUER_URI
+  - name: VITE_USER_POOLS_ID
     value: ""
-  - name: VITE_LOGIN_URL
+  - name: VITE_USER_POOLS_WEB_CLIENT_ID
     value: ""
-  - name: VITE_LOGOUT_URL
+  - name: VITE_COGNITO_DOMAIN
     value: ""
+  - name: VITE_REDIRECT_SIGN_IN
+    value: ""
+  - name: VITE_REDIRECT_SIGN_OUT
+    value: ""
+  - name: VITE_COGNITO_SCOPES
+    value: "openid profile email"
+  - name: VITE_ZONE
+    value: dev
   - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
     value: /api
   - name: VITE_LEXIS_REPORT_API_BASE
@@ -107,12 +115,20 @@ objects:
                   value: /tmp
                 - name: XDG_CONFIG_HOME
                   value: /tmp
-                - name: AWS_COGNITO_ISSUER_URI
-                  value: ${AWS_COGNITO_ISSUER_URI}
-                - name: VITE_LOGIN_URL
-                  value: ${VITE_LOGIN_URL}
-                - name: VITE_LOGOUT_URL
-                  value: ${VITE_LOGOUT_URL}
+                - name: VITE_USER_POOLS_ID
+                  value: ${VITE_USER_POOLS_ID}
+                - name: VITE_USER_POOLS_WEB_CLIENT_ID
+                  value: ${VITE_USER_POOLS_WEB_CLIENT_ID}
+                - name: VITE_COGNITO_DOMAIN
+                  value: ${VITE_COGNITO_DOMAIN}
+                - name: VITE_REDIRECT_SIGN_IN
+                  value: ${VITE_REDIRECT_SIGN_IN}
+                - name: VITE_REDIRECT_SIGN_OUT
+                  value: ${VITE_REDIRECT_SIGN_OUT}
+                - name: VITE_COGNITO_SCOPES
+                  value: ${VITE_COGNITO_SCOPES}
+                - name: VITE_ZONE
+                  value: ${VITE_ZONE}
                 - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
                   value: ${VITE_LEXIS_REPORT_ENDPOINT_BASE}
                 - name: VITE_LEXIS_REPORT_API_BASE

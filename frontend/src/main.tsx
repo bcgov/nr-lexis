@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import 'aws-amplify/auth/enable-oauth-listener'
 import { Amplify } from 'aws-amplify'
 import { cognitoUserPoolsTokenProvider } from 'aws-amplify/auth/cognito'
 import { CookieStorage } from 'aws-amplify/utils'

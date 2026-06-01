@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
 import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth'
-import { isCognitoConfigured } from '@/config/fam/config'
+import { idirProviderName, isCognitoConfigured } from '@/config/fam/config'
 import { AuthContext } from '@/context/auth/AuthContext'
 import type { AuthContextType } from '@/context/auth/types'
-import { env } from '@/env'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
 
@@ -74,6 +73,19 @@ const INDUSTRY_ROLE_NAMES = new Set<string>([
 
 const normalizeAction = (action: string): string => {
   return action.trim().toLowerCase().replace(/\.do$/i, '').replace(/^\//, '')
+}
+
+const hasOauthCallbackParams = (): boolean => {
+  const searchParams = new URLSearchParams(window.location.search)
+  return searchParams.has('code') || searchParams.has('state')
+}
+
+const clearOauthCallbackParams = (): void => {
+  if (!hasOauthCallbackParams()) {
+    return
+  }
+  const cleanUrl = `${window.location.origin}${window.location.pathname}`
+  window.history.replaceState({}, document.title, cleanUrl)
 }
 
 const canonicalizeRole = (role: string): string => {
@@ -173,18 +185,33 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
 export const AuthProvider: FC<Props> = ({ children }) => {
   const [capabilities, setCapabilities] = useState<LexisSessionCapabilities>(DEFAULT_CAPABILITIES)
   const [isLoading, setIsLoading] = useState(true)
-  const externalLoginUrl = (env.VITE_LOGIN_URL ?? '').trim()
-  const usesExternalLogin = isCognitoConfigured || externalLoginUrl.length > 0
+  const usesExternalLogin = isCognitoConfigured
 
   const refresh = useCallback(async () => {
     setIsLoading(true)
 
     try {
       if (isCognitoConfigured) {
-        try {
-          await fetchAuthSession({ forceRefresh: false })
-        } catch {
-          // Ignore here; capabilities endpoint still returns anonymous when no token exists.
+        let tokenReady = false
+        const retryCount = hasOauthCallbackParams() ? 6 : 1
+        for (let attempt = 0; attempt < retryCount; attempt += 1) {
+          try {
+            const { tokens } = (await fetchAuthSession({ forceRefresh: false })) ?? {}
+            if (tokens?.accessToken) {
+              tokenReady = true
+              break
+            }
+          } catch {
+            // Continue retry loop below.
+          }
+
+          if (attempt < retryCount - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 300))
+          }
+        }
+
+        if (tokenReady) {
+          clearOauthCallbackParams()
         }
       }
 
@@ -204,16 +231,11 @@ export const AuthProvider: FC<Props> = ({ children }) => {
 
   const login = useCallback(async () => {
     if (isCognitoConfigured) {
-      await signInWithRedirect()
-      return
-    }
-
-    if (externalLoginUrl) {
-      window.location.assign(externalLoginUrl)
+      await signInWithRedirect({ provider: { custom: idirProviderName } })
       return
     }
     await refresh()
-  }, [externalLoginUrl, refresh])
+  }, [refresh])
 
   const logout = useCallback(async () => {
     try {

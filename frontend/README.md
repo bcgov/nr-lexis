@@ -23,7 +23,13 @@ Configured through `frontend/.env` (copy from `.env.example`).
 
 | Variable | Description |
 |----------|-------------|
-| `VITE_LOGIN_URL` | Optional external login entry URL |
+| `VITE_USER_POOLS_ID` | Cognito user pool id |
+| `VITE_USER_POOLS_WEB_CLIENT_ID` | Cognito app client id |
+| `VITE_COGNITO_DOMAIN` | Cognito hosted UI domain (no protocol) |
+| `VITE_REDIRECT_SIGN_IN` | OAuth callback URL (LEXIS `/dashboard`) |
+| `VITE_REDIRECT_SIGN_OUT` | OAuth sign-out redirect URL |
+| `VITE_COGNITO_SCOPES` | OAuth scopes (default `openid profile email`) |
+| `VITE_ZONE` | Environment zone used for IDIR provider selection (e.g. `dev`) |
 | `VITE_LEXIS_REPORT_API_BASE` | Report API base path |
 | `VITE_LEXIS_REPORT_INCLUDE_ACTION_MAPPING` | Include legacy action mapping when requesting reports |
 | `VITE_LEXIS_CREATE_SUBMIT_REQUEST_MODE` | Create-submit payload mode (`form` or `json`) |

@@ -1,75 +1,47 @@
 import { env } from '@/env'
 
-type ParsedLoginConfig = {
-  clientId: string
-  domain: string
-  redirectSignIn: string
-  scopes: string[]
-}
-
-const parseLoginUrl = (value: string | undefined): ParsedLoginConfig | null => {
+const splitScopes = (value: string | undefined): string[] => {
   const raw = value?.trim()
   if (!raw) {
-    return null
+    return []
   }
-
-  try {
-    const loginUrl = new URL(raw)
-    const clientId = loginUrl.searchParams.get('client_id')?.trim() ?? ''
-    const redirectSignIn =
-      loginUrl.searchParams.get('redirect_uri')?.trim() ?? `${window.location.origin}/dashboard`
-    const scopesRaw = loginUrl.searchParams.get('scope')?.trim() ?? 'openid profile email'
-    const scopes = scopesRaw.split(/[\s+]+/).filter((scope) => scope.length > 0)
-
-    if (!clientId || !loginUrl.host) {
-      return null
-    }
-
-    return {
-      clientId,
-      domain: loginUrl.host,
-      redirectSignIn,
-      scopes,
-    }
-  } catch {
-    return null
-  }
+  return raw.split(/[\s+,]+/).filter((scope) => scope.length > 0)
 }
 
-const parseUserPoolId = (issuerUri: string | undefined): string | null => {
-  const raw = issuerUri?.trim()
-  if (!raw) {
-    return null
+const resolveScopes = (explicit: string[], fallback?: string[]): string[] => {
+  if (explicit.length > 0) {
+    return explicit
   }
-
-  try {
-    const issuer = new URL(raw)
-    const segments = issuer.pathname.split('/').filter((segment) => segment.length > 0)
-    return segments.at(-1) ?? null
-  } catch {
-    return null
+  if (fallback && fallback.length > 0) {
+    return fallback
   }
+  return ['openid', 'profile', 'email']
 }
 
-const parsedLoginConfig = parseLoginUrl(env.VITE_LOGIN_URL)
-const userPoolId = parseUserPoolId(env.VITE_AWS_COGNITO_ISSUER_URI ?? env.AWS_COGNITO_ISSUER_URI)
-const redirectSignOut = env.VITE_LOGOUT_URL?.trim() ?? ''
+const userPoolId = env.VITE_USER_POOLS_ID?.trim() ?? ''
+const userPoolClientId = env.VITE_USER_POOLS_WEB_CLIENT_ID?.trim() ?? ''
+const domain = env.VITE_COGNITO_DOMAIN?.trim()?.replace(/^https?:\/\//, '') ?? ''
+const redirectSignIn = env.VITE_REDIRECT_SIGN_IN?.trim() || `${window.location.origin}/dashboard`
+const redirectSignOut = env.VITE_REDIRECT_SIGN_OUT?.trim() || window.location.origin
+const scopes = resolveScopes(splitScopes(env.VITE_COGNITO_SCOPES))
+
+export const idirProviderName = `${(env.VITE_ZONE ?? 'DEV').toUpperCase()}-IDIR`
 
 export const isCognitoConfigured =
-  Boolean(userPoolId) && Boolean(parsedLoginConfig?.clientId) && Boolean(parsedLoginConfig?.domain)
+  Boolean(userPoolId) && Boolean(userPoolClientId) && Boolean(domain)
 
 const amplifyConfig = isCognitoConfigured
   ? {
       Auth: {
         Cognito: {
-          userPoolId: userPoolId!,
-          userPoolClientId: parsedLoginConfig!.clientId,
+          userPoolId,
+          userPoolClientId,
           loginWith: {
             oauth: {
-              domain: parsedLoginConfig!.domain,
-              scopes: parsedLoginConfig!.scopes,
-              redirectSignIn: [parsedLoginConfig!.redirectSignIn],
-              redirectSignOut: [redirectSignOut || window.location.origin],
+              domain,
+              scopes,
+              redirectSignIn: [redirectSignIn],
+              redirectSignOut: [redirectSignOut],
               responseType: 'code' as const,
             },
           },

@@ -16,10 +16,13 @@ escape() {
 cat > "$CONFIG_FILE" <<EOF2
 // Generated at container start by docker-entrypoint.sh from VITE_* env vars.
 window.config = {
-  AWS_COGNITO_ISSUER_URI: "$(escape "${AWS_COGNITO_ISSUER_URI:-}")",
-  VITE_AWS_COGNITO_ISSUER_URI: "$(escape "${VITE_AWS_COGNITO_ISSUER_URI:-${AWS_COGNITO_ISSUER_URI:-}}")",
-  VITE_LOGIN_URL: "$(escape "${VITE_LOGIN_URL:-}")",
-  VITE_LOGOUT_URL: "$(escape "${VITE_LOGOUT_URL:-}")",
+  VITE_USER_POOLS_ID: "$(escape "${VITE_USER_POOLS_ID:-}")",
+  VITE_USER_POOLS_WEB_CLIENT_ID: "$(escape "${VITE_USER_POOLS_WEB_CLIENT_ID:-}")",
+  VITE_COGNITO_DOMAIN: "$(escape "${VITE_COGNITO_DOMAIN:-}")",
+  VITE_REDIRECT_SIGN_IN: "$(escape "${VITE_REDIRECT_SIGN_IN:-}")",
+  VITE_REDIRECT_SIGN_OUT: "$(escape "${VITE_REDIRECT_SIGN_OUT:-}")",
+  VITE_COGNITO_SCOPES: "$(escape "${VITE_COGNITO_SCOPES:-}")",
+  VITE_ZONE: "$(escape "${VITE_ZONE:-dev}")",
   VITE_LEXIS_REPORT_ENDPOINT_BASE: "$(escape "${VITE_LEXIS_REPORT_ENDPOINT_BASE:-/api}")",
   VITE_LEXIS_REPORT_API_BASE: "$(escape "${VITE_LEXIS_REPORT_API_BASE:-/lexis/reports}")"
 };
