@@ -131,8 +131,6 @@ jobs:
             -p REPLICAS="${{ inputs.frontend_replicas }}"
             -p VITE_LOGIN_URL="${{ vars.VITE_LOGIN_URL }}"
             -p VITE_LOGOUT_URL="${{ vars.VITE_LOGOUT_URL }}"
-            -p VITE_ENABLE_DEV_ROLE_SIMULATION="${{ vars.VITE_ENABLE_DEV_ROLE_SIMULATION }}"
-            -p VITE_ENABLE_SEARCH_MOCK_FALLBACK="${{ vars.VITE_ENABLE_SEARCH_MOCK_FALLBACK }}"
             -p VITE_LEXIS_REPORT_ENDPOINT_BASE="${{ vars.VITE_LEXIS_REPORT_ENDPOINT_BASE }}"
             -p VITE_LEXIS_REPORT_API_BASE="${{ vars.VITE_LEXIS_REPORT_API_BASE }}"
           triggers: ${{ inputs.triggers }}

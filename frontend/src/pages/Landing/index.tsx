@@ -1,75 +1,16 @@
-import { useMemo, useState, type FC } from 'react'
+import { useState, type FC } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Button,
-  Column,
-  Grid,
-  InlineNotification,
-  Select,
-  SelectItem,
-  Tag,
-  TextInput,
-  Tile,
-} from '@carbon/react'
+import { Button, Column, Grid, InlineNotification, Tag, Tile } from '@carbon/react'
 import { Login } from '@carbon/icons-react'
 import { useAuth } from '@/context/auth/useAuth'
 import logo from '@/assets/gov-bc-logo-horiz.png'
 
-const DEV_ROLE_OPTIONS = [
-  { value: '', label: 'Select a role' },
-  { value: 'ADMIN', label: 'ADMIN' },
-  { value: 'READ_ONLY', label: 'READ_ONLY' },
-  { value: 'APPLICATION_APPROVER', label: 'APPLICATION_APPROVER' },
-  { value: 'EXEMPTION_APPROVER', label: 'EXEMPTION_APPROVER' },
-  { value: 'PROVINCIAL_SUBMITTER', label: 'PROVINCIAL_SUBMITTER (Abstract Parent)' },
-  { value: 'FEDERAL_SUBMITTER', label: 'FEDERAL_SUBMITTER (Concrete)' },
-]
-
-const DEV_CONCRETE_ROLE_FAMILIES = [
-  { value: '', label: 'Select role family' },
-  { value: 'PROVINCIAL_SUBMITTER', label: 'PROVINCIAL_SUBMITTER' },
-]
-
-const isDevRoleSimulationEnabled = (): boolean => {
-  if (import.meta.env.VITE_ENABLE_DEV_ROLE_SIMULATION === 'true') {
-    return true
-  }
-  return import.meta.env.DEV
-}
-
-const normalizeForestClientNumber = (value: string): string => value.trim()
-
-const isNumericForestClientNumber = (value: string): boolean => /^[0-9]+$/.test(value)
-
 const LandingPage: FC = () => {
   const navigate = useNavigate()
-  const {
-    capabilities,
-    defaultRoute,
-    devRoles,
-    isLoading,
-    isLoggedIn,
-    login,
-    refresh,
-    setDevRoles,
-    clearLoginSimulation,
-    usesExternalLogin,
-  } = useAuth()
+  const { capabilities, defaultRoute, isLoading, isLoggedIn, login, refresh, usesExternalLogin } =
+    useAuth()
 
-  const [selectedRole, setSelectedRole] = useState('')
-  const [selectedConcreteRoleFamily, setSelectedConcreteRoleFamily] = useState('')
-  const [forestClientNumber, setForestClientNumber] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
-  const [showDevTools, setShowDevTools] = useState(false)
-
-  const roleSimulationEnabled = useMemo(() => isDevRoleSimulationEnabled(), [])
-
-  const effectiveRoles = useMemo(() => {
-    if (capabilities.roles.length > 0) {
-      return capabilities.roles
-    }
-    return devRoles
-  }, [capabilities.roles, devRoles])
 
   const onLogin = async () => {
     setErrorMessage('')
@@ -88,58 +29,6 @@ const LandingPage: FC = () => {
     } catch (error) {
       console.error(error)
       setErrorMessage('Unable to refresh session information.')
-    }
-  }
-
-  const onUseDevRole = async () => {
-    if (!selectedRole) {
-      return
-    }
-
-    setErrorMessage('')
-    try {
-      await setDevRoles([selectedRole])
-      setSelectedConcreteRoleFamily('')
-      setForestClientNumber('')
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to set development role simulation.')
-    }
-  }
-
-  const onUseConcreteDevRole = async () => {
-    const clientNumber = normalizeForestClientNumber(forestClientNumber)
-    if (!selectedConcreteRoleFamily || !clientNumber) {
-      return
-    }
-
-    if (!isNumericForestClientNumber(clientNumber)) {
-      setErrorMessage('Forest client number must be numeric for concrete role simulation.')
-      return
-    }
-
-    setErrorMessage('')
-    const concreteRole = `${selectedConcreteRoleFamily}_${clientNumber}`
-
-    try {
-      await setDevRoles([concreteRole])
-      setSelectedRole('')
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to set concrete development role simulation.')
-    }
-  }
-
-  const onClearSimulation = async () => {
-    setErrorMessage('')
-    try {
-      await clearLoginSimulation()
-      setSelectedRole('')
-      setSelectedConcreteRoleFamily('')
-      setForestClientNumber('')
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to clear development role simulation.')
     }
   }
 
@@ -166,18 +55,14 @@ const LandingPage: FC = () => {
 
               {!usesExternalLogin && !isLoggedIn && (
                 <p className="landing-help-text">
-                  External login URL is not configured. Local development mode can use role
-                  simulation.
+                  External login URL is not configured. Login is expected through backend session
+                  auth.
                 </p>
               )}
 
               {isLoggedIn && (
                 <>
-                  <Button
-                    kind="secondary"
-                    onClick={() => navigate(defaultRoute)}
-                    disabled={isLoading}
-                  >
+                  <Button kind="secondary" onClick={() => navigate(defaultRoute)} disabled={isLoading}>
                     Continue to Application
                   </Button>
                   <Button kind="ghost" onClick={() => void onRefreshSession()} disabled={isLoading}>
@@ -199,8 +84,8 @@ const LandingPage: FC = () => {
               Authenticated: <strong>{isLoggedIn ? 'Yes' : 'No'}</strong>
             </p>
             <div className="landing-role-tags">
-              {effectiveRoles.length === 0 && <Tag type="gray">No roles</Tag>}
-              {effectiveRoles.map((role) => (
+              {capabilities.roles.length === 0 && <Tag type="gray">No roles</Tag>}
+              {capabilities.roles.map((role) => (
                 <Tag key={role} type="blue">
                   {role}
                 </Tag>
@@ -208,88 +93,6 @@ const LandingPage: FC = () => {
             </div>
           </Tile>
         </Column>
-
-        {roleSimulationEnabled && (
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <div className="landing-dev-header">
-                <h2>Development Role Simulation</h2>
-                <Button
-                  kind="tertiary"
-                  onClick={() => setShowDevTools((current) => !current)}
-                  disabled={isLoading}
-                >
-                  {showDevTools ? 'Hide' : 'Show'}
-                </Button>
-              </div>
-
-              {showDevTools && (
-                <>
-                  <p className="landing-help-text">
-                    FAM role model note: <code>PROVINCIAL_SUBMITTER</code> is abstract and
-                    client-scoped via <code>PROVINCIAL_SUBMITTER_&lt;forestClientNumber&gt;</code>.{' '}
-                    <code>FEDERAL_SUBMITTER</code> is concrete and selected directly (no client
-                    suffix). Legacy placeholder aliases are normalized during transition.
-                  </p>
-                  <p className="landing-help-text">
-                    Development role simulation is for local testing only. Production access is
-                    driven by Cognito/FAM role claims.
-                  </p>
-                  <div className="landing-actions">
-                    <Select
-                      id="devRole"
-                      labelText="Development Role"
-                      value={selectedRole}
-                      onChange={(event) => setSelectedRole(event.target.value)}
-                    >
-                      {DEV_ROLE_OPTIONS.map((option) => (
-                        <SelectItem key={option.label} value={option.value} text={option.label} />
-                      ))}
-                    </Select>
-                    <Button
-                      kind="secondary"
-                      onClick={() => void onUseDevRole()}
-                      disabled={isLoading || !selectedRole}
-                    >
-                      Use Selected Role
-                    </Button>
-                    <Select
-                      id="devConcreteRoleFamily"
-                      labelText="Concrete Role Family"
-                      value={selectedConcreteRoleFamily}
-                      onChange={(event) => setSelectedConcreteRoleFamily(event.target.value)}
-                    >
-                      {DEV_CONCRETE_ROLE_FAMILIES.map((option) => (
-                        <SelectItem key={option.label} value={option.value} text={option.label} />
-                      ))}
-                    </Select>
-                    <TextInput
-                      id="devForestClientNumber"
-                      labelText="Forest Client Number"
-                      value={forestClientNumber}
-                      onChange={(event) => setForestClientNumber(event.target.value)}
-                      placeholder="Enter numeric provincial client number"
-                    />
-                    <Button
-                      kind="secondary"
-                      onClick={() => void onUseConcreteDevRole()}
-                      disabled={isLoading || !selectedConcreteRoleFamily || !forestClientNumber}
-                    >
-                      Use Concrete Role
-                    </Button>
-                    <Button
-                      kind="ghost"
-                      onClick={() => void onClearSimulation()}
-                      disabled={isLoading || devRoles.length === 0}
-                    >
-                      Clear Development Role
-                    </Button>
-                  </div>
-                </>
-              )}
-            </Tile>
-          </Column>
-        )}
 
         {errorMessage && (
           <Column sm={4} md={8} lg={16}>

@@ -45,7 +45,6 @@ describe('Landing auth flow smoke', () => {
         grantedActions: [],
       },
       defaultRoute: '/provincial/summary',
-      devRoles: [],
       isLoading: false,
       isLoggedIn: false,
       hasAnyRole: false,
@@ -53,8 +52,6 @@ describe('Landing auth flow smoke', () => {
       login: vi.fn().mockResolvedValue(undefined),
       refresh: vi.fn().mockResolvedValue(undefined),
       logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
       canPerform: vi.fn().mockReturnValue(false),
     })
   })
@@ -71,7 +68,6 @@ describe('Landing auth flow smoke', () => {
         grantedActions: [],
       },
       defaultRoute: '/provincial/summary',
-      devRoles: [],
       isLoading: false,
       isLoggedIn: false,
       hasAnyRole: false,
@@ -79,8 +75,6 @@ describe('Landing auth flow smoke', () => {
       login,
       refresh: vi.fn().mockResolvedValue(undefined),
       logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
       canPerform: vi.fn().mockReturnValue(false),
     })
 
@@ -109,7 +103,6 @@ describe('Landing auth flow smoke', () => {
         grantedActions: ['/summary', '/applicationSearch'],
       },
       defaultRoute: '/provincial/summary',
-      devRoles: [],
       isLoading: false,
       isLoggedIn: true,
       hasAnyRole: true,
@@ -117,8 +110,6 @@ describe('Landing auth flow smoke', () => {
       login,
       refresh,
       logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
       canPerform: vi.fn().mockReturnValue(true),
     })
 
@@ -145,7 +136,6 @@ describe('Landing auth flow smoke', () => {
         grantedActions: [],
       },
       defaultRoute: '/provincial/summary',
-      devRoles: [],
       isLoading: false,
       isLoggedIn: false,
       hasAnyRole: false,
@@ -153,8 +143,6 @@ describe('Landing auth flow smoke', () => {
       login: vi.fn().mockRejectedValue(new Error('boom')),
       refresh: vi.fn().mockResolvedValue(undefined),
       logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
       canPerform: vi.fn().mockReturnValue(false),
     })
 

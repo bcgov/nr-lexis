@@ -20,8 +20,6 @@ vi.mock('@/service/api-service', () => ({
 describe('admin-policy-service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.unstubAllEnvs()
-    localStorage.clear()
   })
 
   it('normalizes fee policy API rows', async () => {
@@ -55,87 +53,23 @@ describe('admin-policy-service', () => {
     ])
   })
 
-  it('throws API errors when local fallback is disabled (default)', async () => {
+  it('throws API errors when fee policy API request fails', async () => {
     const apiError = { response: { status: 500 } }
     getMock.mockRejectedValue(apiError)
 
     await expect(fetchFeePolicies()).rejects.toBe(apiError)
   })
 
-  it('uses local fee policies when fallback toggle is enabled', async () => {
-    vi.stubEnv('VITE_LEXIS_ENABLE_ADMIN_POLICY_LOCAL_FALLBACK', 'true')
-    getMock.mockRejectedValue({ response: { status: 503 } })
-
-    localStorage.setItem(
-      'lexis.admin.feePolicies',
-      JSON.stringify([
-        {
-          id: 'older',
-          effectiveDate: '2026-01-01',
-          orgUnitCode: '11',
-          orgUnitName: 'Cariboo',
-          policyPercentage: '2.0',
-          entryUserId: 'idir\\user',
-          entryTimestamp: '2026-01-01T00:00:00.000Z',
-          updateUserId: 'idir\\user',
-          updateTimestamp: '2026-01-01T00:00:00.000Z',
-        },
-        {
-          id: 'newer',
-          effectiveDate: '2026-03-01',
-          orgUnitCode: '12',
-          orgUnitName: 'Coast',
-          policyPercentage: '4.0',
-          entryUserId: 'idir\\user',
-          entryTimestamp: '2026-03-01T00:00:00.000Z',
-          updateUserId: 'idir\\user',
-          updateTimestamp: '2026-03-01T00:00:00.000Z',
-        },
-      ]),
-    )
-
-    const result = await fetchFeePolicies()
-
-    expect(result.map((row) => row.id)).toEqual(['newer', 'older'])
-  })
-
-  it('falls back to local upsert when enabled and API write fails', async () => {
-    vi.stubEnv('VITE_LEXIS_ENABLE_ADMIN_POLICY_LOCAL_FALLBACK', 'true')
-
+  it('throws API errors when fee policy upsert fails', async () => {
     postMock.mockRejectedValue({ response: { status: 404 } })
 
-    localStorage.setItem(
-      'lexis.admin.feePolicies',
-      JSON.stringify([
-        {
-          id: 'fee-1',
-          effectiveDate: '2026-01-01',
-          orgUnitCode: '11',
-          orgUnitName: 'Cariboo',
-          policyPercentage: '2.0',
-          entryUserId: 'idir\\user',
-          entryTimestamp: '2026-01-01T00:00:00.000Z',
-          updateUserId: 'idir\\user',
-          updateTimestamp: '2026-01-01T00:00:00.000Z',
-        },
-      ]),
-    )
-
-    const result = await upsertFeePolicy({
-      effectiveDate: '2026-04-01',
-      orgUnitCode: ' 12 ',
-      orgUnitName: ' Coast ',
-      policyPercentage: ' 5.0 ',
-    })
-
-    expect(result).toHaveLength(2)
-    expect(result[0]).toEqual(
-      expect.objectContaining({
+    await expect(
+      upsertFeePolicy({
         effectiveDate: '2026-04-01',
-        orgUnitCode: '12',
-        orgUnitName: 'Coast',
-        policyPercentage: '5.0',
+        orgUnitCode: ' 12 ',
+        orgUnitName: ' Coast ',
+        policyPercentage: ' 5.0 ',
       }),
-    )
+    ).rejects.toEqual({ response: { status: 404 } })
   })
 })

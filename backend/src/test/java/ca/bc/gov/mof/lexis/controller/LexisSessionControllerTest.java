@@ -38,64 +38,15 @@ class LexisSessionControllerTest {
   @InjectMocks private LexisSessionController controller;
 
   @Test
-  void welcomeShouldUseRoleFiltersWhenProvided() {
-    MockHttpServletRequest request = new MockHttpServletRequest();
-    request.setUserPrincipal(() -> "idir\\jsmith");
-
-    LexisSessionWelcomeDto dto =
-        new LexisSessionWelcomeDto(
-            true,
-            "idir\\jsmith",
-            List.of("LEXIS_READ_ONLY"),
-            "readOnly",
-            "/applicationSearch.do?actionMapping=view");
-
-    when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY"))).thenReturn(dto);
-
-    ResponseEntity<LexisSessionWelcomeDto> response =
-        controller.showWelcome(List.of("LEXIS_READ_ONLY"), "LEXIS_ADMIN", request);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY"));
-    verify(sessionService, never()).parseRoleHeader("LEXIS_ADMIN");
-  }
-
-  @Test
-  void welcomeShouldUseRoleHeaderWhenFiltersMissing() {
-    MockHttpServletRequest request = new MockHttpServletRequest();
-    request.setUserPrincipal(() -> "idir\\jsmith");
-
-    when(sessionService.parseRoleHeader("READ_ONLY,ADMIN"))
-        .thenReturn(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
-
-    LexisSessionWelcomeDto dto =
-        new LexisSessionWelcomeDto(
-            true,
-            "idir\\jsmith",
-            List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"),
-            "readOnly",
-            "/applicationSearch.do?actionMapping=view");
-    when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN")))
-        .thenReturn(dto);
-
-    ResponseEntity<LexisSessionWelcomeDto> response =
-        controller.showWelcome(null, "READ_ONLY,ADMIN", request);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(sessionService).parseRoleHeader("READ_ONLY,ADMIN");
-    verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
-  }
-
-  @Test
-  void welcomeShouldUseTokenRolesWhenFiltersMissing() {
+  void welcomeShouldUseTokenRolesWhenAvailable() {
     MockHttpServletRequest request = new MockHttpServletRequest();
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a", "LEXIS_PROVINCIAL_SUBMITTER");
     request.setUserPrincipal(authentication);
 
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+
     LexisSessionWelcomeDto dto =
         new LexisSessionWelcomeDto(
             true,
@@ -103,26 +54,51 @@ class LexisSessionControllerTest {
             List.of("LEXIS_PROVINCIAL_SUBMITTER"),
             "industryUser",
             "/summary.do?actionMapping=view");
+
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .thenReturn(dto);
 
-    ResponseEntity<LexisSessionWelcomeDto> response =
-        controller.showWelcome(null, "READ_ONLY,ADMIN", request);
+    ResponseEntity<LexisSessionWelcomeDto> response = controller.showWelcome(request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(sessionService).parseRolesFromPrincipal(authentication);
-    verify(sessionService, never()).parseRoleHeader("READ_ONLY,ADMIN");
     verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+  }
+
+  @Test
+  void welcomeShouldResolveWithoutRolesWhenNoAuthenticationAuthoritiesExist() {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.setUserPrincipal(() -> "idir\\jsmith");
+
+    LexisSessionWelcomeDto dto =
+        new LexisSessionWelcomeDto(
+            true,
+            "idir\\jsmith",
+            List.of(),
+            "mofrUser",
+            "/applicationsReview.do?actionMapping=view");
+
+    when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of())).thenReturn(dto);
+
+    ResponseEntity<LexisSessionWelcomeDto> response = controller.showWelcome(request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(sessionService, never()).parseRolesFromPrincipal(org.mockito.ArgumentMatchers.any());
+    verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of());
   }
 
   @Test
   void capabilitiesShouldUseWelcomeAndAuthorizationServices() {
     MockHttpServletRequest request = new MockHttpServletRequest();
-    request.setUserPrincipal(() -> "idir\\jsmith");
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a", "LEXIS_READ_ONLY", "LEXIS_ADMIN");
+    request.setUserPrincipal(authentication);
 
-    when(sessionService.parseRoleHeader("READ_ONLY,ADMIN"))
+    when(sessionService.parseRolesFromPrincipal(authentication))
         .thenReturn(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
+
     LexisSessionWelcomeDto welcome =
         new LexisSessionWelcomeDto(
             true,
@@ -130,13 +106,13 @@ class LexisSessionControllerTest {
             List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"),
             "readOnly",
             "/applicationSearch.do?actionMapping=view");
+
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN")))
         .thenReturn(welcome);
     when(authorizationService.resolveGrantedActions(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN")))
         .thenReturn(List.of("/applicationSearch", "/applicationDetails"));
 
-    ResponseEntity<LexisSessionCapabilitiesDto> response =
-        controller.capabilities(null, "READ_ONLY,ADMIN", request);
+    ResponseEntity<LexisSessionCapabilitiesDto> response = controller.capabilities(request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody())
@@ -148,7 +124,8 @@ class LexisSessionControllerTest {
                 "readOnly",
                 "/applicationSearch.do?actionMapping=view",
                 List.of("/applicationSearch", "/applicationDetails")));
-    verify(sessionService).parseRoleHeader("READ_ONLY,ADMIN");
+
+    verify(sessionService).parseRolesFromPrincipal(authentication);
     verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
     verify(authorizationService).resolveGrantedActions(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
   }
@@ -156,41 +133,17 @@ class LexisSessionControllerTest {
   @Test
   void canPerformActionShouldEvaluateAgainstResolvedRoles() {
     MockHttpServletRequest request = new MockHttpServletRequest();
-    request.setUserPrincipal(() -> "idir\\jsmith");
-    when(sessionService.parseRoleHeader("READ_ONLY,ADMIN"))
-        .thenReturn(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
-    when(authorizationService.canPerformAction(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"), "/applicationSearch"))
-        .thenReturn(true);
-
-    ResponseEntity<LexisSessionActionAccessDto> response =
-        controller.canPerformAction("/applicationSearch", null, "READ_ONLY,ADMIN", request);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody())
-        .isEqualTo(
-            new LexisSessionActionAccessDto(
-                true,
-                "idir\\jsmith",
-                List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"),
-                "/applicationSearch",
-                true));
-    verify(sessionService).parseRoleHeader("READ_ONLY,ADMIN");
-    verify(authorizationService)
-        .canPerformAction(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"), "/applicationSearch");
-  }
-
-  @Test
-  void canPerformActionShouldUseTokenRolesBeforeHeaderFallback() {
-    MockHttpServletRequest request = new MockHttpServletRequest();
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a", "LEXIS_PROVINCIAL_SUBMITTER");
     request.setUserPrincipal(authentication);
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
     when(authorizationService.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/offersSearch"))
         .thenReturn(true);
 
     ResponseEntity<LexisSessionActionAccessDto> response =
-        controller.canPerformAction("/offersSearch", null, "READ_ONLY,ADMIN", request);
+        controller.canPerformAction("/offersSearch", request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody())
@@ -201,9 +154,32 @@ class LexisSessionControllerTest {
                 List.of("LEXIS_PROVINCIAL_SUBMITTER"),
                 "/offersSearch",
                 true));
+
     verify(sessionService).parseRolesFromPrincipal(authentication);
-    verify(sessionService, never()).parseRoleHeader("READ_ONLY,ADMIN");
     verify(authorizationService).canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/offersSearch");
+  }
+
+  @Test
+  void canPerformActionShouldUseEmptyRolesWhenNoAuthenticationAuthoritiesExist() {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.setUserPrincipal(() -> "idir\\jsmith");
+
+    when(authorizationService.canPerformAction(List.of(), "/applicationSearch")).thenReturn(false);
+
+    ResponseEntity<LexisSessionActionAccessDto> response =
+        controller.canPerformAction("/applicationSearch", request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            new LexisSessionActionAccessDto(
+                true,
+                "idir\\jsmith",
+                List.of(),
+                "/applicationSearch",
+                false));
+
+    verify(authorizationService).canPerformAction(List.of(), "/applicationSearch");
   }
 
   @Test

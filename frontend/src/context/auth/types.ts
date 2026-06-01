@@ -7,11 +7,8 @@ export type AuthContextType = {
   hasAnyRole: boolean
   usesExternalLogin: boolean
   defaultRoute: string
-  devRoles: string[]
   refresh: () => Promise<void>
   login: () => Promise<void>
   logout: () => Promise<void>
-  setDevRoles: (roles: string[]) => Promise<void>
-  clearLoginSimulation: () => Promise<void>
   canPerform: (action: string) => boolean
 }

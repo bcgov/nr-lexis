@@ -33,9 +33,6 @@ Configured through `frontend/.env` (copy from `.env.example`).
 | `VITE_LEXIS_CREATE_OFFER_ENDPOINT` | Create offer endpoint |
 | `VITE_LEXIS_CREATE_PERMIT_ENDPOINT` | Create permit endpoint |
 | `VITE_LEXIS_CREATE_INDIGENOUS_PERMIT_ENDPOINT` | Create indigenous permit endpoint |
-| `VITE_LEXIS_ENABLE_LEGACY_PATH_ROUTING` | Enable legacy session path routing compatibility |
-| `VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK` | Enable temporary role-action fallback mode |
-| `VITE_LEXIS_ENABLE_ADMIN_POLICY_LOCAL_FALLBACK` | Enable local admin policy fallback |
 
 ## Common Scripts
 

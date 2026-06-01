@@ -35,10 +35,6 @@ parameters:
     value: ""
   - name: VITE_LOGOUT_URL
     value: ""
-  - name: VITE_ENABLE_DEV_ROLE_SIMULATION
-    value: "false"
-  - name: VITE_ENABLE_SEARCH_MOCK_FALLBACK
-    value: "false"
   - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
     value: /api
   - name: VITE_LEXIS_REPORT_API_BASE
@@ -113,10 +109,6 @@ objects:
                   value: ${VITE_LOGIN_URL}
                 - name: VITE_LOGOUT_URL
                   value: ${VITE_LOGOUT_URL}
-                - name: VITE_ENABLE_DEV_ROLE_SIMULATION
-                  value: ${VITE_ENABLE_DEV_ROLE_SIMULATION}
-                - name: VITE_ENABLE_SEARCH_MOCK_FALLBACK
-                  value: ${VITE_ENABLE_SEARCH_MOCK_FALLBACK}
                 - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
                   value: ${VITE_LEXIS_REPORT_ENDPOINT_BASE}
                 - name: VITE_LEXIS_REPORT_API_BASE
