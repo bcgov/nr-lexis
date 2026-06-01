@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
 import { AuthContext } from '@/context/auth/AuthContext'
 import type { AuthContextType } from '@/context/auth/types'
+import { env } from '@/env'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
 
@@ -170,7 +171,7 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
 export const AuthProvider: FC<Props> = ({ children }) => {
   const [capabilities, setCapabilities] = useState<LexisSessionCapabilities>(DEFAULT_CAPABILITIES)
   const [isLoading, setIsLoading] = useState(true)
-  const externalLoginUrl = (import.meta.env.VITE_LOGIN_URL ?? '').trim()
+  const externalLoginUrl = (env.VITE_LOGIN_URL ?? '').trim()
   const usesExternalLogin = externalLoginUrl.length > 0
 
   const refresh = useCallback(async () => {
