@@ -1,4 +1,5 @@
 import type { AxiosRequestConfig, AxiosResponseHeaders, RawAxiosResponseHeaders } from 'axios'
+import { env } from '@/env'
 import apiService from '@/service/api-service'
 
 export type RunReportRequest = {
@@ -32,7 +33,7 @@ const normalizeClientNumber = (value: string): string => {
 const normalizeUppercase = (value: string): string => value.trim().toUpperCase()
 
 const getModernReportApiBasePath = (): string => {
-  const configured = (import.meta.env.VITE_LEXIS_REPORT_API_BASE ?? '/lexis/reports').trim()
+  const configured = (env.VITE_LEXIS_REPORT_API_BASE ?? '/lexis/reports').trim()
   if (!configured) {
     return '/lexis/reports'
   }
@@ -40,7 +41,7 @@ const getModernReportApiBasePath = (): string => {
 }
 
 const shouldIncludeActionMapping = (): boolean => {
-  const configured = (import.meta.env.VITE_LEXIS_REPORT_INCLUDE_ACTION_MAPPING ?? 'true')
+  const configured = (env.VITE_LEXIS_REPORT_INCLUDE_ACTION_MAPPING ?? 'true')
     .toString()
     .trim()
     .toLowerCase()
