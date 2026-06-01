@@ -62,7 +62,11 @@ const LandingPage: FC = () => {
 
               {isLoggedIn && (
                 <>
-                  <Button kind="secondary" onClick={() => navigate(defaultRoute)} disabled={isLoading}>
+                  <Button
+                    kind="secondary"
+                    onClick={() => navigate(defaultRoute)}
+                    disabled={isLoading}
+                  >
                     Continue to Application
                   </Button>
                   <Button kind="ghost" onClick={() => void onRefreshSession()} disabled={isLoading}>
