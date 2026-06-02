@@ -196,6 +196,8 @@ public class LexisApiAuthorizationCustomizer
         authorize,
         HttpMethod.POST,
         new String[] {
+          "/api/lexis/applicationsReview",
+          "/api/lexis/applicationsReview.do",
           "/api/lexis/application-reviews/*/approve",
           "/api/lexis/application-reviews/*/status",
           "/api/lexis/application-reviews/*/status-email"
@@ -267,28 +269,36 @@ public class LexisApiAuthorizationCustomizer
         authorize,
         HttpMethod.POST,
         new String[] {
-          "/api/lexis/fileApplicationUpload", "/api/lexis/uploads/application"
+          "/api/lexis/fileApplicationUpload",
+          "/api/lexis/uploads/application",
+          "/api/lexis/admin/uploads/applications"
         },
         "/fileApplicationUpload");
     authorizeAction(
         authorize,
         HttpMethod.POST,
         new String[] {
-          "/api/lexis/filePermitUpload", "/api/lexis/uploads/permit"
+          "/api/lexis/filePermitUpload",
+          "/api/lexis/uploads/permit",
+          "/api/lexis/admin/uploads/permits"
         },
         "/filePermitUpload");
     authorizeAction(
         authorize,
         HttpMethod.POST,
         new String[] {
-          "/api/lexis/fileExemptionUpload", "/api/lexis/uploads/exemption"
+          "/api/lexis/fileExemptionUpload",
+          "/api/lexis/uploads/exemption",
+          "/api/lexis/admin/uploads/exemptions"
         },
         "/fileExemptionUpload");
     authorizeAction(
         authorize,
         HttpMethod.POST,
         new String[] {
-          "/api/lexis/fileInvoiceUpload", "/api/lexis/uploads/invoice"
+          "/api/lexis/fileInvoiceUpload",
+          "/api/lexis/uploads/invoice",
+          "/api/lexis/admin/uploads/invoices"
         },
         "/fileInvoiceUpload");
 

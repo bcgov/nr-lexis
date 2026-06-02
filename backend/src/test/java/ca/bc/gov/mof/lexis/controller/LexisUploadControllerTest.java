@@ -35,7 +35,7 @@ class LexisUploadControllerTest {
     MultipartFile file = new MockMultipartFile("file", "empty.csv", "text/csv", new byte[0]);
 
     ResponseEntity<LexisUploadResultDto> response =
-        controller.fileApplicationUpload(file, 7000123L, "test", null, null);
+        controller.fileApplicationUpload(file, null, 7000123L, "test", null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     verifyNoInteractions(uploadService);
@@ -48,7 +48,7 @@ class LexisUploadControllerTest {
     MultipartFile file = sampleFile("application.csv");
 
     ResponseEntity<LexisUploadResultDto> response =
-        controller.fileApplicationUpload(file, 7000123L, "test", null, null);
+        controller.fileApplicationUpload(file, null, 7000123L, "test", null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(uploadService);
@@ -67,11 +67,29 @@ class LexisUploadControllerTest {
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
-        controller.fileApplicationUpload(file, 7000123L, "App file", null, authentication);
+        controller.fileApplicationUpload(file, null, 7000123L, "App file", null, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
     verify(uploadService).uploadApplication(file, 7000123L, "App file", "jsmith");
+  }
+
+  @Test
+  void fileApplicationUploadShouldAcceptReactFormFileField() {
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
+    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    MultipartFile formFile = sampleFile("application.pdf");
+    LexisUploadResultDto payload =
+        new LexisUploadResultDto("application", "application.pdf", formFile.getSize(), "accepted", "queued");
+    when(uploadService.uploadApplication(formFile, 7000123L, "App file", null))
+        .thenReturn(Optional.of(payload));
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileApplicationUpload(null, formFile, 7000123L, "App file", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(payload);
+    verify(uploadService).uploadApplication(formFile, 7000123L, "App file", null);
   }
 
   @Test
@@ -87,7 +105,7 @@ class LexisUploadControllerTest {
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
-        controller.filePermitUpload(file, 7000123L, "Permit file", null, authentication);
+        controller.filePermitUpload(file, null, 7000123L, "Permit file", null, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
@@ -107,7 +125,7 @@ class LexisUploadControllerTest {
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
-        controller.fileExemptionUpload(file, "E-123", "Exemption file", null, authentication);
+        controller.fileExemptionUpload(file, null, "E-123", "Exemption file", null, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
@@ -138,6 +156,7 @@ class LexisUploadControllerTest {
     ResponseEntity<LexisUploadResultDto> response =
         controller.fileInvoiceUpload(
             file,
+            null,
             7000123L,
             "INV-1001",
             "Invoice INV-1001",
@@ -170,7 +189,7 @@ class LexisUploadControllerTest {
     MultipartFile file = sampleFile("permit.csv");
 
     ResponseEntity<LexisUploadResultDto> response =
-        controller.filePermitUpload(file, null, "Permit file", null, null);
+        controller.filePermitUpload(file, null, null, "Permit file", null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     verifyNoInteractions(uploadService);

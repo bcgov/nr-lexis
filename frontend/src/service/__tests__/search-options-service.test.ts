@@ -5,13 +5,13 @@ import {
   fetchProvincialApplicationOptions,
 } from '@/service/search-options-service'
 
-const getMock = vi.fn()
+const { getCachedDataMock } = vi.hoisted(() => ({
+  getCachedDataMock: vi.fn(),
+}))
 
 vi.mock('@/service/api-service', () => ({
   default: {
-    getAxiosInstance: () => ({
-      get: getMock,
-    }),
+    getCachedData: getCachedDataMock,
   },
 }))
 
@@ -21,22 +21,27 @@ describe('search-options-service', () => {
   })
 
   it('parses provincial application options and ignores invalid entries', async () => {
-    getMock.mockResolvedValue({
-      data: {
-        exemptionTypes: [
-          { code: 'A', name: 'Type A' },
-          { code: '   ', name: 'Bad Code' },
-          { code: 'B', name: 'Type B' },
-        ],
-        applicationStatuses: [{ code: 'NEW', name: 'New' }],
-        productTypes: [{ code: 'LOG', name: 'Logs' }],
-        regions: [{ code: '11', name: 'Cariboo' }, { code: '12' }],
-      },
+    getCachedDataMock.mockResolvedValue({
+      exemptionTypes: [
+        { code: 'A', name: 'Type A' },
+        { code: '   ', name: 'Bad Code' },
+        { code: 'B', name: 'Type B' },
+      ],
+      applicationStatuses: [{ code: 'NEW', name: 'New' }],
+      productTypes: [{ code: 'LOG', name: 'Logs' }],
+      regions: [{ code: '11', name: 'Cariboo' }, { code: '12' }],
     })
 
     const result = await fetchProvincialApplicationOptions()
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/applications/search/options')
+    expect(getCachedDataMock).toHaveBeenCalledWith(
+      '/lexis/applications/search/options',
+      undefined,
+      {
+        cacheKey: 'search-options:/lexis/applications/search/options',
+        ttlMs: 300000,
+      },
+    )
     expect(result).toEqual({
       exemptionTypes: [
         { value: 'A', label: 'Type A' },
@@ -49,21 +54,35 @@ describe('search-options-service', () => {
   })
 
   it('returns empty option lists for non-object payloads', async () => {
-    getMock.mockResolvedValue({ data: 'unexpected' })
+    getCachedDataMock.mockResolvedValue('unexpected')
 
     const result = await fetchFederalApplicationOptions()
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/federal/applications/search/options')
+    expect(getCachedDataMock).toHaveBeenCalledWith(
+      '/lexis/federal/applications/search/options',
+      undefined,
+      {
+        cacheKey: 'search-options:/lexis/federal/applications/search/options',
+        ttlMs: 300000,
+      },
+    )
     expect(result).toEqual({ applicationStatuses: [] })
   })
 
   it('returns empty option lists when options endpoint throws', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    getMock.mockRejectedValue(new Error('network'))
+    getCachedDataMock.mockRejectedValue(new Error('network'))
 
     const result = await fetchApplicationReviewOptions()
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/application-reviews/search/options')
+    expect(getCachedDataMock).toHaveBeenCalledWith(
+      '/lexis/application-reviews/search/options',
+      undefined,
+      {
+        cacheKey: 'search-options:/lexis/application-reviews/search/options',
+        ttlMs: 300000,
+      },
+    )
     expect(result).toEqual({
       productTypes: [],
       regions: [],

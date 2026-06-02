@@ -1,7 +1,8 @@
 package ca.bc.gov.mof.lexis.service.application;
 
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
-import java.text.DecimalFormat;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -21,6 +22,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String APPLICATION_STATUS_NEW = "NEW";
   private static final String JURISDICTION_PROVINCIAL = "P";
   private static final String OIC_INDICATOR_NO = "N";
+  private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
+  private static final String SPECIES_TYPE_CEDAR = "CE";
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
   private static final String PACKAGE_EXISTS_MESSAGE_TEMPLATE = "Package %s already exists.";
@@ -179,6 +182,77 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
+  public List<CodeItem> getEndUsesForSpeciesRegion(
+      String orgUnitNumber, List<String> speciesCodes) {
+    List<String> normalizedSpeciesCodes = normalizeCodes(speciesCodes);
+    Long parsedOrgUnitNumber = parsePositiveLong(trimToNull(orgUnitNumber));
+    if (normalizedSpeciesCodes.isEmpty() || parsedOrgUnitNumber == null) {
+      return List.of();
+    }
+
+    TreeSet<String> endUseCodes = new TreeSet<>();
+    for (ApplicationDetailsRpcRepository.ExcolValidationRow row :
+        repository.findCandidateEndUseCodes(
+            normalizedSpeciesCodes.size(), normalizedSpeciesCodes.get(0), parsedOrgUnitNumber)) {
+      String endUseCode = trimToNull(row.excolCode());
+      if (endUseCode != null) {
+        endUseCodes.add(endUseCode);
+      }
+    }
+
+    List<CodeItem> response = new ArrayList<>();
+    for (String endUseCode : endUseCodes) {
+      repository.findEndUseCode(endUseCode).map(this::toCodeItem).ifPresent(response::add);
+    }
+    return response;
+  }
+
+  @Override
+  public List<SpeciesCodeItem> getRemainingSpecies(
+      String orgUnitNumber, String productTypeCode, List<String> selectedSpeciesCodes) {
+    List<String> normalizedSelectedSpecies = normalizeCodes(selectedSpeciesCodes);
+    TreeSet<String> speciesCodeSet = new TreeSet<>();
+
+    if (normalizedSelectedSpecies.isEmpty()) {
+      for (ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow row :
+          repository.findSpeciesEndUsesByRegion(orgUnitNumber)) {
+        String speciesCode = trimToNull(row.speciesCode());
+        if (speciesCode != null) {
+          speciesCodeSet.add(speciesCode);
+        }
+      }
+    } else {
+      Long parsedOrgUnitNumber = parsePositiveLong(trimToNull(orgUnitNumber));
+      if (parsedOrgUnitNumber == null) {
+        return List.of();
+      }
+      for (ApplicationDetailsRpcRepository.ExcolValidationRow row :
+          repository.findCandidateExcolCombinations(
+              normalizedSelectedSpecies.size(),
+              normalizedSelectedSpecies.get(0),
+              parsedOrgUnitNumber)) {
+        String excolCode = trimToNull(row.excolCode());
+        if (excolCode == null || !containsAllLegacy(excolCode, normalizedSelectedSpecies)) {
+          continue;
+        }
+        String[] excolTokens = excolCode.split("/");
+        for (int i = 0; i < excolTokens.length - 1; i++) {
+          String speciesCode = trimToNull(excolTokens[i]);
+          if (speciesCode != null && !normalizedSelectedSpecies.contains(speciesCode)) {
+            speciesCodeSet.add(speciesCode);
+          }
+        }
+      }
+    }
+
+    if (EXPORT_PRODUCT_TYPE_STANDING.equals(trimToNull(productTypeCode))) {
+      speciesCodeSet.remove(SPECIES_TYPE_CEDAR);
+    }
+
+    return speciesCodeSet.stream().map(SpeciesCodeItem::new).toList();
+  }
+
+  @Override
   public Optional<String> getSelectedEndUse(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
@@ -290,6 +364,55 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
+  public PackageDetailsItem getPackageDetails(String packageNumber) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return emptyPackageDetails();
+    }
+
+    ApplicationDetailsRpcRepository.PackageDetailsRow packageDetails =
+        repository.findPackageDetailsByPackageNumber(normalizedPackageNumber).orElse(null);
+    if (packageDetails == null) {
+      return emptyPackageDetails();
+    }
+
+    BigDecimal scaledVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+    for (ApplicationDetailsRpcRepository.ApplicationScaleDetailRow scale :
+        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber)) {
+      BigDecimal speciesGradeVolume =
+          BigDecimal.valueOf(scale.speciesGradeVolume()).setScale(1, RoundingMode.HALF_UP);
+      scaledVolume = scaledVolume.add(speciesGradeVolume).setScale(1, RoundingMode.HALF_UP);
+    }
+
+    String statusCode = trimToNull(packageDetails.packageStatusCode());
+    String growthTypeCode = trimToNull(packageDetails.growthTypeCode());
+    String productTypeCode = trimToNull(packageDetails.productTypeCode());
+
+    String statusDescription =
+        repository.findPackageStatusDescription(statusCode).orElse(nonNull(statusCode));
+    String growthTypeDescription =
+        repository.findGrowthTypeDescription(growthTypeCode).orElse(nonNull(growthTypeCode));
+    String productTypeDescription =
+        repository.findProductTypeDescription(productTypeCode).orElse(nonNull(productTypeCode));
+
+    return new PackageDetailsItem(
+        true,
+        nonNull(trimToNull(packageDetails.packageNumber())),
+        formatOneDecimal(packageDetails.packageVolume()),
+        scaledVolume.doubleValue(),
+        formatOneDecimal(packageDetails.averageLength()),
+        formatOneDecimal(packageDetails.averageDiameter()),
+        nonNull(statusCode),
+        nonNull(packageDetails.comments()),
+        statusDescription,
+        nonNull(trimToNull(packageDetails.reprocessedIndicator())),
+        nonNull(growthTypeCode),
+        growthTypeDescription,
+        nonNull(productTypeCode),
+        productTypeDescription);
+  }
+
+  @Override
   public ApplicationScaleDetailItem getScaleById(String scaleDetailId) {
     String normalizedScaleDetailId = trimToNull(scaleDetailId);
     if (normalizedScaleDetailId == null) {
@@ -372,6 +495,22 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return resolved;
   }
 
+  private List<String> normalizeCodes(List<String> codes) {
+    if (codes == null || codes.isEmpty()) {
+      return List.of();
+    }
+    return codes.stream().map(this::trimToNull).filter(value -> value != null).distinct().toList();
+  }
+
+  private boolean containsAllLegacy(String excolCode, List<String> selectedSpeciesCodes) {
+    for (String selectedSpeciesCode : selectedSpeciesCodes) {
+      if (!excolCode.contains(selectedSpeciesCode)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   private CodeItem toCodeItem(ApplicationDetailsRpcRepository.CodeRow row) {
     return new CodeItem(trimToNull(row.code()), trimToNull(row.description()));
   }
@@ -438,13 +577,18 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return new ApplicationScaleDetailItem(false, null, null, null, null, null, null);
   }
 
+  private PackageDetailsItem emptyPackageDetails() {
+    return new PackageDetailsItem(
+        false, "", "", 0.0d, "", "", "", "", "", "", "", "", "", "");
+  }
+
   private String formatTimberMark(String value) {
     String normalized = trimToNull(value);
     return normalized == null ? "Unmanufactured" : normalized;
   }
 
   private String formatOneDecimal(double value) {
-    return new DecimalFormat("0.0").format(value);
+    return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
   }
 
   private String nonNull(String value) {
@@ -514,6 +658,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private Long parsePositiveLong(String value) {
+    if (value == null) {
+      return null;
+    }
     try {
       long parsed = Long.parseLong(value);
       return parsed > 0 ? parsed : null;

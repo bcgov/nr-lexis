@@ -8,6 +8,8 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -34,12 +36,16 @@ class ApplicationDetailsRpcControllerTest {
   @Mock private ObjectProvider<ClientLookupService> clientLookupServiceProvider;
   @Mock private ApplicationDetailsRpcService service;
   @Mock private ClientLookupService clientLookupService;
+  @Mock private LexisSessionService sessionService;
+  @Mock private LexisAuthorizationService authorizationService;
 
   private ApplicationDetailsRpcController controller;
 
   @BeforeEach
   void setup() {
-    controller = new ApplicationDetailsRpcController(serviceProvider, clientLookupServiceProvider);
+    controller =
+        new ApplicationDetailsRpcController(
+            serviceProvider, clientLookupServiceProvider, sessionService, authorizationService);
   }
 
   @Test
@@ -89,16 +95,28 @@ class ApplicationDetailsRpcControllerTest {
 
   @Test
   void removeDocumentShouldReturnSuccessFlag() {
+    TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.removeDocument(55L)).thenReturn(true);
 
     ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeDocument("55");
+        controller.removeDocument("55", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isEqualTo("true");
     verify(service).removeDocument(55L);
+  }
+
+  @Test
+  void removeDocumentShouldRejectWithoutFileUploadAction() {
+    TestingAuthenticationToken authentication = unauthorized("/fileApplicationUpload");
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
   }
 
   @Test
@@ -372,6 +390,48 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void getEndUseForSpeciesRegionLegacyShouldParseSpeciesJsonAndReturnCodes() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getEndUsesForSpeciesRegion("11", List.of("FI", "HE")))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.CodeItem("LU", "Lumber"),
+                new ApplicationDetailsRpcService.CodeItem("UT", "Utility")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationCodeResponseDto>> response =
+        controller.getEndUseForSpeciesRegionLegacy("[\"FI\",\"HE\"]", "11", null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody())
+        .extracting(
+            ApplicationDetailsRpcController.ApplicationCodeResponseDto::code,
+            ApplicationDetailsRpcController.ApplicationCodeResponseDto::description)
+        .containsExactly(tuple("LU", "Lumber"), tuple("UT", "Utility"));
+    verify(service).getEndUsesForSpeciesRegion("11", List.of("FI", "HE"));
+  }
+
+  @Test
+  void getRemainingSpeciesLegacyShouldReturnCodePayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getRemainingSpecies("11", "S", List.of("FI")))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.SpeciesCodeItem("HE"),
+                new ApplicationDetailsRpcService.SpeciesCodeItem("SP")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationRemainingSpeciesResponseDto>>
+        response = controller.getRemainingSpeciesLegacy("[\"FI\"]", "11", null, "S", null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody())
+        .extracting(ApplicationDetailsRpcController.ApplicationRemainingSpeciesResponseDto::code)
+        .containsExactly("HE", "SP");
+    verify(service).getRemainingSpecies("11", "S", List.of("FI"));
+  }
+
+  @Test
   void getSelectedEndUseLegacyShouldReturnLegacySuccessPayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getSelectedEndUse(1000456L)).thenReturn(Optional.of("LUM"));
@@ -518,6 +578,49 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void getPackageDetailsLegacyShouldReturnLegacyPackagePayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getPackageDetails("PKG-903"))
+        .thenReturn(
+            new ApplicationDetailsRpcService.PackageDetailsItem(
+                true,
+                "PKG-903",
+                "10.3",
+                3.6d,
+                "6.0",
+                "24.0",
+                "ACT",
+                "Reviewed",
+                "Active",
+                "N",
+                "S",
+                "Standing",
+                "H",
+                "Harvested"));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPackageDetailsResponseDto> response =
+        controller.getPackageDetailsLegacy("PKG-903");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().packageNumber()).isEqualTo("PKG-903");
+    assertThat(response.getBody().volume()).isEqualTo("10.3");
+    assertThat(response.getBody().scaledVolume()).isEqualTo(3.6d);
+    assertThat(response.getBody().length()).isEqualTo("6.0");
+    assertThat(response.getBody().diameter()).isEqualTo("24.0");
+    assertThat(response.getBody().status()).isEqualTo("ACT");
+    assertThat(response.getBody().comments()).isEqualTo("Reviewed");
+    assertThat(response.getBody().statusDesc()).isEqualTo("Active");
+    assertThat(response.getBody().reprocessed()).isEqualTo("N");
+    assertThat(response.getBody().ageClass()).isEqualTo("S");
+    assertThat(response.getBody().ageClassDescription()).isEqualTo("Standing");
+    assertThat(response.getBody().productType()).isEqualTo("H");
+    assertThat(response.getBody().productTypeDescription()).isEqualTo("Harvested");
+    verify(service).getPackageDetails("PKG-903");
+  }
+
+  @Test
   void getScaleByIdLegacyShouldReturnLegacyScaleDetailPayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getScaleById("55"))
@@ -526,7 +629,7 @@ class ApplicationDetailsRpcControllerTest {
                 true, "TM001", "FIR", "12", "J", "10.5", "55"));
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationScaleDetailResponseDto> response =
-        controller.getScaleByIdLegacy("55");
+        controller.getScaleByIdLegacy("55", null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -536,6 +639,24 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().pieces()).isEqualTo("12");
     assertThat(response.getBody().grade()).isEqualTo("J");
     assertThat(response.getBody().volume()).isEqualTo("10.5");
+    assertThat(response.getBody().id()).isEqualTo("55");
+    verify(service).getScaleById("55");
+  }
+
+  @Test
+  void getScaleByIdLegacyShouldAcceptScaleIdAliasFromLegacyJavascript() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getScaleById("55"))
+        .thenReturn(
+            new ApplicationDetailsRpcService.ApplicationScaleDetailItem(
+                true, "TM001", "FIR", "12", "J", "10.5", "55"));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationScaleDetailResponseDto> response =
+        controller.getScaleByIdLegacy(null, "55");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
     assertThat(response.getBody().id()).isEqualTo("55");
     verify(service).getScaleById("55");
   }
@@ -558,10 +679,10 @@ class ApplicationDetailsRpcControllerTest {
 
   @Test
   void deleteScaleByIdLegacyShouldPassAuthenticatedUserAndReturnSuccess() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.deleteScaleById("55", "idir\\jsmith")).thenReturn(true);
 
-    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
     ResponseEntity<ApplicationDetailsRpcController.DeleteResponseDto> response =
         controller.deleteScaleByIdLegacy("55", authentication);
 
@@ -572,11 +693,22 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void deleteScaleByIdLegacyShouldRejectWithoutCreateApplicationAction() {
+    TestingAuthenticationToken authentication = unauthorized("createApplication");
+
+    ResponseEntity<ApplicationDetailsRpcController.DeleteResponseDto> response =
+        controller.deleteScaleByIdLegacy("55", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
   void deletePackageByIdLegacyShouldPassAuthenticatedUserAndReturnSuccess() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.deletePackageById("PKG-903", "idir\\jsmith")).thenReturn(true);
 
-    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
     ResponseEntity<ApplicationDetailsRpcController.DeleteResponseDto> response =
         controller.deletePackageByIdLegacy("PKG-903", authentication);
 
@@ -584,5 +716,21 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isTrue();
     verify(service).deletePackageById("PKG-903", "idir\\jsmith");
+  }
+
+  private TestingAuthenticationToken authorized(String action) {
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, action)).thenReturn(true);
+    return authentication;
+  }
+
+  private TestingAuthenticationToken unauthorized(String action) {
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\readonly", "n/a");
+    List<String> roles = List.of("LEXIS_READ_ONLY");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, action)).thenReturn(false);
+    return authentication;
   }
 }

@@ -248,6 +248,71 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void getEndUsesForSpeciesRegionShouldUseCandidateEndUsesAndResolveDescriptions() {
+    when(repository.findCandidateEndUseCodes(2, "FI", 11L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("UT"),
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("LU"),
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("UT"),
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("ZZ")));
+    when(repository.findEndUseCode("LU"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("LU", "Lumber", 1L, 1L)));
+    when(repository.findEndUseCode("UT"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("UT", "Utility", 1L, 2L)));
+    when(repository.findEndUseCode("ZZ")).thenReturn(Optional.empty());
+
+    List<ApplicationDetailsRpcService.CodeItem> response =
+        service.getEndUsesForSpeciesRegion("11", List.of(" FI ", "HE"));
+
+    assertThat(response)
+        .extracting(
+            ApplicationDetailsRpcService.CodeItem::code,
+            ApplicationDetailsRpcService.CodeItem::description)
+        .containsExactly(tuple("LU", "Lumber"), tuple("UT", "Utility"));
+    verify(repository).findCandidateEndUseCodes(2, "FI", 11L);
+    verify(repository).findEndUseCode("LU");
+    verify(repository).findEndUseCode("UT");
+    verify(repository).findEndUseCode("ZZ");
+  }
+
+  @Test
+  void getRemainingSpeciesShouldReturnRegionSpeciesWhenNoneSelected() {
+    when(repository.findSpeciesEndUsesByRegion("11"))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow("CE", "J", "UT", "CE/UT", 11L),
+                new ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow("HE", "J", "UT", "HE/UT", 11L),
+                new ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow("FI", "J", "UT", "FI/UT", 11L)));
+
+    List<ApplicationDetailsRpcService.SpeciesCodeItem> response =
+        service.getRemainingSpecies("11", "S", List.of());
+
+    assertThat(response)
+        .extracting(ApplicationDetailsRpcService.SpeciesCodeItem::code)
+        .containsExactly("FI", "HE");
+    verify(repository).findSpeciesEndUsesByRegion("11");
+  }
+
+  @Test
+  void getRemainingSpeciesShouldFilterCandidateExcolCombinations() {
+    when(repository.findCandidateExcolCombinations(2, "FI", 11L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("FI/HE/CE/UT"),
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("FI/BA/UT"),
+                new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/FI/SP/UT")));
+
+    List<ApplicationDetailsRpcService.SpeciesCodeItem> response =
+        service.getRemainingSpecies("11", "S", List.of("FI", "HE"));
+
+    assertThat(response)
+        .extracting(ApplicationDetailsRpcService.SpeciesCodeItem::code)
+        .containsExactly("SP");
+    verify(repository).findCandidateExcolCombinations(2, "FI", 11L);
+  }
+
+  @Test
   void getSelectedEndUseShouldReturnFirstApplicationEndUse() {
     when(repository.findEndUsesByApplicationNumber(1000456L))
         .thenReturn(
@@ -321,6 +386,8 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(service.getPackageSelectedEndUse(" ")).isEmpty();
     assertThat(service.getSpeciesForApplication(null)).isEmpty();
     assertThat(service.getSpeciesForPackage(" ")).isEmpty();
+    assertThat(service.getEndUsesForSpeciesRegion("11", List.of())).isEmpty();
+    assertThat(service.getRemainingSpecies(null, "S", List.of("FI"))).isEmpty();
   }
 
   @Test
@@ -453,6 +520,44 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.valid()).isTrue();
     assertThat(response.message()).isNull();
     verify(repository).packageExists("PKG-903");
+  }
+
+  @Test
+  void getPackageDetailsShouldReturnLegacyPackagePayload() {
+    when(repository.findPackageDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageDetailsRow(
+                    "PKG-903", 10.25d, 6.0d, 24.0d, "ACT", "Reviewed", "N", "S", "H")));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "101", "TM1", "HEM", "J", 2.35d, 4L, 1000456L, null, "PKG-903", null),
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "102", "TM2", "FIR", "K", 1.24d, 2L, 1000456L, null, "PKG-903", null)));
+    when(repository.findPackageStatusDescription("ACT")).thenReturn(Optional.of("Active"));
+    when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
+    when(repository.findProductTypeDescription("H")).thenReturn(Optional.of("Harvested"));
+
+    ApplicationDetailsRpcService.PackageDetailsItem response = service.getPackageDetails(" PKG-903 ");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.packageNumber()).isEqualTo("PKG-903");
+    assertThat(response.volume()).isEqualTo("10.3");
+    assertThat(response.scaledVolume()).isEqualTo(3.6d);
+    assertThat(response.length()).isEqualTo("6.0");
+    assertThat(response.diameter()).isEqualTo("24.0");
+    assertThat(response.status()).isEqualTo("ACT");
+    assertThat(response.comments()).isEqualTo("Reviewed");
+    assertThat(response.statusDescription()).isEqualTo("Active");
+    assertThat(response.reprocessed()).isEqualTo("N");
+    assertThat(response.ageClass()).isEqualTo("S");
+    assertThat(response.ageClassDescription()).isEqualTo("Standing");
+    assertThat(response.productType()).isEqualTo("H");
+    assertThat(response.productTypeDescription()).isEqualTo("Harvested");
+    verify(repository).findPackageDetailsByPackageNumber("PKG-903");
+    verify(repository).findScaleDetailsByPackageNumber("PKG-903");
   }
 
   @Test

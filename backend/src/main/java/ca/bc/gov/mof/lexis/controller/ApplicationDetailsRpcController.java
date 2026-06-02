@@ -2,7 +2,12 @@ package ca.bc.gov.mof.lexis.controller;
 
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -12,6 +17,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -43,6 +49,8 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_CONTACTS_FOR_LOCATION = "getContactsForLocation";
   private static final String ACTION_GET_SPECIES_CODES = "getSpeciesCodes";
   private static final String ACTION_GET_GRADE_CODES = "getGradeCodes";
+  private static final String ACTION_GET_END_USE_FOR_SPECIES_REGION = "getEndUseForSpeciesRegion";
+  private static final String ACTION_GET_REMAINING_SPECIES = "getRemainingSpecies";
   private static final String ACTION_GET_SELECTED_END_USE = "getSelectedEndUse";
   private static final String ACTION_GET_PACKAGE_SELECTED_END_USE = "getPackageSelectedEndUse";
   private static final String ACTION_GET_SPECIES_FOR_APPLICATION = "getSpeciesForApplication";
@@ -51,20 +59,31 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_FIND_PERMIT = "findPermit";
   private static final String ACTION_GET_SCALES_FOR_PACKAGE = "getScalesForPackage";
   private static final String ACTION_GET_SCALE_BY_ID = "getScaleById";
+  private static final String ACTION_GET_PACKAGE_DETAILS = "getPackageDetails";
   private static final String ACTION_IS_PACKAGE_VALID = "isPackageValid";
   private static final String ACTION_DELETE_SCALE_BY_ID = "deleteScaleById";
   private static final String ACTION_DELETE_PACKAGE_BY_ID = "deletePackageById";
+  private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
+  private static final String LEGACY_ACTION_FILE_APPLICATION_UPLOAD = "/fileApplicationUpload";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
   private final ObjectProvider<ApplicationDetailsRpcService> serviceProvider;
   private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
+  private final LexisSessionService sessionService;
+  private final LexisAuthorizationService authorizationService;
 
   public ApplicationDetailsRpcController(
       ObjectProvider<ApplicationDetailsRpcService> serviceProvider,
-      ObjectProvider<ClientLookupService> clientLookupServiceProvider) {
+      ObjectProvider<ClientLookupService> clientLookupServiceProvider,
+      LexisSessionService sessionService,
+      LexisAuthorizationService authorizationService) {
     this.serviceProvider = serviceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
+    this.sessionService = sessionService;
+    this.authorizationService = authorizationService;
   }
 
   @GetMapping("/rpc/application-details/document-details")
@@ -129,7 +148,12 @@ public class ApplicationDetailsRpcController {
 
   @DeleteMapping("/rpc/application-details/document")
   public ResponseEntity<RemoveDocumentResponseDto> removeDocument(
-      @RequestParam(name = "documentId", required = false) String documentId) {
+      @RequestParam(name = "documentId", required = false) String documentId,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_FILE_APPLICATION_UPLOAD)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for remove document");
@@ -141,8 +165,9 @@ public class ApplicationDetailsRpcController {
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_REMOVE_DOCUMENT)
   public ResponseEntity<RemoveDocumentResponseDto> removeDocumentLegacy(
-      @RequestParam(name = "documentId", required = false) String documentId) {
-    return removeDocument(documentId);
+      @RequestParam(name = "documentId", required = false) String documentId,
+      Authentication authentication) {
+    return removeDocument(documentId, authentication);
   }
 
   @GetMapping("/rpc/application-details/remark")
@@ -376,6 +401,68 @@ public class ApplicationDetailsRpcController {
     return getGradeCodes(speciesCode, orgUnitNumber, species, region);
   }
 
+  @GetMapping("/rpc/application-details/end-uses-for-species-region")
+  public ResponseEntity<List<ApplicationCodeResponseDto>> getEndUseForSpeciesRegion(
+      @RequestParam(name = "speciesJSON", required = false) String speciesJson,
+      @RequestParam(name = "region", required = false) String region,
+      @RequestParam(name = "orgUnitNumber", required = false) String orgUnitNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for end uses");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.getEndUsesForSpeciesRegion(firstNonBlank(region, orgUnitNumber), parseSpeciesJson(speciesJson))
+            .stream()
+            .map(this::toCodeResponse)
+            .toList());
+  }
+
+  @PostMapping(
+      value = "/applicationDetailsRPC",
+      params = "actionMapping=" + ACTION_GET_END_USE_FOR_SPECIES_REGION)
+  public ResponseEntity<List<ApplicationCodeResponseDto>> getEndUseForSpeciesRegionLegacy(
+      @RequestParam(name = "speciesJSON", required = false) String speciesJson,
+      @RequestParam(name = "region", required = false) String region,
+      @RequestParam(name = "orgUnitNumber", required = false) String orgUnitNumber) {
+    return getEndUseForSpeciesRegion(speciesJson, region, orgUnitNumber);
+  }
+
+  @GetMapping("/rpc/application-details/remaining-species")
+  public ResponseEntity<List<ApplicationRemainingSpeciesResponseDto>> getRemainingSpecies(
+      @RequestParam(name = "speciesJSON", required = false) String speciesJson,
+      @RequestParam(name = "region", required = false) String region,
+      @RequestParam(name = "orgUnitNumber", required = false) String orgUnitNumber,
+      @RequestParam(name = "productType", required = false) String productType,
+      @RequestParam(name = "productTypeCode", required = false) String productTypeCode) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for remaining species");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service
+            .getRemainingSpecies(
+                firstNonBlank(region, orgUnitNumber),
+                firstNonBlank(productType, productTypeCode),
+                parseSpeciesJson(speciesJson))
+            .stream()
+            .map(item -> new ApplicationRemainingSpeciesResponseDto(item.code()))
+            .toList());
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_REMAINING_SPECIES)
+  public ResponseEntity<List<ApplicationRemainingSpeciesResponseDto>> getRemainingSpeciesLegacy(
+      @RequestParam(name = "speciesJSON", required = false) String speciesJson,
+      @RequestParam(name = "region", required = false) String region,
+      @RequestParam(name = "orgUnitNumber", required = false) String orgUnitNumber,
+      @RequestParam(name = "productType", required = false) String productType,
+      @RequestParam(name = "productTypeCode", required = false) String productTypeCode) {
+    return getRemainingSpecies(speciesJson, region, orgUnitNumber, productType, productTypeCode);
+  }
+
   @GetMapping("/rpc/application-details/selected-end-use")
   public ResponseEntity<SelectedEndUseResponseDto> getSelectedEndUse(
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
@@ -525,22 +612,42 @@ public class ApplicationDetailsRpcController {
     return getScalesForPackage(packageNumber);
   }
 
+  @GetMapping("/rpc/application-details/package-details")
+  public ResponseEntity<ApplicationPackageDetailsResponseDto> getPackageDetails(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for package details");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(toPackageDetailsResponse(service.getPackageDetails(packageNumber)));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_PACKAGE_DETAILS)
+  public ResponseEntity<ApplicationPackageDetailsResponseDto> getPackageDetailsLegacy(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    return getPackageDetails(packageNumber);
+  }
+
   @GetMapping("/rpc/application-details/scale")
   public ResponseEntity<ApplicationScaleDetailResponseDto> getScaleById(
-      @RequestParam(name = "scaleDetailId", required = false) String scaleDetailId) {
+      @RequestParam(name = "scaleDetailId", required = false) String scaleDetailId,
+      @RequestParam(name = "scaleId", required = false) String scaleId) {
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for scale detail");
       return ResponseEntity.noContent().build();
     }
 
-    return ResponseEntity.ok(toScaleDetailResponse(service.getScaleById(scaleDetailId)));
+    return ResponseEntity.ok(toScaleDetailResponse(service.getScaleById(firstNonBlank(scaleDetailId, scaleId))));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SCALE_BY_ID)
   public ResponseEntity<ApplicationScaleDetailResponseDto> getScaleByIdLegacy(
-      @RequestParam(name = "scaleDetailId", required = false) String scaleDetailId) {
-    return getScaleById(scaleDetailId);
+      @RequestParam(name = "scaleDetailId", required = false) String scaleDetailId,
+      @RequestParam(name = "scaleId", required = false) String scaleId) {
+    return getScaleById(scaleDetailId, scaleId);
   }
 
   @GetMapping("/rpc/application-details/package-validity")
@@ -565,6 +672,10 @@ public class ApplicationDetailsRpcController {
   public ResponseEntity<DeleteResponseDto> deleteScaleById(
       @RequestParam(name = "scaleId", required = false) String scaleId,
       Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for delete scale");
@@ -586,6 +697,10 @@ public class ApplicationDetailsRpcController {
   public ResponseEntity<DeleteResponseDto> deletePackageById(
       @RequestParam(name = "packageNumber", required = false) String packageNumber,
       Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for delete package");
@@ -601,6 +716,11 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "packageNumber", required = false) String packageNumber,
       Authentication authentication) {
     return deletePackageById(packageNumber, authentication);
+  }
+
+  private boolean canPerform(Authentication authentication, String action) {
+    return authorizationService.canPerformAction(
+        sessionService.parseRolesFromPrincipal(authentication), action);
   }
 
   private Long parsePositiveLong(String rawValue) {
@@ -797,6 +917,21 @@ public class ApplicationDetailsRpcController {
     return normalizedFirst == null ? trimToNull(second) : normalizedFirst;
   }
 
+  private List<String> parseSpeciesJson(String speciesJson) {
+    if (speciesJson == null || speciesJson.isBlank()) {
+      return List.of();
+    }
+    try {
+      return OBJECT_MAPPER.readValue(speciesJson, STRING_LIST_TYPE).stream()
+          .map(this::trimToNull)
+          .filter(value -> value != null)
+          .toList();
+    } catch (JsonProcessingException ex) {
+      LOGGER.warn("Unable to parse legacy speciesJSON [{}]", speciesJson);
+      return List.of();
+    }
+  }
+
   private ApplicationCodeResponseDto toCodeResponse(ApplicationDetailsRpcService.CodeItem item) {
     return new ApplicationCodeResponseDto(item.code(), item.description());
   }
@@ -836,6 +971,25 @@ public class ApplicationDetailsRpcController {
         item.grade(),
         item.volume(),
         item.id());
+  }
+
+  private ApplicationPackageDetailsResponseDto toPackageDetailsResponse(
+      ApplicationDetailsRpcService.PackageDetailsItem item) {
+    return new ApplicationPackageDetailsResponseDto(
+        item.success(),
+        item.packageNumber(),
+        item.volume(),
+        item.scaledVolume(),
+        item.length(),
+        item.diameter(),
+        item.status(),
+        item.comments(),
+        item.statusDescription(),
+        item.reprocessed(),
+        item.ageClass(),
+        item.ageClassDescription(),
+        item.productType(),
+        item.productTypeDescription());
   }
 
   private PackageValidityResponseDto toPackageValidityResponse(
@@ -896,6 +1050,8 @@ public class ApplicationDetailsRpcController {
 
   public record ApplicationCodeResponseDto(String code, String description) {}
 
+  public record ApplicationRemainingSpeciesResponseDto(String code) {}
+
   public record SelectedEndUseResponseDto(boolean success, String selectedEndUse) {}
 
   public record ApplicationSpeciesEndUseResponseDto(
@@ -918,6 +1074,22 @@ public class ApplicationDetailsRpcController {
       String volume,
       String id,
       String cascadeSplitCode) {}
+
+  public record ApplicationPackageDetailsResponseDto(
+      boolean success,
+      String packageNumber,
+      String volume,
+      double scaledVolume,
+      String length,
+      String diameter,
+      String status,
+      String comments,
+      String statusDesc,
+      String reprocessed,
+      String ageClass,
+      String ageClassDescription,
+      String productType,
+      String productTypeDescription) {}
 
   @JsonInclude(JsonInclude.Include.NON_NULL)
   public record ApplicationScaleDetailResponseDto(

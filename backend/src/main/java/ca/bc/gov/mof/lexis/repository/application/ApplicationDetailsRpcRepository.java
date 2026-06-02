@@ -54,8 +54,20 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
   private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
   private static final String FIND_END_USE_CODE = LEXIS_CODES_PACKAGE + "FIND_END_USE_CODE(?,?)";
+  private static final String FIND_GROWTH_TYPE_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_GROWTH_TYPE_CODE(?,?)";
+  private static final String FIND_PACKAGE_STATUS_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_PACKAGE_STATUS_CODE(?,?)";
+  private static final String FIND_PRODUCT_TYPE_CODE =
+      LEXIS_CODES_PACKAGE + "FIND_PRODUCT_TYPE_CODE(?,?)";
   private static final String FIND_SPECIES_GRADE_BY_REGION_SPECIES =
       LEXIS_CODES_PACKAGE + "FIND_SPEC_GRAD_BY_REG_SPEC(?,?,?)";
+  private static final String FIND_SPECIES_GRADE_BY_REGION =
+      LEXIS_CODES_PACKAGE + "FIND_SPEC_GRAD_BY_REGION(?,?)";
+  private static final String FIND_CANDIDATE_END_USES =
+      LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_END_USES(?,?,?,?)";
+  private static final String FIND_CANDIDATE_EXCOL_COMBINATIONS =
+      LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_COMBOS(?,?,?,?)";
   private static final String DELETE_APPLICATION_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "DELETE_APPL_FILE_ATTACHMENT(?)";
   private static final String FIND_REMARK_BY_NUMBER =
@@ -183,6 +195,28 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
             2,
             rs -> getString(rs, "PACKAGE_NUMBER"))
         .isPresent();
+  }
+
+  public Optional<PackageDetailsRow> findPackageDetailsByPackageNumber(String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_PACKAGE_BY_NUMBER,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new PackageDetailsRow(
+                getString(rs, "PACKAGE_NUMBER"),
+                zeroIfNull(getDouble(rs, "PACKAGE_VOLUME")),
+                zeroIfNull(getDouble(rs, "AVERAGE_LENGTH")),
+                zeroIfNull(getDouble(rs, "AVERAGE_DIAMETER")),
+                getString(rs, "EXPORT_PACKAGE_STATUS_CODE"),
+                getString(rs, "COMMENTS"),
+                getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
+                getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+                getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));
   }
 
   public boolean deleteScaleById(String scaleDetailId, String userId) {
@@ -455,6 +489,18 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
                 zeroIfNull(getLong(rs, "ORDER_BY"))));
   }
 
+  public Optional<String> findGrowthTypeDescription(String growthTypeCode) {
+    return findCodeDescription(FIND_GROWTH_TYPE_CODE, growthTypeCode);
+  }
+
+  public Optional<String> findPackageStatusDescription(String packageStatusCode) {
+    return findCodeDescription(FIND_PACKAGE_STATUS_CODE, packageStatusCode);
+  }
+
+  public Optional<String> findProductTypeDescription(String productTypeCode) {
+    return findCodeDescription(FIND_PRODUCT_TYPE_CODE, productTypeCode);
+  }
+
   public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegionSpecies(
       String orgUnitNumber, String speciesCode) {
     String normalizedOrgUnitNumber = trim(orgUnitNumber);
@@ -469,22 +515,100 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
               cs.setString(2, normalizedSpeciesCode);
             },
             3,
-            rs ->
-                new SpeciesGradeEndUseRow(
-                    getString(rs, "EXPORT_SPECIES_CODE"),
-                    getString(rs, "EXPORT_GRADE_CODE"),
-                    getString(rs, "EXPORT_END_USE_CODE"),
-                    getString(rs, "EXCOL_TRANSLATION_VALUE"),
-                    getLong(rs, "ORG_UNIT_NO")))
+            this::mapSpeciesGradeEndUseRow)
         .stream()
         .filter(row -> trim(row.gradeCode()) != null)
         .toList();
+  }
+
+  public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegion(String orgUnitNumber) {
+    String normalizedOrgUnitNumber = trim(orgUnitNumber);
+    if (normalizedOrgUnitNumber == null) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_SPECIES_GRADE_BY_REGION,
+        cs -> cs.setString(1, normalizedOrgUnitNumber),
+        2,
+        this::mapSpeciesGradeEndUseRow);
+  }
+
+  public List<ExcolValidationRow> findCandidateEndUseCodes(
+      int speciesCount, String speciesCode, Long orgUnitNumber) {
+    return findCandidateExcolRows(
+        FIND_CANDIDATE_END_USES, excolPattern(speciesCount, false), speciesCode, orgUnitNumber);
+  }
+
+  public List<ExcolValidationRow> findCandidateExcolCombinations(
+      int speciesCount, String speciesCode, Long orgUnitNumber) {
+    return findCandidateExcolRows(
+        FIND_CANDIDATE_EXCOL_COMBINATIONS,
+        excolPattern(speciesCount, true),
+        speciesCode,
+        orgUnitNumber);
   }
 
   private EndUseRow mapEndUseRow(ResultSet rs) throws SQLException {
     return new EndUseRow(
         getString(rs, "EXPORT_SPECIES_CODE"),
         getString(rs, "EXPORT_END_USE_CODE"));
+  }
+
+  private SpeciesGradeEndUseRow mapSpeciesGradeEndUseRow(ResultSet rs) {
+    return new SpeciesGradeEndUseRow(
+        getString(rs, "EXPORT_SPECIES_CODE"),
+        getString(rs, "EXPORT_GRADE_CODE"),
+        getString(rs, "EXPORT_END_USE_CODE"),
+        getString(rs, "EXCOL_TRANSLATION_VALUE"),
+        getLong(rs, "ORG_UNIT_NO"));
+  }
+
+  private List<ExcolValidationRow> findCandidateExcolRows(
+      String procedureSignature, String excolPattern, String speciesCode, Long orgUnitNumber) {
+    String normalizedSpeciesCode = trim(speciesCode);
+    if (excolPattern == null
+        || normalizedSpeciesCode == null
+        || orgUnitNumber == null
+        || orgUnitNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        procedureSignature,
+        cs -> {
+          cs.setString(1, excolPattern);
+          cs.setString(2, normalizedSpeciesCode);
+          cs.setLong(3, orgUnitNumber);
+        },
+        4,
+        rs -> new ExcolValidationRow(getString(rs, "EXCOL_TRANSLATION_VALUE")));
+  }
+
+  private String excolPattern(int speciesCount, boolean includeAdditionalSpecies) {
+    if (speciesCount < 1) {
+      return null;
+    }
+    StringBuilder pattern = new StringBuilder();
+    for (int i = 0; i < speciesCount; i++) {
+      pattern.append("__/");
+    }
+    pattern.append("__");
+    if (includeAdditionalSpecies) {
+      pattern.append("/%");
+    }
+    return pattern.toString();
+  }
+
+  private Optional<String> findCodeDescription(String procedureSignature, String code) {
+    String normalized = trim(code);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+            procedureSignature,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> trim(rs.getString(2)))
+        .filter(value -> value != null && !value.isBlank());
   }
 
   private void bindApplicationInsert(CallableStatement cs, ApplicationInsertRecord record)
@@ -646,6 +770,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String excolTranslationValue,
       Long orgUnitNumber) {}
 
+  public record ExcolValidationRow(String excolCode) {}
+
   public record ApplicationScaleRow(String timberMark) {}
 
   public record ApplicationPermitRow(Long permitNumber, String statusDescription) {}
@@ -661,6 +787,17 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String exportPermitDetailNumber,
       String packageNumber,
       String cascadeSplitCode) {}
+
+  public record PackageDetailsRow(
+      String packageNumber,
+      double packageVolume,
+      double averageLength,
+      double averageDiameter,
+      String packageStatusCode,
+      String comments,
+      String reprocessedIndicator,
+      String growthTypeCode,
+      String productTypeCode) {}
 
   private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
     String normalized = trim(value);

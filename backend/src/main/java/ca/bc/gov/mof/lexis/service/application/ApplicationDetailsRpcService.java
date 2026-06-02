@@ -26,6 +26,11 @@ public interface ApplicationDetailsRpcService {
 
   List<CodeItem> getGradeCodes(String orgUnitNumber, String speciesCode);
 
+  List<CodeItem> getEndUsesForSpeciesRegion(String orgUnitNumber, List<String> speciesCodes);
+
+  List<SpeciesCodeItem> getRemainingSpecies(
+      String orgUnitNumber, String productTypeCode, List<String> selectedSpeciesCodes);
+
   Optional<String> getSelectedEndUse(Long applicationNumber);
 
   Optional<String> getPackageSelectedEndUse(String packageNumber);
@@ -39,6 +44,8 @@ public interface ApplicationDetailsRpcService {
   List<ApplicationPermitItem> findPermits(Long applicationNumber);
 
   List<ApplicationPackageScaleItem> getScalesForPackage(String packageNumber);
+
+  PackageDetailsItem getPackageDetails(String packageNumber);
 
   ApplicationScaleDetailItem getScaleById(String scaleDetailId);
 
@@ -56,6 +63,8 @@ public interface ApplicationDetailsRpcService {
       long remarkId, String remark, String displayRemark, String user, Instant date) {}
 
   record CodeItem(String code, String description) {}
+
+  record SpeciesCodeItem(String code) {}
 
   record SpeciesEndUseItem(String species, String endUse, String endUseDescription) {}
 
@@ -81,6 +90,22 @@ public interface ApplicationDetailsRpcService {
       String grade,
       String volume,
       String id) {}
+
+  record PackageDetailsItem(
+      boolean success,
+      String packageNumber,
+      String volume,
+      double scaledVolume,
+      String length,
+      String diameter,
+      String status,
+      String comments,
+      String statusDescription,
+      String reprocessed,
+      String ageClass,
+      String ageClassDescription,
+      String productType,
+      String productTypeDescription) {}
 
   record PackageValidityItem(boolean valid, String message) {}
 

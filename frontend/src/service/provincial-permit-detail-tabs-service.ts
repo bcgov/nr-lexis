@@ -37,6 +37,8 @@ export type ProvincialPermitDetailTabsData = {
   boicItems: ProvincialPermitEventRow[]
 }
 
+const PERMIT_TAB_CACHE_TTL_MS = 30_000
+
 const parseArrayPayload = (payload: unknown): unknown[] | null => {
   if (Array.isArray(payload)) {
     return payload
@@ -128,7 +130,9 @@ const fetchRows = async <TRow>(
   normalize: (row: unknown, index: number) => TRow,
 ): Promise<TRow[]> => {
   try {
-    const response = await apiService.getAxiosInstance().get(path)
+    const response = await apiService.getCachedResponse<unknown>(path, undefined, {
+      ttlMs: PERMIT_TAB_CACHE_TTL_MS,
+    })
     if (response.status === 204) {
       return []
     }
