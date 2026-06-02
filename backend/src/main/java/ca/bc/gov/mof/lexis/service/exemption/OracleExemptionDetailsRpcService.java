@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
+import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -13,10 +14,14 @@ import java.util.Map;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 @Profile("oracle")
 public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcService {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(OracleExemptionDetailsRpcService.class);
 
   private static final String JURISDICTION_FEDERAL = "F";
   private static final String JURISDICTION_RESERVE = "I";
@@ -36,9 +41,12 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ExemptionDetailsRpcRepository repository;
+  private final ClientLookupService clientLookupService;
 
-  public OracleExemptionDetailsRpcService(ExemptionDetailsRpcRepository repository) {
+  public OracleExemptionDetailsRpcService(
+      ExemptionDetailsRpcRepository repository, ClientLookupService clientLookupService) {
     this.repository = repository;
+    this.clientLookupService = clientLookupService;
   }
 
   @Override
@@ -338,6 +346,73 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         updated, updated ? List.of() : List.of("Unable to remove application from exemption."));
   }
 
+  @Override
+  public ExemptionApprovalResult approveExemptions(
+      String exemptionNumbers, String userId, boolean canApproveExemption) {
+    List<String> numbers = parseCsv(exemptionNumbers);
+    if (numbers.isEmpty()) {
+      return new ExemptionApprovalResult(
+          true, false, List.of(), "", "No exemptions were specified.", List.of(), List.of());
+    }
+
+    Map<String, String> sendGrid = new LinkedHashMap<>();
+    StringBuilder errorMessage = new StringBuilder();
+    for (String exemptionNumber : numbers) {
+      approveSingleExemption(exemptionNumber, blankToNull(userId), canApproveExemption, sendGrid, errorMessage);
+    }
+
+    boolean valid = !sendGrid.isEmpty();
+    return new ExemptionApprovalResult(
+        true,
+        valid,
+        toSendGridPairs(sendGrid),
+        "",
+        errorMessage.toString(),
+        valid ? List.of() : null,
+        List.of());
+  }
+
+  @Override
+  public ExemptionApprovalEmailResult sendExemptionApprovalEmail(
+      String exemptionNumber, String toEmailAddress) {
+    boolean success = stageExemptionApprovalEmail(exemptionNumber, toEmailAddress);
+    return new ExemptionApprovalEmailResult(
+        success, success ? "Email sent successfully." : "There was a problem sending your email.");
+  }
+
+  @Override
+  public ExemptionApprovalEmailResult sendExemptionApprovalEmails(String sendGrid) {
+    Map<String, String> emailByExemption = parseSendGrid(sendGrid);
+    if (emailByExemption.isEmpty()) {
+      return new ExemptionApprovalEmailResult(false, "There was a problem sending the e-mail(s).");
+    }
+
+    List<String> successes = new ArrayList<>();
+    List<String> failures = new ArrayList<>();
+    emailByExemption.forEach(
+        (exemptionNumber, email) -> {
+          if (stageExemptionApprovalEmail(exemptionNumber, email)) {
+            successes.add(exemptionNumber);
+          } else {
+            failures.add(exemptionNumber);
+          }
+        });
+
+    if (failures.isEmpty()) {
+      return new ExemptionApprovalEmailResult(true, "Emails sent successfully.");
+    }
+    if (!successes.isEmpty()) {
+      return new ExemptionApprovalEmailResult(
+          true,
+          "Sending one or more emails failed.</br> The "
+              + singularPlural(successes).replace("{0}", String.join(", ", successes))
+              + " were sent successfully, but the "
+              + singularPlural(failures).replace("{0}", String.join(", ", failures))
+              + " were not sent successfully.");
+    }
+    return new ExemptionApprovalEmailResult(false, "There was a problem sending the e-mail(s).");
+  }
+
   private boolean resolveCanViewPermit(
       ExemptionDetailsRpcRepository.PermitSummaryRow row,
       boolean oicLike,
@@ -430,6 +505,173 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   private String displayApplicationNumber(Long applicationNumber) {
     return applicationNumber == null ? "" : applicationNumber.toString();
+  }
+
+  private void approveSingleExemption(
+      String exemptionNumber,
+      String userId,
+      boolean canApproveExemption,
+      Map<String, String> sendGrid,
+      StringBuilder errorMessage) {
+    Optional<ExemptionDetailsRpcRepository.ExemptionRecord> existing =
+        repository.findExemptionRecord(exemptionNumber);
+    if (existing.isEmpty()) {
+      errorMessage.append("Failed to approve invalid exemption ")
+          .append(exemptionNumber)
+          .append(":</br>*")
+          .append(required("existing exemption"))
+          .append("</br>");
+      return;
+    }
+
+    ExemptionDetailsRpcRepository.ExemptionRecord current = existing.get();
+    if (EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(current.exemptionStatusCode())) {
+      return;
+    }
+
+    ExemptionDetailsRpcRepository.ExemptionUpdateRecord updateRecord =
+        new ExemptionDetailsRpcRepository.ExemptionUpdateRecord(
+            current.exemptionNumber(),
+            current.exemptionNumber(),
+            current.approvedVolume(),
+            LocalDate.now(),
+            current.expiryDate(),
+            current.otherConditions(),
+            current.exemptionTypeCode(),
+            EXEMPTION_STATUS_ACTIVE,
+            current.entryUserId(),
+            current.entryTimestamp(),
+            userId,
+            null);
+
+    List<String> errors = validateExemptionApproval(updateRecord, current, canApproveExemption);
+    if (!errors.isEmpty()) {
+      errorMessage.append("Failed to approve invalid exemption ")
+          .append(exemptionNumber)
+          .append(":</br>");
+      errors.forEach(error -> errorMessage.append("*").append(error).append("</br>"));
+      return;
+    }
+
+    if (repository.updateExemption(updateRecord)) {
+      sendGrid.put(exemptionNumber, resolveClientEmail(exemptionNumber).orElse(""));
+      return;
+    }
+
+    errorMessage.append("Failed to approve exemption ").append(exemptionNumber).append("</br>");
+  }
+
+  private List<String> validateExemptionApproval(
+      ExemptionDetailsRpcRepository.ExemptionUpdateRecord record,
+      ExemptionDetailsRpcRepository.ExemptionRecord previous,
+      boolean canApproveExemption) {
+    List<String> errors = new ArrayList<>();
+    if (!canApproveExemption) {
+      errors.add("Insufficient privileges to set this Exemption as Active.");
+    }
+    if (record.approvedVolume() == null || record.approvedVolume() <= 0.0d) {
+      errors.add("The approved volume must be greater than 0");
+    }
+    if (blankToNull(record.exemptionTypeCode()) == null) {
+      errors.add(required("exemption type code"));
+    }
+    if (record.expiryDate() == null) {
+      errors.add(required("expiry date"));
+    }
+    if (EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(record.exemptionTypeCode())) {
+      List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> applications =
+          repository.findApplicationSummariesByExemptionNumber(record.exemptionNumber());
+      if (applications.isEmpty()) {
+        errors.add("Active ministerial exemptions require at least one application.");
+      }
+    }
+    if (record.expiryDate() != null
+        && previous.expiryDate() != null
+        && !record.expiryDate().equals(previous.expiryDate())
+        && !canEditExpiryDate(previous.exemptionStatusCode(), previous.exemptionTypeCode())) {
+      errors.add("Insufficient privileges to change the expiry date of this exemption.");
+    }
+    return errors;
+  }
+
+  private Optional<String> resolveClientEmail(String exemptionNumber) {
+    return repository.findApplicationSummariesByExemptionNumber(exemptionNumber).stream()
+        .findFirst()
+        .flatMap(row -> repository.findApplicationLinkRecord(row.applicationNumber()))
+        .flatMap(this::resolveApplicationClientEmail)
+        .map(this::blankToNull);
+  }
+
+  private Optional<String> resolveApplicationClientEmail(
+      ExemptionDetailsRpcRepository.ApplicationLinkRecord application) {
+    String clientNumber = blankToNull(application.agentClientNumber());
+    String locationCode = blankToNull(application.agentClientLocationCode());
+    if (clientNumber == null) {
+      clientNumber = blankToNull(application.ownerClientNumber());
+      locationCode = blankToNull(application.ownerClientLocationCode());
+    }
+    if (clientNumber == null || locationCode == null) {
+      return Optional.empty();
+    }
+    return clientLookupService.getClientData(clientNumber, locationCode)
+        .map(ClientLookupService.ClientData::email)
+        .map(this::blankToNull);
+  }
+
+  private boolean stageExemptionApprovalEmail(String exemptionNumber, String toEmailAddress) {
+    String normalizedExemptionNumber = blankToNull(exemptionNumber);
+    if (normalizedExemptionNumber == null) {
+      return false;
+    }
+    String email = blankToNull(toEmailAddress);
+    if (email == null) {
+      email = resolveClientEmail(normalizedExemptionNumber).orElse(null);
+    }
+    if (blankToNull(email) == null) {
+      return false;
+    }
+    if (repository.findApplicationSummariesByExemptionNumber(normalizedExemptionNumber).isEmpty()) {
+      return false;
+    }
+
+    LOGGER.info(
+        "Exemption approval email request staged for exemption {} to {}.",
+        normalizedExemptionNumber,
+        email);
+    return true;
+  }
+
+  private List<String> parseCsv(String rawValue) {
+    String normalized = blankToNull(rawValue);
+    if (normalized == null) {
+      return List.of();
+    }
+    return List.of(normalized.split(",")).stream()
+        .map(this::blankToNull)
+        .filter(value -> value != null)
+        .distinct()
+        .toList();
+  }
+
+  private Map<String, String> parseSendGrid(String sendGrid) {
+    Map<String, String> emailByExemption = new LinkedHashMap<>();
+    for (String entry : parseCsv(sendGrid)) {
+      String[] pair = entry.split(":", 2);
+      if (pair.length == 2 && blankToNull(pair[0]) != null && blankToNull(pair[1]) != null) {
+        emailByExemption.put(pair[0].trim(), pair[1].trim());
+      }
+    }
+    return emailByExemption;
+  }
+
+  private List<List<String>> toSendGridPairs(Map<String, String> sendGrid) {
+    return sendGrid.entrySet().stream()
+        .map(entry -> List.of(entry.getKey(), entry.getValue()))
+        .toList();
+  }
+
+  private String singularPlural(List<String> count) {
+    return count.size() > 1 ? "e-mails for exemptions: {0} were" : "e-mail for exemption: {0} was";
   }
 
   private CreateExemptionRequest normalizeCreateExemptionRequest(CreateExemptionRequest input) {

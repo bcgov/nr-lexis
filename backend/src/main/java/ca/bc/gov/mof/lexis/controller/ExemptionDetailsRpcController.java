@@ -51,6 +51,9 @@ public class ExemptionDetailsRpcController {
   private static final String ACTION_GET_CLIENT_DATA = "getClientData";
   private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
   private static final String ACTION_GET_CONTACTS_FOR_LOCATION = "getContactsForLocation";
+  private static final String ACTION_APPROVE_EXEMPTIONS = "approveExemptions";
+  private static final String ACTION_SEND_EXEMPTION_APPROVAL_EMAIL = "sendExemptionApprovalEmail";
+  private static final String ACTION_SEND_EXEMPTION_APPROVAL_EMAILS = "sendExemptionApprovalEmails";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -377,6 +380,77 @@ public class ExemptionDetailsRpcController {
     return updateExemption(parameters, authentication);
   }
 
+  @PostMapping("/rpc/exemption-details/approve-exemptions")
+  public ResponseEntity<ExemptionApprovalResponseDto> approveExemptions(
+      @RequestParam(name = "exemptionNumbers", required = false) String exemptionNumbers,
+      Authentication authentication) {
+    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Exemption details RPC service unavailable - returning no content for approve exemptions");
+      return ResponseEntity.noContent().build();
+    }
+
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    ExemptionDetailsRpcService.ExemptionApprovalResult result =
+        service.approveExemptions(
+            exemptionNumbers,
+            authentication == null ? null : authentication.getName(),
+            authorizationService.canPerformAction(roles, "approveExemption"));
+    return ResponseEntity.ok(toApprovalResponse(result));
+  }
+
+  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_APPROVE_EXEMPTIONS)
+  public ResponseEntity<ExemptionApprovalResponseDto> approveExemptionsLegacy(
+      @RequestParam(name = "exemptionNumbers", required = false) String exemptionNumbers,
+      Authentication authentication) {
+    return approveExemptions(exemptionNumbers, authentication);
+  }
+
+  @PostMapping("/rpc/exemption-details/approval-email")
+  public ResponseEntity<ExemptionApprovalEmailResponseDto> sendExemptionApprovalEmail(
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      @RequestParam(name = "legacyExemptionNumber", required = false) String legacyExemptionNumber,
+      @RequestParam(name = "toEmailAddress", required = false) String toEmailAddress) {
+    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Exemption details RPC service unavailable - returning no content for approval email");
+      return ResponseEntity.noContent().build();
+    }
+
+    ExemptionDetailsRpcService.ExemptionApprovalEmailResult result =
+        service.sendExemptionApprovalEmail(
+            firstNonBlank(exemptionNumber, legacyExemptionNumber), toEmailAddress);
+    return ResponseEntity.ok(new ExemptionApprovalEmailResponseDto(result.success(), result.message()));
+  }
+
+  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_SEND_EXEMPTION_APPROVAL_EMAIL)
+  public ResponseEntity<ExemptionApprovalEmailResponseDto> sendExemptionApprovalEmailLegacy(
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      @RequestParam(name = "legacyExemptionNumber", required = false) String legacyExemptionNumber,
+      @RequestParam(name = "toEmailAddress", required = false) String toEmailAddress) {
+    return sendExemptionApprovalEmail(exemptionNumber, legacyExemptionNumber, toEmailAddress);
+  }
+
+  @PostMapping("/rpc/exemption-details/approval-emails")
+  public ResponseEntity<ExemptionApprovalEmailResponseDto> sendExemptionApprovalEmails(
+      @RequestParam(name = "sendGrid", required = false) String sendGrid) {
+    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Exemption details RPC service unavailable - returning no content for approval emails");
+      return ResponseEntity.noContent().build();
+    }
+
+    ExemptionDetailsRpcService.ExemptionApprovalEmailResult result =
+        service.sendExemptionApprovalEmails(sendGrid);
+    return ResponseEntity.ok(new ExemptionApprovalEmailResponseDto(result.success(), result.message()));
+  }
+
+  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_SEND_EXEMPTION_APPROVAL_EMAILS)
+  public ResponseEntity<ExemptionApprovalEmailResponseDto> sendExemptionApprovalEmailsLegacy(
+      @RequestParam(name = "sendGrid", required = false) String sendGrid) {
+    return sendExemptionApprovalEmails(sendGrid);
+  }
+
   @GetMapping("/rpc/exemption-details/client-data")
   public ResponseEntity<ExemptionClientDataResponseDto> getClientData(
       @RequestParam(name = "clientNumber", required = false) String clientNumber,
@@ -485,6 +559,18 @@ public class ExemptionDetailsRpcController {
         applications, response.containsUnmanu(), response.ownerNumber());
   }
 
+  private ExemptionApprovalResponseDto toApprovalResponse(
+      ExemptionDetailsRpcService.ExemptionApprovalResult result) {
+    return new ExemptionApprovalResponseDto(
+        result.success(),
+        result.valid(),
+        result.sendGrid(),
+        result.clientEmailAddress(),
+        result.errorMessage(),
+        result.warnings(),
+        result.errors());
+  }
+
   private Long parsePositiveLong(String rawValue) {
     if (rawValue == null || rawValue.isBlank()) {
       return null;
@@ -544,6 +630,18 @@ public class ExemptionDetailsRpcController {
     }
     for (String name : names) {
       String value = parameters.getFirst(name);
+      if (value != null && !value.isBlank()) {
+        return value.trim();
+      }
+    }
+    return null;
+  }
+
+  private String firstNonBlank(String... values) {
+    if (values == null) {
+      return null;
+    }
+    for (String value : values) {
       if (value != null && !value.isBlank()) {
         return value.trim();
       }
@@ -647,6 +745,17 @@ public class ExemptionDetailsRpcController {
       boolean refreshPage,
       List<String> errors,
       List<String> warnings) {}
+
+  public record ExemptionApprovalResponseDto(
+      boolean success,
+      boolean valid,
+      List<List<String>> sendGrid,
+      String clientEmailAddress,
+      String errorMessage,
+      List<String> warnings,
+      List<String> errors) {}
+
+  public record ExemptionApprovalEmailResponseDto(boolean success, String message) {}
 
   public record ExemptionClientDataResponseDto(
       String clientNumber,

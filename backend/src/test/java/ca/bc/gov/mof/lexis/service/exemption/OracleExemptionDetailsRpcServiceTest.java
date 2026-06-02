@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
+import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -26,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class OracleExemptionDetailsRpcServiceTest {
 
   @Mock private ExemptionDetailsRpcRepository repository;
+  @Mock private ClientLookupService clientLookupService;
 
   @InjectMocks private OracleExemptionDetailsRpcService service;
 
@@ -378,6 +380,98 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.success()).isTrue();
     verify(repository).deleteExemptionRate("EX-205");
+  }
+
+  @Test
+  void approveExemptionsShouldActivateExemptionAndReturnClientEmailSendGrid() {
+    ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("NEW");
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord application = application("EXE", "EX-205", "P");
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
+    when(clientLookupService.getClientData("00055667", "00"))
+        .thenReturn(
+            Optional.of(
+                new ClientLookupService.ClientData(
+                    "00055667",
+                    "Agent Co",
+                    "123 Main St",
+                    "Victoria",
+                    "BC",
+                    "V8W 1A1",
+                    "CA",
+                    "250-555-0100",
+                    "250-555-0199",
+                    "agent@example.com")));
+
+    ExemptionDetailsRpcService.ExemptionApprovalResult response =
+        service.approveExemptions("EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.valid()).isTrue();
+    assertThat(response.sendGrid()).containsExactly(List.of("EX-205", "agent@example.com"));
+    assertThat(response.errorMessage()).isEmpty();
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionUpdateRecord> updateCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class);
+    verify(repository).updateExemption(updateCaptor.capture());
+    ExemptionDetailsRpcRepository.ExemptionUpdateRecord updateRecord = updateCaptor.getValue();
+    assertThat(updateRecord.exemptionStatusCode()).isEqualTo("ACT");
+    assertThat(updateRecord.approvalDate()).isEqualTo(LocalDate.now());
+    assertThat(updateRecord.updateUserId()).isEqualTo("idir\\jsmith");
+    assertThat(updateRecord.regionNumbers()).isNull();
+  }
+
+  @Test
+  void approveExemptionsShouldReturnInvalidResponseWhenNoExemptionsApproved() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.empty());
+
+    ExemptionDetailsRpcService.ExemptionApprovalResult response =
+        service.approveExemptions("EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.valid()).isFalse();
+    assertThat(response.sendGrid()).isEmpty();
+    assertThat(response.errorMessage()).contains("Failed to approve invalid exemption EX-205");
+  }
+
+  @Test
+  void sendExemptionApprovalEmailShouldStageExplicitEmailWhenApplicationExists() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+
+    ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
+        service.sendExemptionApprovalEmail("EX-205", "client@example.com");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("Email sent successfully.");
+  }
+
+  @Test
+  void sendExemptionApprovalEmailsShouldReportPartialFailure() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-404")).thenReturn(List.of());
+
+    ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
+        service.sendExemptionApprovalEmails("EX-205:client@example.com,EX-404:missing@example.com");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).contains("Sending one or more emails failed.");
+    assertThat(response.message()).contains("EX-205");
+    assertThat(response.message()).contains("EX-404");
   }
 
   private ExemptionDetailsRpcRepository.ApplicationLinkRecord application(

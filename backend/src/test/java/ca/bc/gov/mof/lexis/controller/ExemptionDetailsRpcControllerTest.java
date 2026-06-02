@@ -359,4 +359,65 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(response.getBody().get(0).contactName()).isEqualTo("Jane Smith");
     assertThat(response.getBody().get(0).contactId()).isEqualTo("123");
   }
+
+  @Test
+  void approveExemptionsLegacyShouldUseApprovalAuthzAndReturnSendGridPayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+        .thenReturn(true);
+    when(service.approveExemptions("EX-205,EX-206", "idir\\jsmith", true))
+        .thenReturn(
+            new ExemptionDetailsRpcService.ExemptionApprovalResult(
+                true,
+                true,
+                List.of(List.of("EX-205", "client@example.com")),
+                "",
+                "",
+                List.of(),
+                List.of()));
+
+    ResponseEntity<ExemptionDetailsRpcController.ExemptionApprovalResponseDto> response =
+        controller.approveExemptionsLegacy("EX-205,EX-206", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().valid()).isTrue();
+    assertThat(response.getBody().sendGrid()).containsExactly(List.of("EX-205", "client@example.com"));
+    verify(service).approveExemptions("EX-205,EX-206", "idir\\jsmith", true);
+  }
+
+  @Test
+  void sendExemptionApprovalEmailLegacyShouldMapLegacyExemptionNumber() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.sendExemptionApprovalEmail("EX-205", "client@example.com"))
+        .thenReturn(new ExemptionDetailsRpcService.ExemptionApprovalEmailResult(true, "Email sent successfully."));
+
+    ResponseEntity<ExemptionDetailsRpcController.ExemptionApprovalEmailResponseDto> response =
+        controller.sendExemptionApprovalEmailLegacy(null, "EX-205", "client@example.com");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().message()).isEqualTo("Email sent successfully.");
+    verify(service).sendExemptionApprovalEmail("EX-205", "client@example.com");
+  }
+
+  @Test
+  void sendExemptionApprovalEmailsLegacyShouldReturnBatchEmailPayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.sendExemptionApprovalEmails("EX-205:client@example.com"))
+        .thenReturn(new ExemptionDetailsRpcService.ExemptionApprovalEmailResult(true, "Emails sent successfully."));
+
+    ResponseEntity<ExemptionDetailsRpcController.ExemptionApprovalEmailResponseDto> response =
+        controller.sendExemptionApprovalEmailsLegacy("EX-205:client@example.com");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().message()).isEqualTo("Emails sent successfully.");
+    verify(service).sendExemptionApprovalEmails("EX-205:client@example.com");
+  }
 }

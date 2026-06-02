@@ -35,6 +35,14 @@ public interface ExemptionDetailsRpcService {
 
   ApplicationExemptionLinkResult removeApplicationFromExemption(Long applicationNumber, String userId);
 
+  ExemptionApprovalResult approveExemptions(
+      String exemptionNumbers, String userId, boolean canApproveExemption);
+
+  ExemptionApprovalEmailResult sendExemptionApprovalEmail(
+      String exemptionNumber, String toEmailAddress);
+
+  ExemptionApprovalEmailResult sendExemptionApprovalEmails(String sendGrid);
+
   record ExemptionApplicationsResponse(
       List<ApplicationItem> applications, boolean containsUnmanu, String ownerNumber) {}
 
@@ -61,6 +69,17 @@ public interface ExemptionDetailsRpcService {
   record ExemptionNumberValidationResult(boolean valid, String message) {}
 
   record ApplicationExemptionLinkResult(boolean success, List<String> errors) {}
+
+  record ExemptionApprovalResult(
+      boolean success,
+      boolean valid,
+      List<List<String>> sendGrid,
+      String clientEmailAddress,
+      String errorMessage,
+      List<String> warnings,
+      List<String> errors) {}
+
+  record ExemptionApprovalEmailResult(boolean success, String message) {}
 
   record CreateExemptionRequest(
       String exemptionNumber,
