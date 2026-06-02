@@ -31,6 +31,28 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyShowWelcomeShouldRejectAnonymousRequests() throws Exception {
+    mockMvc.perform(get("/api/lexis/showWelcome.do")).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyShowWelcomeShouldAllowKnownRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/showWelcome.do")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.welcomeTarget").value("adminUser"));
+  }
+
+  @Test
+  void legacyAccessDeniedForwardShouldRemainPublic() throws Exception {
+    mockMvc
+        .perform(get("/api/lexis/accessDenied.do"))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+  }
+
+  @Test
   void corsPreflightShouldAllowConfiguredOriginOnProtectedRoute() throws Exception {
     mockMvc
         .perform(

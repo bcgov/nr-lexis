@@ -30,10 +30,23 @@ public class LexisApiAuthorizationCustomizer
     authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
     authorize.requestMatchers(HttpMethod.GET, "/actuator/**").permitAll();
     authorize
-        .requestMatchers("/api/lexis/session/accessDenied", "/api/lexis/session/errorPage", "/error")
+        .requestMatchers(
+            "/api/lexis/session/accessDenied",
+            "/api/lexis/session/errorPage",
+            "/api/lexis/accessDenied",
+            "/api/lexis/accessDenied.do",
+            "/api/lexis/errorPage",
+            "/api/lexis/errorPage.do",
+            "/error")
         .permitAll();
 
     authorizeKnownRoles(authorize, "/api/lexis/session/**");
+    authorizeKnownRoles(
+        authorize,
+        "/api/lexis/showWelcome",
+        "/api/lexis/showWelcome.do",
+        "/api/lexis/logoff",
+        "/api/lexis/logoff.do");
 
     authorizeAction(
         authorize,
