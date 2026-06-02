@@ -174,6 +174,81 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return response;
   }
 
+  @Override
+  public Optional<String> getSelectedEndUse(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return repository.findEndUsesByApplicationNumber(applicationNumber).stream()
+        .map(ApplicationDetailsRpcRepository.EndUseRow::endUseCode)
+        .map(this::trimToNull)
+        .filter(value -> value != null)
+        .findFirst();
+  }
+
+  @Override
+  public Optional<String> getPackageSelectedEndUse(String packageNumber) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return Optional.empty();
+    }
+    return repository.findEndUsesByPackageNumber(normalizedPackageNumber).stream()
+        .map(ApplicationDetailsRpcRepository.EndUseRow::endUseCode)
+        .map(this::trimToNull)
+        .filter(value -> value != null)
+        .findFirst();
+  }
+
+  @Override
+  public List<SpeciesEndUseItem> getSpeciesForApplication(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return toSpeciesEndUseItems(repository.findEndUsesByApplicationNumber(applicationNumber));
+  }
+
+  @Override
+  public List<SpeciesEndUseItem> getSpeciesForPackage(String packageNumber) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return List.of();
+    }
+    return toSpeciesEndUseItems(repository.findEndUsesByPackageNumber(normalizedPackageNumber));
+  }
+
+  private List<SpeciesEndUseItem> toSpeciesEndUseItems(
+      List<ApplicationDetailsRpcRepository.EndUseRow> rows) {
+    Map<String, String> endUseDescriptionByCode = new LinkedHashMap<>();
+    return rows.stream()
+        .map(
+            row ->
+                new SpeciesEndUseItem(
+                    trimToNull(row.speciesCode()),
+                    trimToNull(row.endUseCode()),
+                    resolveEndUseDescription(row.endUseCode(), endUseDescriptionByCode)))
+        .toList();
+  }
+
+  private String resolveEndUseDescription(
+      String endUseCode, Map<String, String> endUseDescriptionByCode) {
+    String normalizedCode = trimToNull(endUseCode);
+    if (normalizedCode == null) {
+      return "";
+    }
+    String cached = endUseDescriptionByCode.get(normalizedCode);
+    if (cached != null) {
+      return cached;
+    }
+    String resolved =
+        repository
+            .findEndUseCode(normalizedCode)
+            .map(ApplicationDetailsRpcRepository.CodeRow::description)
+            .map(this::trimToNull)
+            .orElse(normalizedCode);
+    endUseDescriptionByCode.put(normalizedCode, resolved);
+    return resolved;
+  }
+
   private CodeItem toCodeItem(ApplicationDetailsRpcRepository.CodeRow row) {
     return new CodeItem(trimToNull(row.code()), trimToNull(row.description()));
   }

@@ -42,6 +42,10 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_CONTACTS_FOR_LOCATION = "getContactsForLocation";
   private static final String ACTION_GET_SPECIES_CODES = "getSpeciesCodes";
   private static final String ACTION_GET_GRADE_CODES = "getGradeCodes";
+  private static final String ACTION_GET_SELECTED_END_USE = "getSelectedEndUse";
+  private static final String ACTION_GET_PACKAGE_SELECTED_END_USE = "getPackageSelectedEndUse";
+  private static final String ACTION_GET_SPECIES_FOR_APPLICATION = "getSpeciesForApplication";
+  private static final String ACTION_GET_SPECIES_FOR_PACKAGE = "getSpeciesForPackage";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -364,6 +368,90 @@ public class ApplicationDetailsRpcController {
     return getGradeCodes(speciesCode, orgUnitNumber, species, region);
   }
 
+  @GetMapping("/rpc/application-details/selected-end-use")
+  public ResponseEntity<SelectedEndUseResponseDto> getSelectedEndUse(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for selected end use");
+      return ResponseEntity.noContent().build();
+    }
+
+    return service
+        .getSelectedEndUse(parsePositiveLong(applicationNumber))
+        .map(value -> ResponseEntity.ok(new SelectedEndUseResponseDto(true, value)))
+        .orElseGet(() -> ResponseEntity.ok(new SelectedEndUseResponseDto(false, null)));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SELECTED_END_USE)
+  public ResponseEntity<SelectedEndUseResponseDto> getSelectedEndUseLegacy(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    return getSelectedEndUse(applicationNumber);
+  }
+
+  @GetMapping("/rpc/application-details/package-selected-end-use")
+  public ResponseEntity<SelectedEndUseResponseDto> getPackageSelectedEndUse(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for package selected end use");
+      return ResponseEntity.noContent().build();
+    }
+
+    return service
+        .getPackageSelectedEndUse(packageNumber)
+        .map(value -> ResponseEntity.ok(new SelectedEndUseResponseDto(true, value)))
+        .orElseGet(() -> ResponseEntity.ok(new SelectedEndUseResponseDto(false, null)));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_PACKAGE_SELECTED_END_USE)
+  public ResponseEntity<SelectedEndUseResponseDto> getPackageSelectedEndUseLegacy(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    return getPackageSelectedEndUse(packageNumber);
+  }
+
+  @GetMapping("/rpc/application-details/species-for-application")
+  public ResponseEntity<List<ApplicationSpeciesEndUseResponseDto>> getSpeciesForApplication(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for application species");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.getSpeciesForApplication(parsePositiveLong(applicationNumber)).stream()
+            .map(this::toApplicationSpeciesEndUseResponse)
+            .toList());
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SPECIES_FOR_APPLICATION)
+  public ResponseEntity<List<ApplicationSpeciesEndUseResponseDto>> getSpeciesForApplicationLegacy(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    return getSpeciesForApplication(applicationNumber);
+  }
+
+  @GetMapping("/rpc/application-details/species-for-package")
+  public ResponseEntity<List<PackageSpeciesEndUseResponseDto>> getSpeciesForPackage(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for package species");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.getSpeciesForPackage(packageNumber).stream()
+            .map(this::toPackageSpeciesEndUseResponse)
+            .toList());
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SPECIES_FOR_PACKAGE)
+  public ResponseEntity<List<PackageSpeciesEndUseResponseDto>> getSpeciesForPackageLegacy(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    return getSpeciesForPackage(packageNumber);
+  }
+
   private Long parsePositiveLong(String rawValue) {
     if (rawValue == null || rawValue.isBlank()) {
       return null;
@@ -562,6 +650,18 @@ public class ApplicationDetailsRpcController {
     return new ApplicationCodeResponseDto(item.code(), item.description());
   }
 
+  private ApplicationSpeciesEndUseResponseDto toApplicationSpeciesEndUseResponse(
+      ApplicationDetailsRpcService.SpeciesEndUseItem item) {
+    return new ApplicationSpeciesEndUseResponseDto(
+        item.species(), item.endUse(), item.endUseDescription());
+  }
+
+  private PackageSpeciesEndUseResponseDto toPackageSpeciesEndUseResponse(
+      ApplicationDetailsRpcService.SpeciesEndUseItem item) {
+    return new PackageSpeciesEndUseResponseDto(
+        item.species(), item.endUse(), item.endUseDescription(), item.endUse());
+  }
+
   public record DocumentDetailsResponseDto(
       String name, String description, String type, long id) {}
 
@@ -610,4 +710,12 @@ public class ApplicationDetailsRpcController {
       String email) {}
 
   public record ApplicationCodeResponseDto(String code, String description) {}
+
+  public record SelectedEndUseResponseDto(boolean success, String selectedEndUse) {}
+
+  public record ApplicationSpeciesEndUseResponseDto(
+      String species, String enduse, String endUseDescription) {}
+
+  public record PackageSpeciesEndUseResponseDto(
+      String species, String enduse, String packageEndUseDescription, String packageEndUse) {}
 }

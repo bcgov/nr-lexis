@@ -26,6 +26,14 @@ public interface ApplicationDetailsRpcService {
 
   List<CodeItem> getGradeCodes(String orgUnitNumber, String speciesCode);
 
+  Optional<String> getSelectedEndUse(Long applicationNumber);
+
+  Optional<String> getPackageSelectedEndUse(String packageNumber);
+
+  List<SpeciesEndUseItem> getSpeciesForApplication(Long applicationNumber);
+
+  List<SpeciesEndUseItem> getSpeciesForPackage(String packageNumber);
+
   record DocumentItem(long id, String name, String description, String type) {}
 
   record DocumentContent(byte[] bytes) {}
@@ -34,6 +42,8 @@ public interface ApplicationDetailsRpcService {
       long remarkId, String remark, String displayRemark, String user, Instant date) {}
 
   record CodeItem(String code, String description) {}
+
+  record SpeciesEndUseItem(String species, String endUse, String endUseDescription) {}
 
   record ApplicationClientSnapshot(
       String agentClientNumber,

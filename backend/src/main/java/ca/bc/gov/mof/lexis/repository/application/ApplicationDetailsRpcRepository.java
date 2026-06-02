@@ -33,11 +33,16 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_APP(?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
+  private static final String FIND_END_USE_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
+  private static final String FIND_END_USE_BY_PACKAGE =
+      LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_PACK(?,?)";
   private static final String FIND_ATTACHMENT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
   private static final String FIND_ALL_SPECIES_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_SPECIES_CODES(?)";
   private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
+  private static final String FIND_END_USE_CODE = LEXIS_CODES_PACKAGE + "FIND_END_USE_CODE(?,?)";
   private static final String FIND_SPECIES_GRADE_BY_REGION_SPECIES =
       LEXIS_CODES_PACKAGE + "FIND_SPEC_GRAD_BY_REG_SPEC(?,?,?)";
   private static final String DELETE_APPLICATION_FILE_ATTACHMENT =
@@ -247,6 +252,29 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
                 getString(rs, "OWNER_CONTACT_NAME")));
   }
 
+  public List<EndUseRow> findEndUsesByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_END_USE_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        this::mapEndUseRow);
+  }
+
+  public List<EndUseRow> findEndUsesByPackageNumber(String packageNumber) {
+    String normalizedPackageNumber = trim(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_END_USE_BY_PACKAGE,
+        cs -> cs.setString(1, normalizedPackageNumber),
+        2,
+        this::mapEndUseRow);
+  }
+
   public List<CodeRow> findAllSpeciesCodes() {
     return queryCursorProcedure(
             FIND_ALL_SPECIES_CODES,
@@ -281,6 +309,23 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
                 zeroIfNull(getLong(rs, "ORDER_BY"))));
   }
 
+  public Optional<CodeRow> findEndUseCode(String endUseCode) {
+    String normalized = trim(endUseCode);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_END_USE_CODE,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new CodeRow(
+                getString(rs, "CODE"),
+                getString(rs, "DESCRIPTION"),
+                zeroIfNull(getLong(rs, "GROUP_BY")),
+                zeroIfNull(getLong(rs, "ORDER_BY"))));
+  }
+
   public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegionSpecies(
       String orgUnitNumber, String speciesCode) {
     String normalizedOrgUnitNumber = trim(orgUnitNumber);
@@ -305,6 +350,12 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         .stream()
         .filter(row -> trim(row.gradeCode()) != null)
         .toList();
+  }
+
+  private EndUseRow mapEndUseRow(ResultSet rs) throws SQLException {
+    return new EndUseRow(
+        getString(rs, "EXPORT_SPECIES_CODE"),
+        getString(rs, "EXPORT_END_USE_CODE"));
   }
 
   private void bindApplicationInsert(CallableStatement cs, ApplicationInsertRecord record)
@@ -442,6 +493,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String ownerContactName) {}
 
   public record CodeRow(String code, String description, long groupBy, long orderBy) {}
+
+  public record EndUseRow(String speciesCode, String endUseCode) {}
 
   public record SpeciesGradeEndUseRow(
       String speciesCode,

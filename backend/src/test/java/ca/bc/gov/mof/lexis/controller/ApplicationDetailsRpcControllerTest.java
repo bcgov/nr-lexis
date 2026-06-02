@@ -370,4 +370,76 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().get(0).code()).isEqualTo("K");
     verify(service).getGradeCodes("22", "HEM");
   }
+
+  @Test
+  void getSelectedEndUseLegacyShouldReturnLegacySuccessPayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getSelectedEndUse(1000456L)).thenReturn(Optional.of("LUM"));
+
+    ResponseEntity<ApplicationDetailsRpcController.SelectedEndUseResponseDto> response =
+        controller.getSelectedEndUseLegacy("1000456");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().selectedEndUse()).isEqualTo("LUM");
+    verify(service).getSelectedEndUse(1000456L);
+  }
+
+  @Test
+  void getPackageSelectedEndUseLegacyShouldReturnFalseWhenMissing() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getPackageSelectedEndUse("PKG-903")).thenReturn(Optional.empty());
+
+    ResponseEntity<ApplicationDetailsRpcController.SelectedEndUseResponseDto> response =
+        controller.getPackageSelectedEndUseLegacy("PKG-903");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+    assertThat(response.getBody().selectedEndUse()).isNull();
+    verify(service).getPackageSelectedEndUse("PKG-903");
+  }
+
+  @Test
+  void getSpeciesForApplicationLegacyShouldReturnApplicationFieldNames() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getSpeciesForApplication(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.SpeciesEndUseItem("FIR", "LUM", "Lumber"),
+                new ApplicationDetailsRpcService.SpeciesEndUseItem("HEM", "PUL", "Pulp")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationSpeciesEndUseResponseDto>>
+        response = controller.getSpeciesForApplicationLegacy("1000456");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody())
+        .extracting(
+            ApplicationDetailsRpcController.ApplicationSpeciesEndUseResponseDto::species,
+            ApplicationDetailsRpcController.ApplicationSpeciesEndUseResponseDto::enduse,
+            ApplicationDetailsRpcController.ApplicationSpeciesEndUseResponseDto::endUseDescription)
+        .containsExactly(tuple("FIR", "LUM", "Lumber"), tuple("HEM", "PUL", "Pulp"));
+    verify(service).getSpeciesForApplication(1000456L);
+  }
+
+  @Test
+  void getSpeciesForPackageLegacyShouldReturnPackageFieldNames() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getSpeciesForPackage("PKG-903"))
+        .thenReturn(List.of(new ApplicationDetailsRpcService.SpeciesEndUseItem("CED", "LUM", "Lumber")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.PackageSpeciesEndUseResponseDto>> response =
+        controller.getSpeciesForPackageLegacy("PKG-903");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody()).hasSize(1);
+    assertThat(response.getBody().get(0).species()).isEqualTo("CED");
+    assertThat(response.getBody().get(0).enduse()).isEqualTo("LUM");
+    assertThat(response.getBody().get(0).packageEndUseDescription()).isEqualTo("Lumber");
+    assertThat(response.getBody().get(0).packageEndUse()).isEqualTo("LUM");
+    verify(service).getSpeciesForPackage("PKG-903");
+  }
 }

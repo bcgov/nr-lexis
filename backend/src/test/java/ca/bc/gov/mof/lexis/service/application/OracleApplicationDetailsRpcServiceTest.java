@@ -246,4 +246,80 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository).findGradeCode("J");
     verify(repository).findGradeCode("U");
   }
+
+  @Test
+  void getSelectedEndUseShouldReturnFirstApplicationEndUse() {
+    when(repository.findEndUsesByApplicationNumber(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.EndUseRow("FIR", " LUM "),
+                new ApplicationDetailsRpcRepository.EndUseRow("HEM", "PUL")));
+
+    Optional<String> response = service.getSelectedEndUse(1000456L);
+
+    assertThat(response).contains("LUM");
+    verify(repository).findEndUsesByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void getPackageSelectedEndUseShouldReturnFirstPackageEndUse() {
+    when(repository.findEndUsesByPackageNumber("PKG-903"))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.EndUseRow("FIR", "LUM")));
+
+    Optional<String> response = service.getPackageSelectedEndUse(" PKG-903 ");
+
+    assertThat(response).contains("LUM");
+    verify(repository).findEndUsesByPackageNumber("PKG-903");
+  }
+
+  @Test
+  void getSpeciesForApplicationShouldResolveEndUseDescriptions() {
+    when(repository.findEndUsesByApplicationNumber(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.EndUseRow(" FIR ", " LUM "),
+                new ApplicationDetailsRpcRepository.EndUseRow(" HEM ", " LUM ")));
+    when(repository.findEndUseCode("LUM"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("LUM", " Lumber ", 1L, 1L)));
+
+    List<ApplicationDetailsRpcService.SpeciesEndUseItem> response =
+        service.getSpeciesForApplication(1000456L);
+
+    assertThat(response)
+        .extracting(
+            ApplicationDetailsRpcService.SpeciesEndUseItem::species,
+            ApplicationDetailsRpcService.SpeciesEndUseItem::endUse,
+            ApplicationDetailsRpcService.SpeciesEndUseItem::endUseDescription)
+        .containsExactly(tuple("FIR", "LUM", "Lumber"), tuple("HEM", "LUM", "Lumber"));
+    verify(repository).findEndUsesByApplicationNumber(1000456L);
+    verify(repository).findEndUseCode("LUM");
+  }
+
+  @Test
+  void getSpeciesForPackageShouldResolveEndUseDescriptions() {
+    when(repository.findEndUsesByPackageNumber("PKG-903"))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.EndUseRow("CED", "PUL")));
+    when(repository.findEndUseCode("PUL"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("PUL", "Pulp", 1L, 2L)));
+
+    List<ApplicationDetailsRpcService.SpeciesEndUseItem> response =
+        service.getSpeciesForPackage("PKG-903");
+
+    assertThat(response)
+        .extracting(
+            ApplicationDetailsRpcService.SpeciesEndUseItem::species,
+            ApplicationDetailsRpcService.SpeciesEndUseItem::endUse,
+            ApplicationDetailsRpcService.SpeciesEndUseItem::endUseDescription)
+        .containsExactly(tuple("CED", "PUL", "Pulp"));
+    verify(repository).findEndUsesByPackageNumber("PKG-903");
+    verify(repository).findEndUseCode("PUL");
+  }
+
+  @Test
+  void getSpeciesEndUseLookupsShouldReturnEmptyForInvalidInputs() {
+    assertThat(service.getSelectedEndUse(null)).isEmpty();
+    assertThat(service.getPackageSelectedEndUse(" ")).isEmpty();
+    assertThat(service.getSpeciesForApplication(null)).isEmpty();
+    assertThat(service.getSpeciesForPackage(" ")).isEmpty();
+  }
 }
