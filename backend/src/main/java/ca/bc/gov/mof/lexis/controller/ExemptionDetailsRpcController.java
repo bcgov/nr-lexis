@@ -43,6 +43,7 @@ public class ExemptionDetailsRpcController {
   private static final String ACTION_GET_DOCUMENT = "getDocument";
   private static final String ACTION_REMOVE_DOCUMENT = "removeDocument";
   private static final String ACTION_ADD_EXEMPTION = "addExemption";
+  private static final String ACTION_CHECK_EXEMPTION_NUMBER = "checkExemptionNumber";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -227,6 +228,27 @@ public class ExemptionDetailsRpcController {
     return removeDocument(documentId);
   }
 
+  @GetMapping("/rpc/exemption-details/check-exemption-number")
+  public ResponseEntity<ExemptionNumberValidationResponseDto> checkExemptionNumber(
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber) {
+    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Exemption details RPC service unavailable - returning no content for check exemption number");
+      return ResponseEntity.noContent().build();
+    }
+
+    ExemptionDetailsRpcService.ExemptionNumberValidationResult result =
+        service.checkExemptionNumber(exemptionNumber);
+    return ResponseEntity.ok(
+        new ExemptionNumberValidationResponseDto(result.valid(), result.message()));
+  }
+
+  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_CHECK_EXEMPTION_NUMBER)
+  public ResponseEntity<ExemptionNumberValidationResponseDto> checkExemptionNumberLegacy(
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber) {
+    return checkExemptionNumber(exemptionNumber);
+  }
+
   @PostMapping("/rpc/exemption-details/exemption")
   public ResponseEntity<ExemptionPersistenceResponseDto> addExemption(
       @RequestParam MultiValueMap<String, String> parameters,
@@ -393,6 +415,8 @@ public class ExemptionDetailsRpcController {
   public record DocumentItemDto(String name, String description, String type, long id) {}
 
   public record RemoveDocumentResponseDto(String success) {}
+
+  public record ExemptionNumberValidationResponseDto(boolean isValid, String message) {}
 
   public record ExemptionPersistenceResponseDto(
       boolean success,

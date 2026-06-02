@@ -149,6 +149,25 @@ class ExemptionDetailsRpcControllerTest {
   }
 
   @Test
+  void checkExemptionNumberLegacyShouldReturnLegacyValidationPayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.checkExemptionNumber("EX-205"))
+        .thenReturn(
+            new ExemptionDetailsRpcService.ExemptionNumberValidationResult(
+                false, "* - this exemption number has already been assigned"));
+
+    ResponseEntity<ExemptionDetailsRpcController.ExemptionNumberValidationResponseDto> response =
+        controller.checkExemptionNumberLegacy("EX-205");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().isValid()).isFalse();
+    assertThat(response.getBody().message())
+        .isEqualTo("* - this exemption number has already been assigned");
+    verify(service).checkExemptionNumber("EX-205");
+  }
+
+  @Test
   void addExemptionLegacyShouldMapAliasesAndReturnPersistencePayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.addExemption(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))

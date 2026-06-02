@@ -24,6 +24,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final String EXEMPTION_STATUS_ACTIVE = "ACT";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
+  private static final String EXEMPTION_NUMBER_ASSIGNED_MESSAGE =
+      "* - this exemption number has already been assigned";
   private static final String SAVE_SUCCESS_MESSAGE = "The exemption was saved successfully.";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -182,6 +184,14 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
     return new CreateExemptionResult(
         true, SAVE_SUCCESS_MESSAGE, exemptionNumber, true, List.of(), warnings);
+  }
+
+  @Override
+  public ExemptionNumberValidationResult checkExemptionNumber(String exemptionNumber) {
+    String normalized = blankToNull(exemptionNumber);
+    boolean valid = normalized == null || !repository.existsByExemptionNumber(normalized);
+    return new ExemptionNumberValidationResult(
+        valid, valid ? null : EXEMPTION_NUMBER_ASSIGNED_MESSAGE);
   }
 
   private boolean resolveCanViewPermit(

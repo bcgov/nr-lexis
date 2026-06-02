@@ -157,4 +157,27 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(record.otherConditions()).isEqualTo("Conditions");
     assertThat(record.regionNumbers()).containsExactly(11L, 12L);
   }
+
+  @Test
+  void checkExemptionNumberShouldReturnValidWhenNumberIsAvailable() {
+    when(repository.existsByExemptionNumber("EX-205")).thenReturn(false);
+
+    ExemptionDetailsRpcService.ExemptionNumberValidationResult response =
+        service.checkExemptionNumber(" EX-205 ");
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.message()).isNull();
+    verify(repository).existsByExemptionNumber("EX-205");
+  }
+
+  @Test
+  void checkExemptionNumberShouldReturnDuplicateMessageWhenNumberExists() {
+    when(repository.existsByExemptionNumber("EX-205")).thenReturn(true);
+
+    ExemptionDetailsRpcService.ExemptionNumberValidationResult response =
+        service.checkExemptionNumber("EX-205");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.message()).isEqualTo("* - this exemption number has already been assigned");
+  }
 }

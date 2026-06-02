@@ -84,6 +84,19 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         .filter(value -> value != null && !value.isBlank());
   }
 
+  public boolean existsByExemptionNumber(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return false;
+    }
+    return queryCursorSingle(
+            FIND_EXEMPTION_BY_NUMBER,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> getString(rs, "EXEMPTION_NUMBER"))
+        .isPresent();
+  }
+
   public List<DocumentRow> findExemptionDocumentDetailsByExemptionNumber(String exemptionNumber) {
     String normalized = trim(exemptionNumber);
     if (normalized == null) {
