@@ -7,6 +7,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -179,5 +181,97 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.valid()).isFalse();
     assertThat(response.message()).isEqualTo("* - this exemption number has already been assigned");
+  }
+
+  @Test
+  void addApplicationToExemptionShouldRejectApplicationWithActiveValidOffer() {
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application("APP", null, "P")));
+    when(repository.findExemptionTypeCodeByExemptionNumber("EX-205")).thenReturn(Optional.of("O"));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205")).thenReturn(List.of());
+    when(repository.hasActiveValidOffers(1000456L)).thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true, true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).contains("Application has valid offers and cannot be added to an exemption.");
+  }
+
+  @Test
+  void addApplicationToExemptionShouldSetApplicationExemptionAndExemptedStatus() {
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord application = application("APP", null, "P");
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
+    when(repository.findExemptionTypeCodeByExemptionNumber("EX-205")).thenReturn(Optional.of("O"));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205")).thenReturn(List.of());
+    when(repository.hasActiveValidOffers(1000456L)).thenReturn(false);
+    when(repository.updateApplicationExemption(any(ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class)))
+        .thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true, true);
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.errors()).isEmpty();
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class);
+    verify(repository).updateApplicationExemption(recordCaptor.capture());
+    ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord record = recordCaptor.getValue();
+    assertThat(record.application()).isEqualTo(application);
+    assertThat(record.exemptionNumber()).isEqualTo("EX-205");
+    assertThat(record.applicationStatusCode()).isEqualTo("EXE");
+    assertThat(record.updateUserId()).isEqualTo("idir\\jsmith");
+  }
+
+  @Test
+  void removeApplicationFromExemptionShouldClearExemptionAndRestoreApprovedStatus() {
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord application = application("EXE", "EX-205", "P");
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
+    when(repository.updateApplicationExemption(any(ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class)))
+        .thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.removeApplicationFromExemption(1000456L, "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class);
+    verify(repository).updateApplicationExemption(recordCaptor.capture());
+    ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord record = recordCaptor.getValue();
+    assertThat(record.exemptionNumber()).isNull();
+    assertThat(record.applicationStatusCode()).isEqualTo("APP");
+  }
+
+  private ExemptionDetailsRpcRepository.ApplicationLinkRecord application(
+      String statusCode, String exemptionNumber, String jurisdictionCode) {
+    return new ExemptionDetailsRpcRepository.ApplicationLinkRecord(
+        1000456L,
+        null,
+        LocalDate.of(2026, 2, 20),
+        120L,
+        LocalDate.of(2026, 2, 21),
+        95.0d,
+        1.6d,
+        "Campbell River",
+        "creator",
+        Timestamp.from(Instant.parse("2026-02-20T18:00:00Z")),
+        null,
+        "00055667",
+        "00",
+        "00077881",
+        "00",
+        exemptionNumber,
+        "ER02",
+        statusCode,
+        "O",
+        12L,
+        "S",
+        jurisdictionCode,
+        "G",
+        "Agent Contact",
+        "Owner Contact",
+        "N",
+        LocalDate.of(2026, 2, 1));
   }
 }

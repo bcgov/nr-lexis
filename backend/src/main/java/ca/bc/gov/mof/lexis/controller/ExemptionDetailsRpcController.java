@@ -44,6 +44,8 @@ public class ExemptionDetailsRpcController {
   private static final String ACTION_REMOVE_DOCUMENT = "removeDocument";
   private static final String ACTION_ADD_EXEMPTION = "addExemption";
   private static final String ACTION_CHECK_EXEMPTION_NUMBER = "checkExemptionNumber";
+  private static final String ACTION_ADD_APPLICATION_TO_EXEMPTION = "addApplicationToExemption";
+  private static final String ACTION_REMOVE_APPLICATION_FROM_EXEMPTION = "removeApplicationFromExemption";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -249,6 +251,60 @@ public class ExemptionDetailsRpcController {
     return checkExemptionNumber(exemptionNumber);
   }
 
+  @PostMapping("/rpc/exemption-details/application")
+  public ResponseEntity<ApplicationExemptionLinkResponseDto> addApplicationToExemption(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      Authentication authentication) {
+    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Exemption details RPC service unavailable - returning no content for add application to exemption");
+      return ResponseEntity.noContent().build();
+    }
+
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult result =
+        service.addApplicationToExemption(
+            parsePositiveLong(applicationNumber),
+            exemptionNumber,
+            authentication == null ? null : authentication.getName(),
+            authorizationService.canPerformAction(roles, "viewFederalApplication"),
+            authorizationService.canPerformAction(roles, "viewOICApplication"));
+    return ResponseEntity.ok(new ApplicationExemptionLinkResponseDto(result.success(), result.errors()));
+  }
+
+  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_ADD_APPLICATION_TO_EXEMPTION)
+  public ResponseEntity<ApplicationExemptionLinkResponseDto> addApplicationToExemptionLegacy(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      Authentication authentication) {
+    return addApplicationToExemption(applicationNumber, exemptionNumber, authentication);
+  }
+
+  @DeleteMapping("/rpc/exemption-details/application")
+  public ResponseEntity<ApplicationExemptionLinkResponseDto> removeApplicationFromExemption(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      Authentication authentication) {
+    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Exemption details RPC service unavailable - returning no content for remove application from exemption");
+      return ResponseEntity.noContent().build();
+    }
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult result =
+        service.removeApplicationFromExemption(
+            parsePositiveLong(applicationNumber),
+            authentication == null ? null : authentication.getName());
+    return ResponseEntity.ok(new ApplicationExemptionLinkResponseDto(result.success(), result.errors()));
+  }
+
+  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_REMOVE_APPLICATION_FROM_EXEMPTION)
+  public ResponseEntity<ApplicationExemptionLinkResponseDto> removeApplicationFromExemptionLegacy(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      Authentication authentication) {
+    return removeApplicationFromExemption(applicationNumber, authentication);
+  }
+
   @PostMapping("/rpc/exemption-details/exemption")
   public ResponseEntity<ExemptionPersistenceResponseDto> addExemption(
       @RequestParam MultiValueMap<String, String> parameters,
@@ -417,6 +473,8 @@ public class ExemptionDetailsRpcController {
   public record RemoveDocumentResponseDto(String success) {}
 
   public record ExemptionNumberValidationResponseDto(boolean isValid, String message) {}
+
+  public record ApplicationExemptionLinkResponseDto(boolean success, List<String> errors) {}
 
   public record ExemptionPersistenceResponseDto(
       boolean success,

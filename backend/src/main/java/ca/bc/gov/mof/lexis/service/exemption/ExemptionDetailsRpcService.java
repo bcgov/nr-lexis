@@ -24,6 +24,15 @@ public interface ExemptionDetailsRpcService {
 
   ExemptionNumberValidationResult checkExemptionNumber(String exemptionNumber);
 
+  ApplicationExemptionLinkResult addApplicationToExemption(
+      Long applicationNumber,
+      String exemptionNumber,
+      String userId,
+      boolean canViewFederalApplications,
+      boolean canViewReserveApplications);
+
+  ApplicationExemptionLinkResult removeApplicationFromExemption(Long applicationNumber, String userId);
+
   record ExemptionApplicationsResponse(
       List<ApplicationItem> applications, boolean containsUnmanu, String ownerNumber) {}
 
@@ -48,6 +57,8 @@ public interface ExemptionDetailsRpcService {
   record DocumentContent(byte[] bytes) {}
 
   record ExemptionNumberValidationResult(boolean valid, String message) {}
+
+  record ApplicationExemptionLinkResult(boolean success, List<String> errors) {}
 
   record CreateExemptionRequest(
       String exemptionNumber,

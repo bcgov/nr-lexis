@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -22,6 +23,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final String EXEMPTION_TYPE_OIC = "O";
   private static final String EXEMPTION_TYPE_BOIC = "B";
   private static final String EXEMPTION_STATUS_ACTIVE = "ACT";
+  private static final String APPLICATION_STATUS_APPROVED = "APP";
+  private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
   private static final String EXEMPTION_NUMBER_ASSIGNED_MESSAGE =
@@ -194,6 +197,86 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         valid, valid ? null : EXEMPTION_NUMBER_ASSIGNED_MESSAGE);
   }
 
+  @Override
+  public ApplicationExemptionLinkResult addApplicationToExemption(
+      Long applicationNumber,
+      String exemptionNumber,
+      String userId,
+      boolean canViewFederalApplications,
+      boolean canViewReserveApplications) {
+    String normalizedExemptionNumber = blankToNull(exemptionNumber);
+    List<String> errors = new ArrayList<>();
+
+    Optional<ExemptionDetailsRpcRepository.ApplicationLinkRecord> candidate =
+        repository.findApplicationLinkRecord(applicationNumber);
+    if (candidate.isEmpty()) {
+      errors.add("Application " + displayApplicationNumber(applicationNumber) + " does not exist");
+      return new ApplicationExemptionLinkResult(false, errors);
+    }
+
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord application = candidate.get();
+    Optional<String> exemptionType = repository.findExemptionTypeCodeByExemptionNumber(normalizedExemptionNumber);
+    if (exemptionType.isEmpty()) {
+      errors.add(required("exemption number"));
+      return new ApplicationExemptionLinkResult(false, errors);
+    }
+
+    List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> assignedApplications =
+        repository.findApplicationSummariesByExemptionNumber(normalizedExemptionNumber);
+    String exemptionTypeCode = exemptionType.get();
+    boolean oicExemption = EXEMPTION_TYPE_OIC.equalsIgnoreCase(exemptionTypeCode);
+
+    if (!APPLICATION_STATUS_APPROVED.equalsIgnoreCase(application.applicationStatusCode())) {
+      errors.add("Applications must have a status of approved.");
+    } else if (blankToNull(application.exemptionNumber()) != null) {
+      errors.add("This application is already assigned to an exemption.");
+    } else if (repository.hasActiveValidOffers(application.applicationNumber())) {
+      errors.add("Application has valid offers and cannot be added to an exemption.");
+    } else if (!oicExemption && appNotPastListingDate(application)) {
+      errors.add("Application listing date has not passed.");
+    } else if (!oicExemption && assignedOwnerMismatch(assignedApplications, application.ownerClientNumber())) {
+      errors.add("Application cannot be added to this exemption because the client number does not match.");
+    } else if (!canViewFederalApplications && JURISDICTION_FEDERAL.equalsIgnoreCase(application.exportJurisdictionCode())) {
+      errors.add("Insufficient privileges to add this application.");
+    } else if (!canViewReserveApplications && JURISDICTION_RESERVE.equalsIgnoreCase(application.exportJurisdictionCode())) {
+      errors.add("Insufficient privileges to add this application.");
+    }
+
+    if (!errors.isEmpty()) {
+      return new ApplicationExemptionLinkResult(false, errors);
+    }
+
+    boolean updated =
+        repository.updateApplicationExemption(
+            new ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord(
+                application,
+                normalizedExemptionNumber,
+                APPLICATION_STATUS_EXEMPTED,
+                defaultUpdateUser(userId, application.entryUserId())));
+    return new ApplicationExemptionLinkResult(updated, updated ? List.of() : List.of("Unable to add application to exemption."));
+  }
+
+  @Override
+  public ApplicationExemptionLinkResult removeApplicationFromExemption(Long applicationNumber, String userId) {
+    Optional<ExemptionDetailsRpcRepository.ApplicationLinkRecord> existing =
+        repository.findApplicationLinkRecord(applicationNumber);
+    if (existing.isEmpty()) {
+      return new ApplicationExemptionLinkResult(
+          false, List.of("Application " + displayApplicationNumber(applicationNumber) + " does not exist"));
+    }
+
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord application = existing.get();
+    boolean updated =
+        repository.updateApplicationExemption(
+            new ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord(
+                application,
+                null,
+                APPLICATION_STATUS_APPROVED,
+                defaultUpdateUser(userId, application.entryUserId())));
+    return new ApplicationExemptionLinkResult(
+        updated, updated ? List.of() : List.of("Unable to remove application from exemption."));
+  }
+
   private boolean resolveCanViewPermit(
       ExemptionDetailsRpcRepository.PermitSummaryRow row,
       boolean oicLike,
@@ -253,6 +336,39 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private boolean appNotPastListingDate(ExemptionDetailsRpcRepository.ApplicationLinkRecord application) {
+    if (application.exportScheduleId() == null || application.listingDate() == null) {
+      return false;
+    }
+    LocalDate today = LocalDate.now(ZoneId.systemDefault());
+    return !application.listingDate().isBefore(today);
+  }
+
+  private boolean assignedOwnerMismatch(
+      List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> assignedApplications,
+      String candidateOwnerClientNumber) {
+    String normalizedCandidateOwner = blankToNull(candidateOwnerClientNumber);
+    if (assignedApplications == null || assignedApplications.isEmpty() || normalizedCandidateOwner == null) {
+      return false;
+    }
+    return assignedApplications.stream()
+        .map(ExemptionDetailsRpcRepository.ApplicationSummaryRow::ownerClientNumber)
+        .map(this::blankToNull)
+        .filter(owner -> owner != null)
+        .findFirst()
+        .map(owner -> !owner.equals(normalizedCandidateOwner))
+        .orElse(false);
+  }
+
+  private String defaultUpdateUser(String userId, String fallback) {
+    String normalized = blankToNull(userId);
+    return normalized == null ? blankToNull(fallback) : normalized;
+  }
+
+  private String displayApplicationNumber(Long applicationNumber) {
+    return applicationNumber == null ? "" : applicationNumber.toString();
   }
 
   private CreateExemptionRequest normalizeCreateExemptionRequest(CreateExemptionRequest input) {

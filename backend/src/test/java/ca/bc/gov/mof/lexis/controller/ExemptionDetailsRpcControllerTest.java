@@ -168,6 +168,44 @@ class ExemptionDetailsRpcControllerTest {
   }
 
   @Test
+  void addApplicationToExemptionLegacyShouldUseAuthzFlagsAndReturnLinkPayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewFederalApplication"))
+        .thenReturn(true);
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewOICApplication"))
+        .thenReturn(true);
+    when(service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true, true))
+        .thenReturn(new ExemptionDetailsRpcService.ApplicationExemptionLinkResult(true, List.of()));
+
+    ResponseEntity<ExemptionDetailsRpcController.ApplicationExemptionLinkResponseDto> response =
+        controller.addApplicationToExemptionLegacy("1000456", "EX-205", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().errors()).isEmpty();
+    verify(service).addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true, true);
+  }
+
+  @Test
+  void removeApplicationFromExemptionLegacyShouldReturnLinkPayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(service.removeApplicationFromExemption(1000456L, "idir\\jsmith"))
+        .thenReturn(new ExemptionDetailsRpcService.ApplicationExemptionLinkResult(true, List.of()));
+
+    ResponseEntity<ExemptionDetailsRpcController.ApplicationExemptionLinkResponseDto> response =
+        controller.removeApplicationFromExemptionLegacy("1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    verify(service).removeApplicationFromExemption(1000456L, "idir\\jsmith");
+  }
+
+  @Test
   void addExemptionLegacyShouldMapAliasesAndReturnPersistencePayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.addExemption(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
