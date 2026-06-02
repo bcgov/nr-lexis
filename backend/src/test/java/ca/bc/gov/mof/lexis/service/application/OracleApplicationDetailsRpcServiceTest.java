@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -201,5 +202,48 @@ class OracleApplicationDetailsRpcServiceTest {
   void getApplicationClientSnapshotShouldReturnEmptyForInvalidApplicationNumber() {
     assertThat(service.getApplicationClientSnapshot(null)).isEmpty();
     verifyNoInteractions(repository);
+  }
+
+  @Test
+  void getSpeciesCodesShouldMapOracleCodeRows() {
+    when(repository.findAllSpeciesCodes())
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.CodeRow(" FIR ", " Douglas-fir ", 1L, 1L),
+                new ApplicationDetailsRpcRepository.CodeRow(" HEM ", " Hemlock ", 1L, 2L)));
+
+    List<ApplicationDetailsRpcService.CodeItem> response = service.getSpeciesCodes();
+
+    assertThat(response)
+        .extracting(
+            ApplicationDetailsRpcService.CodeItem::code,
+            ApplicationDetailsRpcService.CodeItem::description)
+        .containsExactly(tuple("FIR", "Douglas-fir"), tuple("HEM", "Hemlock"));
+    verify(repository).findAllSpeciesCodes();
+  }
+
+  @Test
+  void getGradeCodesShouldDeduplicateSortAndResolveDescriptions() {
+    when(repository.findSpeciesEndUsesByRegionSpecies("11", "FIR"))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow("FIR", "U", "LUM", "FIR/U", 11L),
+                new ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow("FIR", "J", "PUL", "FIR/J", 11L),
+                new ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow("FIR", "J", "LUM", "FIR/J", 11L)));
+    when(repository.findGradeCode("J"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("J", "Grade J", 1L, 1L)));
+    when(repository.findGradeCode("U"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("U", "Grade U", 1L, 2L)));
+
+    List<ApplicationDetailsRpcService.CodeItem> response = service.getGradeCodes("11", "FIR");
+
+    assertThat(response)
+        .extracting(
+            ApplicationDetailsRpcService.CodeItem::code,
+            ApplicationDetailsRpcService.CodeItem::description)
+        .containsExactly(tuple("J", "Grade J"), tuple("U", "Grade U"));
+    verify(repository).findSpeciesEndUsesByRegionSpecies("11", "FIR");
+    verify(repository).findGradeCode("J");
+    verify(repository).findGradeCode("U");
   }
 }

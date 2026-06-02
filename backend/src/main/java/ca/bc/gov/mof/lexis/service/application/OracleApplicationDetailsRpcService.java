@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeSet;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -144,6 +145,37 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
                     trimToNull(row.ownerClientNumber()),
                     trimToNull(row.ownerClientLocationCode()),
                     trimToNull(row.ownerContactName())));
+  }
+
+  @Override
+  public List<CodeItem> getSpeciesCodes() {
+    return repository.findAllSpeciesCodes().stream().map(this::toCodeItem).toList();
+  }
+
+  @Override
+  public List<CodeItem> getGradeCodes(String orgUnitNumber, String speciesCode) {
+    TreeSet<String> gradeCodes = new TreeSet<>();
+    for (ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow row :
+        repository.findSpeciesEndUsesByRegionSpecies(orgUnitNumber, speciesCode)) {
+      String gradeCode = trimToNull(row.gradeCode());
+      if (gradeCode != null) {
+        gradeCodes.add(gradeCode);
+      }
+    }
+
+    List<CodeItem> response = new ArrayList<>();
+    for (String gradeCode : gradeCodes) {
+      response.add(
+          repository
+              .findGradeCode(gradeCode)
+              .map(this::toCodeItem)
+              .orElse(new CodeItem(gradeCode, gradeCode)));
+    }
+    return response;
+  }
+
+  private CodeItem toCodeItem(ApplicationDetailsRpcRepository.CodeRow row) {
+    return new CodeItem(trimToNull(row.code()), trimToNull(row.description()));
   }
 
   private PersistedRemark toPersistedRemark(ApplicationDetailsRpcRepository.RemarkRow row) {

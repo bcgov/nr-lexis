@@ -10,6 +10,7 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -34,6 +35,11 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_ATTACHMENT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
+  private static final String FIND_ALL_SPECIES_CODES =
+      LEXIS_CODES_PACKAGE + "FIND_ALL_SPECIES_CODES(?)";
+  private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
+  private static final String FIND_SPECIES_GRADE_BY_REGION_SPECIES =
+      LEXIS_CODES_PACKAGE + "FIND_SPEC_GRAD_BY_REG_SPEC(?,?,?)";
   private static final String DELETE_APPLICATION_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "DELETE_APPL_FILE_ATTACHMENT(?)";
   private static final String FIND_REMARK_BY_NUMBER =
@@ -241,6 +247,66 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
                 getString(rs, "OWNER_CONTACT_NAME")));
   }
 
+  public List<CodeRow> findAllSpeciesCodes() {
+    return queryCursorProcedure(
+            FIND_ALL_SPECIES_CODES,
+            null,
+            1,
+            rs ->
+                new CodeRow(
+                    getString(rs, "CODE"),
+                    getString(rs, "DESCRIPTION"),
+                    zeroIfNull(getLong(rs, "GROUP_BY")),
+                    zeroIfNull(getLong(rs, "ORDER_BY"))))
+        .stream()
+        .filter(row -> trim(row.code()) != null && trim(row.description()) != null)
+        .sorted(Comparator.comparingLong(CodeRow::groupBy).thenComparingLong(CodeRow::orderBy))
+        .toList();
+  }
+
+  public Optional<CodeRow> findGradeCode(String gradeCode) {
+    String normalized = trim(gradeCode);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_GRADE_CODE,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new CodeRow(
+                getString(rs, "CODE"),
+                getString(rs, "DESCRIPTION"),
+                zeroIfNull(getLong(rs, "GROUP_BY")),
+                zeroIfNull(getLong(rs, "ORDER_BY"))));
+  }
+
+  public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegionSpecies(
+      String orgUnitNumber, String speciesCode) {
+    String normalizedOrgUnitNumber = trim(orgUnitNumber);
+    String normalizedSpeciesCode = trim(speciesCode);
+    if (normalizedOrgUnitNumber == null || normalizedSpeciesCode == null) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+            FIND_SPECIES_GRADE_BY_REGION_SPECIES,
+            cs -> {
+              cs.setString(1, normalizedOrgUnitNumber);
+              cs.setString(2, normalizedSpeciesCode);
+            },
+            3,
+            rs ->
+                new SpeciesGradeEndUseRow(
+                    getString(rs, "EXPORT_SPECIES_CODE"),
+                    getString(rs, "EXPORT_GRADE_CODE"),
+                    getString(rs, "EXPORT_END_USE_CODE"),
+                    getString(rs, "EXCOL_TRANSLATION_VALUE"),
+                    getLong(rs, "ORG_UNIT_NO")))
+        .stream()
+        .filter(row -> trim(row.gradeCode()) != null)
+        .toList();
+  }
+
   private void bindApplicationInsert(CallableStatement cs, ApplicationInsertRecord record)
       throws SQLException {
     int index = 1;
@@ -375,6 +441,15 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String ownerClientLocationCode,
       String ownerContactName) {}
 
+  public record CodeRow(String code, String description, long groupBy, long orderBy) {}
+
+  public record SpeciesGradeEndUseRow(
+      String speciesCode,
+      String gradeCode,
+      String endUseCode,
+      String excolTranslationValue,
+      Long orgUnitNumber) {}
+
   private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
     String normalized = trim(value);
     if (normalized == null) {
@@ -382,6 +457,10 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     } else {
       cs.setString(index, normalized);
     }
+  }
+
+  private long zeroIfNull(Long value) {
+    return value == null ? 0L : value;
   }
 
   private void setLongOrNull(CallableStatement cs, int index, Long value) throws SQLException {

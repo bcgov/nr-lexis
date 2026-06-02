@@ -204,6 +204,15 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyApplicationDetailsRpcShouldAllowCodeListAction() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "getSpeciesCodes")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void legacyExemptionDetailsRpcShouldAllowApproveExemptionsAction() throws Exception {
     mockMvc.perform(
             post("/api/lexis/exemptionDetailsRPC")

@@ -22,12 +22,18 @@ public interface ApplicationDetailsRpcService {
 
   Optional<ApplicationClientSnapshot> getApplicationClientSnapshot(Long applicationNumber);
 
+  List<CodeItem> getSpeciesCodes();
+
+  List<CodeItem> getGradeCodes(String orgUnitNumber, String speciesCode);
+
   record DocumentItem(long id, String name, String description, String type) {}
 
   record DocumentContent(byte[] bytes) {}
 
   record PersistedRemark(
       long remarkId, String remark, String displayRemark, String user, Instant date) {}
+
+  record CodeItem(String code, String description) {}
 
   record ApplicationClientSnapshot(
       String agentClientNumber,

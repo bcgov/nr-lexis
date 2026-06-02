@@ -40,6 +40,8 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_CLIENT_DATA = "getClientData";
   private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
   private static final String ACTION_GET_CONTACTS_FOR_LOCATION = "getContactsForLocation";
+  private static final String ACTION_GET_SPECIES_CODES = "getSpeciesCodes";
+  private static final String ACTION_GET_GRADE_CODES = "getGradeCodes";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -318,6 +320,50 @@ public class ApplicationDetailsRpcController {
     return getContactsForLocation(clientNumber, clientLocationCode, applicationNumber, applicantType);
   }
 
+  @GetMapping("/rpc/application-details/species-codes")
+  public ResponseEntity<List<ApplicationCodeResponseDto>> getSpeciesCodes() {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for species codes");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getSpeciesCodes().stream().map(this::toCodeResponse).toList());
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SPECIES_CODES)
+  public ResponseEntity<List<ApplicationCodeResponseDto>> getSpeciesCodesLegacy() {
+    return getSpeciesCodes();
+  }
+
+  @GetMapping("/rpc/application-details/grade-codes")
+  public ResponseEntity<List<ApplicationCodeResponseDto>> getGradeCodes(
+      @RequestParam(name = "speciesCode", required = false) String speciesCode,
+      @RequestParam(name = "orgUnitNumber", required = false) String orgUnitNumber,
+      @RequestParam(name = "species", required = false) String species,
+      @RequestParam(name = "region", required = false) String region) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for grade codes");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.getGradeCodes(firstNonBlank(orgUnitNumber, region), firstNonBlank(speciesCode, species))
+            .stream()
+            .map(this::toCodeResponse)
+            .toList());
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_GRADE_CODES)
+  public ResponseEntity<List<ApplicationCodeResponseDto>> getGradeCodesLegacy(
+      @RequestParam(name = "speciesCode", required = false) String speciesCode,
+      @RequestParam(name = "orgUnitNumber", required = false) String orgUnitNumber,
+      @RequestParam(name = "species", required = false) String species,
+      @RequestParam(name = "region", required = false) String region) {
+    return getGradeCodes(speciesCode, orgUnitNumber, species, region);
+  }
+
   private Long parsePositiveLong(String rawValue) {
     if (rawValue == null || rawValue.isBlank()) {
       return null;
@@ -507,6 +553,15 @@ public class ApplicationDetailsRpcController {
     return left != null && right != null && left.equalsIgnoreCase(right);
   }
 
+  private String firstNonBlank(String first, String second) {
+    String normalizedFirst = trimToNull(first);
+    return normalizedFirst == null ? trimToNull(second) : normalizedFirst;
+  }
+
+  private ApplicationCodeResponseDto toCodeResponse(ApplicationDetailsRpcService.CodeItem item) {
+    return new ApplicationCodeResponseDto(item.code(), item.description());
+  }
+
   public record DocumentDetailsResponseDto(
       String name, String description, String type, long id) {}
 
@@ -553,4 +608,6 @@ public class ApplicationDetailsRpcController {
       String phone,
       String fax,
       String email) {}
+
+  public record ApplicationCodeResponseDto(String code, String description) {}
 }

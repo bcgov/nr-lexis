@@ -310,4 +310,64 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().get(0).contactId()).isEqualTo("22");
     verify(clientLookupService).getContactsForLocation("11111", "02");
   }
+
+  @Test
+  void getSpeciesCodesLegacyShouldReturnLegacyCodePayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getSpeciesCodes())
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.CodeItem("FIR", "Douglas-fir"),
+                new ApplicationDetailsRpcService.CodeItem("HEM", "Hemlock")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationCodeResponseDto>> response =
+        controller.getSpeciesCodesLegacy();
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody())
+        .extracting(
+            ApplicationDetailsRpcController.ApplicationCodeResponseDto::code,
+            ApplicationDetailsRpcController.ApplicationCodeResponseDto::description)
+        .containsExactly(tuple("FIR", "Douglas-fir"), tuple("HEM", "Hemlock"));
+    verify(service).getSpeciesCodes();
+  }
+
+  @Test
+  void getGradeCodesLegacyShouldUseLegacyAndModernParameterAliases() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getGradeCodes("11", "FIR"))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.CodeItem("J", "Grade J"),
+                new ApplicationDetailsRpcService.CodeItem("U", "Grade U")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationCodeResponseDto>> response =
+        controller.getGradeCodesLegacy("FIR", "11", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody())
+        .extracting(
+            ApplicationDetailsRpcController.ApplicationCodeResponseDto::code,
+            ApplicationDetailsRpcController.ApplicationCodeResponseDto::description)
+        .containsExactly(tuple("J", "Grade J"), tuple("U", "Grade U"));
+    verify(service).getGradeCodes("11", "FIR");
+  }
+
+  @Test
+  void getGradeCodesShouldFallbackToShortParameterAliases() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getGradeCodes("22", "HEM"))
+        .thenReturn(List.of(new ApplicationDetailsRpcService.CodeItem("K", "Grade K")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationCodeResponseDto>> response =
+        controller.getGradeCodes(null, null, "HEM", "22");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody()).hasSize(1);
+    assertThat(response.getBody().get(0).code()).isEqualTo("K");
+    verify(service).getGradeCodes("22", "HEM");
+  }
 }
