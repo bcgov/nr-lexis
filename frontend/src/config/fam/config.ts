@@ -26,6 +26,7 @@ const redirectSignOut = env.VITE_REDIRECT_SIGN_OUT?.trim() || window.location.or
 const scopes = resolveScopes(splitScopes(env.VITE_COGNITO_SCOPES))
 
 export const idirProviderName = `${(env.VITE_ZONE ?? 'DEV').toUpperCase()}-IDIR`
+export const businessBceidProviderName = `${(env.VITE_ZONE ?? 'DEV').toUpperCase()}-BCEIDBUSINESS`
 
 export const isCognitoConfigured =
   Boolean(userPoolId) && Boolean(userPoolClientId) && Boolean(domain)

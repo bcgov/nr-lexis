@@ -56,7 +56,7 @@ describe('Landing auth flow smoke', () => {
     })
   })
 
-  it('runs login action from the landing entry button', async () => {
+  it('runs IDIR login action from the landing entry button', async () => {
     const login = vi.fn().mockResolvedValue(undefined)
     mockedUseAuth.mockReturnValue({
       capabilities: {
@@ -83,10 +83,40 @@ describe('Landing auth flow smoke', () => {
     const loginButton = screen.getByRole('button', { name: 'Log in with IDIR' })
     await userEvent.click(loginButton)
 
-    expect(login).toHaveBeenCalledTimes(1)
+    expect(login).toHaveBeenCalledWith('idir')
     expect(
       screen.queryByRole('button', { name: 'Continue to Application' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('runs Business BCeID login action from the landing entry button', async () => {
+    const login = vi.fn().mockResolvedValue(undefined)
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: false,
+        principal: null,
+        roles: [],
+        welcomeTarget: null,
+        legacyPath: null,
+        grantedActions: [],
+      },
+      defaultRoute: '/provincial/summary',
+      isLoading: false,
+      isLoggedIn: false,
+      hasAnyRole: false,
+      usesExternalLogin: true,
+      login,
+      refresh: vi.fn().mockResolvedValue(undefined),
+      logout: vi.fn().mockResolvedValue(undefined),
+      canPerform: vi.fn().mockReturnValue(false),
+    })
+
+    renderPage()
+
+    const loginButton = screen.getByRole('button', { name: 'Log in with Business BCeID' })
+    await userEvent.click(loginButton)
+
+    expect(login).toHaveBeenCalledWith('business-bceid')
   })
 
   it('shows session claims and navigates to default route when logged in', async () => {

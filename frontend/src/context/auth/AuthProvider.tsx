@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
 import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth'
-import { idirProviderName, isCognitoConfigured } from '@/config/fam/config'
+import {
+  businessBceidProviderName,
+  idirProviderName,
+  isCognitoConfigured,
+} from '@/config/fam/config'
 import { AuthContext } from '@/context/auth/AuthContext'
-import type { AuthContextType } from '@/context/auth/types'
+import type { AuthContextType, LoginProvider } from '@/context/auth/types'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
 
@@ -229,13 +233,18 @@ export const AuthProvider: FC<Props> = ({ children }) => {
     void refresh()
   }, [refresh])
 
-  const login = useCallback(async () => {
-    if (isCognitoConfigured) {
-      await signInWithRedirect({ provider: { custom: idirProviderName } })
-      return
-    }
-    await refresh()
-  }, [refresh])
+  const login = useCallback(
+    async (provider: LoginProvider = 'idir') => {
+      if (isCognitoConfigured) {
+        const providerName =
+          provider === 'business-bceid' ? businessBceidProviderName : idirProviderName
+        await signInWithRedirect({ provider: { custom: providerName } })
+        return
+      }
+      await refresh()
+    },
+    [refresh],
+  )
 
   const logout = useCallback(async () => {
     try {

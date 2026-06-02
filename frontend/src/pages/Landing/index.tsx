@@ -2,6 +2,7 @@ import { useState, type FC } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Column, Grid, InlineNotification, Tag, Tile } from '@carbon/react'
 import { Login } from '@carbon/icons-react'
+import type { LoginProvider } from '@/context/auth/types'
 import { useAuth } from '@/context/auth/useAuth'
 import logo from '@/assets/gov-bc-logo-horiz.png'
 
@@ -12,10 +13,10 @@ const LandingPage: FC = () => {
 
   const [errorMessage, setErrorMessage] = useState('')
 
-  const onLogin = async () => {
+  const onLogin = async (provider: LoginProvider) => {
     setErrorMessage('')
     try {
-      await login()
+      await login(provider)
     } catch (error) {
       console.error(error)
       setErrorMessage('Unable to start the login flow.')
@@ -40,23 +41,39 @@ const LandingPage: FC = () => {
         </Column>
 
         <Column sm={4} md={8} lg={9}>
-          <Tile>
-            <h1>NR LEXIS</h1>
-            <p>Log Exemption Information System modernization frontend.</p>
+          <Tile className="landing-card">
+            <p className="landing-kicker">Government of British Columbia</p>
+            <h1>Log Exemption Information System</h1>
+            <p>
+              Apply for and manage log export exemptions, permits, offers, and related LEXIS
+              workflows.
+            </p>
             <div className="landing-actions">
-              <Button
-                kind="primary"
-                renderIcon={Login}
-                onClick={() => void onLogin()}
-                disabled={isLoading}
-              >
-                Log in with IDIR
-              </Button>
+              {!isLoggedIn && (
+                <>
+                  <Button
+                    kind="primary"
+                    renderIcon={Login}
+                    onClick={() => void onLogin('idir')}
+                    disabled={isLoading || !usesExternalLogin}
+                  >
+                    Log in with IDIR
+                  </Button>
+                  <Button
+                    kind="secondary"
+                    renderIcon={Login}
+                    onClick={() => void onLogin('business-bceid')}
+                    disabled={isLoading || !usesExternalLogin}
+                  >
+                    Log in with Business BCeID
+                  </Button>
+                </>
+              )}
 
               {!usesExternalLogin && !isLoggedIn && (
                 <p className="landing-help-text">
-                  External login URL is not configured. Login is expected through backend session
-                  auth.
+                  LEXIS login is not configured for this environment. Contact the system
+                  administrator.
                 </p>
               )}
 
@@ -79,22 +96,29 @@ const LandingPage: FC = () => {
         </Column>
 
         <Column sm={4} md={8} lg={7}>
-          <Tile>
-            <h2>Session Status</h2>
+          <Tile className="landing-card landing-card--support">
+            <h2>Access to LEXIS</h2>
             <p>
-              Principal: <strong>{capabilities.principal ?? 'Anonymous'}</strong>
+              Industry users sign in with Business BCeID. Ministry users sign in with IDIR. Access
+              must be granted through Forests Access Management before LEXIS roles appear here.
             </p>
-            <p>
-              Authenticated: <strong>{isLoggedIn ? 'Yes' : 'No'}</strong>
-            </p>
-            <div className="landing-role-tags">
-              {capabilities.roles.length === 0 && <Tag type="gray">No roles</Tag>}
-              {capabilities.roles.map((role) => (
-                <Tag key={role} type="blue">
-                  {role}
-                </Tag>
-              ))}
-            </div>
+            {isLoggedIn && (
+              <div className="landing-session-summary">
+                <p>
+                  Signed in as <strong>{capabilities.principal ?? 'Unknown user'}</strong>
+                </p>
+                <div className="landing-role-tags">
+                  {capabilities.roles.length === 0 && (
+                    <Tag type="gray">No LEXIS roles assigned</Tag>
+                  )}
+                  {capabilities.roles.map((role) => (
+                    <Tag key={role} type="blue">
+                      {role}
+                    </Tag>
+                  ))}
+                </div>
+              </div>
+            )}
           </Tile>
         </Column>
 
