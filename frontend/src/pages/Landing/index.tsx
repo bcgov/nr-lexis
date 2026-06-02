@@ -1,6 +1,6 @@
 import { useState, type FC } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Column, Grid, InlineNotification, Tag, Tile } from '@carbon/react'
+import { Button, Column, Grid, InlineNotification, Tile } from '@carbon/react'
 import { Login } from '@carbon/icons-react'
 import type { LoginProvider } from '@/context/auth/types'
 import { useAuth } from '@/context/auth/useAuth'
@@ -8,8 +8,7 @@ import logo from '@/assets/gov-bc-logo-horiz.png'
 
 const LandingPage: FC = () => {
   const navigate = useNavigate()
-  const { capabilities, defaultRoute, isLoading, isLoggedIn, login, refresh, usesExternalLogin } =
-    useAuth()
+  const { defaultRoute, isLoading, isLoggedIn, login, usesExternalLogin } = useAuth()
 
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -20,16 +19,6 @@ const LandingPage: FC = () => {
     } catch (error) {
       console.error(error)
       setErrorMessage('Unable to start the login flow.')
-    }
-  }
-
-  const onRefreshSession = async () => {
-    setErrorMessage('')
-    try {
-      await refresh()
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to refresh session information.')
     }
   }
 
@@ -78,18 +67,13 @@ const LandingPage: FC = () => {
               )}
 
               {isLoggedIn && (
-                <>
-                  <Button
-                    kind="secondary"
-                    onClick={() => navigate(defaultRoute)}
-                    disabled={isLoading}
-                  >
-                    Continue to Application
-                  </Button>
-                  <Button kind="ghost" onClick={() => void onRefreshSession()} disabled={isLoading}>
-                    Refresh Session
-                  </Button>
-                </>
+                <Button
+                  kind="secondary"
+                  onClick={() => navigate(defaultRoute)}
+                  disabled={isLoading}
+                >
+                  Continue to Application
+                </Button>
               )}
             </div>
           </Tile>
@@ -102,23 +86,6 @@ const LandingPage: FC = () => {
               Industry users sign in with Business BCeID. Ministry users sign in with IDIR. Access
               must be granted through Forests Access Management before LEXIS roles appear here.
             </p>
-            {isLoggedIn && (
-              <div className="landing-session-summary">
-                <p>
-                  Signed in as <strong>{capabilities.principal ?? 'Unknown user'}</strong>
-                </p>
-                <div className="landing-role-tags">
-                  {capabilities.roles.length === 0 && (
-                    <Tag type="gray">No LEXIS roles assigned</Tag>
-                  )}
-                  {capabilities.roles.map((role) => (
-                    <Tag key={role} type="blue">
-                      {role}
-                    </Tag>
-                  ))}
-                </div>
-              </div>
-            )}
           </Tile>
         </Column>
 
