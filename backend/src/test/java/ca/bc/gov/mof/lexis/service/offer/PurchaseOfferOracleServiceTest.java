@@ -150,6 +150,81 @@ class PurchaseOfferOracleServiceTest {
     verifyNoInteractions(repository);
   }
 
+  @Test
+  void addOfferShouldReturnValidationErrorsBeforeOracleInsert() {
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                null, null, null, null, null, 0.0d, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "A valid application number is required.",
+            "A valid company name is required.",
+            "A valid contact name is required.",
+            "The purchase offer amount must be greater than 0",
+            "A valid purchase offer date is required.",
+            "A valid pickup location is required.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addOfferShouldInsertWhenRequestIsValid() {
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L,
+                null,
+                "No Packages",
+                " Example Lumber ",
+                " Alex Example ",
+                12500.25d,
+                LocalDate.of(2026, 3, 2),
+                null,
+                LocalDate.of(2026, 3, 18),
+                null,
+                null,
+                " Initial offer ",
+                null,
+                null,
+                null,
+                null,
+                " 00077881 ",
+                " Port Moody ",
+                " Condition notes ",
+                99.99d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("The purchase offer was saved successfully.");
+    assertThat(response.applicationNumber()).isEqualTo(1000456L);
+    assertThat(response.exportPurchaseOfferNumber()).isEqualTo(81001L);
+    assertThat(response.sendEmail()).isTrue();
+    assertThat(response.update()).isFalse();
+
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferInsertRecord.class);
+    verify(repository).insertOffer(recordCaptor.capture());
+    PurchaseOfferRepository.PurchaseOfferInsertRecord record = recordCaptor.getValue();
+    assertThat(record.packageNumber()).isNull();
+    assertThat(record.companyName()).isEqualTo("Example Lumber");
+    assertThat(record.contactName()).isEqualTo("Alex Example");
+    assertThat(record.fairOfferIndicator()).isEqualTo("N");
+    assertThat(record.validOfferIndicator()).isEqualTo("Y");
+    assertThat(record.approvalIndicator()).isEqualTo("N");
+    assertThat(record.exportJurisdictionCode()).isEqualTo("P");
+    assertThat(record.manufacturingFacilityInfo()).isEqualTo(" ");
+    assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
+    assertThat(record.applicationNumber()).isEqualTo(1000456L);
+    assertThat(record.offerVolume()).isEqualTo(99.9d);
+  }
+
   private PurchaseOfferSearchResultDto row(Long offerNumber, LocalDate listingDate) {
     return new PurchaseOfferSearchResultDto(
         offerNumber,

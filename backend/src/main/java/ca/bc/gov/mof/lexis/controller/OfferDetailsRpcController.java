@@ -5,10 +5,12 @@ import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
+import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -17,8 +19,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,14 +40,17 @@ public class OfferDetailsRpcController {
   private final ObjectProvider<LexisApplicationService> applicationServiceProvider;
   private final ObjectProvider<FederalApplicationService> federalApplicationServiceProvider;
   private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
+  private final ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider;
 
   public OfferDetailsRpcController(
       ObjectProvider<LexisApplicationService> applicationServiceProvider,
       ObjectProvider<FederalApplicationService> federalApplicationServiceProvider,
-      ObjectProvider<ClientLookupService> clientLookupServiceProvider) {
+      ObjectProvider<ClientLookupService> clientLookupServiceProvider,
+      ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider) {
     this.applicationServiceProvider = applicationServiceProvider;
     this.federalApplicationServiceProvider = federalApplicationServiceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
+    this.purchaseOfferServiceProvider = purchaseOfferServiceProvider;
   }
 
   @GetMapping("/validate-application-number")
@@ -256,6 +264,28 @@ public class OfferDetailsRpcController {
     return ResponseEntity.ok(response);
   }
 
+  @PostMapping("/offer")
+  public ResponseEntity<OfferPersistenceResponseDto> addOffer(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    PurchaseOfferService service = purchaseOfferServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Purchase offer service unavailable - returning no content for add offer");
+      return ResponseEntity.noContent().build();
+    }
+
+    String userId = authentication == null ? null : authentication.getName();
+    PurchaseOfferService.CreateOfferResult result =
+        service.addOffer(toCreateOfferRequest(parameters), userId);
+    return ResponseEntity.ok(toPersistenceResponse(result));
+  }
+
+  public ResponseEntity<OfferPersistenceResponseDto> addOfferLegacy(
+      MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return addOffer(parameters, authentication);
+  }
+
   private boolean isFederalApplication(Long applicationNumber) {
     FederalApplicationService federalService = federalApplicationServiceProvider.getIfAvailable();
     if (federalService == null) {
@@ -273,6 +303,98 @@ public class OfferDetailsRpcController {
     } catch (NumberFormatException ex) {
       return null;
     }
+  }
+
+  private Long parsePositiveLong(String rawValue) {
+    if (rawValue == null || rawValue.isBlank()) {
+      return null;
+    }
+    try {
+      long parsed = Long.parseLong(rawValue.trim());
+      return parsed > 0 ? parsed : null;
+    } catch (NumberFormatException ex) {
+      return null;
+    }
+  }
+
+  private Double parseDouble(String rawValue) {
+    if (rawValue == null || rawValue.isBlank()) {
+      return null;
+    }
+    try {
+      return Double.parseDouble(rawValue.trim());
+    } catch (NumberFormatException ex) {
+      return null;
+    }
+  }
+
+  private LocalDate parseDate(String rawValue) {
+    if (rawValue == null || rawValue.isBlank()) {
+      return null;
+    }
+    String normalized = rawValue.trim();
+    try {
+      return LocalDate.parse(normalized);
+    } catch (DateTimeParseException ignored) {
+      try {
+        return LocalDate.parse(normalized, LEGACY_DATE_FORMATTER);
+      } catch (DateTimeParseException ex) {
+        return null;
+      }
+    }
+  }
+
+  private PurchaseOfferService.CreateOfferRequest toCreateOfferRequest(
+      MultiValueMap<String, String> parameters) {
+    return new PurchaseOfferService.CreateOfferRequest(
+        parsePositiveLong(first(parameters, "applicationNumber")),
+        parsePositiveLong(first(parameters, "exportPurchaseOfferNumber", "offerNumber")),
+        first(parameters, "packageNumber"),
+        first(parameters, "companyName"),
+        first(parameters, "contactName"),
+        parseDouble(first(parameters, "purchaseOfferAmount")),
+        parseDate(first(parameters, "purchaseOfferDate")),
+        parseDate(first(parameters, "offerWithdrawalDate", "offerEndDate")),
+        parseDate(first(parameters, "teacReviewDate")),
+        first(parameters, "fairOfferIndicator"),
+        first(parameters, "validOfferIndicator"),
+        first(parameters, "offerRemark"),
+        first(parameters, "approvalIndicator"),
+        first(parameters, "withdrawReason"),
+        first(parameters, "exportJurisdictionCode", "jurisdictionCode"),
+        first(parameters, "manufacturingFacilityInfo"),
+        first(parameters, "offeringClientNumber", "clientNumber"),
+        first(parameters, "pickupLocation"),
+        first(parameters, "offerCondition"),
+        parseDouble(first(parameters, "offerVolume")));
+  }
+
+  private OfferPersistenceResponseDto toPersistenceResponse(
+      PurchaseOfferService.CreateOfferResult result) {
+    return new OfferPersistenceResponseDto(
+        result.success(),
+        result.message(),
+        result.applicationNumber(),
+        result.exportPurchaseOfferNumber(),
+        result.clientHasEmail(),
+        result.toEmails(),
+        result.sendEmail(),
+        result.update(),
+        result.errors(),
+        result.warnings());
+  }
+
+  private String first(MultiValueMap<String, String> parameters, String... names) {
+    if (parameters == null || names == null) {
+      return null;
+    }
+    for (String name : names) {
+      String value = parameters.getFirst(name);
+      if (value != null && !value.isBlank()) {
+        return value.trim();
+      }
+    }
+    return null;
   }
 
   private String formatLegacyDate(LocalDate value) {
@@ -330,4 +452,16 @@ public class OfferDetailsRpcController {
 
   public record OfferClientLocationResponseDto(
       String locationName, String locationCode, boolean selected) {}
+
+  public record OfferPersistenceResponseDto(
+      boolean success,
+      String message,
+      Long applicationNumber,
+      Long exportPurchaseOfferNumber,
+      boolean clientHasEmail,
+      String toEmails,
+      boolean sendEmail,
+      boolean isUpdate,
+      List<String> errors,
+      List<String> warnings) {}
 }

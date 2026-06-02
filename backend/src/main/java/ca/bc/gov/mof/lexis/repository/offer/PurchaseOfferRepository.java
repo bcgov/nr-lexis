@@ -5,6 +5,14 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import java.sql.CallableStatement;
+import java.sql.Date;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -22,6 +30,8 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_POS_BY_CRITERIA(?,?,?,?,?)";
   private static final String FIND_PURCHASE_OFFER_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_NUM(?,?)";
+  private static final String INSERT_PURCHASE_OFFER =
+      LEXIS_GROUP_9_PACKAGE + "INSERT_PURCHASE_OFFER(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
   public PurchaseOfferRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -141,11 +151,113 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
                 firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
   }
 
+  public Optional<PurchaseOfferInsertRow> insertOffer(PurchaseOfferInsertRecord record) {
+    if (record == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        INSERT_PURCHASE_OFFER,
+        cs -> bindPurchaseOfferInsert(cs, record),
+        24,
+        this::mapPurchaseOfferInsertRow);
+  }
+
+  private void bindPurchaseOfferInsert(CallableStatement cs, PurchaseOfferInsertRecord record)
+      throws SQLException {
+    int index = 1;
+    setStringOrNull(cs, index++, record.packageNumber());
+    setStringOrNull(cs, index++, record.companyName());
+    setStringOrNull(cs, index++, record.contactName());
+    setDoubleOrNull(cs, index++, record.purchaseOfferAmount());
+    setDateOrNull(cs, index++, record.purchaseOfferDate());
+    setDateOrNull(cs, index++, record.offerWithdrawalDate());
+    setDateOrNull(cs, index++, record.teacReviewDate());
+    setStringOrNull(cs, index++, record.fairOfferIndicator());
+    setStringOrNull(cs, index++, record.validOfferIndicator());
+    setStringOrNull(cs, index++, record.offerRemark());
+    setStringOrNull(cs, index++, record.approvalIndicator());
+    setStringOrNull(cs, index++, record.withdrawReason());
+    setStringOrNull(cs, index++, record.exportJurisdictionCode());
+    setStringOrNull(cs, index++, record.manufacturingFacilityInfo());
+    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setTimestamp(index++, Timestamp.from(Instant.now()));
+    setStringOrNull(cs, index++, record.updateUserId());
+    cs.setNull(index++, Types.TIMESTAMP);
+    setStringOrNull(cs, index++, record.offeringClientNumber());
+    setStringOrNull(cs, index++, record.pickupLocation());
+    setStringOrNull(cs, index++, record.offerCondition());
+    setLongOrNull(cs, index++, record.applicationNumber());
+    setDoubleOrNull(cs, index, record.offerVolume());
+  }
+
+  private PurchaseOfferInsertRow mapPurchaseOfferInsertRow(ResultSet rs) {
+    return new PurchaseOfferInsertRow(getLong(rs, "EXPORT_PURCHASE_OFFER_NUMBER"));
+  }
+
   private String firstNonNull(String first, String second) {
     return first != null ? first : second;
   }
 
   private double coalesce(Double value, double fallback) {
     return value == null ? fallback : value;
+  }
+
+  public record PurchaseOfferInsertRecord(
+      String packageNumber,
+      String companyName,
+      String contactName,
+      Double purchaseOfferAmount,
+      LocalDate purchaseOfferDate,
+      LocalDate offerWithdrawalDate,
+      LocalDate teacReviewDate,
+      String fairOfferIndicator,
+      String validOfferIndicator,
+      String offerRemark,
+      String approvalIndicator,
+      String withdrawReason,
+      String exportJurisdictionCode,
+      String manufacturingFacilityInfo,
+      String entryUserId,
+      String updateUserId,
+      String offeringClientNumber,
+      String pickupLocation,
+      String offerCondition,
+      Long applicationNumber,
+      Double offerVolume) {}
+
+  public record PurchaseOfferInsertRow(Long exportPurchaseOfferNumber) {}
+
+  private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
+    String normalized = trim(value);
+    if (normalized == null) {
+      cs.setNull(index, Types.VARCHAR);
+    } else {
+      cs.setString(index, normalized);
+    }
+  }
+
+  private void setLongOrNull(CallableStatement cs, int index, Long value) throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.NUMERIC);
+    } else {
+      cs.setLong(index, value);
+    }
+  }
+
+  private void setDoubleOrNull(CallableStatement cs, int index, Double value) throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.DOUBLE);
+    } else {
+      cs.setDouble(index, value);
+    }
+  }
+
+  private void setDateOrNull(CallableStatement cs, int index, LocalDate value) throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.DATE);
+    } else {
+      cs.setDate(index, Date.valueOf(value));
+    }
   }
 }
