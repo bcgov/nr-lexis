@@ -243,6 +243,58 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(record.applicationStatusCode()).isEqualTo("APP");
   }
 
+  @Test
+  void updateExemptionShouldSaveUpdateAndRevertApplicationsWhenCancelled() {
+    ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("ACT");
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord application = application("EXE", "EX-205", "P");
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
+    when(repository.updateApplicationExemption(any(ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class)))
+        .thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                " Updated conditions ",
+                "M",
+                "CAN",
+                List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("The exemption was updated successfully.");
+    assertThat(response.exemptionNumber()).isEqualTo("EX-205");
+    assertThat(response.refreshPage()).isFalse();
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionUpdateRecord> exemptionCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class);
+    verify(repository).updateExemption(exemptionCaptor.capture());
+    ExemptionDetailsRpcRepository.ExemptionUpdateRecord updateRecord = exemptionCaptor.getValue();
+    assertThat(updateRecord.exemptionNumber()).isEqualTo("EX-205");
+    assertThat(updateRecord.previousExemptionNumber()).isEqualTo("EX-205");
+    assertThat(updateRecord.exemptionStatusCode()).isEqualTo("CAN");
+    assertThat(updateRecord.updateUserId()).isEqualTo("idir\\jsmith");
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord> applicationCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class);
+    verify(repository).updateApplicationExemption(applicationCaptor.capture());
+    assertThat(applicationCaptor.getValue().exemptionNumber()).isEqualTo("EX-205");
+    assertThat(applicationCaptor.getValue().applicationStatusCode()).isEqualTo("APP");
+  }
+
   private ExemptionDetailsRpcRepository.ApplicationLinkRecord application(
       String statusCode, String exemptionNumber, String jurisdictionCode) {
     return new ExemptionDetailsRpcRepository.ApplicationLinkRecord(
@@ -273,5 +325,20 @@ class OracleExemptionDetailsRpcServiceTest {
         "Owner Contact",
         "N",
         LocalDate.of(2026, 2, 1));
+  }
+
+  private ExemptionDetailsRpcRepository.ExemptionRecord exemption(String statusCode) {
+    return new ExemptionDetailsRpcRepository.ExemptionRecord(
+        "EX-205",
+        250.5d,
+        LocalDate.of(2026, 3, 1),
+        LocalDate.of(2026, 12, 31),
+        "Conditions",
+        "M",
+        statusCode,
+        "creator",
+        Timestamp.from(Instant.parse("2026-02-20T18:00:00Z")),
+        null,
+        null);
   }
 }

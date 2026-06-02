@@ -22,7 +22,10 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final String JURISDICTION_RESERVE = "I";
   private static final String EXEMPTION_TYPE_OIC = "O";
   private static final String EXEMPTION_TYPE_BOIC = "B";
+  private static final String EXEMPTION_TYPE_MINISTERIAL = "M";
   private static final String EXEMPTION_STATUS_ACTIVE = "ACT";
+  private static final String EXEMPTION_STATUS_CANCELLED = "CAN";
+  private static final String EXEMPTION_STATUS_NEW = "NEW";
   private static final String APPLICATION_STATUS_APPROVED = "APP";
   private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
@@ -187,6 +190,53 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
     return new CreateExemptionResult(
         true, SAVE_SUCCESS_MESSAGE, exemptionNumber, true, List.of(), warnings);
+  }
+
+  @Override
+  public CreateExemptionResult updateExemption(
+      UpdateExemptionRequest request, String userId, boolean canApproveExemption) {
+    UpdateExemptionRequest normalized = normalizeUpdateExemptionRequest(request);
+    String lookupNumber =
+        blankToNull(normalized.exemptionNumber()) == null
+            ? normalized.previousExemptionNumber()
+            : normalized.exemptionNumber();
+    Optional<ExemptionDetailsRpcRepository.ExemptionRecord> existing =
+        repository.findExemptionRecord(lookupNumber);
+
+    if (existing.isEmpty() && blankToNull(normalized.previousExemptionNumber()) != null) {
+      existing = repository.findExemptionRecord(normalized.previousExemptionNumber());
+    }
+    if (existing.isEmpty()) {
+      return new CreateExemptionResult(
+          false, null, null, false, List.of(required("existing exemption")), List.of());
+    }
+
+    ExemptionDetailsRpcRepository.ExemptionRecord current = existing.get();
+    ExemptionDetailsRpcRepository.ExemptionUpdateRecord updateRecord =
+        toUpdateRecord(normalized, current, blankToNull(userId));
+
+    List<String> errors = validateUpdateExemption(updateRecord, current, canApproveExemption);
+    if (!errors.isEmpty()) {
+      return new CreateExemptionResult(false, null, updateRecord.exemptionNumber(), false, errors, List.of());
+    }
+
+    boolean updated = repository.updateExemption(updateRecord);
+    if (!updated) {
+      return new CreateExemptionResult(
+          false,
+          "We were unable to save this exemption. Please note the time this error occurred and report to someone.",
+          updateRecord.exemptionNumber(),
+          false,
+          List.of(),
+          List.of());
+    }
+
+    if (statusChangedTo(current.exemptionStatusCode(), updateRecord.exemptionStatusCode(), EXEMPTION_STATUS_CANCELLED)) {
+      revertApplicationsToApproved(updateRecord.exemptionNumber(), updateRecord.updateUserId());
+    }
+
+    return new CreateExemptionResult(
+        true, "The exemption was updated successfully.", updateRecord.exemptionNumber(), false, List.of(), List.of());
   }
 
   @Override
@@ -393,6 +443,29 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         regions);
   }
 
+  private UpdateExemptionRequest normalizeUpdateExemptionRequest(UpdateExemptionRequest input) {
+    if (input == null) {
+      return new UpdateExemptionRequest(null, null, null, null, null, null, null, null, List.of());
+    }
+    List<Long> regions =
+        input.regionNumbers() == null
+            ? List.of()
+            : input.regionNumbers().stream()
+                .filter(region -> region != null && region > 0)
+                .distinct()
+                .toList();
+    return new UpdateExemptionRequest(
+        blankToNull(input.exemptionNumber()),
+        blankToNull(input.previousExemptionNumber()),
+        input.approvedVolume(),
+        input.approvalDate(),
+        input.expiryDate(),
+        input.otherConditions() == null ? "" : input.otherConditions().trim(),
+        blankToNull(input.exemptionTypeCode()),
+        blankToNull(input.exemptionStatusCode()),
+        regions);
+  }
+
   private List<String> validateCreateExemption(CreateExemptionRequest request) {
     List<String> errors = new ArrayList<>();
     if (blankToNull(request.exemptionNumber()) == null) {
@@ -423,6 +496,78 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return errors;
   }
 
+  private List<String> validateUpdateExemption(
+      ExemptionDetailsRpcRepository.ExemptionUpdateRecord record,
+      ExemptionDetailsRpcRepository.ExemptionRecord previous,
+      boolean canApproveExemption) {
+    List<String> errors = validateCommonExemption(
+        record.exemptionNumber(),
+        record.approvedVolume(),
+        record.approvalDate(),
+        record.expiryDate(),
+        record.exemptionTypeCode(),
+        record.exemptionStatusCode(),
+        record.regionNumbers());
+
+    if (statusChangedTo(previous.exemptionStatusCode(), record.exemptionStatusCode(), EXEMPTION_STATUS_ACTIVE)
+        && !EXEMPTION_TYPE_OIC.equalsIgnoreCase(record.exemptionTypeCode())
+        && !EXEMPTION_TYPE_BOIC.equalsIgnoreCase(record.exemptionTypeCode())
+        && !canApproveExemption) {
+      errors.add("Insufficient privileges to set this Exemption as Active.");
+    }
+
+    if (statusChangedTo(previous.exemptionStatusCode(), record.exemptionStatusCode(), EXEMPTION_STATUS_ACTIVE)
+        && EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(record.exemptionTypeCode())) {
+      List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> applications =
+          repository.findApplicationSummariesByExemptionNumber(record.exemptionNumber());
+      if (applications.isEmpty()) {
+        errors.add("Active ministerial exemptions require at least one application.");
+      }
+    }
+
+    if (record.expiryDate() != null
+        && previous.expiryDate() != null
+        && !record.expiryDate().equals(previous.expiryDate())
+        && !canEditExpiryDate(record.exemptionStatusCode(), record.exemptionTypeCode())) {
+      errors.add("Insufficient privileges to change the expiry date of this exemption.");
+    }
+    return errors;
+  }
+
+  private List<String> validateCommonExemption(
+      String exemptionNumber,
+      Double approvedVolume,
+      LocalDate approvalDate,
+      LocalDate expiryDate,
+      String exemptionTypeCode,
+      String exemptionStatusCode,
+      List<Long> regionNumbers) {
+    List<String> errors = new ArrayList<>();
+    if (blankToNull(exemptionNumber) == null) {
+      errors.add(required("exemption number"));
+    }
+    if (approvedVolume == null || approvedVolume <= 0.0d) {
+      errors.add("The approved volume must be greater than 0");
+    }
+    if (blankToNull(exemptionTypeCode) == null) {
+      errors.add(required("exemption type code"));
+    }
+    if (blankToNull(exemptionStatusCode) == null) {
+      errors.add(required("exemption status code"));
+    }
+    if (EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(exemptionStatusCode) && expiryDate == null) {
+      errors.add(required("expiry date"));
+    }
+    if (approvalDate != null && expiryDate != null && expiryDate.isBefore(approvalDate)) {
+      errors.add("The approval date must come before the expiry.");
+    }
+    if (EXEMPTION_TYPE_BOIC.equalsIgnoreCase(exemptionTypeCode)
+        && (regionNumbers == null || regionNumbers.isEmpty())) {
+      errors.add(required("region"));
+    }
+    return errors;
+  }
+
   private ExemptionDetailsRpcRepository.ExemptionInsertRecord toInsertRecord(
       CreateExemptionRequest request, String entryUserId) {
     return new ExemptionDetailsRpcRepository.ExemptionInsertRecord(
@@ -435,6 +580,78 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         request.exemptionStatusCode(),
         entryUserId,
         request.regionNumbers());
+  }
+
+  private ExemptionDetailsRpcRepository.ExemptionUpdateRecord toUpdateRecord(
+      UpdateExemptionRequest request,
+      ExemptionDetailsRpcRepository.ExemptionRecord previous,
+      String updateUserId) {
+    boolean previousCancelled = EXEMPTION_STATUS_CANCELLED.equalsIgnoreCase(previous.exemptionStatusCode());
+    String exemptionNumber = Optional.ofNullable(blankToNull(request.exemptionNumber())).orElse(previous.exemptionNumber());
+    String previousExemptionNumber =
+        Optional.ofNullable(blankToNull(request.previousExemptionNumber())).orElse(previous.exemptionNumber());
+    String statusCode = Optional.ofNullable(blankToNull(request.exemptionStatusCode())).orElse(previous.exemptionStatusCode());
+
+    if (previousCancelled) {
+      return new ExemptionDetailsRpcRepository.ExemptionUpdateRecord(
+          exemptionNumber,
+          previousExemptionNumber,
+          previous.approvedVolume(),
+          previous.approvalDate(),
+          previous.expiryDate(),
+          previous.otherConditions(),
+          previous.exemptionTypeCode(),
+          statusCode,
+          previous.entryUserId(),
+          previous.entryTimestamp(),
+          updateUserId,
+          request.regionNumbers());
+    }
+
+    String typeCode = Optional.ofNullable(blankToNull(request.exemptionTypeCode())).orElse(previous.exemptionTypeCode());
+    LocalDate approvalDate =
+        request.approvalDate() == null ? previous.approvalDate() : request.approvalDate();
+    return new ExemptionDetailsRpcRepository.ExemptionUpdateRecord(
+        exemptionNumber,
+        previousExemptionNumber,
+        request.approvedVolume() == null ? previous.approvedVolume() : request.approvedVolume(),
+        approvalDate,
+        request.expiryDate() == null ? previous.expiryDate() : request.expiryDate(),
+        request.otherConditions() == null ? previous.otherConditions() : request.otherConditions(),
+        typeCode,
+        statusCode,
+        previous.entryUserId(),
+        previous.entryTimestamp(),
+        updateUserId,
+        request.regionNumbers());
+  }
+
+  private void revertApplicationsToApproved(String exemptionNumber, String updateUserId) {
+    for (ExemptionDetailsRpcRepository.ApplicationSummaryRow row :
+        repository.findApplicationSummariesByExemptionNumber(exemptionNumber)) {
+      repository.findApplicationLinkRecord(row.applicationNumber())
+          .filter(application -> APPLICATION_STATUS_EXEMPTED.equalsIgnoreCase(application.applicationStatusCode()))
+          .ifPresent(application ->
+              repository.updateApplicationExemption(
+                  new ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord(
+                      application,
+                      application.exemptionNumber(),
+                      APPLICATION_STATUS_APPROVED,
+                      defaultUpdateUser(updateUserId, application.entryUserId()))));
+    }
+  }
+
+  private boolean statusChangedTo(String previousStatus, String currentStatus, String targetStatus) {
+    return !targetStatus.equalsIgnoreCase(blankToNull(previousStatus))
+        && targetStatus.equalsIgnoreCase(blankToNull(currentStatus));
+  }
+
+  private boolean canEditExpiryDate(String previousStatusCode, String exemptionTypeCode) {
+    if (EXEMPTION_TYPE_BOIC.equalsIgnoreCase(exemptionTypeCode)) {
+      return EXEMPTION_STATUS_NEW.equalsIgnoreCase(previousStatusCode)
+          || EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(previousStatusCode);
+    }
+    return EXEMPTION_STATUS_NEW.equalsIgnoreCase(previousStatusCode);
   }
 
   private String required(String fieldName) {

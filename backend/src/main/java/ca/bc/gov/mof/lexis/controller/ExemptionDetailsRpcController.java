@@ -43,6 +43,7 @@ public class ExemptionDetailsRpcController {
   private static final String ACTION_GET_DOCUMENT = "getDocument";
   private static final String ACTION_REMOVE_DOCUMENT = "removeDocument";
   private static final String ACTION_ADD_EXEMPTION = "addExemption";
+  private static final String ACTION_UPDATE_EXEMPTION = "updateExemption";
   private static final String ACTION_CHECK_EXEMPTION_NUMBER = "checkExemptionNumber";
   private static final String ACTION_ADD_APPLICATION_TO_EXEMPTION = "addApplicationToExemption";
   private static final String ACTION_REMOVE_APPLICATION_FROM_EXEMPTION = "removeApplicationFromExemption";
@@ -335,6 +336,40 @@ public class ExemptionDetailsRpcController {
     return addExemption(parameters, authentication);
   }
 
+  @PostMapping("/rpc/exemption-details/exemption/update")
+  public ResponseEntity<ExemptionPersistenceResponseDto> updateExemption(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Exemption details RPC service unavailable - returning no content for update exemption");
+      return ResponseEntity.noContent().build();
+    }
+
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    String userId = authentication == null ? null : authentication.getName();
+    ExemptionDetailsRpcService.CreateExemptionResult result =
+        service.updateExemption(
+            toUpdateExemptionRequest(parameters),
+            userId,
+            authorizationService.canPerformAction(roles, "approveExemption"));
+    return ResponseEntity.ok(
+        new ExemptionPersistenceResponseDto(
+            result.success(),
+            result.message(),
+            result.exemptionNumber(),
+            result.refreshPage(),
+            result.errors(),
+            result.warnings()));
+  }
+
+  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_UPDATE_EXEMPTION)
+  public ResponseEntity<ExemptionPersistenceResponseDto> updateExemptionLegacy(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return updateExemption(parameters, authentication);
+  }
+
   private ExemptionApplicationsResponseDto toApplicationsResponse(
       ExemptionDetailsRpcService.ExemptionApplicationsResponse response) {
     List<ApplicationItemDto> applications =
@@ -369,6 +404,20 @@ public class ExemptionDetailsRpcController {
       MultiValueMap<String, String> parameters) {
     return new ExemptionDetailsRpcService.CreateExemptionRequest(
         first(parameters, "exemptionNumber", "legacyExemptionNumber"),
+        parseDouble(first(parameters, "approvedVolume")),
+        parseDate(first(parameters, "approvalDate", "exemptionApprovalDate")),
+        parseDate(first(parameters, "exemptionExpiryDate", "expiryDate")),
+        first(parameters, "otherConditions"),
+        first(parameters, "exemptionTypeCode", "legacyExemptionType"),
+        first(parameters, "exemptionStatusCode"),
+        parseRegions(parameters));
+  }
+
+  private ExemptionDetailsRpcService.UpdateExemptionRequest toUpdateExemptionRequest(
+      MultiValueMap<String, String> parameters) {
+    return new ExemptionDetailsRpcService.UpdateExemptionRequest(
+        first(parameters, "exemptionNumber", "legacyExemptionNumber"),
+        first(parameters, "legacyExemptionNumber", "previousExemptionNumber"),
         parseDouble(first(parameters, "approvedVolume")),
         parseDate(first(parameters, "approvalDate", "exemptionApprovalDate")),
         parseDate(first(parameters, "exemptionExpiryDate", "expiryDate")),

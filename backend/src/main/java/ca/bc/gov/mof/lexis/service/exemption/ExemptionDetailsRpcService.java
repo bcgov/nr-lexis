@@ -22,6 +22,8 @@ public interface ExemptionDetailsRpcService {
 
   CreateExemptionResult addExemption(CreateExemptionRequest request, String userId);
 
+  CreateExemptionResult updateExemption(UpdateExemptionRequest request, String userId, boolean canApproveExemption);
+
   ExemptionNumberValidationResult checkExemptionNumber(String exemptionNumber);
 
   ApplicationExemptionLinkResult addApplicationToExemption(
@@ -62,6 +64,17 @@ public interface ExemptionDetailsRpcService {
 
   record CreateExemptionRequest(
       String exemptionNumber,
+      Double approvedVolume,
+      LocalDate approvalDate,
+      LocalDate expiryDate,
+      String otherConditions,
+      String exemptionTypeCode,
+      String exemptionStatusCode,
+      List<Long> regionNumbers) {}
+
+  record UpdateExemptionRequest(
+      String exemptionNumber,
+      String previousExemptionNumber,
       Double approvedVolume,
       LocalDate approvalDate,
       LocalDate expiryDate,

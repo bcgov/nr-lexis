@@ -242,4 +242,51 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(request.expiryDate()).isEqualTo(LocalDate.of(2026, 12, 31));
     assertThat(request.regionNumbers()).containsExactly(11L, 12L);
   }
+
+  @Test
+  void updateExemptionLegacyShouldMapAliasesAndApprovalAuthz() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+        .thenReturn(true);
+    when(service.updateExemption(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith"),
+            org.mockito.ArgumentMatchers.eq(true)))
+        .thenReturn(
+            new ExemptionDetailsRpcService.CreateExemptionResult(
+                true, "The exemption was updated successfully.", "EX-206", false, List.of(), List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exemptionNumber", "EX-206");
+    params.add("legacyExemptionNumber", "EX-205");
+    params.add("approvedVolume", "350.5");
+    params.add("approvalDate", "03/01/2026");
+    params.add("exemptionExpiryDate", "12/31/2026");
+    params.add("otherConditions", "Updated conditions");
+    params.add("exemptionTypeCode", "B");
+    params.add("exemptionStatusCode", "ACT");
+    params.add("region", "11,12");
+
+    ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
+        controller.updateExemptionLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().exemptionNumber()).isEqualTo("EX-206");
+    assertThat(response.getBody().refreshPage()).isFalse();
+
+    ArgumentCaptor<ExemptionDetailsRpcService.UpdateExemptionRequest> requestCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcService.UpdateExemptionRequest.class);
+    verify(service).updateExemption(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"), org.mockito.ArgumentMatchers.eq(true));
+    ExemptionDetailsRpcService.UpdateExemptionRequest request = requestCaptor.getValue();
+    assertThat(request.exemptionNumber()).isEqualTo("EX-206");
+    assertThat(request.previousExemptionNumber()).isEqualTo("EX-205");
+    assertThat(request.approvedVolume()).isEqualTo(350.5d);
+    assertThat(request.approvalDate()).isEqualTo(LocalDate.of(2026, 3, 1));
+    assertThat(request.expiryDate()).isEqualTo(LocalDate.of(2026, 12, 31));
+    assertThat(request.regionNumbers()).containsExactly(11L, 12L);
+  }
 }

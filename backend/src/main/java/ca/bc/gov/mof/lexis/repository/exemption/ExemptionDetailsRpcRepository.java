@@ -44,8 +44,12 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "DELETE_EXEMPT_FILE_ATTACHMENT(?)";
   private static final String INSERT_EXEMPTION =
       LEXIS_GROUP_4_PACKAGE + "INSERT_EXEMPTION(?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String UPDATE_EXEMPTION =
+      LEXIS_GROUP_4_PACKAGE + "UPDATE_EXEMPTION(?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String INSERT_EXEMPTION_ORG_UNIT =
       LEXIS_GROUP_4_PACKAGE + "INSERT_EXMPTN_ORG_UNIT(?,?)";
+  private static final String DELETE_EXEMPTION_ORG_UNIT =
+      LEXIS_GROUP_4_PACKAGE + "DELETE_EXMPTN_ORG_UNIT(?)";
   private static final String UPDATE_EXEMPTION_APPLICATION =
       LEXIS_GROUP_14_PACKAGE + "UPDATE_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
@@ -101,6 +105,18 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
             2,
             rs -> getString(rs, "EXEMPTION_NUMBER"))
         .isPresent();
+  }
+
+  public Optional<ExemptionRecord> findExemptionRecord(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_EXEMPTION_BY_NUMBER,
+        cs -> cs.setString(1, normalized),
+        2,
+        this::mapExemptionRecord);
   }
 
   public Optional<ApplicationLinkRecord> findApplicationLinkRecord(Long applicationNumber) {
@@ -251,6 +267,18 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     return inserted;
   }
 
+  public boolean updateExemption(ExemptionUpdateRecord record) {
+    if (record == null || trim(record.exemptionNumber()) == null || trim(record.previousExemptionNumber()) == null) {
+      return false;
+    }
+
+    boolean updated = executeProcedure(UPDATE_EXEMPTION, cs -> bindExemptionUpdate(cs, record));
+    if (updated && "B".equalsIgnoreCase(trim(record.exemptionTypeCode())) && record.regionNumbers() != null) {
+      replaceExemptionOrgUnits(record.exemptionNumber(), record.regionNumbers());
+    }
+    return updated;
+  }
+
   private void bindExemptionInsert(CallableStatement cs, ExemptionInsertRecord record)
       throws SQLException {
     int index = 1;
@@ -267,6 +295,23 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     cs.setNull(index, Types.TIMESTAMP);
   }
 
+  private void bindExemptionUpdate(CallableStatement cs, ExemptionUpdateRecord record)
+      throws SQLException {
+    int index = 1;
+    setStringOrNull(cs, index++, record.exemptionNumber());
+    setDoubleOrNull(cs, index++, record.approvedVolume());
+    setDateOrNull(cs, index++, record.approvalDate());
+    setDateOrNull(cs, index++, record.expiryDate());
+    setStringOrNull(cs, index++, record.otherConditions() == null ? "" : record.otherConditions());
+    setStringOrNull(cs, index++, record.exemptionTypeCode());
+    setStringOrNull(cs, index++, record.exemptionStatusCode());
+    setStringOrNull(cs, index++, record.entryUserId());
+    setTimestampOrNull(cs, index++, record.entryTimestamp());
+    setStringOrNull(cs, index++, record.updateUserId());
+    cs.setTimestamp(index++, Timestamp.from(Instant.now()));
+    setStringOrNull(cs, index, record.previousExemptionNumber());
+  }
+
   private void insertExemptionOrgUnit(String exemptionNumber, Long regionNumber) {
     executeProcedure(
         INSERT_EXEMPTION_ORG_UNIT,
@@ -274,6 +319,18 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
           cs.setString(1, exemptionNumber);
           cs.setLong(2, regionNumber);
         });
+  }
+
+  private void replaceExemptionOrgUnits(String exemptionNumber, List<Long> regionNumbers) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return;
+    }
+    executeProcedure(DELETE_EXEMPTION_ORG_UNIT, cs -> cs.setString(1, normalized));
+    regionNumbers.stream()
+        .filter(region -> region != null && region > 0)
+        .distinct()
+        .forEach(region -> insertExemptionOrgUnit(normalized, region));
   }
 
   private ApplicationSummaryRow mapApplicationSummaryRow(ResultSet rs) {
@@ -315,6 +372,21 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
 
   private ExemptionInsertRow mapExemptionInsertRow(ResultSet rs) {
     return new ExemptionInsertRow(valueOrEmpty(getString(rs, "EXEMPTION_NUMBER")));
+  }
+
+  private ExemptionRecord mapExemptionRecord(ResultSet rs) {
+    return new ExemptionRecord(
+        valueOrEmpty(getString(rs, "EXEMPTION_NUMBER")),
+        getDouble(rs, "APPROVED_VOLUME"),
+        getLocalDate(rs, "APPROVAL_DATE"),
+        getLocalDate(rs, "EXPIRY_DATE"),
+        valueOrEmpty(getString(rs, "OTHER_CONDITIONS")),
+        valueOrEmpty(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
+        valueOrEmpty(getString(rs, "EXPORT_EXEMPTION_STATUS_CODE")),
+        valueOrEmpty(getString(rs, "ENTRY_USERID")),
+        getTimestamp(rs, "ENTRY_TIMESTAMP"),
+        valueOrEmpty(getString(rs, "UPDATE_USERID")),
+        getTimestamp(rs, "UPDATE_TIMESTAMP"));
   }
 
   private ApplicationLinkRecord mapApplicationLinkRecord(ResultSet rs) {
@@ -448,6 +520,33 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       List<Long> regionNumbers) {}
 
   public record ExemptionInsertRow(String exemptionNumber) {}
+
+  public record ExemptionRecord(
+      String exemptionNumber,
+      Double approvedVolume,
+      LocalDate approvalDate,
+      LocalDate expiryDate,
+      String otherConditions,
+      String exemptionTypeCode,
+      String exemptionStatusCode,
+      String entryUserId,
+      Timestamp entryTimestamp,
+      String updateUserId,
+      Timestamp updateTimestamp) {}
+
+  public record ExemptionUpdateRecord(
+      String exemptionNumber,
+      String previousExemptionNumber,
+      Double approvedVolume,
+      LocalDate approvalDate,
+      LocalDate expiryDate,
+      String otherConditions,
+      String exemptionTypeCode,
+      String exemptionStatusCode,
+      String entryUserId,
+      Timestamp entryTimestamp,
+      String updateUserId,
+      List<Long> regionNumbers) {}
 
   public record ApplicationLinkRecord(
       Long applicationNumber,
