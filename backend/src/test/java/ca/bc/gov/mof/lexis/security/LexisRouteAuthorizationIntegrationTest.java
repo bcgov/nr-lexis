@@ -184,6 +184,16 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyExemptionDetailsRpcShouldAllowClientLookupAction() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/exemptionDetailsRPC")
+                .param("actionMapping", "getClientLocations")
+                .param("clientNumber", "77881")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void legacyOfferDetailsAddShouldAllowProvincialSubmitterRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/offerDetails")

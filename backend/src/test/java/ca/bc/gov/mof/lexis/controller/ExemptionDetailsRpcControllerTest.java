@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
@@ -31,7 +32,9 @@ import org.springframework.util.MultiValueMap;
 class ExemptionDetailsRpcControllerTest {
 
   @Mock private ObjectProvider<ExemptionDetailsRpcService> serviceProvider;
+  @Mock private ObjectProvider<ClientLookupService> clientLookupServiceProvider;
   @Mock private ExemptionDetailsRpcService service;
+  @Mock private ClientLookupService clientLookupService;
   @Mock private LexisSessionService sessionService;
   @Mock private LexisAuthorizationService authorizationService;
 
@@ -40,7 +43,8 @@ class ExemptionDetailsRpcControllerTest {
   @BeforeEach
   void setup() {
     controller =
-        new ExemptionDetailsRpcController(serviceProvider, sessionService, authorizationService);
+        new ExemptionDetailsRpcController(
+            serviceProvider, clientLookupServiceProvider, sessionService, authorizationService);
   }
 
   @Test
@@ -295,5 +299,64 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(request.feeRate()).isEqualTo(18.25d);
     assertThat(request.enableRateOverride()).isFalse();
     assertThat(request.regionNumbers()).containsExactly(11L, 12L);
+  }
+
+  @Test
+  void getClientDataLegacyShouldReturnLegacyClientPayload() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getClientData("77881", "00"))
+        .thenReturn(
+            Optional.of(
+                new ClientLookupService.ClientData(
+                    "00077881",
+                    "Acme Forestry",
+                    "123 Main St",
+                    "Victoria",
+                    "BC",
+                    "V8W 1A1",
+                    "CA",
+                    "250-555-0100",
+                    "250-555-0199",
+                    "user@example.com")));
+
+    ResponseEntity<ExemptionDetailsRpcController.ExemptionClientDataResponseDto> response =
+        controller.getClientDataLegacy("77881", "00");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().clientNumber()).isEqualTo("00077881");
+    assertThat(response.getBody().companyName()).isEqualTo("Acme Forestry");
+    assertThat(response.getBody().notfound()).isNull();
+  }
+
+  @Test
+  void getClientLocationsLegacyShouldReturnLocations() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getClientLocations("77881"))
+        .thenReturn(List.of(new ClientLookupService.ClientLocation("00 - Main", "00", false)));
+
+    ResponseEntity<List<ExemptionDetailsRpcController.ExemptionClientLocationResponseDto>> response =
+        controller.getClientLocationsLegacy("77881");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody()).hasSize(1);
+    assertThat(response.getBody().get(0).locationCode()).isEqualTo("00");
+  }
+
+  @Test
+  void getContactsForLocationLegacyShouldReturnContacts() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getContactsForLocation("77881", "00"))
+        .thenReturn(List.of(new ClientLookupService.ClientContact("Jane Smith", "123")));
+
+    ResponseEntity<List<ExemptionDetailsRpcController.ExemptionClientContactResponseDto>> response =
+        controller.getContactsForLocationLegacy("77881", "00");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody()).hasSize(1);
+    assertThat(response.getBody().get(0).contactName()).isEqualTo("Jane Smith");
+    assertThat(response.getBody().get(0).contactId()).isEqualTo("123");
   }
 }

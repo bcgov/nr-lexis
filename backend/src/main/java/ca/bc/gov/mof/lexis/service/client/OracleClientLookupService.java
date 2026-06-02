@@ -54,6 +54,25 @@ public class OracleClientLookupService implements ClientLookupService {
     return locations;
   }
 
+  @Override
+  public List<ClientContact> getContactsForLocation(String clientNumber, String locationCode) {
+    String normalizedClientNumber = normalizeClientNumber(clientNumber);
+    String normalizedLocationCode = trimToNull(locationCode);
+    if (normalizedClientNumber == null || normalizedLocationCode == null) {
+      return List.of(new ClientContact("No contacts on file for this location", "0"));
+    }
+
+    List<ClientContact> contacts =
+        repository.findContactsByClientNumberCode(normalizedClientNumber, normalizedLocationCode).stream()
+            .map(row -> new ClientContact(replaceEmptyField(row.contactName()), replaceEmptyField(row.contactId())))
+            .toList();
+
+    if (contacts.isEmpty()) {
+      return List.of(new ClientContact("No contacts on file for this location", "0"));
+    }
+    return contacts;
+  }
+
   private ClientData toClientData(ClientLocationRow row) {
     return new ClientData(
         replaceEmptyField(row.clientNumber()),

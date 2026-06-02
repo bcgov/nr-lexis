@@ -63,4 +63,30 @@ class OracleClientLookupServiceTest {
     assertThat(response.get(0).locationCode()).isEqualTo("0");
     assertThat(response.get(0).locationName()).isEqualTo("No locations on file");
   }
+
+  @Test
+  void getContactsForLocationShouldPadClientNumberAndMapContacts() {
+    when(repository.findContactsByClientNumberCode("00077881", "00"))
+        .thenReturn(List.of(new ClientLookupRepository.ClientContactRow("Jane Smith", "123")));
+
+    List<ClientLookupService.ClientContact> response =
+        service.getContactsForLocation("77881", "00");
+
+    assertThat(response).hasSize(1);
+    assertThat(response.get(0).contactName()).isEqualTo("Jane Smith");
+    assertThat(response.get(0).contactId()).isEqualTo("123");
+    verify(repository).findContactsByClientNumberCode("00077881", "00");
+  }
+
+  @Test
+  void getContactsForLocationShouldReturnPlaceholderWhenNoContactsFound() {
+    when(repository.findContactsByClientNumberCode("00077881", "00")).thenReturn(List.of());
+
+    List<ClientLookupService.ClientContact> response =
+        service.getContactsForLocation("77881", "00");
+
+    assertThat(response).hasSize(1);
+    assertThat(response.get(0).contactId()).isEqualTo("0");
+    assertThat(response.get(0).contactName()).isEqualTo("No contacts on file for this location");
+  }
 }

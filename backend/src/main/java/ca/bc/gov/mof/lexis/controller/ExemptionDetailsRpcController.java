@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
@@ -47,18 +48,24 @@ public class ExemptionDetailsRpcController {
   private static final String ACTION_CHECK_EXEMPTION_NUMBER = "checkExemptionNumber";
   private static final String ACTION_ADD_APPLICATION_TO_EXEMPTION = "addApplicationToExemption";
   private static final String ACTION_REMOVE_APPLICATION_FROM_EXEMPTION = "removeApplicationFromExemption";
+  private static final String ACTION_GET_CLIENT_DATA = "getClientData";
+  private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
+  private static final String ACTION_GET_CONTACTS_FOR_LOCATION = "getContactsForLocation";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ObjectProvider<ExemptionDetailsRpcService> serviceProvider;
+  private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
 
   public ExemptionDetailsRpcController(
       ObjectProvider<ExemptionDetailsRpcService> serviceProvider,
+      ObjectProvider<ClientLookupService> clientLookupServiceProvider,
       LexisSessionService sessionService,
       LexisAuthorizationService authorizationService) {
     this.serviceProvider = serviceProvider;
+    this.clientLookupServiceProvider = clientLookupServiceProvider;
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
   }
@@ -370,6 +377,96 @@ public class ExemptionDetailsRpcController {
     return updateExemption(parameters, authentication);
   }
 
+  @GetMapping("/rpc/exemption-details/client-data")
+  public ResponseEntity<ExemptionClientDataResponseDto> getClientData(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
+    ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
+    if (clientLookupService == null) {
+      LOGGER.warn("Client lookup service unavailable - returning no content for exemption client data");
+      return ResponseEntity.noContent().build();
+    }
+
+    return clientLookupService
+        .getClientData(clientNumber, clientLocationCode)
+        .map(
+            data ->
+                ResponseEntity.ok(
+                    new ExemptionClientDataResponseDto(
+                        data.clientNumber(),
+                        data.companyName(),
+                        data.address(),
+                        data.city(),
+                        data.province(),
+                        data.postalCode(),
+                        data.country(),
+                        data.phone(),
+                        data.fax(),
+                        data.email(),
+                        null)))
+        .orElseGet(
+            () ->
+                ResponseEntity.ok(
+                    new ExemptionClientDataResponseDto(
+                        null, null, null, null, null, null, null, null, null, null, "true")));
+  }
+
+  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_GET_CLIENT_DATA)
+  public ResponseEntity<ExemptionClientDataResponseDto> getClientDataLegacy(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
+    return getClientData(clientNumber, clientLocationCode);
+  }
+
+  @GetMapping("/rpc/exemption-details/client-locations")
+  public ResponseEntity<List<ExemptionClientLocationResponseDto>> getClientLocations(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber) {
+    ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
+    if (clientLookupService == null) {
+      LOGGER.warn("Client lookup service unavailable - returning no content for exemption client locations");
+      return ResponseEntity.noContent().build();
+    }
+
+    List<ExemptionClientLocationResponseDto> response =
+        clientLookupService.getClientLocations(clientNumber).stream()
+            .map(
+                location ->
+                    new ExemptionClientLocationResponseDto(
+                        location.locationName(), location.locationCode(), location.selected()))
+            .toList();
+    return ResponseEntity.ok(response);
+  }
+
+  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_GET_CLIENT_LOCATIONS)
+  public ResponseEntity<List<ExemptionClientLocationResponseDto>> getClientLocationsLegacy(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber) {
+    return getClientLocations(clientNumber);
+  }
+
+  @GetMapping("/rpc/exemption-details/contacts-for-location")
+  public ResponseEntity<List<ExemptionClientContactResponseDto>> getContactsForLocation(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
+    ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
+    if (clientLookupService == null) {
+      LOGGER.warn("Client lookup service unavailable - returning no content for exemption contacts");
+      return ResponseEntity.noContent().build();
+    }
+
+    List<ExemptionClientContactResponseDto> response =
+        clientLookupService.getContactsForLocation(clientNumber, clientLocationCode).stream()
+            .map(contact -> new ExemptionClientContactResponseDto(contact.contactName(), contact.contactId()))
+            .toList();
+    return ResponseEntity.ok(response);
+  }
+
+  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_GET_CONTACTS_FOR_LOCATION)
+  public ResponseEntity<List<ExemptionClientContactResponseDto>> getContactsForLocationLegacy(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
+    return getContactsForLocation(clientNumber, clientLocationCode);
+  }
+
   private ExemptionApplicationsResponseDto toApplicationsResponse(
       ExemptionDetailsRpcService.ExemptionApplicationsResponse response) {
     List<ApplicationItemDto> applications =
@@ -550,4 +647,22 @@ public class ExemptionDetailsRpcController {
       boolean refreshPage,
       List<String> errors,
       List<String> warnings) {}
+
+  public record ExemptionClientDataResponseDto(
+      String clientNumber,
+      String companyName,
+      String address,
+      String city,
+      String province,
+      String postalCode,
+      String country,
+      String phone,
+      String fax,
+      String email,
+      String notfound) {}
+
+  public record ExemptionClientLocationResponseDto(
+      String locationName, String locationCode, boolean selected) {}
+
+  public record ExemptionClientContactResponseDto(String contactName, String contactId) {}
 }
