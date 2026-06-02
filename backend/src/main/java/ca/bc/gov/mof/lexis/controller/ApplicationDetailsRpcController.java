@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -36,13 +37,20 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_REMARK = "getRemark";
   private static final String ACTION_PERSIST_REMARK = "persistRemark";
   private static final String ACTION_ADD_APPLICATION = "addApplication";
+  private static final String ACTION_GET_CLIENT_DATA = "getClientData";
+  private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
+  private static final String ACTION_GET_CONTACTS_FOR_LOCATION = "getContactsForLocation";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ObjectProvider<ApplicationDetailsRpcService> serviceProvider;
+  private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
 
-  public ApplicationDetailsRpcController(ObjectProvider<ApplicationDetailsRpcService> serviceProvider) {
+  public ApplicationDetailsRpcController(
+      ObjectProvider<ApplicationDetailsRpcService> serviceProvider,
+      ObjectProvider<ClientLookupService> clientLookupServiceProvider) {
     this.serviceProvider = serviceProvider;
+    this.clientLookupServiceProvider = clientLookupServiceProvider;
   }
 
   @GetMapping("/rpc/application-details/document-details")
@@ -213,6 +221,103 @@ public class ApplicationDetailsRpcController {
     return addApplication(parameters, authentication);
   }
 
+  @GetMapping("/rpc/application-details/client-data")
+  public ResponseEntity<ApplicationClientDataResponseDto> getClientData(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
+    ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
+    if (clientLookupService == null) {
+      LOGGER.warn("Client lookup service unavailable - returning no content for application client data");
+      return ResponseEntity.noContent().build();
+    }
+
+    return clientLookupService
+        .getClientData(clientNumber, clientLocationCode)
+        .map(data -> ResponseEntity.ok(toClientDataResponse(data, null)))
+        .orElseGet(
+            () ->
+                ResponseEntity.ok(
+                    new ApplicationClientDataResponseDto(
+                        null, null, null, null, null, null, null, null, null, null, "true")));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_CLIENT_DATA)
+  public ResponseEntity<ApplicationClientDataResponseDto> getClientDataLegacy(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
+    return getClientData(clientNumber, clientLocationCode);
+  }
+
+  @GetMapping("/rpc/application-details/client-locations")
+  public ResponseEntity<List<ApplicationClientLocationResponseDto>> getClientLocations(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "applicantType", required = false) String applicantType) {
+    ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
+    if (clientLookupService == null) {
+      LOGGER.warn("Client lookup service unavailable - returning no content for application client locations");
+      return ResponseEntity.noContent().build();
+    }
+
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    ApplicationDetailsRpcService.ApplicationClientSnapshot snapshot =
+        service == null ? null : service.getApplicationClientSnapshot(parsePositiveLong(applicationNumber)).orElse(null);
+    List<ApplicationClientLocationResponseDto> response =
+        clientLookupService.getClientLocations(clientNumber).stream()
+            .map(
+                location ->
+                    new ApplicationClientLocationResponseDto(
+                        location.locationName(),
+                        location.locationCode(),
+                        isSelectedLocation(clientNumber, location.locationCode(), applicantType, snapshot)))
+            .toList();
+    return ResponseEntity.ok(response);
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_CLIENT_LOCATIONS)
+  public ResponseEntity<List<ApplicationClientLocationResponseDto>> getClientLocationsLegacy(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "applicantType", required = false) String applicantType) {
+    return getClientLocations(clientNumber, applicationNumber, applicantType);
+  }
+
+  @GetMapping("/rpc/application-details/contacts-for-location")
+  public ResponseEntity<List<ApplicationClientContactResponseDto>> getContactsForLocation(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "applicantType", required = false) String applicantType) {
+    ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
+    if (clientLookupService == null) {
+      LOGGER.warn("Client lookup service unavailable - returning no content for application contacts");
+      return ResponseEntity.noContent().build();
+    }
+
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    ApplicationDetailsRpcService.ApplicationClientSnapshot snapshot =
+        service == null ? null : service.getApplicationClientSnapshot(parsePositiveLong(applicationNumber)).orElse(null);
+    List<ClientLookupService.ClientContact> contacts =
+        resolveApplicationContacts(clientLookupService, clientNumber, clientLocationCode, applicantType, snapshot);
+    ClientLookupService.ClientData data =
+        clientLookupService.getClientData(clientNumber, clientLocationCode).orElse(null);
+
+    List<ApplicationClientContactResponseDto> response =
+        contacts.stream()
+            .map(contact -> toClientContactResponse(contact, data))
+            .toList();
+    return ResponseEntity.ok(response);
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_CONTACTS_FOR_LOCATION)
+  public ResponseEntity<List<ApplicationClientContactResponseDto>> getContactsForLocationLegacy(
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "applicantType", required = false) String applicantType) {
+    return getContactsForLocation(clientNumber, clientLocationCode, applicationNumber, applicantType);
+  }
+
   private Long parsePositiveLong(String rawValue) {
     if (rawValue == null || rawValue.isBlank()) {
       return null;
@@ -305,6 +410,103 @@ public class ApplicationDetailsRpcController {
     return normalized;
   }
 
+  private boolean isSelectedLocation(
+      String clientNumber,
+      String locationCode,
+      String applicantType,
+      ApplicationDetailsRpcService.ApplicationClientSnapshot snapshot) {
+    if (snapshot == null) {
+      return false;
+    }
+    String normalizedClientNumber = normalizeClientNumber(clientNumber);
+    String normalizedLocationCode = trimToNull(locationCode);
+    if ("owner".equalsIgnoreCase(applicantType)) {
+      return equalsIgnoreCase(normalizedClientNumber, snapshot.ownerClientNumber())
+          && equalsIgnoreCase(normalizedLocationCode, snapshot.ownerClientLocationCode());
+    }
+    if ("agent".equalsIgnoreCase(applicantType)) {
+      return equalsIgnoreCase(normalizedClientNumber, snapshot.agentClientNumber())
+          && equalsIgnoreCase(normalizedLocationCode, snapshot.agentClientLocationCode());
+    }
+    return false;
+  }
+
+  private List<ClientLookupService.ClientContact> resolveApplicationContacts(
+      ClientLookupService clientLookupService,
+      String clientNumber,
+      String clientLocationCode,
+      String applicantType,
+      ApplicationDetailsRpcService.ApplicationClientSnapshot snapshot) {
+    String normalizedClientNumber = normalizeClientNumber(clientNumber);
+    String normalizedLocationCode = trimToNull(clientLocationCode);
+    if (snapshot != null && "agent".equalsIgnoreCase(applicantType)
+        && trimToNull(snapshot.agentContactName()) != null
+        && equalsIgnoreCase(normalizedClientNumber, snapshot.agentClientNumber())
+        && equalsIgnoreCase(normalizedLocationCode, snapshot.agentClientLocationCode())) {
+      return List.of(new ClientLookupService.ClientContact(snapshot.agentContactName(), "-1"));
+    }
+    if (snapshot != null && "owner".equalsIgnoreCase(applicantType)
+        && trimToNull(snapshot.ownerContactName()) != null
+        && equalsIgnoreCase(normalizedClientNumber, snapshot.ownerClientNumber())
+        && equalsIgnoreCase(normalizedLocationCode, snapshot.ownerClientLocationCode())) {
+      return List.of(new ClientLookupService.ClientContact(snapshot.ownerContactName(), "-1"));
+    }
+    return clientLookupService.getContactsForLocation(clientNumber, clientLocationCode);
+  }
+
+  private ApplicationClientDataResponseDto toClientDataResponse(
+      ClientLookupService.ClientData data, String notfound) {
+    return new ApplicationClientDataResponseDto(
+        data.clientNumber(),
+        data.companyName(),
+        data.address(),
+        data.city(),
+        data.province(),
+        data.postalCode(),
+        data.country(),
+        data.phone(),
+        data.fax(),
+        data.email(),
+        notfound);
+  }
+
+  private ApplicationClientContactResponseDto toClientContactResponse(
+      ClientLookupService.ClientContact contact, ClientLookupService.ClientData data) {
+    return new ApplicationClientContactResponseDto(
+        contact.contactName(),
+        contact.contactId(),
+        data == null ? null : data.clientNumber(),
+        data == null ? null : data.companyName(),
+        data == null ? null : data.address(),
+        data == null ? null : data.city(),
+        data == null ? null : data.province(),
+        data == null ? null : data.postalCode(),
+        data == null ? null : data.country(),
+        data == null ? null : data.phone(),
+        data == null ? null : data.fax(),
+        data == null ? null : data.email());
+  }
+
+  private String trimToNull(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private String normalizeClientNumber(String clientNumber) {
+    String normalized = trimToNull(clientNumber);
+    if (normalized == null) {
+      return null;
+    }
+    return normalized.length() >= 8 ? normalized : "0".repeat(8 - normalized.length()) + normalized;
+  }
+
+  private boolean equalsIgnoreCase(String left, String right) {
+    return left != null && right != null && left.equalsIgnoreCase(right);
+  }
+
   public record DocumentDetailsResponseDto(
       String name, String description, String type, long id) {}
 
@@ -321,4 +523,34 @@ public class ApplicationDetailsRpcController {
       Long applicationNumber,
       List<String> errors,
       List<String> warnings) {}
+
+  public record ApplicationClientDataResponseDto(
+      String clientNumber,
+      String companyName,
+      String address,
+      String city,
+      String province,
+      String postalCode,
+      String country,
+      String phone,
+      String fax,
+      String email,
+      String notfound) {}
+
+  public record ApplicationClientLocationResponseDto(
+      String locationName, String locationCode, boolean selected) {}
+
+  public record ApplicationClientContactResponseDto(
+      String contactName,
+      String contactId,
+      String clientNumber,
+      String companyName,
+      String address,
+      String city,
+      String province,
+      String postalCode,
+      String country,
+      String phone,
+      String fax,
+      String email) {}
 }

@@ -20,12 +20,22 @@ public interface ApplicationDetailsRpcService {
 
   CreateApplicationResult addApplication(CreateApplicationRequest request, String userId);
 
+  Optional<ApplicationClientSnapshot> getApplicationClientSnapshot(Long applicationNumber);
+
   record DocumentItem(long id, String name, String description, String type) {}
 
   record DocumentContent(byte[] bytes) {}
 
   record PersistedRemark(
       long remarkId, String remark, String displayRemark, String user, Instant date) {}
+
+  record ApplicationClientSnapshot(
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String agentContactName,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String ownerContactName) {}
 
   record CreateApplicationRequest(
       Long federalApplicationNumber,

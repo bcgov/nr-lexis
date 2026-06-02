@@ -1,11 +1,13 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -29,13 +31,15 @@ import org.springframework.util.MultiValueMap;
 class ApplicationDetailsRpcControllerTest {
 
   @Mock private ObjectProvider<ApplicationDetailsRpcService> serviceProvider;
+  @Mock private ObjectProvider<ClientLookupService> clientLookupServiceProvider;
   @Mock private ApplicationDetailsRpcService service;
+  @Mock private ClientLookupService clientLookupService;
 
   private ApplicationDetailsRpcController controller;
 
   @BeforeEach
   void setup() {
-    controller = new ApplicationDetailsRpcController(serviceProvider);
+    controller = new ApplicationDetailsRpcController(serviceProvider, clientLookupServiceProvider);
   }
 
   @Test
@@ -177,5 +181,133 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(request.agentClientNumber()).isEqualTo("00022222");
     assertThat(request.exemptionReasonCode()).isEqualTo("U");
     assertThat(request.productTypeCode()).isEqualTo("H");
+  }
+
+  @Test
+  void getClientDataLegacyShouldReturnLegacyClientPayload() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getClientData("77881", "00"))
+        .thenReturn(
+            Optional.of(
+                new ClientLookupService.ClientData(
+                    "00077881",
+                    "Acme Forestry",
+                    "123 Main St",
+                    "Victoria",
+                    "BC",
+                    "V8W 1A1",
+                    "CA",
+                    "250-555-0100",
+                    "250-555-0199",
+                    "contact@example.com")));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationClientDataResponseDto> response =
+        controller.getClientDataLegacy("77881", "00");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().clientNumber()).isEqualTo("00077881");
+    assertThat(response.getBody().companyName()).isEqualTo("Acme Forestry");
+    assertThat(response.getBody().notfound()).isNull();
+    verify(clientLookupService).getClientData("77881", "00");
+  }
+
+  @Test
+  void getClientDataLegacyShouldReturnNotFoundFlagWhenClientMissing() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getClientData("77881", "00")).thenReturn(Optional.empty());
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationClientDataResponseDto> response =
+        controller.getClientDataLegacy("77881", "00");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().notfound()).isEqualTo("true");
+  }
+
+  @Test
+  void getClientLocationsLegacyShouldMarkSavedLocationSelected() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationClientSnapshot(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcService.ApplicationClientSnapshot(
+                    "00022222", "01", "Agent Contact", "00011111", "02", "Owner Contact")));
+    when(clientLookupService.getClientLocations("22222"))
+        .thenReturn(
+            List.of(
+                new ClientLookupService.ClientLocation("Main Office", "01", false),
+                new ClientLookupService.ClientLocation("Reload Yard", "02", false)));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationClientLocationResponseDto>>
+        response = controller.getClientLocationsLegacy("22222", "1000456", "agent");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody())
+        .extracting(
+            ApplicationDetailsRpcController.ApplicationClientLocationResponseDto::locationCode,
+            ApplicationDetailsRpcController.ApplicationClientLocationResponseDto::selected)
+        .containsExactly(tuple("01", true), tuple("02", false));
+  }
+
+  @Test
+  void getContactsForLocationLegacyShouldPreferSavedApplicationContactAndIncludeClientData() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationClientSnapshot(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcService.ApplicationClientSnapshot(
+                    "00022222", "01", "Agent Contact", "00011111", "02", "Owner Contact")));
+    when(clientLookupService.getClientData("11111", "02"))
+        .thenReturn(
+            Optional.of(
+                new ClientLookupService.ClientData(
+                    "00011111",
+                    "Owner Forestry",
+                    "456 Forest Rd",
+                    "Nanaimo",
+                    "BC",
+                    "V9R 1A1",
+                    "CA",
+                    "250-555-0200",
+                    null,
+                    "owner@example.com")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationClientContactResponseDto>>
+        response = controller.getContactsForLocationLegacy("11111", "02", "1000456", "owner");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody()).hasSize(1);
+    ApplicationDetailsRpcController.ApplicationClientContactResponseDto contact =
+        response.getBody().get(0);
+    assertThat(contact.contactName()).isEqualTo("Owner Contact");
+    assertThat(contact.contactId()).isEqualTo("-1");
+    assertThat(contact.clientNumber()).isEqualTo("00011111");
+    assertThat(contact.companyName()).isEqualTo("Owner Forestry");
+    verify(clientLookupService).getClientData("11111", "02");
+  }
+
+  @Test
+  void getContactsForLocationLegacyShouldFallbackToClientContacts() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationClientSnapshot(1000456L)).thenReturn(Optional.empty());
+    when(clientLookupService.getContactsForLocation("11111", "02"))
+        .thenReturn(List.of(new ClientLookupService.ClientContact("Fallback Contact", "22")));
+    when(clientLookupService.getClientData("11111", "02")).thenReturn(Optional.empty());
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationClientContactResponseDto>>
+        response = controller.getContactsForLocationLegacy("11111", "02", "1000456", "owner");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody()).hasSize(1);
+    assertThat(response.getBody().get(0).contactName()).isEqualTo("Fallback Contact");
+    assertThat(response.getBody().get(0).contactId()).isEqualTo("22");
+    verify(clientLookupService).getContactsForLocation("11111", "02");
   }
 }

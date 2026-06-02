@@ -30,6 +30,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_APP(?,?)";
+  private static final String FIND_APPLICATION_BY_NUMBER =
+      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_ATTACHMENT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
   private static final String DELETE_APPLICATION_FILE_ATTACHMENT =
@@ -221,6 +223,24 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         this::mapApplicationInsertRow);
   }
 
+  public Optional<ApplicationClientSnapshotRow> findApplicationClientSnapshot(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_APPLICATION_BY_NUMBER,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new ApplicationClientSnapshotRow(
+                getString(rs, "AGENT_CLIENT_NUMBER"),
+                getString(rs, "AGENT_CLIENT_LOCATION_CODE"),
+                getString(rs, "AGENT_CONTACT_NAME"),
+                getString(rs, "OWNER_CLIENT_NUMBER"),
+                getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
+                getString(rs, "OWNER_CONTACT_NAME")));
+  }
+
   private void bindApplicationInsert(CallableStatement cs, ApplicationInsertRecord record)
       throws SQLException {
     int index = 1;
@@ -346,6 +366,14 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String oicIndicator) {}
 
   public record ApplicationInsertRow(Long applicationNumber) {}
+
+  public record ApplicationClientSnapshotRow(
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String agentContactName,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String ownerContactName) {}
 
   private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
     String normalized = trim(value);

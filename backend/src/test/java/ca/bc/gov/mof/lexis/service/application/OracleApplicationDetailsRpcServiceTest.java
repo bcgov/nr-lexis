@@ -170,4 +170,36 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(record.oicIndicator()).isEqualTo("N");
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
   }
+
+  @Test
+  void getApplicationClientSnapshotShouldMapStoredApplicationClientFields() {
+    when(repository.findApplicationClientSnapshot(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.ApplicationClientSnapshotRow(
+                    " 00022222 ",
+                    " 01 ",
+                    " Agent Contact ",
+                    " 00011111 ",
+                    " 02 ",
+                    " Owner Contact ")));
+
+    Optional<ApplicationDetailsRpcService.ApplicationClientSnapshot> response =
+        service.getApplicationClientSnapshot(1000456L);
+
+    assertThat(response).isPresent();
+    assertThat(response.get().agentClientNumber()).isEqualTo("00022222");
+    assertThat(response.get().agentClientLocationCode()).isEqualTo("01");
+    assertThat(response.get().agentContactName()).isEqualTo("Agent Contact");
+    assertThat(response.get().ownerClientNumber()).isEqualTo("00011111");
+    assertThat(response.get().ownerClientLocationCode()).isEqualTo("02");
+    assertThat(response.get().ownerContactName()).isEqualTo("Owner Contact");
+    verify(repository).findApplicationClientSnapshot(1000456L);
+  }
+
+  @Test
+  void getApplicationClientSnapshotShouldReturnEmptyForInvalidApplicationNumber() {
+    assertThat(service.getApplicationClientSnapshot(null)).isEmpty();
+    verifyNoInteractions(repository);
+  }
 }

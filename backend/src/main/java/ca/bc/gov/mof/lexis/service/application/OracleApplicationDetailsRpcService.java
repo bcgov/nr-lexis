@@ -129,6 +129,23 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         true, SAVE_SUCCESS_MESSAGE, applicationNumber, List.of(), warnings);
   }
 
+  @Override
+  public Optional<ApplicationClientSnapshot> getApplicationClientSnapshot(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return repository.findApplicationClientSnapshot(applicationNumber)
+        .map(
+            row ->
+                new ApplicationClientSnapshot(
+                    trimToNull(row.agentClientNumber()),
+                    trimToNull(row.agentClientLocationCode()),
+                    trimToNull(row.agentContactName()),
+                    trimToNull(row.ownerClientNumber()),
+                    trimToNull(row.ownerClientLocationCode()),
+                    trimToNull(row.ownerContactName())));
+  }
+
   private PersistedRemark toPersistedRemark(ApplicationDetailsRpcRepository.RemarkRow row) {
     String remark = row.remark() == null ? "" : row.remark();
     return new PersistedRemark(
