@@ -1,7 +1,9 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
@@ -11,6 +13,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -108,5 +111,50 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.get(0).description()).isEqualTo("Not on file");
     assertThat(response.get(0).type()).isEqualTo("Uploaded document");
     verify(repository).findApplicationDocumentDetailsByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void addExemptionShouldReturnValidationErrorsBeforeOracleInsert() {
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                "", null, null, null, "", "", "", List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).contains("A valid exemption number is required.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addExemptionShouldInsertWhenRequestIsValid() {
+    when(repository.insertExemption(any(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class)))
+        .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-205")));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                " Conditions ",
+                "B",
+                "ACT",
+                List.of(11L, 12L, 11L)),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("The exemption was saved successfully.");
+    assertThat(response.exemptionNumber()).isEqualTo("EX-205");
+    assertThat(response.refreshPage()).isTrue();
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class);
+    verify(repository).insertExemption(recordCaptor.capture());
+    ExemptionDetailsRpcRepository.ExemptionInsertRecord record = recordCaptor.getValue();
+    assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
+    assertThat(record.otherConditions()).isEqualTo("Conditions");
+    assertThat(record.regionNumbers()).containsExactly(11L, 12L);
   }
 }

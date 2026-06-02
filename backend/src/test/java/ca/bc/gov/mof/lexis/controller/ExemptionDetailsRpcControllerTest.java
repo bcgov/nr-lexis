@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -15,12 +16,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ExemptionDetailsRpcController")
@@ -142,5 +146,43 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isEqualTo("true");
     verify(service).removeDocument(55L);
+  }
+
+  @Test
+  void addExemptionLegacyShouldMapAliasesAndReturnPersistencePayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.addExemption(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ExemptionDetailsRpcService.CreateExemptionResult(
+                true, "The exemption was saved successfully.", "EX-205", true, List.of(), List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exemptionNumber", "EX-205");
+    params.add("approvedVolume", "250.5");
+    params.add("approvalDate", "2026-03-01");
+    params.add("expiryDate", "2026-12-31");
+    params.add("otherConditions", "Conditions");
+    params.add("exemptionTypeCode", "B");
+    params.add("exemptionStatusCode", "ACT");
+    params.add("region", "11,12");
+
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
+        controller.addExemptionLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().exemptionNumber()).isEqualTo("EX-205");
+    assertThat(response.getBody().refreshPage()).isTrue();
+
+    ArgumentCaptor<ExemptionDetailsRpcService.CreateExemptionRequest> requestCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcService.CreateExemptionRequest.class);
+    verify(service).addExemption(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    ExemptionDetailsRpcService.CreateExemptionRequest request = requestCaptor.getValue();
+    assertThat(request.approvedVolume()).isEqualTo(250.5d);
+    assertThat(request.approvalDate()).isEqualTo(LocalDate.of(2026, 3, 1));
+    assertThat(request.expiryDate()).isEqualTo(LocalDate.of(2026, 12, 31));
+    assertThat(request.regionNumbers()).containsExactly(11L, 12L);
   }
 }

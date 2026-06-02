@@ -4,6 +4,10 @@ import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +17,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,6 +42,9 @@ public class ExemptionDetailsRpcController {
   private static final String ACTION_GET_DOCUMENT_DETAILS = "getDocumentDetails";
   private static final String ACTION_GET_DOCUMENT = "getDocument";
   private static final String ACTION_REMOVE_DOCUMENT = "removeDocument";
+  private static final String ACTION_ADD_EXEMPTION = "addExemption";
+  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
+      DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ObjectProvider<ExemptionDetailsRpcService> serviceProvider;
   private final LexisSessionService sessionService;
@@ -219,6 +227,36 @@ public class ExemptionDetailsRpcController {
     return removeDocument(documentId);
   }
 
+  @PostMapping("/rpc/exemption-details/exemption")
+  public ResponseEntity<ExemptionPersistenceResponseDto> addExemption(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Exemption details RPC service unavailable - returning no content for add exemption");
+      return ResponseEntity.noContent().build();
+    }
+
+    String userId = authentication == null ? null : authentication.getName();
+    ExemptionDetailsRpcService.CreateExemptionResult result =
+        service.addExemption(toCreateExemptionRequest(parameters), userId);
+    return ResponseEntity.ok(
+        new ExemptionPersistenceResponseDto(
+            result.success(),
+            result.message(),
+            result.exemptionNumber(),
+            result.refreshPage(),
+            result.errors(),
+            result.warnings()));
+  }
+
+  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_ADD_EXEMPTION)
+  public ResponseEntity<ExemptionPersistenceResponseDto> addExemptionLegacy(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return addExemption(parameters, authentication);
+  }
+
   private ExemptionApplicationsResponseDto toApplicationsResponse(
       ExemptionDetailsRpcService.ExemptionApplicationsResponse response) {
     List<ApplicationItemDto> applications =
@@ -247,6 +285,78 @@ public class ExemptionDetailsRpcController {
     } catch (NumberFormatException ex) {
       return null;
     }
+  }
+
+  private ExemptionDetailsRpcService.CreateExemptionRequest toCreateExemptionRequest(
+      MultiValueMap<String, String> parameters) {
+    return new ExemptionDetailsRpcService.CreateExemptionRequest(
+        first(parameters, "exemptionNumber", "legacyExemptionNumber"),
+        parseDouble(first(parameters, "approvedVolume")),
+        parseDate(first(parameters, "approvalDate", "exemptionApprovalDate")),
+        parseDate(first(parameters, "exemptionExpiryDate", "expiryDate")),
+        first(parameters, "otherConditions"),
+        first(parameters, "exemptionTypeCode", "legacyExemptionType"),
+        first(parameters, "exemptionStatusCode"),
+        parseRegions(parameters));
+  }
+
+  private String first(MultiValueMap<String, String> parameters, String... names) {
+    if (parameters == null || names == null) {
+      return null;
+    }
+    for (String name : names) {
+      String value = parameters.getFirst(name);
+      if (value != null && !value.isBlank()) {
+        return value.trim();
+      }
+    }
+    return null;
+  }
+
+  private LocalDate parseDate(String rawValue) {
+    if (rawValue == null || rawValue.isBlank()) {
+      return null;
+    }
+    String normalized = rawValue.trim();
+    try {
+      return LocalDate.parse(normalized);
+    } catch (DateTimeParseException ignored) {
+      try {
+        return LocalDate.parse(normalized, LEGACY_DATE_FORMATTER);
+      } catch (DateTimeParseException ex) {
+        return null;
+      }
+    }
+  }
+
+  private Double parseDouble(String rawValue) {
+    if (rawValue == null || rawValue.isBlank()) {
+      return null;
+    }
+    try {
+      return Double.parseDouble(rawValue.trim());
+    } catch (NumberFormatException ex) {
+      return null;
+    }
+  }
+
+  private List<Long> parseRegions(MultiValueMap<String, String> parameters) {
+    if (parameters == null) {
+      return List.of();
+    }
+    List<String> rawValues = new ArrayList<>();
+    rawValues.addAll(parameters.getOrDefault("region", List.of()));
+    rawValues.addAll(parameters.getOrDefault("regions", List.of()));
+    rawValues.addAll(parameters.getOrDefault("orgUnitNumber", List.of()));
+
+    return rawValues.stream()
+        .flatMap(value -> List.of(value.split(",")).stream())
+        .map(String::trim)
+        .filter(value -> !value.isBlank())
+        .map(this::parsePositiveLong)
+        .filter(value -> value != null && value > 0)
+        .distinct()
+        .toList();
   }
 
   private String sanitizeFileName(String rawValue) {
@@ -283,4 +393,12 @@ public class ExemptionDetailsRpcController {
   public record DocumentItemDto(String name, String description, String type, long id) {}
 
   public record RemoveDocumentResponseDto(String success) {}
+
+  public record ExemptionPersistenceResponseDto(
+      boolean success,
+      String message,
+      String exemptionNumber,
+      boolean refreshPage,
+      List<String> errors,
+      List<String> warnings) {}
 }

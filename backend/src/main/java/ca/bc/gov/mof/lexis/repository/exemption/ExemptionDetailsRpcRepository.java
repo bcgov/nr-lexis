@@ -2,10 +2,13 @@ package ca.bc.gov.mof.lexis.repository.exemption;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.io.InputStream;
+import java.sql.CallableStatement;
+import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -35,6 +38,10 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
   private static final String DELETE_EXEMPTION_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "DELETE_EXEMPT_FILE_ATTACHMENT(?)";
+  private static final String INSERT_EXEMPTION =
+      LEXIS_GROUP_4_PACKAGE + "INSERT_EXEMPTION(?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String INSERT_EXEMPTION_ORG_UNIT =
+      LEXIS_GROUP_4_PACKAGE + "INSERT_EXMPTN_ORG_UNIT(?,?)";
 
   public ExemptionDetailsRpcRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -168,6 +175,53 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     return executeProcedure(DELETE_EXEMPTION_FILE_ATTACHMENT, cs -> cs.setLong(1, documentId));
   }
 
+  public Optional<ExemptionInsertRow> insertExemption(ExemptionInsertRecord record) {
+    if (record == null || trim(record.exemptionNumber()) == null) {
+      return Optional.empty();
+    }
+
+    Optional<ExemptionInsertRow> inserted =
+        queryCursorSingle(
+            INSERT_EXEMPTION,
+            cs -> bindExemptionInsert(cs, record),
+            12,
+            this::mapExemptionInsertRow);
+
+    if (inserted.isPresent() && record.regionNumbers() != null) {
+      record.regionNumbers().stream()
+          .filter(region -> region != null && region > 0)
+          .distinct()
+          .forEach(region -> insertExemptionOrgUnit(inserted.get().exemptionNumber(), region));
+    }
+
+    return inserted;
+  }
+
+  private void bindExemptionInsert(CallableStatement cs, ExemptionInsertRecord record)
+      throws SQLException {
+    int index = 1;
+    setStringOrNull(cs, index++, record.exemptionNumber());
+    setDoubleOrNull(cs, index++, record.approvedVolume());
+    setDateOrNull(cs, index++, record.approvalDate());
+    setDateOrNull(cs, index++, record.expiryDate());
+    setStringOrNull(cs, index++, record.otherConditions() == null ? "" : record.otherConditions());
+    setStringOrNull(cs, index++, record.exemptionTypeCode());
+    setStringOrNull(cs, index++, record.exemptionStatusCode());
+    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setTimestamp(index++, Timestamp.from(Instant.now()));
+    cs.setNull(index++, Types.VARCHAR);
+    cs.setNull(index, Types.TIMESTAMP);
+  }
+
+  private void insertExemptionOrgUnit(String exemptionNumber, Long regionNumber) {
+    executeProcedure(
+        INSERT_EXEMPTION_ORG_UNIT,
+        cs -> {
+          cs.setString(1, exemptionNumber);
+          cs.setLong(2, regionNumber);
+        });
+  }
+
   private ApplicationSummaryRow mapApplicationSummaryRow(ResultSet rs) {
     return new ApplicationSummaryRow(
         defaultLong(getLong(rs, "APPLICATION_NUMBER"), 0L),
@@ -203,6 +257,10 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         safeFileName(valueOrEmpty(getString(rs, "FILE_NAME"))),
         valueOrEmpty(getString(rs, "DESCRIPTION")),
         valueOrEmpty(getString(rs, "EXPORT_ATTACHMENT_TYPE_CODE")));
+  }
+
+  private ExemptionInsertRow mapExemptionInsertRow(ResultSet rs) {
+    return new ExemptionInsertRow(valueOrEmpty(getString(rs, "EXEMPTION_NUMBER")));
   }
 
   private long defaultLong(Long value, long fallback) {
@@ -248,4 +306,42 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
 
   public record DocumentRow(
       long id, String fileName, String description, String attachmentTypeCode) {}
+
+  public record ExemptionInsertRecord(
+      String exemptionNumber,
+      Double approvedVolume,
+      LocalDate approvalDate,
+      LocalDate expiryDate,
+      String otherConditions,
+      String exemptionTypeCode,
+      String exemptionStatusCode,
+      String entryUserId,
+      List<Long> regionNumbers) {}
+
+  public record ExemptionInsertRow(String exemptionNumber) {}
+
+  private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
+    String normalized = trim(value);
+    if (normalized == null) {
+      cs.setNull(index, Types.VARCHAR);
+    } else {
+      cs.setString(index, normalized);
+    }
+  }
+
+  private void setDoubleOrNull(CallableStatement cs, int index, Double value) throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.DOUBLE);
+    } else {
+      cs.setDouble(index, value);
+    }
+  }
+
+  private void setDateOrNull(CallableStatement cs, int index, LocalDate value) throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.DATE);
+    } else {
+      cs.setDate(index, Date.valueOf(value));
+    }
+  }
 }

@@ -21,8 +21,10 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final String JURISDICTION_RESERVE = "I";
   private static final String EXEMPTION_TYPE_OIC = "O";
   private static final String EXEMPTION_TYPE_BOIC = "B";
+  private static final String EXEMPTION_STATUS_ACTIVE = "ACT";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
+  private static final String SAVE_SUCCESS_MESSAGE = "The exemption was saved successfully.";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ExemptionDetailsRpcRepository repository;
@@ -153,6 +155,35 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return repository.deleteExemptionFile(documentId);
   }
 
+  @Override
+  public CreateExemptionResult addExemption(CreateExemptionRequest request, String userId) {
+    CreateExemptionRequest normalized = normalizeCreateExemptionRequest(request);
+    List<String> errors = validateCreateExemption(normalized);
+    List<String> warnings = List.of();
+
+    if (!errors.isEmpty()) {
+      return new CreateExemptionResult(false, null, null, false, errors, warnings);
+    }
+
+    Optional<ExemptionDetailsRpcRepository.ExemptionInsertRow> inserted =
+        repository.insertExemption(toInsertRecord(normalized, blankToNull(userId)));
+    String exemptionNumber =
+        inserted.map(ExemptionDetailsRpcRepository.ExemptionInsertRow::exemptionNumber).orElse(null);
+
+    if (blankToNull(exemptionNumber) == null) {
+      return new CreateExemptionResult(
+          false,
+          "We were unable to save this exemption. Please note the time this error occurred and report to someone.",
+          null,
+          false,
+          List.of(),
+          warnings);
+    }
+
+    return new CreateExemptionResult(
+        true, SAVE_SUCCESS_MESSAGE, exemptionNumber, true, List.of(), warnings);
+  }
+
   private boolean resolveCanViewPermit(
       ExemptionDetailsRpcRepository.PermitSummaryRow row,
       boolean oicLike,
@@ -212,5 +243,75 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private CreateExemptionRequest normalizeCreateExemptionRequest(CreateExemptionRequest input) {
+    if (input == null) {
+      return new CreateExemptionRequest(null, null, null, null, null, null, null, List.of());
+    }
+    List<Long> regions =
+        input.regionNumbers() == null
+            ? List.of()
+            : input.regionNumbers().stream()
+                .filter(region -> region != null && region > 0)
+                .distinct()
+                .toList();
+    return new CreateExemptionRequest(
+        blankToNull(input.exemptionNumber()),
+        input.approvedVolume(),
+        input.approvalDate(),
+        input.expiryDate(),
+        input.otherConditions() == null ? "" : input.otherConditions().trim(),
+        blankToNull(input.exemptionTypeCode()),
+        blankToNull(input.exemptionStatusCode()),
+        regions);
+  }
+
+  private List<String> validateCreateExemption(CreateExemptionRequest request) {
+    List<String> errors = new ArrayList<>();
+    if (blankToNull(request.exemptionNumber()) == null) {
+      errors.add(required("exemption number"));
+    }
+    if (request.approvedVolume() == null || request.approvedVolume() <= 0.0d) {
+      errors.add("The approved volume must be greater than 0");
+    }
+    if (blankToNull(request.exemptionTypeCode()) == null) {
+      errors.add(required("exemption type code"));
+    }
+    if (blankToNull(request.exemptionStatusCode()) == null) {
+      errors.add(required("exemption status code"));
+    }
+    if (EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(request.exemptionStatusCode())
+        && request.expiryDate() == null) {
+      errors.add(required("expiry date"));
+    }
+    if (request.approvalDate() != null
+        && request.expiryDate() != null
+        && request.expiryDate().isBefore(request.approvalDate())) {
+      errors.add("The approval date must come before the expiry.");
+    }
+    if (EXEMPTION_TYPE_BOIC.equalsIgnoreCase(request.exemptionTypeCode())
+        && request.regionNumbers().isEmpty()) {
+      errors.add(required("region"));
+    }
+    return errors;
+  }
+
+  private ExemptionDetailsRpcRepository.ExemptionInsertRecord toInsertRecord(
+      CreateExemptionRequest request, String entryUserId) {
+    return new ExemptionDetailsRpcRepository.ExemptionInsertRecord(
+        request.exemptionNumber(),
+        request.approvedVolume(),
+        request.approvalDate(),
+        request.expiryDate(),
+        request.otherConditions(),
+        request.exemptionTypeCode(),
+        request.exemptionStatusCode(),
+        entryUserId,
+        request.regionNumbers());
+  }
+
+  private String required(String fieldName) {
+    return "A valid " + fieldName + " is required.";
   }
 }

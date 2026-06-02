@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +19,8 @@ public interface ExemptionDetailsRpcService {
   Optional<DocumentContent> getDocument(Long fileId);
 
   boolean removeDocument(Long documentId);
+
+  CreateExemptionResult addExemption(CreateExemptionRequest request, String userId);
 
   record ExemptionApplicationsResponse(
       List<ApplicationItem> applications, boolean containsUnmanu, String ownerNumber) {}
@@ -41,4 +44,22 @@ public interface ExemptionDetailsRpcService {
   record DocumentItem(long id, String name, String description, String type) {}
 
   record DocumentContent(byte[] bytes) {}
+
+  record CreateExemptionRequest(
+      String exemptionNumber,
+      Double approvedVolume,
+      LocalDate approvalDate,
+      LocalDate expiryDate,
+      String otherConditions,
+      String exemptionTypeCode,
+      String exemptionStatusCode,
+      List<Long> regionNumbers) {}
+
+  record CreateExemptionResult(
+      boolean success,
+      String message,
+      String exemptionNumber,
+      boolean refreshPage,
+      List<String> errors,
+      List<String> warnings) {}
 }
