@@ -1,8 +1,10 @@
 package ca.bc.gov.mof.lexis.service.application;
 
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
+import java.text.DecimalFormat;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +22,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String JURISDICTION_PROVINCIAL = "P";
   private static final String OIC_INDICATOR_NO = "N";
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
+  private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
   private static final int REMARK_DISPLAY_LIMIT = 70;
 
   private final ApplicationDetailsRpcRepository repository;
@@ -252,6 +255,61 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return List.copyOf(permitsByNumber.values());
   }
 
+  @Override
+  public List<ApplicationPackageScaleItem> getScalesForPackage(String packageNumber) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return List.of();
+    }
+
+    Map<String, String> speciesDescriptionByCode = new LinkedHashMap<>();
+    Map<String, String> gradeDescriptionByCode = new LinkedHashMap<>();
+    Map<Long, Boolean> permittedByPermitNumber = new LinkedHashMap<>();
+    return repository.findScaleDetailsByPackageNumber(normalizedPackageNumber).stream()
+        .sorted(
+            Comparator
+                .comparing(
+                    ApplicationDetailsRpcRepository.ApplicationScaleDetailRow::timberMark,
+                    Comparator.nullsLast(String::compareTo))
+                .thenComparing(
+                    ApplicationDetailsRpcRepository.ApplicationScaleDetailRow::exportSpeciesCode,
+                    Comparator.nullsLast(String::compareTo)))
+        .map(
+            row ->
+                new ApplicationPackageScaleItem(
+                    isCompletedPermit(row.exportPermitDetailNumber(), permittedByPermitNumber),
+                    formatTimberMark(row.timberMark()),
+                    resolveSpeciesDescription(row.exportSpeciesCode(), speciesDescriptionByCode),
+                    row.piecesCount(),
+                    resolveGradeDescription(row.exportGradeCode(), gradeDescriptionByCode),
+                    formatOneDecimal(row.speciesGradeVolume()),
+                    nonNull(trimToNull(row.exportScaleDetailId())),
+                    nonNull(trimToNull(row.cascadeSplitCode()))))
+        .toList();
+  }
+
+  @Override
+  public ApplicationScaleDetailItem getScaleById(String scaleDetailId) {
+    String normalizedScaleDetailId = trimToNull(scaleDetailId);
+    if (normalizedScaleDetailId == null) {
+      return missingScaleDetail();
+    }
+
+    return repository
+        .findScaleDetailById(normalizedScaleDetailId)
+        .map(
+            row ->
+                new ApplicationScaleDetailItem(
+                    true,
+                    formatTimberMark(row.timberMark()),
+                    trimToNull(row.exportSpeciesCode()),
+                    Long.toString(row.piecesCount()),
+                    trimToNull(row.exportGradeCode()),
+                    formatOneDecimal(row.speciesGradeVolume()),
+                    trimToNull(row.exportScaleDetailId())))
+        .orElseGet(this::missingScaleDetail);
+  }
+
   private List<SpeciesEndUseItem> toSpeciesEndUseItems(
       List<ApplicationDetailsRpcRepository.EndUseRow> rows) {
     Map<String, String> endUseDescriptionByCode = new LinkedHashMap<>();
@@ -287,6 +345,81 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private CodeItem toCodeItem(ApplicationDetailsRpcRepository.CodeRow row) {
     return new CodeItem(trimToNull(row.code()), trimToNull(row.description()));
+  }
+
+  private String resolveSpeciesDescription(
+      String speciesCode, Map<String, String> speciesDescriptionByCode) {
+    String normalizedCode = trimToNull(speciesCode);
+    if (normalizedCode == null) {
+      return "";
+    }
+    String cached = speciesDescriptionByCode.get(normalizedCode);
+    if (cached != null) {
+      return cached;
+    }
+    String resolved =
+        repository
+            .findSpeciesCode(normalizedCode)
+            .map(ApplicationDetailsRpcRepository.CodeRow::description)
+            .map(this::trimToNull)
+            .orElse(normalizedCode);
+    speciesDescriptionByCode.put(normalizedCode, resolved);
+    return resolved;
+  }
+
+  private String resolveGradeDescription(
+      String gradeCode, Map<String, String> gradeDescriptionByCode) {
+    String normalizedCode = trimToNull(gradeCode);
+    if (normalizedCode == null) {
+      return "";
+    }
+    String cached = gradeDescriptionByCode.get(normalizedCode);
+    if (cached != null) {
+      return cached;
+    }
+    String resolved =
+        repository
+            .findGradeCode(normalizedCode)
+            .map(ApplicationDetailsRpcRepository.CodeRow::description)
+            .map(this::trimToNull)
+            .orElse(normalizedCode);
+    gradeDescriptionByCode.put(normalizedCode, resolved);
+    return resolved;
+  }
+
+  private boolean isCompletedPermit(
+      String exportPermitDetailNumber, Map<Long, Boolean> permittedByPermitNumber) {
+    Long permitNumber = parsePositiveLong(trimToNull(exportPermitDetailNumber));
+    if (permitNumber == null) {
+      return false;
+    }
+    if (permittedByPermitNumber.containsKey(permitNumber)) {
+      return permittedByPermitNumber.get(permitNumber);
+    }
+    boolean permitted =
+        repository
+            .findPermitStatusCodeByPermitNumber(permitNumber)
+            .map(EXPORT_PERMIT_STATUS_COMPLETE::equals)
+            .orElse(false);
+    permittedByPermitNumber.put(permitNumber, permitted);
+    return permitted;
+  }
+
+  private ApplicationScaleDetailItem missingScaleDetail() {
+    return new ApplicationScaleDetailItem(false, null, null, null, null, null, null);
+  }
+
+  private String formatTimberMark(String value) {
+    String normalized = trimToNull(value);
+    return normalized == null ? "Unmanufactured" : normalized;
+  }
+
+  private String formatOneDecimal(double value) {
+    return new DecimalFormat("0.0").format(value);
+  }
+
+  private String nonNull(String value) {
+    return value == null ? "" : value;
   }
 
   private PersistedRemark toPersistedRemark(ApplicationDetailsRpcRepository.RemarkRow row) {

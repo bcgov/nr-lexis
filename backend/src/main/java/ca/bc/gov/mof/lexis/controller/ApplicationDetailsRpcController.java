@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.controller;
 
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -48,6 +49,8 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_SPECIES_FOR_PACKAGE = "getSpeciesForPackage";
   private static final String ACTION_GET_UNIQUE_SCALES_FOR_APPLICATION = "getUniqueScalesForApplication";
   private static final String ACTION_FIND_PERMIT = "findPermit";
+  private static final String ACTION_GET_SCALES_FOR_PACKAGE = "getScalesForPackage";
+  private static final String ACTION_GET_SCALE_BY_ID = "getScaleById";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -498,6 +501,45 @@ public class ApplicationDetailsRpcController {
     return findPermits(applicationNumber);
   }
 
+  @GetMapping("/rpc/application-details/package-scales")
+  public ResponseEntity<List<ApplicationPackageScaleResponseDto>> getScalesForPackage(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for package scales");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.getScalesForPackage(packageNumber).stream()
+            .map(this::toPackageScaleResponse)
+            .toList());
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SCALES_FOR_PACKAGE)
+  public ResponseEntity<List<ApplicationPackageScaleResponseDto>> getScalesForPackageLegacy(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    return getScalesForPackage(packageNumber);
+  }
+
+  @GetMapping("/rpc/application-details/scale")
+  public ResponseEntity<ApplicationScaleDetailResponseDto> getScaleById(
+      @RequestParam(name = "scaleDetailId", required = false) String scaleDetailId) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for scale detail");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(toScaleDetailResponse(service.getScaleById(scaleDetailId)));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SCALE_BY_ID)
+  public ResponseEntity<ApplicationScaleDetailResponseDto> getScaleByIdLegacy(
+      @RequestParam(name = "scaleDetailId", required = false) String scaleDetailId) {
+    return getScaleById(scaleDetailId);
+  }
+
   private Long parsePositiveLong(String rawValue) {
     if (rawValue == null || rawValue.isBlank()) {
       return null;
@@ -708,6 +750,31 @@ public class ApplicationDetailsRpcController {
         item.species(), item.endUse(), item.endUseDescription(), item.endUse());
   }
 
+  private ApplicationPackageScaleResponseDto toPackageScaleResponse(
+      ApplicationDetailsRpcService.ApplicationPackageScaleItem item) {
+    return new ApplicationPackageScaleResponseDto(
+        item.permitted(),
+        item.timberMark(),
+        item.species(),
+        item.pieces(),
+        item.grade(),
+        item.volume(),
+        item.id(),
+        item.cascadeSplitCode());
+  }
+
+  private ApplicationScaleDetailResponseDto toScaleDetailResponse(
+      ApplicationDetailsRpcService.ApplicationScaleDetailItem item) {
+    return new ApplicationScaleDetailResponseDto(
+        item.success(),
+        item.timberMark(),
+        item.species(),
+        item.pieces(),
+        item.grade(),
+        item.volume(),
+        item.id());
+  }
+
   public record DocumentDetailsResponseDto(
       String name, String description, String type, long id) {}
 
@@ -769,4 +836,24 @@ public class ApplicationDetailsRpcController {
 
   public record ApplicationPermitResponseDto(
       Long permitNumber, String permitStatusDescription) {}
+
+  public record ApplicationPackageScaleResponseDto(
+      boolean permitted,
+      String timberMark,
+      String species,
+      long pieces,
+      String grade,
+      String volume,
+      String id,
+      String cascadeSplitCode) {}
+
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  public record ApplicationScaleDetailResponseDto(
+      boolean success,
+      String timberMark,
+      String species,
+      String pieces,
+      String grade,
+      String volume,
+      String id) {}
 }

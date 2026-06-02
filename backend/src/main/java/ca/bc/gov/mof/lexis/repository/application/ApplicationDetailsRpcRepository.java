@@ -31,8 +31,14 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_APP(?,?)";
+  private static final String FIND_SCALE_DETAIL_BY_PACKAGE =
+      LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PKG(?,?)";
+  private static final String FIND_SCALE_DETAIL_BY_ID =
+      LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_ID(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_APP(?,?)";
+  private static final String FIND_PERMIT_DETAIL_BY_ID =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_END_USE_BY_APPLICATION =
@@ -43,6 +49,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
   private static final String FIND_ALL_SPECIES_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_SPECIES_CODES(?)";
+  private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
   private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
   private static final String FIND_END_USE_CODE = LEXIS_CODES_PACKAGE + "FIND_END_USE_CODE(?,?)";
   private static final String FIND_SPECIES_GRADE_BY_REGION_SPECIES =
@@ -121,6 +128,42 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
         rs -> new ApplicationPermitRow(getLong(rs, "EXPORT_PERMIT_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
+  }
+
+  public List<ApplicationScaleDetailRow> findScaleDetailsByPackageNumber(String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_SCALE_DETAIL_BY_PACKAGE,
+        cs -> cs.setString(1, normalized),
+        2,
+        this::mapApplicationScaleDetailRow);
+  }
+
+  public Optional<ApplicationScaleDetailRow> findScaleDetailById(String scaleDetailId) {
+    String normalized = trim(scaleDetailId);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_SCALE_DETAIL_BY_ID,
+        cs -> cs.setString(1, normalized),
+        2,
+        this::mapApplicationScaleDetailRow);
+  }
+
+  public Optional<String> findPermitStatusCodeByPermitNumber(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+            FIND_PERMIT_DETAIL_BY_ID,
+            cs -> cs.setString(1, permitNumber.toString()),
+            2,
+            rs -> trim(getString(rs, "EXPORT_PERMIT_STATUS_CODE")))
+        .filter(value -> value != null && !value.isBlank());
   }
 
   public Optional<String> findAttachmentTypeDescription(String attachmentTypeCode) {
@@ -333,6 +376,23 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
                 zeroIfNull(getLong(rs, "ORDER_BY"))));
   }
 
+  public Optional<CodeRow> findSpeciesCode(String speciesCode) {
+    String normalized = trim(speciesCode);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_SPECIES_CODE,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs ->
+            new CodeRow(
+                getString(rs, "CODE"),
+                getString(rs, "DESCRIPTION"),
+                zeroIfNull(getLong(rs, "GROUP_BY")),
+                zeroIfNull(getLong(rs, "ORDER_BY"))));
+  }
+
   public Optional<CodeRow> findEndUseCode(String endUseCode) {
     String normalized = trim(endUseCode);
     if (normalized == null) {
@@ -438,6 +498,20 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     return new ApplicationInsertRow(getLong(rs, "APPLICATION_NUMBER"));
   }
 
+  private ApplicationScaleDetailRow mapApplicationScaleDetailRow(ResultSet rs) {
+    return new ApplicationScaleDetailRow(
+        getString(rs, "EXPORT_SCALE_DETAIL_ID"),
+        getString(rs, "TIMBER_MARK"),
+        getString(rs, "EXPORT_SPECIES_CODE"),
+        getString(rs, "EXPORT_GRADE_CODE"),
+        zeroIfNull(getDouble(rs, "SPECIES_GRADE_VOLUME")),
+        zeroIfNull(getLong(rs, "PIECES_COUNT")),
+        getLong(rs, "APPLICATION_NUMBER"),
+        getString(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+        getString(rs, "PACKAGE_NUMBER"),
+        getString(rs, "CASCADE_SPLIT_CODE"));
+  }
+
   private Instant getInstant(ResultSet rs, String column) {
     try {
       Timestamp value = rs.getTimestamp(column);
@@ -531,6 +605,18 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
   public record ApplicationPermitRow(Long permitNumber, String statusDescription) {}
 
+  public record ApplicationScaleDetailRow(
+      String exportScaleDetailId,
+      String timberMark,
+      String exportSpeciesCode,
+      String exportGradeCode,
+      double speciesGradeVolume,
+      long piecesCount,
+      Long applicationNumber,
+      String exportPermitDetailNumber,
+      String packageNumber,
+      String cascadeSplitCode) {}
+
   private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
     String normalized = trim(value);
     if (normalized == null) {
@@ -542,6 +628,10 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
   private long zeroIfNull(Long value) {
     return value == null ? 0L : value;
+  }
+
+  private double zeroIfNull(Double value) {
+    return value == null ? 0.0d : value;
   }
 
   private void setLongOrNull(CallableStatement cs, int index, Long value) throws SQLException {

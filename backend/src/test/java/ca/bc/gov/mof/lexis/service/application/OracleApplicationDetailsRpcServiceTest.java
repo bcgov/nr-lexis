@@ -362,4 +362,74 @@ class OracleApplicationDetailsRpcServiceTest {
         .containsExactly(tuple(7000123L, "Complete"), tuple(7000456L, "Active"));
     verify(repository).findPermitsByApplicationNumber(1000456L);
   }
+
+  @Test
+  void getScalesForPackageShouldReturnLegacySortedScaleRows() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "56", null, "HEM", "U", 6.0d, 8L, 1000456L, null, "PKG-903", null),
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "55", "TM001", "FIR", "J", 10.55d, 12L, 1000456L, "7000123", "PKG-903", "C")));
+    when(repository.findSpeciesCode("FIR"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("FIR", "Douglas-fir", 1L, 1L)));
+    when(repository.findSpeciesCode("HEM"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("HEM", "Hemlock", 1L, 2L)));
+    when(repository.findGradeCode("J"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("J", "Grade J", 1L, 1L)));
+    when(repository.findGradeCode("U"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("U", "Grade U", 1L, 2L)));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L)).thenReturn(Optional.of("COM"));
+
+    List<ApplicationDetailsRpcService.ApplicationPackageScaleItem> response =
+        service.getScalesForPackage(" PKG-903 ");
+
+    assertThat(response)
+        .extracting(
+            ApplicationDetailsRpcService.ApplicationPackageScaleItem::permitted,
+            ApplicationDetailsRpcService.ApplicationPackageScaleItem::timberMark,
+            ApplicationDetailsRpcService.ApplicationPackageScaleItem::species,
+            ApplicationDetailsRpcService.ApplicationPackageScaleItem::pieces,
+            ApplicationDetailsRpcService.ApplicationPackageScaleItem::grade,
+            ApplicationDetailsRpcService.ApplicationPackageScaleItem::volume,
+            ApplicationDetailsRpcService.ApplicationPackageScaleItem::id,
+            ApplicationDetailsRpcService.ApplicationPackageScaleItem::cascadeSplitCode)
+        .containsExactly(
+            tuple(true, "TM001", "Douglas-fir", 12L, "Grade J", "10.6", "55", "C"),
+            tuple(false, "Unmanufactured", "Hemlock", 8L, "Grade U", "6.0", "56", ""));
+    verify(repository).findScaleDetailsByPackageNumber("PKG-903");
+    verify(repository).findPermitStatusCodeByPermitNumber(7000123L);
+  }
+
+  @Test
+  void getScaleByIdShouldReturnLegacyScaleEditPayload() {
+    when(repository.findScaleDetailById("55"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "55", null, "FIR", "J", 10.55d, 12L, 1000456L, null, "PKG-903", "C")));
+
+    ApplicationDetailsRpcService.ApplicationScaleDetailItem response = service.getScaleById(" 55 ");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.timberMark()).isEqualTo("Unmanufactured");
+    assertThat(response.species()).isEqualTo("FIR");
+    assertThat(response.pieces()).isEqualTo("12");
+    assertThat(response.grade()).isEqualTo("J");
+    assertThat(response.volume()).isEqualTo("10.6");
+    assertThat(response.id()).isEqualTo("55");
+    verify(repository).findScaleDetailById("55");
+  }
+
+  @Test
+  void getScaleByIdShouldReturnFalsePayloadWhenMissing() {
+    when(repository.findScaleDetailById("999")).thenReturn(Optional.empty());
+
+    ApplicationDetailsRpcService.ApplicationScaleDetailItem response = service.getScaleById("999");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.timberMark()).isNull();
+    verify(repository).findScaleDetailById("999");
+  }
 }

@@ -38,6 +38,10 @@ public interface ApplicationDetailsRpcService {
 
   List<ApplicationPermitItem> findPermits(Long applicationNumber);
 
+  List<ApplicationPackageScaleItem> getScalesForPackage(String packageNumber);
+
+  ApplicationScaleDetailItem getScaleById(String scaleDetailId);
+
   record DocumentItem(long id, String name, String description, String type) {}
 
   record DocumentContent(byte[] bytes) {}
@@ -52,6 +56,25 @@ public interface ApplicationDetailsRpcService {
   record ApplicationScaleItem(String timberMark) {}
 
   record ApplicationPermitItem(Long permitNumber, String permitStatusDescription) {}
+
+  record ApplicationPackageScaleItem(
+      boolean permitted,
+      String timberMark,
+      String species,
+      long pieces,
+      String grade,
+      String volume,
+      String id,
+      String cascadeSplitCode) {}
+
+  record ApplicationScaleDetailItem(
+      boolean success,
+      String timberMark,
+      String species,
+      String pieces,
+      String grade,
+      String volume,
+      String id) {}
 
   record ApplicationClientSnapshot(
       String agentClientNumber,

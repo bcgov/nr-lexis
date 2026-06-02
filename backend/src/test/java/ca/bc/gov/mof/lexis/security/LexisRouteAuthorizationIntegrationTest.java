@@ -233,6 +233,16 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyApplicationDetailsRpcShouldAllowPackageScaleLookupAction() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "getScalesForPackage")
+                .param("packageNumber", "PKG-903")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void legacyExemptionDetailsRpcShouldAllowApproveExemptionsAction() throws Exception {
     mockMvc.perform(
             post("/api/lexis/exemptionDetailsRPC")

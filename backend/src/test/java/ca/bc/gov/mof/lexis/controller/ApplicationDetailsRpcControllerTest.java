@@ -484,4 +484,59 @@ class ApplicationDetailsRpcControllerTest {
         .containsExactly(tuple(7000123L, "Complete"), tuple(7000456L, "Active"));
     verify(service).findPermits(1000456L);
   }
+
+  @Test
+  void getScalesForPackageLegacyShouldReturnLegacyScaleRows() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getScalesForPackage("PKG-903"))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.ApplicationPackageScaleItem(
+                    true, "TM001", "Douglas-fir", 12L, "Grade J", "10.5", "55", "C"),
+                new ApplicationDetailsRpcService.ApplicationPackageScaleItem(
+                    false, "Unmanufactured", "Hemlock", 8L, "Grade U", "6.0", "56", "")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto>> response =
+        controller.getScalesForPackageLegacy("PKG-903");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody())
+        .extracting(
+            ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto::permitted,
+            ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto::timberMark,
+            ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto::species,
+            ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto::pieces,
+            ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto::grade,
+            ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto::volume,
+            ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto::id,
+            ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto::cascadeSplitCode)
+        .containsExactly(
+            tuple(true, "TM001", "Douglas-fir", 12L, "Grade J", "10.5", "55", "C"),
+            tuple(false, "Unmanufactured", "Hemlock", 8L, "Grade U", "6.0", "56", ""));
+    verify(service).getScalesForPackage("PKG-903");
+  }
+
+  @Test
+  void getScaleByIdLegacyShouldReturnLegacyScaleDetailPayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getScaleById("55"))
+        .thenReturn(
+            new ApplicationDetailsRpcService.ApplicationScaleDetailItem(
+                true, "TM001", "FIR", "12", "J", "10.5", "55"));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationScaleDetailResponseDto> response =
+        controller.getScaleByIdLegacy("55");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().timberMark()).isEqualTo("TM001");
+    assertThat(response.getBody().species()).isEqualTo("FIR");
+    assertThat(response.getBody().pieces()).isEqualTo("12");
+    assertThat(response.getBody().grade()).isEqualTo("J");
+    assertThat(response.getBody().volume()).isEqualTo("10.5");
+    assertThat(response.getBody().id()).isEqualTo("55");
+    verify(service).getScaleById("55");
+  }
 }
