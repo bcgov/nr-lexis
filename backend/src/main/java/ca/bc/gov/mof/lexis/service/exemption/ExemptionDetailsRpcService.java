@@ -70,6 +70,8 @@ public interface ExemptionDetailsRpcService {
       String otherConditions,
       String exemptionTypeCode,
       String exemptionStatusCode,
+      Double feeRate,
+      Boolean enableRateOverride,
       List<Long> regionNumbers) {}
 
   record UpdateExemptionRequest(
@@ -81,6 +83,8 @@ public interface ExemptionDetailsRpcService {
       String otherConditions,
       String exemptionTypeCode,
       String exemptionStatusCode,
+      Double feeRate,
+      Boolean enableRateOverride,
       List<Long> regionNumbers) {}
 
   record CreateExemptionResult(

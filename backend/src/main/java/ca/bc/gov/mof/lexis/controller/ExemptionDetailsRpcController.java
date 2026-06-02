@@ -410,6 +410,8 @@ public class ExemptionDetailsRpcController {
         first(parameters, "otherConditions"),
         first(parameters, "exemptionTypeCode", "legacyExemptionType"),
         first(parameters, "exemptionStatusCode"),
+        parseDouble(first(parameters, "feeRate")),
+        resolveRateOverride(parameters),
         parseRegions(parameters));
   }
 
@@ -424,7 +426,19 @@ public class ExemptionDetailsRpcController {
         first(parameters, "otherConditions"),
         first(parameters, "exemptionTypeCode", "legacyExemptionType"),
         first(parameters, "exemptionStatusCode"),
+        parseDouble(first(parameters, "feeRate")),
+        resolveRateOverride(parameters),
         parseRegions(parameters));
+  }
+
+  private Boolean resolveRateOverride(MultiValueMap<String, String> parameters) {
+    if (hasParameter(parameters, "enableRateOverride")) {
+      return Boolean.TRUE;
+    }
+    if (hasParameter(parameters, "feeRate")) {
+      return Boolean.FALSE;
+    }
+    return null;
   }
 
   private String first(MultiValueMap<String, String> parameters, String... names) {
@@ -438,6 +452,10 @@ public class ExemptionDetailsRpcController {
       }
     }
     return null;
+  }
+
+  private boolean hasParameter(MultiValueMap<String, String> parameters, String name) {
+    return parameters != null && parameters.containsKey(name);
   }
 
   private LocalDate parseDate(String rawValue) {

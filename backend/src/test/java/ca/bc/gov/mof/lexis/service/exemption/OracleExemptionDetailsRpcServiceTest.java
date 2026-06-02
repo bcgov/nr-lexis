@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.exemption;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -120,7 +121,7 @@ class OracleExemptionDetailsRpcServiceTest {
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.addExemption(
             new ExemptionDetailsRpcService.CreateExemptionRequest(
-                "", null, null, null, "", "", "", List.of()),
+                "", null, null, null, "", "", "", null, null, List.of()),
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
@@ -132,6 +133,9 @@ class OracleExemptionDetailsRpcServiceTest {
   void addExemptionShouldInsertWhenRequestIsValid() {
     when(repository.insertExemption(any(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class)))
         .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-205")));
+    when(repository.findExemptionRate("EX-205")).thenReturn(Optional.empty());
+    when(repository.insertExemptionRate(any(ExemptionDetailsRpcRepository.ExemptionRateMutationRecord.class)))
+        .thenReturn(Optional.of(exemptionRate(18.25d)));
 
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.addExemption(
@@ -143,6 +147,8 @@ class OracleExemptionDetailsRpcServiceTest {
                 " Conditions ",
                 "B",
                 "ACT",
+                18.25d,
+                true,
                 List.of(11L, 12L, 11L)),
             "idir\\jsmith");
 
@@ -158,6 +164,14 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
     assertThat(record.otherConditions()).isEqualTo("Conditions");
     assertThat(record.regionNumbers()).containsExactly(11L, 12L);
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionRateMutationRecord> rateCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionRateMutationRecord.class);
+    verify(repository).insertExemptionRate(rateCaptor.capture());
+    ExemptionDetailsRpcRepository.ExemptionRateMutationRecord rateRecord = rateCaptor.getValue();
+    assertThat(rateRecord.exemptionNumber()).isEqualTo("EX-205");
+    assertThat(rateRecord.fixedExemptionRate()).isEqualTo(18.25d);
+    assertThat(rateRecord.userId()).isEqualTo("idir\\jsmith");
   }
 
   @Test
@@ -270,6 +284,8 @@ class OracleExemptionDetailsRpcServiceTest {
                 " Updated conditions ",
                 "M",
                 "CAN",
+                null,
+                null,
                 List.of()),
             "idir\\jsmith",
             true);
@@ -293,6 +309,75 @@ class OracleExemptionDetailsRpcServiceTest {
     verify(repository).updateApplicationExemption(applicationCaptor.capture());
     assertThat(applicationCaptor.getValue().exemptionNumber()).isEqualTo("EX-205");
     assertThat(applicationCaptor.getValue().applicationStatusCode()).isEqualTo("APP");
+    verify(repository, never()).findExemptionRate("EX-205");
+  }
+
+  @Test
+  void updateExemptionShouldUpdateExistingFeeRateWhenOverrideEnabled() {
+    ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("ACT");
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
+    when(repository.findExemptionRate("EX-205")).thenReturn(Optional.of(exemptionRate(18.25d)));
+    when(repository.updateExemptionRate(any(ExemptionDetailsRpcRepository.ExemptionRateMutationRecord.class)))
+        .thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                " Updated conditions ",
+                "M",
+                "ACT",
+                22.5d,
+                true,
+                List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isTrue();
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionRateMutationRecord> rateCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionRateMutationRecord.class);
+    verify(repository).updateExemptionRate(rateCaptor.capture());
+    ExemptionDetailsRpcRepository.ExemptionRateMutationRecord rateRecord = rateCaptor.getValue();
+    assertThat(rateRecord.exemptionNumber()).isEqualTo("EX-205");
+    assertThat(rateRecord.fixedExemptionRate()).isEqualTo(22.5d);
+    assertThat(rateRecord.userId()).isEqualTo("idir\\jsmith");
+  }
+
+  @Test
+  void updateExemptionShouldDeleteExistingFeeRateWhenOverrideDisabled() {
+    ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("ACT");
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
+    when(repository.findExemptionRate("EX-205")).thenReturn(Optional.of(exemptionRate(18.25d)));
+    when(repository.deleteExemptionRate("EX-205")).thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                " Updated conditions ",
+                "M",
+                "ACT",
+                null,
+                false,
+                List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isTrue();
+    verify(repository).deleteExemptionRate("EX-205");
   }
 
   private ExemptionDetailsRpcRepository.ApplicationLinkRecord application(
@@ -336,6 +421,16 @@ class OracleExemptionDetailsRpcServiceTest {
         "Conditions",
         "M",
         statusCode,
+        "creator",
+        Timestamp.from(Instant.parse("2026-02-20T18:00:00Z")),
+        null,
+        null);
+  }
+
+  private ExemptionDetailsRpcRepository.ExemptionRateRecord exemptionRate(Double fixedRate) {
+    return new ExemptionDetailsRpcRepository.ExemptionRateRecord(
+        "EX-205",
+        fixedRate,
         "creator",
         Timestamp.from(Instant.parse("2026-02-20T18:00:00Z")),
         null,

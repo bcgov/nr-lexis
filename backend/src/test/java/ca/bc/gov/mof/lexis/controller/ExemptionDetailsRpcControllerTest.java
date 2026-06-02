@@ -221,6 +221,8 @@ class ExemptionDetailsRpcControllerTest {
     params.add("otherConditions", "Conditions");
     params.add("exemptionTypeCode", "B");
     params.add("exemptionStatusCode", "ACT");
+    params.add("feeRate", "18.25");
+    params.add("enableRateOverride", "true");
     params.add("region", "11,12");
 
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
@@ -240,6 +242,8 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(request.approvedVolume()).isEqualTo(250.5d);
     assertThat(request.approvalDate()).isEqualTo(LocalDate.of(2026, 3, 1));
     assertThat(request.expiryDate()).isEqualTo(LocalDate.of(2026, 12, 31));
+    assertThat(request.feeRate()).isEqualTo(18.25d);
+    assertThat(request.enableRateOverride()).isTrue();
     assertThat(request.regionNumbers()).containsExactly(11L, 12L);
   }
 
@@ -267,6 +271,7 @@ class ExemptionDetailsRpcControllerTest {
     params.add("otherConditions", "Updated conditions");
     params.add("exemptionTypeCode", "B");
     params.add("exemptionStatusCode", "ACT");
+    params.add("feeRate", "18.25");
     params.add("region", "11,12");
 
     ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
@@ -287,6 +292,8 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(request.approvedVolume()).isEqualTo(350.5d);
     assertThat(request.approvalDate()).isEqualTo(LocalDate.of(2026, 3, 1));
     assertThat(request.expiryDate()).isEqualTo(LocalDate.of(2026, 12, 31));
+    assertThat(request.feeRate()).isEqualTo(18.25d);
+    assertThat(request.enableRateOverride()).isFalse();
     assertThat(request.regionNumbers()).containsExactly(11L, 12L);
   }
 }

@@ -40,6 +40,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String FIND_ATTACHMENT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
+  private static final String FIND_RATE_BY_EXEMPTION =
+      LEXIS_CODES_PACKAGE + "FIND_RATE_BY_EXEMPTION(?,?)";
   private static final String DELETE_EXEMPTION_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "DELETE_EXEMPT_FILE_ATTACHMENT(?)";
   private static final String INSERT_EXEMPTION =
@@ -50,6 +52,12 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_4_PACKAGE + "INSERT_EXMPTN_ORG_UNIT(?,?)";
   private static final String DELETE_EXEMPTION_ORG_UNIT =
       LEXIS_GROUP_4_PACKAGE + "DELETE_EXMPTN_ORG_UNIT(?)";
+  private static final String INSERT_EXEMPTION_RATE =
+      LEXIS_GROUP_4_PACKAGE + "INSERT_EXEMPTION_RATE(?,?,?,?,?)";
+  private static final String UPDATE_EXEMPTION_RATE =
+      LEXIS_GROUP_4_PACKAGE + "UPDATE_EXEMPTION_RATE(?,?,?,?)";
+  private static final String DELETE_EXEMPTION_RATE =
+      LEXIS_GROUP_4_PACKAGE + "DELETE_EXEMPTION_RATE(?)";
   private static final String UPDATE_EXEMPTION_APPLICATION =
       LEXIS_GROUP_14_PACKAGE + "UPDATE_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
@@ -117,6 +125,18 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         cs -> cs.setString(1, normalized),
         2,
         this::mapExemptionRecord);
+  }
+
+  public Optional<ExemptionRateRecord> findExemptionRate(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_RATE_BY_EXEMPTION,
+        cs -> cs.setString(1, normalized),
+        2,
+        this::mapExemptionRateRecord);
   }
 
   public Optional<ApplicationLinkRecord> findApplicationLinkRecord(Long applicationNumber) {
@@ -279,6 +299,44 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     return updated;
   }
 
+  public Optional<ExemptionRateRecord> insertExemptionRate(ExemptionRateMutationRecord record) {
+    if (record == null || trim(record.exemptionNumber()) == null || record.fixedExemptionRate() == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        INSERT_EXEMPTION_RATE,
+        cs -> {
+          setStringOrNull(cs, 1, record.exemptionNumber());
+          setDoubleOrNull(cs, 2, record.fixedExemptionRate());
+          setStringOrNull(cs, 3, record.userId());
+          cs.setTimestamp(4, Timestamp.from(Instant.now()));
+        },
+        5,
+        this::mapExemptionRateRecord);
+  }
+
+  public boolean updateExemptionRate(ExemptionRateMutationRecord record) {
+    if (record == null || trim(record.exemptionNumber()) == null || record.fixedExemptionRate() == null) {
+      return false;
+    }
+    return executeProcedure(
+        UPDATE_EXEMPTION_RATE,
+        cs -> {
+          setStringOrNull(cs, 1, record.exemptionNumber());
+          setDoubleOrNull(cs, 2, record.fixedExemptionRate());
+          setStringOrNull(cs, 3, record.userId());
+          cs.setTimestamp(4, Timestamp.from(Instant.now()));
+        });
+  }
+
+  public boolean deleteExemptionRate(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return false;
+    }
+    return executeProcedure(DELETE_EXEMPTION_RATE, cs -> cs.setString(1, normalized));
+  }
+
   private void bindExemptionInsert(CallableStatement cs, ExemptionInsertRecord record)
       throws SQLException {
     int index = 1;
@@ -383,6 +441,16 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         valueOrEmpty(getString(rs, "OTHER_CONDITIONS")),
         valueOrEmpty(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
         valueOrEmpty(getString(rs, "EXPORT_EXEMPTION_STATUS_CODE")),
+        valueOrEmpty(getString(rs, "ENTRY_USERID")),
+        getTimestamp(rs, "ENTRY_TIMESTAMP"),
+        valueOrEmpty(getString(rs, "UPDATE_USERID")),
+        getTimestamp(rs, "UPDATE_TIMESTAMP"));
+  }
+
+  private ExemptionRateRecord mapExemptionRateRecord(ResultSet rs) {
+    return new ExemptionRateRecord(
+        valueOrEmpty(getString(rs, "EXEMPTION_NUMBER")),
+        getDouble(rs, "FIXED_EXEMPTION_RATE"),
         valueOrEmpty(getString(rs, "ENTRY_USERID")),
         getTimestamp(rs, "ENTRY_TIMESTAMP"),
         valueOrEmpty(getString(rs, "UPDATE_USERID")),
@@ -547,6 +615,19 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       Timestamp entryTimestamp,
       String updateUserId,
       List<Long> regionNumbers) {}
+
+  public record ExemptionRateRecord(
+      String exemptionNumber,
+      Double fixedExemptionRate,
+      String entryUserId,
+      Timestamp entryTimestamp,
+      String updateUserId,
+      Timestamp updateTimestamp) {}
+
+  public record ExemptionRateMutationRecord(
+      String exemptionNumber,
+      Double fixedExemptionRate,
+      String userId) {}
 
   public record ApplicationLinkRecord(
       Long applicationNumber,

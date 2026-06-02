@@ -188,6 +188,12 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
           warnings);
     }
 
+    processFeeRates(
+        exemptionNumber,
+        normalized.enableRateOverride(),
+        normalized.feeRate(),
+        blankToNull(userId));
+
     return new CreateExemptionResult(
         true, SAVE_SUCCESS_MESSAGE, exemptionNumber, true, List.of(), warnings);
   }
@@ -234,6 +240,11 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     if (statusChangedTo(current.exemptionStatusCode(), updateRecord.exemptionStatusCode(), EXEMPTION_STATUS_CANCELLED)) {
       revertApplicationsToApproved(updateRecord.exemptionNumber(), updateRecord.updateUserId());
     }
+    processFeeRates(
+        updateRecord.exemptionNumber(),
+        normalized.enableRateOverride(),
+        normalized.feeRate(),
+        updateRecord.updateUserId());
 
     return new CreateExemptionResult(
         true, "The exemption was updated successfully.", updateRecord.exemptionNumber(), false, List.of(), List.of());
@@ -423,7 +434,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   private CreateExemptionRequest normalizeCreateExemptionRequest(CreateExemptionRequest input) {
     if (input == null) {
-      return new CreateExemptionRequest(null, null, null, null, null, null, null, List.of());
+      return new CreateExemptionRequest(null, null, null, null, null, null, null, null, null, List.of());
     }
     List<Long> regions =
         input.regionNumbers() == null
@@ -440,12 +451,14 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         input.otherConditions() == null ? "" : input.otherConditions().trim(),
         blankToNull(input.exemptionTypeCode()),
         blankToNull(input.exemptionStatusCode()),
+        input.feeRate(),
+        input.enableRateOverride(),
         regions);
   }
 
   private UpdateExemptionRequest normalizeUpdateExemptionRequest(UpdateExemptionRequest input) {
     if (input == null) {
-      return new UpdateExemptionRequest(null, null, null, null, null, null, null, null, List.of());
+      return new UpdateExemptionRequest(null, null, null, null, null, null, null, null, null, null, List.of());
     }
     List<Long> regions =
         input.regionNumbers() == null
@@ -463,6 +476,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         input.otherConditions() == null ? "" : input.otherConditions().trim(),
         blankToNull(input.exemptionTypeCode()),
         blankToNull(input.exemptionStatusCode()),
+        input.feeRate(),
+        input.enableRateOverride(),
         regions);
   }
 
@@ -638,6 +653,34 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                       application.exemptionNumber(),
                       APPLICATION_STATUS_APPROVED,
                       defaultUpdateUser(updateUserId, application.entryUserId()))));
+    }
+  }
+
+  private void processFeeRates(
+      String exemptionNumber,
+      Boolean enableRateOverride,
+      Double feeRate,
+      String userId) {
+    if (enableRateOverride == null) {
+      return;
+    }
+    Optional<ExemptionDetailsRpcRepository.ExemptionRateRecord> existing =
+        repository.findExemptionRate(exemptionNumber);
+
+    if (!enableRateOverride && existing.isPresent()) {
+      repository.deleteExemptionRate(exemptionNumber);
+      return;
+    }
+    if (!enableRateOverride || feeRate == null) {
+      return;
+    }
+
+    ExemptionDetailsRpcRepository.ExemptionRateMutationRecord record =
+        new ExemptionDetailsRpcRepository.ExemptionRateMutationRecord(exemptionNumber, feeRate, userId);
+    if (existing.isPresent()) {
+      repository.updateExemptionRate(record);
+    } else {
+      repository.insertExemptionRate(record);
     }
   }
 
