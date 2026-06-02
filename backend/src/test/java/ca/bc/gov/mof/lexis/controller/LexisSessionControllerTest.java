@@ -10,6 +10,7 @@ import ca.bc.gov.mof.lexis.dto.session.LexisSessionCapabilitiesDto;
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionLogoutDto;
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionMessageDto;
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionWelcomeDto;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.servlet.ServletException;
@@ -34,6 +35,7 @@ class LexisSessionControllerTest {
 
   @Mock private LexisSessionService sessionService;
   @Mock private LexisAuthorizationService authorizationService;
+  @Mock private LexisPrincipalService principalService;
 
   @InjectMocks private LexisSessionController controller;
 
@@ -44,6 +46,7 @@ class LexisSessionControllerTest {
         new TestingAuthenticationToken("idir\\jsmith", "n/a", "LEXIS_PROVINCIAL_SUBMITTER");
     request.setUserPrincipal(authentication);
 
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("idir\\jsmith");
     when(sessionService.parseRolesFromPrincipal(authentication))
         .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
 
@@ -69,7 +72,8 @@ class LexisSessionControllerTest {
   @Test
   void welcomeShouldResolveWithoutRolesWhenNoAuthenticationAuthoritiesExist() {
     MockHttpServletRequest request = new MockHttpServletRequest();
-    request.setUserPrincipal(() -> "idir\\jsmith");
+    Principal principal = () -> "idir\\jsmith";
+    request.setUserPrincipal(principal);
 
     LexisSessionWelcomeDto dto =
         new LexisSessionWelcomeDto(
@@ -79,6 +83,7 @@ class LexisSessionControllerTest {
             "mofrUser",
             "/applicationsReview.do?actionMapping=view");
 
+    when(principalService.resolvePrincipalName(principal)).thenReturn("idir\\jsmith");
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of())).thenReturn(dto);
 
     ResponseEntity<LexisSessionWelcomeDto> response = controller.showWelcome(request);
@@ -96,6 +101,7 @@ class LexisSessionControllerTest {
         new TestingAuthenticationToken("idir\\jsmith", "n/a", "LEXIS_READ_ONLY", "LEXIS_ADMIN");
     request.setUserPrincipal(authentication);
 
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("idir\\jsmith");
     when(sessionService.parseRolesFromPrincipal(authentication))
         .thenReturn(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
 
@@ -137,6 +143,7 @@ class LexisSessionControllerTest {
         new TestingAuthenticationToken("idir\\jsmith", "n/a", "LEXIS_PROVINCIAL_SUBMITTER");
     request.setUserPrincipal(authentication);
 
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("idir\\jsmith");
     when(sessionService.parseRolesFromPrincipal(authentication))
         .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
     when(authorizationService.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/offersSearch"))
@@ -162,8 +169,10 @@ class LexisSessionControllerTest {
   @Test
   void canPerformActionShouldUseEmptyRolesWhenNoAuthenticationAuthoritiesExist() {
     MockHttpServletRequest request = new MockHttpServletRequest();
-    request.setUserPrincipal(() -> "idir\\jsmith");
+    Principal principal = () -> "idir\\jsmith";
+    request.setUserPrincipal(principal);
 
+    when(principalService.resolvePrincipalName(principal)).thenReturn("idir\\jsmith");
     when(authorizationService.canPerformAction(List.of(), "/applicationSearch")).thenReturn(false);
 
     ResponseEntity<LexisSessionActionAccessDto> response =

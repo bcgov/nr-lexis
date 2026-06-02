@@ -211,7 +211,6 @@ const Layout: FC<Props> = ({ children }) => {
 
   const handleLogout = () => {
     void logout()
-    navigate('/')
   }
 
   const openContact = () => {

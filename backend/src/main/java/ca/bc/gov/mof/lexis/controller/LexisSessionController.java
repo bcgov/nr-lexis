@@ -5,6 +5,7 @@ import ca.bc.gov.mof.lexis.dto.session.LexisSessionLogoutDto;
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionMessageDto;
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionActionAccessDto;
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionWelcomeDto;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.servlet.ServletException;
@@ -29,18 +30,22 @@ public class LexisSessionController {
 
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
+  private final LexisPrincipalService principalService;
 
   public LexisSessionController(
-      LexisSessionService sessionService, LexisAuthorizationService authorizationService) {
+      LexisSessionService sessionService,
+      LexisAuthorizationService authorizationService,
+      LexisPrincipalService principalService) {
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
+    this.principalService = principalService;
   }
 
   @GetMapping({"/welcome", "/showWelcome"})
   public ResponseEntity<LexisSessionWelcomeDto> showWelcome(HttpServletRequest request) {
 
     Principal principal = request.getUserPrincipal();
-    String principalName = principal == null ? null : principal.getName();
+    String principalName = principalService.resolvePrincipalName(principal);
     List<String> roles = resolveRoles(principal);
     return ResponseEntity.ok(sessionService.resolveWelcomeRoute(principalName, roles));
   }
@@ -49,7 +54,7 @@ public class LexisSessionController {
   public ResponseEntity<LexisSessionCapabilitiesDto> capabilities(HttpServletRequest request) {
 
     Principal principal = request.getUserPrincipal();
-    String principalName = principal == null ? null : principal.getName();
+    String principalName = principalService.resolvePrincipalName(principal);
     List<String> roles = resolveRoles(principal);
 
     LexisSessionWelcomeDto welcome = sessionService.resolveWelcomeRoute(principalName, roles);
@@ -71,7 +76,7 @@ public class LexisSessionController {
       HttpServletRequest request) {
 
     Principal principal = request.getUserPrincipal();
-    String principalName = principal == null ? null : principal.getName();
+    String principalName = principalService.resolvePrincipalName(principal);
     List<String> roles = resolveRoles(principal);
     boolean granted = authorizationService.canPerformAction(roles, action);
 
