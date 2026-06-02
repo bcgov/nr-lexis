@@ -34,6 +34,10 @@ public interface ApplicationDetailsRpcService {
 
   List<SpeciesEndUseItem> getSpeciesForPackage(String packageNumber);
 
+  List<ApplicationScaleItem> getUniqueScalesForApplication(Long applicationNumber);
+
+  List<ApplicationPermitItem> findPermits(Long applicationNumber);
+
   record DocumentItem(long id, String name, String description, String type) {}
 
   record DocumentContent(byte[] bytes) {}
@@ -44,6 +48,10 @@ public interface ApplicationDetailsRpcService {
   record CodeItem(String code, String description) {}
 
   record SpeciesEndUseItem(String species, String endUse, String endUseDescription) {}
+
+  record ApplicationScaleItem(String timberMark) {}
+
+  record ApplicationPermitItem(Long permitNumber, String permitStatusDescription) {}
 
   record ApplicationClientSnapshot(
       String agentClientNumber,

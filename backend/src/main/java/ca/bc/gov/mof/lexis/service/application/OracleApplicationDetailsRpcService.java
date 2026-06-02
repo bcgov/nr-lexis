@@ -216,6 +216,42 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return toSpeciesEndUseItems(repository.findEndUsesByPackageNumber(normalizedPackageNumber));
   }
 
+  @Override
+  public List<ApplicationScaleItem> getUniqueScalesForApplication(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+
+    TreeSet<String> timberMarks = new TreeSet<>();
+    for (ApplicationDetailsRpcRepository.ApplicationScaleRow row :
+        repository.findScaleDetailsByApplicationNumber(applicationNumber)) {
+      String timberMark = trimToNull(row.timberMark());
+      if (timberMark != null) {
+        timberMarks.add(timberMark);
+      }
+    }
+    return timberMarks.stream().map(ApplicationScaleItem::new).toList();
+  }
+
+  @Override
+  public List<ApplicationPermitItem> findPermits(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+
+    Map<Long, ApplicationPermitItem> permitsByNumber = new LinkedHashMap<>();
+    for (ApplicationDetailsRpcRepository.ApplicationPermitRow row :
+        repository.findPermitsByApplicationNumber(applicationNumber)) {
+      Long permitNumber = row.permitNumber();
+      if (permitNumber != null && permitNumber > 0 && !permitsByNumber.containsKey(permitNumber)) {
+        permitsByNumber.put(
+            permitNumber,
+            new ApplicationPermitItem(permitNumber, trimToNull(row.statusDescription())));
+      }
+    }
+    return List.copyOf(permitsByNumber.values());
+  }
+
   private List<SpeciesEndUseItem> toSpeciesEndUseItems(
       List<ApplicationDetailsRpcRepository.EndUseRow> rows) {
     Map<String, String> endUseDescriptionByCode = new LinkedHashMap<>();

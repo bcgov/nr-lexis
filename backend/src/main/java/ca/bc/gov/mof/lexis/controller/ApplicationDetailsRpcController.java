@@ -46,6 +46,8 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_PACKAGE_SELECTED_END_USE = "getPackageSelectedEndUse";
   private static final String ACTION_GET_SPECIES_FOR_APPLICATION = "getSpeciesForApplication";
   private static final String ACTION_GET_SPECIES_FOR_PACKAGE = "getSpeciesForPackage";
+  private static final String ACTION_GET_UNIQUE_SCALES_FOR_APPLICATION = "getUniqueScalesForApplication";
+  private static final String ACTION_FIND_PERMIT = "findPermit";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -452,6 +454,50 @@ public class ApplicationDetailsRpcController {
     return getSpeciesForPackage(packageNumber);
   }
 
+  @GetMapping("/rpc/application-details/unique-scales")
+  public ResponseEntity<List<ApplicationScaleResponseDto>> getUniqueScalesForApplication(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for application scales");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.getUniqueScalesForApplication(parsePositiveLong(applicationNumber)).stream()
+            .map(item -> new ApplicationScaleResponseDto(item.timberMark()))
+            .toList());
+  }
+
+  @PostMapping(
+      value = "/applicationDetailsRPC",
+      params = "actionMapping=" + ACTION_GET_UNIQUE_SCALES_FOR_APPLICATION)
+  public ResponseEntity<List<ApplicationScaleResponseDto>> getUniqueScalesForApplicationLegacy(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    return getUniqueScalesForApplication(applicationNumber);
+  }
+
+  @GetMapping("/rpc/application-details/permits")
+  public ResponseEntity<List<ApplicationPermitResponseDto>> findPermits(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for application permits");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.findPermits(parsePositiveLong(applicationNumber)).stream()
+            .map(item -> new ApplicationPermitResponseDto(item.permitNumber(), item.permitStatusDescription()))
+            .toList());
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_FIND_PERMIT)
+  public ResponseEntity<List<ApplicationPermitResponseDto>> findPermitLegacy(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    return findPermits(applicationNumber);
+  }
+
   private Long parsePositiveLong(String rawValue) {
     if (rawValue == null || rawValue.isBlank()) {
       return null;
@@ -718,4 +764,9 @@ public class ApplicationDetailsRpcController {
 
   public record PackageSpeciesEndUseResponseDto(
       String species, String enduse, String packageEndUseDescription, String packageEndUse) {}
+
+  public record ApplicationScaleResponseDto(String timberMark) {}
+
+  public record ApplicationPermitResponseDto(
+      Long permitNumber, String permitStatusDescription) {}
 }

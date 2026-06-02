@@ -442,4 +442,46 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().get(0).packageEndUse()).isEqualTo("LUM");
     verify(service).getSpeciesForPackage("PKG-903");
   }
+
+  @Test
+  void getUniqueScalesForApplicationLegacyShouldReturnTimberMarks() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getUniqueScalesForApplication(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.ApplicationScaleItem("TM001"),
+                new ApplicationDetailsRpcService.ApplicationScaleItem("TM002")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationScaleResponseDto>> response =
+        controller.getUniqueScalesForApplicationLegacy("1000456");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody())
+        .extracting(ApplicationDetailsRpcController.ApplicationScaleResponseDto::timberMark)
+        .containsExactly("TM001", "TM002");
+    verify(service).getUniqueScalesForApplication(1000456L);
+  }
+
+  @Test
+  void findPermitLegacyShouldReturnPermitPayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findPermits(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.ApplicationPermitItem(7000123L, "Complete"),
+                new ApplicationDetailsRpcService.ApplicationPermitItem(7000456L, "Active")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationPermitResponseDto>> response =
+        controller.findPermitLegacy("1000456");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody())
+        .extracting(
+            ApplicationDetailsRpcController.ApplicationPermitResponseDto::permitNumber,
+            ApplicationDetailsRpcController.ApplicationPermitResponseDto::permitStatusDescription)
+        .containsExactly(tuple(7000123L, "Complete"), tuple(7000456L, "Active"));
+    verify(service).findPermits(1000456L);
+  }
 }

@@ -322,4 +322,44 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(service.getSpeciesForApplication(null)).isEmpty();
     assertThat(service.getSpeciesForPackage(" ")).isEmpty();
   }
+
+  @Test
+  void getUniqueScalesForApplicationShouldDeduplicateAndSortTimberMarks() {
+    when(repository.findScaleDetailsByApplicationNumber(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ApplicationScaleRow(" TM002 "),
+                new ApplicationDetailsRpcRepository.ApplicationScaleRow("TM001"),
+                new ApplicationDetailsRpcRepository.ApplicationScaleRow("TM002"),
+                new ApplicationDetailsRpcRepository.ApplicationScaleRow(" ")));
+
+    List<ApplicationDetailsRpcService.ApplicationScaleItem> response =
+        service.getUniqueScalesForApplication(1000456L);
+
+    assertThat(response)
+        .extracting(ApplicationDetailsRpcService.ApplicationScaleItem::timberMark)
+        .containsExactly("TM001", "TM002");
+    verify(repository).findScaleDetailsByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void findPermitsShouldDeduplicateByPermitNumberPreservingFirstStatus() {
+    when(repository.findPermitsByApplicationNumber(1000456L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ApplicationPermitRow(7000123L, " Complete "),
+                new ApplicationDetailsRpcRepository.ApplicationPermitRow(7000123L, "Duplicate"),
+                new ApplicationDetailsRpcRepository.ApplicationPermitRow(7000456L, "Active"),
+                new ApplicationDetailsRpcRepository.ApplicationPermitRow(null, "Ignored")));
+
+    List<ApplicationDetailsRpcService.ApplicationPermitItem> response =
+        service.findPermits(1000456L);
+
+    assertThat(response)
+        .extracting(
+            ApplicationDetailsRpcService.ApplicationPermitItem::permitNumber,
+            ApplicationDetailsRpcService.ApplicationPermitItem::permitStatusDescription)
+        .containsExactly(tuple(7000123L, "Complete"), tuple(7000456L, "Active"));
+    verify(repository).findPermitsByApplicationNumber(1000456L);
+  }
 }

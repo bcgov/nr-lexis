@@ -31,6 +31,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_APP(?,?)";
+  private static final String FIND_PERMIT_DETAIL_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_APP(?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_END_USE_BY_APPLICATION =
@@ -97,6 +99,28 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         .filter(value -> value != null && value > 0)
         .distinct()
         .toList();
+  }
+
+  public List<ApplicationScaleRow> findScaleDetailsByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_SCALE_DETAIL_BY_APPLICATION,
+        cs -> cs.setLong(1, applicationNumber),
+        2,
+        rs -> new ApplicationScaleRow(getString(rs, "TIMBER_MARK")));
+  }
+
+  public List<ApplicationPermitRow> findPermitsByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_PERMIT_DETAIL_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs -> new ApplicationPermitRow(getLong(rs, "EXPORT_PERMIT_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
   }
 
   public Optional<String> findAttachmentTypeDescription(String attachmentTypeCode) {
@@ -502,6 +526,10 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String endUseCode,
       String excolTranslationValue,
       Long orgUnitNumber) {}
+
+  public record ApplicationScaleRow(String timberMark) {}
+
+  public record ApplicationPermitRow(Long permitNumber, String statusDescription) {}
 
   private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
     String normalized = trim(value);
