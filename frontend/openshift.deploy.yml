@@ -23,6 +23,9 @@ parameters:
   - name: IMAGE_TAG
     description: Container image tag (PR number, 'test', or 'prod')
     value: latest
+  - name: ROLLOUT_TRIGGER
+    description: Value placed on the pod template to force rollout when a reused image tag is rebuilt
+    value: ""
   - name: REGISTRY
     description: Image registry path (no tag)
     value: ghcr.io/bcgov/nr-lexis/frontend
@@ -69,6 +72,8 @@ objects:
           labels:
             app: ${NAME}-frontend-${ZONE}
             app.kubernetes.io/instance: ${ZONE}
+          annotations:
+            app.openshift.io/redeploy-token: ${ROLLOUT_TRIGGER}
         spec:
           automountServiceAccountToken: false
           securityContext:
@@ -76,6 +81,7 @@ objects:
           initContainers:
             - name: seed-srv
               image: ${REGISTRY}:${IMAGE_TAG}
+              imagePullPolicy: Always
               command:
                 - sh
                 - -c
@@ -101,6 +107,7 @@ objects:
           containers:
             - name: ${NAME}-frontend
               image: ${REGISTRY}:${IMAGE_TAG}
+              imagePullPolicy: Always
               ports:
                 - name: http
                   containerPort: 3000
