@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,11 +15,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ApplicationDetailsRpcController")
@@ -127,5 +131,51 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().remarkId()).isEqualTo(44L);
     assertThat(response.getBody().user()).isEqualTo("idir\\jsmith");
     verify(service).persistRemark("new", 1000456L, "Long remark", "idir\\jsmith");
+  }
+
+  @Test
+  void addApplicationLegacyShouldMapAliasesAndReturnLegacyPersistencePayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.addApplication(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "The application was saved successfully.", 1000456L, List.of(), List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationDate", "2026-03-01");
+    params.add("exemptionTerm", "30");
+    params.add("receivedDate", "2026-03-02");
+    params.add("applicationVolume", "125.5");
+    params.add("averageLogVolume", "2.4");
+    params.add("productLocation", "Camp 1");
+    params.add("applicantClientNumber", "00022222");
+    params.add("agentClientLocationCode", "01");
+    params.add("ownerClientNumber", "00011111");
+    params.add("ownerClientLocationCode", "02");
+    params.add("exemptionTypeCode", "U");
+    params.add("applicantType", "A");
+    params.add("region", "11");
+    params.add("productTypeCode", "H");
+    params.add("growthTypeCode", "O");
+    params.add("ownerContactName", "Owner Contact");
+
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().valid()).isTrue();
+    assertThat(response.getBody().applicationNumber()).isEqualTo(1000456L);
+
+    ArgumentCaptor<ApplicationDetailsRpcService.CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
+    verify(service).addApplication(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    ApplicationDetailsRpcService.CreateApplicationRequest request = requestCaptor.getValue();
+    assertThat(request.applicationDate()).isEqualTo(LocalDate.of(2026, 3, 1));
+    assertThat(request.receivedDate()).isEqualTo(LocalDate.of(2026, 3, 2));
+    assertThat(request.agentClientNumber()).isEqualTo("00022222");
+    assertThat(request.exemptionReasonCode()).isEqualTo("U");
+    assertThat(request.productTypeCode()).isEqualTo("H");
   }
 }

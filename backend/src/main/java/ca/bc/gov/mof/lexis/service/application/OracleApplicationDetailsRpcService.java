@@ -15,6 +15,10 @@ import org.springframework.stereotype.Service;
 public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpcService {
 
   private static final String DESCRIPTION_NOT_ON_FILE = "Not on file";
+  private static final String APPLICATION_STATUS_NEW = "NEW";
+  private static final String JURISDICTION_PROVINCIAL = "P";
+  private static final String OIC_INDICATOR_NO = "N";
+  private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
   private static final int REMARK_DISPLAY_LIMIT = 70;
 
   private final ApplicationDetailsRpcRepository repository;
@@ -96,6 +100,35 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return repository.findRemarkByNumber(parsedRemarkId).map(this::toPersistedRemark);
   }
 
+  @Override
+  public CreateApplicationResult addApplication(CreateApplicationRequest request, String userId) {
+    CreateApplicationRequest normalized = normalizeCreateApplicationRequest(request);
+    List<String> errors = validateCreateApplication(normalized);
+    List<String> warnings = List.of();
+
+    if (normalized.validationEnabled() && !errors.isEmpty()) {
+      return new CreateApplicationResult(false, null, null, errors, warnings);
+    }
+
+    String entryUserId = trimToNull(userId);
+    Optional<ApplicationDetailsRpcRepository.ApplicationInsertRow> inserted =
+        repository.insertApplication(toInsertRecord(normalized, entryUserId));
+
+    Long applicationNumber =
+        inserted.map(ApplicationDetailsRpcRepository.ApplicationInsertRow::applicationNumber).orElse(null);
+    if (applicationNumber == null || applicationNumber < 1) {
+      return new CreateApplicationResult(
+          false,
+          "We were unable to save this application. Please note the time this error occurred and report to someone.",
+          null,
+          List.of(),
+          warnings);
+    }
+
+    return new CreateApplicationResult(
+        true, SAVE_SUCCESS_MESSAGE, applicationNumber, List.of(), warnings);
+  }
+
   private PersistedRemark toPersistedRemark(ApplicationDetailsRpcRepository.RemarkRow row) {
     String remark = row.remark() == null ? "" : row.remark();
     return new PersistedRemark(
@@ -165,5 +198,108 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     } catch (NumberFormatException ex) {
       return null;
     }
+  }
+
+  private CreateApplicationRequest normalizeCreateApplicationRequest(CreateApplicationRequest input) {
+    if (input == null) {
+      return new CreateApplicationRequest(
+          null, null, null, null, null, null, null, null, null, null, null, null, null,
+          null, null, null, null, JURISDICTION_PROVINCIAL, null, null, null, OIC_INDICATOR_NO, true);
+    }
+
+    return new CreateApplicationRequest(
+        input.federalApplicationNumber(),
+        input.applicationDate(),
+        input.termDays(),
+        input.receivedDate(),
+        input.applicationVolume(),
+        input.averageLogVolume() == null ? 0.0d : input.averageLogVolume(),
+        trimToNull(input.productLocation()),
+        input.exportScheduleId(),
+        trimToNull(input.agentClientNumber()),
+        trimToNull(input.agentClientLocationCode()),
+        trimToNull(input.ownerClientNumber()),
+        trimToNull(input.ownerClientLocationCode()),
+        trimToNull(input.exemptionNumber()),
+        trimToNull(input.exemptionReasonCode()),
+        trimToNull(input.applicantTypeCode()),
+        input.orgUnitNumber(),
+        trimToNull(input.productTypeCode()),
+        firstNonBlank(input.jurisdictionCode(), JURISDICTION_PROVINCIAL),
+        trimToNull(input.growthTypeCode()),
+        trimToNull(input.agentContactName()),
+        trimToNull(input.ownerContactName()),
+        firstNonBlank(input.oicIndicator(), OIC_INDICATOR_NO),
+        input.validationEnabled());
+  }
+
+  private List<String> validateCreateApplication(CreateApplicationRequest request) {
+    List<String> errors = new ArrayList<>();
+    if (request.applicationDate() == null) {
+      errors.add(required("application date"));
+    }
+    if (request.termDays() == null || request.termDays() <= 0) {
+      errors.add("The application term days must be greater than or equal to 0");
+    }
+    if (request.receivedDate() == null) {
+      errors.add(required("application received date"));
+    }
+    if (request.applicationVolume() == null || request.applicationVolume() <= 0.0d) {
+      errors.add("The application volume must be greater than or equal to 0");
+    }
+    if (trimToNull(request.productTypeCode()) == null) {
+      errors.add(required("product type code"));
+    }
+    if (request.orgUnitNumber() == null || request.orgUnitNumber() <= 0) {
+      errors.add(required("application region"));
+    }
+    if (trimToNull(request.ownerClientNumber()) == null) {
+      errors.add(required("application owner number"));
+    }
+    if (trimToNull(request.ownerClientLocationCode()) == null) {
+      errors.add(required("application owner location"));
+    }
+    if (trimToNull(request.ownerContactName()) == null) {
+      errors.add(required("application owner name"));
+    }
+    return errors;
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationInsertRecord toInsertRecord(
+      CreateApplicationRequest request, String entryUserId) {
+    return new ApplicationDetailsRpcRepository.ApplicationInsertRecord(
+        request.applicationDate(),
+        request.federalApplicationNumber(),
+        request.termDays(),
+        request.receivedDate(),
+        request.applicationVolume(),
+        request.averageLogVolume(),
+        request.productLocation(),
+        entryUserId,
+        request.exportScheduleId(),
+        request.agentClientNumber(),
+        request.agentClientLocationCode(),
+        request.ownerClientNumber(),
+        request.ownerClientLocationCode(),
+        request.exemptionNumber(),
+        request.exemptionReasonCode(),
+        APPLICATION_STATUS_NEW,
+        request.applicantTypeCode(),
+        request.orgUnitNumber(),
+        request.productTypeCode(),
+        request.jurisdictionCode(),
+        request.growthTypeCode(),
+        request.agentContactName(),
+        request.ownerContactName(),
+        request.oicIndicator());
+  }
+
+  private String required(String fieldName) {
+    return "A valid " + fieldName + " is required.";
+  }
+
+  private String firstNonBlank(String value, String fallback) {
+    String normalized = trimToNull(value);
+    return normalized == null ? fallback : normalized;
   }
 }

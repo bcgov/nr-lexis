@@ -2,11 +2,14 @@ package ca.bc.gov.mof.lexis.repository.application;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.io.InputStream;
+import java.sql.CallableStatement;
+import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -37,6 +40,9 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_14_PACKAGE + "INSERT_EXEMPTION_APP_REMARK(?,?,?,?,?,?)";
   private static final String UPDATE_REMARK =
       LEXIS_GROUP_14_PACKAGE + "UPDATE_EXEMPTION_APP_REMARK(?,?,?,?,?,?)";
+  private static final String INSERT_EXEMPTION_APPLICATION =
+      LEXIS_GROUP_13_PACKAGE
+          + "INSERT_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
   public ApplicationDetailsRpcRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -203,6 +209,50 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         });
   }
 
+  public Optional<ApplicationInsertRow> insertApplication(ApplicationInsertRecord record) {
+    if (record == null) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingle(
+        INSERT_EXEMPTION_APPLICATION,
+        cs -> bindApplicationInsert(cs, record),
+        28,
+        this::mapApplicationInsertRow);
+  }
+
+  private void bindApplicationInsert(CallableStatement cs, ApplicationInsertRecord record)
+      throws SQLException {
+    int index = 1;
+    setDateOrNull(cs, index++, record.applicationDate());
+    setLongOrNull(cs, index++, emptyToNull(record.federalApplicationNumber()));
+    setLongOrNull(cs, index++, record.termDays());
+    setDateOrNull(cs, index++, record.receivedDate());
+    setDoubleOrNull(cs, index++, record.applicationVolume());
+    setDoubleOrNull(cs, index++, record.averageLogVolume());
+    setStringOrNull(cs, index++, record.productLocation());
+    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setTimestamp(index++, Timestamp.from(Instant.now()));
+    cs.setNull(index++, Types.VARCHAR);
+    cs.setNull(index++, Types.TIMESTAMP);
+    setLongOrNull(cs, index++, record.exportScheduleId());
+    setStringOrNull(cs, index++, record.agentClientNumber());
+    setStringOrNull(cs, index++, record.agentClientLocationCode());
+    setStringOrNull(cs, index++, record.ownerClientNumber());
+    setStringOrNull(cs, index++, record.ownerClientLocationCode());
+    setStringOrNull(cs, index++, record.exemptionNumber());
+    setStringOrNull(cs, index++, record.exemptionReasonCode());
+    setStringOrNull(cs, index++, record.applicationStatusCode());
+    setStringOrNull(cs, index++, record.applicantTypeCode());
+    setLongOrNull(cs, index++, record.orgUnitNumber());
+    setStringOrNull(cs, index++, record.productTypeCode());
+    setStringOrNull(cs, index++, record.jurisdictionCode());
+    setStringOrNull(cs, index++, record.growthTypeCode());
+    setStringOrNull(cs, index++, record.agentContactName());
+    setStringOrNull(cs, index++, record.ownerContactName());
+    setStringOrNull(cs, index, record.oicIndicator());
+  }
+
   private DocumentRow mapDocumentRow(ResultSet rs) {
     Long attachmentId = getLong(rs, "EXPORT_ATTACHMENT_ID");
     String fileName = safeFileName(getString(rs, "FILE_NAME"));
@@ -221,6 +271,10 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     String user = getString(rs, "ENTRY_USERID");
     Instant date = getInstant(rs, "ENTRY_TIMESTAMP");
     return new RemarkRow(remarkId == null ? 0L : remarkId, remark == null ? "" : remark, user, date);
+  }
+
+  private ApplicationInsertRow mapApplicationInsertRow(ResultSet rs) {
+    return new ApplicationInsertRow(getLong(rs, "APPLICATION_NUMBER"));
   }
 
   private Instant getInstant(ResultSet rs, String column) {
@@ -264,4 +318,69 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       long id, String fileName, String description, String attachmentTypeCode) {}
 
   public record RemarkRow(long remarkId, String remark, String user, Instant date) {}
+
+  public record ApplicationInsertRecord(
+      LocalDate applicationDate,
+      Long federalApplicationNumber,
+      Long termDays,
+      LocalDate receivedDate,
+      Double applicationVolume,
+      Double averageLogVolume,
+      String productLocation,
+      String entryUserId,
+      Long exportScheduleId,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String exemptionNumber,
+      String exemptionReasonCode,
+      String applicationStatusCode,
+      String applicantTypeCode,
+      Long orgUnitNumber,
+      String productTypeCode,
+      String jurisdictionCode,
+      String growthTypeCode,
+      String agentContactName,
+      String ownerContactName,
+      String oicIndicator) {}
+
+  public record ApplicationInsertRow(Long applicationNumber) {}
+
+  private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
+    String normalized = trim(value);
+    if (normalized == null) {
+      cs.setNull(index, Types.VARCHAR);
+    } else {
+      cs.setString(index, normalized);
+    }
+  }
+
+  private void setLongOrNull(CallableStatement cs, int index, Long value) throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.NUMERIC);
+    } else {
+      cs.setLong(index, value);
+    }
+  }
+
+  private void setDoubleOrNull(CallableStatement cs, int index, Double value) throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.DOUBLE);
+    } else {
+      cs.setDouble(index, value);
+    }
+  }
+
+  private void setDateOrNull(CallableStatement cs, int index, LocalDate value) throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.DATE);
+    } else {
+      cs.setDate(index, Date.valueOf(value));
+    }
+  }
+
+  private Long emptyToNull(Long value) {
+    return value == null || value <= 0 ? null : value;
+  }
 }

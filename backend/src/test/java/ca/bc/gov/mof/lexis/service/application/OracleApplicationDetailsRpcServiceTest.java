@@ -8,8 +8,10 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -106,5 +108,66 @@ class OracleApplicationDetailsRpcServiceTest {
 
     assertThat(response).isEmpty();
     verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addApplicationShouldReturnValidationErrorsBeforeOracleInsert() {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("A valid application date is required.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addApplicationShouldInsertWhenRequestIsValid() {
+    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                2.4d,
+                "Camp 1",
+                null,
+                "00022222",
+                "01",
+                "00011111",
+                "02",
+                null,
+                "U",
+                "A",
+                11L,
+                "H",
+                null,
+                "O",
+                "Agent Contact",
+                "Owner Contact",
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.applicationNumber()).isEqualTo(1000456L);
+    assertThat(response.message()).isEqualTo("The application was saved successfully.");
+
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class);
+    verify(repository).insertApplication(recordCaptor.capture());
+    ApplicationDetailsRpcRepository.ApplicationInsertRecord record = recordCaptor.getValue();
+    assertThat(record.applicationStatusCode()).isEqualTo("NEW");
+    assertThat(record.jurisdictionCode()).isEqualTo("P");
+    assertThat(record.oicIndicator()).isEqualTo("N");
+    assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
   }
 }
