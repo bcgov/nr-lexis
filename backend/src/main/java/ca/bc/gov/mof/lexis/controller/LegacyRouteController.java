@@ -50,6 +50,7 @@ public class LegacyRouteController {
   private static final String ACTION_GET_CLIENT_DATA = "getClientData";
   private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
   private static final String ACTION_ADD_OFFER = "addOffer";
+  private static final String ACTION_UPDATE_OFFER = "updateOffer";
   private static final String ACTION_GET_PERMIT_SUMMARY = "getPermitSummary";
   private static final String ACTION_GET_TOTAL_FEES_FOR_PERMIT = "getTotalFeesForPermit";
   private static final String ACTION_GET_SCALE_FEES_FOR_PACKAGE = "getScaleFeesForPackage";
@@ -546,6 +547,9 @@ public class LegacyRouteController {
     }
     if (ACTION_ADD_OFFER.equalsIgnoreCase(actionMapping)) {
       return offerDetailsRpcController.addOfferLegacy(requestParameters, authentication);
+    }
+    if (ACTION_UPDATE_OFFER.equalsIgnoreCase(actionMapping)) {
+      return offerDetailsRpcController.updateOfferLegacy(requestParameters, authentication);
     }
     return ResponseEntity.noContent().build();
   }

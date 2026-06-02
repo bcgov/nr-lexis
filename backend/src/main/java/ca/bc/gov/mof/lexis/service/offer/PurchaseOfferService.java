@@ -18,6 +18,8 @@ public interface PurchaseOfferService {
 
   CreateOfferResult addOffer(CreateOfferRequest request, String userId);
 
+  CreateOfferResult updateOffer(CreateOfferRequest request, String userId);
+
   record CreateOfferRequest(
       Long applicationNumber,
       Long exportPurchaseOfferNumber,

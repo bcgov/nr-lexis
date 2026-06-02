@@ -13,6 +13,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -222,6 +223,105 @@ class PurchaseOfferOracleServiceTest {
     assertThat(record.manufacturingFacilityInfo()).isEqualTo(" ");
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
     assertThat(record.applicationNumber()).isEqualTo(1000456L);
+    assertThat(record.offerVolume()).isEqualTo(99.9d);
+  }
+
+  @Test
+  void updateOfferShouldRejectMissingOfferNumberBeforeOracleLookup() {
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.update()).isTrue();
+    assertThat(response.errors()).containsExactly("A valid purchase offer number is required.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void updateOfferShouldPreserveExistingValuesAndCallOracleUpdate() {
+    Instant entryTimestamp = Instant.parse("2026-03-01T18:00:00Z");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.PurchaseOfferUpdateSourceRow(
+                    81001L,
+                    1000456L,
+                    "PKG-903",
+                    "Example Lumber",
+                    "Alex Example",
+                    12500.25d,
+                    LocalDate.of(2026, 3, 2),
+                    null,
+                    LocalDate.of(2026, 3, 18),
+                    "Y",
+                    "Y",
+                    "Existing remark",
+                    "Y",
+                    null,
+                    "P",
+                    "Existing mill",
+                    "Port Moody",
+                    "Existing condition",
+                    "creator",
+                    entryTimestamp,
+                    95.5d)));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L,
+                81001L,
+                null,
+                null,
+                null,
+                13000.0d,
+                LocalDate.of(2026, 3, 3),
+                LocalDate.of(2026, 3, 19),
+                null,
+                null,
+                null,
+                null,
+                null,
+                "Withdrawn by buyer",
+                null,
+                null,
+                null,
+                " Campbell River ",
+                null,
+                99.99d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.update()).isTrue();
+    assertThat(response.sendEmail()).isTrue();
+    assertThat(response.exportPurchaseOfferNumber()).isEqualTo(81001L);
+
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(recordCaptor.capture());
+    PurchaseOfferRepository.PurchaseOfferUpdateRecord record = recordCaptor.getValue();
+    assertThat(record.exportPurchaseOfferNumber()).isEqualTo(81001L);
+    assertThat(record.companyName()).isEqualTo("Example Lumber");
+    assertThat(record.contactName()).isEqualTo("Alex Example");
+    assertThat(record.purchaseOfferAmount()).isEqualTo(13000.0d);
+    assertThat(record.purchaseOfferDate()).isEqualTo(LocalDate.of(2026, 3, 3));
+    assertThat(record.offerWithdrawalDate()).isEqualTo(LocalDate.of(2026, 3, 19));
+    assertThat(record.fairOfferIndicator()).isEqualTo("Y");
+    assertThat(record.validOfferIndicator()).isEqualTo("Y");
+    assertThat(record.approvalIndicator()).isEqualTo("Y");
+    assertThat(record.exportJurisdictionCode()).isEqualTo("P");
+    assertThat(record.manufacturingFacilityInfo()).isEqualTo("Existing mill");
+    assertThat(record.pickupLocation()).isEqualTo("Campbell River");
+    assertThat(record.offerCondition()).isEqualTo("Existing condition");
+    assertThat(record.entryUserId()).isEqualTo("creator");
+    assertThat(record.entryTimestamp()).isEqualTo(entryTimestamp);
+    assertThat(record.updateUserId()).isEqualTo("idir\\jsmith");
     assertThat(record.offerVolume()).isEqualTo(99.9d);
   }
 

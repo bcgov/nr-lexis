@@ -280,10 +280,32 @@ public class OfferDetailsRpcController {
     return ResponseEntity.ok(toPersistenceResponse(result));
   }
 
+  @PostMapping("/offer/update")
+  public ResponseEntity<OfferPersistenceResponseDto> updateOffer(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    PurchaseOfferService service = purchaseOfferServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Purchase offer service unavailable - returning no content for update offer");
+      return ResponseEntity.noContent().build();
+    }
+
+    String userId = authentication == null ? null : authentication.getName();
+    PurchaseOfferService.CreateOfferResult result =
+        service.updateOffer(toCreateOfferRequest(parameters), userId);
+    return ResponseEntity.ok(toPersistenceResponse(result));
+  }
+
   public ResponseEntity<OfferPersistenceResponseDto> addOfferLegacy(
       MultiValueMap<String, String> parameters,
       Authentication authentication) {
     return addOffer(parameters, authentication);
+  }
+
+  public ResponseEntity<OfferPersistenceResponseDto> updateOfferLegacy(
+      MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return updateOffer(parameters, authentication);
   }
 
   private boolean isFederalApplication(Long applicationNumber) {

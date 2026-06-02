@@ -269,6 +269,53 @@ class OfferDetailsRpcControllerTest {
     assertThat(request.offerVolume()).isEqualTo(99.99d);
   }
 
+  @Test
+  void updateOfferLegacyShouldMapAliasesAndReturnUpdatePayload() {
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(authentication.getName()).thenReturn("idir\\jsmith");
+    when(purchaseOfferService.updateOffer(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new PurchaseOfferService.CreateOfferResult(
+                true,
+                "The purchase offer was updated successfully.",
+                1000456L,
+                81001L,
+                false,
+                null,
+                true,
+                true,
+                List.of(),
+                List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("purchaseOfferAmount", "13000.00");
+    params.add("purchaseOfferDate", "2026-03-03");
+    params.add("offerWithdrawalDate", "03/19/2026");
+    params.add("withdrawReason", "Withdrawn by buyer");
+    params.add("pickupLocation", "Port Moody");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().isUpdate()).isTrue();
+    assertThat(response.getBody().sendEmail()).isTrue();
+
+    ArgumentCaptor<PurchaseOfferService.CreateOfferRequest> requestCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferService.CreateOfferRequest.class);
+    verify(purchaseOfferService)
+        .updateOffer(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    PurchaseOfferService.CreateOfferRequest request = requestCaptor.getValue();
+    assertThat(request.exportPurchaseOfferNumber()).isEqualTo(81001L);
+    assertThat(request.purchaseOfferAmount()).isEqualTo(13000.00d);
+    assertThat(request.offerWithdrawalDate()).isEqualTo(LocalDate.of(2026, 3, 19));
+    assertThat(request.withdrawReason()).isEqualTo("Withdrawn by buyer");
+  }
+
   private LexisApplicationDetailDto application(
       long applicationNumber,
       String statusCode,
