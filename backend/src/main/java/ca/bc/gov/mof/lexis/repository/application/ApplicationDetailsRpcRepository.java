@@ -39,6 +39,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_APP(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
+  private static final String FIND_PACKAGE_BY_NUMBER =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_END_USE_BY_APPLICATION =
@@ -62,6 +64,10 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_14_PACKAGE + "INSERT_EXEMPTION_APP_REMARK(?,?,?,?,?,?)";
   private static final String UPDATE_REMARK =
       LEXIS_GROUP_14_PACKAGE + "UPDATE_EXEMPTION_APP_REMARK(?,?,?,?,?,?)";
+  private static final String DELETE_SCALE_DETAIL =
+      LEXIS_GROUP_9_PACKAGE + "DELETE_SCALE_DETAIL(?,?)";
+  private static final String DELETE_PACKAGE =
+      LEXIS_GROUP_9_PACKAGE + "DELETE_PACKAGE(?,?)";
   private static final String INSERT_EXEMPTION_APPLICATION =
       LEXIS_GROUP_13_PACKAGE
           + "INSERT_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
@@ -164,6 +170,45 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
             2,
             rs -> trim(getString(rs, "EXPORT_PERMIT_STATUS_CODE")))
         .filter(value -> value != null && !value.isBlank());
+  }
+
+  public boolean packageExists(String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return false;
+    }
+    return queryCursorSingle(
+            FIND_PACKAGE_BY_NUMBER,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> getString(rs, "PACKAGE_NUMBER"))
+        .isPresent();
+  }
+
+  public boolean deleteScaleById(String scaleDetailId, String userId) {
+    String normalizedScaleDetailId = trim(scaleDetailId);
+    if (normalizedScaleDetailId == null) {
+      return false;
+    }
+    return executeProcedure(
+        DELETE_SCALE_DETAIL,
+        cs -> {
+          cs.setString(1, normalizedScaleDetailId);
+          cs.setString(2, trim(userId));
+        });
+  }
+
+  public boolean deletePackageById(String packageNumber, String userId) {
+    String normalizedPackageNumber = trim(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return false;
+    }
+    return executeProcedure(
+        DELETE_PACKAGE,
+        cs -> {
+          cs.setString(1, normalizedPackageNumber);
+          cs.setString(2, trim(userId));
+        });
   }
 
   public Optional<String> findAttachmentTypeDescription(String attachmentTypeCode) {

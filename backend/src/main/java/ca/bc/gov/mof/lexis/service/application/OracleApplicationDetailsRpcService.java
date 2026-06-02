@@ -23,6 +23,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String OIC_INDICATOR_NO = "N";
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
+  private static final String PACKAGE_EXISTS_MESSAGE_TEMPLATE = "Package %s already exists.";
   private static final int REMARK_DISPLAY_LIMIT = 70;
 
   private final ApplicationDetailsRpcRepository repository;
@@ -308,6 +309,34 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
                     formatOneDecimal(row.speciesGradeVolume()),
                     trimToNull(row.exportScaleDetailId())))
         .orElseGet(this::missingScaleDetail);
+  }
+
+  @Override
+  public PackageValidityItem isPackageValid(String packageNumber) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null || !repository.packageExists(normalizedPackageNumber)) {
+      return new PackageValidityItem(true, null);
+    }
+    return new PackageValidityItem(
+        false, PACKAGE_EXISTS_MESSAGE_TEMPLATE.formatted(normalizedPackageNumber));
+  }
+
+  @Override
+  public boolean deleteScaleById(String scaleDetailId, String userId) {
+    String normalizedScaleDetailId = trimToNull(scaleDetailId);
+    if (normalizedScaleDetailId == null) {
+      return false;
+    }
+    return repository.deleteScaleById(normalizedScaleDetailId, trimToNull(userId));
+  }
+
+  @Override
+  public boolean deletePackageById(String packageNumber, String userId) {
+    String normalizedPackageNumber = trimToNull(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return false;
+    }
+    return repository.deletePackageById(normalizedPackageNumber, trimToNull(userId));
   }
 
   private List<SpeciesEndUseItem> toSpeciesEndUseItems(

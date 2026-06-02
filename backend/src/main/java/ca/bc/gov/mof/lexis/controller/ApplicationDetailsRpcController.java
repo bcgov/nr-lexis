@@ -51,6 +51,9 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_FIND_PERMIT = "findPermit";
   private static final String ACTION_GET_SCALES_FOR_PACKAGE = "getScalesForPackage";
   private static final String ACTION_GET_SCALE_BY_ID = "getScaleById";
+  private static final String ACTION_IS_PACKAGE_VALID = "isPackageValid";
+  private static final String ACTION_DELETE_SCALE_BY_ID = "deleteScaleById";
+  private static final String ACTION_DELETE_PACKAGE_BY_ID = "deletePackageById";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -540,6 +543,66 @@ public class ApplicationDetailsRpcController {
     return getScaleById(scaleDetailId);
   }
 
+  @GetMapping("/rpc/application-details/package-validity")
+  public ResponseEntity<PackageValidityResponseDto> isPackageValid(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for package validity");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(toPackageValidityResponse(service.isPackageValid(packageNumber)));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_IS_PACKAGE_VALID)
+  public ResponseEntity<PackageValidityResponseDto> isPackageValidLegacy(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
+    return isPackageValid(packageNumber);
+  }
+
+  @DeleteMapping("/rpc/application-details/scale")
+  public ResponseEntity<DeleteResponseDto> deleteScaleById(
+      @RequestParam(name = "scaleId", required = false) String scaleId,
+      Authentication authentication) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for delete scale");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        new DeleteResponseDto(service.deleteScaleById(scaleId, userId(authentication))));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_DELETE_SCALE_BY_ID)
+  public ResponseEntity<DeleteResponseDto> deleteScaleByIdLegacy(
+      @RequestParam(name = "scaleId", required = false) String scaleId,
+      Authentication authentication) {
+    return deleteScaleById(scaleId, authentication);
+  }
+
+  @DeleteMapping("/rpc/application-details/package")
+  public ResponseEntity<DeleteResponseDto> deletePackageById(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      Authentication authentication) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for delete package");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        new DeleteResponseDto(service.deletePackageById(packageNumber, userId(authentication))));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_DELETE_PACKAGE_BY_ID)
+  public ResponseEntity<DeleteResponseDto> deletePackageByIdLegacy(
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      Authentication authentication) {
+    return deletePackageById(packageNumber, authentication);
+  }
+
   private Long parsePositiveLong(String rawValue) {
     if (rawValue == null || rawValue.isBlank()) {
       return null;
@@ -775,6 +838,15 @@ public class ApplicationDetailsRpcController {
         item.id());
   }
 
+  private PackageValidityResponseDto toPackageValidityResponse(
+      ApplicationDetailsRpcService.PackageValidityItem item) {
+    return new PackageValidityResponseDto(item.valid(), item.message());
+  }
+
+  private String userId(Authentication authentication) {
+    return authentication == null ? null : authentication.getName();
+  }
+
   public record DocumentDetailsResponseDto(
       String name, String description, String type, long id) {}
 
@@ -856,4 +928,9 @@ public class ApplicationDetailsRpcController {
       String grade,
       String volume,
       String id) {}
+
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  public record PackageValidityResponseDto(boolean valid, String message) {}
+
+  public record DeleteResponseDto(boolean success) {}
 }

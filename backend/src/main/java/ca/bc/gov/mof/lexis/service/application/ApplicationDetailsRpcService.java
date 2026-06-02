@@ -42,6 +42,12 @@ public interface ApplicationDetailsRpcService {
 
   ApplicationScaleDetailItem getScaleById(String scaleDetailId);
 
+  PackageValidityItem isPackageValid(String packageNumber);
+
+  boolean deleteScaleById(String scaleDetailId, String userId);
+
+  boolean deletePackageById(String packageNumber, String userId);
+
   record DocumentItem(long id, String name, String description, String type) {}
 
   record DocumentContent(byte[] bytes) {}
@@ -75,6 +81,8 @@ public interface ApplicationDetailsRpcService {
       String grade,
       String volume,
       String id) {}
+
+  record PackageValidityItem(boolean valid, String message) {}
 
   record ApplicationClientSnapshot(
       String agentClientNumber,

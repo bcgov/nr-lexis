@@ -432,4 +432,46 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.timberMark()).isNull();
     verify(repository).findScaleDetailById("999");
   }
+
+  @Test
+  void isPackageValidShouldReturnLegacyExistsMessageWhenPackageExists() {
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+
+    ApplicationDetailsRpcService.PackageValidityItem response = service.isPackageValid(" PKG-903 ");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.message()).isEqualTo("Package PKG-903 already exists.");
+    verify(repository).packageExists("PKG-903");
+  }
+
+  @Test
+  void isPackageValidShouldReturnTrueWhenPackageMissing() {
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+
+    ApplicationDetailsRpcService.PackageValidityItem response = service.isPackageValid("PKG-903");
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.message()).isNull();
+    verify(repository).packageExists("PKG-903");
+  }
+
+  @Test
+  void deleteScaleByIdShouldDelegateToOracleRepository() {
+    when(repository.deleteScaleById("55", "idir\\jsmith")).thenReturn(true);
+
+    boolean response = service.deleteScaleById(" 55 ", " idir\\jsmith ");
+
+    assertThat(response).isTrue();
+    verify(repository).deleteScaleById("55", "idir\\jsmith");
+  }
+
+  @Test
+  void deletePackageByIdShouldDelegateToOracleRepository() {
+    when(repository.deletePackageById("PKG-903", "idir\\jsmith")).thenReturn(true);
+
+    boolean response = service.deletePackageById(" PKG-903 ", " idir\\jsmith ");
+
+    assertThat(response).isTrue();
+    verify(repository).deletePackageById("PKG-903", "idir\\jsmith");
+  }
 }

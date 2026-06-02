@@ -243,6 +243,16 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyApplicationDetailsRpcShouldAllowDeleteScaleAction() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "deleteScaleById")
+                .param("scaleId", "55")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void legacyExemptionDetailsRpcShouldAllowApproveExemptionsAction() throws Exception {
     mockMvc.perform(
             post("/api/lexis/exemptionDetailsRPC")

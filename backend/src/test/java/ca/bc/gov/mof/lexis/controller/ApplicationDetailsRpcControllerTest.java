@@ -539,4 +539,50 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().id()).isEqualTo("55");
     verify(service).getScaleById("55");
   }
+
+  @Test
+  void isPackageValidLegacyShouldReturnFalseWithMessageWhenPackageExists() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.isPackageValid("PKG-903"))
+        .thenReturn(new ApplicationDetailsRpcService.PackageValidityItem(false, "Package PKG-903 already exists."));
+
+    ResponseEntity<ApplicationDetailsRpcController.PackageValidityResponseDto> response =
+        controller.isPackageValidLegacy("PKG-903");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().message()).isEqualTo("Package PKG-903 already exists.");
+    verify(service).isPackageValid("PKG-903");
+  }
+
+  @Test
+  void deleteScaleByIdLegacyShouldPassAuthenticatedUserAndReturnSuccess() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.deleteScaleById("55", "idir\\jsmith")).thenReturn(true);
+
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    ResponseEntity<ApplicationDetailsRpcController.DeleteResponseDto> response =
+        controller.deleteScaleByIdLegacy("55", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    verify(service).deleteScaleById("55", "idir\\jsmith");
+  }
+
+  @Test
+  void deletePackageByIdLegacyShouldPassAuthenticatedUserAndReturnSuccess() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.deletePackageById("PKG-903", "idir\\jsmith")).thenReturn(true);
+
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    ResponseEntity<ApplicationDetailsRpcController.DeleteResponseDto> response =
+        controller.deletePackageByIdLegacy("PKG-903", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    verify(service).deletePackageById("PKG-903", "idir\\jsmith");
+  }
 }
