@@ -70,6 +70,7 @@ type PermitInvoiceDetailsPayload = {
 }
 
 const DEFAULT_CONVERSION_RATE = '1.00'
+const PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS = 30_000
 
 const asString = (value: unknown): string => {
   if (typeof value === 'string') {
@@ -209,14 +210,16 @@ const fetchInvoiceDetails = async (
   permitNumber: string,
   invoiceNumber: string,
 ): Promise<PermitInvoiceDetailsPayload> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .get<PermitInvoiceDetailsPayload>('/lexis/rpc/permit-details/invoice-details', {
+  const response = await apiService.getCachedResponse<PermitInvoiceDetailsPayload>(
+    '/lexis/rpc/permit-details/invoice-details',
+    {
       params: {
         permitNumber,
         salesInvoiceNumber: invoiceNumber,
       },
-    })
+    },
+    { ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS },
+  )
 
   if (response.status === 204) {
     return {
@@ -240,13 +243,15 @@ const fetchInvoiceDetails = async (
 export const fetchPermitDocuments = async (
   permitNumber: string,
 ): Promise<PermitDocumentsResult> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .get<unknown>('/lexis/rpc/permit-details/document-details', {
+  const response = await apiService.getCachedResponse<unknown>(
+    '/lexis/rpc/permit-details/document-details',
+    {
       params: {
         permitNumber,
       },
-    })
+    },
+    { ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS },
+  )
 
   if (response.status === 204) {
     return {
@@ -295,13 +300,15 @@ export const openPermitDocument = async (
 }
 
 export const fetchPermitInvoices = async (permitNumber: string): Promise<PermitInvoicesResult> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .get<{ invoiceList?: unknown }>('/lexis/rpc/permit-details/invoices-for-permit', {
+  const response = await apiService.getCachedResponse<{ invoiceList?: unknown }>(
+    '/lexis/rpc/permit-details/invoices-for-permit',
+    {
       params: {
         permitNumber,
       },
-    })
+    },
+    { ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS },
+  )
 
   if (response.status === 204) {
     return {
@@ -319,9 +326,10 @@ export const fetchPermitInvoices = async (permitNumber: string): Promise<PermitI
 
   const invoiceNumbers = listRaw.map((entry) => asString(entry)).filter((entry) => entry.length > 0)
 
-  const detailsResults = await Promise.all(
-    invoiceNumbers.map((invoiceNumber) => fetchInvoiceDetails(permitNumber, invoiceNumber)),
-  )
+  const detailsResults: PermitInvoiceDetailsPayload[] = []
+  for (const invoiceNumber of invoiceNumbers) {
+    detailsResults.push(await fetchInvoiceDetails(permitNumber, invoiceNumber))
+  }
 
   return {
     rows: detailsResults.map((result, index) => ({
@@ -338,10 +346,12 @@ export const fetchPermitInvoices = async (permitNumber: string): Promise<PermitI
 
 export const fetchPermitInvoiceConversionRate =
   async (): Promise<PermitInvoiceConversionRateResult> => {
-    const response = await apiService.getAxiosInstance().get<{
+    const response = await apiService.getCachedResponse<{
       success?: boolean
       conversionRate?: unknown
-    }>('/lexis/rpc/permit-details/conversion-rate')
+    }>('/lexis/rpc/permit-details/conversion-rate', undefined, {
+      ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS,
+    })
 
     const conversionRate = asString(response.data?.conversionRate) || DEFAULT_CONVERSION_RATE
     return {

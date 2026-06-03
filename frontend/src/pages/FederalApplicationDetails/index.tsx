@@ -19,6 +19,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchFederalApplicationDetail } from '@/service/lexis-detail-service'
 import {
   fetchFederalApplicationDocuments,
@@ -72,6 +73,7 @@ const FederalApplicationDetailsPage: FC = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const beginDetailRequest = useLatestRequestGuard()
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
@@ -101,6 +103,7 @@ const FederalApplicationDetailsPage: FC = () => {
 
   useEffect(() => {
     const load = async () => {
+      const isLatestRequest = beginDetailRequest()
       if (!applicationNumber) {
         setErrorMessage('Application number is missing from the route.')
         setDetail(null)
@@ -119,6 +122,9 @@ const FederalApplicationDetailsPage: FC = () => {
       setActionInfoMessage('')
       try {
         const response = await fetchFederalApplicationDetail(applicationNumber)
+        if (!isLatestRequest()) {
+          return
+        }
         setDetail(response)
         if (!response) {
           setErrorMessage(`No federal application found for ${applicationNumber}.`)
@@ -128,25 +134,33 @@ const FederalApplicationDetailsPage: FC = () => {
 
         try {
           const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
-          setDocumentRows(documentsResult.rows)
+          if (isLatestRequest()) {
+            setDocumentRows(documentsResult.rows)
+          }
         } catch (error) {
-          console.error(error)
-          setDocumentRows([])
-          setDocumentsErrorMessage('Unable to retrieve federal application documents.')
+          if (isLatestRequest()) {
+            console.error(error)
+            setDocumentRows([])
+            setDocumentsErrorMessage('Unable to retrieve federal application documents.')
+          }
         }
       } catch (error) {
-        console.error(error)
-        setErrorMessage('Unable to retrieve federal application detail.')
-        setDetail(null)
-        setDocumentRows([])
-        setDocumentsErrorMessage('')
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve federal application detail.')
+          setDetail(null)
+          setDocumentRows([])
+          setDocumentsErrorMessage('')
+        }
       } finally {
-        setLoading(false)
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
       }
     }
 
     void load()
-  }, [applicationNumber])
+  }, [applicationNumber, beginDetailRequest])
 
   const filteredPackages = useMemo(() => {
     const rows = detail?.packages ?? []
@@ -227,27 +241,37 @@ const FederalApplicationDetailsPage: FC = () => {
         return
       }
 
+      const isLatestRequest = beginDetailRequest()
       setIsRemovingDocumentId(row.id)
       setActionErrorMessage('')
       setActionInfoMessage('')
 
       try {
         const removeResult = await removeFederalApplicationDocument(row.id)
+        if (!isLatestRequest()) {
+          return
+        }
         if (!removeResult.success) {
           setActionErrorMessage('Document removal failed. Refresh and try again.')
           return
         }
 
         const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
-        setDocumentRows(documentsResult.rows)
+        if (isLatestRequest()) {
+          setDocumentRows(documentsResult.rows)
+        }
       } catch (error) {
-        console.error(error)
-        setActionErrorMessage('Unable to remove the selected document.')
+        if (isLatestRequest()) {
+          console.error(error)
+          setActionErrorMessage('Unable to remove the selected document.')
+        }
       } finally {
-        setIsRemovingDocumentId(null)
+        if (isLatestRequest()) {
+          setIsRemovingDocumentId(null)
+        }
       }
     },
-    [applicationNumber],
+    [applicationNumber, beginDetailRequest],
   )
 
   return (

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useMemo, useState, type FC } from 'react'
 import { Button, Column, Grid, InlineLoading, InlineNotification, Tag, Tile } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchApplicationReviews } from '@/service/application-review-search-service'
 import { searchFederalApplications } from '@/service/federal-application-search-service'
 import { searchIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
@@ -184,8 +185,10 @@ const Dashboard: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const [counts, setCounts] = useState<DashboardCounts>(INITIAL_COUNTS)
+  const [countsLoaded, setCountsLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const beginCountsRequest = useLatestRequestGuard()
 
   const canAccessModule = useCallback(
     (requiredActions: string[]): boolean => {
@@ -199,171 +202,175 @@ const Dashboard: FC = () => {
   }, [canAccessModule])
 
   const loadCounts = useCallback(async () => {
+    const isLatestRequest = beginCountsRequest()
     setLoading(true)
     setErrorMessage('')
 
     try {
-      const [
-        provincialApplications,
-        provincialExemptions,
-        provincialOffers,
-        provincialPermits,
-        reviewQueue,
-        federalApplications,
-        indianReservePermits,
-      ] = await Promise.all([
-        canAccessModule(['/applicationSearch'])
-          ? searchProvincialApplications({
-              filters: {
-                applicationNumber: '',
-                packageNumber: '',
-                exemptionType: '',
-                exemptionNumber: '',
-                applicationStatus: '',
-                productTypeCode: '',
-                region: [],
-                listingFromDate: '',
-                listingToDate: '',
-                applicantClientNumber: '',
-                ownerClientNumber: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'applicationNumber',
-              sortDirection: 'desc',
-            })
-          : Promise.resolve(null),
-        canAccessModule(['/exemptionSearch'])
-          ? searchProvincialExemptions({
-              filters: {
-                applicationNumber: '',
-                packageNumber: '',
-                exemptionNumber: '',
-                region: [],
-                listFromDate: '',
-                listToDate: '',
-                exemptionTypeCode: '',
-                exemptionStatusCode: '',
-                applicantClientNumber: '',
-                ownerClientNumber: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'exemptionNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessModule(['/offersSearch'])
-          ? searchProvincialOffers({
-              filters: {
-                applicationNumber: '',
-                packageNumber: '',
-                clientNumber: '',
-                listingFromDate: '',
-                listingToDate: '',
-                region: [],
-                withdrawalFromDate: '',
-                withdrawalToDate: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'offerNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessModule(['/permitSearch'])
-          ? searchProvincialPermits({
-              filters: {
-                applicationNumber: '',
-                packageNumber: '',
-                region: [],
-                issuedFromDate: '',
-                issuedToDate: '',
-                permitStatus: '',
-                permitNumber: '',
-                ownerClientNumber: '',
-                applicantClientNumber: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'permitNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessModule(['/applicationsReview'])
-          ? searchApplicationReviews({
-              filters: {
-                applicationNumber: '',
-                productTypeCode: '',
-                region: [],
-                receivedFromDate: '',
-                receivedToDate: '',
-                listingFromDate: '',
-                listingToDate: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'applicationNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessModule(['/federalApplicationSearch', 'viewFederalApplication'])
-          ? searchFederalApplications({
-              filters: {
-                applicationNumber: '',
-                packageNumber: '',
-                applicationStatus: '',
-                clientNumber: '',
-                receivedFromDate: '',
-                receivedToDate: '',
-                listingFromDate: '',
-                listingToDate: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'federalApplicationNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessModule(['/indianReservePermitSearch', 'viewOICApplication'])
-          ? searchIndianReservePermits({
-              filters: {
-                permitNumber: '',
-                packageNumber: '',
-                fromPermitIssueDate: '',
-                toPermitIssueDate: '',
-                fromEstimatedShippingDate: '',
-                toEstimatedShippingDate: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'permitNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-      ])
+      const loadMetric = async <T,>(
+        canAccess: boolean,
+        load: () => Promise<T>,
+      ): Promise<T | null> => (canAccess ? load() : null)
 
-      setCounts({
-        provincialApplications: provincialApplications?.page.totalElements ?? 0,
-        provincialExemptions: provincialExemptions?.page.totalElements ?? 0,
-        provincialOffers: provincialOffers?.page.totalElements ?? 0,
-        provincialPermits: provincialPermits?.page.totalElements ?? 0,
-        reviewQueue: reviewQueue?.page.totalElements ?? 0,
-        federalApplications: federalApplications?.page.totalElements ?? 0,
-        indianReservePermits: indianReservePermits?.page.totalElements ?? 0,
-      })
+      const provincialApplications = await loadMetric(canAccessModule(['/applicationSearch']), () =>
+        searchProvincialApplications({
+          filters: {
+            applicationNumber: '',
+            packageNumber: '',
+            exemptionType: '',
+            exemptionNumber: '',
+            applicationStatus: '',
+            productTypeCode: '',
+            region: [],
+            listingFromDate: '',
+            listingToDate: '',
+            applicantClientNumber: '',
+            ownerClientNumber: '',
+          },
+          page: 0,
+          pageSize: 1,
+          sortField: 'applicationNumber',
+          sortDirection: 'desc',
+        }),
+      )
+      const provincialExemptions = await loadMetric(canAccessModule(['/exemptionSearch']), () =>
+        searchProvincialExemptions({
+          filters: {
+            applicationNumber: '',
+            packageNumber: '',
+            exemptionNumber: '',
+            region: [],
+            listFromDate: '',
+            listToDate: '',
+            exemptionTypeCode: '',
+            exemptionStatusCode: '',
+            applicantClientNumber: '',
+            ownerClientNumber: '',
+          },
+          page: 0,
+          pageSize: 1,
+          sortField: 'exemptionNumber',
+          sortDirection: 'asc',
+        }),
+      )
+      const provincialOffers = await loadMetric(canAccessModule(['/offersSearch']), () =>
+        searchProvincialOffers({
+          filters: {
+            applicationNumber: '',
+            packageNumber: '',
+            clientNumber: '',
+            listingFromDate: '',
+            listingToDate: '',
+            region: [],
+            withdrawalFromDate: '',
+            withdrawalToDate: '',
+          },
+          page: 0,
+          pageSize: 1,
+          sortField: 'offerNumber',
+          sortDirection: 'asc',
+        }),
+      )
+      const provincialPermits = await loadMetric(canAccessModule(['/permitSearch']), () =>
+        searchProvincialPermits({
+          filters: {
+            applicationNumber: '',
+            packageNumber: '',
+            region: [],
+            issuedFromDate: '',
+            issuedToDate: '',
+            permitStatus: '',
+            permitNumber: '',
+            ownerClientNumber: '',
+            applicantClientNumber: '',
+          },
+          page: 0,
+          pageSize: 1,
+          sortField: 'permitNumber',
+          sortDirection: 'asc',
+        }),
+      )
+      const reviewQueue = await loadMetric(canAccessModule(['/applicationsReview']), () =>
+        searchApplicationReviews({
+          filters: {
+            applicationNumber: '',
+            productTypeCode: '',
+            region: [],
+            receivedFromDate: '',
+            receivedToDate: '',
+            listingFromDate: '',
+            listingToDate: '',
+          },
+          page: 0,
+          pageSize: 1,
+          sortField: 'applicationNumber',
+          sortDirection: 'asc',
+        }),
+      )
+      const federalApplications = await loadMetric(
+        canAccessModule(['/federalApplicationSearch', 'viewFederalApplication']),
+        () =>
+          searchFederalApplications({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              applicationStatus: '',
+              clientNumber: '',
+              receivedFromDate: '',
+              receivedToDate: '',
+              listingFromDate: '',
+              listingToDate: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'federalApplicationNumber',
+            sortDirection: 'asc',
+          }),
+      )
+      const indianReservePermits = await loadMetric(
+        canAccessModule(['/indianReservePermitSearch', 'viewOICApplication']),
+        () =>
+          searchIndianReservePermits({
+            filters: {
+              permitNumber: '',
+              packageNumber: '',
+              fromPermitIssueDate: '',
+              toPermitIssueDate: '',
+              fromEstimatedShippingDate: '',
+              toEstimatedShippingDate: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'permitNumber',
+            sortDirection: 'asc',
+          }),
+      )
+
+      if (isLatestRequest()) {
+        setCounts({
+          provincialApplications: provincialApplications?.page.totalElements ?? 0,
+          provincialExemptions: provincialExemptions?.page.totalElements ?? 0,
+          provincialOffers: provincialOffers?.page.totalElements ?? 0,
+          provincialPermits: provincialPermits?.page.totalElements ?? 0,
+          reviewQueue: reviewQueue?.page.totalElements ?? 0,
+          federalApplications: federalApplications?.page.totalElements ?? 0,
+          indianReservePermits: indianReservePermits?.page.totalElements ?? 0,
+        })
+        setCountsLoaded(true)
+      }
     } catch (error) {
-      console.error(error)
-      setCounts(INITIAL_COUNTS)
-      setErrorMessage('Unable to refresh dashboard counts.')
+      if (isLatestRequest()) {
+        console.error(error)
+        setCounts(INITIAL_COUNTS)
+        setCountsLoaded(false)
+        setErrorMessage('Unable to refresh dashboard counts.')
+      }
     } finally {
-      setLoading(false)
+      if (isLatestRequest()) {
+        setLoading(false)
+      }
     }
-  }, [canAccessModule])
-
-  useEffect(() => {
-    void loadCounts()
-  }, [loadCounts])
+  }, [beginCountsRequest, canAccessModule])
 
   return (
     <Grid fullWidth className="default-grid">
@@ -446,7 +453,11 @@ const Dashboard: FC = () => {
               <Tag type={hasAccess ? 'green' : 'red'}>
                 {hasAccess ? 'Available' : 'Not Granted'}
               </Tag>
-              {total !== null && <p className="summary-metric-value">{total.toLocaleString()}</p>}
+              {total !== null && (
+                <p className="summary-metric-value">
+                  {countsLoaded ? total.toLocaleString() : '-'}
+                </p>
+              )}
               <p>{module.description}</p>
               <div className="legacy-search-actions">
                 <Button

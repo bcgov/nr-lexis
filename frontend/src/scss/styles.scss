@@ -275,14 +275,32 @@ body {
   height: auto;
 }
 
+.landing-card {
+  min-height: 100%;
+}
+
+.landing-kicker {
+  color: #003366;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0 0 0.5rem;
+  text-transform: uppercase;
+}
+
 .landing-actions {
   display: grid;
   gap: 1rem;
+  max-width: 22rem;
 }
 
 .landing-help-text {
   color: var(--cds-text-secondary);
   margin: 0;
+}
+
+.landing-card--support p {
+  line-height: 1.5;
 }
 
 .landing-dev-header {
@@ -421,6 +439,40 @@ body {
 .detail-list {
   margin: 0;
   padding-left: 1rem;
+}
+
+.application-items-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.application-items-section {
+  min-width: 0;
+}
+
+.application-items-section h3 {
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem;
+}
+
+.application-items-form {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-bottom: 0.75rem;
+}
+
+.application-items-inline-form {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  margin-bottom: 0.75rem;
+}
+
+.application-items-section .cds--data-table-container {
+  overflow-x: auto;
 }
 
 .cds--tile {

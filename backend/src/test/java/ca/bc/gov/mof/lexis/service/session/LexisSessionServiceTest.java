@@ -109,6 +109,13 @@ class LexisSessionServiceTest {
   }
 
   @Test
+  void shouldNotMapFamApplicationAdminGroupToLexisAdmin() {
+    List<String> roles = service.parseRoleHeader("LEXIS_DEV_ADMIN");
+
+    assertThat(roles).containsExactly("LEXIS_DEV_ADMIN");
+  }
+
+  @Test
   void shouldParseAuthoritiesIntoCanonicalDistinctRoles() {
     List<String> roles =
         service.parseAuthorities(

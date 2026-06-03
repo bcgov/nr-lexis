@@ -79,10 +79,8 @@ const AdminPoliciesPage: FC = () => {
     clearNotifications()
 
     try {
-      const [loadedFeePolicies, loadedFilPolicies] = await Promise.all([
-        fetchFeePolicies(),
-        fetchFilPolicies(),
-      ])
+      const loadedFeePolicies = await fetchFeePolicies()
+      const loadedFilPolicies = await fetchFilPolicies()
       setFeePolicies(loadedFeePolicies)
       setFilPolicies(loadedFilPolicies)
     } catch (error) {
@@ -262,8 +260,7 @@ const AdminPoliciesPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <p className="landing-help-text">
-            Policy administration is API-first. Local draft fallback is available only when
-            explicitly enabled with <code>VITE_LEXIS_ENABLE_ADMIN_POLICY_LOCAL_FALLBACK=true</code>.
+            Policy administration is API-backed and follows backend authorization and persistence.
           </p>
           <div>
             Fee policy access:{' '}

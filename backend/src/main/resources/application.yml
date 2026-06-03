@@ -32,6 +32,7 @@ lexis:
     cognito:
       enabled: ${LEXIS_COGNITO_ENABLED:false}
       enforce-route-auth: ${LEXIS_ENFORCE_ROUTE_AUTH:false}
+      userinfo-uri: ${COGNITO_USERINFO_URI:}
     # Mirrors legacy WebADE "industry-roles" behaviour with renamed submitter roles.
     industry-roles: "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER"
   authz:

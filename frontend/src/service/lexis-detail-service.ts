@@ -10,6 +10,8 @@ import type {
 import apiService from '@/service/api-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 
+const DETAIL_CACHE_TTL_MS = 30_000
+
 const isNotFound = (error: unknown): boolean => {
   return (
     axios.isAxiosError(error) && (error.response?.status === 404 || error.response?.status === 204)
@@ -20,9 +22,11 @@ export const fetchProvincialApplicationDetail = async (
   applicationNumber: string,
 ): Promise<ProvincialApplicationDetail | null> => {
   try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<ProvincialApplicationDetail>(`/lexis/applications/${applicationNumber}`)
+    const response = await apiService.getCachedResponse<ProvincialApplicationDetail>(
+      `/lexis/applications/${applicationNumber}`,
+      undefined,
+      { ttlMs: DETAIL_CACHE_TTL_MS },
+    )
     return response.data
   } catch (error) {
     if (isNotFound(error)) {
@@ -36,9 +40,11 @@ export const fetchProvincialExemptionDetail = async (
   exemptionNumber: string,
 ): Promise<ProvincialExemptionDetail | null> => {
   try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<ProvincialExemptionDetail>(`/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`)
+    const response = await apiService.getCachedResponse<ProvincialExemptionDetail>(
+      `/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+      undefined,
+      { ttlMs: DETAIL_CACHE_TTL_MS },
+    )
     return response.data
   } catch (error) {
     if (isNotFound(error)) {
@@ -52,9 +58,11 @@ export const fetchProvincialOfferDetail = async (
   offerNumber: string,
 ): Promise<ProvincialOfferDetail | null> => {
   try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<ProvincialOfferDetail>(`/lexis/purchase-offers/${offerNumber}`)
+    const response = await apiService.getCachedResponse<ProvincialOfferDetail>(
+      `/lexis/purchase-offers/${offerNumber}`,
+      undefined,
+      { ttlMs: DETAIL_CACHE_TTL_MS },
+    )
     return response.data
   } catch (error) {
     if (isNotFound(error)) {
@@ -68,9 +76,11 @@ export const fetchProvincialPermitDetail = async (
   permitNumber: string,
 ): Promise<ProvincialPermitDetail | null> => {
   try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<ProvincialPermitDetail>(`/lexis/permits/${permitNumber}`)
+    const response = await apiService.getCachedResponse<ProvincialPermitDetail>(
+      `/lexis/permits/${permitNumber}`,
+      undefined,
+      { ttlMs: DETAIL_CACHE_TTL_MS },
+    )
     return response.data
   } catch (error) {
     if (isNotFound(error)) {
@@ -84,9 +94,11 @@ export const fetchFederalApplicationDetail = async (
   applicationNumber: string,
 ): Promise<FederalApplicationDetail | null> => {
   try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<FederalApplicationDetail>(`/lexis/federal/applications/${applicationNumber}`)
+    const response = await apiService.getCachedResponse<FederalApplicationDetail>(
+      `/lexis/federal/applications/${applicationNumber}`,
+      undefined,
+      { ttlMs: DETAIL_CACHE_TTL_MS },
+    )
     return response.data
   } catch (error) {
     if (isNotFound(error)) {
@@ -100,11 +112,11 @@ export const fetchIndianReservePermitDetail = async (
   permitNumber: string,
 ): Promise<IndianReservePermitDetail | null> => {
   try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get<IndianReservePermitDetail>(
-        `/lexis/indian-reserve/permits/${encodeURIComponent(permitNumber)}`,
-      )
+    const response = await apiService.getCachedResponse<IndianReservePermitDetail>(
+      `/lexis/indian-reserve/permits/${encodeURIComponent(permitNumber)}`,
+      undefined,
+      { ttlMs: DETAIL_CACHE_TTL_MS },
+    )
     return response.data
   } catch (error) {
     if (isNotFound(error)) {

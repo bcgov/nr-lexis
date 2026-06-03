@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -76,6 +76,80 @@ describe('Reports Page Actions', () => {
     await screen.findByRole('heading', { name: 'Reports' })
     expect(screen.queryByLabelText('Report Variant')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Generate Report' })).toBeDisabled()
+  })
+
+  it('loads report field options sequentially only when the selected report needs them', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => true,
+    } as any)
+    let resolveApplicationOptions:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>) => void)
+      | undefined
+    let resolveExemptionOptions:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialExemptionOptions>>) => void)
+      | undefined
+    mockedFetchProvincialApplicationOptions.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveApplicationOptions = resolve
+        }),
+    )
+    mockedFetchProvincialExemptionOptions.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveExemptionOptions = resolve
+        }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Reports' })).toBeInTheDocument()
+    })
+    expect(mockedFetchProvincialApplicationOptions).not.toHaveBeenCalled()
+    expect(mockedFetchProvincialExemptionOptions).not.toHaveBeenCalled()
+    expect(mockedFetchProvincialPermitOptions).not.toHaveBeenCalled()
+
+    const reportRow = screen.getByText('Exemption Report').closest('tr')
+    expect(reportRow).not.toBeNull()
+    await userEvent.click(
+      within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
+    )
+
+    await waitFor(() => {
+      expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalledTimes(1)
+    })
+    expect(mockedFetchProvincialExemptionOptions).not.toHaveBeenCalled()
+    expect(mockedFetchProvincialPermitOptions).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveApplicationOptions?.({
+        exemptionTypes: [],
+        applicationStatuses: [],
+        productTypes: [],
+        regions: [],
+      })
+    })
+
+    await waitFor(() => {
+      expect(mockedFetchProvincialExemptionOptions).toHaveBeenCalledTimes(1)
+    })
+    expect(mockedFetchProvincialPermitOptions).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveExemptionOptions?.({
+        exemptionTypes: [],
+        exemptionStatuses: [],
+        regions: [],
+      })
+    })
+    expect(mockedFetchProvincialPermitOptions).not.toHaveBeenCalled()
   })
 
   it('uses the selected report variant when generating reports', async () => {

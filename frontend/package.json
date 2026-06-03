@@ -27,6 +27,7 @@
     "@carbon/react": "^1.88.0",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-react": "^6.0.0",
+    "aws-amplify": "^6.15.5",
     "axios": "^1.7.7",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

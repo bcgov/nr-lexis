@@ -19,6 +19,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
@@ -26,6 +27,7 @@ import {
   removeApplicationDocument,
   type ProvincialApplicationDocumentRow,
 } from '@/service/provincial-application-documents-service'
+import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const displayValue = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined || value === '') {
@@ -72,6 +74,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const beginDetailRequest = useLatestRequestGuard()
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
@@ -99,55 +102,67 @@ const ProvincialApplicationDetailsPage: FC = () => {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    const load = async () => {
-      if (!applicationNumber) {
-        setErrorMessage('Application number is missing from the route.')
-        setDetail(null)
-        setDocumentRows([])
-        setDocumentsErrorMessage('')
-        setActionErrorMessage('')
-        setActionInfoMessage('')
-        setLoading(false)
-        return
-      }
-
-      setLoading(true)
-      setErrorMessage('')
+  const loadApplicationDetail = useCallback(async () => {
+    const isLatestRequest = beginDetailRequest()
+    if (!applicationNumber) {
+      setErrorMessage('Application number is missing from the route.')
+      setDetail(null)
+      setDocumentRows([])
       setDocumentsErrorMessage('')
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    setErrorMessage('')
+    setDocumentsErrorMessage('')
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+
+    try {
+      const response = await fetchProvincialApplicationDetail(applicationNumber)
+      if (!isLatestRequest()) {
+        return
+      }
+      setDetail(response)
+      if (!response) {
+        setErrorMessage(`No provincial application found for ${applicationNumber}.`)
+        setDocumentRows([])
+        return
+      }
 
       try {
-        const response = await fetchProvincialApplicationDetail(applicationNumber)
-        setDetail(response)
-        if (!response) {
-          setErrorMessage(`No provincial application found for ${applicationNumber}.`)
-          setDocumentRows([])
-          return
-        }
-
-        try {
-          const documentsResult = await fetchApplicationDocuments(applicationNumber)
+        const documentsResult = await fetchApplicationDocuments(applicationNumber)
+        if (isLatestRequest()) {
           setDocumentRows(documentsResult.rows)
-        } catch (error) {
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
           console.error(error)
           setDocumentRows([])
           setDocumentsErrorMessage('Unable to retrieve application documents.')
         }
-      } catch (error) {
+      }
+    } catch (error) {
+      if (isLatestRequest()) {
         console.error(error)
         setErrorMessage('Unable to retrieve provincial application detail.')
         setDetail(null)
         setDocumentRows([])
         setDocumentsErrorMessage('')
-      } finally {
+      }
+    } finally {
+      if (isLatestRequest()) {
         setLoading(false)
       }
     }
+  }, [applicationNumber, beginDetailRequest])
 
-    void load()
-  }, [applicationNumber])
+  useEffect(() => {
+    void loadApplicationDetail()
+  }, [loadApplicationDetail])
 
   const filteredPackages = useMemo(() => {
     const rows = detail?.packages ?? []
@@ -196,6 +211,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   }, [documentRows, documentsFilter])
 
   const canManageDocuments = canPerform('/fileApplicationUpload')
+  const canManageItems = canPerform('createApplication') && !detail?.readOnly && !detail?.locked
 
   const onCreateOffer = useCallback(() => {
     if (!detail) {
@@ -250,27 +266,37 @@ const ProvincialApplicationDetailsPage: FC = () => {
         return
       }
 
+      const isLatestRequest = beginDetailRequest()
       setIsRemovingDocumentId(row.id)
       setActionErrorMessage('')
       setActionInfoMessage('')
 
       try {
         const removeResult = await removeApplicationDocument(row.id)
+        if (!isLatestRequest()) {
+          return
+        }
         if (!removeResult.success) {
           setActionErrorMessage('Document removal failed. Refresh and try again.')
           return
         }
 
         const documentsResult = await fetchApplicationDocuments(applicationNumber)
-        setDocumentRows(documentsResult.rows)
+        if (isLatestRequest()) {
+          setDocumentRows(documentsResult.rows)
+        }
       } catch (error) {
-        console.error(error)
-        setActionErrorMessage('Unable to remove the selected document.')
+        if (isLatestRequest()) {
+          console.error(error)
+          setActionErrorMessage('Unable to remove the selected document.')
+        }
       } finally {
-        setIsRemovingDocumentId(null)
+        if (isLatestRequest()) {
+          setIsRemovingDocumentId(null)
+        }
       }
     },
-    [applicationNumber],
+    [applicationNumber, beginDetailRequest],
   )
 
   return (
@@ -509,6 +535,13 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 </TableBody>
               </Table>
             </Tile>
+          </Column>
+          <Column sm={4} md={8} lg={16}>
+            <ProvincialApplicationItemsPanel
+              detail={detail}
+              canManageItems={canManageItems}
+              onDetailChanged={loadApplicationDetail}
+            />
           </Column>
           <Column sm={4} md={8} lg={8}>
             <Tile>

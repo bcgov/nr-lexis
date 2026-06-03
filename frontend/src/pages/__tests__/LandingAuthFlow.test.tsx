@@ -45,7 +45,6 @@ describe('Landing auth flow smoke', () => {
         grantedActions: [],
       },
       defaultRoute: '/provincial/summary',
-      devRoles: [],
       isLoading: false,
       isLoggedIn: false,
       hasAnyRole: false,
@@ -53,13 +52,11 @@ describe('Landing auth flow smoke', () => {
       login: vi.fn().mockResolvedValue(undefined),
       refresh: vi.fn().mockResolvedValue(undefined),
       logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
       canPerform: vi.fn().mockReturnValue(false),
     })
   })
 
-  it('runs login action from the landing entry button', async () => {
+  it('runs IDIR login action from the landing entry button', async () => {
     const login = vi.fn().mockResolvedValue(undefined)
     mockedUseAuth.mockReturnValue({
       capabilities: {
@@ -71,7 +68,6 @@ describe('Landing auth flow smoke', () => {
         grantedActions: [],
       },
       defaultRoute: '/provincial/summary',
-      devRoles: [],
       isLoading: false,
       isLoggedIn: false,
       hasAnyRole: false,
@@ -79,8 +75,6 @@ describe('Landing auth flow smoke', () => {
       login,
       refresh: vi.fn().mockResolvedValue(undefined),
       logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
       canPerform: vi.fn().mockReturnValue(false),
     })
 
@@ -89,13 +83,43 @@ describe('Landing auth flow smoke', () => {
     const loginButton = screen.getByRole('button', { name: 'Log in with IDIR' })
     await userEvent.click(loginButton)
 
-    expect(login).toHaveBeenCalledTimes(1)
+    expect(login).toHaveBeenCalledWith('idir')
     expect(
       screen.queryByRole('button', { name: 'Continue to Application' }),
     ).not.toBeInTheDocument()
   })
 
-  it('shows session claims and navigates to default route when logged in', async () => {
+  it('runs Business BCeID login action from the landing entry button', async () => {
+    const login = vi.fn().mockResolvedValue(undefined)
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: false,
+        principal: null,
+        roles: [],
+        welcomeTarget: null,
+        legacyPath: null,
+        grantedActions: [],
+      },
+      defaultRoute: '/provincial/summary',
+      isLoading: false,
+      isLoggedIn: false,
+      hasAnyRole: false,
+      usesExternalLogin: true,
+      login,
+      refresh: vi.fn().mockResolvedValue(undefined),
+      logout: vi.fn().mockResolvedValue(undefined),
+      canPerform: vi.fn().mockReturnValue(false),
+    })
+
+    renderPage()
+
+    const loginButton = screen.getByRole('button', { name: 'Log in with Business BCeID' })
+    await userEvent.click(loginButton)
+
+    expect(login).toHaveBeenCalledWith('business-bceid')
+  })
+
+  it('navigates to default route when logged in without exposing session details', async () => {
     const login = vi.fn().mockResolvedValue(undefined)
     const refresh = vi.fn().mockResolvedValue(undefined)
 
@@ -109,7 +133,6 @@ describe('Landing auth flow smoke', () => {
         grantedActions: ['/summary', '/applicationSearch'],
       },
       defaultRoute: '/provincial/summary',
-      devRoles: [],
       isLoading: false,
       isLoggedIn: true,
       hasAnyRole: true,
@@ -117,21 +140,18 @@ describe('Landing auth flow smoke', () => {
       login,
       refresh,
       logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
       canPerform: vi.fn().mockReturnValue(true),
     })
 
     renderPage()
 
-    expect(screen.getByText('idir\\analyst')).toBeInTheDocument()
-    expect(screen.getByText('PROVINCIAL_SUBMITTER_00012345')).toBeInTheDocument()
+    expect(screen.queryByText('idir\\analyst')).not.toBeInTheDocument()
+    expect(screen.queryByText('PROVINCIAL_SUBMITTER_00012345')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh Session' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Continue to Application' }))
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/summary')
-
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh Session' }))
-    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(refresh).not.toHaveBeenCalled()
   })
 
   it('surfaces inline error when login initiation fails', async () => {
@@ -145,7 +165,6 @@ describe('Landing auth flow smoke', () => {
         grantedActions: [],
       },
       defaultRoute: '/provincial/summary',
-      devRoles: [],
       isLoading: false,
       isLoggedIn: false,
       hasAnyRole: false,
@@ -153,8 +172,6 @@ describe('Landing auth flow smoke', () => {
       login: vi.fn().mockRejectedValue(new Error('boom')),
       refresh: vi.fn().mockResolvedValue(undefined),
       logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
       canPerform: vi.fn().mockReturnValue(false),
     })
 

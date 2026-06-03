@@ -32,6 +32,8 @@ import {
   parseSortDirectionParam,
   setSearchParam,
 } from '@/pages/shared/search-query-utils'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
 
@@ -168,6 +170,7 @@ const ProvincialPermitPage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
@@ -198,36 +201,49 @@ const ProvincialPermitPage: FC = () => {
     return !isValidIsoDate(filters.issuedFromDate) || !isValidIsoDate(filters.issuedToDate)
   }, [filters.issuedFromDate, filters.issuedToDate])
 
-  const runSearch = useCallback(async (request: ProvincialPermitSearchRequest) => {
-    if (
-      !isValidIsoDate(request.filters.issuedFromDate) ||
-      !isValidIsoDate(request.filters.issuedToDate)
-    ) {
-      return
-    }
-    setLoading(true)
-    setErrorMessage('')
-    try {
-      const response = await searchProvincialPermits(request)
-      setResults(response)
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to retrieve permit search results.')
-      setResults(EMPTY_RESULTS)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const beginSearchRequest = useLatestRequestGuard()
+
+  const runSearch = useCallback(
+    async (request: ProvincialPermitSearchRequest) => {
+      const isLatestRequest = beginSearchRequest()
+      if (
+        !isValidIsoDate(request.filters.issuedFromDate) ||
+        !isValidIsoDate(request.filters.issuedToDate)
+      ) {
+        setLoading(false)
+        return
+      }
+      setLoading(true)
+      setErrorMessage('')
+      try {
+        const response = await searchProvincialPermits(request)
+        if (isLatestRequest()) {
+          setResults(response)
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve permit search results.')
+          setResults(EMPTY_RESULTS)
+        }
+      } finally {
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
+      }
+    },
+    [beginSearchRequest],
+  )
 
   useEffect(() => {
     void runSearch({
-      filters: urlState.filters,
-      page: urlState.page - 1,
-      pageSize: urlState.pageSize,
-      sortField: urlState.sortField,
-      sortDirection: urlState.sortDirection,
+      filters: debouncedUrlState.filters,
+      page: debouncedUrlState.page - 1,
+      pageSize: debouncedUrlState.pageSize,
+      sortField: debouncedUrlState.sortField,
+      sortDirection: debouncedUrlState.sortDirection,
     })
-  }, [runSearch, urlState])
+  }, [debouncedUrlState, runSearch])
 
   useEffect(() => {
     const loadOptions = async () => {

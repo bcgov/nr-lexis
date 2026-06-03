@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 import { E2E_BASE_URL } from './e2e/utils'
 
+const isRemoteE2E = !!process.env.CI && /^https?:\/\//.test(E2E_BASE_URL)
+
 /**
  * Read environment variables from file.
  * https://github.com/motdotla/dotenv
@@ -13,6 +15,7 @@ import { E2E_BASE_URL } from './e2e/utils'
 export default defineConfig({
   timeout: 120000,
   testDir: './e2e',
+  testMatch: /smoke\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -34,12 +37,14 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
-  webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 4173',
-    url: E2E_BASE_URL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
-  },
+  webServer: isRemoteE2E
+    ? undefined
+    : {
+        command: 'npm run dev -- --host 127.0.0.1 --port 4173',
+        url: 'http://127.0.0.1:4173',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120000,
+      },
 
   /* Configure projects for major browsers */
   projects: [

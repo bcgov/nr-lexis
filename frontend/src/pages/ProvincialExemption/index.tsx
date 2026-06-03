@@ -35,6 +35,8 @@ import {
   parseSortDirectionParam,
   setSearchParam,
 } from '@/pages/shared/search-query-utils'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
 import {
   fetchProvincialExemptionOptions,
@@ -192,6 +194,7 @@ const ProvincialExemptionPage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
@@ -227,37 +230,50 @@ const ProvincialExemptionPage: FC = () => {
     return !isValidIsoDate(filters.listFromDate) || !isValidIsoDate(filters.listToDate)
   }, [filters.listFromDate, filters.listToDate])
 
-  const runSearch = useCallback(async (request: ProvincialExemptionSearchRequest) => {
-    if (
-      !isValidIsoDate(request.filters.listFromDate) ||
-      !isValidIsoDate(request.filters.listToDate)
-    ) {
-      return
-    }
+  const beginSearchRequest = useLatestRequestGuard()
 
-    setLoading(true)
-    setErrorMessage('')
-    try {
-      const response = await searchProvincialExemptions(request)
-      setResults(response)
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to retrieve exemption search results.')
-      setResults(EMPTY_RESULTS)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const runSearch = useCallback(
+    async (request: ProvincialExemptionSearchRequest) => {
+      const isLatestRequest = beginSearchRequest()
+      if (
+        !isValidIsoDate(request.filters.listFromDate) ||
+        !isValidIsoDate(request.filters.listToDate)
+      ) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setErrorMessage('')
+      try {
+        const response = await searchProvincialExemptions(request)
+        if (isLatestRequest()) {
+          setResults(response)
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve exemption search results.')
+          setResults(EMPTY_RESULTS)
+        }
+      } finally {
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
+      }
+    },
+    [beginSearchRequest],
+  )
 
   useEffect(() => {
     void runSearch({
-      filters: urlState.filters,
-      page: urlState.page - 1,
-      pageSize: urlState.pageSize,
-      sortField: urlState.sortField,
-      sortDirection: urlState.sortDirection,
+      filters: debouncedUrlState.filters,
+      page: debouncedUrlState.page - 1,
+      pageSize: debouncedUrlState.pageSize,
+      sortField: debouncedUrlState.sortField,
+      sortDirection: debouncedUrlState.sortDirection,
     })
-  }, [runSearch, urlState])
+  }, [debouncedUrlState, runSearch])
 
   useEffect(() => {
     const loadOptions = async () => {

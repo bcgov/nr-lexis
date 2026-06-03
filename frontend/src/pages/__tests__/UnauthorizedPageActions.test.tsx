@@ -39,7 +39,7 @@ describe('Unauthorized page actions', () => {
     expect(await screen.findByText('landing-page')).toBeInTheDocument()
   })
 
-  it('calls logout and navigates to landing page', async () => {
+  it('calls logout without local navigation', async () => {
     const logout = vi.fn().mockResolvedValue(undefined)
     mockedUseAuth.mockReturnValue({
       logout,
@@ -50,6 +50,6 @@ describe('Unauthorized page actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Log Out' }))
 
     expect(logout).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('landing-page')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
   })
 })

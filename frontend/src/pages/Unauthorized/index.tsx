@@ -20,7 +20,6 @@ const UnauthorizedPage: FC = () => {
             kind="secondary"
             onClick={() => {
               void logout()
-              navigate('/')
             }}
           >
             Log Out

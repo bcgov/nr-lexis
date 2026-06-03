@@ -30,15 +30,17 @@ public class LexisUploadController {
   }
 
   @PostMapping(
-      value = {"/fileApplicationUpload", "/uploads/application"},
+      value = {"/fileApplicationUpload", "/uploads/application", "/admin/uploads/applications"},
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<LexisUploadResultDto> fileApplicationUpload(
-      @RequestParam("file") MultipartFile file,
+      @RequestParam(name = "file", required = false) MultipartFile file,
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
       @RequestParam(name = "applicationNumber", required = false) Long applicationNumber,
       @RequestParam(name = "fileDescription", required = false) String fileDescription,
       @RequestParam(name = "description", required = false) String descriptionAlias,
       Authentication authentication) {
-    if (file == null || file.isEmpty() || applicationNumber == null || applicationNumber < 1) {
+    MultipartFile uploadFile = firstNonNull(file, formFile);
+    if (uploadFile == null || uploadFile.isEmpty() || applicationNumber == null || applicationNumber < 1) {
       return ResponseEntity.badRequest().build();
     }
 
@@ -49,7 +51,7 @@ public class LexisUploadController {
     }
     return service
         .uploadApplication(
-            file,
+            uploadFile,
             applicationNumber,
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
@@ -58,15 +60,17 @@ public class LexisUploadController {
   }
 
   @PostMapping(
-      value = {"/filePermitUpload", "/uploads/permit"},
+      value = {"/filePermitUpload", "/uploads/permit", "/admin/uploads/permits"},
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<LexisUploadResultDto> filePermitUpload(
-      @RequestParam("file") MultipartFile file,
+      @RequestParam(name = "file", required = false) MultipartFile file,
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,
       @RequestParam(name = "fileDescription", required = false) String fileDescription,
       @RequestParam(name = "description", required = false) String descriptionAlias,
       Authentication authentication) {
-    if (file == null || file.isEmpty() || permitNumber == null || permitNumber < 1) {
+    MultipartFile uploadFile = firstNonNull(file, formFile);
+    if (uploadFile == null || uploadFile.isEmpty() || permitNumber == null || permitNumber < 1) {
       return ResponseEntity.badRequest().build();
     }
 
@@ -77,7 +81,7 @@ public class LexisUploadController {
     }
     return service
         .uploadPermit(
-            file,
+            uploadFile,
             permitNumber,
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
@@ -86,16 +90,18 @@ public class LexisUploadController {
   }
 
   @PostMapping(
-      value = {"/fileExemptionUpload", "/uploads/exemption"},
+      value = {"/fileExemptionUpload", "/uploads/exemption", "/admin/uploads/exemptions"},
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<LexisUploadResultDto> fileExemptionUpload(
-      @RequestParam("file") MultipartFile file,
+      @RequestParam(name = "file", required = false) MultipartFile file,
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
       @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
       @RequestParam(name = "fileDescription", required = false) String fileDescription,
       @RequestParam(name = "description", required = false) String descriptionAlias,
       Authentication authentication) {
-    if (file == null
-        || file.isEmpty()
+    MultipartFile uploadFile = firstNonNull(file, formFile);
+    if (uploadFile == null
+        || uploadFile.isEmpty()
         || exemptionNumber == null
         || exemptionNumber.isBlank()) {
       return ResponseEntity.badRequest().build();
@@ -108,7 +114,7 @@ public class LexisUploadController {
     }
     return service
         .uploadExemption(
-            file,
+            uploadFile,
             exemptionNumber,
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
@@ -117,10 +123,11 @@ public class LexisUploadController {
   }
 
   @PostMapping(
-      value = {"/fileInvoiceUpload", "/uploads/invoice"},
+      value = {"/fileInvoiceUpload", "/uploads/invoice", "/admin/uploads/invoices"},
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<LexisUploadResultDto> fileInvoiceUpload(
-      @RequestParam("file") MultipartFile file,
+      @RequestParam(name = "file", required = false) MultipartFile file,
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,
       @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber,
       @RequestParam(name = "fileDescription", required = false) String fileDescription,
@@ -134,8 +141,9 @@ public class LexisUploadController {
       @RequestParam(name = "invoiceFeeInLieu", required = false) BigDecimal invoiceFeeInLieu,
       @RequestParam(name = "feeInLieu", required = false) BigDecimal feeInLieuAlias,
       Authentication authentication) {
-    if (file == null
-        || file.isEmpty()
+    MultipartFile uploadFile = firstNonNull(file, formFile);
+    if (uploadFile == null
+        || uploadFile.isEmpty()
         || permitNumber == null
         || permitNumber < 1
         || salesInvoiceNumber == null
@@ -150,7 +158,7 @@ public class LexisUploadController {
     }
     return service
         .uploadInvoice(
-            file,
+            uploadFile,
             permitNumber,
             salesInvoiceNumber,
             firstNonBlank(fileDescription, descriptionAlias),
@@ -188,6 +196,10 @@ public class LexisUploadController {
   }
 
   private BigDecimal firstNonNull(BigDecimal primary, BigDecimal alias) {
+    return primary != null ? primary : alias;
+  }
+
+  private MultipartFile firstNonNull(MultipartFile primary, MultipartFile alias) {
     return primary != null ? primary : alias;
   }
 }

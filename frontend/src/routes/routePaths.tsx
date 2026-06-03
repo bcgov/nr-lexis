@@ -83,6 +83,12 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
+    path: '/dashboard',
+    id: 'Landing Dashboard Callback',
+    element: <LandingPage />,
+    isNavigation: false,
+  },
+  {
     path: '/unauthorized',
     id: 'Unauthorized',
     element: <UnauthorizedPage />,

@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialOfferDetail } from '@/service/lexis-detail-service'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -21,6 +22,7 @@ const ProvincialOfferDetailsPage: FC = () => {
   const [detail, setDetail] = useState<ProvincialOfferDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const beginDetailRequest = useLatestRequestGuard()
   const withCurrentSearch = useCallback(
     (path: string): string => {
       const query = searchParams.toString()
@@ -31,6 +33,7 @@ const ProvincialOfferDetailsPage: FC = () => {
 
   useEffect(() => {
     const load = async () => {
+      const isLatestRequest = beginDetailRequest()
       if (!offerNumber) {
         setErrorMessage('Offer number is missing from the route.')
         setDetail(null)
@@ -43,21 +46,28 @@ const ProvincialOfferDetailsPage: FC = () => {
       setErrorMessage('')
       try {
         const response = await fetchProvincialOfferDetail(offerNumber)
+        if (!isLatestRequest()) {
+          return
+        }
         setDetail(response)
         if (!response) {
           setErrorMessage(`No provincial offer found for ${offerNumber}.`)
         }
       } catch (error) {
-        console.error(error)
-        setErrorMessage('Unable to retrieve provincial offer detail.')
-        setDetail(null)
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve provincial offer detail.')
+          setDetail(null)
+        }
       } finally {
-        setLoading(false)
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
       }
     }
 
     void load()
-  }, [offerNumber])
+  }, [offerNumber, beginDetailRequest])
 
   return (
     <Grid fullWidth className="default-grid">

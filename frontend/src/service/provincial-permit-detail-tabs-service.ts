@@ -37,6 +37,8 @@ export type ProvincialPermitDetailTabsData = {
   boicItems: ProvincialPermitEventRow[]
 }
 
+const PERMIT_TAB_CACHE_TTL_MS = 30_000
+
 const parseArrayPayload = (payload: unknown): unknown[] | null => {
   if (Array.isArray(payload)) {
     return payload
@@ -128,7 +130,9 @@ const fetchRows = async <TRow>(
   normalize: (row: unknown, index: number) => TRow,
 ): Promise<TRow[]> => {
   try {
-    const response = await apiService.getAxiosInstance().get(path)
+    const response = await apiService.getCachedResponse<unknown>(path, undefined, {
+      ttlMs: PERMIT_TAB_CACHE_TTL_MS,
+    })
     if (response.status === 204) {
       return []
     }
@@ -147,19 +151,24 @@ const fetchRows = async <TRow>(
 export const fetchProvincialPermitDetailTabs = async (
   permitNumber: string,
 ): Promise<ProvincialPermitDetailTabsData> => {
-  const [items, fees, gbmsEvents, oicItems, boicItems] = await Promise.all([
-    fetchRows(`/lexis/permits/${encodeURIComponent(permitNumber)}/items`, normalizePermitItemRow),
-    fetchRows(`/lexis/permits/${encodeURIComponent(permitNumber)}/fees`, normalizePermitFeeRow),
-    fetchRows(`/lexis/permits/${encodeURIComponent(permitNumber)}/gbms`, normalizePermitEventRow),
-    fetchRows(
-      `/lexis/permits/${encodeURIComponent(permitNumber)}/oic-items`,
-      normalizePermitEventRow,
-    ),
-    fetchRows(
-      `/lexis/permits/${encodeURIComponent(permitNumber)}/boic-items`,
-      normalizePermitEventRow,
-    ),
-  ])
+  const encodedPermitNumber = encodeURIComponent(permitNumber)
+  const items = await fetchRows(
+    `/lexis/permits/${encodedPermitNumber}/items`,
+    normalizePermitItemRow,
+  )
+  const fees = await fetchRows(`/lexis/permits/${encodedPermitNumber}/fees`, normalizePermitFeeRow)
+  const gbmsEvents = await fetchRows(
+    `/lexis/permits/${encodedPermitNumber}/gbms`,
+    normalizePermitEventRow,
+  )
+  const oicItems = await fetchRows(
+    `/lexis/permits/${encodedPermitNumber}/oic-items`,
+    normalizePermitEventRow,
+  )
+  const boicItems = await fetchRows(
+    `/lexis/permits/${encodedPermitNumber}/boic-items`,
+    normalizePermitEventRow,
+  )
 
   return {
     items,

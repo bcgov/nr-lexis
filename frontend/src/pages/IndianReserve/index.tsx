@@ -28,6 +28,8 @@ import {
   parseSortDirectionParam,
   setSearchParam,
 } from '@/pages/shared/search-query-utils'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
 
 const INITIAL_FILTERS: IndianReservePermitSearchFilters = {
@@ -138,6 +140,7 @@ const IndianReservePage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
@@ -173,39 +176,52 @@ const IndianReservePage: FC = () => {
     filters.toEstimatedShippingDate,
   ])
 
-  const runSearch = useCallback(async (request: IndianReservePermitSearchRequest) => {
-    if (
-      !isValidIsoDate(request.filters.fromPermitIssueDate) ||
-      !isValidIsoDate(request.filters.toPermitIssueDate) ||
-      !isValidIsoDate(request.filters.fromEstimatedShippingDate) ||
-      !isValidIsoDate(request.filters.toEstimatedShippingDate)
-    ) {
-      return
-    }
+  const beginSearchRequest = useLatestRequestGuard()
 
-    setLoading(true)
-    setErrorMessage('')
-    try {
-      const response = await searchIndianReservePermits(request)
-      setResults(response)
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to retrieve indigenous reserve permit search results.')
-      setResults(EMPTY_RESULTS)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const runSearch = useCallback(
+    async (request: IndianReservePermitSearchRequest) => {
+      const isLatestRequest = beginSearchRequest()
+      if (
+        !isValidIsoDate(request.filters.fromPermitIssueDate) ||
+        !isValidIsoDate(request.filters.toPermitIssueDate) ||
+        !isValidIsoDate(request.filters.fromEstimatedShippingDate) ||
+        !isValidIsoDate(request.filters.toEstimatedShippingDate)
+      ) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setErrorMessage('')
+      try {
+        const response = await searchIndianReservePermits(request)
+        if (isLatestRequest()) {
+          setResults(response)
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve indigenous reserve permit search results.')
+          setResults(EMPTY_RESULTS)
+        }
+      } finally {
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
+      }
+    },
+    [beginSearchRequest],
+  )
 
   useEffect(() => {
     void runSearch({
-      filters: urlState.filters,
-      sortField: urlState.sortField,
-      sortDirection: urlState.sortDirection,
-      page: urlState.page - 1,
-      pageSize: urlState.pageSize,
+      filters: debouncedUrlState.filters,
+      sortField: debouncedUrlState.sortField,
+      sortDirection: debouncedUrlState.sortDirection,
+      page: debouncedUrlState.page - 1,
+      pageSize: debouncedUrlState.pageSize,
     })
-  }, [runSearch, urlState])
+  }, [debouncedUrlState, runSearch])
 
   const onSearch = () => {
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))

@@ -32,12 +32,15 @@ const parseOptions = (input: unknown): SearchOption[] => {
 
 const fetchOptions = async (path: string): Promise<Record<string, unknown> | null> => {
   try {
-    const response = await apiService.getAxiosInstance().get(path)
-    if (!response.data || typeof response.data !== 'object') {
+    const data = await apiService.getCachedData<unknown>(path, undefined, {
+      cacheKey: `search-options:${path}`,
+      ttlMs: 5 * 60_000,
+    })
+    if (!data || typeof data !== 'object') {
       return null
     }
 
-    return response.data
+    return data as Record<string, unknown>
   } catch (error) {
     console.warn(`Unable to load search options from ${path}.`, error)
     return null

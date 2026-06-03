@@ -35,6 +35,8 @@ import {
   parseSortDirectionParam,
   setSearchParam,
 } from '@/pages/shared/search-query-utils'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   approveApplicationReview,
   sendApplicationReviewStatusEmail,
@@ -195,6 +197,7 @@ const ProvincialReviewPage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
@@ -258,39 +261,52 @@ const ProvincialReviewPage: FC = () => {
     return selectableRows.every((row) => Boolean(selectedRowsById[row.applicationNumber]))
   }, [selectableRows, selectedRowsById])
 
-  const runSearch = useCallback(async (request: ApplicationReviewSearchRequest) => {
-    if (
-      !isValidIsoDate(request.filters.receivedFromDate) ||
-      !isValidIsoDate(request.filters.receivedToDate) ||
-      !isValidIsoDate(request.filters.listingFromDate) ||
-      !isValidIsoDate(request.filters.listingToDate)
-    ) {
-      return
-    }
+  const beginSearchRequest = useLatestRequestGuard()
 
-    setLoading(true)
-    setErrorMessage('')
-    try {
-      const response = await searchApplicationReviews(request)
-      setResults(response)
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to retrieve application review search results.')
-      setResults(EMPTY_RESULTS)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const runSearch = useCallback(
+    async (request: ApplicationReviewSearchRequest) => {
+      const isLatestRequest = beginSearchRequest()
+      if (
+        !isValidIsoDate(request.filters.receivedFromDate) ||
+        !isValidIsoDate(request.filters.receivedToDate) ||
+        !isValidIsoDate(request.filters.listingFromDate) ||
+        !isValidIsoDate(request.filters.listingToDate)
+      ) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setErrorMessage('')
+      try {
+        const response = await searchApplicationReviews(request)
+        if (isLatestRequest()) {
+          setResults(response)
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve application review search results.')
+          setResults(EMPTY_RESULTS)
+        }
+      } finally {
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
+      }
+    },
+    [beginSearchRequest],
+  )
 
   useEffect(() => {
     void runSearch({
-      filters: urlState.filters,
-      page: urlState.page - 1,
-      pageSize: urlState.pageSize,
-      sortField: urlState.sortField,
-      sortDirection: urlState.sortDirection,
+      filters: debouncedUrlState.filters,
+      page: debouncedUrlState.page - 1,
+      pageSize: debouncedUrlState.pageSize,
+      sortField: debouncedUrlState.sortField,
+      sortDirection: debouncedUrlState.sortDirection,
     })
-  }, [runSearch, urlState])
+  }, [debouncedUrlState, runSearch])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -383,25 +399,24 @@ const ProvincialReviewPage: FC = () => {
     setReviewActionStatus(null)
 
     try {
-      const approvalResults = await Promise.all(
-        selectedNumbers.map(async (applicationNumber) => {
-          try {
-            const result = await approveApplicationReview(applicationNumber)
-            return {
-              applicationNumber,
-              success: result.updated && result.valid,
-              message: result.message,
-            }
-          } catch (error) {
-            console.warn(`Unable to approve application ${applicationNumber}.`, error)
-            return {
-              applicationNumber,
-              success: false,
-              message: 'Request failed.',
-            }
-          }
-        }),
-      )
+      const approvalResults = []
+      for (const applicationNumber of selectedNumbers) {
+        try {
+          const result = await approveApplicationReview(applicationNumber)
+          approvalResults.push({
+            applicationNumber,
+            success: result.updated && result.valid,
+            message: result.message,
+          })
+        } catch (error) {
+          console.warn(`Unable to approve application ${applicationNumber}.`, error)
+          approvalResults.push({
+            applicationNumber,
+            success: false,
+            message: 'Request failed.',
+          })
+        }
+      }
 
       const successCount = approvalResults.filter((result) => result.success).length
       const failureCount = approvalResults.length - successCount
@@ -480,46 +495,45 @@ const ProvincialReviewPage: FC = () => {
     setReviewActionStatus(null)
 
     try {
-      const updateResults = await Promise.all(
-        selectedNumbers.map(async (applicationNumber) => {
-          try {
-            const updateResponse = await updateApplicationReviewStatus(applicationNumber, {
+      const updateResults = []
+      for (const applicationNumber of selectedNumbers) {
+        try {
+          const updateResponse = await updateApplicationReviewStatus(applicationNumber, {
+            statusCode: normalizedStatusCode,
+            remark: statusRemark,
+            clientEmailAddress: normalizedEmail,
+          })
+
+          const updateSuccess = updateResponse.updated && updateResponse.valid
+          let emailSuccess = true
+          let emailMessage = ''
+
+          if (sendEmail && updateSuccess) {
+            const emailResponse = await sendApplicationReviewStatusEmail(applicationNumber, {
               statusCode: normalizedStatusCode,
               remark: statusRemark,
               clientEmailAddress: normalizedEmail,
             })
-
-            const updateSuccess = updateResponse.updated && updateResponse.valid
-            let emailSuccess = true
-            let emailMessage = ''
-
-            if (sendEmail && updateSuccess) {
-              const emailResponse = await sendApplicationReviewStatusEmail(applicationNumber, {
-                statusCode: normalizedStatusCode,
-                remark: statusRemark,
-                clientEmailAddress: normalizedEmail,
-              })
-              emailSuccess = emailResponse.success
-              emailMessage = emailResponse.message
-            }
-
-            return {
-              success: updateSuccess && emailSuccess,
-              updateSuccess,
-              emailSuccess,
-              message: emailMessage || updateResponse.message,
-            }
-          } catch (error) {
-            console.warn(`Unable to update status for application ${applicationNumber}.`, error)
-            return {
-              success: false,
-              updateSuccess: false,
-              emailSuccess: !sendEmail,
-              message: 'Request failed.',
-            }
+            emailSuccess = emailResponse.success
+            emailMessage = emailResponse.message
           }
-        }),
-      )
+
+          updateResults.push({
+            success: updateSuccess && emailSuccess,
+            updateSuccess,
+            emailSuccess,
+            message: emailMessage || updateResponse.message,
+          })
+        } catch (error) {
+          console.warn(`Unable to update status for application ${applicationNumber}.`, error)
+          updateResults.push({
+            success: false,
+            updateSuccess: false,
+            emailSuccess: !sendEmail,
+            message: 'Request failed.',
+          })
+        }
+      }
 
       const successCount = updateResults.filter((result) => result.success).length
       const failureCount = updateResults.length - successCount

@@ -26,6 +26,8 @@ export type RemoveProvincialExemptionDocumentResult = {
   source: ProvincialExemptionDocumentSource
 }
 
+const DOCUMENT_LIST_CACHE_TTL_MS = 30_000
+
 const asString = (value: unknown): string => {
   if (typeof value === 'string') {
     return value.trim()
@@ -149,13 +151,15 @@ const parseRemoveDocumentSuccess = (payload: unknown): boolean => {
 export const fetchExemptionDocuments = async (
   exemptionNumber: string,
 ): Promise<ProvincialExemptionDocumentsResult> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .get<unknown>('/lexis/rpc/exemption-details/document-details', {
+  const response = await apiService.getCachedResponse<unknown>(
+    '/lexis/rpc/exemption-details/document-details',
+    {
       params: {
         exemptionNumber,
       },
-    })
+    },
+    { ttlMs: DOCUMENT_LIST_CACHE_TTL_MS },
+  )
 
   if (response.status === 204) {
     return {

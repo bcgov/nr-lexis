@@ -7,13 +7,13 @@ import { searchProvincialExemptions } from '@/service/provincial-exemption-searc
 import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
 
-const getMock = vi.fn()
+const { getCachedResponseMock } = vi.hoisted(() => ({
+  getCachedResponseMock: vi.fn(),
+}))
 
 vi.mock('@/service/api-service', () => ({
   default: {
-    getAxiosInstance: () => ({
-      get: getMock,
-    }),
+    getCachedResponse: getCachedResponseMock,
   },
 }))
 
@@ -140,9 +140,10 @@ const indigenousRequest = {
 }
 
 const readParams = (callIndex = 0): URLSearchParams => {
-  const [, config] = getMock.mock.calls[callIndex]
+  const [, config, options] = getCachedResponseMock.mock.calls[callIndex]
   expect(config).toBeDefined()
   expect(config.params).toBeInstanceOf(URLSearchParams)
+  expect(options).toEqual({ ttlMs: 10_000 })
   return config.params as URLSearchParams
 }
 
@@ -152,7 +153,7 @@ describe('search-service contracts', () => {
   })
 
   it('maps provincial application results and backend query params', async () => {
-    getMock.mockResolvedValue({
+    getCachedResponseMock.mockResolvedValue({
       data: {
         results: [
           {
@@ -176,7 +177,11 @@ describe('search-service contracts', () => {
 
     const result = await searchProvincialApplications(applicationRequest)
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/applications/search', expect.any(Object))
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/applications/search',
+      expect.any(Object),
+      { ttlMs: 10_000 },
+    )
     const params = readParams()
     expect(params.get('applicationNumber')).toBe('101')
     expect(params.get('agentClientNumber')).toBe('00012345')
@@ -192,7 +197,7 @@ describe('search-service contracts', () => {
   })
 
   it('maps provincial exemption status fields and approval gate', async () => {
-    getMock.mockResolvedValue({
+    getCachedResponseMock.mockResolvedValue({
       data: {
         results: [
           {
@@ -215,7 +220,11 @@ describe('search-service contracts', () => {
 
     const result = await searchProvincialExemptions(exemptionRequest)
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/exemptions/search', expect.any(Object))
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/exemptions/search',
+      expect.any(Object),
+      { ttlMs: 10_000 },
+    )
     const params = readParams()
     expect(params.get('exemptionStatusCode')).toBe('NEW')
     expect(params.get('region')).toBe('22')
@@ -229,7 +238,7 @@ describe('search-service contracts', () => {
   })
 
   it('maps federal search data and sends client filter to owner and agent params', async () => {
-    getMock.mockResolvedValue({
+    getCachedResponseMock.mockResolvedValue({
       data: {
         results: [
           {
@@ -254,7 +263,11 @@ describe('search-service contracts', () => {
 
     const result = await searchFederalApplications(federalRequest)
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/federal/applications/search', expect.any(Object))
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/federal/applications/search',
+      expect.any(Object),
+      { ttlMs: 10_000 },
+    )
     const params = readParams()
     expect(params.get('ownerClientNumber')).toBe('00011122')
     expect(params.get('agentClientNumber')).toBe('00011122')
@@ -303,7 +316,7 @@ describe('search-service contracts', () => {
       message: 'Backend indigenous reserve permit response did not include results.',
     },
   ])('rejects %s response when results payload is missing', async ({ run, message }) => {
-    getMock.mockResolvedValue({ data: { rows: [] } })
+    getCachedResponseMock.mockResolvedValue({ data: { rows: [] } })
 
     await expect(run()).rejects.toThrow(message)
   })

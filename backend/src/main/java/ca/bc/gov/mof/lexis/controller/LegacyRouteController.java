@@ -12,6 +12,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,6 +28,9 @@ public class LegacyRouteController {
   private static final String ACTION_VIEW = "view";
   private static final String ACTION_ADD = "add";
   private static final String ACTION_CREATE = "create";
+  private static final String ACTION_APPROVE = "approve";
+  private static final String ACTION_DISAPPROVE = "disapprove";
+  private static final String ACTION_SEND_STATUS_EMAIL = "sendStatusEmail";
   private static final String ACTION_VERIFY_APPLICATION_CLIENTS = "verifyApplicationClients";
   private static final String ACTION_HAS_VALID_OFFER = "hasValidOffer";
   private static final String ACTION_GET_APPLICATIONS = "getApplications";
@@ -48,6 +52,8 @@ public class LegacyRouteController {
   private static final String ACTION_GET_APPLICATION_VOLUME = "getApplicationVolume";
   private static final String ACTION_GET_CLIENT_DATA = "getClientData";
   private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
+  private static final String ACTION_ADD_OFFER = "addOffer";
+  private static final String ACTION_UPDATE_OFFER = "updateOffer";
   private static final String ACTION_GET_PERMIT_SUMMARY = "getPermitSummary";
   private static final String ACTION_GET_TOTAL_FEES_FOR_PERMIT = "getTotalFeesForPermit";
   private static final String ACTION_GET_SCALE_FEES_FOR_PACKAGE = "getScaleFeesForPackage";
@@ -195,7 +201,9 @@ public class LegacyRouteController {
     return applicationController.getByApplicationNumber(applicationNumber);
   }
 
-  @GetMapping({"/applicationsReview", "/applicationsReview.do"})
+  @RequestMapping(
+      path = {"/applicationsReview", "/applicationsReview.do"},
+      method = {RequestMethod.GET, RequestMethod.POST})
   public ResponseEntity<?> applicationsReview(
       @RequestParam(name = "actionMapping", required = false) String actionMapping,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
@@ -207,9 +215,20 @@ public class LegacyRouteController {
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      @RequestParam MultiValueMap<String, String> requestParameters,
+      HttpServletRequest request) {
     if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
       return applicationReviewController.searchOptions();
+    }
+    if (ACTION_APPROVE.equalsIgnoreCase(actionMapping)) {
+      return applicationReviewController.approveLegacy(requestParameters, request);
+    }
+    if (ACTION_DISAPPROVE.equalsIgnoreCase(actionMapping)) {
+      return applicationReviewController.disapproveLegacy(requestParameters, request);
+    }
+    if (ACTION_SEND_STATUS_EMAIL.equalsIgnoreCase(actionMapping)) {
+      return applicationReviewController.sendStatusEmailLegacy(requestParameters);
     }
     return applicationReviewController.search(
         applicationNumber,
@@ -514,10 +533,13 @@ public class LegacyRouteController {
       method = {RequestMethod.GET, RequestMethod.POST})
   public ResponseEntity<?> offerDetailsRpc(
       @RequestParam(name = "actionMapping", required = false) String actionMapping,
-      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
-      @RequestParam(name = "packageNumber", required = false) String packageNumber,
-      @RequestParam(name = "clientNumber", required = false) String clientNumber,
-      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
+      @RequestParam MultiValueMap<String, String> requestParameters,
+      Authentication authentication) {
+    String applicationNumber = first(requestParameters, "applicationNumber");
+    String packageNumber = first(requestParameters, "packageNumber");
+    String clientNumber = first(requestParameters, "clientNumber");
+    String clientLocationCode = first(requestParameters, "clientLocationCode");
+
     if (ACTION_VALIDATE_APPLICATION_NUMBER.equalsIgnoreCase(actionMapping)) {
       return offerDetailsRpcController.validateApplicationNumber(applicationNumber);
     }
@@ -538,6 +560,12 @@ public class LegacyRouteController {
     }
     if (ACTION_GET_CLIENT_LOCATIONS.equalsIgnoreCase(actionMapping)) {
       return offerDetailsRpcController.getClientLocations(clientNumber);
+    }
+    if (ACTION_ADD_OFFER.equalsIgnoreCase(actionMapping)) {
+      return offerDetailsRpcController.addOfferLegacy(requestParameters, authentication);
+    }
+    if (ACTION_UPDATE_OFFER.equalsIgnoreCase(actionMapping)) {
+      return offerDetailsRpcController.updateOfferLegacy(requestParameters, authentication);
     }
     return ResponseEntity.noContent().build();
   }
@@ -774,5 +802,13 @@ public class LegacyRouteController {
     }
     // Legacy "add/create" loaded JSP pages; REST shim preserves only authorization semantics.
     return ResponseEntity.noContent().build();
+  }
+
+  private String first(MultiValueMap<String, String> parameters, String name) {
+    if (parameters == null || name == null) {
+      return null;
+    }
+    String value = parameters.getFirst(name);
+    return value == null || value.isBlank() ? null : value.trim();
   }
 }

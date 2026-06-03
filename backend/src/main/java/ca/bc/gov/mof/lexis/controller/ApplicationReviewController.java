@@ -17,12 +17,15 @@ import java.security.Principal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -133,9 +136,138 @@ public class ApplicationReviewController {
     return ResponseEntity.ok(service.sendStatusEmail(applicationNumber, requestBody));
   }
 
+  public ResponseEntity<Map<String, Object>> approveLegacy(
+      MultiValueMap<String, String> parameters, HttpServletRequest request) {
+    ApplicationReviewService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application review service unavailable - returning no content for legacy approve");
+      return ResponseEntity.noContent().build();
+    }
+
+    Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    ApplicationReviewStatusUpdateResultDto result =
+        applicationNumber == null
+            ? invalidStatusUpdate("Application number must be a positive value.")
+            : service.approve(applicationNumber, resolvePrincipalName(request));
+
+    return ResponseEntity.ok(legacyStatusUpdatePayload(result));
+  }
+
+  public ResponseEntity<Map<String, Object>> disapproveLegacy(
+      MultiValueMap<String, String> parameters, HttpServletRequest request) {
+    ApplicationReviewService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application review service unavailable - returning no content for legacy disapprove");
+      return ResponseEntity.noContent().build();
+    }
+
+    Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    String statusCode = first(parameters, "applicationReviewStatus", "appStatus", "statusCode");
+    String remark = first(parameters, "remarkBody", "remark");
+    String clientEmail = first(parameters, "clientEmailAddress");
+    ApplicationReviewStatusUpdateResultDto result =
+        applicationNumber == null
+            ? invalidStatusUpdate("Application number must be a positive value.")
+            : service.updateStatus(
+                applicationNumber,
+                new ApplicationReviewStatusUpdateRequestDto(statusCode, remark, clientEmail),
+                resolvePrincipalName(request));
+
+    Map<String, Object> payload = legacyStatusUpdatePayload(result);
+    payload.put("clientEmail", legacyClientEmail(result.clientEmail()));
+    payload.put("remark", result.remark() == null ? "" : result.remark());
+    return ResponseEntity.ok(payload);
+  }
+
+  public ResponseEntity<Map<String, Object>> sendStatusEmailLegacy(
+      MultiValueMap<String, String> parameters) {
+    ApplicationReviewService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application review service unavailable - returning no content for legacy status email");
+      return ResponseEntity.noContent().build();
+    }
+
+    Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    ApplicationReviewStatusEmailResultDto result =
+        applicationNumber == null
+            ? new ApplicationReviewStatusEmailResultDto(
+                false, "Application number must be a positive value.")
+            : service.sendStatusEmail(
+                applicationNumber,
+                new ApplicationReviewStatusEmailRequestDto(
+                    first(parameters, "appStatus", "statusCode", "applicationReviewStatus"),
+                    first(parameters, "clientEmailAddress"),
+                    first(parameters, "remark", "remarkBody")));
+
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("success", Boolean.toString(result.success()));
+    payload.put("message", result.message());
+    return ResponseEntity.ok(payload);
+  }
+
   private String resolvePrincipalName(HttpServletRequest request) {
     Principal principal = request.getUserPrincipal();
     return principal == null ? null : principal.getName();
+  }
+
+  private ApplicationReviewStatusUpdateResultDto invalidStatusUpdate(String message) {
+    return new ApplicationReviewStatusUpdateResultDto(false, false, null, null, null, message);
+  }
+
+  private Map<String, Object> legacyStatusUpdatePayload(
+      ApplicationReviewStatusUpdateResultDto result) {
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("hasLock", result.updated());
+    payload.put("valid", result.valid());
+    payload.put("statusCode", result.statusCode());
+    payload.put("clientEmail", result.clientEmail());
+    payload.put("remark", result.remark());
+    payload.put("message", result.message());
+    payload.put("errors", result.valid() ? List.of() : List.of(result.message()));
+    payload.put("warnings", List.of());
+    return payload;
+  }
+
+  private String legacyClientEmail(String clientEmail) {
+    String normalized = trimToNull(clientEmail);
+    return normalized == null ? "none" : normalized;
+  }
+
+  private Long parsePositiveLong(String value) {
+    String normalized = trimToNull(value);
+    if (normalized == null) {
+      return null;
+    }
+    try {
+      long parsed = Long.parseLong(normalized);
+      return parsed > 0 ? parsed : null;
+    } catch (NumberFormatException ex) {
+      return null;
+    }
+  }
+
+  private String first(MultiValueMap<String, String> parameters, String... names) {
+    if (parameters == null || names == null) {
+      return null;
+    }
+    for (String name : names) {
+      if (name == null) {
+        continue;
+      }
+      String value = trimToNull(parameters.getFirst(name));
+      if (value != null) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  private String trimToNull(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private LocalDate parseDate(String input) {

@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { env } from '@/env'
 import apiService from '@/service/api-service'
 
 export type CreateSubmissionResult = {
@@ -65,7 +66,7 @@ const getConfiguredPath = (configured: unknown, fallback: string): string => {
 }
 
 const getCreateSubmitRequestMode = (): CreateSubmitRequestMode => {
-  const configured = (import.meta.env.VITE_LEXIS_CREATE_SUBMIT_REQUEST_MODE ?? 'form')
+  const configured = (env.VITE_LEXIS_CREATE_SUBMIT_REQUEST_MODE ?? 'form')
     .toString()
     .trim()
     .toLowerCase()
@@ -74,7 +75,7 @@ const getCreateSubmitRequestMode = (): CreateSubmitRequestMode => {
 }
 
 const shouldIncludeCreateSubmitActionMapping = (): boolean => {
-  const configured = (import.meta.env.VITE_LEXIS_CREATE_SUBMIT_INCLUDE_ACTION_MAPPING ?? 'true')
+  const configured = (env.VITE_LEXIS_CREATE_SUBMIT_INCLUDE_ACTION_MAPPING ?? 'true')
     .toString()
     .trim()
     .toLowerCase()
@@ -97,35 +98,29 @@ const withCreateActionMapping = (
 
 const getProvincialApplicationCreatePath = (): string => {
   return getConfiguredPath(
-    import.meta.env.VITE_LEXIS_CREATE_APPLICATION_ENDPOINT,
+    env.VITE_LEXIS_CREATE_APPLICATION_ENDPOINT,
     '/lexis/applicationDetailsRPC',
   )
 }
 
 const getProvincialExemptionCreatePath = (): string => {
-  return getConfiguredPath(
-    import.meta.env.VITE_LEXIS_CREATE_EXEMPTION_ENDPOINT,
-    '/lexis/exemptionDetailsRPC',
-  )
+  return getConfiguredPath(env.VITE_LEXIS_CREATE_EXEMPTION_ENDPOINT, '/lexis/exemptionDetailsRPC')
 }
 
 const getProvincialOfferCreatePath = (): string => {
-  return getConfiguredPath(
-    import.meta.env.VITE_LEXIS_CREATE_OFFER_ENDPOINT,
-    '/lexis/offerDetailsRPC',
-  )
+  return getConfiguredPath(env.VITE_LEXIS_CREATE_OFFER_ENDPOINT, '/lexis/offerDetailsRPC')
 }
 
 const getProvincialPermitCreatePath = (): string => {
   return getConfiguredPath(
-    import.meta.env.VITE_LEXIS_CREATE_PERMIT_ENDPOINT,
+    env.VITE_LEXIS_CREATE_PERMIT_ENDPOINT,
     '/lexis/rpc/permit-details/add-permit',
   )
 }
 
 const getIndigenousReservePermitCreatePath = (): string => {
   return getConfiguredPath(
-    import.meta.env.VITE_LEXIS_CREATE_INDIGENOUS_PERMIT_ENDPOINT,
+    env.VITE_LEXIS_CREATE_INDIGENOUS_PERMIT_ENDPOINT,
     '/lexis/indianReservePermitDetails',
   )
 }

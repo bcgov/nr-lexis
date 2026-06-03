@@ -9,6 +9,8 @@ public interface ClientLookupService {
 
   List<ClientLocation> getClientLocations(String clientNumber);
 
+  List<ClientContact> getContactsForLocation(String clientNumber, String locationCode);
+
   record ClientData(
       String clientNumber,
       String companyName,
@@ -22,4 +24,6 @@ public interface ClientLookupService {
       String email) {}
 
   record ClientLocation(String locationName, String locationCode, boolean selected) {}
+
+  record ClientContact(String contactName, String contactId) {}
 }

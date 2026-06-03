@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -122,6 +122,33 @@ describe('Admin policy action states', () => {
 
     expect(screen.getByText('Policy Update')).toBeInTheDocument()
     expect(screen.getByText('Fee policy added.')).toBeInTheDocument()
+  })
+
+  it('loads fee and FIL policies sequentially', async () => {
+    let resolveFeePolicies:
+      | ((value: Awaited<ReturnType<typeof fetchFeePolicies>>) => void)
+      | undefined
+    mockedFetchFeePolicies.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFeePolicies = resolve
+        }),
+    )
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(mockedFetchFeePolicies).toHaveBeenCalledTimes(1)
+    })
+    expect(mockedFetchFilPolicies).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveFeePolicies?.([])
+    })
+
+    await waitFor(() => {
+      expect(mockedFetchFilPolicies).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('enforces permission and disables mutating actions when not granted', async () => {

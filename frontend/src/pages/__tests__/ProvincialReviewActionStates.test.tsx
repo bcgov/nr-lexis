@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -51,6 +51,35 @@ const reviewResponse = {
       speciesEndUse: 'LUM',
       listingDate: '2026-02-26',
       status: 'REV',
+      region: '12',
+      showInfoIcon: false,
+    },
+  ],
+  page: {
+    number: 0,
+    size: 10,
+    totalElements: 2,
+    totalPages: 1,
+  },
+}
+
+const twoNewReviewResponse = {
+  content: [
+    {
+      applicationNumber: '2000001',
+      volume: 210.5,
+      speciesEndUse: 'LOG',
+      listingDate: '2026-02-01',
+      status: 'NEW',
+      region: '11',
+      showInfoIcon: false,
+    },
+    {
+      applicationNumber: '2000002',
+      volume: 95,
+      speciesEndUse: 'LUM',
+      listingDate: '2026-02-26',
+      status: 'NEW',
       region: '12',
       showInfoIcon: false,
     },
@@ -163,6 +192,135 @@ describe('Provincial Review Action State Smoke', () => {
     })
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+  })
+
+  it('approves selected applications sequentially', async () => {
+    mockedSearchApplicationReviews.mockResolvedValue(twoNewReviewResponse)
+    let resolveFirstApproval:
+      | ((value: Awaited<ReturnType<typeof approveApplicationReview>>) => void)
+      | undefined
+    let resolveSecondApproval:
+      | ((value: Awaited<ReturnType<typeof approveApplicationReview>>) => void)
+      | undefined
+    mockedApproveApplicationReview
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirstApproval = resolve
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecondApproval = resolve
+          }),
+      )
+
+    renderPage()
+    await screen.findByText('2000001')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+
+    await waitFor(() => {
+      expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
+    })
+    expect(mockedApproveApplicationReview).toHaveBeenNthCalledWith(1, '2000001')
+
+    await act(async () => {
+      resolveFirstApproval?.({
+        updated: true,
+        valid: true,
+        statusCode: 'APP',
+        clientEmail: '',
+        remark: '',
+        message: 'Approved first',
+      })
+    })
+
+    await waitFor(() => {
+      expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(2)
+    })
+    expect(mockedApproveApplicationReview).toHaveBeenNthCalledWith(2, '2000002')
+
+    await act(async () => {
+      resolveSecondApproval?.({
+        updated: true,
+        valid: true,
+        statusCode: 'APP',
+        clientEmail: '',
+        remark: '',
+        message: 'Approved second',
+      })
+    })
+
+    expect(await screen.findByText('Approved 2 application(s).')).toBeInTheDocument()
+  })
+
+  it('updates status and sends emails sequentially per selected application', async () => {
+    mockedSearchApplicationReviews.mockResolvedValue(twoNewReviewResponse)
+    let resolveFirstEmail:
+      | ((value: Awaited<ReturnType<typeof sendApplicationReviewStatusEmail>>) => void)
+      | undefined
+    mockedSendApplicationReviewStatusEmail
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirstEmail = resolve
+          }),
+      )
+      .mockResolvedValueOnce({
+        success: true,
+        message: 'Sent second',
+      })
+
+    renderPage()
+    await screen.findByText('2000001')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.selectOptions(screen.getByLabelText('Update Status Code'), 'REJ')
+    await userEvent.type(
+      screen.getByLabelText('Client Email Address (required for status email)'),
+      'client@example.com',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Update Status and Send Email' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(1)
+      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledTimes(1)
+    })
+    expect(mockedUpdateApplicationReviewStatus).toHaveBeenNthCalledWith(
+      1,
+      '2000001',
+      expect.objectContaining({
+        statusCode: 'REJ',
+        clientEmailAddress: 'client@example.com',
+      }),
+    )
+
+    await act(async () => {
+      resolveFirstEmail?.({
+        success: true,
+        message: 'Sent first',
+      })
+    })
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(2)
+      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledTimes(2)
+    })
+    expect(mockedUpdateApplicationReviewStatus).toHaveBeenNthCalledWith(
+      2,
+      '2000002',
+      expect.objectContaining({
+        statusCode: 'REJ',
+        clientEmailAddress: 'client@example.com',
+      }),
+    )
+
+    expect(
+      await screen.findByText('Updated status and sent email for 2 application(s).'),
+    ).toBeInTheDocument()
   })
 
   it('disables selection and action buttons when user lacks review permission', async () => {
