@@ -13,6 +13,9 @@ import java.util.Optional;
 import java.util.TreeSet;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.NoTransactionException;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 @Service
 @Profile("oracle")
@@ -24,6 +27,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String OIC_INDICATOR_NO = "N";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
   private static final String SPECIES_TYPE_CEDAR = "CE";
+  private static final String EXPORT_SPECIES_ENDUSE_OTHER = "OT";
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
   private static final String PACKAGE_EXISTS_MESSAGE_TEMPLATE = "Package %s already exists.";
@@ -445,6 +449,97 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
+  public PackagePersistenceResult addPackage(PackageMutationRequest request, String userId) {
+    PackageMutationRequest normalized = normalizePackageMutationRequest(request);
+    List<String> errors = validatePackageMutation(normalized, false);
+    if (!errors.isEmpty()) {
+      return invalidPackageResult(normalized.packageNumber(), errors);
+    }
+
+    ApplicationDetailsRpcRepository.PackageMutationRecord record =
+        toPackageMutationRecord(normalized, null, normalized.packageNumber(), userId, true);
+    Optional<ApplicationDetailsRpcRepository.PackageMutationRow> inserted = repository.insertPackage(record);
+    if (inserted.isEmpty()) {
+      return invalidPackageResult(
+          normalized.packageNumber(),
+          List.of("We were unable to save this package. Please try again."));
+    }
+
+    return packageSuccess(record.packageNumber(), record);
+  }
+
+  @Override
+  @Transactional
+  public PackagePersistenceResult updatePackage(PackageMutationRequest request, String userId) {
+    PackageMutationRequest normalized = normalizePackageMutationRequest(request);
+    String currentPackageNumber = trimToNull(normalized.packageNumber());
+    ApplicationDetailsRpcRepository.PackageMutationRow existing =
+        repository.findPackageMutationByPackageNumber(currentPackageNumber).orElse(null);
+    List<String> errors = validatePackageMutation(normalized, true);
+    if (existing == null) {
+      errors.add("Package number " + nonNull(currentPackageNumber) + " does not exist.");
+    }
+    if (!errors.isEmpty()) {
+      return invalidPackageResult(firstNonBlank(normalized.newPackageNumber(), currentPackageNumber), errors);
+    }
+
+    String targetPackageNumber = firstNonBlank(normalized.newPackageNumber(), currentPackageNumber);
+    ApplicationDetailsRpcRepository.PackageMutationRecord record =
+        toPackageMutationRecord(normalized, existing, targetPackageNumber, userId, false);
+
+    boolean saved;
+    if (!targetPackageNumber.equals(currentPackageNumber)) {
+      saved = renamePackage(currentPackageNumber, record, userId);
+    } else {
+      saved = repository.updatePackage(record);
+    }
+
+    if (!saved) {
+      return invalidPackageResult(
+          targetPackageNumber, List.of("We were unable to save this package. Please try again."));
+    }
+    return packageSuccess(targetPackageNumber, record);
+  }
+
+  @Override
+  public ScalePersistenceResult addScaleToPackage(ScaleMutationRequest request, String userId) {
+    ScaleMutationRequest normalized = normalizeScaleMutationRequest(request);
+    List<String> errors = validateScaleMutation(normalized);
+    if (!errors.isEmpty()) {
+      return new ScalePersistenceResult(false, null, errors, List.of());
+    }
+
+    ApplicationDetailsRpcRepository.ScaleMutationRecord record =
+        new ApplicationDetailsRpcRepository.ScaleMutationRecord(
+            null,
+            normalized.timberMark(),
+            normalized.pieces(),
+            normalized.volume(),
+            normalized.packageNumber(),
+            normalized.speciesCode(),
+            normalized.gradeCode(),
+            normalized.applicationNumber(),
+            null,
+            0.0d,
+            trimToNull(userId),
+            Instant.now(),
+            null);
+
+    Optional<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> inserted =
+        repository.insertScaleDetail(record);
+    if (inserted.isEmpty()) {
+      return new ScalePersistenceResult(
+          false,
+          null,
+          List.of("We were unable to save this scale. Please try again."),
+          List.of());
+    }
+
+    return new ScalePersistenceResult(
+        true, toScalePersistenceItem(inserted.get()), List.of(), List.of());
+  }
+
+  @Override
   public boolean deleteScaleById(String scaleDetailId, String userId) {
     String normalizedScaleDetailId = trimToNull(scaleDetailId);
     if (normalizedScaleDetailId == null) {
@@ -460,6 +555,306 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return false;
     }
     return repository.deletePackageById(normalizedPackageNumber, trimToNull(userId));
+  }
+
+  private PackageMutationRequest normalizePackageMutationRequest(PackageMutationRequest request) {
+    if (request == null) {
+      return new PackageMutationRequest(
+          null, null, null, null, null, null, null, null, null, null, null, null, List.of());
+    }
+    return new PackageMutationRequest(
+        trimToNull(request.packageNumber()),
+        trimToNull(request.newPackageNumber()),
+        request.applicationNumber(),
+        request.volume(),
+        request.averageLength(),
+        request.averageDiameter(),
+        trimToNull(request.status()),
+        request.comments() == null ? "" : request.comments(),
+        trimToNull(request.reprocessed()),
+        trimToNull(request.ageClass()),
+        trimToNull(request.productType()),
+        trimToNull(request.endUseCode()),
+        normalizeCodes(request.speciesCodes()));
+  }
+
+  private List<String> validatePackageMutation(PackageMutationRequest request, boolean update) {
+    List<String> errors = new ArrayList<>();
+    String packageNumber = trimToNull(request.packageNumber());
+    String newPackageNumber = trimToNull(request.newPackageNumber());
+    String targetPackageNumber = update ? firstNonBlank(newPackageNumber, packageNumber) : packageNumber;
+
+    if (packageNumber == null) {
+      errors.add(required("package number"));
+    } else if (packageNumber.length() > 20) {
+      errors.add("The package number must be 20 characters or fewer.");
+    }
+
+    if (targetPackageNumber != null && targetPackageNumber.length() > 20) {
+      errors.add("The new package number must be 20 characters or fewer.");
+    }
+
+    if (!update && packageNumber != null && repository.packageExists(packageNumber)) {
+      errors.add(PACKAGE_EXISTS_MESSAGE_TEMPLATE.formatted(packageNumber));
+    }
+
+    if (update
+        && newPackageNumber != null
+        && !newPackageNumber.equals(packageNumber)
+        && repository.packageExists(newPackageNumber)) {
+      errors.add(PACKAGE_EXISTS_MESSAGE_TEMPLATE.formatted(newPackageNumber));
+    }
+
+    if (request.averageDiameter() == null || request.averageDiameter() <= 0.0d) {
+      errors.add("The package average diameter must be greater than 0.");
+    } else if (request.averageDiameter() > 99.99d) {
+      errors.add("The package average diameter must be less than 99.9.");
+    }
+
+    if (request.averageLength() == null || request.averageLength() <= 0.0d) {
+      errors.add("The package average length must be greater than 0.");
+    } else if (request.averageLength() > 99.0d) {
+      errors.add("The package average length must be less than 99.9.");
+    }
+
+    if (request.volume() == null || request.volume() < 0.0d) {
+      errors.add("The package volume must be greater than or equal to 0.");
+    } else if (!hasAtMostOneDecimal(request.volume())) {
+      errors.add("The package volume must have no more than one decimal place.");
+    }
+
+    if (request.status() == null) {
+      errors.add(required("package status code"));
+    }
+
+    if (update && packageNumber != null && request.volume() != null) {
+      double scaledVolume =
+          repository.findScaleDetailsByPackageNumber(packageNumber).stream()
+              .mapToDouble(ApplicationDetailsRpcRepository.ApplicationScaleDetailRow::speciesGradeVolume)
+              .sum();
+      if (BigDecimal.valueOf(request.volume()).compareTo(BigDecimal.valueOf(scaledVolume)) < 0) {
+        errors.add(
+            "The package volume must be more than the total scale volume ("
+                + formatOneDecimal(scaledVolume)
+                + ").");
+      }
+    }
+
+    return errors;
+  }
+
+  private boolean hasAtMostOneDecimal(Double value) {
+    if (value == null) {
+      return false;
+    }
+    return BigDecimal.valueOf(value).stripTrailingZeros().scale() <= 1;
+  }
+
+  private ApplicationDetailsRpcRepository.PackageMutationRecord toPackageMutationRecord(
+      PackageMutationRequest request,
+      ApplicationDetailsRpcRepository.PackageMutationRow existing,
+      String packageNumber,
+      String userId,
+      boolean insert) {
+    return new ApplicationDetailsRpcRepository.PackageMutationRecord(
+        packageNumber,
+        request.applicationNumber() == null && existing != null
+            ? existing.applicationNumber()
+            : request.applicationNumber(),
+        firstNonBlank(request.reprocessed(), existing == null ? null : existing.reprocessedIndicator()),
+        request.volume() == null && existing != null ? existing.packageVolume() : request.volume(),
+        request.averageLength() == null && existing != null ? existing.averageLength() : request.averageLength(),
+        request.averageDiameter() == null && existing != null ? existing.averageDiameter() : request.averageDiameter(),
+        request.comments(),
+        existing == null ? null : existing.packageFee(),
+        existing == null ? null : existing.federalPermitNumber(),
+        existing == null ? null : existing.reservePermitNumber(),
+        firstNonBlank(request.status(), existing == null ? null : existing.packageStatusCode()),
+        firstNonBlank(request.ageClass(), existing == null ? null : existing.growthTypeCode()),
+        firstNonBlank(request.productType(), existing == null ? null : existing.productTypeCode()),
+        insert ? trimToNull(userId) : existing == null ? trimToNull(userId) : existing.entryUserId(),
+        insert || existing == null ? Instant.now() : existing.entryTimestamp(),
+        insert ? null : trimToNull(userId),
+        toPackageEndUses(request.speciesCodes(), request.endUseCode()));
+  }
+
+  private List<ApplicationDetailsRpcRepository.PackageEndUseRecord> toPackageEndUses(
+      List<String> speciesCodes, String endUseCode) {
+    List<String> normalizedSpeciesCodes = normalizeCodes(speciesCodes);
+    if (normalizedSpeciesCodes.isEmpty()) {
+      return List.of();
+    }
+
+    String normalizedEndUseCode = firstNonBlank(endUseCode, EXPORT_SPECIES_ENDUSE_OTHER);
+    return normalizedSpeciesCodes.stream()
+        .map(code -> new ApplicationDetailsRpcRepository.PackageEndUseRecord(code, normalizedEndUseCode))
+        .toList();
+  }
+
+  private boolean renamePackage(
+      String currentPackageNumber,
+      ApplicationDetailsRpcRepository.PackageMutationRecord record,
+      String userId) {
+    if (repository.insertPackage(record).isEmpty()) {
+      markRollbackOnly();
+      return false;
+    }
+
+    for (ApplicationDetailsRpcRepository.ScaleMutationRow scale :
+        repository.findScaleMutationDetailsByPackageNumber(currentPackageNumber)) {
+      boolean updated =
+          repository.updateScaleDetail(
+              new ApplicationDetailsRpcRepository.ScaleMutationRecord(
+                  scale.scaleDetailId(),
+                  scale.timberMark(),
+                  scale.piecesCount(),
+                  scale.speciesGradeVolume(),
+                  record.packageNumber(),
+                  scale.speciesCode(),
+                  scale.gradeCode(),
+                  scale.applicationNumber(),
+                  scale.exportPermitDetailNumber(),
+                  0.0d,
+                  scale.entryUserId(),
+                  scale.entryTimestamp(),
+                  trimToNull(userId)));
+      if (!updated) {
+        markRollbackOnly();
+        return false;
+      }
+    }
+
+    boolean deleted = repository.deletePackageById(currentPackageNumber, trimToNull(userId));
+    if (!deleted) {
+      markRollbackOnly();
+    }
+    return deleted;
+  }
+
+  private PackagePersistenceResult invalidPackageResult(String packageNumber, List<String> errors) {
+    return new PackagePersistenceResult(
+        false, nonNull(trimToNull(packageNumber)), null, null, null, null, errors, List.of());
+  }
+
+  private PackagePersistenceResult packageSuccess(
+      String packageNumber, ApplicationDetailsRpcRepository.PackageMutationRecord record) {
+    return new PackagePersistenceResult(
+        true,
+        nonNull(trimToNull(packageNumber)),
+        formatOneDecimal(record.packageVolume() == null ? 0.0d : record.packageVolume()),
+        formatOneDecimal(record.averageLength() == null ? 0.0d : record.averageLength()),
+        formatOneDecimal(record.averageDiameter() == null ? 0.0d : record.averageDiameter()),
+        nonNull(trimToNull(record.packageStatusCode())),
+        List.of(),
+        List.of());
+  }
+
+  private ScaleMutationRequest normalizeScaleMutationRequest(ScaleMutationRequest request) {
+    if (request == null) {
+      return new ScaleMutationRequest(null, null, null, null, null, null, null);
+    }
+    return new ScaleMutationRequest(
+        trimToNull(request.timberMark()),
+        trimToNull(request.packageNumber()),
+        trimToNull(request.gradeCode()),
+        trimToNull(request.speciesCode()),
+        request.applicationNumber(),
+        request.pieces(),
+        request.volume());
+  }
+
+  private List<String> validateScaleMutation(ScaleMutationRequest request) {
+    List<String> errors = new ArrayList<>();
+    String packageNumber = trimToNull(request.packageNumber());
+
+    if (packageNumber == null) {
+      errors.add(required("scale package number"));
+    } else if (!repository.packageExists(packageNumber)) {
+      errors.add("Package number " + packageNumber + " does not exist.");
+    }
+
+    if (trimToNull(request.timberMark()) == null) {
+      errors.add(required("timber mark"));
+    }
+    if (trimToNull(request.gradeCode()) == null) {
+      errors.add(required("grade code"));
+    }
+    if (trimToNull(request.speciesCode()) == null) {
+      errors.add(required("species code"));
+    }
+
+    if (request.pieces() == null || request.pieces() < 0) {
+      errors.add("The scale pieces must be greater than or equal to 0.");
+    } else if (request.pieces() > 999_999_999L) {
+      errors.add("The scale pieces must be less than 999999999.");
+    }
+
+    if (request.volume() == null || request.volume() < 0.0d) {
+      errors.add("The scale volume must be greater than or equal to 0.");
+    } else if (request.volume() > 99_999.9d) {
+      errors.add("The scale volume must be less than 99999.9.");
+    }
+
+    if (packageNumber != null) {
+      List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows =
+          repository.findScaleDetailsByPackageNumber(packageNumber);
+      boolean duplicate =
+          scaleRows.stream()
+              .anyMatch(
+                  row ->
+                      equalsNullable(trimToNull(request.timberMark()), trimToNull(row.timberMark()))
+                          && equalsNullable(trimToNull(request.speciesCode()), trimToNull(row.exportSpeciesCode()))
+                          && equalsNullable(trimToNull(request.gradeCode()), trimToNull(row.exportGradeCode())));
+      if (duplicate) {
+        errors.add("A scale with this timber mark, species, and grade already exists.");
+      }
+
+      if (request.volume() != null) {
+        double packageVolume =
+            repository
+                .findPackageDetailsByPackageNumber(packageNumber)
+                .map(ApplicationDetailsRpcRepository.PackageDetailsRow::packageVolume)
+                .orElse(0.0d);
+        double scaleTotal =
+            scaleRows.stream()
+                .mapToDouble(ApplicationDetailsRpcRepository.ApplicationScaleDetailRow::speciesGradeVolume)
+                .sum();
+        if (BigDecimal.valueOf(scaleTotal + request.volume()).compareTo(BigDecimal.valueOf(packageVolume)) > 0) {
+          double allowedVolume = packageVolume - scaleTotal;
+          errors.add(
+              allowedVolume <= 0.0d
+                  ? "The package volume has already been met."
+                  : "The scale volume must be less than " + formatOneDecimal(allowedVolume) + ".");
+        }
+      }
+    }
+
+    return errors;
+  }
+
+  private ApplicationPackageScaleItem toScalePersistenceItem(
+      ApplicationDetailsRpcRepository.ApplicationScaleDetailRow row) {
+    return new ApplicationPackageScaleItem(
+        false,
+        formatTimberMark(row.timberMark()),
+        resolveSpeciesDescription(row.exportSpeciesCode(), new LinkedHashMap<>()),
+        row.piecesCount(),
+        resolveGradeDescription(row.exportGradeCode(), new LinkedHashMap<>()),
+        formatOneDecimal(row.speciesGradeVolume()),
+        nonNull(trimToNull(row.exportScaleDetailId())),
+        nonNull(trimToNull(row.cascadeSplitCode())));
+  }
+
+  private boolean equalsNullable(String left, String right) {
+    return left == null ? right == null : left.equals(right);
+  }
+
+  private void markRollbackOnly() {
+    try {
+      TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+    } catch (NoTransactionException ignored) {
+      // No surrounding transaction exists for this call path.
+    }
   }
 
   private List<SpeciesEndUseItem> toSpeciesEndUseItems(

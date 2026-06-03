@@ -523,6 +523,146 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void addPackageShouldInsertPackageWithLegacyEndUseRows() {
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.insertPackage(any()))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-903", 1000456L, "N", 125.5d, 12.0d, 24.0d, "Test", null,
+                    null, null, "A", null, null, "idir\\jsmith", Instant.now())));
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.addPackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                " PKG-903 ",
+                null,
+                1000456L,
+                125.5d,
+                12.0d,
+                24.0d,
+                "A",
+                "Test",
+                "N",
+                null,
+                null,
+                "LU",
+                List.of("FI", "HE")),
+            " idir\\jsmith ");
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.packageNumber()).isEqualTo("PKG-903");
+    assertThat(response.volume()).isEqualTo("125.5");
+
+    ArgumentCaptor<ApplicationDetailsRpcRepository.PackageMutationRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.PackageMutationRecord.class);
+    verify(repository).insertPackage(recordCaptor.capture());
+    ApplicationDetailsRpcRepository.PackageMutationRecord record = recordCaptor.getValue();
+    assertThat(record.packageNumber()).isEqualTo("PKG-903");
+    assertThat(record.applicationNumber()).isEqualTo(1000456L);
+    assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
+    assertThat(record.endUses())
+        .extracting(
+            ApplicationDetailsRpcRepository.PackageEndUseRecord::speciesCode,
+            ApplicationDetailsRpcRepository.PackageEndUseRecord::endUseCode)
+        .containsExactly(tuple("FI", "LU"), tuple("HE", "LU"));
+  }
+
+  @Test
+  void updatePackageShouldRenamePackageAndMoveScales() {
+    Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
+    when(repository.findPackageMutationByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-903", 1000456L, "N", 100.0d, 10.0d, 20.0d, "Old", null,
+                    null, null, "A", "O", "H", "idir\\old", entryTimestamp)));
+    when(repository.packageExists("PKG-904")).thenReturn(false);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.insertPackage(any()))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-904", 1000456L, "N", 100.0d, 10.0d, 20.0d, "New", null,
+                    null, null, "A", "O", "H", "idir\\old", entryTimestamp)));
+    when(repository.findScaleMutationDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ScaleMutationRow(
+                    "55", "TM001", 10L, 12.5d, "PKG-903", "FI", "1", 1000456L,
+                    null, "idir\\old", entryTimestamp)));
+    when(repository.updateScaleDetail(any())).thenReturn(true);
+    when(repository.deletePackageById("PKG-903", "idir\\jsmith")).thenReturn(true);
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.updatePackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                "PKG-904",
+                1000456L,
+                100.0d,
+                10.0d,
+                20.0d,
+                "A",
+                "New",
+                "N",
+                "O",
+                "H",
+                null,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.packageNumber()).isEqualTo("PKG-904");
+
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ScaleMutationRecord> scaleCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ScaleMutationRecord.class);
+    verify(repository).updateScaleDetail(scaleCaptor.capture());
+    assertThat(scaleCaptor.getValue().packageNumber()).isEqualTo("PKG-904");
+    assertThat(scaleCaptor.getValue().updateUserId()).isEqualTo("idir\\jsmith");
+    verify(repository).deletePackageById("PKG-903", "idir\\jsmith");
+  }
+
+  @Test
+  void addScaleToPackageShouldInsertScaleAndReturnLegacyResult() {
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findPackageDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageDetailsRow(
+                    "PKG-903", 100.0d, 10.0d, 20.0d, "A", "", "N", "O", "H")));
+    when(repository.insertScaleDetail(any()))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "55", "TM001", "FI", "1", 12.5d, 10L, 1000456L, null, "PKG-903", "")));
+    when(repository.findSpeciesCode("FI"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("FI", "Douglas-fir", 1L, 1L)));
+    when(repository.findGradeCode("1"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
+
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addScaleToPackage(
+            new ApplicationDetailsRpcService.ScaleMutationRequest(
+                "TM001", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.result()).isNotNull();
+    assertThat(response.result().timberMark()).isEqualTo("TM001");
+    assertThat(response.result().species()).isEqualTo("Douglas-fir");
+    assertThat(response.result().grade()).isEqualTo("Sawlog");
+    assertThat(response.result().id()).isEqualTo("55");
+
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ScaleMutationRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ScaleMutationRecord.class);
+    verify(repository).insertScaleDetail(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().entryUserId()).isEqualTo("idir\\jsmith");
+    assertThat(recordCaptor.getValue().speciesGradeVolume()).isEqualTo(12.5d);
+  }
+
+  @Test
   void getPackageDetailsShouldReturnLegacyPackagePayload() {
     when(repository.findPackageDetailsByPackageNumber("PKG-903"))
         .thenReturn(

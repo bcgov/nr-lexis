@@ -19,6 +19,9 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.NoTransactionException;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 @Repository
 @Profile("oracle")
@@ -80,6 +83,18 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "DELETE_SCALE_DETAIL(?,?)";
   private static final String DELETE_PACKAGE =
       LEXIS_GROUP_9_PACKAGE + "DELETE_PACKAGE(?,?)";
+  private static final String INSERT_PACKAGE =
+      LEXIS_GROUP_9_PACKAGE + "INSERT_PACKAGE(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String UPDATE_PACKAGE =
+      LEXIS_GROUP_9_PACKAGE + "UPDATE_PACKAGE(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String INSERT_SCALE_DETAIL =
+      LEXIS_GROUP_9_PACKAGE + "INSERT_SCALE_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String UPDATE_SCALE =
+      LEXIS_GROUP_9_PACKAGE + "UPDATE_SCALE(?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String INSERT_END_USE_PACKAGE =
+      LEXIS_GROUP_14_PACKAGE + "INSERT_END_USE_PACKAGE(?,?,?)";
+  private static final String DELETE_END_USE_PACKAGE =
+      LEXIS_GROUP_14_PACKAGE + "DELETE_END_USE_PACKAGE(?)";
   private static final String INSERT_EXEMPTION_APPLICATION =
       LEXIS_GROUP_13_PACKAGE
           + "INSERT_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
@@ -217,6 +232,89 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
                 getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
                 getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
                 getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));
+  }
+
+  public Optional<PackageMutationRow> findPackageMutationByPackageNumber(String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_PACKAGE_BY_NUMBER,
+        cs -> cs.setString(1, normalized),
+        2,
+        this::mapPackageMutationRow);
+  }
+
+  @Transactional
+  public Optional<PackageMutationRow> insertPackage(PackageMutationRecord record) {
+    if (record == null || trim(record.packageNumber()) == null) {
+      return Optional.empty();
+    }
+    Optional<PackageMutationRow> inserted =
+        queryCursorSingle(
+            INSERT_PACKAGE,
+            cs -> bindPackageInsert(cs, record),
+            18,
+            this::mapPackageMutationRow);
+
+    if (inserted.isPresent() && !insertPackageEndUses(record.packageNumber(), record.endUses())) {
+      markRollbackOnly();
+      return Optional.empty();
+    }
+    return inserted;
+  }
+
+  @Transactional
+  public boolean updatePackage(PackageMutationRecord record) {
+    if (record == null || trim(record.packageNumber()) == null) {
+      return false;
+    }
+
+    boolean updated =
+        executeProcedure(
+            UPDATE_PACKAGE,
+            cs -> bindPackageUpdate(cs, record));
+    if (!updated) {
+      return false;
+    }
+
+    if (!deletePackageEndUses(record.packageNumber())
+        || !insertPackageEndUses(record.packageNumber(), record.endUses())) {
+      markRollbackOnly();
+      return false;
+    }
+    return true;
+  }
+
+  public Optional<ApplicationScaleDetailRow> insertScaleDetail(ScaleMutationRecord record) {
+    if (record == null || trim(record.packageNumber()) == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        INSERT_SCALE_DETAIL,
+        cs -> bindScaleInsert(cs, record),
+        13,
+        this::mapApplicationScaleDetailRow);
+  }
+
+  public List<ScaleMutationRow> findScaleMutationDetailsByPackageNumber(String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_SCALE_DETAIL_BY_PACKAGE,
+        cs -> cs.setString(1, normalized),
+        2,
+        this::mapScaleMutationRow);
+  }
+
+  public boolean updateScaleDetail(ScaleMutationRecord record) {
+    if (record == null || trim(record.scaleDetailId()) == null) {
+      return false;
+    }
+    return executeProcedure(UPDATE_SCALE, cs -> bindScaleUpdate(cs, record));
   }
 
   public boolean deleteScaleById(String scaleDetailId, String userId) {
@@ -643,6 +741,121 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index, record.oicIndicator());
   }
 
+  private void bindPackageInsert(CallableStatement cs, PackageMutationRecord record)
+      throws SQLException {
+    int index = 1;
+    setStringOrNull(cs, index++, record.packageNumber());
+    setLongOrNull(cs, index++, emptyToNull(record.applicationNumber()));
+    setStringOrNull(cs, index++, record.reprocessedIndicator());
+    setDoubleOrNull(cs, index++, record.packageVolume());
+    setDoubleOrNull(cs, index++, record.averageLength());
+    setDoubleOrNull(cs, index++, record.averageDiameter());
+    setStringOrNull(cs, index++, record.comments());
+    setDoubleOrNull(cs, index++, record.packageFee());
+    setLongOrNull(cs, index++, emptyToNull(record.federalPermitNumber()));
+    setLongOrNull(cs, index++, emptyToNull(record.reservePermitNumber()));
+    setStringOrNull(cs, index++, record.packageStatusCode());
+    setStringOrNull(cs, index++, record.growthTypeCode());
+    setStringOrNull(cs, index++, record.productTypeCode());
+    setStringOrNull(cs, index++, record.entryUserId());
+    setTimestampOrNull(cs, index++, record.entryTimestamp());
+    setStringOrNull(cs, index++, null);
+    setTimestampOrNull(cs, index, null);
+  }
+
+  private void bindPackageUpdate(CallableStatement cs, PackageMutationRecord record)
+      throws SQLException {
+    int index = 1;
+    setStringOrNull(cs, index++, record.packageNumber());
+    setLongOrNull(cs, index++, record.applicationNumber());
+    setStringOrNull(cs, index++, record.reprocessedIndicator());
+    setDoubleOrNull(cs, index++, record.packageVolume());
+    setDoubleOrNull(cs, index++, record.averageLength());
+    setDoubleOrNull(cs, index++, record.averageDiameter());
+    setStringOrNull(cs, index++, record.comments());
+    setDoubleOrNull(cs, index++, record.packageFee());
+    setLongOrNull(cs, index++, emptyToNull(record.federalPermitNumber()));
+    setLongOrNull(cs, index++, emptyToNull(record.reservePermitNumber()));
+    setStringOrNull(cs, index++, record.packageStatusCode());
+    setStringOrNull(cs, index++, record.growthTypeCode());
+    setStringOrNull(cs, index++, record.productTypeCode());
+    setStringOrNull(cs, index++, record.entryUserId());
+    setTimestampOrNull(cs, index++, record.entryTimestamp());
+    setStringOrNull(cs, index++, record.updateUserId());
+    cs.setTimestamp(index, Timestamp.from(Instant.now()));
+  }
+
+  private void bindScaleInsert(CallableStatement cs, ScaleMutationRecord record)
+      throws SQLException {
+    int index = 1;
+    setStringOrNull(cs, index++, record.timberMark());
+    setLongOrNull(cs, index++, record.piecesCount());
+    setDoubleOrNull(cs, index++, record.speciesGradeVolume());
+    setStringOrNull(cs, index++, record.entryUserId());
+    setTimestampOrNull(cs, index++, record.entryTimestamp());
+    setStringOrNull(cs, index++, null);
+    setTimestampOrNull(cs, index++, null);
+    setStringOrNull(cs, index++, record.packageNumber());
+    setStringOrNull(cs, index++, record.speciesCode());
+    setStringOrNull(cs, index++, record.gradeCode());
+    setLongOrNull(cs, index++, emptyToNull(record.exportPermitDetailNumber()));
+    setDoubleOrNull(cs, index, record.exemptionOverrideRate());
+  }
+
+  private void bindScaleUpdate(CallableStatement cs, ScaleMutationRecord record)
+      throws SQLException {
+    int index = 1;
+    setLongOrNull(cs, index++, parsePositiveLong(record.scaleDetailId()));
+    setLongOrNull(cs, index++, emptyToNull(record.exportPermitDetailNumber()));
+    setStringOrNull(cs, index++, record.timberMark());
+    setLongOrNull(cs, index++, record.piecesCount());
+    setDoubleOrNull(cs, index++, record.speciesGradeVolume());
+    setStringOrNull(cs, index++, record.packageNumber());
+    setStringOrNull(cs, index++, record.speciesCode());
+    setStringOrNull(cs, index++, record.gradeCode());
+    setStringOrNull(cs, index++, record.entryUserId());
+    setTimestampOrNull(cs, index++, record.entryTimestamp());
+    setStringOrNull(cs, index++, record.updateUserId());
+    cs.setTimestamp(index, Timestamp.from(Instant.now()));
+  }
+
+  private boolean insertPackageEndUses(String packageNumber, List<PackageEndUseRecord> endUses) {
+    String normalizedPackageNumber = trim(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return false;
+    }
+    if (endUses == null || endUses.isEmpty()) {
+      return true;
+    }
+    for (PackageEndUseRecord endUse : endUses) {
+      String speciesCode = trim(endUse.speciesCode());
+      String endUseCode = trim(endUse.endUseCode());
+      if (speciesCode == null || endUseCode == null) {
+        continue;
+      }
+      boolean inserted =
+          executeProcedure(
+          INSERT_END_USE_PACKAGE,
+          cs -> {
+            cs.setString(1, normalizedPackageNumber);
+            cs.setString(2, speciesCode);
+            cs.setString(3, endUseCode);
+          });
+      if (!inserted) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private boolean deletePackageEndUses(String packageNumber) {
+    String normalizedPackageNumber = trim(packageNumber);
+    if (normalizedPackageNumber == null) {
+      return false;
+    }
+    return executeProcedure(DELETE_END_USE_PACKAGE, cs -> cs.setString(1, normalizedPackageNumber));
+  }
+
   private DocumentRow mapDocumentRow(ResultSet rs) {
     Long attachmentId = getLong(rs, "EXPORT_ATTACHMENT_ID");
     String fileName = safeFileName(getString(rs, "FILE_NAME"));
@@ -681,6 +894,40 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         getString(rs, "CASCADE_SPLIT_CODE"));
   }
 
+  private PackageMutationRow mapPackageMutationRow(ResultSet rs) {
+    return new PackageMutationRow(
+        getString(rs, "PACKAGE_NUMBER"),
+        getLong(rs, "APPLICATION_NUMBER"),
+        getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
+        getDouble(rs, "PACKAGE_VOLUME"),
+        getDouble(rs, "AVERAGE_LENGTH"),
+        getDouble(rs, "AVERAGE_DIAMETER"),
+        getString(rs, "COMMENTS"),
+        getDouble(rs, "PACKAGE_FEE"),
+        getLong(rs, "EXPORT_FED_PERMIT_DETAIL_ID"),
+        getLong(rs, "EXPORT_INDIAN_RSRV_PRMT_DTL_ID"),
+        getString(rs, "EXPORT_PACKAGE_STATUS_CODE"),
+        getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+        getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
+        getString(rs, "ENTRY_USERID"),
+        getInstant(rs, "ENTRY_TIMESTAMP"));
+  }
+
+  private ScaleMutationRow mapScaleMutationRow(ResultSet rs) {
+    return new ScaleMutationRow(
+        getString(rs, "EXPORT_SCALE_DETAIL_ID"),
+        getString(rs, "TIMBER_MARK"),
+        getLong(rs, "PIECES_COUNT"),
+        getDouble(rs, "SPECIES_GRADE_VOLUME"),
+        getString(rs, "PACKAGE_NUMBER"),
+        getString(rs, "EXPORT_SPECIES_CODE"),
+        getString(rs, "EXPORT_GRADE_CODE"),
+        getLong(rs, "APPLICATION_NUMBER"),
+        getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+        getString(rs, "ENTRY_USERID"),
+        getInstant(rs, "ENTRY_TIMESTAMP"));
+  }
+
   private Instant getInstant(ResultSet rs, String column) {
     try {
       Timestamp value = rs.getTimestamp(column);
@@ -700,6 +947,14 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       return parsed > 0 ? parsed : null;
     } catch (NumberFormatException ex) {
       return null;
+    }
+  }
+
+  private void markRollbackOnly() {
+    try {
+      TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+    } catch (NoTransactionException ignored) {
+      // No surrounding transaction exists for this call path.
     }
   }
 
@@ -788,6 +1043,72 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String packageNumber,
       String cascadeSplitCode) {}
 
+  public record PackageEndUseRecord(String speciesCode, String endUseCode) {}
+
+  public record PackageMutationRecord(
+      String packageNumber,
+      Long applicationNumber,
+      String reprocessedIndicator,
+      Double packageVolume,
+      Double averageLength,
+      Double averageDiameter,
+      String comments,
+      Double packageFee,
+      Long federalPermitNumber,
+      Long reservePermitNumber,
+      String packageStatusCode,
+      String growthTypeCode,
+      String productTypeCode,
+      String entryUserId,
+      Instant entryTimestamp,
+      String updateUserId,
+      List<PackageEndUseRecord> endUses) {}
+
+  public record PackageMutationRow(
+      String packageNumber,
+      Long applicationNumber,
+      String reprocessedIndicator,
+      Double packageVolume,
+      Double averageLength,
+      Double averageDiameter,
+      String comments,
+      Double packageFee,
+      Long federalPermitNumber,
+      Long reservePermitNumber,
+      String packageStatusCode,
+      String growthTypeCode,
+      String productTypeCode,
+      String entryUserId,
+      Instant entryTimestamp) {}
+
+  public record ScaleMutationRecord(
+      String scaleDetailId,
+      String timberMark,
+      Long piecesCount,
+      Double speciesGradeVolume,
+      String packageNumber,
+      String speciesCode,
+      String gradeCode,
+      Long applicationNumber,
+      Long exportPermitDetailNumber,
+      Double exemptionOverrideRate,
+      String entryUserId,
+      Instant entryTimestamp,
+      String updateUserId) {}
+
+  public record ScaleMutationRow(
+      String scaleDetailId,
+      String timberMark,
+      Long piecesCount,
+      Double speciesGradeVolume,
+      String packageNumber,
+      String speciesCode,
+      String gradeCode,
+      Long applicationNumber,
+      Long exportPermitDetailNumber,
+      String entryUserId,
+      Instant entryTimestamp) {}
+
   public record PackageDetailsRow(
       String packageNumber,
       double packageVolume,
@@ -837,6 +1158,14 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       cs.setNull(index, Types.DATE);
     } else {
       cs.setDate(index, Date.valueOf(value));
+    }
+  }
+
+  private void setTimestampOrNull(CallableStatement cs, int index, Instant value) throws SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.TIMESTAMP);
+    } else {
+      cs.setTimestamp(index, Timestamp.from(value));
     }
   }
 

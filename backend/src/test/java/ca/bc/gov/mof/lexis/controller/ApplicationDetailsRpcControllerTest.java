@@ -678,6 +678,131 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void addPackageToApplicationLegacyShouldMapLegacyParamsAndReturnPackagePayload() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.addPackage(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.PackagePersistenceResult(
+                true, "PKG-903", "125.5", "12.0", "24.0", "A", List.of(), List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("packageNumber", "PKG-903");
+    params.add("applicationNumber", "1000456");
+    params.add("packageDialogPackageVolume", "125.5");
+    params.add("packageDialogAverageLength", "12.0");
+    params.add("packageDialogAverageDiameter", "24.0");
+    params.add("packageDialogPackageStatus", "A");
+    params.add("packageDialogPackageComment", "Test package");
+    params.add("packageDialogReprocessedIndicator", "N");
+    params.add("createPackageEndUse", "LU");
+    params.add("createPackageSpeciesTableValues", "FI,HE");
+
+    ResponseEntity<ApplicationDetailsRpcController.PackagePersistenceResponseDto> response =
+        controller.addPackageToApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().valid()).isTrue();
+    assertThat(response.getBody().packageNumber()).isEqualTo("PKG-903");
+    assertThat(response.getBody().packageName()).isEqualTo("PKG-903");
+
+    ArgumentCaptor<ApplicationDetailsRpcService.PackageMutationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.PackageMutationRequest.class);
+    verify(service).addPackage(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    ApplicationDetailsRpcService.PackageMutationRequest request = requestCaptor.getValue();
+    assertThat(request.applicationNumber()).isEqualTo(1000456L);
+    assertThat(request.volume()).isEqualTo(125.5d);
+    assertThat(request.status()).isEqualTo("A");
+    assertThat(request.endUseCode()).isEqualTo("LU");
+    assertThat(request.speciesCodes()).containsExactly("FI", "HE");
+  }
+
+  @Test
+  void updatePackageLegacyShouldMapLegacyParamsAndReturnPackagePayload() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.updatePackage(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.PackagePersistenceResult(
+                true, "PKG-904", "100.0", "10.0", "20.0", "A", List.of(), List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("packageNumber", "PKG-903");
+    params.add("newPackageNumber", "PKG-904");
+    params.add("applicationNumber", "1000456");
+    params.add("packageDialogPackageVolume", "100.0");
+    params.add("packageDialogAverageLength", "10.0");
+    params.add("packageDialogAverageDiameter", "20.0");
+    params.add("packageDialogPackageStatus", "A");
+    params.add("updatePackageEndUse", "LU");
+    params.add("updatePackageSpeciesTableValues", "CE");
+
+    ResponseEntity<ApplicationDetailsRpcController.PackagePersistenceResponseDto> response =
+        controller.updatePackageLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().packageNumber()).isEqualTo("PKG-904");
+
+    ArgumentCaptor<ApplicationDetailsRpcService.PackageMutationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.PackageMutationRequest.class);
+    verify(service).updatePackage(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    ApplicationDetailsRpcService.PackageMutationRequest request = requestCaptor.getValue();
+    assertThat(request.packageNumber()).isEqualTo("PKG-903");
+    assertThat(request.newPackageNumber()).isEqualTo("PKG-904");
+    assertThat(request.speciesCodes()).containsExactly("CE");
+  }
+
+  @Test
+  void addScaleToPackageLegacyShouldMapLegacyParamsAndReturnScalePayload() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.addScaleToPackage(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.ScalePersistenceResult(
+                true,
+                new ApplicationDetailsRpcService.ApplicationPackageScaleItem(
+                    false, "A12345", "Douglas-fir", 10L, "Sawlog", "12.5", "55", ""),
+                List.of(),
+                List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("timberMark", "A12345");
+    params.add("scaleVolume", "12.5");
+    params.add("scalePieces", "10");
+    params.add("gradeCode", "1");
+    params.add("speciesCode", "FI");
+    params.add("applicationNumber", "1000456");
+    params.add("packageNumber", "PKG-903");
+
+    ResponseEntity<ApplicationDetailsRpcController.ScalePersistenceResponseDto> response =
+        controller.addScaleToPackageLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().valid()).isTrue();
+    assertThat(response.getBody().result()).isNotNull();
+    assertThat(response.getBody().result().id()).isEqualTo("55");
+    assertThat(response.getBody().result().pieces()).isEqualTo(10L);
+
+    ArgumentCaptor<ApplicationDetailsRpcService.ScaleMutationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.ScaleMutationRequest.class);
+    verify(service).addScaleToPackage(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    ApplicationDetailsRpcService.ScaleMutationRequest request = requestCaptor.getValue();
+    assertThat(request.packageNumber()).isEqualTo("PKG-903");
+    assertThat(request.applicationNumber()).isEqualTo(1000456L);
+    assertThat(request.pieces()).isEqualTo(10L);
+    assertThat(request.volume()).isEqualTo(12.5d);
+  }
+
+  @Test
   void deleteScaleByIdLegacyShouldPassAuthenticatedUserAndReturnSuccess() {
     TestingAuthenticationToken authentication = authorized("createApplication");
     when(serviceProvider.getIfAvailable()).thenReturn(service);

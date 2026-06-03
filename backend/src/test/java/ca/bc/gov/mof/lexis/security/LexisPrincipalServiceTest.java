@@ -36,6 +36,38 @@ class LexisPrincipalServiceTest {
   }
 
   @Test
+  void shouldResolveBusinessBceidUserFromUserInfoClaims() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken = jwt("5cdd5598-30c1-708e-3288-187b41a253e8");
+
+    when(userInfoService.getUserInfo(accessToken))
+        .thenReturn(
+            Map.of(
+                "custom:idp_name", "bceidbusiness",
+                "custom:idp_username", "industry.user"));
+
+    String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
+
+    assertThat(principalName).isEqualTo("BCEIDBUSINESS\\industry.user");
+  }
+
+  @Test
+  void shouldResolveBceidUserIdWhenUsernameClaimIsMissing() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken = jwt("5cdd5598-30c1-708e-3288-187b41a253e8");
+
+    when(userInfoService.getUserInfo(accessToken))
+        .thenReturn(
+            Map.of(
+                "custom:idp_name", "dev-bceidbusiness",
+                "custom:idp_user_id", "ab123456"));
+
+    String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
+
+    assertThat(principalName).isEqualTo("DEV-BCEIDBUSINESS\\ab123456");
+  }
+
+  @Test
   void shouldFallbackToJwtSubjectWhenUserInfoHasNoProfileClaims() {
     LexisPrincipalService service = new LexisPrincipalService(userInfoService);
     Jwt accessToken = jwt("5cdd5598-30c1-708e-3288-187b41a253e8");

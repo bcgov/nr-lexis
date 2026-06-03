@@ -7,6 +7,7 @@ import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -61,6 +62,9 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_SCALE_BY_ID = "getScaleById";
   private static final String ACTION_GET_PACKAGE_DETAILS = "getPackageDetails";
   private static final String ACTION_IS_PACKAGE_VALID = "isPackageValid";
+  private static final String ACTION_ADD_PACKAGE_TO_APPLICATION = "addPackageToApplication";
+  private static final String ACTION_UPDATE_PACKAGE = "updatePackage";
+  private static final String ACTION_ADD_SCALE_TO_PACKAGE = "addScaleToPackage";
   private static final String ACTION_DELETE_SCALE_BY_ID = "deleteScaleById";
   private static final String ACTION_DELETE_PACKAGE_BY_ID = "deletePackageById";
   private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
@@ -668,6 +672,84 @@ public class ApplicationDetailsRpcController {
     return isPackageValid(packageNumber);
   }
 
+  @PostMapping("/rpc/application-details/package")
+  public ResponseEntity<PackagePersistenceResponseDto> addPackageToApplication(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for add package");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        toPackagePersistenceResponse(
+            service.addPackage(toPackageMutationRequest(parameters), userId(authentication))));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_ADD_PACKAGE_TO_APPLICATION)
+  public ResponseEntity<PackagePersistenceResponseDto> addPackageToApplicationLegacy(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return addPackageToApplication(parameters, authentication);
+  }
+
+  @PostMapping("/rpc/application-details/package-update")
+  public ResponseEntity<PackagePersistenceResponseDto> updatePackage(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for update package");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        toPackagePersistenceResponse(
+            service.updatePackage(toPackageMutationRequest(parameters), userId(authentication))));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_UPDATE_PACKAGE)
+  public ResponseEntity<PackagePersistenceResponseDto> updatePackageLegacy(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return updatePackage(parameters, authentication);
+  }
+
+  @PostMapping("/rpc/application-details/package-scale")
+  public ResponseEntity<ScalePersistenceResponseDto> addScaleToPackage(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for add scale");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        toScalePersistenceResponse(
+            service.addScaleToPackage(toScaleMutationRequest(parameters), userId(authentication))));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_ADD_SCALE_TO_PACKAGE)
+  public ResponseEntity<ScalePersistenceResponseDto> addScaleToPackageLegacy(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return addScaleToPackage(parameters, authentication);
+  }
+
   @DeleteMapping("/rpc/application-details/scale")
   public ResponseEntity<DeleteResponseDto> deleteScaleById(
       @RequestParam(name = "scaleId", required = false) String scaleId,
@@ -763,6 +845,36 @@ public class ApplicationDetailsRpcController {
         !"false".equalsIgnoreCase(first(parameters, "validation")));
   }
 
+  private ApplicationDetailsRpcService.PackageMutationRequest toPackageMutationRequest(
+      MultiValueMap<String, String> parameters) {
+    return new ApplicationDetailsRpcService.PackageMutationRequest(
+        first(parameters, "packageNumber"),
+        first(parameters, "newPackageNumber"),
+        parsePositiveLong(first(parameters, "applicationNumber")),
+        parseDouble(first(parameters, "packageDialogPackageVolume", "packageVolume", "volume")),
+        parseDouble(first(parameters, "packageDialogAverageLength", "averageLength", "length")),
+        parseDouble(first(parameters, "packageDialogAverageDiameter", "averageDiameter", "diameter")),
+        first(parameters, "packageDialogPackageStatus", "packageStatus", "status"),
+        first(parameters, "packageDialogPackageComment", "comments", "comment"),
+        first(parameters, "packageDialogReprocessedIndicator", "reprocessed"),
+        first(parameters, "packageDialogAgeClass", "updatePackageDialogAgeClass", "ageClass"),
+        first(parameters, "packageDialogProductType", "updatePackageDialogProductType", "productType"),
+        first(parameters, "createPackageEndUse", "updatePackageEndUse", "endUseCode"),
+        parseCsv(first(parameters, "createPackageSpeciesTableValues", "updatePackageSpeciesTableValues", "speciesCodes")));
+  }
+
+  private ApplicationDetailsRpcService.ScaleMutationRequest toScaleMutationRequest(
+      MultiValueMap<String, String> parameters) {
+    return new ApplicationDetailsRpcService.ScaleMutationRequest(
+        first(parameters, "timberMark"),
+        first(parameters, "packageNumber"),
+        first(parameters, "gradeCode"),
+        first(parameters, "speciesCode"),
+        parsePositiveLong(first(parameters, "applicationNumber")),
+        parseNonNegativeLong(first(parameters, "scalePieces", "pieces")),
+        parseDouble(first(parameters, "scaleVolume", "volume")));
+  }
+
   private String first(MultiValueMap<String, String> parameters, String... names) {
     if (parameters == null || names == null) {
       return null;
@@ -798,6 +910,18 @@ public class ApplicationDetailsRpcController {
     }
     try {
       return Double.parseDouble(rawValue.trim());
+    } catch (NumberFormatException ex) {
+      return null;
+    }
+  }
+
+  private Long parseNonNegativeLong(String rawValue) {
+    if (rawValue == null || rawValue.isBlank()) {
+      return null;
+    }
+    try {
+      long parsed = Long.parseLong(rawValue.trim());
+      return parsed >= 0 ? parsed : null;
     } catch (NumberFormatException ex) {
       return null;
     }
@@ -932,6 +1056,17 @@ public class ApplicationDetailsRpcController {
     }
   }
 
+  private List<String> parseCsv(String csv) {
+    String normalized = trimToNull(csv);
+    if (normalized == null) {
+      return List.of();
+    }
+    return List.of(normalized.split(",")).stream()
+        .map(this::trimToNull)
+        .filter(value -> value != null)
+        .toList();
+  }
+
   private ApplicationCodeResponseDto toCodeResponse(ApplicationDetailsRpcService.CodeItem item) {
     return new ApplicationCodeResponseDto(item.code(), item.description());
   }
@@ -995,6 +1130,38 @@ public class ApplicationDetailsRpcController {
   private PackageValidityResponseDto toPackageValidityResponse(
       ApplicationDetailsRpcService.PackageValidityItem item) {
     return new PackageValidityResponseDto(item.valid(), item.message());
+  }
+
+  private PackagePersistenceResponseDto toPackagePersistenceResponse(
+      ApplicationDetailsRpcService.PackagePersistenceResult item) {
+    return new PackagePersistenceResponseDto(
+        item.valid(),
+        item.errors(),
+        item.warnings(),
+        item.packageNumber(),
+        item.volume(),
+        item.length(),
+        item.diameter(),
+        item.status(),
+        item.packageNumber());
+  }
+
+  private ScalePersistenceResponseDto toScalePersistenceResponse(
+      ApplicationDetailsRpcService.ScalePersistenceResult item) {
+    ApplicationDetailsRpcService.ApplicationPackageScaleItem result = item.result();
+    return new ScalePersistenceResponseDto(
+        item.valid(),
+        result == null
+            ? null
+            : new ScalePersistenceResultDto(
+                result.timberMark(),
+                result.pieces(),
+                result.species(),
+                result.grade(),
+                result.volume(),
+                result.id()),
+        item.errors(),
+        item.warnings());
   }
 
   private String userId(Authentication authentication) {
@@ -1103,6 +1270,28 @@ public class ApplicationDetailsRpcController {
 
   @JsonInclude(JsonInclude.Include.NON_NULL)
   public record PackageValidityResponseDto(boolean valid, String message) {}
+
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  public record PackagePersistenceResponseDto(
+      boolean valid,
+      List<String> errors,
+      List<String> warnings,
+      String packageNumber,
+      String volume,
+      String length,
+      String diameter,
+      String status,
+      @JsonProperty("package") String packageName) {}
+
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  public record ScalePersistenceResponseDto(
+      boolean valid,
+      ScalePersistenceResultDto result,
+      List<String> errors,
+      List<String> warnings) {}
+
+  public record ScalePersistenceResultDto(
+      String timberMark, long pieces, String species, String grade, String volume, String id) {}
 
   public record DeleteResponseDto(boolean success) {}
 }

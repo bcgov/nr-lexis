@@ -51,6 +51,12 @@ public interface ApplicationDetailsRpcService {
 
   PackageValidityItem isPackageValid(String packageNumber);
 
+  PackagePersistenceResult addPackage(PackageMutationRequest request, String userId);
+
+  PackagePersistenceResult updatePackage(PackageMutationRequest request, String userId);
+
+  ScalePersistenceResult addScaleToPackage(ScaleMutationRequest request, String userId);
+
   boolean deleteScaleById(String scaleDetailId, String userId);
 
   boolean deletePackageById(String packageNumber, String userId);
@@ -108,6 +114,46 @@ public interface ApplicationDetailsRpcService {
       String productTypeDescription) {}
 
   record PackageValidityItem(boolean valid, String message) {}
+
+  record PackageMutationRequest(
+      String packageNumber,
+      String newPackageNumber,
+      Long applicationNumber,
+      Double volume,
+      Double averageLength,
+      Double averageDiameter,
+      String status,
+      String comments,
+      String reprocessed,
+      String ageClass,
+      String productType,
+      String endUseCode,
+      List<String> speciesCodes) {}
+
+  record PackagePersistenceResult(
+      boolean valid,
+      String packageNumber,
+      String volume,
+      String length,
+      String diameter,
+      String status,
+      List<String> errors,
+      List<String> warnings) {}
+
+  record ScaleMutationRequest(
+      String timberMark,
+      String packageNumber,
+      String gradeCode,
+      String speciesCode,
+      Long applicationNumber,
+      Long pieces,
+      Double volume) {}
+
+  record ScalePersistenceResult(
+      boolean valid,
+      ApplicationPackageScaleItem result,
+      List<String> errors,
+      List<String> warnings) {}
 
   record ApplicationClientSnapshot(
       String agentClientNumber,
