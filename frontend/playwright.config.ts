@@ -2,7 +2,6 @@ import { defineConfig, devices } from '@playwright/test'
 import { E2E_BASE_URL } from './e2e/utils'
 
 const isRemoteE2E = !!process.env.CI && /^https?:\/\//.test(E2E_BASE_URL)
-const runSimulationSpecs = process.env.E2E_ENABLE_SIMULATION_SPECS === 'true'
 
 /**
  * Read environment variables from file.
@@ -16,7 +15,7 @@ const runSimulationSpecs = process.env.E2E_ENABLE_SIMULATION_SPECS === 'true'
 export default defineConfig({
   timeout: 120000,
   testDir: './e2e',
-  testMatch: runSimulationSpecs ? /.*\.spec\.ts/ : /smoke\.spec\.ts/,
+  testMatch: /smoke\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
