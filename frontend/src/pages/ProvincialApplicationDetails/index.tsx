@@ -26,6 +26,7 @@ import {
   removeApplicationDocument,
   type ProvincialApplicationDocumentRow,
 } from '@/service/provincial-application-documents-service'
+import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const displayValue = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined || value === '') {
@@ -99,55 +100,55 @@ const ProvincialApplicationDetailsPage: FC = () => {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    const load = async () => {
-      if (!applicationNumber) {
-        setErrorMessage('Application number is missing from the route.')
-        setDetail(null)
-        setDocumentRows([])
-        setDocumentsErrorMessage('')
-        setActionErrorMessage('')
-        setActionInfoMessage('')
-        setLoading(false)
-        return
-      }
-
-      setLoading(true)
-      setErrorMessage('')
+  const loadApplicationDetail = useCallback(async () => {
+    if (!applicationNumber) {
+      setErrorMessage('Application number is missing from the route.')
+      setDetail(null)
+      setDocumentRows([])
       setDocumentsErrorMessage('')
       setActionErrorMessage('')
       setActionInfoMessage('')
-
-      try {
-        const response = await fetchProvincialApplicationDetail(applicationNumber)
-        setDetail(response)
-        if (!response) {
-          setErrorMessage(`No provincial application found for ${applicationNumber}.`)
-          setDocumentRows([])
-          return
-        }
-
-        try {
-          const documentsResult = await fetchApplicationDocuments(applicationNumber)
-          setDocumentRows(documentsResult.rows)
-        } catch (error) {
-          console.error(error)
-          setDocumentRows([])
-          setDocumentsErrorMessage('Unable to retrieve application documents.')
-        }
-      } catch (error) {
-        console.error(error)
-        setErrorMessage('Unable to retrieve provincial application detail.')
-        setDetail(null)
-        setDocumentRows([])
-        setDocumentsErrorMessage('')
-      } finally {
-        setLoading(false)
-      }
+      setLoading(false)
+      return
     }
 
-    void load()
+    setLoading(true)
+    setErrorMessage('')
+    setDocumentsErrorMessage('')
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+
+    try {
+      const response = await fetchProvincialApplicationDetail(applicationNumber)
+      setDetail(response)
+      if (!response) {
+        setErrorMessage(`No provincial application found for ${applicationNumber}.`)
+        setDocumentRows([])
+        return
+      }
+
+      try {
+        const documentsResult = await fetchApplicationDocuments(applicationNumber)
+        setDocumentRows(documentsResult.rows)
+      } catch (error) {
+        console.error(error)
+        setDocumentRows([])
+        setDocumentsErrorMessage('Unable to retrieve application documents.')
+      }
+    } catch (error) {
+      console.error(error)
+      setErrorMessage('Unable to retrieve provincial application detail.')
+      setDetail(null)
+      setDocumentRows([])
+      setDocumentsErrorMessage('')
+    } finally {
+      setLoading(false)
+    }
   }, [applicationNumber])
+
+  useEffect(() => {
+    void loadApplicationDetail()
+  }, [loadApplicationDetail])
 
   const filteredPackages = useMemo(() => {
     const rows = detail?.packages ?? []
@@ -196,6 +197,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   }, [documentRows, documentsFilter])
 
   const canManageDocuments = canPerform('/fileApplicationUpload')
+  const canManageItems = canPerform('createApplication') && !detail?.readOnly && !detail?.locked
 
   const onCreateOffer = useCallback(() => {
     if (!detail) {
@@ -509,6 +511,13 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 </TableBody>
               </Table>
             </Tile>
+          </Column>
+          <Column sm={4} md={8} lg={16}>
+            <ProvincialApplicationItemsPanel
+              detail={detail}
+              canManageItems={canManageItems}
+              onDetailChanged={loadApplicationDetail}
+            />
           </Column>
           <Column sm={4} md={8} lg={8}>
             <Tile>

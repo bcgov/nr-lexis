@@ -1,0 +1,522 @@
+import apiService from '@/service/api-service'
+import { toSearchServiceError } from '@/service/search-service-fallback'
+
+export type ApplicationCodeOption = {
+  code: string
+  description: string
+}
+
+export type ApplicationPackageDetails = {
+  success: boolean
+  packageNumber: string
+  volume: string
+  scaledVolume: number
+  length: string
+  diameter: string
+  status: string
+  comments: string
+  statusDescription: string
+  reprocessed: string
+  ageClass: string
+  ageClassDescription: string
+  productType: string
+  productTypeDescription: string
+}
+
+export type ApplicationPackageSpeciesRow = {
+  species: string
+  endUse: string
+  endUseDescription: string
+}
+
+export type ApplicationPackageScaleRow = {
+  permitted: boolean
+  timberMark: string
+  species: string
+  pieces: number
+  grade: string
+  volume: string
+  id: string
+  cascadeSplitCode: string
+}
+
+export type ApplicationScaleDetails = {
+  success: boolean
+  timberMark: string
+  species: string
+  pieces: string
+  grade: string
+  volume: string
+  id: string
+}
+
+export type ApplicationPackageMutation = {
+  packageNumber: string
+  newPackageNumber?: string
+  applicationNumber: string
+  volume: string
+  averageLength: string
+  averageDiameter: string
+  status: string
+  comments: string
+  reprocessed: string
+  ageClass?: string
+  productType?: string
+  endUseCode?: string
+  speciesCodes: string[]
+}
+
+export type ApplicationScaleMutation = {
+  timberMark: string
+  packageNumber: string
+  gradeCode: string
+  speciesCode: string
+  applicationNumber: string
+  pieces: string
+  volume: string
+}
+
+export type ApplicationPackageMutationResult = {
+  valid: boolean
+  packageNumber: string
+  errors: string[]
+  warnings: string[]
+}
+
+export type ApplicationScaleMutationResult = {
+  valid: boolean
+  result: ApplicationPackageScaleRow | null
+  errors: string[]
+  warnings: string[]
+}
+
+export type DeleteApplicationItemResult = {
+  success: boolean
+}
+
+const ITEMS_CACHE_TTL_MS = 30_000
+
+const asString = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  return ''
+}
+
+const asNumber = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+  return 0
+}
+
+const asBoolean = (value: unknown): boolean => {
+  if (typeof value === 'boolean') {
+    return value
+  }
+  if (typeof value === 'string') {
+    return value.trim().toLowerCase() === 'true'
+  }
+  return false
+}
+
+const asStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.map(asString).filter((entry) => entry.length > 0)
+}
+
+const parseArrayPayload = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload
+  }
+  if (!payload || typeof payload !== 'object') {
+    return []
+  }
+
+  const objectPayload = payload as Record<string, unknown>
+  if (Array.isArray(objectPayload.results)) {
+    return objectPayload.results
+  }
+  if (Array.isArray(objectPayload.rows)) {
+    return objectPayload.rows
+  }
+  if (Array.isArray(objectPayload.items)) {
+    return objectPayload.items
+  }
+  if (Array.isArray(objectPayload.data)) {
+    return objectPayload.data
+  }
+  return []
+}
+
+const toUrlEncodedParams = (payload: Record<string, string | undefined>): URLSearchParams => {
+  const params = new URLSearchParams()
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value !== undefined && value.trim().length > 0) {
+      params.append(key, value)
+    }
+  })
+  return params
+}
+
+const postLegacyForm = async <TResponse>(
+  path: string,
+  payload: Record<string, string | undefined>,
+): Promise<TResponse> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .post<TResponse>(path, toUrlEncodedParams(payload), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+  return response.data
+}
+
+const normalizeCodeOption = (row: unknown): ApplicationCodeOption => {
+  const source = (row ?? {}) as Record<string, unknown>
+  const code = asString(source.code || source.value)
+  return {
+    code,
+    description: asString(source.description || source.label || source.name) || code,
+  }
+}
+
+const normalizePackageDetails = (payload: unknown): ApplicationPackageDetails => {
+  const source = (payload ?? {}) as Record<string, unknown>
+  return {
+    success: asBoolean(source.success),
+    packageNumber: asString(source.packageNumber),
+    volume: asString(source.volume),
+    scaledVolume: asNumber(source.scaledVolume),
+    length: asString(source.length),
+    diameter: asString(source.diameter),
+    status: asString(source.status),
+    comments: asString(source.comments),
+    statusDescription: asString(source.statusDesc || source.statusDescription),
+    reprocessed: asString(source.reprocessed),
+    ageClass: asString(source.ageClass),
+    ageClassDescription: asString(source.ageClassDescription),
+    productType: asString(source.productType),
+    productTypeDescription: asString(source.productTypeDescription),
+  }
+}
+
+const normalizePackageSpeciesRow = (row: unknown): ApplicationPackageSpeciesRow => {
+  const source = (row ?? {}) as Record<string, unknown>
+  return {
+    species: asString(source.species),
+    endUse: asString(source.enduse || source.endUse || source.packageEndUse),
+    endUseDescription: asString(
+      source.packageEndUseDescription || source.endUseDescription || source.description,
+    ),
+  }
+}
+
+const normalizePackageScaleRow = (row: unknown): ApplicationPackageScaleRow => {
+  const source = (row ?? {}) as Record<string, unknown>
+  return {
+    permitted: asBoolean(source.permitted),
+    timberMark: asString(source.timberMark),
+    species: asString(source.species),
+    pieces: asNumber(source.pieces),
+    grade: asString(source.grade),
+    volume: asString(source.volume),
+    id: asString(source.id || source.scaleId || source.scaleDetailId),
+    cascadeSplitCode: asString(source.cascadeSplitCode),
+  }
+}
+
+const normalizeScaleDetails = (payload: unknown): ApplicationScaleDetails => {
+  const source = (payload ?? {}) as Record<string, unknown>
+  return {
+    success: asBoolean(source.success),
+    timberMark: asString(source.timberMark),
+    species: asString(source.species),
+    pieces: asString(source.pieces),
+    grade: asString(source.grade),
+    volume: asString(source.volume),
+    id: asString(source.id || source.scaleId || source.scaleDetailId),
+  }
+}
+
+const normalizePackageMutationResult = (payload: unknown): ApplicationPackageMutationResult => {
+  const source = (payload ?? {}) as Record<string, unknown>
+  return {
+    valid: asBoolean(source.valid),
+    packageNumber: asString(source.packageNumber || source.package),
+    errors: asStringArray(source.errors),
+    warnings: asStringArray(source.warnings),
+  }
+}
+
+const normalizeScaleMutationResult = (payload: unknown): ApplicationScaleMutationResult => {
+  const source = (payload ?? {}) as Record<string, unknown>
+  return {
+    valid: asBoolean(source.valid),
+    result: source.result ? normalizePackageScaleRow(source.result) : null,
+    errors: asStringArray(source.errors),
+    warnings: asStringArray(source.warnings),
+  }
+}
+
+export const fetchApplicationPackageDetails = async (
+  packageNumber: string,
+): Promise<ApplicationPackageDetails> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/package-details',
+      {
+        params: { packageNumber },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return normalizePackageDetails(response.data)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application package details.', error)
+  }
+}
+
+export const fetchApplicationPackageSpecies = async (
+  packageNumber: string,
+): Promise<ApplicationPackageSpeciesRow[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/species-for-package',
+      {
+        params: { packageNumber },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizePackageSpeciesRow)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load package species.', error)
+  }
+}
+
+export const fetchApplicationPackageScales = async (
+  packageNumber: string,
+): Promise<ApplicationPackageScaleRow[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/package-scales',
+      {
+        params: { packageNumber },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizePackageScaleRow)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load package scales.', error)
+  }
+}
+
+export const fetchApplicationSpeciesCodes = async (): Promise<ApplicationCodeOption[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/species-codes',
+      undefined,
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizeCodeOption)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application species codes.', error)
+  }
+}
+
+export const fetchApplicationGradeCodes = async (
+  region: string,
+  speciesCode: string,
+): Promise<ApplicationCodeOption[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/grade-codes',
+      {
+        params: {
+          orgUnitNumber: region,
+          speciesCode,
+        },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizeCodeOption)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application grade codes.', error)
+  }
+}
+
+export const fetchApplicationRemainingSpecies = async (
+  region: string,
+  productType: string,
+  selectedSpecies: string[],
+): Promise<ApplicationCodeOption[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/remaining-species',
+      {
+        params: {
+          orgUnitNumber: region,
+          productType,
+          speciesJSON: JSON.stringify(selectedSpecies),
+        },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizeCodeOption)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load remaining package species.', error)
+  }
+}
+
+export const fetchApplicationEndUsesForSpeciesRegion = async (
+  region: string,
+  selectedSpecies: string[],
+): Promise<ApplicationCodeOption[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/end-uses-for-species-region',
+      {
+        params: {
+          orgUnitNumber: region,
+          speciesJSON: JSON.stringify(selectedSpecies),
+        },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizeCodeOption)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load package end-use codes.', error)
+  }
+}
+
+export const fetchApplicationScaleDetails = async (
+  scaleId: string,
+): Promise<ApplicationScaleDetails> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/scale',
+      {
+        params: { scaleId },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return normalizeScaleDetails(response.data)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application scale details.', error)
+  }
+}
+
+export const addApplicationPackage = async (
+  request: ApplicationPackageMutation,
+): Promise<ApplicationPackageMutationResult> => {
+  try {
+    const payload = await postLegacyForm<unknown>('/lexis/rpc/application-details/package', {
+      packageNumber: request.packageNumber,
+      applicationNumber: request.applicationNumber,
+      packageDialogPackageVolume: request.volume,
+      packageDialogAverageLength: request.averageLength,
+      packageDialogAverageDiameter: request.averageDiameter,
+      packageDialogPackageStatus: request.status,
+      packageDialogPackageComment: request.comments,
+      packageDialogReprocessedIndicator: request.reprocessed,
+      packageDialogAgeClass: request.ageClass,
+      packageDialogProductType: request.productType,
+      createPackageEndUse: request.endUseCode,
+      createPackageSpeciesTableValues: request.speciesCodes.join(','),
+    })
+    return normalizePackageMutationResult(payload)
+  } catch (error) {
+    throw toSearchServiceError('Unable to add application package.', error)
+  }
+}
+
+export const updateApplicationPackage = async (
+  request: ApplicationPackageMutation,
+): Promise<ApplicationPackageMutationResult> => {
+  try {
+    const payload = await postLegacyForm<unknown>('/lexis/rpc/application-details/package-update', {
+      packageNumber: request.packageNumber,
+      newPackageNumber: request.newPackageNumber,
+      applicationNumber: request.applicationNumber,
+      packageDialogPackageVolume: request.volume,
+      packageDialogAverageLength: request.averageLength,
+      packageDialogAverageDiameter: request.averageDiameter,
+      packageDialogPackageStatus: request.status,
+      packageDialogPackageComment: request.comments,
+      packageDialogReprocessedIndicator: request.reprocessed,
+      updatePackageDialogAgeClass: request.ageClass,
+      updatePackageDialogProductType: request.productType,
+      updatePackageEndUse: request.endUseCode,
+      updatePackageSpeciesTableValues: request.speciesCodes.join(','),
+    })
+    return normalizePackageMutationResult(payload)
+  } catch (error) {
+    throw toSearchServiceError('Unable to update application package.', error)
+  }
+}
+
+export const addApplicationScaleToPackage = async (
+  request: ApplicationScaleMutation,
+): Promise<ApplicationScaleMutationResult> => {
+  try {
+    const payload = await postLegacyForm<unknown>('/lexis/rpc/application-details/package-scale', {
+      timberMark: request.timberMark,
+      packageNumber: request.packageNumber,
+      gradeCode: request.gradeCode,
+      speciesCode: request.speciesCode,
+      applicationNumber: request.applicationNumber,
+      scalePieces: request.pieces,
+      scaleVolume: request.volume,
+    })
+    return normalizeScaleMutationResult(payload)
+  } catch (error) {
+    throw toSearchServiceError('Unable to add application scale.', error)
+  }
+}
+
+export const deleteApplicationScale = async (
+  scaleId: string,
+): Promise<DeleteApplicationItemResult> => {
+  try {
+    const response = await apiService
+      .getAxiosInstance()
+      .delete<unknown>('/lexis/rpc/application-details/scale', {
+        params: {
+          scaleId,
+        },
+      })
+    const source = (response.data ?? {}) as Record<string, unknown>
+    return { success: response.status === 204 || asBoolean(source.success) }
+  } catch (error) {
+    throw toSearchServiceError('Unable to delete application scale.', error)
+  }
+}
+
+export const deleteApplicationPackage = async (
+  packageNumber: string,
+): Promise<DeleteApplicationItemResult> => {
+  try {
+    const response = await apiService
+      .getAxiosInstance()
+      .delete<unknown>('/lexis/rpc/application-details/package', {
+        params: {
+          packageNumber,
+        },
+      })
+    const source = (response.data ?? {}) as Record<string, unknown>
+    return { success: response.status === 204 || asBoolean(source.success) }
+  } catch (error) {
+    throw toSearchServiceError('Unable to delete application package.', error)
+  }
+}

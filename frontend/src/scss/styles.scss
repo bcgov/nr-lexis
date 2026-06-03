@@ -441,6 +441,40 @@ body {
   padding-left: 1rem;
 }
 
+.application-items-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.application-items-section {
+  min-width: 0;
+}
+
+.application-items-section h3 {
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem;
+}
+
+.application-items-form {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-bottom: 0.75rem;
+}
+
+.application-items-inline-form {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  margin-bottom: 0.75rem;
+}
+
+.application-items-section .cds--data-table-container {
+  overflow-x: auto;
+}
+
 .cds--tile {
   border: 1px solid #999999;
   margin-bottom: 0.625rem;
