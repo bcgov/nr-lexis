@@ -30,6 +30,8 @@ import {
   parseSortDirectionParam,
   setSearchParam,
 } from '@/pages/shared/search-query-utils'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
 import { fetchProvincialOfferOptions } from '@/service/search-options-service'
 
@@ -162,6 +164,7 @@ const ProvincialOffersPage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
@@ -202,39 +205,52 @@ const ProvincialOffersPage: FC = () => {
     filters.withdrawalToDate,
   ])
 
-  const runSearch = useCallback(async (request: ProvincialOfferSearchRequest) => {
-    if (
-      !isValidIsoDate(request.filters.listingFromDate) ||
-      !isValidIsoDate(request.filters.listingToDate) ||
-      !isValidIsoDate(request.filters.withdrawalFromDate) ||
-      !isValidIsoDate(request.filters.withdrawalToDate)
-    ) {
-      return
-    }
+  const beginSearchRequest = useLatestRequestGuard()
 
-    setLoading(true)
-    setErrorMessage('')
-    try {
-      const response = await searchProvincialOffers(request)
-      setResults(response)
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to retrieve offer search results.')
-      setResults(EMPTY_RESULTS)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const runSearch = useCallback(
+    async (request: ProvincialOfferSearchRequest) => {
+      const isLatestRequest = beginSearchRequest()
+      if (
+        !isValidIsoDate(request.filters.listingFromDate) ||
+        !isValidIsoDate(request.filters.listingToDate) ||
+        !isValidIsoDate(request.filters.withdrawalFromDate) ||
+        !isValidIsoDate(request.filters.withdrawalToDate)
+      ) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setErrorMessage('')
+      try {
+        const response = await searchProvincialOffers(request)
+        if (isLatestRequest()) {
+          setResults(response)
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve offer search results.')
+          setResults(EMPTY_RESULTS)
+        }
+      } finally {
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
+      }
+    },
+    [beginSearchRequest],
+  )
 
   useEffect(() => {
     void runSearch({
-      filters: urlState.filters,
-      page: urlState.page - 1,
-      pageSize: urlState.pageSize,
-      sortField: urlState.sortField,
-      sortDirection: urlState.sortDirection,
+      filters: debouncedUrlState.filters,
+      page: debouncedUrlState.page - 1,
+      pageSize: debouncedUrlState.pageSize,
+      sortField: debouncedUrlState.sortField,
+      sortDirection: debouncedUrlState.sortDirection,
     })
-  }, [runSearch, urlState])
+  }, [debouncedUrlState, runSearch])
 
   useEffect(() => {
     const loadOptions = async () => {

@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { type FC } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '@/context/auth/AuthProvider'
 import { useAuth } from '@/context/auth/useAuth'
-import { fetchSessionCapabilities } from '@/service/session-service'
+import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
 
 vi.mock('@/service/session-service', () => ({
   fetchSessionCapabilities: vi.fn(),
@@ -11,13 +12,23 @@ vi.mock('@/service/session-service', () => ({
 }))
 
 const mockedFetchSessionCapabilities = vi.mocked(fetchSessionCapabilities)
+const mockedPerformLogoff = vi.mocked(performLogoff)
 
 type ProbeProps = {
   actionChecks: string[]
 }
 
 const AuthProbe: FC<ProbeProps> = ({ actionChecks }) => {
-  const { capabilities, canPerform, defaultRoute, hasAnyRole, isLoading, isLoggedIn } = useAuth()
+  const {
+    capabilities,
+    canPerform,
+    defaultRoute,
+    hasAnyRole,
+    isLoading,
+    isLoggedIn,
+    logout,
+    refresh,
+  } = useAuth()
 
   return (
     <div>
@@ -31,6 +42,12 @@ const AuthProbe: FC<ProbeProps> = ({ actionChecks }) => {
           {String(canPerform(action))}
         </div>
       ))}
+      <button type="button" onClick={() => void refresh()}>
+        Refresh Session
+      </button>
+      <button type="button" onClick={() => void logout()}>
+        Logout
+      </button>
     </div>
   )
 }
@@ -52,6 +69,7 @@ const waitForAuthLoad = async () => {
 describe('Auth Provider Role Matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedPerformLogoff.mockResolvedValue({ invalidated: true })
   })
 
   it('normalizes legacy concrete submitter roles to canonical forms', async () => {
@@ -125,6 +143,78 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+  })
+
+  it('coalesces concurrent session refresh requests', async () => {
+    let resolveCapabilities:
+      | ((value: Awaited<ReturnType<typeof fetchSessionCapabilities>>) => void)
+      | undefined
+    mockedFetchSessionCapabilities.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCapabilities = resolve
+        }),
+    )
+
+    renderProbe()
+
+    await waitFor(() => {
+      expect(mockedFetchSessionCapabilities).toHaveBeenCalledTimes(1)
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh Session' }))
+    expect(mockedFetchSessionCapabilities).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveCapabilities?.({
+        authenticated: true,
+        principal: 'idir\\reviewer',
+        roles: [],
+        welcomeTarget: null,
+        legacyPath: null,
+        grantedActions: ['/applicationsReview'],
+      })
+    })
+
+    await waitForAuthLoad()
+    expect(mockedFetchSessionCapabilities).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores stale session refresh results after logout', async () => {
+    let resolveCapabilities:
+      | ((value: Awaited<ReturnType<typeof fetchSessionCapabilities>>) => void)
+      | undefined
+    mockedFetchSessionCapabilities.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCapabilities = resolve
+        }),
+    )
+
+    renderProbe()
+
+    await waitFor(() => {
+      expect(mockedFetchSessionCapabilities).toHaveBeenCalledTimes(1)
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Logout' }))
+    await waitForAuthLoad()
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+
+    await act(async () => {
+      resolveCapabilities?.({
+        authenticated: true,
+        principal: 'idir\\admin',
+        roles: ['LEXIS_ADMIN'],
+        welcomeTarget: null,
+        legacyPath: null,
+        grantedActions: ['/lexisAgentAdmin'],
+      })
+    })
+
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+    expect(screen.getByTestId('roles')).toHaveTextContent('')
+    expect(mockedFetchSessionCapabilities).toHaveBeenCalledTimes(1)
   })
 
   it('sets login state from authenticated flag only', async () => {

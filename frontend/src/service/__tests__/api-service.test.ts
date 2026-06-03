@@ -46,22 +46,34 @@ const buildResponse = (data: unknown) => ({
   config: {},
 })
 
+const buildSession = ({
+  sub = 'user-1',
+  username = 'USER1',
+  clientId = 'lexis',
+  token = 'token',
+  includePayload = true,
+} = {}) => ({
+  tokens: {
+    accessToken: {
+      payload: includePayload
+        ? {
+            sub,
+            username,
+            client_id: clientId,
+          }
+        : undefined,
+      toString: () => token,
+    },
+  },
+})
+
 describe('api-service cached GET support', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    getMock.mockReset()
+    fetchAuthSessionMock.mockReset()
     apiService.clearCachedGetData()
-    fetchAuthSessionMock.mockResolvedValue({
-      tokens: {
-        accessToken: {
-          payload: {
-            sub: 'user-1',
-            username: 'USER1',
-            client_id: 'lexis',
-          },
-          toString: () => 'token',
-        },
-      },
-    })
+    fetchAuthSessionMock.mockResolvedValue(buildSession())
   })
 
   it('coalesces matching in-flight cached GET requests', async () => {
@@ -116,7 +128,263 @@ describe('api-service cached GET support', () => {
     expect(getMock).toHaveBeenCalledTimes(1)
   })
 
-  it('clears cached GET data when a write request goes through the shared client', async () => {
+  it('uses the resolved auth token on cached GET requests', async () => {
+    getMock.mockResolvedValueOnce(buildResponse({ count: 1 }))
+
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+
+    expect(getMock).toHaveBeenCalledWith(
+      '/lexis/example',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token',
+        }),
+      }),
+    )
+  })
+
+  it('keeps custom cached GET keys separated by authenticated user', async () => {
+    fetchAuthSessionMock
+      .mockResolvedValueOnce(buildSession({ sub: 'user-1', username: 'USER1', token: 'token-1' }))
+      .mockResolvedValueOnce(buildSession({ sub: 'user-2', username: 'USER2', token: 'token-2' }))
+      .mockResolvedValueOnce(buildSession({ sub: 'user-1', username: 'USER1', token: 'token-1' }))
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', undefined, {
+        cacheKey: 'shared-key',
+      }),
+    ).resolves.toEqual({ count: 1 })
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', undefined, {
+        cacheKey: 'shared-key',
+      }),
+    ).resolves.toEqual({ count: 2 })
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', undefined, {
+        cacheKey: 'shared-key',
+      }),
+    ).resolves.toEqual({ count: 1 })
+
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps cached GET keys separated by token when auth claims are unavailable', async () => {
+    fetchAuthSessionMock
+      .mockResolvedValueOnce(buildSession({ token: 'opaque-token-1', includePayload: false }))
+      .mockResolvedValueOnce(buildSession({ token: 'opaque-token-2', includePayload: false }))
+      .mockResolvedValueOnce(buildSession({ token: 'opaque-token-1', includePayload: false }))
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', undefined, {
+        cacheKey: 'shared-key',
+      }),
+    ).resolves.toEqual({ count: 1 })
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', undefined, {
+        cacheKey: 'shared-key',
+      }),
+    ).resolves.toEqual({ count: 2 })
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', undefined, {
+        cacheKey: 'shared-key',
+      }),
+    ).resolves.toEqual({ count: 1 })
+
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not cache GETs when the auth cache scope cannot be resolved', async () => {
+    fetchAuthSessionMock.mockRejectedValue(new Error('session unavailable'))
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 2,
+    })
+
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not cache GETs with an explicit authorization header', async () => {
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    const config = {
+      headers: {
+        Authorization: 'Bearer external-token',
+      },
+    }
+
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', config),
+    ).resolves.toEqual({
+      count: 1,
+    })
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', config),
+    ).resolves.toEqual({
+      count: 2,
+    })
+
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not cache GETs with an explicit authorization header on AxiosHeaders-style objects', async () => {
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    const config = {
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'authorization' ? 'Bearer external-token' : undefined,
+        has: (name: string) => name.toLowerCase() === 'authorization',
+        toJSON: () => ({}),
+      },
+    }
+
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', config),
+    ).resolves.toEqual({
+      count: 1,
+    })
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', config),
+    ).resolves.toEqual({
+      count: 2,
+    })
+
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('refetches cached GETs after the ttl expires', async () => {
+    const dateNowSpy = vi.spyOn(Date, 'now')
+    dateNowSpy.mockReturnValue(1_000)
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', undefined, { ttlMs: 5 }),
+    ).resolves.toEqual({ count: 1 })
+
+    dateNowSpy.mockReturnValue(1_004)
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', undefined, { ttlMs: 5 }),
+    ).resolves.toEqual({ count: 1 })
+
+    dateNowSpy.mockReturnValue(1_006)
+    await expect(
+      apiService.getCachedData<{ count: number }>('/lexis/example', undefined, { ttlMs: 5 }),
+    ).resolves.toEqual({ count: 2 })
+
+    expect(getMock).toHaveBeenCalledTimes(2)
+    dateNowSpy.mockRestore()
+  })
+
+  it('evicts the least recently used cached GET when the cache is full', async () => {
+    getMock.mockImplementation((path: string) => Promise.resolve(buildResponse({ path })))
+
+    for (let index = 0; index < 150; index += 1) {
+      await expect(
+        apiService.getCachedData<{ path: string }>(`/lexis/example/${index}`),
+      ).resolves.toEqual({
+        path: `/lexis/example/${index}`,
+      })
+    }
+
+    await expect(apiService.getCachedData<{ path: string }>('/lexis/example/0')).resolves.toEqual({
+      path: '/lexis/example/0',
+    })
+    await expect(apiService.getCachedData<{ path: string }>('/lexis/example/150')).resolves.toEqual(
+      {
+        path: '/lexis/example/150',
+      },
+    )
+    await expect(apiService.getCachedData<{ path: string }>('/lexis/example/1')).resolves.toEqual({
+      path: '/lexis/example/1',
+    })
+
+    expect(getMock).toHaveBeenCalledTimes(152)
+  })
+
+  it.each(['post', 'put', 'patch', 'delete'])(
+    'clears cached GET data when a %s request goes through the shared client',
+    async (method) => {
+      apiService.clearCachedGetData()
+      getMock.mockReset()
+      getMock
+        .mockResolvedValueOnce(buildResponse({ count: 1 }))
+        .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+      await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+        count: 1,
+      })
+
+      const requestInterceptor = getRegisteredRequestInterceptor()
+      expect(requestInterceptor).toBeInstanceOf(Function)
+      await requestInterceptor({
+        method,
+        headers: {},
+      })
+
+      await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+        count: 2,
+      })
+
+      expect(getMock).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('adds auth headers when the request interceptor receives a config without headers', async () => {
+    const requestInterceptor = getRegisteredRequestInterceptor()
+    expect(requestInterceptor).toBeInstanceOf(Function)
+
+    const result = await requestInterceptor({
+      method: 'get',
+    })
+
+    expect(result.headers).toEqual(
+      expect.objectContaining({
+        Authorization: 'Bearer token',
+      }),
+    )
+  })
+
+  it('adds auth headers through AxiosHeaders-style setters when available', async () => {
+    const headerValues: Record<string, string> = {}
+    const requestInterceptor = getRegisteredRequestInterceptor()
+    expect(requestInterceptor).toBeInstanceOf(Function)
+
+    await requestInterceptor({
+      method: 'get',
+      headers: {
+        get: (name: string) => headerValues[name],
+        has: (name: string) => Object.prototype.hasOwnProperty.call(headerValues, name),
+        set: (name: string, value: string) => {
+          headerValues[name] = value
+        },
+        toJSON: () => headerValues,
+      },
+    })
+
+    expect(headerValues.Authorization).toBe('Bearer token')
+  })
+
+  it('keeps cached GET data when another GET request goes through the shared client', async () => {
     getMock
       .mockResolvedValueOnce(buildResponse({ count: 1 }))
       .mockResolvedValueOnce(buildResponse({ count: 2 }))
@@ -128,15 +396,15 @@ describe('api-service cached GET support', () => {
     const requestInterceptor = getRegisteredRequestInterceptor()
     expect(requestInterceptor).toBeInstanceOf(Function)
     await requestInterceptor({
-      method: 'post',
+      method: 'get',
       headers: {},
     })
 
     await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
-      count: 2,
+      count: 1,
     })
 
-    expect(getMock).toHaveBeenCalledTimes(2)
+    expect(getMock).toHaveBeenCalledTimes(1)
   })
 
   it('does not cache an in-flight GET that resolves after a write clears the cache', async () => {

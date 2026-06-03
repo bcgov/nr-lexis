@@ -79,10 +79,8 @@ const AdminPoliciesPage: FC = () => {
     clearNotifications()
 
     try {
-      const [loadedFeePolicies, loadedFilPolicies] = await Promise.all([
-        fetchFeePolicies(),
-        fetchFilPolicies(),
-      ])
+      const loadedFeePolicies = await fetchFeePolicies()
+      const loadedFilPolicies = await fetchFilPolicies()
       setFeePolicies(loadedFeePolicies)
       setFilPolicies(loadedFilPolicies)
     } catch (error) {

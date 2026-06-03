@@ -19,6 +19,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
 import {
   fetchExemptionDocuments,
@@ -72,6 +73,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const beginDetailRequest = useLatestRequestGuard()
   const permitFilter = searchParams.get('permitFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
   const documentsFilter = searchParams.get('documentsFilter') ?? ''
@@ -100,6 +102,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
   useEffect(() => {
     const load = async () => {
+      const isLatestRequest = beginDetailRequest()
       if (!exemptionNumber) {
         setErrorMessage('Exemption number is missing from the route.')
         setDetail(null)
@@ -119,6 +122,9 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
       try {
         const response = await fetchProvincialExemptionDetail(exemptionNumber)
+        if (!isLatestRequest()) {
+          return
+        }
         setDetail(response)
         if (!response) {
           setErrorMessage(`No provincial exemption found for ${exemptionNumber}.`)
@@ -128,25 +134,33 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
         try {
           const documentsResult = await fetchExemptionDocuments(exemptionNumber)
-          setDocumentRows(documentsResult.rows)
+          if (isLatestRequest()) {
+            setDocumentRows(documentsResult.rows)
+          }
         } catch (error) {
-          console.error(error)
-          setDocumentRows([])
-          setDocumentsErrorMessage('Unable to retrieve exemption documents.')
+          if (isLatestRequest()) {
+            console.error(error)
+            setDocumentRows([])
+            setDocumentsErrorMessage('Unable to retrieve exemption documents.')
+          }
         }
       } catch (error) {
-        console.error(error)
-        setErrorMessage('Unable to retrieve provincial exemption detail.')
-        setDetail(null)
-        setDocumentRows([])
-        setDocumentsErrorMessage('')
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve provincial exemption detail.')
+          setDetail(null)
+          setDocumentRows([])
+          setDocumentsErrorMessage('')
+        }
       } finally {
-        setLoading(false)
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
       }
     }
 
     void load()
-  }, [exemptionNumber])
+  }, [exemptionNumber, beginDetailRequest])
 
   const filteredPermitNumbers = useMemo(() => {
     const rows = detail?.permitNumbers ?? []
@@ -242,27 +256,37 @@ const ProvincialExemptionDetailsPage: FC = () => {
         return
       }
 
+      const isLatestRequest = beginDetailRequest()
       setIsRemovingDocumentId(row.id)
       setActionErrorMessage('')
       setActionInfoMessage('')
 
       try {
         const removeResult = await removeExemptionDocument(row.id)
+        if (!isLatestRequest()) {
+          return
+        }
         if (!removeResult.success) {
           setActionErrorMessage('Document removal failed. Refresh and try again.')
           return
         }
 
         const documentsResult = await fetchExemptionDocuments(exemptionNumber)
-        setDocumentRows(documentsResult.rows)
+        if (isLatestRequest()) {
+          setDocumentRows(documentsResult.rows)
+        }
       } catch (error) {
-        console.error(error)
-        setActionErrorMessage('Unable to remove the selected document.')
+        if (isLatestRequest()) {
+          console.error(error)
+          setActionErrorMessage('Unable to remove the selected document.')
+        }
       } finally {
-        setIsRemovingDocumentId(null)
+        if (isLatestRequest()) {
+          setIsRemovingDocumentId(null)
+        }
       }
     },
-    [exemptionNumber],
+    [beginDetailRequest, exemptionNumber],
   )
 
   return (

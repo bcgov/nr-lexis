@@ -33,6 +33,8 @@ import {
   parseSortDirectionParam,
   setSearchParam,
 } from '@/pages/shared/search-query-utils'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchFederalApplications } from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions, type SearchOption } from '@/service/search-options-service'
 
@@ -171,6 +173,7 @@ const FederalPage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
@@ -205,39 +208,52 @@ const FederalPage: FC = () => {
     filters.listingToDate,
   ])
 
-  const runSearch = useCallback(async (request: FederalApplicationSearchRequest) => {
-    if (
-      !isValidIsoDate(request.filters.receivedFromDate) ||
-      !isValidIsoDate(request.filters.receivedToDate) ||
-      !isValidIsoDate(request.filters.listingFromDate) ||
-      !isValidIsoDate(request.filters.listingToDate)
-    ) {
-      return
-    }
+  const beginSearchRequest = useLatestRequestGuard()
 
-    setLoading(true)
-    setErrorMessage('')
-    try {
-      const response = await searchFederalApplications(request)
-      setResults(response)
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to retrieve federal application search results.')
-      setResults(EMPTY_RESULTS)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const runSearch = useCallback(
+    async (request: FederalApplicationSearchRequest) => {
+      const isLatestRequest = beginSearchRequest()
+      if (
+        !isValidIsoDate(request.filters.receivedFromDate) ||
+        !isValidIsoDate(request.filters.receivedToDate) ||
+        !isValidIsoDate(request.filters.listingFromDate) ||
+        !isValidIsoDate(request.filters.listingToDate)
+      ) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setErrorMessage('')
+      try {
+        const response = await searchFederalApplications(request)
+        if (isLatestRequest()) {
+          setResults(response)
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve federal application search results.')
+          setResults(EMPTY_RESULTS)
+        }
+      } finally {
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
+      }
+    },
+    [beginSearchRequest],
+  )
 
   useEffect(() => {
     void runSearch({
-      filters: urlState.filters,
-      sortField: urlState.sortField,
-      sortDirection: urlState.sortDirection,
-      page: urlState.page - 1,
-      pageSize: urlState.pageSize,
+      filters: debouncedUrlState.filters,
+      sortField: debouncedUrlState.sortField,
+      sortDirection: debouncedUrlState.sortDirection,
+      page: debouncedUrlState.page - 1,
+      pageSize: debouncedUrlState.pageSize,
     })
-  }, [runSearch, urlState])
+  }, [debouncedUrlState, runSearch])
 
   useEffect(() => {
     const loadOptions = async () => {

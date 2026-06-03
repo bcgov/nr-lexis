@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
@@ -104,6 +104,15 @@ const applicationDetail: ProvincialApplicationDetail = {
 const LocationProbe = () => {
   const location = useLocation()
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
+}
+
+const NavigateButton = ({ to }: { to: string }) => {
+  const navigate = useNavigate()
+  return (
+    <button type="button" onClick={() => navigate(to)}>
+      Navigate application
+    </button>
+  )
 }
 
 describe('Provincial Application Detail Document Actions', () => {
@@ -224,6 +233,64 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(location.textContent).toBe('/admin/uploads?type=application&applicationNumber=321')
   })
 
+  it('ignores stale detail responses after navigating to another application', async () => {
+    const secondApplicationDetail: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      applicationNumber: 654,
+      exemptionNumber: 'EX-654',
+      statusDescription: 'Second status',
+      ownerClientNumber: '00099988',
+      agentClientNumber: '00077766',
+    }
+    let resolveFirstDetail: ((value: ProvincialApplicationDetail) => void) | undefined
+    mockedFetchProvincialApplicationDetail
+      .mockImplementationOnce(
+        () =>
+          new Promise<ProvincialApplicationDetail>((resolve) => {
+            resolveFirstDetail = resolve
+          }),
+      )
+      .mockResolvedValueOnce(secondApplicationDetail)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={
+              <>
+                <NavigateButton to="/provincial/application/654" />
+                <ProvincialApplicationDetailsPage />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledWith('321')
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Navigate application' }))
+
+    await waitFor(() => {
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledWith('654')
+    })
+    expect(await screen.findByText('Second status')).toBeInTheDocument()
+    expect(screen.getByText('00099988')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveFirstDetail?.(applicationDetail)
+    })
+
+    expect(screen.getByText('Second status')).toBeInTheDocument()
+    expect(screen.getByText('00099988')).toBeInTheDocument()
+    expect(screen.queryByText('00011122')).not.toBeInTheDocument()
+    expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(1)
+    expect(mockedFetchApplicationDocuments).toHaveBeenCalledWith('654')
+  })
+
   it('opens application document from API response', async () => {
     mockedFetchApplicationDocuments.mockResolvedValue({
       rows: [
@@ -308,6 +375,99 @@ describe('Provincial Application Detail Document Actions', () => {
     })
   })
 
+  it('ignores stale document refreshes after navigating to another application', async () => {
+    const secondApplicationDetail: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      applicationNumber: 654,
+      ownerClientNumber: '00099988',
+    }
+    let resolveStaleDocuments:
+      | ((value: Awaited<ReturnType<typeof fetchApplicationDocuments>>) => void)
+      | undefined
+    mockedFetchProvincialApplicationDetail
+      .mockResolvedValueOnce(applicationDetail)
+      .mockResolvedValueOnce(secondApplicationDetail)
+    mockedFetchApplicationDocuments
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '100',
+            name: 'old-doc.pdf',
+            description: 'old application',
+            type: 'Attachment',
+          },
+        ],
+        source: 'api',
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveStaleDocuments = resolve
+          }),
+      )
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '200',
+            name: 'new-doc.pdf',
+            description: 'new application',
+            type: 'Attachment',
+          },
+        ],
+        source: 'api',
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={
+              <>
+                <NavigateButton to="/provincial/application/654" />
+                <ProvincialApplicationDetailsPage />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const documentName = await screen.findByText('old-doc.pdf')
+    const documentRow = documentName.closest('tr')
+    expect(documentRow).toBeTruthy()
+    await userEvent.click(
+      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+    )
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Navigate application' }))
+
+    expect(await screen.findByText('new-doc.pdf')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveStaleDocuments?.({
+        rows: [
+          {
+            id: '999',
+            name: 'stale-doc.pdf',
+            description: 'stale application',
+            type: 'Attachment',
+          },
+        ],
+        source: 'api',
+      })
+    })
+
+    expect(screen.getByText('new-doc.pdf')).toBeInTheDocument()
+    expect(screen.queryByText('old-doc.pdf')).not.toBeInTheDocument()
+    expect(screen.queryByText('stale-doc.pdf')).not.toBeInTheDocument()
+    expect(mockedFetchApplicationDocuments).toHaveBeenCalledWith('654')
+  })
+
   it('edits package species and saves application item details', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -349,6 +509,111 @@ describe('Provincial Application Detail Document Actions', () => {
       )
     })
     expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
+  })
+
+  it('ignores stale package item responses after selecting another package', async () => {
+    const detailWithTwoPackages: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      packages: [
+        { packageNumber: 'PKG-1', volume: 100, pieceCount: 5 },
+        { packageNumber: 'PKG-2', volume: 200, pieceCount: 8 },
+      ],
+    }
+    let resolveFirstPackageDetails:
+      | ((value: Awaited<ReturnType<typeof fetchApplicationPackageDetails>>) => void)
+      | undefined
+    mockedFetchProvincialApplicationDetail.mockResolvedValue(detailWithTwoPackages)
+    mockedFetchApplicationPackageDetails
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirstPackageDetails = resolve
+          }),
+      )
+      .mockResolvedValueOnce({
+        success: true,
+        packageNumber: 'PKG-2',
+        volume: '200.0',
+        scaledVolume: 40,
+        length: '14.0',
+        diameter: '26.0',
+        status: 'A',
+        comments: 'Second package',
+        statusDescription: 'Active',
+        reprocessed: 'N',
+        ageClass: 'O',
+        ageClassDescription: 'Old',
+        productType: 'LOG',
+        productTypeDescription: 'Logs',
+      })
+    mockedFetchApplicationPackageSpecies.mockResolvedValue([
+      {
+        species: 'CE',
+        endUse: 'LU',
+        endUseDescription: 'Lumber',
+      },
+    ])
+    mockedFetchApplicationPackageScales.mockResolvedValue([
+      {
+        permitted: false,
+        timberMark: 'TM002',
+        species: 'Cedar',
+        grade: 'Sawlog',
+        pieces: 8,
+        volume: '40.0',
+        id: '56',
+        cascadeSplitCode: '',
+      },
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
+    })
+
+    await userEvent.selectOptions(await screen.findByLabelText('Selected package'), 'PKG-2')
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
+      expect(screen.getByLabelText('Package Comments')).toHaveValue('Second package')
+    })
+
+    await act(async () => {
+      resolveFirstPackageDetails?.({
+        success: true,
+        packageNumber: 'PKG-1',
+        volume: '100.0',
+        scaledVolume: 20,
+        length: '12.0',
+        diameter: '24.0',
+        status: 'A',
+        comments: 'First package stale',
+        statusDescription: 'Active',
+        reprocessed: 'N',
+        ageClass: 'O',
+        ageClassDescription: 'Old',
+        productType: 'LOG',
+        productTypeDescription: 'Logs',
+      })
+    })
+
+    expect(screen.getByLabelText('Selected package')).toHaveValue('PKG-2')
+    expect(screen.getByLabelText('Package Comments')).toHaveValue('Second package')
+    expect(screen.queryByDisplayValue('First package stale')).not.toBeInTheDocument()
+    expect(screen.getByText('TM002')).toBeInTheDocument()
+    expect(screen.queryByText('TM001')).not.toBeInTheDocument()
+    expect(mockedFetchApplicationPackageSpecies).not.toHaveBeenCalledWith('PKG-1')
+    expect(mockedFetchApplicationPackageScales).not.toHaveBeenCalledWith('PKG-1')
   })
 
   it('adds, looks up, and deletes package scales', async () => {

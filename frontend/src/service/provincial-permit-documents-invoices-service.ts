@@ -326,9 +326,10 @@ export const fetchPermitInvoices = async (permitNumber: string): Promise<PermitI
 
   const invoiceNumbers = listRaw.map((entry) => asString(entry)).filter((entry) => entry.length > 0)
 
-  const detailsResults = await Promise.all(
-    invoiceNumbers.map((invoiceNumber) => fetchInvoiceDetails(permitNumber, invoiceNumber)),
-  )
+  const detailsResults: PermitInvoiceDetailsPayload[] = []
+  for (const invoiceNumber of invoiceNumbers) {
+    detailsResults.push(await fetchInvoiceDetails(permitNumber, invoiceNumber))
+  }
 
   return {
     rows: detailsResults.map((result, index) => ({

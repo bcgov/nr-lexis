@@ -189,4 +189,94 @@ describe('Provincial Application Search Actions', () => {
       )
     })
   })
+
+  it('debounces backend searches while filters are typed', async () => {
+    renderPage()
+    await screen.findByText('321')
+    mockedSearchProvincialApplications.mockClear()
+
+    await userEvent.type(screen.getByLabelText('Application Number'), '987')
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            applicationNumber: '987',
+          }),
+        }),
+      )
+    })
+  })
+
+  it('ignores stale search responses that resolve after a newer search', async () => {
+    renderPage()
+    await screen.findByText('321')
+    mockedSearchProvincialApplications.mockReset()
+
+    let resolveFirstSearch: (
+      value: Awaited<ReturnType<typeof searchProvincialApplications>>,
+    ) => void
+    let resolveSecondSearch: (
+      value: Awaited<ReturnType<typeof searchProvincialApplications>>,
+    ) => void
+    mockedSearchProvincialApplications
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirstSearch = resolve
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveSecondSearch = resolve
+        }),
+      )
+
+    const applicationNumberInput = screen.getByLabelText('Application Number')
+    await userEvent.type(applicationNumberInput, '1')
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
+    })
+
+    await userEvent.type(applicationNumberInput, '2')
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(2)
+    })
+
+    resolveSecondSearch!({
+      content: [
+        {
+          ...searchRowsWithMixedEligibility[0],
+          applicationNumber: '222',
+        },
+      ],
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+    expect(await screen.findByText('222')).toBeInTheDocument()
+
+    resolveFirstSearch!({
+      content: [
+        {
+          ...searchRowsWithMixedEligibility[0],
+          applicationNumber: '111',
+        },
+      ],
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText('111')).not.toBeInTheDocument()
+      expect(screen.getByText('222')).toBeInTheDocument()
+    })
+  })
 })

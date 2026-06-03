@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from 'react'
 import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth'
 import {
   businessBceidProviderName,
@@ -190,43 +190,67 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
 export const AuthProvider: FC<Props> = ({ children }) => {
   const [capabilities, setCapabilities] = useState<LexisSessionCapabilities>(DEFAULT_CAPABILITIES)
   const [isLoading, setIsLoading] = useState(true)
+  const refreshPromiseRef = useRef<Promise<void> | null>(null)
+  const sessionGenerationRef = useRef(0)
   const usesExternalLogin = isCognitoConfigured
 
   const refresh = useCallback(async () => {
-    setIsLoading(true)
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current
+    }
 
-    try {
-      if (isCognitoConfigured) {
-        let tokenReady = false
-        const retryCount = hasOauthCallbackParams() ? 6 : 1
-        for (let attempt = 0; attempt < retryCount; attempt += 1) {
-          try {
-            const { tokens } = (await fetchAuthSession({ forceRefresh: false })) ?? {}
-            if (tokens?.accessToken) {
-              tokenReady = true
-              break
+    setIsLoading(true)
+    const refreshGeneration = sessionGenerationRef.current
+
+    const refreshPromise = (async () => {
+      try {
+        if (isCognitoConfigured) {
+          let tokenReady = false
+          const retryCount = hasOauthCallbackParams() ? 6 : 1
+          for (let attempt = 0; attempt < retryCount; attempt += 1) {
+            try {
+              const { tokens } = (await fetchAuthSession({ forceRefresh: false })) ?? {}
+              if (tokens?.accessToken) {
+                tokenReady = true
+                break
+              }
+            } catch {
+              // Continue retry loop below.
             }
-          } catch {
-            // Continue retry loop below.
+
+            if (attempt < retryCount - 1) {
+              await new Promise((resolve) => setTimeout(resolve, 300))
+            }
           }
 
-          if (attempt < retryCount - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 300))
+          if (tokenReady) {
+            clearOauthCallbackParams()
           }
         }
 
-        if (tokenReady) {
-          clearOauthCallbackParams()
+        const data = await fetchSessionCapabilities()
+        if (sessionGenerationRef.current === refreshGeneration) {
+          setCapabilities(sanitizeCapabilities(data))
+        }
+      } catch (error) {
+        if (sessionGenerationRef.current === refreshGeneration) {
+          console.warn('Unable to load session capabilities.', error)
+          setCapabilities(DEFAULT_CAPABILITIES)
+        }
+      } finally {
+        if (sessionGenerationRef.current === refreshGeneration) {
+          setIsLoading(false)
         }
       }
+    })()
 
-      const data = await fetchSessionCapabilities()
-      setCapabilities(sanitizeCapabilities(data))
-    } catch (error) {
-      console.warn('Unable to load session capabilities.', error)
-      setCapabilities(DEFAULT_CAPABILITIES)
+    refreshPromiseRef.current = refreshPromise
+    try {
+      await refreshPromise
     } finally {
-      setIsLoading(false)
+      if (refreshPromiseRef.current === refreshPromise) {
+        refreshPromiseRef.current = null
+      }
     }
   }, [])
 
@@ -248,6 +272,9 @@ export const AuthProvider: FC<Props> = ({ children }) => {
   )
 
   const logout = useCallback(async () => {
+    sessionGenerationRef.current += 1
+    refreshPromiseRef.current = null
+
     try {
       await performLogoff()
       if (isCognitoConfigured) {

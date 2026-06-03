@@ -19,6 +19,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
 import {
   addPermitInvoice,
@@ -128,6 +129,10 @@ const ProvincialPermitDetailsPage: FC = () => {
   const [invoiceDraftExportValue, setInvoiceDraftExportValue] = useState('')
   const [invoiceDraftFeeInLieu, setInvoiceDraftFeeInLieu] = useState('')
   const [isAddingInvoice, setIsAddingInvoice] = useState(false)
+  const beginDetailRequest = useLatestRequestGuard()
+  const beginDocumentRefreshRequest = useLatestRequestGuard()
+  const beginAddInvoiceRequest = useLatestRequestGuard()
+  const beginInvoiceUploadRequest = useLatestRequestGuard()
   const itemsFilter = searchParams.get('itemsFilter') ?? ''
   const feesFilter = searchParams.get('feesFilter') ?? ''
   const gbmsFilter = searchParams.get('gbmsFilter') ?? ''
@@ -170,6 +175,7 @@ const ProvincialPermitDetailsPage: FC = () => {
 
   useEffect(() => {
     const load = async () => {
+      const isLatestRequest = beginDetailRequest()
       if (!permitNumber) {
         setErrorMessage('Permit number is missing from the route.')
         setDetail(null)
@@ -188,6 +194,9 @@ const ProvincialPermitDetailsPage: FC = () => {
 
       try {
         const response = await fetchProvincialPermitDetail(permitNumber)
+        if (!isLatestRequest()) {
+          return
+        }
         setDetail(response)
 
         if (!response) {
@@ -200,43 +209,53 @@ const ProvincialPermitDetailsPage: FC = () => {
 
         try {
           const tabsResult = await fetchProvincialPermitDetailTabs(permitNumber)
-          setTabsData(tabsResult)
+          if (isLatestRequest()) {
+            setTabsData(tabsResult)
+          }
         } catch (error) {
-          console.error(error)
-          setTabsData(null)
-          setTabsErrorMessage('Unable to retrieve permit item and fee tables.')
+          if (isLatestRequest()) {
+            console.error(error)
+            setTabsData(null)
+            setTabsErrorMessage('Unable to retrieve permit item and fee tables.')
+          }
         }
 
         try {
-          const [documentsResult, invoicesResult] = await Promise.all([
-            fetchPermitDocuments(permitNumber),
-            fetchPermitInvoices(permitNumber),
-          ])
-          setDocumentRows(documentsResult.rows)
-          setInvoiceRows(invoicesResult.rows)
+          const documentsResult = await fetchPermitDocuments(permitNumber)
+          const invoicesResult = await fetchPermitInvoices(permitNumber)
+          if (isLatestRequest()) {
+            setDocumentRows(documentsResult.rows)
+            setInvoiceRows(invoicesResult.rows)
+          }
         } catch (error) {
-          console.error(error)
-          setDocumentRows([])
-          setInvoiceRows([])
-          setDocumentsInvoicesErrorMessage(
-            'Unable to retrieve permit documents or invoice details.',
-          )
+          if (isLatestRequest()) {
+            console.error(error)
+            setDocumentRows([])
+            setInvoiceRows([])
+            setDocumentsInvoicesErrorMessage(
+              'Unable to retrieve permit documents or invoice details.',
+            )
+          }
         }
       } catch (error) {
-        console.error(error)
-        setErrorMessage('Unable to retrieve provincial permit detail.')
-        setDetail(null)
-        setTabsData(null)
-        setDocumentRows([])
-        setInvoiceRows([])
-        setDocumentsInvoicesErrorMessage('')
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve provincial permit detail.')
+          setDetail(null)
+          setTabsData(null)
+          setDocumentRows([])
+          setInvoiceRows([])
+          setDocumentsInvoicesErrorMessage('')
+        }
       } finally {
-        setLoading(false)
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
       }
     }
 
     void load()
-  }, [permitNumber])
+  }, [permitNumber, beginDetailRequest])
 
   const filteredItems = useMemo(() => {
     if (!tabsData) {
@@ -406,6 +425,7 @@ const ProvincialPermitDetailsPage: FC = () => {
         return
       }
 
+      const isLatestRequest = beginDocumentRefreshRequest()
       setActionErrorMessage('')
       setActionInfoMessage('')
       setIsRemovingDocumentId(row.id)
@@ -416,26 +436,34 @@ const ProvincialPermitDetailsPage: FC = () => {
             ? await removePermitApplicationDocument(row.id)
             : await removePermitDocument(row.id)
 
+        if (!isLatestRequest()) {
+          return
+        }
         if (!removeResult.success) {
           setActionErrorMessage('Unable to remove selected document.')
           return
         }
 
-        const [documentsResult, invoicesResult] = await Promise.all([
-          fetchPermitDocuments(resolvedPermitNumber),
-          fetchPermitInvoices(resolvedPermitNumber),
-        ])
-        setDocumentRows(documentsResult.rows)
-        setInvoiceRows(invoicesResult.rows)
-        setDocumentsInvoicesErrorMessage('')
+        const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
+        const invoicesResult = await fetchPermitInvoices(resolvedPermitNumber)
+        if (isLatestRequest()) {
+          setDocumentRows(documentsResult.rows)
+          setInvoiceRows(invoicesResult.rows)
+          setDocumentsInvoicesErrorMessage('')
+        }
       } catch (error) {
-        console.error(error)
-        setActionErrorMessage('Unable to remove selected document.')
+        if (isLatestRequest()) {
+          console.error(error)
+          setActionErrorMessage('Unable to remove selected document.')
+        }
       } finally {
-        setIsRemovingDocumentId(null)
+        if (isLatestRequest()) {
+          setIsRemovingDocumentId(null)
+        }
       }
     },
     [
+      beginDocumentRefreshRequest,
       canDeleteInvoiceDocuments,
       canDeletePermitDocuments,
       detail?.permitNumber,
@@ -468,6 +496,7 @@ const ProvincialPermitDetailsPage: FC = () => {
       return
     }
 
+    const isLatestRequest = beginAddInvoiceRequest()
     setActionErrorMessage('')
     setActionInfoMessage('')
     setIsAddingInvoice(true)
@@ -475,8 +504,14 @@ const ProvincialPermitDetailsPage: FC = () => {
       let conversionRate = '1.00'
       try {
         const conversionResult = await fetchPermitInvoiceConversionRate()
+        if (!isLatestRequest()) {
+          return
+        }
         conversionRate = conversionResult.conversionRate || conversionRate
       } catch (error) {
+        if (!isLatestRequest()) {
+          return
+        }
         console.error(error)
         setActionInfoMessage(
           'Unable to retrieve conversion rate for invoice add. Using default conversion rate of 1.00.',
@@ -491,24 +526,34 @@ const ProvincialPermitDetailsPage: FC = () => {
         invoiceFeeInLieu,
       })
 
+      if (!isLatestRequest()) {
+        return
+      }
       if (!addResult.success) {
         setActionErrorMessage(addResult.errors[0] || addResult.message || 'Unable to add invoice.')
         return
       }
 
       const refreshedInvoices = await fetchPermitInvoices(resolvedPermitNumber)
-      setInvoiceRows(refreshedInvoices.rows)
-      setDocumentsInvoicesErrorMessage('')
-      setInvoiceDraftNumber('')
-      setInvoiceDraftExportValue('')
-      setInvoiceDraftFeeInLieu('')
+      if (isLatestRequest()) {
+        setInvoiceRows(refreshedInvoices.rows)
+        setDocumentsInvoicesErrorMessage('')
+        setInvoiceDraftNumber('')
+        setInvoiceDraftExportValue('')
+        setInvoiceDraftFeeInLieu('')
+      }
     } catch (error) {
-      console.error(error)
-      setActionErrorMessage('Unable to add invoice.')
+      if (isLatestRequest()) {
+        console.error(error)
+        setActionErrorMessage('Unable to add invoice.')
+      }
     } finally {
-      setIsAddingInvoice(false)
+      if (isLatestRequest()) {
+        setIsAddingInvoice(false)
+      }
     }
   }, [
+    beginAddInvoiceRequest,
     detail?.permitNumber,
     invoiceDraftExportValue,
     invoiceDraftFeeInLieu,
@@ -523,11 +568,18 @@ const ProvincialPermitDetailsPage: FC = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
+    const isLatestRequest = beginInvoiceUploadRequest()
     let conversionRate = '1.00'
     try {
       const conversionResult = await fetchPermitInvoiceConversionRate()
+      if (!isLatestRequest()) {
+        return
+      }
       conversionRate = conversionResult.conversionRate || conversionRate
     } catch (error) {
+      if (!isLatestRequest()) {
+        return
+      }
       console.error(error)
       setActionInfoMessage('Unable to retrieve conversion rate. Using 1.00 for invoice upload.')
     }
@@ -537,8 +589,10 @@ const ProvincialPermitDetailsPage: FC = () => {
       permitNumber: String(detail.permitNumber),
       invoiceConversionRate: conversionRate,
     })
-    navigate(`/admin/uploads?${params.toString()}`)
-  }, [detail?.permitNumber, navigate])
+    if (isLatestRequest()) {
+      navigate(`/admin/uploads?${params.toString()}`)
+    }
+  }, [beginInvoiceUploadRequest, detail?.permitNumber, navigate])
 
   return (
     <Grid fullWidth className="default-grid">

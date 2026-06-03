@@ -1,4 +1,4 @@
-import apiService from '@/service/api-service'
+import { getCachedSearchResponse } from '@/service/cached-search-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
   ProvincialApplicationSearchRequest,
@@ -102,9 +102,10 @@ export const searchProvincialApplications = async (
   request: ProvincialApplicationSearchRequest,
 ): Promise<ProvincialApplicationSearchResponse> => {
   try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get('/lexis/applications/search', { params: buildBackendParams(request) })
+    const response = await getCachedSearchResponse<unknown>(
+      '/lexis/applications/search',
+      buildBackendParams(request),
+    )
 
     const parsed = parseBackendResponse(response.data)
     if (!parsed) {

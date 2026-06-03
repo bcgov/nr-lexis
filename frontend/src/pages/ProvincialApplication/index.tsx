@@ -35,6 +35,8 @@ import {
   parseSortDirectionParam,
   setSearchParam,
 } from '@/pages/shared/search-query-utils'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchProvincialApplications } from '@/service/provincial-application-search-service'
 import {
   fetchProvincialApplicationOptions,
@@ -201,6 +203,7 @@ const ProvincialApplicationPage: FC = () => {
         : DEFAULT_PAGE_SIZE,
     }
   }, [searchParams])
+  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
@@ -236,36 +239,49 @@ const ProvincialApplicationPage: FC = () => {
     return !isValidIsoDate(filters.listingFromDate) || !isValidIsoDate(filters.listingToDate)
   }, [filters.listingFromDate, filters.listingToDate])
 
-  const runSearch = useCallback(async (request: ProvincialApplicationSearchRequest) => {
-    if (
-      !isValidIsoDate(request.filters.listingFromDate) ||
-      !isValidIsoDate(request.filters.listingToDate)
-    ) {
-      return
-    }
-    setLoading(true)
-    setErrorMessage('')
-    try {
-      const response = await searchProvincialApplications(request)
-      setResults(response)
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to retrieve application search results.')
-      setResults(EMPTY_RESULTS)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const beginSearchRequest = useLatestRequestGuard()
+
+  const runSearch = useCallback(
+    async (request: ProvincialApplicationSearchRequest) => {
+      const isLatestRequest = beginSearchRequest()
+      if (
+        !isValidIsoDate(request.filters.listingFromDate) ||
+        !isValidIsoDate(request.filters.listingToDate)
+      ) {
+        setLoading(false)
+        return
+      }
+      setLoading(true)
+      setErrorMessage('')
+      try {
+        const response = await searchProvincialApplications(request)
+        if (isLatestRequest()) {
+          setResults(response)
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve application search results.')
+          setResults(EMPTY_RESULTS)
+        }
+      } finally {
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
+      }
+    },
+    [beginSearchRequest],
+  )
 
   useEffect(() => {
     void runSearch({
-      filters: urlState.filters,
-      page: urlState.page - 1,
-      pageSize: urlState.pageSize,
-      sortField: urlState.sortField,
-      sortDirection: urlState.sortDirection,
+      filters: debouncedUrlState.filters,
+      page: debouncedUrlState.page - 1,
+      pageSize: debouncedUrlState.pageSize,
+      sortField: debouncedUrlState.sortField,
+      sortDirection: debouncedUrlState.sortDirection,
     })
-  }, [runSearch, urlState])
+  }, [debouncedUrlState, runSearch])
 
   useEffect(() => {
     const loadOptions = async () => {

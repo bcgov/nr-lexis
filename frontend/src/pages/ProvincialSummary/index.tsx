@@ -16,6 +16,7 @@ import {
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchApplicationReviews } from '@/service/application-review-search-service'
 import { searchFederalApplications } from '@/service/federal-application-search-service'
 import { searchIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
@@ -130,6 +131,7 @@ const ProvincialSummaryPage: FC = () => {
   const [reviewPreview, setReviewPreview] = useState<
     { applicationNumber: string; status: string; listingDate: string; region: string }[]
   >([])
+  const beginSummaryRequest = useLatestRequestGuard()
 
   const canAccessSummaryRoute = useCallback(
     (key: SummaryMetricKey): boolean => {
@@ -147,149 +149,153 @@ const ProvincialSummaryPage: FC = () => {
   }, [canAccessSummaryRoute])
 
   const loadSummary = useCallback(async () => {
+    const isLatestRequest = beginSummaryRequest()
     setLoading(true)
     setErrorMessage('')
 
     try {
-      const [
-        provincialApplications,
-        provincialExemptions,
-        provincialOffers,
-        provincialPermits,
-        reviewQueue,
-        federalApplications,
-        indianReservePermits,
-      ] = await Promise.all([
-        canAccessSummaryRoute('provincialApplications')
-          ? searchProvincialApplications({
-              filters: {
-                applicationNumber: '',
-                packageNumber: '',
-                exemptionType: '',
-                exemptionNumber: '',
-                applicationStatus: '',
-                productTypeCode: '',
-                region: [],
-                listingFromDate: '',
-                listingToDate: '',
-                applicantClientNumber: '',
-                ownerClientNumber: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'applicationNumber',
-              sortDirection: 'desc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('provincialExemptions')
-          ? searchProvincialExemptions({
-              filters: {
-                applicationNumber: '',
-                packageNumber: '',
-                exemptionNumber: '',
-                region: [],
-                listFromDate: '',
-                listToDate: '',
-                exemptionTypeCode: '',
-                exemptionStatusCode: '',
-                applicantClientNumber: '',
-                ownerClientNumber: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'exemptionNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('provincialOffers')
-          ? searchProvincialOffers({
-              filters: {
-                applicationNumber: '',
-                packageNumber: '',
-                clientNumber: '',
-                listingFromDate: '',
-                listingToDate: '',
-                region: [],
-                withdrawalFromDate: '',
-                withdrawalToDate: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'offerNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('provincialPermits')
-          ? searchProvincialPermits({
-              filters: {
-                applicationNumber: '',
-                packageNumber: '',
-                region: [],
-                issuedFromDate: '',
-                issuedToDate: '',
-                permitStatus: '',
-                permitNumber: '',
-                ownerClientNumber: '',
-                applicantClientNumber: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'permitNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('reviewQueue')
-          ? searchApplicationReviews({
-              filters: {
-                applicationNumber: '',
-                productTypeCode: '',
-                region: [],
-                receivedFromDate: '',
-                receivedToDate: '',
-                listingFromDate: '',
-                listingToDate: '',
-              },
-              page: 0,
-              pageSize: 5,
-              sortField: 'applicationNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('federalApplications')
-          ? searchFederalApplications({
-              filters: {
-                applicationNumber: '',
-                packageNumber: '',
-                applicationStatus: '',
-                clientNumber: '',
-                receivedFromDate: '',
-                receivedToDate: '',
-                listingFromDate: '',
-                listingToDate: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'federalApplicationNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('indianReservePermits')
-          ? searchIndianReservePermits({
-              filters: {
-                permitNumber: '',
-                packageNumber: '',
-                fromPermitIssueDate: '',
-                toPermitIssueDate: '',
-                fromEstimatedShippingDate: '',
-                toEstimatedShippingDate: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'permitNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-      ])
+      const loadMetric = async <T,>(
+        canAccess: boolean,
+        load: () => Promise<T>,
+      ): Promise<T | null> => (canAccess ? load() : null)
+
+      const provincialApplications = await loadMetric(
+        canAccessSummaryRoute('provincialApplications'),
+        () =>
+          searchProvincialApplications({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              exemptionType: '',
+              exemptionNumber: '',
+              applicationStatus: '',
+              productTypeCode: '',
+              region: [],
+              listingFromDate: '',
+              listingToDate: '',
+              applicantClientNumber: '',
+              ownerClientNumber: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'applicationNumber',
+            sortDirection: 'desc',
+          }),
+      )
+      const provincialExemptions = await loadMetric(
+        canAccessSummaryRoute('provincialExemptions'),
+        () =>
+          searchProvincialExemptions({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              exemptionNumber: '',
+              region: [],
+              listFromDate: '',
+              listToDate: '',
+              exemptionTypeCode: '',
+              exemptionStatusCode: '',
+              applicantClientNumber: '',
+              ownerClientNumber: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'exemptionNumber',
+            sortDirection: 'asc',
+          }),
+      )
+      const provincialOffers = await loadMetric(canAccessSummaryRoute('provincialOffers'), () =>
+        searchProvincialOffers({
+          filters: {
+            applicationNumber: '',
+            packageNumber: '',
+            clientNumber: '',
+            listingFromDate: '',
+            listingToDate: '',
+            region: [],
+            withdrawalFromDate: '',
+            withdrawalToDate: '',
+          },
+          page: 0,
+          pageSize: 1,
+          sortField: 'offerNumber',
+          sortDirection: 'asc',
+        }),
+      )
+      const provincialPermits = await loadMetric(canAccessSummaryRoute('provincialPermits'), () =>
+        searchProvincialPermits({
+          filters: {
+            applicationNumber: '',
+            packageNumber: '',
+            region: [],
+            issuedFromDate: '',
+            issuedToDate: '',
+            permitStatus: '',
+            permitNumber: '',
+            ownerClientNumber: '',
+            applicantClientNumber: '',
+          },
+          page: 0,
+          pageSize: 1,
+          sortField: 'permitNumber',
+          sortDirection: 'asc',
+        }),
+      )
+      const reviewQueue = await loadMetric(canAccessSummaryRoute('reviewQueue'), () =>
+        searchApplicationReviews({
+          filters: {
+            applicationNumber: '',
+            productTypeCode: '',
+            region: [],
+            receivedFromDate: '',
+            receivedToDate: '',
+            listingFromDate: '',
+            listingToDate: '',
+          },
+          page: 0,
+          pageSize: 5,
+          sortField: 'applicationNumber',
+          sortDirection: 'asc',
+        }),
+      )
+      const federalApplications = await loadMetric(
+        canAccessSummaryRoute('federalApplications'),
+        () =>
+          searchFederalApplications({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              applicationStatus: '',
+              clientNumber: '',
+              receivedFromDate: '',
+              receivedToDate: '',
+              listingFromDate: '',
+              listingToDate: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'federalApplicationNumber',
+            sortDirection: 'asc',
+          }),
+      )
+      const indianReservePermits = await loadMetric(
+        canAccessSummaryRoute('indianReservePermits'),
+        () =>
+          searchIndianReservePermits({
+            filters: {
+              permitNumber: '',
+              packageNumber: '',
+              fromPermitIssueDate: '',
+              toPermitIssueDate: '',
+              fromEstimatedShippingDate: '',
+              toEstimatedShippingDate: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'permitNumber',
+            sortDirection: 'asc',
+          }),
+      )
 
       const totalsByKey: Record<SummaryMetricKey, number> = {
         provincialApplications: provincialApplications?.page.totalElements ?? 0,
@@ -301,30 +307,36 @@ const ProvincialSummaryPage: FC = () => {
         indianReservePermits: indianReservePermits?.page.totalElements ?? 0,
       }
 
-      setMetrics(
-        INITIAL_METRICS.map((metric) => ({
-          ...metric,
-          total: totalsByKey[metric.key],
-        })),
-      )
+      if (isLatestRequest()) {
+        setMetrics(
+          INITIAL_METRICS.map((metric) => ({
+            ...metric,
+            total: totalsByKey[metric.key],
+          })),
+        )
 
-      setReviewPreview(
-        (reviewQueue?.content ?? []).map((item) => ({
-          applicationNumber: item.applicationNumber,
-          status: item.status,
-          listingDate: item.listingDate,
-          region: item.region,
-        })),
-      )
+        setReviewPreview(
+          (reviewQueue?.content ?? []).map((item) => ({
+            applicationNumber: item.applicationNumber,
+            status: item.status,
+            listingDate: item.listingDate,
+            region: item.region,
+          })),
+        )
+      }
     } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to calculate provincial summary metrics.')
-      setMetrics(INITIAL_METRICS)
-      setReviewPreview([])
+      if (isLatestRequest()) {
+        console.error(error)
+        setErrorMessage('Unable to calculate provincial summary metrics.')
+        setMetrics(INITIAL_METRICS)
+        setReviewPreview([])
+      }
     } finally {
-      setLoading(false)
+      if (isLatestRequest()) {
+        setLoading(false)
+      }
     }
-  }, [canAccessSummaryRoute])
+  }, [beginSummaryRequest, canAccessSummaryRoute])
 
   useEffect(() => {
     void loadSummary()

@@ -1,4 +1,4 @@
-import apiService from '@/service/api-service'
+import { getCachedSearchResponse } from '@/service/cached-search-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
   IndianReservePermitSearchRequest,
@@ -78,9 +78,10 @@ export const searchIndianReservePermits = async (
   request: IndianReservePermitSearchRequest,
 ): Promise<IndianReservePermitSearchResponse> => {
   try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get('/lexis/indian-reserve/permits/search', { params: buildBackendParams(request) })
+    const response = await getCachedSearchResponse<unknown>(
+      '/lexis/indian-reserve/permits/search',
+      buildBackendParams(request),
+    )
 
     const parsed = parseBackendResponse(response.data)
     if (!parsed) {

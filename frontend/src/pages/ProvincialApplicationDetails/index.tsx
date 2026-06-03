@@ -19,6 +19,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
@@ -73,6 +74,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const beginDetailRequest = useLatestRequestGuard()
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
@@ -101,6 +103,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   )
 
   const loadApplicationDetail = useCallback(async () => {
+    const isLatestRequest = beginDetailRequest()
     if (!applicationNumber) {
       setErrorMessage('Application number is missing from the route.')
       setDetail(null)
@@ -120,6 +123,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
     try {
       const response = await fetchProvincialApplicationDetail(applicationNumber)
+      if (!isLatestRequest()) {
+        return
+      }
       setDetail(response)
       if (!response) {
         setErrorMessage(`No provincial application found for ${applicationNumber}.`)
@@ -129,22 +135,30 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
       try {
         const documentsResult = await fetchApplicationDocuments(applicationNumber)
-        setDocumentRows(documentsResult.rows)
+        if (isLatestRequest()) {
+          setDocumentRows(documentsResult.rows)
+        }
       } catch (error) {
-        console.error(error)
-        setDocumentRows([])
-        setDocumentsErrorMessage('Unable to retrieve application documents.')
+        if (isLatestRequest()) {
+          console.error(error)
+          setDocumentRows([])
+          setDocumentsErrorMessage('Unable to retrieve application documents.')
+        }
       }
     } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to retrieve provincial application detail.')
-      setDetail(null)
-      setDocumentRows([])
-      setDocumentsErrorMessage('')
+      if (isLatestRequest()) {
+        console.error(error)
+        setErrorMessage('Unable to retrieve provincial application detail.')
+        setDetail(null)
+        setDocumentRows([])
+        setDocumentsErrorMessage('')
+      }
     } finally {
-      setLoading(false)
+      if (isLatestRequest()) {
+        setLoading(false)
+      }
     }
-  }, [applicationNumber])
+  }, [applicationNumber, beginDetailRequest])
 
   useEffect(() => {
     void loadApplicationDetail()
@@ -252,27 +266,37 @@ const ProvincialApplicationDetailsPage: FC = () => {
         return
       }
 
+      const isLatestRequest = beginDetailRequest()
       setIsRemovingDocumentId(row.id)
       setActionErrorMessage('')
       setActionInfoMessage('')
 
       try {
         const removeResult = await removeApplicationDocument(row.id)
+        if (!isLatestRequest()) {
+          return
+        }
         if (!removeResult.success) {
           setActionErrorMessage('Document removal failed. Refresh and try again.')
           return
         }
 
         const documentsResult = await fetchApplicationDocuments(applicationNumber)
-        setDocumentRows(documentsResult.rows)
+        if (isLatestRequest()) {
+          setDocumentRows(documentsResult.rows)
+        }
       } catch (error) {
-        console.error(error)
-        setActionErrorMessage('Unable to remove the selected document.')
+        if (isLatestRequest()) {
+          console.error(error)
+          setActionErrorMessage('Unable to remove the selected document.')
+        }
       } finally {
-        setIsRemovingDocumentId(null)
+        if (isLatestRequest()) {
+          setIsRemovingDocumentId(null)
+        }
       }
     },
-    [applicationNumber],
+    [applicationNumber, beginDetailRequest],
   )
 
   return (

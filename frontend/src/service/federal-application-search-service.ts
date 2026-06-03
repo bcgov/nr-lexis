@@ -1,4 +1,4 @@
-import apiService from '@/service/api-service'
+import { getCachedSearchResponse } from '@/service/cached-search-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
   FederalApplicationSearchRequest,
@@ -102,9 +102,10 @@ export const searchFederalApplications = async (
   request: FederalApplicationSearchRequest,
 ): Promise<FederalApplicationSearchResponse> => {
   try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get('/lexis/federal/applications/search', { params: buildBackendParams(request) })
+    const response = await getCachedSearchResponse<unknown>(
+      '/lexis/federal/applications/search',
+      buildBackendParams(request),
+    )
 
     const parsed = parseBackendResponse(response.data)
     if (!parsed) {

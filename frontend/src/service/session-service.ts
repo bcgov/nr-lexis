@@ -4,10 +4,17 @@ import type {
   LexisSessionLogoutResponse,
 } from '@/interfaces/LexisSession'
 
+const SESSION_CAPABILITIES_CACHE_TTL_MS = 5_000
+
 export const fetchSessionCapabilities = async (): Promise<LexisSessionCapabilities> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .get<LexisSessionCapabilities>('/lexis/session/capabilities')
+  const response = await apiService.getCachedResponse<LexisSessionCapabilities>(
+    '/lexis/session/capabilities',
+    undefined,
+    {
+      cacheKey: 'session-capabilities',
+      ttlMs: SESSION_CAPABILITIES_CACHE_TTL_MS,
+    },
+  )
 
   return response.data
 }

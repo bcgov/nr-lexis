@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchFeePolicies, upsertFeePolicy } from '@/service/admin-policy-service'
 
-const getMock = vi.fn()
-const postMock = vi.fn()
-const putMock = vi.fn()
-const deleteMock = vi.fn()
+const { deleteMock, getCachedResponseMock, getMock, postMock, putMock } = vi.hoisted(() => ({
+  deleteMock: vi.fn(),
+  getCachedResponseMock: vi.fn(),
+  getMock: vi.fn(),
+  postMock: vi.fn(),
+  putMock: vi.fn(),
+}))
 
 vi.mock('@/service/api-service', () => ({
   default: {
+    getCachedResponse: getCachedResponseMock,
     getAxiosInstance: () => ({
       get: getMock,
       post: postMock,
@@ -23,7 +27,7 @@ describe('admin-policy-service', () => {
   })
 
   it('normalizes fee policy API rows', async () => {
-    getMock.mockResolvedValue({
+    getCachedResponseMock.mockResolvedValue({
       data: [
         {
           policyId: 'fee-1',
@@ -41,7 +45,11 @@ describe('admin-policy-service', () => {
 
     const result = await fetchFeePolicies()
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/admin/policies/fee')
+    expect(getCachedResponseMock).toHaveBeenCalledWith('/lexis/admin/policies/fee', undefined, {
+      cacheKey: 'admin-policies:fee',
+      ttlMs: 30_000,
+    })
+    expect(getMock).not.toHaveBeenCalled()
     expect(result).toEqual([
       expect.objectContaining({
         id: 'fee-1',
@@ -55,7 +63,7 @@ describe('admin-policy-service', () => {
 
   it('throws API errors when fee policy API request fails', async () => {
     const apiError = { response: { status: 500 } }
-    getMock.mockRejectedValue(apiError)
+    getCachedResponseMock.mockRejectedValue(apiError)
 
     await expect(fetchFeePolicies()).rejects.toBe(apiError)
   })

@@ -3,6 +3,7 @@ import type {
   ApplicationReviewSearchResponse,
 } from '@/interfaces/ApplicationReviewSearch'
 import apiService from '@/service/api-service'
+import { getCachedSearchResponse } from '@/service/cached-search-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 
 type BackendApplicationReviewSearchResult = {
@@ -110,9 +111,10 @@ export const searchApplicationReviews = async (
   request: ApplicationReviewSearchRequest,
 ): Promise<ApplicationReviewSearchResponse> => {
   try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get('/lexis/application-reviews/search', { params: buildBackendParams(request) })
+    const response = await getCachedSearchResponse<unknown>(
+      '/lexis/application-reviews/search',
+      buildBackendParams(request),
+    )
 
     const parsed = parseBackendResponse(response.data)
     if (!parsed) {

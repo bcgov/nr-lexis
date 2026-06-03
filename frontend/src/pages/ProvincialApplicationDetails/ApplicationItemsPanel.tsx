@@ -16,6 +16,7 @@ import {
   Tile,
 } from '@carbon/react'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   addApplicationPackage,
   addApplicationScaleToPackage,
@@ -76,7 +77,7 @@ type Props = {
   onDetailChanged: () => Promise<void>
 }
 
-const emptyPackageForm = (detail: ProvincialApplicationDetail): PackageFormState => ({
+const emptyPackageForm = (productTypeCode: string | null | undefined): PackageFormState => ({
   packageNumber: '',
   newPackageNumber: '',
   volume: '',
@@ -86,7 +87,7 @@ const emptyPackageForm = (detail: ProvincialApplicationDetail): PackageFormState
   comments: '',
   reprocessed: 'N',
   ageClass: '',
-  productType: detail.productTypeCode ?? '',
+  productType: productTypeCode ?? '',
   endUseCode: '',
 })
 
@@ -162,7 +163,7 @@ const packageSelectionReducer = (
 }
 
 const toPackageForm = (
-  detail: ProvincialApplicationDetail,
+  productTypeCode: string | null | undefined,
   packageDetails: ApplicationPackageDetails,
   speciesRows: ApplicationPackageSpeciesRow[],
 ): PackageFormState => ({
@@ -175,7 +176,7 @@ const toPackageForm = (
   comments: packageDetails.comments,
   reprocessed: packageDetails.reprocessed || 'N',
   ageClass: packageDetails.ageClass,
-  productType: packageDetails.productType || detail.productTypeCode || '',
+  productType: packageDetails.productType || productTypeCode || '',
   endUseCode: speciesRows[0]?.endUse ?? '',
 })
 
@@ -185,6 +186,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   onDetailChanged,
 }) => {
   const applicationNumber = String(detail.applicationNumber)
+  const productTypeCode = detail.productTypeCode ?? ''
   const packageNumbersFromDetail = useMemo(
     () => detail.packages.map((item) => item.packageNumber).filter(Boolean),
     [detail.packages],
@@ -194,9 +196,11 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     packageNumbersFromDetail,
     buildPackageSelectionState,
   )
-  const [packageForm, setPackageForm] = useState<PackageFormState>(() => emptyPackageForm(detail))
+  const [packageForm, setPackageForm] = useState<PackageFormState>(() =>
+    emptyPackageForm(productTypeCode),
+  )
   const [createPackageForm, setCreatePackageForm] = useState<PackageFormState>(() =>
-    emptyPackageForm(detail),
+    emptyPackageForm(productTypeCode),
   )
   const [packageSpeciesRows, setPackageSpeciesRows] = useState<ApplicationPackageSpeciesRow[]>([])
   const [speciesDraft, setSpeciesDraft] = useState<string[]>([])
@@ -217,6 +221,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   const [isSavingPackage, setIsSavingPackage] = useState(false)
   const [isSavingScale, setIsSavingScale] = useState(false)
   const [deletingScaleId, setDeletingScaleId] = useState('')
+  const beginItemsRequest = useLatestRequestGuard()
 
   useEffect(() => {
     dispatchPackageSelection({ type: 'sync', packageNumbers: packageNumbersFromDetail })
@@ -243,8 +248,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
 
   const loadPackageItems = useCallback(
     async (packageNumber: string) => {
+      const isLatestRequest = beginItemsRequest()
       if (!packageNumber) {
-        setPackageForm(emptyPackageForm(detail))
+        setPackageForm(emptyPackageForm(productTypeCode))
         setPackageSpeciesRows([])
         setSpeciesDraft([])
         setScales([])
@@ -256,24 +262,35 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       setItemsLoading(true)
       setItemsErrorMessage('')
       try {
-        const [detailsResult, speciesResult, scalesResult] = await Promise.all([
-          fetchApplicationPackageDetails(packageNumber),
-          fetchApplicationPackageSpecies(packageNumber),
-          fetchApplicationPackageScales(packageNumber),
-        ])
+        const detailsResult = await fetchApplicationPackageDetails(packageNumber)
+        if (!isLatestRequest()) {
+          return
+        }
+        const speciesResult = await fetchApplicationPackageSpecies(packageNumber)
+        if (!isLatestRequest()) {
+          return
+        }
+        const scalesResult = await fetchApplicationPackageScales(packageNumber)
+        if (!isLatestRequest()) {
+          return
+        }
         const nextSpeciesDraft = uniqueCodes(speciesResult)
-        setPackageForm(toPackageForm(detail, detailsResult, speciesResult))
+        setPackageForm(toPackageForm(productTypeCode, detailsResult, speciesResult))
         setPackageSpeciesRows(speciesResult)
         setSpeciesDraft(nextSpeciesDraft)
         setScales(scalesResult)
       } catch (error) {
-        console.error(error)
-        setItemsErrorMessage('Unable to retrieve application item details.')
+        if (isLatestRequest()) {
+          console.error(error)
+          setItemsErrorMessage('Unable to retrieve application item details.')
+        }
       } finally {
-        setItemsLoading(false)
+        if (isLatestRequest()) {
+          setItemsLoading(false)
+        }
       }
     },
-    [detail],
+    [beginItemsRequest, productTypeCode],
   )
 
   useEffect(() => {
@@ -283,7 +300,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   useEffect(() => {
     let cancelled = false
     const region = detail.orgUnitNumber ? String(detail.orgUnitNumber) : ''
-    const productType = packageForm.productType || detail.productTypeCode || ''
+    const productType = packageForm.productType || productTypeCode
 
     const loadSpeciesOptions = async () => {
       if (!region) {
@@ -307,13 +324,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     return () => {
       cancelled = true
     }
-  }, [
-    detail.orgUnitNumber,
-    detail.productTypeCode,
-    packageForm.productType,
-    speciesDraft,
-    speciesOptions,
-  ])
+  }, [detail.orgUnitNumber, productTypeCode, packageForm.productType, speciesDraft, speciesOptions])
 
   useEffect(() => {
     let cancelled = false
@@ -414,7 +425,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     comments: form.comments,
     reprocessed: form.reprocessed,
     ageClass: form.ageClass,
-    productType: form.productType || detail.productTypeCode || '',
+    productType: form.productType || productTypeCode,
     endUseCode: form.endUseCode,
     speciesCodes: speciesDraft,
   })
@@ -469,7 +480,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         comments: createPackageForm.comments,
         reprocessed: createPackageForm.reprocessed,
         ageClass: createPackageForm.ageClass,
-        productType: createPackageForm.productType || detail.productTypeCode || '',
+        productType: createPackageForm.productType || productTypeCode,
         endUseCode: createPackageForm.endUseCode,
         speciesCodes: [],
       })
@@ -480,7 +491,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
 
       const nextPackageNumber = result.packageNumber || createPackageForm.packageNumber
       dispatchPackageSelection({ type: 'add', packageNumber: nextPackageNumber })
-      setCreatePackageForm(emptyPackageForm(detail))
+      setCreatePackageForm(emptyPackageForm(productTypeCode))
       setItemsInfoMessage(`Package ${nextPackageNumber} created.`)
       await onDetailChanged()
       await loadPackageItems(nextPackageNumber)

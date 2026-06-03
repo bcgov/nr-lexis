@@ -37,6 +37,7 @@ export type UpsertFilPolicyRequest = {
 }
 
 const DEFAULT_USER_ID = 'CURRENT_USER'
+const POLICY_CACHE_TTL_MS = 30_000
 
 const createTimestamp = (): string => new Date().toISOString()
 const createRowId = (): string => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -119,7 +120,14 @@ const normalizeFilPolicyRow = (row: unknown): FilPolicyRow => {
 }
 
 export const fetchFeePolicies = async (): Promise<FeePolicyRow[]> => {
-  const response = await apiService.getAxiosInstance().get('/lexis/admin/policies/fee')
+  const response = await apiService.getCachedResponse<unknown>(
+    '/lexis/admin/policies/fee',
+    undefined,
+    {
+      cacheKey: 'admin-policies:fee',
+      ttlMs: POLICY_CACHE_TTL_MS,
+    },
+  )
   const payloadRows = parseArrayPayload(response.data)
   if (!payloadRows) {
     throw new Error('Fee policy response is not a list.')
@@ -150,7 +158,14 @@ export const deleteFeePolicy = async (rowId: string): Promise<FeePolicyRow[]> =>
 }
 
 export const fetchFilPolicies = async (): Promise<FilPolicyRow[]> => {
-  const response = await apiService.getAxiosInstance().get('/lexis/admin/policies/fil')
+  const response = await apiService.getCachedResponse<unknown>(
+    '/lexis/admin/policies/fil',
+    undefined,
+    {
+      cacheKey: 'admin-policies:fil',
+      ttlMs: POLICY_CACHE_TTL_MS,
+    },
+  )
   const payloadRows = parseArrayPayload(response.data)
   if (!payloadRows) {
     throw new Error('FIL policy response is not a list.')

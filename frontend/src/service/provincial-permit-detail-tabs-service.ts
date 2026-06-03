@@ -151,19 +151,24 @@ const fetchRows = async <TRow>(
 export const fetchProvincialPermitDetailTabs = async (
   permitNumber: string,
 ): Promise<ProvincialPermitDetailTabsData> => {
-  const [items, fees, gbmsEvents, oicItems, boicItems] = await Promise.all([
-    fetchRows(`/lexis/permits/${encodeURIComponent(permitNumber)}/items`, normalizePermitItemRow),
-    fetchRows(`/lexis/permits/${encodeURIComponent(permitNumber)}/fees`, normalizePermitFeeRow),
-    fetchRows(`/lexis/permits/${encodeURIComponent(permitNumber)}/gbms`, normalizePermitEventRow),
-    fetchRows(
-      `/lexis/permits/${encodeURIComponent(permitNumber)}/oic-items`,
-      normalizePermitEventRow,
-    ),
-    fetchRows(
-      `/lexis/permits/${encodeURIComponent(permitNumber)}/boic-items`,
-      normalizePermitEventRow,
-    ),
-  ])
+  const encodedPermitNumber = encodeURIComponent(permitNumber)
+  const items = await fetchRows(
+    `/lexis/permits/${encodedPermitNumber}/items`,
+    normalizePermitItemRow,
+  )
+  const fees = await fetchRows(`/lexis/permits/${encodedPermitNumber}/fees`, normalizePermitFeeRow)
+  const gbmsEvents = await fetchRows(
+    `/lexis/permits/${encodedPermitNumber}/gbms`,
+    normalizePermitEventRow,
+  )
+  const oicItems = await fetchRows(
+    `/lexis/permits/${encodedPermitNumber}/oic-items`,
+    normalizePermitEventRow,
+  )
+  const boicItems = await fetchRows(
+    `/lexis/permits/${encodedPermitNumber}/boic-items`,
+    normalizePermitEventRow,
+  )
 
   return {
     items,

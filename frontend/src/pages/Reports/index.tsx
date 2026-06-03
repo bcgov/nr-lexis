@@ -28,6 +28,7 @@ import {
   fetchProvincialPermitOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 
 type ReportDefinition = {
   id: string
@@ -57,6 +58,12 @@ type ReportActionMapping = {
 }
 
 type ReportCategoryFilter = 'ALL' | ReportDefinition['category']
+type ReportOptionSource = 'application' | 'exemption' | 'permit'
+type ReportOptionSources = {
+  application: Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>
+  exemption: Awaited<ReturnType<typeof fetchProvincialExemptionOptions>>
+  permit: Awaited<ReturnType<typeof fetchProvincialPermitOptions>>
+}
 
 const OUTPUT_FORMAT_FIELD: ReportFieldDefinition = {
   key: 'outputFormat',
@@ -573,6 +580,24 @@ const mergeOptions = (...optionGroups: SearchOption[][]): SearchOption[] => {
   return Array.from(byCode.values())
 }
 
+const getRequiredReportOptionSources = (report: ReportDefinition): ReportOptionSource[] => {
+  const fieldKeys = new Set(report.fields.map((field) => field.key))
+  const sources = new Set<ReportOptionSource>()
+
+  if (fieldKeys.has('exemptionType') || fieldKeys.has('exemptionTypeCode')) {
+    sources.add('application')
+    sources.add('exemption')
+  }
+  if (fieldKeys.has('exemptionStatus')) {
+    sources.add('exemption')
+  }
+  if (fieldKeys.has('permitStatus')) {
+    sources.add('permit')
+  }
+
+  return Array.from(sources)
+}
+
 const parseRecordParam = (value: string | null): Record<string, string> => {
   if (!value) {
     return {}
@@ -711,11 +736,12 @@ const ReportsPage: FC = () => {
   const [selectedActionById, setSelectedActionById] = useState<Record<string, string>>({
     [initialReport.id]: initialSelectedAction,
   })
-  const [reportFieldOptionsByKey, setReportFieldOptionsByKey] = useState<
-    Record<string, SearchOption[]>
+  const [reportOptionSourcesByKey, setReportOptionSourcesByKey] = useState<
+    Partial<ReportOptionSources>
   >({})
   const [launchErrorMessage, setLaunchErrorMessage] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const beginReportOptionsRequest = useLatestRequestGuard()
 
   const visibleReports = useMemo(() => {
     return REPORT_DEFINITIONS.filter((report) => {
@@ -751,6 +777,31 @@ const ReportsPage: FC = () => {
     selectedReport,
     selectedActionById[selectedReport.id] ?? null,
   )
+  const requiredReportOptionSources = useMemo(
+    () => getRequiredReportOptionSources(selectedReport),
+    [selectedReport],
+  )
+  const reportFieldOptionsByKey = useMemo(() => {
+    const exemptionTypeOptions = mergeOptions(
+      reportOptionSourcesByKey.application?.exemptionTypes ?? [],
+      reportOptionSourcesByKey.exemption?.exemptionTypes ?? [],
+    )
+
+    return {
+      ...(exemptionTypeOptions.length > 0
+        ? {
+            exemptionType: exemptionTypeOptions,
+            exemptionTypeCode: exemptionTypeOptions,
+          }
+        : {}),
+      ...(reportOptionSourcesByKey.exemption?.exemptionStatuses.length
+        ? { exemptionStatus: reportOptionSourcesByKey.exemption.exemptionStatuses }
+        : {}),
+      ...(reportOptionSourcesByKey.permit?.permitStatuses.length
+        ? { permitStatus: reportOptionSourcesByKey.permit.permitStatuses }
+        : {}),
+    }
+  }, [reportOptionSourcesByKey])
 
   useEffect(() => {
     const nextParams = buildReportSearchParams({
@@ -778,27 +829,45 @@ const ReportsPage: FC = () => {
 
   useEffect(() => {
     const loadReportFieldOptions = async () => {
-      const [applicationOptions, exemptionOptions, permitOptions] = await Promise.all([
-        fetchProvincialApplicationOptions(),
-        fetchProvincialExemptionOptions(),
-        fetchProvincialPermitOptions(),
-      ])
-
-      const exemptionTypeOptions = mergeOptions(
-        applicationOptions.exemptionTypes,
-        exemptionOptions.exemptionTypes,
+      const missingSources = requiredReportOptionSources.filter(
+        (source) => !reportOptionSourcesByKey[source],
       )
+      if (missingSources.length === 0) {
+        beginReportOptionsRequest()
+        return
+      }
 
-      setReportFieldOptionsByKey({
-        exemptionType: exemptionTypeOptions,
-        exemptionTypeCode: exemptionTypeOptions,
-        exemptionStatus: exemptionOptions.exemptionStatuses,
-        permitStatus: permitOptions.permitStatuses,
-      })
+      const isLatestRequest = beginReportOptionsRequest()
+      const loadedSources: Partial<ReportOptionSources> = {}
+
+      try {
+        for (const source of missingSources) {
+          if (source === 'application') {
+            loadedSources.application = await fetchProvincialApplicationOptions()
+          } else if (source === 'exemption') {
+            loadedSources.exemption = await fetchProvincialExemptionOptions()
+          } else {
+            loadedSources.permit = await fetchProvincialPermitOptions()
+          }
+
+          if (!isLatestRequest()) {
+            return
+          }
+        }
+
+        setReportOptionSourcesByKey((current) => ({
+          ...current,
+          ...loadedSources,
+        }))
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.warn('Unable to load report field options.', error)
+        }
+      }
     }
 
     void loadReportFieldOptions()
-  }, [])
+  }, [beginReportOptionsRequest, reportOptionSourcesByKey, requiredReportOptionSources])
 
   const onSelectReport = (reportId: string): void => {
     setSelectedReportId(reportId)
