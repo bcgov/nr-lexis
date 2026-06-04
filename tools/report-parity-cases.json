@@ -1,0 +1,423 @@
+[
+  {
+    "id": "application-csv-all-region",
+    "description": "Application ledger CSV with legacy all-region default",
+    "reportId": "applicationReport",
+    "legacyPath": "/applicationReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "0",
+      "exportJurisdictionCode": "P",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "application-pdf",
+    "description": "Application ledger PDF using the migrated Jasper template",
+    "reportId": "applicationReport",
+    "legacyPath": "/applicationReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "P",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "offer-csv",
+    "description": "Offer report CSV with legacy application date filtering",
+    "reportId": "offerReport",
+    "legacyPath": "/offerReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "P",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "offer-pdf",
+    "description": "Offer report PDF using the migrated Jasper template",
+    "reportId": "offerReport",
+    "legacyPath": "/offerReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "P",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "permit-ledger-csv",
+    "description": "Permit ledger CSV via explicit legacy reporting procedure",
+    "reportId": "permitLedgerReport",
+    "legacyPath": "/permitLedgerReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "permitStatus": "COM",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "permit-ledger-pdf",
+    "description": "Permit ledger PDF using the migrated Jasper template",
+    "reportId": "permitLedgerReport",
+    "legacyPath": "/permitLedgerReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "permitStatus": "COM",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "species-grade-csv",
+    "description": "Species and grade CSV using the legacy explicit reporting procedure",
+    "reportId": "speciesGradeReport",
+    "legacyPath": "/speciesGradeReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "permitStatus": "COM",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "species-grade-pdf",
+    "description": "Species and grade PDF using the migrated legacy table fallback",
+    "reportId": "speciesGradeReport",
+    "legacyPath": "/speciesGradeReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "permitStatus": "COM",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "exemption-ledger-csv",
+    "description": "Exemption ledger CSV with approval and listing date criteria",
+    "reportId": "exemptionReport",
+    "legacyPath": "/exemptionReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "listingFromDate": "2025-01-01",
+      "listingToDate": "2025-12-31",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "exemption-ledger-pdf",
+    "description": "Exemption ledger PDF using the migrated Jasper template",
+    "reportId": "exemptionReport",
+    "legacyPath": "/exemptionReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "listingFromDate": "2025-01-01",
+      "listingToDate": "2025-12-31",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "fee-report-csv",
+    "description": "Fee report CSV with completed permit status parity",
+    "reportId": "feeReport",
+    "legacyPath": "/feeReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "orgUnitNumber": "${REPORT_REGION}",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "fee-report-pdf",
+    "description": "Fee report PDF using the migrated Jasper template",
+    "reportId": "feeReport",
+    "legacyPath": "/feeReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "orgUnitNumber": "${REPORT_REGION}",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "biweekly-listing-csv",
+    "description": "Biweekly listing CSV with legacy P/F jurisdiction fallback",
+    "reportId": "biweeklyListing",
+    "legacyPath": "/biweeklyListing.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "biweekly-listing-pdf",
+    "description": "Biweekly listing PDF using the migrated Jasper template",
+    "reportId": "biweeklyListing",
+    "legacyPath": "/biweeklyListing.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "P",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "biweekly-industry-csv",
+    "description": "Biweekly industry CSV with current schedule defaults",
+    "reportId": "biweeklyListing",
+    "legacyPath": "/biweeklyListing.do",
+    "actionMapping": "generateIndustryCSV",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {}
+  },
+  {
+    "id": "biweekly-industry-pdf",
+    "description": "Biweekly industry PDF with current schedule defaults",
+    "reportId": "biweeklyListing",
+    "legacyPath": "/biweeklyListing.do",
+    "actionMapping": "generateIndustryPDF",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {}
+  },
+  {
+    "id": "transport-report-csv",
+    "description": "Transport report CSV with issue and received date criteria",
+    "reportId": "transportReport",
+    "legacyPath": "/transportReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "jurisdiction": "P",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "transport-report-pdf",
+    "description": "Transport report PDF using the migrated Jasper template",
+    "reportId": "transportReport",
+    "legacyPath": "/transportReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "jurisdiction": "P",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "teac-csv",
+    "description": "TEAC package CSV using the jurisdiction-specific legacy procedure",
+    "reportId": "teacReport",
+    "legacyPath": "/teacReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "P",
+      "exportSchedule": "${REPORT_SCHEDULE_ID}",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "teac-federal-csv",
+    "description": "Federal TEAC package CSV using the jurisdiction-specific legacy procedure",
+    "reportId": "teacReport",
+    "legacyPath": "/teacReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "F",
+      "exportSchedule": "${REPORT_SCHEDULE_ID}",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "teac-provincial-pdf",
+    "description": "Provincial TEAC package PDF using the migrated legacy table fallback",
+    "reportId": "teacReport",
+    "legacyPath": "/teacReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "P",
+      "exportSchedule": "${REPORT_SCHEDULE_ID}",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "teac-federal-pdf",
+    "description": "Federal TEAC package PDF using the migrated legacy table fallback",
+    "reportId": "teacReport",
+    "legacyPath": "/teacReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "F",
+      "exportSchedule": "${REPORT_SCHEDULE_ID}",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "approved-exemption-pdf",
+    "description": "Approved exemption prompt-only PDF fallback",
+    "reportId": "approvedExemptionReport",
+    "legacyPath": "/approvedExemptionReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "exemptionNumber": "${APPROVED_EXEMPTION_NUMBER}",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "permit-pdf",
+    "description": "Permit prompt-only PDF with GBMS invoice default",
+    "reportId": "permitReport",
+    "legacyPath": "/permitReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "permitNumber": "${PERMIT_NUMBER}",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "tenure-permit-spreadsheet",
+    "description": "Tenure permit details spreadsheet variant",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generatePermitReport",
+    "format": "XLS",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "tenure-type-spreadsheet",
+    "description": "Tenure analysis spreadsheet by tenure type",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generateTenureReport",
+    "format": "XLS",
+    "compare": "metadata",
+    "parameters": {
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "tenureType1": "${REPORT_TENURE_TYPE}",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "tenure-mark-spreadsheet",
+    "description": "Tenure analysis spreadsheet by timber mark",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generateMarkReport",
+    "format": "XLS",
+    "compare": "metadata",
+    "parameters": {
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "timberMark1": "${REPORT_TIMBER_MARK}",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "tenure-file-spreadsheet",
+    "description": "Tenure analysis spreadsheet by forest file",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generateFileReport",
+    "format": "XLS",
+    "compare": "metadata",
+    "parameters": {
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "forestFileId": "${REPORT_FOREST_FILE_ID}",
+      "outputFormat": "CSV"
+    }
+  }
+]

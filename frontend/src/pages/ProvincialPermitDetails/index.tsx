@@ -697,7 +697,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                 <Button
                   kind="primary"
                   size="sm"
-                  disabled={isOpeningPermitReport || !canPerform('/permitSearch')}
+                  disabled={isOpeningPermitReport || !canPerform('/permitReport')}
                   onClick={() => void onOpenPermitReport()}
                 >
                   {isOpeningPermitReport ? 'Opening Permit Report...' : 'Open Permit Report'}

@@ -74,8 +74,8 @@ public class LexisJasperReportParameterProvider {
 
   private Map<String, Object> exemptionReport(Map<String, String> parameters) {
     Map<String, Object> reportParameters = new HashMap<>();
-    reportParameters.put("P_FROM_DATE", defaultDate(first(parameters, "fromDate"), DEFAULT_FROM_DATE));
-    reportParameters.put("P_TO_DATE", defaultDate(first(parameters, "toDate"), DEFAULT_TO_DATE));
+    reportParameters.put("P_FROM_DATE", first(parameters, "fromDate"));
+    reportParameters.put("P_TO_DATE", first(parameters, "toDate"));
     reportParameters.put("P_LISTING_FROM_DATE", first(parameters, "listingFromDate"));
     reportParameters.put("P_LISTING_TO_DATE", first(parameters, "listingToDate"));
     reportParameters.put("P_ORG_UNIT", csvValue(parameters, "region"));
@@ -93,8 +93,8 @@ public class LexisJasperReportParameterProvider {
     reportParameters.put("P_ORG_UNIT", first(parameters, "region"));
     reportParameters.put("P_JURISDICTION", first(parameters, "exportJurisdictionCode", "jurisdiction"));
     reportParameters.put("P_EXEMPTION_REASON", first(parameters, "exemptionReason"));
-    reportParameters.put("P_RECEIVED_FROM", defaultDate(first(parameters, "fromDate"), DEFAULT_FROM_DATE));
-    reportParameters.put("P_RECEIVED_TO", defaultDate(first(parameters, "toDate"), DEFAULT_TO_DATE));
+    reportParameters.put("P_RECEIVED_FROM", first(parameters, "fromDate"));
+    reportParameters.put("P_RECEIVED_TO", first(parameters, "toDate"));
     reportParameters.put("P_CLIENT_NUMBER", first(parameters, "clientNumber"));
     reportParameters.put("P_GROWTH_TYPE", first(parameters, "growthType"));
     return reportParameters;
@@ -102,18 +102,7 @@ public class LexisJasperReportParameterProvider {
 
   private Map<String, Object> approvedExemptionReport(Map<String, String> parameters) {
     Map<String, Object> reportParameters = new HashMap<>();
-    // Temporary migration fallback until the dedicated approved-exemption template is ported.
-    reportParameters.put("P_FROM_DATE", DEFAULT_FROM_DATE);
-    reportParameters.put("P_TO_DATE", DEFAULT_TO_DATE);
-    reportParameters.put("P_LISTING_FROM_DATE", "");
-    reportParameters.put("P_LISTING_TO_DATE", "");
-    reportParameters.put("P_ORG_UNIT", "");
-    reportParameters.put("P_EXEMPTION_REASON", "");
-    reportParameters.put("P_EXEMPTION_TYPE", "");
-    reportParameters.put("P_CLIENT", "");
-    reportParameters.put("P_GROWTH_TYPE", "");
     reportParameters.put("P_EXEMPTION_NUMBER", first(parameters, "exemptionNumber"));
-    reportParameters.put("P_EXEMPTION_STATUS", "");
     return reportParameters;
   }
 
@@ -202,18 +191,18 @@ public class LexisJasperReportParameterProvider {
     reportParameters.put("P_CLIENT_TYPE", clientType);
     reportParameters.put("P_FROM_DATE", first(parameters, "fromDate"));
     reportParameters.put("P_TO_DATE", first(parameters, "toDate"));
-    reportParameters.put("P_TENURE_TYPE_1", emptyIfNull(first(parameters, "tenureType1")));
-    reportParameters.put("P_TENURE_TYPE_2", emptyIfNull(first(parameters, "tenureType2")));
-    reportParameters.put("P_TENURE_TYPE_3", emptyIfNull(first(parameters, "tenureType3")));
-    reportParameters.put("P_TENURE_TYPE_4", emptyIfNull(first(parameters, "tenureType4")));
-    reportParameters.put("P_TENURE_TYPE_5", emptyIfNull(first(parameters, "tenureType5")));
-    reportParameters.put("P_TENURE_TYPE_6", emptyIfNull(first(parameters, "tenureType6")));
-    reportParameters.put("P_TIMBER_MARK_1", emptyIfNull(first(parameters, "timberMark1")));
-    reportParameters.put("P_TIMBER_MARK_2", emptyIfNull(first(parameters, "timberMark2")));
-    reportParameters.put("P_TIMBER_MARK_3", emptyIfNull(first(parameters, "timberMark3")));
-    reportParameters.put("P_TIMBER_MARK_4", emptyIfNull(first(parameters, "timberMark4")));
-    reportParameters.put("P_TIMBER_MARK_5", emptyIfNull(first(parameters, "timberMark5")));
-    reportParameters.put("P_TIMBER_MARK_6", emptyIfNull(first(parameters, "timberMark6")));
+    reportParameters.put("P_TENURE_TYPE_1", "");
+    reportParameters.put("P_TENURE_TYPE_2", "");
+    reportParameters.put("P_TENURE_TYPE_3", "");
+    reportParameters.put("P_TENURE_TYPE_4", "");
+    reportParameters.put("P_TENURE_TYPE_5", "");
+    reportParameters.put("P_TENURE_TYPE_6", "");
+    reportParameters.put("P_TIMBER_MARK_1", "");
+    reportParameters.put("P_TIMBER_MARK_2", "");
+    reportParameters.put("P_TIMBER_MARK_3", "");
+    reportParameters.put("P_TIMBER_MARK_4", "");
+    reportParameters.put("P_TIMBER_MARK_5", "");
+    reportParameters.put("P_TIMBER_MARK_6", "");
     reportParameters.put("P_FOREST_FILE_ID", first(parameters, "forestFileId"));
 
     return reportParameters;

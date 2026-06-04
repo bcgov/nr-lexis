@@ -91,7 +91,7 @@ $P{P_ORG_UNIT}!=null &&
 $P{P_ORG_UNIT}.contains( "1903" )&& $P{P_ORG_UNIT}.contains( "1904" ) && $P{P_ORG_UNIT}.contains( "1905" ) && $P{P_ORG_UNIT}.contains( "1906" ) &&
 $P{P_ORG_UNIT}.contains( "1907" )&& $P{P_ORG_UNIT}.contains( "1908" ) && $P{P_ORG_UNIT}.contains( "1909" ) && $P{P_ORG_UNIT}.contains( "1910" )
 ?   "All"
-:   org.apache.commons.lang.StringUtils.chop(
+:   ca.bc.gov.mof.lexis.service.report.LexisReportStringUtils.chop(
        (($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1903" ) ? "RCB, " : "" ) +
        ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1904" ) ? "RKB, " : "" ) +
        ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1905" ) ? "RNO, " : "" ) +
@@ -201,9 +201,9 @@ $P{P_LISTING_TO_DATE}==null || $P{P_LISTING_TO_DATE}.isEmpty()
 //""
 
 $F{EXPORT_JURISDICTION_CODE}!=null && $F{EXPORT_JURISDICTION_CODE}.equalsIgnoreCase( "F" )
-?   $F{FED_APPLICATION_NUMBER}.toString()
-:   $F{EXPORT_JURISDICTION_CODE}!=null || $F{EXPORT_JURISDICTION_CODE}.equalsIgnoreCase( "P" )
-    ?   $F{APPLICATION_NUMBER}.toString()
+?   ( $F{FED_APPLICATION_NUMBER} == null ? "" : $F{FED_APPLICATION_NUMBER}.toString() )
+:   $F{EXPORT_JURISDICTION_CODE}!=null && $F{EXPORT_JURISDICTION_CODE}.equalsIgnoreCase( "P" )
+    ?   ( $F{APPLICATION_NUMBER} == null ? "" : $F{APPLICATION_NUMBER}.toString() )
     :   ""]]></variableExpression>
 	</variable>
 	<variable name="CCF8_F_EXEMPTION_NUMBER" class="java.lang.String" resetType="None">
@@ -230,11 +230,11 @@ $P{P_EXEMPTION_NUMBER}==null || $P{P_EXEMPTION_NUMBER}.isEmpty()
 
 $P{P_EXEMPTION_STATUS}!=null && $P{P_EXEMPTION_STATUS}.equalsIgnoreCase( "NEW" )
 ?   "New"
-:   $P{P_EXEMPTION_STATUS}!=null && $P{P_EXEMPTION_STATUS}.equalsIgnoreCase( "NEW" )
+:   $P{P_EXEMPTION_STATUS}!=null && $P{P_EXEMPTION_STATUS}.equalsIgnoreCase( "ACT" )
     ?   "Active"
-    :   $P{P_EXEMPTION_STATUS}!=null && $P{P_EXEMPTION_STATUS}.equalsIgnoreCase( "NEW" )
+    :   $P{P_EXEMPTION_STATUS}!=null && $P{P_EXEMPTION_STATUS}.equalsIgnoreCase( "CAN" )
         ?   "Cancelled"
-        :   $P{P_EXEMPTION_STATUS}!=null && $P{P_EXEMPTION_STATUS}.equalsIgnoreCase( "NEW" )
+        :   $P{P_EXEMPTION_STATUS}!=null && $P{P_EXEMPTION_STATUS}.equalsIgnoreCase( "EXP" )
             ?   "Expired"
             :   "All"]]></variableExpression>
 	</variable>

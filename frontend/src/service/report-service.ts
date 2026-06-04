@@ -15,6 +15,11 @@ export type RunReportResult = {
   contentType: string
 }
 
+type ReportApiPayload = {
+  parameters: Record<string, string>
+  format: string
+}
+
 const splitCsv = (value: string): string[] =>
   value
     .split(',')
@@ -23,14 +28,47 @@ const splitCsv = (value: string): string[] =>
 
 const normalizeClientNumber = (value: string): string => {
   const trimmed = value.trim()
-  if (!trimmed || !/^[0-9]+$/.test(trimmed)) {
+  if (!trimmed || !/^[0-9.]+$/.test(trimmed)) {
     return trimmed
   }
 
   return trimmed.padStart(8, '0')
 }
 
+const shouldNormalizeLegacyClientNumber = (reportId: string): boolean =>
+  ['offerReport', 'permitLedgerReport', 'tenureReport'].includes(reportId)
+
 const normalizeUppercase = (value: string): string => value.trim().toUpperCase()
+
+const shouldNormalizeLegacyUppercase = (reportId: string, key: string): boolean =>
+  (reportId === 'speciesGradeReport' && (key === 'timberMark' || key === 'forestFileId')) ||
+  (reportId === 'permitLedgerReport' && key === 'timberMark') ||
+  (reportId === 'tenureReport' && key === 'forestFileId')
+
+const LEGACY_TENURE_FIELD_LIMIT = 6
+const PDF_ONLY_PROMPT_REPORT_IDS = new Set(['approvedExemptionReport', 'permitReport'])
+
+const compactLegacyIndexedValues = (
+  values: Record<string, string>,
+  prefix: 'tenureType' | 'timberMark',
+  csvFallbackKey: 'tenureTypes' | 'timberMarks',
+): string[] => {
+  const indexedValues = Array.from(
+    { length: LEGACY_TENURE_FIELD_LIMIT },
+    (_, index) => values[`${prefix}${index + 1}`] ?? '',
+  )
+  const compactedIndexedValues = indexedValues
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+
+  if (compactedIndexedValues.length > 0) {
+    return compactedIndexedValues.slice(0, LEGACY_TENURE_FIELD_LIMIT).map(normalizeUppercase)
+  }
+
+  return splitCsv(values[csvFallbackKey] ?? '')
+    .slice(0, LEGACY_TENURE_FIELD_LIMIT)
+    .map(normalizeUppercase)
+}
 
 const getModernReportApiBasePath = (): string => {
   const configured = (env.VITE_LEXIS_REPORT_API_BASE ?? '/lexis/reports').trim()
@@ -53,63 +91,105 @@ const buildModernReportEndpoint = (reportId: string): string => {
   return `${basePath}/${encodeURIComponent(reportId)}`
 }
 
-const buildReportPayload = (
+const resolveReportFormat = (
+  reportId: string,
   values: Record<string, string>,
   actionMapping?: string,
-): Record<string, unknown> => {
-  const payload: Record<string, unknown> = {}
+): string => {
+  if (PDF_ONLY_PROMPT_REPORT_IDS.has(reportId)) {
+    return 'PDF'
+  }
+
+  const normalizedActionMapping = actionMapping?.trim().toLowerCase() ?? ''
+  if (normalizedActionMapping.includes('csv')) {
+    return 'CSV'
+  }
+  if (normalizedActionMapping.includes('pdf')) {
+    return 'PDF'
+  }
+
+  const outputFormat = values.outputFormat?.trim().toUpperCase()
+  if (reportId === 'tenureReport' && outputFormat === 'CSV') {
+    return 'XLS'
+  }
+  if (outputFormat === 'CSV') {
+    return 'CSV'
+  }
+  if (outputFormat === 'XLS' || outputFormat === 'XLSX') {
+    return 'XLS'
+  }
+  if (outputFormat === 'PDF') {
+    return 'PDF'
+  }
+  return 'PDF'
+}
+
+const resolveReportExtension = (
+  reportId: string,
+  values: Record<string, string>,
+  actionMapping?: string,
+): string => {
+  const format = resolveReportFormat(reportId, values, actionMapping)
+  return format === 'XLS' ? 'xlsx' : format.toLowerCase()
+}
+
+const buildReportPayload = (
+  reportId: string,
+  values: Record<string, string>,
+  actionMapping?: string,
+): ReportApiPayload => {
+  const parameters: Record<string, string> = {}
 
   if (shouldIncludeActionMapping() && actionMapping && actionMapping.trim().length > 0) {
-    payload.actionMapping = actionMapping.trim()
+    parameters.legacyActionMapping = actionMapping.trim()
   }
 
   Object.entries(values).forEach(([key, rawValue]) => {
     const value = rawValue.trim()
-    if (!value || key === 'tenureTypes' || key === 'timberMarks') {
+    if (
+      !value ||
+      key === 'outputFormat' ||
+      key === 'tenureTypes' ||
+      key === 'timberMarks' ||
+      /^tenureType[1-6]$/.test(key) ||
+      /^timberMark[1-6]$/.test(key)
+    ) {
       return
     }
 
-    if (key === 'clientNumber') {
-      payload[key] = normalizeClientNumber(value)
+    if (key === 'clientNumber' && shouldNormalizeLegacyClientNumber(reportId)) {
+      parameters[key] = normalizeClientNumber(value)
       return
     }
 
-    if (key === 'forestFileId' || key === 'timberMark') {
-      payload[key] = normalizeUppercase(value)
+    if (shouldNormalizeLegacyUppercase(reportId, key)) {
+      parameters[key] = normalizeUppercase(value)
       return
     }
 
     if (key === 'region' || key === 'orgUnitNumber') {
-      payload[key] = splitCsv(value)
+      parameters[key] = splitCsv(value).join(',')
       return
     }
 
-    payload[key] = value
+    parameters[key] = value
   })
 
-  const tenureTypes = splitCsv(values.tenureTypes ?? '')
-    .slice(0, 6)
-    .map(normalizeUppercase)
-  const timberMarks = splitCsv(values.timberMarks ?? '')
-    .slice(0, 6)
-    .map(normalizeUppercase)
-
-  if (tenureTypes.length > 0) {
-    payload.tenureTypes = tenureTypes
-  }
-  if (timberMarks.length > 0) {
-    payload.timberMarks = timberMarks
-  }
+  const tenureTypes = compactLegacyIndexedValues(values, 'tenureType', 'tenureTypes')
+  const timberMarks = compactLegacyIndexedValues(values, 'timberMark', 'timberMarks')
 
   tenureTypes.forEach((value, index) => {
-    payload[`tenureType${index + 1}`] = value
+    parameters[`tenureType${index + 1}`] = value
   })
 
   timberMarks.forEach((value, index) => {
-    payload[`timberMark${index + 1}`] = value
+    parameters[`timberMark${index + 1}`] = value
   })
 
-  return payload
+  return {
+    parameters,
+    format: resolveReportFormat(reportId, values, actionMapping),
+  }
 }
 
 const getResponseHeaderValue = (
@@ -126,19 +206,23 @@ const getResponseHeaderValue = (
   return null
 }
 
-const getDefaultFilename = (reportId: string, values: Record<string, string>): string => {
-  const outputFormat = values.outputFormat?.trim().toLowerCase() === 'csv' ? 'csv' : 'pdf'
-  return `lexis-${reportId}.${outputFormat}`
+const getDefaultFilename = (
+  reportId: string,
+  values: Record<string, string>,
+  actionMapping?: string,
+): string => {
+  return `lexis-${reportId}.${resolveReportExtension(reportId, values, actionMapping)}`
 }
 
 const extractFilename = (
   headers: RawAxiosResponseHeaders | AxiosResponseHeaders,
   reportId: string,
   values: Record<string, string>,
+  actionMapping?: string,
 ): string => {
   const contentDisposition = getResponseHeaderValue(headers, 'content-disposition')
   if (!contentDisposition) {
-    return getDefaultFilename(reportId, values)
+    return getDefaultFilename(reportId, values, actionMapping)
   }
 
   const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
@@ -155,11 +239,11 @@ const extractFilename = (
     return regularMatch[1]
   }
 
-  return getDefaultFilename(reportId, values)
+  return getDefaultFilename(reportId, values, actionMapping)
 }
 
 export const runReport = async (request: RunReportRequest): Promise<RunReportResult> => {
-  const requestConfig: AxiosRequestConfig<Record<string, unknown>> = {
+  const requestConfig: AxiosRequestConfig<ReportApiPayload> = {
     responseType: 'blob',
     headers: {
       Accept: 'application/octet-stream',
@@ -171,13 +255,18 @@ export const runReport = async (request: RunReportRequest): Promise<RunReportRes
     .getAxiosInstance()
     .post<Blob>(
       buildModernReportEndpoint(request.reportId),
-      buildReportPayload(request.values, request.actionMapping),
+      buildReportPayload(request.reportId, request.values, request.actionMapping),
       requestConfig,
     )
 
   const contentType =
     getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream'
-  const filename = extractFilename(response.headers, request.reportId, request.values)
+  const filename = extractFilename(
+    response.headers,
+    request.reportId,
+    request.values,
+    request.actionMapping,
+  )
 
   return {
     source: 'api',

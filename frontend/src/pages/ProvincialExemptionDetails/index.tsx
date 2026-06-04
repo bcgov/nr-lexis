@@ -27,6 +27,7 @@ import {
   removeExemptionDocument,
   type ProvincialExemptionDocumentRow,
 } from '@/service/provincial-exemption-documents-service'
+import { runReport } from '@/service/report-service'
 
 const displayValue = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined || value === '') {
@@ -46,6 +47,23 @@ const triggerBrowserDownload = (blob: Blob, filename: string): void => {
   anchor.click()
   anchor.remove()
   URL.revokeObjectURL(objectUrl)
+}
+
+const openBlobInNewTab = (blob: Blob): boolean => {
+  const objectUrl = URL.createObjectURL(blob)
+  const openedWindow = window.open(
+    objectUrl,
+    'approvedExemptionReportWindow',
+    'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
+  )
+
+  if (!openedWindow) {
+    URL.revokeObjectURL(objectUrl)
+    return false
+  }
+
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  return true
 }
 
 const matchesFilter = (
@@ -73,6 +91,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [isOpeningApprovedExemptionReport, setIsOpeningApprovedExemptionReport] = useState(false)
   const beginDetailRequest = useLatestRequestGuard()
   const permitFilter = searchParams.get('permitFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
@@ -201,6 +220,39 @@ const ProvincialExemptionDetailsPage: FC = () => {
   }, [detail])
 
   const canManageDocuments = canPerform('/fileExemptionUpload')
+
+  const onOpenApprovedExemptionReport = useCallback(async () => {
+    if (!detail) {
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setIsOpeningApprovedExemptionReport(true)
+    try {
+      const runResult = await runReport({
+        reportId: 'approvedExemptionReport',
+        actionMapping: 'generate',
+        values: {
+          exemptionNumber: detail.exemptionNumber,
+          outputFormat: 'PDF',
+        },
+      })
+
+      const opened = openBlobInNewTab(runResult.blob)
+      if (!opened) {
+        triggerBrowserDownload(runResult.blob, runResult.filename)
+        setActionErrorMessage(
+          'Popup blocked while opening approved exemption report preview. Downloaded the report file instead.',
+        )
+      }
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to generate approved exemption report.')
+    } finally {
+      setIsOpeningApprovedExemptionReport(false)
+    }
+  }, [detail])
 
   const onCreatePermit = useCallback(() => {
     if (!detail) {
@@ -393,6 +445,20 @@ const ProvincialExemptionDetailsPage: FC = () => {
                   onClick={onOpenExemptionUpload}
                 >
                   Upload Exemption Document
+                </Button>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  disabled={
+                    !detail.exemptionNumber ||
+                    !canPerform('/approvedExemptionReport') ||
+                    isOpeningApprovedExemptionReport
+                  }
+                  onClick={() => void onOpenApprovedExemptionReport()}
+                >
+                  {isOpeningApprovedExemptionReport
+                    ? 'Opening Approved Exemption Report...'
+                    : 'Open Approved Exemption Report'}
                 </Button>
                 <Button
                   kind="primary"

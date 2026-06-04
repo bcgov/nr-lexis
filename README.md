@@ -67,6 +67,24 @@ docker compose --profile caddy up caddy
 
 This runs Spring Boot + Vite locally with the same Oracle-backed assumptions (VPN + local Oracle config files).
 
+### Jasper report parity check
+
+Use the checked-in parity harness when both this backend and `nr-lexis-main` are running against the same Oracle data. It calls the modern Spring report API and the legacy Struts report URL for each case in `tools/report-parity-cases.json`.
+
+```bash
+LEGACY_REPORT_BASE_URL=http://localhost:8081/nr-lexis \
+REPORT_PARITY_COOKIE='SESSION=...' \
+REPORT_REGION=1904 \
+REPORT_SCHEDULE_ID=12345 \
+APPROVED_EXEMPTION_NUMBER=EX-12345 \
+PERMIT_NUMBER=900100 \
+node tools/compare-report-parity.mjs \
+  --modern-base http://localhost:8080/api/lexis/reports \
+  --out-dir /tmp/lexis-report-parity
+```
+
+CSV cases cover every legacy CSV generator and compare exact bytes, including both provincial and federal TEAC procedures. PDF and spreadsheet cases compare HTTP status, content type, filename extension, byte count, and hashes because generated report metadata can vary by renderer. The PDF cases include migrated JRXML templates, prompt-only reports, and migrated legacy table fallbacks for TEAC and species/grade. The biweekly cases cover normal report generation plus the schedule-driven industry CSV/PDF actions. The tenure spreadsheet cases cover all four legacy action mappings: permit, tenure type, timber mark, and forest file. Use `--exact-binary` when you need strict byte equality. `--out-dir` writes both generated files and a metadata JSON record per case for follow-up diffing. Requests default to a 120 second timeout; override it with `--timeout-ms` or `REPORT_PARITY_TIMEOUT_MS` for slow Oracle-backed runs.
+
 ## CI/CD
 
 GitHub Actions handles PR checks, image builds, and OpenShift deployments. Namespace and credential values are environment-driven through repository/environment secrets and variables.

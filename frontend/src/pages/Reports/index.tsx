@@ -6,6 +6,7 @@ import {
   Column,
   Grid,
   InlineNotification,
+  MultiSelect,
   Select,
   SelectItem,
   Table,
@@ -23,6 +24,7 @@ import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-util
 import { useAuth } from '@/context/auth/useAuth'
 import { runReport } from '@/service/report-service'
 import {
+  fetchReportOptions,
   fetchProvincialApplicationOptions,
   fetchProvincialExemptionOptions,
   fetchProvincialPermitOptions,
@@ -43,7 +45,9 @@ type ReportDefinition = {
 type ReportFieldDefinition = {
   key: string
   label: string
-  type: 'text' | 'date' | 'select' | 'textarea'
+  type: 'text' | 'date' | 'select' | 'textarea' | 'multiselect'
+  optionKey?: string
+  defaultValue?: string
   placeholder?: string
   options?: Array<{
     value: string
@@ -58,11 +62,12 @@ type ReportActionMapping = {
 }
 
 type ReportCategoryFilter = 'ALL' | ReportDefinition['category']
-type ReportOptionSource = 'application' | 'exemption' | 'permit'
+type ReportOptionSource = 'application' | 'exemption' | 'permit' | 'report'
 type ReportOptionSources = {
   application: Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>
   exemption: Awaited<ReturnType<typeof fetchProvincialExemptionOptions>>
   permit: Awaited<ReturnType<typeof fetchProvincialPermitOptions>>
+  report: Awaited<ReturnType<typeof fetchReportOptions>>
 }
 
 const OUTPUT_FORMAT_FIELD: ReportFieldDefinition = {
@@ -75,18 +80,118 @@ const OUTPUT_FORMAT_FIELD: ReportFieldDefinition = {
   ],
 }
 
+const TENURE_OUTPUT_FORMAT_FIELD: ReportFieldDefinition = {
+  ...OUTPUT_FORMAT_FIELD,
+  options: [
+    { value: 'PDF', label: 'PDF' },
+    { value: 'CSV', label: 'XLS' },
+  ],
+}
+
+const TEAC_JURISDICTION_FIELD: ReportFieldDefinition = {
+  key: 'exportJurisdictionCode',
+  label: 'Jurisdiction',
+  type: 'select',
+  optionKey: 'teacJurisdictions',
+  options: [
+    { value: 'P', label: 'Provincial' },
+    { value: 'F', label: 'Federal' },
+  ],
+}
+
+const BIWEEKLY_JURISDICTION_FIELD: ReportFieldDefinition = {
+  key: 'exportJurisdictionCode',
+  label: 'Jurisdiction',
+  type: 'select',
+  optionKey: 'biweeklyJurisdictions',
+  options: [
+    { value: '', label: 'All' },
+    { value: 'P', label: 'Provincial' },
+    { value: 'F', label: 'Federal' },
+  ],
+}
+
+const REPORT_JURISDICTION_FIELD: ReportFieldDefinition = {
+  key: 'exportJurisdictionCode',
+  label: 'Jurisdiction',
+  type: 'select',
+  optionKey: 'reportJurisdictions',
+  options: [
+    { value: '', label: 'All' },
+    { value: 'P', label: 'Provincial' },
+    { value: 'F', label: 'Federal' },
+    { value: 'I', label: 'Indian Reserve' },
+  ],
+}
+
+const TRANSPORT_JURISDICTION_FIELD: ReportFieldDefinition = {
+  ...REPORT_JURISDICTION_FIELD,
+  key: 'jurisdiction',
+}
+
+const SINGLE_REGION_CODE_FIELD: ReportFieldDefinition = {
+  key: 'region',
+  label: 'Region',
+  type: 'select',
+}
+
+const APPLICATION_REGION_CODE_FIELD: ReportFieldDefinition = {
+  ...SINGLE_REGION_CODE_FIELD,
+  optionKey: 'applicationRegions',
+  defaultValue: '0',
+}
+
 const REGION_CODES_FIELD: ReportFieldDefinition = {
   key: 'region',
-  label: 'Region Codes',
-  type: 'text',
-  placeholder: 'Comma-separated region codes',
+  label: 'Region',
+  type: 'multiselect',
 }
 
 const ORG_UNIT_CODES_FIELD: ReportFieldDefinition = {
   key: 'orgUnitNumber',
-  label: 'Region Codes',
-  type: 'text',
-  placeholder: 'Comma-separated region codes',
+  label: 'Region',
+  type: 'multiselect',
+}
+
+const EXEMPTION_REASON_FIELD: ReportFieldDefinition = {
+  key: 'exemptionReason',
+  label: 'Exemption Reason',
+  type: 'select',
+}
+
+const EXEMPTION_TYPE_FIELD: ReportFieldDefinition = {
+  key: 'exemptionType',
+  label: 'Exemption Type',
+  type: 'select',
+}
+
+const TENURE_EXEMPTION_TYPE_FIELD: ReportFieldDefinition = {
+  ...EXEMPTION_TYPE_FIELD,
+  optionKey: 'tenureExemptionTypes',
+}
+
+const GROWTH_TYPE_FIELD: ReportFieldDefinition = {
+  key: 'growthType',
+  label: 'Growth Type',
+  type: 'select',
+}
+
+const PERMIT_STATUS_FIELD: ReportFieldDefinition = {
+  key: 'permitStatus',
+  label: 'Permit Status',
+  type: 'select',
+}
+
+const DESTINATION_COUNTRY_FIELD: ReportFieldDefinition = {
+  key: 'destinationCountry',
+  label: 'Final Destination Country',
+  type: 'select',
+}
+
+const PORT_OF_EXPORT_FIELD: ReportFieldDefinition = {
+  key: 'portOfExport',
+  label: 'Customs Port of Export',
+  type: 'select',
 }
 
 const REPORT_DEFINITIONS: ReportDefinition[] = [
@@ -98,27 +203,15 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     description: 'Applications by status and timeline.',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
-      REGION_CODES_FIELD,
-      {
-        key: 'exemptionReason',
-        label: 'Exemption Reason Code',
-        type: 'text',
-      },
-      {
-        key: 'exportJurisdictionCode',
-        label: 'Jurisdiction Code',
-        type: 'text',
-      },
+      APPLICATION_REGION_CODE_FIELD,
+      EXEMPTION_REASON_FIELD,
+      BIWEEKLY_JURISDICTION_FIELD,
       {
         key: 'clientNumber',
         label: 'Client Number',
         type: 'text',
       },
-      {
-        key: 'growthType',
-        label: 'Growth Type Code',
-        type: 'text',
-      },
+      GROWTH_TYPE_FIELD,
       {
         key: 'fromDate',
         label: 'Received From Date',
@@ -141,11 +234,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       REGION_CODES_FIELD,
-      {
-        key: 'exportJurisdictionCode',
-        label: 'Jurisdiction Code',
-        type: 'text',
-      },
+      REPORT_JURISDICTION_FIELD,
       {
         key: 'clientNumber',
         label: 'Client Number',
@@ -176,23 +265,18 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'teacReport',
-    title: 'TEAC Report',
+    title: 'TEAC Package Report',
     category: 'Cross-Module',
     action: '/teacReport',
     description: 'TEAC package readiness and review data.',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       REGION_CODES_FIELD,
-      {
-        key: 'exportJurisdictionCode',
-        label: 'Jurisdiction Code',
-        type: 'text',
-      },
+      TEAC_JURISDICTION_FIELD,
       {
         key: 'exportSchedule',
-        label: 'Advertising Schedule',
-        type: 'text',
-        helperText: 'Use exportSchedule ID or formatted value from backend schedule data.',
+        label: 'Advertising Date',
+        type: 'select',
       },
       OUTPUT_FORMAT_FIELD,
     ],
@@ -206,25 +290,13 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       REGION_CODES_FIELD,
-      {
-        key: 'exemptionReason',
-        label: 'Exemption Reason Code',
-        type: 'text',
-      },
-      {
-        key: 'growthType',
-        label: 'Growth Type Code',
-        type: 'text',
-      },
-      {
-        key: 'exemptionType',
-        label: 'Exemption Type Code',
-        type: 'text',
-      },
+      EXEMPTION_REASON_FIELD,
+      GROWTH_TYPE_FIELD,
+      EXEMPTION_TYPE_FIELD,
       {
         key: 'exemptionStatus',
-        label: 'Exemption Status Code',
-        type: 'text',
+        label: 'Exemption Status',
+        type: 'select',
       },
       {
         key: 'listingFromDate',
@@ -268,36 +340,16 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
         label: 'Exemption Number',
         type: 'text',
       },
-      {
-        key: 'exemptionType',
-        label: 'Exemption Type Code',
-        type: 'text',
-      },
-      {
-        key: 'exemptionReason',
-        label: 'Exemption Reason Code',
-        type: 'text',
-      },
-      {
-        key: 'permitStatus',
-        label: 'Permit Status Code',
-        type: 'text',
-      },
-      {
-        key: 'growthType',
-        label: 'Growth Type Code',
-        type: 'text',
-      },
+      EXEMPTION_TYPE_FIELD,
+      EXEMPTION_REASON_FIELD,
+      PERMIT_STATUS_FIELD,
+      GROWTH_TYPE_FIELD,
       {
         key: 'timberMark',
         label: 'Timber Mark',
         type: 'text',
       },
-      {
-        key: 'destinationCountry',
-        label: 'Destination Country Code',
-        type: 'text',
-      },
+      DESTINATION_COUNTRY_FIELD,
       {
         key: 'fromDate',
         label: 'Issued From Date',
@@ -319,26 +371,14 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     description: 'Destination and transport statistics.',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
-      {
-        key: 'jurisdiction',
-        label: 'Jurisdiction Code',
-        type: 'text',
-      },
+      TRANSPORT_JURISDICTION_FIELD,
       REGION_CODES_FIELD,
-      {
-        key: 'destinationCountry',
-        label: 'Destination Country Code',
-        type: 'text',
-      },
-      {
-        key: 'portOfExport',
-        label: 'Port of Export Code',
-        type: 'text',
-      },
+      DESTINATION_COUNTRY_FIELD,
+      PORT_OF_EXPORT_FIELD,
       {
         key: 'status',
-        label: 'Permit Status Code',
-        type: 'text',
+        label: 'Permit Status',
+        type: 'select',
       },
       {
         key: 'fromDate',
@@ -355,7 +395,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'speciesGradeReport',
-    title: 'Species & Grade Report',
+    title: 'Species and Grade Report',
     category: 'Provincial',
     action: '/speciesGradeReport',
     description: 'Species/grade composition analytics.',
@@ -364,29 +404,18 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       REGION_CODES_FIELD,
       {
         key: 'permitStatus',
-        label: 'Permit Status Code',
-        type: 'text',
+        label: 'Permit Status',
+        type: 'select',
+        defaultValue: 'COM',
       },
       {
         key: 'exemptionNumber',
         label: 'Exemption Number',
         type: 'text',
       },
-      {
-        key: 'exemptionType',
-        label: 'Exemption Type Code',
-        type: 'text',
-      },
-      {
-        key: 'exemptionReason',
-        label: 'Exemption Reason Code',
-        type: 'text',
-      },
-      {
-        key: 'growthType',
-        label: 'Growth Type Code',
-        type: 'text',
-      },
+      EXEMPTION_TYPE_FIELD,
+      EXEMPTION_REASON_FIELD,
+      GROWTH_TYPE_FIELD,
       {
         key: 'timberMark',
         label: 'Timber Mark',
@@ -424,21 +453,9 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
         label: 'Exemption Number',
         type: 'text',
       },
-      {
-        key: 'exemptionType',
-        label: 'Exemption Type Code',
-        type: 'text',
-      },
-      {
-        key: 'exemptionReason',
-        label: 'Exemption Reason Code',
-        type: 'text',
-      },
-      {
-        key: 'growthType',
-        label: 'Growth Type Code',
-        type: 'text',
-      },
+      EXEMPTION_TYPE_FIELD,
+      EXEMPTION_REASON_FIELD,
+      GROWTH_TYPE_FIELD,
       {
         key: 'fromDate',
         label: 'Permit Issued From Date',
@@ -469,11 +486,13 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
         key: 'fromDate',
         label: 'Issued From Date',
         type: 'date',
+        defaultValue: getLegacyTenureDefaultFromDate(),
       },
       {
         key: 'toDate',
         label: 'Issued To Date',
         type: 'date',
+        defaultValue: getLegacyTenureDefaultToDate(),
       },
       REGION_CODES_FIELD,
       {
@@ -481,11 +500,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
         label: 'Exemption Number',
         type: 'text',
       },
-      {
-        key: 'exemptionType',
-        label: 'Exemption Type Code',
-        type: 'text',
-      },
+      TENURE_EXEMPTION_TYPE_FIELD,
       {
         key: 'clientNumber',
         label: 'Client Number',
@@ -496,54 +511,93 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
         label: 'Forest File ID',
         type: 'text',
       },
-      {
-        key: 'exemptionReason',
-        label: 'Exemption Reason Code',
-        type: 'text',
-      },
+      EXEMPTION_REASON_FIELD,
       {
         key: 'clientType',
         label: 'Client Type',
         type: 'select',
         options: [
-          { value: '', label: 'Select client type' },
           { value: 'P', label: 'Permit Holder' },
           { value: 'M', label: 'Mark Holder' },
         ],
       },
       {
-        key: 'tenureTypes',
-        label: 'Tenure Types',
-        type: 'textarea',
-        placeholder: 'Comma-separated values (max 6)',
+        key: 'tenureType1',
+        label: 'Tenure Type 1',
+        type: 'text',
       },
       {
-        key: 'timberMarks',
-        label: 'Timber Marks',
-        type: 'textarea',
-        placeholder: 'Comma-separated values (max 6)',
+        key: 'tenureType2',
+        label: 'Tenure Type 2',
+        type: 'text',
       },
-      OUTPUT_FORMAT_FIELD,
+      {
+        key: 'tenureType3',
+        label: 'Tenure Type 3',
+        type: 'text',
+      },
+      {
+        key: 'tenureType4',
+        label: 'Tenure Type 4',
+        type: 'text',
+      },
+      {
+        key: 'tenureType5',
+        label: 'Tenure Type 5',
+        type: 'text',
+      },
+      {
+        key: 'tenureType6',
+        label: 'Tenure Type 6',
+        type: 'text',
+      },
+      {
+        key: 'timberMark1',
+        label: 'Timber Mark 1',
+        type: 'text',
+      },
+      {
+        key: 'timberMark2',
+        label: 'Timber Mark 2',
+        type: 'text',
+      },
+      {
+        key: 'timberMark3',
+        label: 'Timber Mark 3',
+        type: 'text',
+      },
+      {
+        key: 'timberMark4',
+        label: 'Timber Mark 4',
+        type: 'text',
+      },
+      {
+        key: 'timberMark5',
+        label: 'Timber Mark 5',
+        type: 'text',
+      },
+      {
+        key: 'timberMark6',
+        label: 'Timber Mark 6',
+        type: 'text',
+      },
+      TENURE_OUTPUT_FORMAT_FIELD,
     ],
   },
   {
-    id: 'mofrListing',
+    id: 'biweeklyListing',
     title: 'MOFR Listing Export',
     category: 'Federal',
     action: 'mofrListing',
     description: 'Exportable listing output for MOFR workflows.',
     actionMappings: [
+      { value: 'generate', label: 'Generate With Filters' },
       { value: 'generateIndustryPDF', label: 'Advertising List PDF' },
       { value: 'generateIndustryCSV', label: 'Advertising List CSV' },
-      { value: 'generate', label: 'Generate With Filters' },
     ],
     fields: [
       REGION_CODES_FIELD,
-      {
-        key: 'exportJurisdictionCode',
-        label: 'Jurisdiction Code',
-        type: 'text',
-      },
+      BIWEEKLY_JURISDICTION_FIELD,
       {
         key: 'fromDate',
         label: 'Listing From Date',
@@ -560,6 +614,44 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
 ]
 
 const REPORT_CATEGORY_OPTIONS = ['ALL', 'Provincial', 'Federal', 'Cross-Module'] as const
+
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getLegacyTenureDefaultFromDate(): string {
+  const today = new Date()
+  return formatLocalDate(new Date(today.getFullYear() - 1, today.getMonth(), 1))
+}
+
+function getLegacyTenureDefaultToDate(): string {
+  const today = new Date()
+  return formatLocalDate(new Date(today.getFullYear(), today.getMonth(), 0))
+}
+
+function getLegacyTenureToDateFromFromDate(fromDate: string): string {
+  const normalizedFromDate = fromDate.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedFromDate)) {
+    return ''
+  }
+
+  const [year, month, day] = normalizedFromDate.split('-').map(Number)
+  const parsedDate = new Date(year, month - 1, day)
+  if (
+    parsedDate.getFullYear() !== year ||
+    parsedDate.getMonth() !== month - 1 ||
+    parsedDate.getDate() !== day
+  ) {
+    return ''
+  }
+
+  const toDate = new Date(year + 1, month - 1, day)
+  toDate.setDate(toDate.getDate() - 1)
+  return formatLocalDate(toDate)
+}
 
 const parseBooleanFlag = (value: string | null): boolean => {
   if (!value) {
@@ -584,15 +676,23 @@ const getRequiredReportOptionSources = (report: ReportDefinition): ReportOptionS
   const fieldKeys = new Set(report.fields.map((field) => field.key))
   const sources = new Set<ReportOptionSource>()
 
-  if (fieldKeys.has('exemptionType') || fieldKeys.has('exemptionTypeCode')) {
-    sources.add('application')
-    sources.add('exemption')
-  }
-  if (fieldKeys.has('exemptionStatus')) {
-    sources.add('exemption')
-  }
-  if (fieldKeys.has('permitStatus')) {
-    sources.add('permit')
+  if (
+    fieldKeys.has('exportSchedule') ||
+    fieldKeys.has('exportJurisdictionCode') ||
+    fieldKeys.has('jurisdiction') ||
+    fieldKeys.has('region') ||
+    fieldKeys.has('orgUnitNumber') ||
+    fieldKeys.has('exemptionType') ||
+    fieldKeys.has('exemptionTypeCode') ||
+    fieldKeys.has('exemptionReason') ||
+    fieldKeys.has('exemptionStatus') ||
+    fieldKeys.has('growthType') ||
+    fieldKeys.has('permitStatus') ||
+    fieldKeys.has('status') ||
+    fieldKeys.has('destinationCountry') ||
+    fieldKeys.has('portOfExport')
+  ) {
+    sources.add('report')
   }
 
   return Array.from(sources)
@@ -628,6 +728,98 @@ const sanitizeReportValues = (
   const allowedKeys = new Set(report.fields.map((field) => field.key))
   return Object.entries(values).reduce<Record<string, string>>((acc, [key, value]) => {
     if (allowedKeys.has(key)) {
+      acc[key] = value
+    }
+    return acc
+  }, {})
+}
+
+const appendSelectedOptionLabels = (
+  report: ReportDefinition,
+  values: Record<string, string>,
+  optionsByKey: Record<string, SearchOption[]>,
+): Record<string, string> => {
+  const result = { ...values }
+  report.fields.forEach((field) => {
+    if (field.key === 'outputFormat' || (field.type !== 'select' && field.type !== 'multiselect')) {
+      return
+    }
+
+    const value = result[field.key]
+    if (!value) {
+      return
+    }
+
+    const options = optionsByKey[field.optionKey ?? field.key] ?? field.options ?? []
+    if (options.length === 0) {
+      return
+    }
+
+    const labels = value
+      .split(',')
+      .map((selectedValue) => selectedValue.trim())
+      .filter(Boolean)
+      .map((selectedValue) => options.find((option) => option.value === selectedValue)?.label)
+      .filter((label): label is string => Boolean(label && label.trim()))
+
+    if (labels.length > 0) {
+      result[`${field.key}Label`] = labels.join(', ')
+    }
+  })
+  return result
+}
+
+const buildEffectiveReportValues = (
+  report: ReportDefinition,
+  values: Record<string, string>,
+  optionsByKey: Record<string, SearchOption[]> = {},
+  defaultRegion = '',
+  actionMapping = '',
+): Record<string, string> => {
+  const effectiveValues = { ...values }
+  const normalizedActionMapping = actionMapping.trim().toLowerCase()
+  const skipsFormCriteria =
+    normalizedActionMapping === 'generateindustrypdf' ||
+    normalizedActionMapping === 'generateindustrycsv'
+  report.fields.forEach((field) => {
+    if (
+      field.defaultValue !== undefined &&
+      (effectiveValues[field.key] === undefined || effectiveValues[field.key] === '')
+    ) {
+      effectiveValues[field.key] = field.defaultValue
+      return
+    }
+
+    if (
+      !skipsFormCriteria &&
+      field.type === 'multiselect' &&
+      !effectiveValues[field.key] &&
+      (field.key === 'region' || field.key === 'orgUnitNumber')
+    ) {
+      if (defaultRegion) {
+        effectiveValues[field.key] = defaultRegion
+        return
+      }
+      const options = optionsByKey[field.optionKey ?? field.key] ?? []
+      if (options.length > 0) {
+        effectiveValues[field.key] = options.map((option) => option.value).join(',')
+      }
+      return
+    }
+
+    if (field.key === 'outputFormat' || field.type !== 'select' || effectiveValues[field.key]) {
+      return
+    }
+
+    const options = optionsByKey[field.optionKey ?? field.key] ?? field.options ?? []
+    if (options.length > 0 && !options.some((option) => option.value === '')) {
+      effectiveValues[field.key] = options[0].value
+    }
+  })
+  return Object.entries(appendSelectedOptionLabels(report, effectiveValues, optionsByKey)).reduce<
+    Record<string, string>
+  >((acc, [key, value]) => {
+    if (value.trim()) {
       acc[key] = value
     }
     return acc
@@ -703,6 +895,21 @@ const openBlobInNewTab = (blob: Blob): boolean => {
   return true
 }
 
+const isDownloadReportRequest = (
+  values: Record<string, string>,
+  actionMapping?: string,
+): boolean => {
+  const normalizedActionMapping = actionMapping?.trim().toLowerCase() ?? ''
+  if (normalizedActionMapping.includes('csv')) {
+    return true
+  }
+  if (normalizedActionMapping.includes('pdf')) {
+    return false
+  }
+  const outputFormat = values.outputFormat?.trim().toUpperCase()
+  return outputFormat === 'CSV' || outputFormat === 'XLS' || outputFormat === 'XLSX'
+}
+
 const ReportsPage: FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const { canPerform } = useAuth()
@@ -738,6 +945,9 @@ const ReportsPage: FC = () => {
   })
   const [reportOptionSourcesByKey, setReportOptionSourcesByKey] = useState<
     Partial<ReportOptionSources>
+  >({})
+  const [expandedDestinationCountryReports, setExpandedDestinationCountryReports] = useState<
+    Record<string, boolean>
   >({})
   const [launchErrorMessage, setLaunchErrorMessage] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -782,26 +992,90 @@ const ReportsPage: FC = () => {
     [selectedReport],
   )
   const reportFieldOptionsByKey = useMemo(() => {
+    const reportOptions = reportOptionSourcesByKey.report
+    const destinationCountryOptions =
+      expandedDestinationCountryReports[selectedReport.id] &&
+      reportOptions?.allDestinationCountries.length
+        ? reportOptions.allDestinationCountries
+        : (reportOptions?.destinationCountries ?? [])
     const exemptionTypeOptions = mergeOptions(
+      reportOptions?.exemptionTypes ?? [],
       reportOptionSourcesByKey.application?.exemptionTypes ?? [],
       reportOptionSourcesByKey.exemption?.exemptionTypes ?? [],
     )
 
     return {
+      applicationRegions: [{ value: '0', label: 'All' }, ...(reportOptions?.regions ?? [])],
       ...(exemptionTypeOptions.length > 0
         ? {
             exemptionType: exemptionTypeOptions,
             exemptionTypeCode: exemptionTypeOptions,
           }
         : {}),
+      ...(reportOptions?.tenureExemptionTypes.length
+        ? { tenureExemptionTypes: reportOptions.tenureExemptionTypes }
+        : {}),
+      ...(reportOptions?.exemptionReasons.length
+        ? { exemptionReason: reportOptions.exemptionReasons }
+        : {}),
+      ...(reportOptions?.growthTypes.length ? { growthType: reportOptions.growthTypes } : {}),
       ...(reportOptionSourcesByKey.exemption?.exemptionStatuses.length
-        ? { exemptionStatus: reportOptionSourcesByKey.exemption.exemptionStatuses }
+        ? {
+            exemptionStatus: mergeOptions(
+              reportOptions?.exemptionStatuses ?? [],
+              reportOptionSourcesByKey.exemption.exemptionStatuses,
+            ),
+          }
+        : reportOptions?.exemptionStatuses.length
+          ? { exemptionStatus: reportOptions.exemptionStatuses }
+          : {}),
+      ...(reportOptions?.permitStatuses.length
+        ? {
+            permitStatus: reportOptions.permitStatuses,
+            status: reportOptions.permitStatuses,
+          }
         : {}),
       ...(reportOptionSourcesByKey.permit?.permitStatuses.length
-        ? { permitStatus: reportOptionSourcesByKey.permit.permitStatuses }
+        ? {
+            permitStatus: mergeOptions(
+              reportOptions?.permitStatuses ?? [],
+              reportOptionSourcesByKey.permit.permitStatuses,
+            ),
+            status: mergeOptions(
+              reportOptions?.permitStatuses ?? [],
+              reportOptionSourcesByKey.permit.permitStatuses,
+            ),
+          }
+        : {}),
+      ...(destinationCountryOptions.length
+        ? { destinationCountry: destinationCountryOptions }
+        : {}),
+      ...(reportOptions?.portsOfExport.length ? { portOfExport: reportOptions.portsOfExport } : {}),
+      ...(reportOptions?.currentSchedules.length
+        ? { exportSchedule: reportOptions.currentSchedules }
+        : {}),
+      ...(reportOptions?.reportJurisdictions.length
+        ? {
+            reportJurisdictions: reportOptions.reportJurisdictions,
+            jurisdiction: reportOptions.reportJurisdictions,
+          }
+        : {}),
+      ...(reportOptions?.biweeklyJurisdictions.length
+        ? { biweeklyJurisdictions: reportOptions.biweeklyJurisdictions }
+        : {}),
+      ...(reportOptions?.teacJurisdictions.length
+        ? { teacJurisdictions: reportOptions.teacJurisdictions }
+        : {}),
+      ...(reportOptions?.regions.length
+        ? {
+            region: reportOptions.regions,
+            orgUnitNumber: reportOptions.regions,
+          }
         : {}),
     }
-  }, [reportOptionSourcesByKey])
+  }, [expandedDestinationCountryReports, reportOptionSourcesByKey, selectedReport.id])
+
+  const defaultReportRegion = reportOptionSourcesByKey.report?.defaultRegion ?? ''
 
   useEffect(() => {
     const nextParams = buildReportSearchParams({
@@ -846,8 +1120,10 @@ const ReportsPage: FC = () => {
             loadedSources.application = await fetchProvincialApplicationOptions()
           } else if (source === 'exemption') {
             loadedSources.exemption = await fetchProvincialExemptionOptions()
-          } else {
+          } else if (source === 'permit') {
             loadedSources.permit = await fetchProvincialPermitOptions()
+          } else {
+            loadedSources.report = await fetchReportOptions()
           }
 
           if (!isLatestRequest()) {
@@ -875,11 +1151,21 @@ const ReportsPage: FC = () => {
   }
 
   const onUpdateField = (fieldKey: string, value: string): void => {
+    const clearsSpeciesForestFile =
+      selectedReport.id === 'speciesGradeReport' && fieldKey === 'timberMark' && value.trim()
+    const clearsSpeciesTimberMark =
+      selectedReport.id === 'speciesGradeReport' && fieldKey === 'forestFileId' && value.trim()
+
     setReportValuesById((current) => ({
       ...current,
       [selectedReport.id]: {
         ...current[selectedReport.id],
         [fieldKey]: value,
+        ...(clearsSpeciesForestFile ? { forestFileId: '' } : {}),
+        ...(clearsSpeciesTimberMark ? { timberMark: '' } : {}),
+        ...(selectedReport.id === 'tenureReport' && fieldKey === 'fromDate'
+          ? { toDate: getLegacyTenureToDateFromFromDate(value) }
+          : {}),
       },
     }))
   }
@@ -903,14 +1189,20 @@ const ReportsPage: FC = () => {
     setIsGenerating(true)
 
     try {
+      const effectiveReportValues = buildEffectiveReportValues(
+        selectedReport,
+        selectedReportValues,
+        reportFieldOptionsByKey,
+        defaultReportRegion,
+        selectedActionMapping,
+      )
       const runResult = await runReport({
         reportId: selectedReport.id,
         actionMapping: selectedActionMapping,
-        values: selectedReportValues,
+        values: effectiveReportValues,
       })
 
-      const outputFormat = (selectedReportValues.outputFormat ?? 'PDF').trim().toUpperCase()
-      const shouldDownload = outputFormat === 'CSV'
+      const shouldDownload = isDownloadReportRequest(effectiveReportValues, selectedActionMapping)
 
       if (shouldDownload) {
         triggerBrowserDownload(runResult.blob, runResult.filename)
@@ -979,10 +1271,6 @@ const ReportsPage: FC = () => {
               Reset Report Filters
             </Button>
           </div>
-          <p className="landing-help-text">
-            Some code fields now load backend options where available. Remaining free-text report
-            code fields will be switched as additional option endpoints are exposed.
-          </p>
         </Tile>
       </Column>
 
@@ -1066,47 +1354,105 @@ const ReportsPage: FC = () => {
               </Select>
             )}
             {selectedReport.fields.map((field) => {
+              const defaultMultiselectValue =
+                (field.key === 'region' || field.key === 'orgUnitNumber') && defaultReportRegion
+                  ? defaultReportRegion
+                  : ''
               const currentValue =
-                selectedReportValues[field.key] ?? (field.key === 'outputFormat' ? 'PDF' : '')
-              const dynamicOptions = reportFieldOptionsByKey[field.key] ?? []
+                selectedReportValues[field.key] ??
+                field.defaultValue ??
+                (defaultMultiselectValue || (field.key === 'outputFormat' ? 'PDF' : ''))
+              const dynamicOptions = reportFieldOptionsByKey[field.optionKey ?? field.key] ?? []
+              const resolvedCurrentValue =
+                field.type === 'select' &&
+                field.key !== 'outputFormat' &&
+                !currentValue &&
+                dynamicOptions.length > 0 &&
+                !dynamicOptions.some((option) => option.value === '')
+                  ? dynamicOptions[0].value
+                  : currentValue
+
+              if (field.type === 'multiselect' && dynamicOptions.length > 0) {
+                const selectedValues = new Set(
+                  resolvedCurrentValue
+                    .split(',')
+                    .map((value) => value.trim())
+                    .filter(Boolean),
+                )
+                const selectedItems = dynamicOptions.filter((option) =>
+                  selectedValues.has(option.value),
+                )
+
+                return (
+                  <MultiSelect
+                    key={field.key}
+                    id={`${selectedReport.id}-${field.key}`}
+                    titleText={field.label}
+                    items={dynamicOptions}
+                    itemToString={(item) => (item ? item.label : '')}
+                    label="Select region(s)"
+                    selectionFeedback="fixed"
+                    selectedItems={selectedItems}
+                    onChange={(event) => {
+                      const nextSelected = (event.selectedItems ?? []) as SearchOption[]
+                      onUpdateField(field.key, nextSelected.map((option) => option.value).join(','))
+                    }}
+                  />
+                )
+              }
+
               const shouldRenderSelect = field.type === 'select' || dynamicOptions.length > 0
 
               if (shouldRenderSelect) {
+                const canExpandDestinationCountries =
+                  field.key === 'destinationCountry' &&
+                  Boolean(reportOptionSourcesByKey.report?.allDestinationCountries.length) &&
+                  !expandedDestinationCountryReports[selectedReport.id]
                 const providedOptions =
                   dynamicOptions.length > 0
                     ? dynamicOptions
                     : (field.options ?? [{ value: '', label: 'Select an option' }])
                 const hasCurrentValue = providedOptions.some(
-                  (option) => option.value === currentValue,
+                  (option) => option.value === resolvedCurrentValue,
                 )
                 const resolvedOptions = hasCurrentValue
                   ? providedOptions
-                  : currentValue
+                  : resolvedCurrentValue
                     ? [
                         ...providedOptions,
                         {
-                          value: currentValue,
-                          label: `Custom (${currentValue})`,
+                          value: resolvedCurrentValue,
+                          label: `Custom (${resolvedCurrentValue})`,
                         },
                       ]
                     : providedOptions
-                const optionsWithFallback =
-                  dynamicOptions.length > 0
-                    ? [{ value: '', label: 'All values' }, ...resolvedOptions]
-                    : resolvedOptions
-
                 return (
-                  <Select
-                    key={field.key}
-                    id={`${selectedReport.id}-${field.key}`}
-                    labelText={field.label}
-                    value={currentValue}
-                    onChange={(event) => onUpdateField(field.key, event.target.value)}
-                  >
-                    {optionsWithFallback.map((option) => (
-                      <SelectItem key={option.value} value={option.value} text={option.label} />
-                    ))}
-                  </Select>
+                  <div key={field.key}>
+                    <Select
+                      id={`${selectedReport.id}-${field.key}`}
+                      labelText={field.label}
+                      value={resolvedCurrentValue}
+                      onChange={(event) => onUpdateField(field.key, event.target.value)}
+                    >
+                      {resolvedOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value} text={option.label} />
+                      ))}
+                    </Select>
+                    {canExpandDestinationCountries && (
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setExpandedDestinationCountryReports((current) => ({
+                            ...current,
+                            [selectedReport.id]: true,
+                          }))
+                        }
+                      >
+                        More...
+                      </Button>
+                    )}
+                  </div>
                 )
               }
 
@@ -1116,7 +1462,7 @@ const ReportsPage: FC = () => {
                     key={field.key}
                     id={`${selectedReport.id}-${field.key}`}
                     labelText={field.label}
-                    value={currentValue}
+                    value={resolvedCurrentValue}
                     placeholder={field.placeholder}
                     helperText={field.helperText}
                     onChange={(event) => onUpdateField(field.key, event.target.value)}
@@ -1131,9 +1477,14 @@ const ReportsPage: FC = () => {
                   id={`${selectedReport.id}-${field.key}`}
                   type={field.type === 'date' ? 'date' : 'text'}
                   labelText={field.label}
-                  value={currentValue}
+                  value={resolvedCurrentValue}
                   placeholder={field.placeholder}
                   helperText={field.helperText}
+                  disabled={
+                    selectedReport.id === 'speciesGradeReport' &&
+                    ((field.key === 'timberMark' && Boolean(selectedReportValues.forestFileId)) ||
+                      (field.key === 'forestFileId' && Boolean(selectedReportValues.timberMark)))
+                  }
                   onChange={(event) => onUpdateField(field.key, event.target.value)}
                 />
               )

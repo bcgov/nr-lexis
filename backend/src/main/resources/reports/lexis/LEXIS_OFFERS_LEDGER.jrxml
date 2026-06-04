@@ -113,7 +113,7 @@ $P{P_ORG_UNIT}!=null &&
 $P{P_ORG_UNIT}.contains( "1903" )&& $P{P_ORG_UNIT}.contains( "1904" ) && $P{P_ORG_UNIT}.contains( "1905" ) && $P{P_ORG_UNIT}.contains( "1906" ) &&
 $P{P_ORG_UNIT}.contains( "1907" )&& $P{P_ORG_UNIT}.contains( "1908" ) && $P{P_ORG_UNIT}.contains( "1909" ) && $P{P_ORG_UNIT}.contains( "1910" )
 ?   "All"
-:   org.apache.commons.lang.StringUtils.chomp(
+:   ca.bc.gov.mof.lexis.service.report.LexisReportStringUtils.chomp(
         (
             ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1903" ) ? "RCB, " : "" ) +
             ($P{P_ORG_UNIT}!=null && $P{P_ORG_UNIT}.contains( "1904" ) ? "RKB, " : "" ) +

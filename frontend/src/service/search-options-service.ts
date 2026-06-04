@@ -5,7 +5,7 @@ export type SearchOption = {
   label: string
 }
 
-const parseOptions = (input: unknown): SearchOption[] => {
+const parseOptions = (input: unknown, allowEmptyCode = false): SearchOption[] => {
   if (!Array.isArray(input)) {
     return []
   }
@@ -18,7 +18,7 @@ const parseOptions = (input: unknown): SearchOption[] => {
 
       const code = typeof (item as any).code === 'string' ? (item as any).code.trim() : ''
       const name = typeof (item as any).name === 'string' ? (item as any).name.trim() : ''
-      if (!code || !name) {
+      if ((!code && !allowEmptyCode) || !name) {
         return null
       }
 
@@ -107,6 +107,63 @@ export const fetchProvincialPermitOptions = async (): Promise<{
   return {
     permitStatuses: parseOptions(data.permitStatuses),
     regions: parseOptions(data.regions),
+  }
+}
+
+export const fetchReportOptions = async (): Promise<{
+  currentSchedules: SearchOption[]
+  defaultRegion: string
+  regions: SearchOption[]
+  reportJurisdictions: SearchOption[]
+  biweeklyJurisdictions: SearchOption[]
+  teacJurisdictions: SearchOption[]
+  exemptionTypes: SearchOption[]
+  tenureExemptionTypes: SearchOption[]
+  exemptionReasons: SearchOption[]
+  exemptionStatuses: SearchOption[]
+  growthTypes: SearchOption[]
+  permitStatuses: SearchOption[]
+  destinationCountries: SearchOption[]
+  allDestinationCountries: SearchOption[]
+  portsOfExport: SearchOption[]
+}> => {
+  const data = await fetchOptions('/lexis/reports/options')
+  if (!data) {
+    return {
+      currentSchedules: [],
+      defaultRegion: '',
+      regions: [],
+      reportJurisdictions: [],
+      biweeklyJurisdictions: [],
+      teacJurisdictions: [],
+      exemptionTypes: [],
+      tenureExemptionTypes: [],
+      exemptionReasons: [],
+      exemptionStatuses: [],
+      growthTypes: [],
+      permitStatuses: [],
+      destinationCountries: [],
+      allDestinationCountries: [],
+      portsOfExport: [],
+    }
+  }
+
+  return {
+    currentSchedules: parseOptions(data.currentSchedules),
+    defaultRegion: typeof data.defaultRegion === 'string' ? data.defaultRegion.trim() : '',
+    regions: parseOptions(data.regions),
+    reportJurisdictions: parseOptions(data.reportJurisdictions, true),
+    biweeklyJurisdictions: parseOptions(data.biweeklyJurisdictions, true),
+    teacJurisdictions: parseOptions(data.teacJurisdictions),
+    exemptionTypes: parseOptions(data.exemptionTypes, true),
+    tenureExemptionTypes: parseOptions(data.tenureExemptionTypes, true),
+    exemptionReasons: parseOptions(data.exemptionReasons, true),
+    exemptionStatuses: parseOptions(data.exemptionStatuses, true),
+    growthTypes: parseOptions(data.growthTypes, true),
+    permitStatuses: parseOptions(data.permitStatuses, true),
+    destinationCountries: parseOptions(data.destinationCountries, true),
+    allDestinationCountries: parseOptions(data.allDestinationCountries),
+    portsOfExport: parseOptions(data.portsOfExport, true),
   }
 }
 
