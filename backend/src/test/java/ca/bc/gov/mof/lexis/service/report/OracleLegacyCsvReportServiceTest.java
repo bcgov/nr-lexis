@@ -234,6 +234,7 @@ class OracleLegacyCsvReportServiceTest {
         .setString(
             org.mockito.ArgumentMatchers.eq(1),
             org.mockito.ArgumentMatchers.contains("EEA.EXPORT_JURISDICTION_CODE <> :6"));
+    assertBindArrayValues("2026-01-01", "2026-01-31", "1904", "1905", "P", "I", "10001");
     verify(callableStatement).setArray(2, bindArray);
     verify(callableStatement).setInt(3, 7);
     verify(callableStatement).registerOutParameter(4, Types.REF_CURSOR);
@@ -503,6 +504,8 @@ class OracleLegacyCsvReportServiceTest {
         .setString(
             org.mockito.ArgumentMatchers.eq(1),
             org.mockito.ArgumentMatchers.contains("A.EXPORT_PERMIT_ISSUE_DATE BETWEEN TO_DATE(:1, 'yyyy-mm-dd')"));
+    assertBindArrayValues(
+        "2026-06-01", "2026-06-30", "2026-06-01", "2026-06-30", "1904", "COM", "P", "US", "VAN");
     verify(callableStatement).setArray(2, bindArray);
     verify(callableStatement).setInt(3, 9);
     verify(callableStatement).registerOutParameter(4, Types.REF_CURSOR);
@@ -558,9 +561,30 @@ class OracleLegacyCsvReportServiceTest {
         .setString(
             org.mockito.ArgumentMatchers.eq(1),
             org.mockito.ArgumentMatchers.contains("E.APPROVAL_DATE IS NULL"));
+    assertBindArrayValues(
+        "2026-07-01",
+        "2026-07-31",
+        "1904",
+        "1905",
+        "S",
+        "M",
+        "10001",
+        "PRI",
+        "E-123",
+        "ACT",
+        "2026-07-01",
+        "2026-07-15");
     verify(callableStatement).setArray(2, bindArray);
     verify(callableStatement).setInt(3, 12);
     verify(callableStatement).registerOutParameter(4, Types.REF_CURSOR);
+  }
+
+  private void assertBindArrayValues(String... expectedValues) throws Exception {
+    ArgumentCaptor<Object> bindValuesCaptor = ArgumentCaptor.forClass(Object.class);
+    verify(oracleConnection)
+        .createOracleArray(
+            org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"), bindValuesCaptor.capture());
+    assertThat((String[]) bindValuesCaptor.getValue()).containsExactly(expectedValues);
   }
 
   private static String today() {
