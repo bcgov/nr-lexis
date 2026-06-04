@@ -143,15 +143,14 @@ public class LegacyReportRouteController {
 
     if (ACTION_GENERATE.equalsIgnoreCase(actionMapping) || normalizedAction.startsWith(ACTION_GENERATE)) {
       String explicitFormat = trimToNull(outputFormat);
+      if ("approvedExemptionReport".equals(reportAction) || "permitReport".equals(reportAction)) {
+        return "PDF";
+      }
       if ("tenureReport".equals(reportAction)) {
         return "PDF".equalsIgnoreCase(explicitFormat) ? "PDF" : "XLS";
       }
       if (explicitFormat != null) {
         return "PDF".equalsIgnoreCase(explicitFormat) ? "PDF" : "CSV";
-      }
-
-      if ("approvedExemptionReport".equals(reportAction) || "permitReport".equals(reportAction)) {
-        return "PDF";
       }
 
       // Struts legacy behavior defaulted to CSV when outputFormat was absent.

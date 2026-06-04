@@ -455,6 +455,39 @@ class LegacyReportRouteControllerTest {
   }
 
   @Test
+  void shouldKeepApprovedExemptionReportPdfOnlyWhenOutputFormatIsProvided() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/api/lexis/approvedExemptionReport.do");
+
+    when(reportController.approvedExemptionReport(any()))
+        .thenReturn(ResponseEntity.ok(new byte[] {4, 4}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+    multi.add("outputFormat", "CSV");
+    multi.add("exemptionNumber", "E-12345");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "outputFormat", "CSV",
+                "exemptionNumber", "E-12345"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).approvedExemptionReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.format()).isEqualTo("PDF");
+    assertThat(delegated.parameters()).containsEntry("exemptionNumber", "E-12345");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
   void shouldDefaultPermitReportGenerateToPdfWhenOutputFormatMissing() {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request =
