@@ -201,6 +201,9 @@ public class LegacyReportRouteController {
     if ("clientNumber".equals(key) && shouldNormalizeClientNumber(reportAction)) {
       return normalizeClientNumber(value);
     }
+    if (shouldNormalizeUppercase(reportAction, key)) {
+      return value.toUpperCase(Locale.ROOT);
+    }
     return value;
   }
 
@@ -208,6 +211,21 @@ public class LegacyReportRouteController {
     return "offerReport".equals(reportAction)
         || "permitLedgerReport".equals(reportAction)
         || "tenureReport".equals(reportAction);
+  }
+
+  private boolean shouldNormalizeUppercase(String reportAction, String key) {
+    if ("speciesGradeReport".equals(reportAction)) {
+      return "timberMark".equals(key) || "forestFileId".equals(key);
+    }
+    if ("permitLedgerReport".equals(reportAction)) {
+      return "timberMark".equals(key);
+    }
+    if ("tenureReport".equals(reportAction)) {
+      return "forestFileId".equals(key)
+          || key.matches("tenureType[1-6]")
+          || key.matches("timberMark[1-6]");
+    }
+    return false;
   }
 
   private String normalizeClientNumber(String value) {

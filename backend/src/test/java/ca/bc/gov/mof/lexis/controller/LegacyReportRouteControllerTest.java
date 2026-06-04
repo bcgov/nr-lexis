@@ -261,6 +261,109 @@ class LegacyReportRouteControllerTest {
   }
 
   @Test
+  void shouldNormalizeLegacySpeciesGradeMarkAndFileFieldsToUppercase() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/api/lexis/speciesGradeReport.do");
+
+    when(reportController.speciesGradeReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 1}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+    multi.add("outputFormat", "PDF");
+    multi.add("timberMark", "tm123");
+    multi.add("forestFileId", "a12345");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "outputFormat", "PDF",
+                "timberMark", "tm123",
+                "forestFileId", "a12345"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).speciesGradeReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.parameters())
+        .containsEntry("timberMark", "TM123")
+        .containsEntry("forestFileId", "A12345");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldNormalizeLegacyPermitLedgerTimberMarkToUppercase() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/api/lexis/permitLedgerReport.do");
+
+    when(reportController.permitLedgerReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 2}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+    multi.add("outputFormat", "PDF");
+    multi.add("timberMark", "tm456");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "outputFormat", "PDF",
+                "timberMark", "tm456"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).permitLedgerReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.parameters()).containsEntry("timberMark", "TM456");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldNormalizeLegacyTenureIndexedFieldsAndForestFileToUppercase() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
+
+    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 3}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generateMarkReport");
+    multi.add("outputFormat", "PDF");
+    multi.add("tenureType1", "a01");
+    multi.add("timberMark1", "tm001");
+    multi.add("forestFileId", "a12345");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generateMarkReport",
+                "outputFormat", "PDF",
+                "tenureType1", "a01",
+                "timberMark1", "tm001",
+                "forestFileId", "a12345"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).tenureReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.parameters())
+        .containsEntry("tenureType1", "A01")
+        .containsEntry("timberMark1", "TM001")
+        .containsEntry("forestFileId", "A12345");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
   void shouldDefaultApprovedExemptionGenerateToPdfWhenOutputFormatMissing() {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request =
