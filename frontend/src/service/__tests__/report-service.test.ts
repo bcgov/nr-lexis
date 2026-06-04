@@ -111,6 +111,13 @@ describe('report-service', () => {
         clientNumber: '456',
       },
     })
+    await runReport({
+      reportId: 'offerReport',
+      actionMapping: 'generate',
+      values: {
+        clientNumber: '123.4',
+      },
+    })
 
     expect(postMock.mock.calls[0][1]).toEqual(
       expect.objectContaining({
@@ -125,6 +132,14 @@ describe('report-service', () => {
         parameters: {
           legacyActionMapping: 'generatePermitReport',
           clientNumber: '00000456',
+        },
+      }),
+    )
+    expect(postMock.mock.calls[2][1]).toEqual(
+      expect.objectContaining({
+        parameters: {
+          legacyActionMapping: 'generate',
+          clientNumber: '000123.4',
         },
       }),
     )

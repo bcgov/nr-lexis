@@ -28,7 +28,7 @@ const splitCsv = (value: string): string[] =>
 
 const normalizeClientNumber = (value: string): string => {
   const trimmed = value.trim()
-  if (!trimmed || !/^[0-9]+$/.test(trimmed)) {
+  if (!trimmed || !/^[0-9.]+$/.test(trimmed)) {
     return trimmed
   }
 

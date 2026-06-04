@@ -49,14 +49,14 @@ class LegacyReportRouteControllerTest {
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generate");
     multi.add("outputFormat", "PDF");
-    multi.add("clientNumber", "1234567");
+    multi.add("clientNumber", "123.4");
 
     ResponseEntity<byte[]> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
                 "outputFormat", "PDF",
-                "clientNumber", "1234567"),
+                "clientNumber", "123.4"),
             multi,
             request);
 
@@ -66,7 +66,7 @@ class LegacyReportRouteControllerTest {
 
     LexisReportRequestDto delegated = requestCaptor.getValue();
     assertThat(delegated.format()).isEqualTo("PDF");
-    assertThat(delegated.parameters()).containsEntry("clientNumber", "01234567");
+    assertThat(delegated.parameters()).containsEntry("clientNumber", "000123.4");
     assertThat(delegated.parameters()).containsEntry("legacyActionMapping", "generate");
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
   }

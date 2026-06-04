@@ -211,7 +211,7 @@ public class LegacyReportRouteController {
   }
 
   private String normalizeClientNumber(String value) {
-    if (value == null || !value.matches("\\d+")) {
+    if (value == null || !value.matches("[0-9.]+")) {
       return value;
     }
     return String.format("%8s", value).replace(' ', '0');
