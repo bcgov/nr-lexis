@@ -504,6 +504,10 @@ public class OracleLexisReportService implements LexisReportService {
     Path destination =
         runtimeTemplateDirectory.resolve(resourceName.replace(".jrxml", ".jasper"));
 
+    if (Files.exists(destination)) {
+      return;
+    }
+
     try {
       JasperCompileManager.compileReportToFile(source.toString(), destination.toString());
     } catch (JRException ex) {
