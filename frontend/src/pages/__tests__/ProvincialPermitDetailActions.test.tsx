@@ -414,6 +414,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('uses report service blob response when opening permit report', async () => {
+    mockedFetchPermitInvoices.mockResolvedValue({
+      rows: [
+        {
+          id: 'INV-GBMS-1',
+          invoiceNumber: 'INV-GBMS',
+          exportValueCad: '10.00',
+          conversionRate: '1.00',
+          feeInLieu: '0.00',
+          invoiceFound: true,
+        },
+      ],
+      source: 'api',
+    })
     mockedRunReport.mockResolvedValue({
       source: 'api',
       blob: new Blob(['permit-report']),
@@ -450,6 +463,26 @@ describe('Provincial Permit Detail Action Smoke', () => {
       'permitReportWindow',
       expect.any(String),
     )
+  })
+
+  it('gates permit report action on the legacy permit report permission', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action !== '/permitReport',
+    } as any)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reportButton = await screen.findByRole('button', { name: 'Open Permit Report' })
+    expect(reportButton).toBeDisabled()
   })
 
   it('shows detail error contract when permit detail endpoint fails', async () => {
