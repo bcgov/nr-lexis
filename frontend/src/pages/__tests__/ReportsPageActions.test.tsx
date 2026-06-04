@@ -714,6 +714,54 @@ describe('Reports Page Actions', () => {
     expect(window.open).not.toHaveBeenCalled()
   })
 
+  it('uses the legacy biweekly industry pdf variant without form criteria', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => true,
+    } as any)
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+      ],
+    })
+    const anchorClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('MOFR Listing Export')
+    const reportRow = screen.getByText('MOFR Listing Export').closest('tr')
+    expect(reportRow).not.toBeNull()
+    await userEvent.click(
+      within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
+    )
+
+    await userEvent.selectOptions(screen.getByLabelText('Report Variant'), 'generateIndustryPDF')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'biweeklyListing',
+        actionMapping: 'generateIndustryPDF',
+        values: {},
+      })
+    })
+    expect(window.open).toHaveBeenCalledWith(
+      'blob:report',
+      'reportWindow',
+      'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
+    )
+    expect(anchorClickSpy).not.toHaveBeenCalled()
+  })
+
   it('defaults the biweekly listing to the legacy filtered generate action', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => true,
