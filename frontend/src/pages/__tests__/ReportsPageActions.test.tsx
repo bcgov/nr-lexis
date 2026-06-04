@@ -515,7 +515,7 @@ describe('Reports Page Actions', () => {
     expect(screen.getByLabelText('Issued To Date')).toHaveValue(defaultDates.toDate)
     expect(screen.getByLabelText('Client Type')).toHaveValue('P')
     await userEvent.selectOptions(screen.getByLabelText('Exemption Type'), 'M')
-    await userEvent.selectOptions(screen.getByLabelText('Output Format'), 'XLS')
+    await userEvent.selectOptions(screen.getByLabelText('Output Format'), 'CSV')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -528,7 +528,7 @@ describe('Reports Page Actions', () => {
           exemptionTypeLabel: 'Ministerial',
           clientType: 'P',
           clientTypeLabel: 'Permit Holder',
-          outputFormat: 'XLS',
+          outputFormat: 'CSV',
         },
       })
     })

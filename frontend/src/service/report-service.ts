@@ -85,7 +85,11 @@ const buildModernReportEndpoint = (reportId: string): string => {
   return `${basePath}/${encodeURIComponent(reportId)}`
 }
 
-const resolveReportFormat = (values: Record<string, string>, actionMapping?: string): string => {
+const resolveReportFormat = (
+  reportId: string,
+  values: Record<string, string>,
+  actionMapping?: string,
+): string => {
   const normalizedActionMapping = actionMapping?.trim().toLowerCase() ?? ''
   if (normalizedActionMapping.includes('csv')) {
     return 'CSV'
@@ -95,6 +99,9 @@ const resolveReportFormat = (values: Record<string, string>, actionMapping?: str
   }
 
   const outputFormat = values.outputFormat?.trim().toUpperCase()
+  if (reportId === 'tenureReport' && outputFormat === 'CSV') {
+    return 'XLS'
+  }
   if (outputFormat === 'CSV') {
     return 'CSV'
   }
@@ -107,8 +114,12 @@ const resolveReportFormat = (values: Record<string, string>, actionMapping?: str
   return 'PDF'
 }
 
-const resolveReportExtension = (values: Record<string, string>, actionMapping?: string): string => {
-  const format = resolveReportFormat(values, actionMapping)
+const resolveReportExtension = (
+  reportId: string,
+  values: Record<string, string>,
+  actionMapping?: string,
+): string => {
+  const format = resolveReportFormat(reportId, values, actionMapping)
   return format === 'XLS' ? 'xlsx' : format.toLowerCase()
 }
 
@@ -167,7 +178,7 @@ const buildReportPayload = (
 
   return {
     parameters,
-    format: resolveReportFormat(values, actionMapping),
+    format: resolveReportFormat(reportId, values, actionMapping),
   }
 }
 
@@ -190,7 +201,7 @@ const getDefaultFilename = (
   values: Record<string, string>,
   actionMapping?: string,
 ): string => {
-  return `lexis-${reportId}.${resolveReportExtension(values, actionMapping)}`
+  return `lexis-${reportId}.${resolveReportExtension(reportId, values, actionMapping)}`
 }
 
 const extractFilename = (

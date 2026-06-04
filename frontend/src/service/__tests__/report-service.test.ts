@@ -210,6 +210,33 @@ describe('report-service', () => {
     )
   })
 
+  it('maps the legacy tenure CSV option value to spreadsheet output', async () => {
+    postMock.mockResolvedValue({
+      data: new Blob(['report']),
+      headers: {},
+    })
+
+    const result = await runReport({
+      reportId: 'tenureReport',
+      actionMapping: 'generatePermitReport',
+      values: {
+        outputFormat: 'CSV',
+      },
+    })
+
+    expect(result.filename).toBe('lexis-tenureReport.xlsx')
+
+    const [, payload] = postMock.mock.calls[0]
+    expect(payload).toEqual(
+      expect.objectContaining({
+        format: 'XLS',
+        parameters: {
+          legacyActionMapping: 'generatePermitReport',
+        },
+      }),
+    )
+  })
+
   it('compacts and normalizes legacy tenure type and timber mark fields', async () => {
     postMock.mockResolvedValue({
       data: new Blob(['report']),
