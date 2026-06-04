@@ -271,7 +271,7 @@ describe('Reports Page Actions', () => {
     })
   })
 
-  it('submits a single region value for the application report like legacy Struts', async () => {
+  it('defaults application report region to the legacy all-regions sentinel', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => true,
     } as any)
@@ -293,8 +293,13 @@ describe('Reports Page Actions', () => {
 
     await screen.findByRole('heading', { name: 'Application Report' })
     await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' })
-    expect(screen.queryByRole('option', { name: 'All values' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Region')).toHaveValue('1903')
+    const regionSelect = screen.getByLabelText('Region') as HTMLSelectElement
+    expect(Array.from(regionSelect.options).map((option) => [option.value, option.text])).toEqual([
+      ['0', 'All'],
+      ['1903', 'Cariboo Natural Resource Region'],
+      ['1904', 'Kootenay-Boundary Natural Resource Region'],
+    ])
+    expect(regionSelect).toHaveValue('0')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -302,8 +307,8 @@ describe('Reports Page Actions', () => {
         reportId: 'applicationReport',
         actionMapping: 'generate',
         values: {
-          region: '1903',
-          regionLabel: 'Cariboo Natural Resource Region',
+          region: '0',
+          regionLabel: 'All',
         },
       })
     })
@@ -650,6 +655,8 @@ describe('Reports Page Actions', () => {
         reportId: 'applicationReport',
         actionMapping: 'generate',
         values: {
+          region: '0',
+          regionLabel: 'All',
           exportJurisdictionCode: 'F',
           exportJurisdictionCodeLabel: 'Federal Legacy',
         },
@@ -812,7 +819,11 @@ describe('Reports Page Actions', () => {
       expect(mockedRunReport).toHaveBeenCalledWith({
         reportId: 'applicationReport',
         actionMapping: 'generate',
-        values: { outputFormat: 'CSV' },
+        values: {
+          region: '0',
+          regionLabel: 'All',
+          outputFormat: 'CSV',
+        },
       })
     })
     expect(window.open).not.toHaveBeenCalled()

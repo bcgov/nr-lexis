@@ -135,6 +135,12 @@ const SINGLE_REGION_CODE_FIELD: ReportFieldDefinition = {
   type: 'select',
 }
 
+const APPLICATION_REGION_CODE_FIELD: ReportFieldDefinition = {
+  ...SINGLE_REGION_CODE_FIELD,
+  optionKey: 'applicationRegions',
+  defaultValue: '0',
+}
+
 const REGION_CODES_FIELD: ReportFieldDefinition = {
   key: 'region',
   label: 'Region',
@@ -197,7 +203,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     description: 'Applications by status and timeline.',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
-      SINGLE_REGION_CODE_FIELD,
+      APPLICATION_REGION_CODE_FIELD,
       EXEMPTION_REASON_FIELD,
       BIWEEKLY_JURISDICTION_FIELD,
       {
@@ -999,6 +1005,7 @@ const ReportsPage: FC = () => {
     )
 
     return {
+      applicationRegions: [{ value: '0', label: 'All' }, ...(reportOptions?.regions ?? [])],
       ...(exemptionTypeOptions.length > 0
         ? {
             exemptionType: exemptionTypeOptions,
