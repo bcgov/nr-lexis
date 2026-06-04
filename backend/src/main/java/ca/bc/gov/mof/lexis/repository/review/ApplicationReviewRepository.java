@@ -76,24 +76,24 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   public List<ApplicationReviewSearchResultDto> search(ApplicationReviewSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
-    where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
-    where.addEquals("EEA.EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
-    where.addDateGte("EEA.RECEIVED_DATE", criteria.receivedFromDate());
-    where.addDateLte("EEA.RECEIVED_DATE", criteria.receivedToDate());
-    where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
-    where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
-    where.addRaw(" AND (EEA.EXPORT_APPLICATION_STATUS_CODE = 'NEW' OR EEA.EXPORT_APPLICATION_STATUS_CODE = 'PND')");
-    where.addInEqualsNumberOrNoResults("EEA.ORG_UNIT_NO", criteria.regionNumbers());
+    where.addLike("APPLICATION_NUMBER", criteria.applicationNumber());
+    where.addEquals("EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
+    where.addDateGte("RECEIVED_DATE", criteria.receivedFromDate());
+    where.addDateLte("RECEIVED_DATE", criteria.receivedToDate());
+    where.addDateGte("ADVERTISING_DATE", criteria.listingFromDate());
+    where.addDateLte("ADVERTISING_DATE", criteria.listingToDate());
+    where.addRaw(" AND (EXPORT_APPLICATION_STATUS_CODE = 'NEW' OR EXPORT_APPLICATION_STATUS_CODE = 'PND')");
+    where.addInEqualsNumberOrNoResults("ORG_UNIT_NO", criteria.regionNumbers());
 
     String orderBy =
         sanitizedSort(
             criteria.sortField(),
             mapOf(
-                "applicationNumber", "EEA.APPLICATION_NUMBER",
-                "volume", "EEA.EXEMPTION_APPLICATION_VOLUME",
-                "listingDate", "ES.ADVERTISING_DATE",
-                "status", "EEA.EXPORT_APPLICATION_STATUS_CODE",
-                "region", "OU.ORG_UNIT_CODE"),
+                "applicationNumber", "APPLICATION_NUMBER",
+                "volume", "EXEMPTION_APPLICATION_VOLUME",
+                "listingDate", "ADVERTISING_DATE",
+                "status", "EXPORT_APPLICATION_STATUS_CODE",
+                "region", "ORG_UNIT_CODE"),
             "applicationNumber",
             "DESC");
 
