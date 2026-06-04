@@ -107,6 +107,40 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   @Test
+  void shouldGenerateTeacCsvFromFederalProcedureWithLegacyNullAndZeroDefaults() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareCall("{ call LEXIS_REPORTING.FEDERAL_TEAC_REPORT(?,?,?) }"))
+        .thenReturn(callableStatement);
+    when(callableStatement.getObject(3)).thenReturn(resultSet);
+
+    when(resultSet.getMetaData()).thenReturn(metaData);
+    when(metaData.getColumnCount()).thenReturn(1);
+    when(metaData.getColumnName(1)).thenReturn("VALUE");
+    when(resultSet.next()).thenReturn(false);
+
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(
+            Map.of(
+                "exportSchedule", "not-a-number",
+                "exportJurisdictionCode", "F"),
+            "CSV");
+
+    var report =
+        service.generateLegacyCsvReport(
+            LexisJasperReportDefinition.TEAC_REPORT,
+            request,
+            LexisReportFormat.CSV);
+
+    assertThat(report).isPresent();
+    assertThat(report.orElseThrow().filename()).isEqualTo("TeacReport" + today() + ".csv");
+
+    verify(callableStatement).setNull(1, Types.VARCHAR);
+    verify(callableStatement).setLong(2, 0L);
+    verify(callableStatement).registerOutParameter(3, Types.REF_CURSOR);
+  }
+
+  @Test
   void shouldGenerateSpeciesGradeCsvUsingLegacyProcedureParameterOrder() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
     when(connection.prepareCall("{ call LEXIS_REPORTING.SPECIES_GRADE_REPORT_CSV(?,?,?,?,?,?,?,?,?,?,?) }"))
