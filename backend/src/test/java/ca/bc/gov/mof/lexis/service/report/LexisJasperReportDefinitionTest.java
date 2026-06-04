@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
 class LexisJasperReportDefinitionTest {
@@ -32,13 +33,13 @@ class LexisJasperReportDefinitionTest {
   void unsupportedDefinitionsShouldBeExplicit() {
     assertThat(LexisJasperReportDefinition.TEAC_REPORT.supportsJasperTemplate()).isFalse();
     assertThat(LexisJasperReportDefinition.SPECIES_GRADE_REPORT.supportsJasperTemplate()).isFalse();
+    assertThat(LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT.supportsJasperTemplate()).isFalse();
   }
 
   @Test
-  void approvedExemptionShouldUseTemporaryTemplateFallback() {
-    assertThat(LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT.supportsJasperTemplate()).isTrue();
+  void approvedExemptionShouldNotUseExemptionLedgerTemplateFallback() {
     assertThat(LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT.templateName())
-        .isEqualTo("LEXIS_EXEMPTION_LEDGER");
+        .isNull();
   }
 
   @Test
@@ -47,5 +48,21 @@ class LexisJasperReportDefinitionTest {
         LexisJasperReportDefinition.BIWEEKLY_LISTING.resolveFilename(LexisReportFormat.PDF);
 
     assertThat(filename).isEqualTo("biweeklyListing.pdf");
+  }
+
+  @Test
+  void resolveFilenameShouldUseLegacyCsvNamesWithCurrentDate() {
+    String today = LocalDate.now().toString();
+
+    assertThat(LexisJasperReportDefinition.APPLICATION_REPORT.resolveFilename(LexisReportFormat.CSV))
+        .isEqualTo("applicationLedger" + today + ".csv");
+    assertThat(LexisJasperReportDefinition.EXEMPTION_REPORT.resolveFilename(LexisReportFormat.CSV))
+        .isEqualTo("exemptionLedger" + today + ".csv");
+    assertThat(LexisJasperReportDefinition.PERMIT_LEDGER_REPORT.resolveFilename(LexisReportFormat.CSV))
+        .isEqualTo("permitLedger" + today + ".csv");
+    assertThat(LexisJasperReportDefinition.TEAC_REPORT.resolveFilename(LexisReportFormat.CSV))
+        .isEqualTo("TeacReport" + today + ".csv");
+    assertThat(LexisJasperReportDefinition.TENURE_REPORT.resolveFilename(LexisReportFormat.CSV))
+        .isEqualTo("tenureAnalysis" + today + ".csv");
   }
 }

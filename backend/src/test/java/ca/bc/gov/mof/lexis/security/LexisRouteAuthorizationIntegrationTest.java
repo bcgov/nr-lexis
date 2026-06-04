@@ -597,6 +597,19 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void reportOptionsShouldRejectAnonymousRequests() throws Exception {
+    mockMvc.perform(get("/api/lexis/reports/options")).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void reportOptionsShouldAllowKnownRoleWithoutTeacReportGrant() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/reports/options")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void legacyReportRouteShouldAllowAdminRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/offerReport")

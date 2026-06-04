@@ -47,6 +47,7 @@ public class LexisApiAuthorizationCustomizer
         "/api/lexis/showWelcome.do",
         "/api/lexis/logoff",
         "/api/lexis/logoff.do");
+    authorizeKnownRoles(authorize, "/api/lexis/reports/options");
 
     authorizeAction(
         authorize,

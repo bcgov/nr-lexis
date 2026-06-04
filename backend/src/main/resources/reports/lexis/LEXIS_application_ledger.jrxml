@@ -131,7 +131,7 @@ $F{EXPORT_GROWTH_TYPE_CODE}==null || $F{EXPORT_GROWTH_TYPE_CODE}.isEmpty()
 //else if ({?P_ORG_UNIT} = 1835) then
 //'Coast Forest Region'
 
-( $P{P_ORG_UNIT} == null || $P{P_ORG_UNIT}.isEmpty() ? "All" :
+( $P{P_ORG_UNIT} == null || $P{P_ORG_UNIT}.isEmpty() || $P{P_ORG_UNIT}.equalsIgnoreCase( "0" ) ? "All" :
 ( $P{P_ORG_UNIT}.equalsIgnoreCase( "1833" ) ? "Northern Interior Forest Region" :
 ( $P{P_ORG_UNIT}.equalsIgnoreCase( "1834" ) ? "Southern Interior Forest Region" :
 ( $P{P_ORG_UNIT}.equalsIgnoreCase( "1835" ) ? "Coast Forest Region" :

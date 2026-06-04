@@ -419,7 +419,7 @@ BRITISH COLUMBIA]]></text>
 				<textElement textAlignment="Center">
 					<font fontName="Arial" size="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false"/>
 				</textElement>
-				<textFieldExpression><![CDATA[$F{COAST_INTERIOR_IND}.equalsIgnoreCase("I") ? $F{RECEIPT_NUMBER} : $P{P_INVOICE_NUMBER}]]></textFieldExpression>
+				<textFieldExpression><![CDATA["I".equalsIgnoreCase($F{COAST_INTERIOR_IND}) ? ($F{RECEIPT_NUMBER} == null ? "" : $F{RECEIPT_NUMBER}) : ($P{P_INVOICE_NUMBER} == null ? "" : $P{P_INVOICE_NUMBER})]]></textFieldExpression>
 			</textField>
 			<textField>
 				<reportElement uuid="3a93f3b8-6698-4ab1-9b33-c5a127a9ed12" x="12" y="181" width="630" height="24" forecolor="#000000"/>

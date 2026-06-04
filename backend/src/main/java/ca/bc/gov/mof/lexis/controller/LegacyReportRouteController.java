@@ -143,15 +143,14 @@ public class LegacyReportRouteController {
 
     if (ACTION_GENERATE.equalsIgnoreCase(actionMapping) || normalizedAction.startsWith(ACTION_GENERATE)) {
       String explicitFormat = trimToNull(outputFormat);
+      if ("tenureReport".equals(reportAction)) {
+        return "PDF".equalsIgnoreCase(explicitFormat) ? "PDF" : "XLS";
+      }
       if (explicitFormat != null) {
-        // Legacy pages label spreadsheet output as XLS while posting CSV.
-        if ("XLS".equalsIgnoreCase(explicitFormat) || "XLSX".equalsIgnoreCase(explicitFormat)) {
-          return "CSV";
-        }
         return explicitFormat.toUpperCase(Locale.ROOT);
       }
 
-      if ("approvedExemptionReport".equals(reportAction)) {
+      if ("approvedExemptionReport".equals(reportAction) || "permitReport".equals(reportAction)) {
         return "PDF";
       }
 
