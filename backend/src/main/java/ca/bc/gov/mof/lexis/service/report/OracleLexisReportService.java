@@ -160,7 +160,7 @@ public class OracleLexisReportService implements LexisReportService {
     HashMap<String, Object> parameters =
         new HashMap<>(parameterProvider.buildParameters(definition, effectiveRequest));
     parameters.put("SUBREPORT_DIR", runtimeTemplateDirectory.toAbsolutePath() + File.separator);
-    parameters.put("SUBREPORT_EXT", ".jrxml");
+    parameters.put("SUBREPORT_EXT", ".jasper");
 
     try (Connection connection = dataSource.getConnection()) {
       JasperPrint print = JasperFillManager.fillReport(jasperReport, parameters, connection);
@@ -471,6 +471,9 @@ public class OracleLexisReportService implements LexisReportService {
 
       for (String resourceName : RUNTIME_TEMPLATE_RESOURCES) {
         copyRuntimeResource(resourceName);
+        if (resourceName.endsWith(".jrxml")) {
+          compileRuntimeTemplate(resourceName);
+        }
       }
 
       runtimeResourcesPrepared.set(true);
@@ -492,6 +495,20 @@ public class OracleLexisReportService implements LexisReportService {
     } catch (IOException ex) {
       throw new IllegalStateException(
           "Failed to prepare Jasper runtime resource: " + resourceName,
+          ex);
+    }
+  }
+
+  private void compileRuntimeTemplate(String resourceName) {
+    Path source = runtimeTemplateDirectory.resolve(resourceName);
+    Path destination =
+        runtimeTemplateDirectory.resolve(resourceName.replace(".jrxml", ".jasper"));
+
+    try {
+      JasperCompileManager.compileReportToFile(source.toString(), destination.toString());
+    } catch (JRException ex) {
+      throw new IllegalStateException(
+          "Failed to compile Jasper runtime template: " + resourceName,
           ex);
     }
   }
