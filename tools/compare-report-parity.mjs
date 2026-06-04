@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 
 const DEFAULT_CASES_FILE = 'tools/report-parity-cases.json'
 const DEFAULT_MODERN_BASE = 'http://localhost:8080/api/lexis/reports'
+const DEFAULT_TIMEOUT_MS = 120_000
 
 const args = process.argv.slice(2)
 
@@ -19,6 +20,7 @@ Options:
   --modern-base <url>      Modern report base URL. Default: ${DEFAULT_MODERN_BASE}
   --legacy-base <url>      Legacy app base URL. Required unless LEGACY_REPORT_BASE_URL is set.
   --out-dir <path>         Save modern/legacy report bytes and metadata for each executed case.
+  --timeout-ms <ms>        Per-request timeout. Default: ${DEFAULT_TIMEOUT_MS}.
   --list                   List available cases and exit.
   --strict-env             Fail instead of skipping cases with missing \${ENV_VAR} placeholders.
   --exact-binary           Compare every case by exact bytes, including PDF/XLS metadata outputs.
@@ -43,6 +45,7 @@ function parseArgs(rawArgs) {
     modernBase: process.env.MODERN_REPORT_BASE_URL ?? DEFAULT_MODERN_BASE,
     legacyBase: process.env.LEGACY_REPORT_BASE_URL ?? '',
     outDir: process.env.REPORT_PARITY_OUTPUT_DIR ?? '',
+    timeoutMs: process.env.REPORT_PARITY_TIMEOUT_MS ?? `${DEFAULT_TIMEOUT_MS}`,
     caseIds: new Set(),
     list: false,
     strictEnv: false,
@@ -75,6 +78,10 @@ function parseArgs(rawArgs) {
       options.outDir = requireValue(rawArgs, ++index, arg)
       continue
     }
+    if (arg === '--timeout-ms') {
+      options.timeoutMs = requireValue(rawArgs, ++index, arg)
+      continue
+    }
     if (arg === '--list') {
       options.list = true
       continue
@@ -90,7 +97,15 @@ function parseArgs(rawArgs) {
     throw new Error(`Unknown option: ${arg}`)
   }
 
+  options.timeoutMs = parsePositiveInteger(options.timeoutMs, '--timeout-ms')
   return options
+}
+
+function parsePositiveInteger(value, label) {
+  if (!/^[1-9]\d*$/.test(String(value))) {
+    throw new Error(`${label} must be a positive integer`)
+  }
+  return Number(value)
 }
 
 function requireValue(values, index, option) {
@@ -189,9 +204,10 @@ function legacyUrl(baseUrl, testCase) {
   return url
 }
 
-async function fetchModern(baseUrl, testCase) {
+async function fetchModern(baseUrl, testCase, timeoutMs) {
   const response = await fetch(joinUrl(baseUrl, `/${encodeURIComponent(testCase.reportId)}`), {
     method: 'POST',
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       ...headersFor('MODERN'),
       Accept: 'application/octet-stream',
@@ -202,9 +218,10 @@ async function fetchModern(baseUrl, testCase) {
   return responseSummary(response, Buffer.from(await response.arrayBuffer()))
 }
 
-async function fetchLegacy(baseUrl, testCase) {
+async function fetchLegacy(baseUrl, testCase, timeoutMs) {
   const response = await fetch(legacyUrl(baseUrl, testCase), {
     method: 'GET',
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       ...headersFor('LEGACY'),
       Accept: 'application/octet-stream',
@@ -370,6 +387,14 @@ async function main() {
     return
   }
 
+  if (options.caseIds.size > 0) {
+    const knownCaseIds = new Set(cases.map((testCase) => testCase.id))
+    const unknownCaseIds = Array.from(options.caseIds).filter((caseId) => !knownCaseIds.has(caseId))
+    if (unknownCaseIds.length > 0) {
+      throw new Error(`Unknown report parity case(s): ${unknownCaseIds.join(', ')}`)
+    }
+  }
+
   if (!options.legacyBase) {
     throw new Error('Missing --legacy-base or LEGACY_REPORT_BASE_URL')
   }
@@ -400,8 +425,8 @@ async function main() {
 
     process.stdout.write(`RUN  ${testCase.id} ... `)
     const [modern, legacy] = await Promise.all([
-      fetchModern(options.modernBase, testCase),
-      fetchLegacy(options.legacyBase, testCase),
+      fetchModern(options.modernBase, testCase, options.timeoutMs),
+      fetchLegacy(options.legacyBase, testCase, options.timeoutMs),
     ])
     const failures = compareResults(testCase, modern, legacy, options.exactBinary)
     await writeArtifacts(options.outDir, testCase, modern, legacy, failures)
