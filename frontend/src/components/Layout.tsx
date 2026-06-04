@@ -1,9 +1,8 @@
-import type { FC, ReactNode } from 'react'
-import { Email, Help, Home, Logout } from '@carbon/icons-react'
-import { OverflowMenu, OverflowMenuItem, SkipToContent, Theme } from '@carbon/react'
+import { useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
+import { AsleepFilled, Close, LightFilled, Logout, Search, UserAvatar } from '@carbon/icons-react'
+import { IconButton, SkipToContent, Theme } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
-import bcGovLogo from '@/assets/BCID_H_rgb_pos.png'
 
 type Props = {
   children: ReactNode
@@ -190,11 +189,32 @@ const getBreadcrumbRoute = (pathname: string): BreadcrumbRoute => {
   return matchedRoute ?? { path: pathname, section: 'LEXIS', subsection: 'Page' }
 }
 
+const getProfileInitials = (principal: string | null): string => {
+  if (!principal) {
+    return 'LX'
+  }
+
+  const normalized = principal.replace(/[^a-zA-Z0-9\s._-]/g, ' ').trim()
+  const parts = normalized.split(/[\s._-]+/).filter(Boolean)
+  const initials = parts
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+
+  return (initials || principal.slice(0, 2)).toUpperCase()
+}
+
 const Layout: FC<Props> = ({ children }) => {
   const location = useLocation()
   const navigate = useNavigate()
   const { capabilities, canPerform, defaultRoute, logout } = useAuth()
   const breadcrumbRoute = getBreadcrumbRoute(location.pathname)
+  const [isDarkTheme, setIsDarkTheme] = useState(false)
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const profileInitials = useMemo(
+    () => getProfileInitials(capabilities.principal),
+    [capabilities.principal],
+  )
 
   const canShowLink = (link: NavigationLink): boolean => {
     if (!link.requiredActions || link.requiredActions.length === 0) {
@@ -213,143 +233,146 @@ const Layout: FC<Props> = ({ children }) => {
     void logout()
   }
 
-  const openContact = () => {
-    window.location.href = 'mailto:?subject=LEXIS Web Feedback'
-  }
+  useEffect(() => {
+    if (!isProfileOpen) {
+      return undefined
+    }
 
-  const openHelp = () => {
-    window.open(
-      '/help/LEXIS_Help.htm',
-      'Help',
-      'target=_blank,width=800,height=600,toolbar=no,location=no,directories=no,status=no,menubar=no,scrollbars=yes,resizable=yes',
-    )
-  }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsProfileOpen(false)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isProfileOpen])
 
   return (
-    <Theme theme="white">
+    <Theme theme={isDarkTheme ? 'g100' : 'white'}>
       <div className="app-shell">
         <SkipToContent />
-        <header className="legacy-app-header" aria-label="NR LEXIS">
+        <header className="cds--header csp-app-header" aria-label="NR LEXIS">
           <button
             type="button"
-            className="legacy-header-logo-button"
+            className="cds--header__name csp-header-name"
             onClick={() => navigate(defaultRoute)}
-            aria-label="Go to LEXIS menu"
+            aria-label="Go to LEXIS home"
           >
-            <img
-              src={bcGovLogo}
-              className="legacy-header-logo"
-              alt="British Columbia Government Logo"
-            />
+            Log Exemption Information System
           </button>
-          <div className="legacy-header-title">
-            <span className="legacy-program-heading">Log Exemption Information System</span>
-            <span className="legacy-program-ministry">
-              Ministry of Forests, Lands, and Natural Resource Operations
-            </span>
-          </div>
-          <div className="legacy-header-utility">
-            {capabilities.principal && (
-              <span className="legacy-header-principal">{capabilities.principal}</span>
-            )}
-            <OverflowMenu
-              aria-label="LEXIS utilities"
-              flipped
-              size="sm"
-              className="legacy-utility-menu"
+
+          <div className="cds--header__global csp-header-global">
+            <div className="csp-header-theme-toggle">
+              <span aria-hidden="true">Light</span>
+              <button
+                type="button"
+                className="csp-theme-switch"
+                role="switch"
+                aria-checked={isDarkTheme}
+                aria-label="Toggle dark mode"
+                onClick={() => setIsDarkTheme((current) => !current)}
+              >
+                {isDarkTheme ? <AsleepFilled size={12} /> : <LightFilled size={12} />}
+              </button>
+              <span aria-hidden="true">Dark</span>
+            </div>
+
+            <IconButton
+              align="bottom-right"
+              className="csp-header-action"
+              kind="ghost"
+              label={isProfileOpen ? 'Close profile panel' : 'Open profile panel'}
+              aria-expanded={isProfileOpen}
+              aria-controls="profile-panel"
+              onClick={() => setIsProfileOpen((current) => !current)}
             >
-              <OverflowMenuItem
-                itemText={
-                  <span className="legacy-utility-item">
-                    <Home size={16} /> Main
-                  </span>
-                }
-                onClick={() => navigate(defaultRoute)}
-                requireTitle
-              />
-              <OverflowMenuItem
-                itemText={
-                  <span className="legacy-utility-item">
-                    <Email size={16} /> Contact Us
-                  </span>
-                }
-                onClick={openContact}
-                requireTitle
-              />
-              <OverflowMenuItem
-                itemText={
-                  <span className="legacy-utility-item">
-                    <Help size={16} /> Help
-                  </span>
-                }
-                onClick={openHelp}
-                requireTitle
-              />
-              <OverflowMenuItem
-                hasDivider
-                itemText={
-                  <span className="legacy-utility-item">
-                    <Logout size={16} /> Logout
-                  </span>
-                }
-                onClick={handleLogout}
-                requireTitle
-              />
-            </OverflowMenu>
+              <UserAvatar size={20} />
+            </IconButton>
           </div>
         </header>
 
-        <div className="legacy-layout-frame">
-          <nav className="legacy-side-nav" aria-label="LEXIS Menu">
-            <button
-              type="button"
-              className="legacy-menu-home"
-              onClick={() => navigate(defaultRoute)}
+        <aside
+          id="profile-panel"
+          className={`profile-panel${isProfileOpen ? ' is-open' : ''}`}
+          role="dialog"
+          aria-label="Profile"
+          aria-modal="false"
+        >
+          <div className="profile-panel__header">
+            <h2 className="profile-panel__title">Profile</h2>
+            <IconButton
+              align="bottom-right"
+              className="profile-panel__close"
+              kind="ghost"
+              label="Close profile panel"
+              onClick={() => setIsProfileOpen(false)}
             >
-              LEXIS Menu
-            </button>
+              <Close size={20} />
+            </IconButton>
+          </div>
+
+          <div className="profile-panel__body">
+            <div className="profile-panel__identity">
+              <div className="profile-avatar" aria-hidden="true">
+                {profileInitials}
+              </div>
+              <div className="profile-panel__info">
+                <p className="profile-panel__name">{capabilities.principal ?? 'LEXIS user'}</p>
+                <p className="profile-panel__meta">Application: NR LEXIS</p>
+              </div>
+            </div>
+          </div>
+
+          <hr className="profile-panel__divider" role="separator" />
+
+          <button className="profile-panel__signout" type="button" onClick={handleLogout}>
+            <Logout size={16} />
+            Sign out
+          </button>
+        </aside>
+
+        <nav className="cds--side-nav csp-side-nav" aria-label="Side navigation">
+          <ul className="cds--side-nav__items csp-side-nav__items">
             {visibleNavigationSections.map((section) => (
-              <section key={section.label} className="legacy-menu-section">
-                <h2 className="legacy-menu-heading">{section.label}</h2>
-                <ul className="legacy-menu-list">
+              <li key={section.label} className="csp-side-nav__section">
+                <span className="cds--side-nav__category csp-side-nav__category">
+                  {section.label}
+                </span>
+                <ul className="csp-side-nav__section-list">
                   {section.links.map((link) => (
                     <li key={link.to}>
                       <NavLink
                         to={link.to}
                         className={({ isActive }) =>
-                          isActive ? 'legacy-menu-link active' : 'legacy-menu-link'
+                          isActive
+                            ? 'cds--side-nav__link csp-side-nav__link cds--side-nav__link--active'
+                            : 'cds--side-nav__link csp-side-nav__link'
                         }
+                        aria-current={location.pathname === link.to ? 'page' : undefined}
                       >
-                        {link.label}
+                        <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
+                          <Search size={16} />
+                        </span>
+                        <span className="cds--side-nav__link-text">{link.label}</span>
                       </NavLink>
                     </li>
                   ))}
                 </ul>
-              </section>
+              </li>
             ))}
-            <button type="button" className="legacy-menu-home" onClick={handleLogout}>
-              Logout
-            </button>
-          </nav>
+          </ul>
+        </nav>
 
-          <main id="main-content" className="app-main">
-            <div className="legacy-breadcrumb" aria-label="Current page">
-              <span className="legacy-breadcrumb-text">
-                {breadcrumbRoute.section} &gt; {breadcrumbRoute.subsection}
-              </span>
-            </div>
-            {children}
-          </main>
-        </div>
-        <footer className="app-footer">
-          <span>NR LEXIS {capabilities.principal ? `- ${capabilities.principal}` : ''}</span>
-          <nav className="legacy-footer-links" aria-label="Footer links">
-            <a href="https://www2.gov.bc.ca/gov/content/home/copyright">Copyright</a>
-            <a href="https://www2.gov.bc.ca/gov/content/home/disclaimer">Disclaimer</a>
-            <a href="https://www2.gov.bc.ca/gov/content/home/privacy">Privacy</a>
-            <a href="https://www2.gov.bc.ca/gov/content/home/accessibility">Accessibility</a>
-          </nav>
-        </footer>
+        <main id="main-content" className="cds--content app-main">
+          <header className="page-header">
+            <p className="page-header__eyebrow" aria-label="Current page">
+              {breadcrumbRoute.section}
+            </p>
+            <div className="page-header__title">{breadcrumbRoute.subsection}</div>
+          </header>
+          {children}
+        </main>
       </div>
     </Theme>
   )
