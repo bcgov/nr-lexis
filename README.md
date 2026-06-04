@@ -79,10 +79,11 @@ REPORT_SCHEDULE_ID=12345 \
 APPROVED_EXEMPTION_NUMBER=EX-12345 \
 PERMIT_NUMBER=900100 \
 node tools/compare-report-parity.mjs \
-  --modern-base http://localhost:8080/api/lexis/reports
+  --modern-base http://localhost:8080/api/lexis/reports \
+  --out-dir /tmp/lexis-report-parity
 ```
 
-CSV cases compare exact bytes. PDF and spreadsheet cases compare HTTP status, content type, filename extension, byte count, and hashes because generated report metadata can vary by renderer. Use `--exact-binary` when you need strict byte equality.
+CSV cases compare exact bytes. PDF and spreadsheet cases compare HTTP status, content type, filename extension, byte count, and hashes because generated report metadata can vary by renderer. Use `--exact-binary` when you need strict byte equality. `--out-dir` writes both generated files and a metadata JSON record per case for follow-up diffing.
 
 ## CI/CD
 

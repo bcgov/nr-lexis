@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 
 const DEFAULT_CASES_FILE = 'tools/report-parity-cases.json'
 const DEFAULT_MODERN_BASE = 'http://localhost:8080/api/lexis/reports'
@@ -18,6 +18,7 @@ Options:
   --case <id>              Run one case id. Can be supplied more than once.
   --modern-base <url>      Modern report base URL. Default: ${DEFAULT_MODERN_BASE}
   --legacy-base <url>      Legacy app base URL. Required unless LEGACY_REPORT_BASE_URL is set.
+  --out-dir <path>         Save modern/legacy report bytes and metadata for each executed case.
   --list                   List available cases and exit.
   --strict-env             Fail instead of skipping cases with missing \${ENV_VAR} placeholders.
   --exact-binary           Compare every case by exact bytes, including PDF/XLS metadata outputs.
@@ -41,6 +42,7 @@ function parseArgs(rawArgs) {
     casesFile: process.env.REPORT_PARITY_CASES ?? DEFAULT_CASES_FILE,
     modernBase: process.env.MODERN_REPORT_BASE_URL ?? DEFAULT_MODERN_BASE,
     legacyBase: process.env.LEGACY_REPORT_BASE_URL ?? '',
+    outDir: process.env.REPORT_PARITY_OUTPUT_DIR ?? '',
     caseIds: new Set(),
     list: false,
     strictEnv: false,
@@ -67,6 +69,10 @@ function parseArgs(rawArgs) {
     }
     if (arg === '--legacy-base') {
       options.legacyBase = requireValue(rawArgs, ++index, arg)
+      continue
+    }
+    if (arg === '--out-dir') {
+      options.outDir = requireValue(rawArgs, ++index, arg)
       continue
     }
     if (arg === '--list') {
@@ -228,6 +234,28 @@ function filenameExtension(disposition) {
   return dot >= 0 ? filename.slice(dot + 1).toLowerCase() : ''
 }
 
+function extensionForResult(result, fallbackFormat) {
+  const dispositionExtension = filenameExtension(result.disposition)
+  if (dispositionExtension) {
+    return dispositionExtension
+  }
+  const contentType = normalizeContentType(result.contentType)
+  if (contentType.includes('pdf')) {
+    return 'pdf'
+  }
+  if (contentType.includes('csv') || contentType.includes('excel')) {
+    return fallbackFormat.toLowerCase() === 'xls' ? 'xlsx' : fallbackFormat.toLowerCase()
+  }
+  if (contentType.includes('spreadsheet')) {
+    return 'xlsx'
+  }
+  return fallbackFormat.toLowerCase()
+}
+
+function safeFileStem(value) {
+  return value.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'report'
+}
+
 function normalizeContentType(contentType) {
   return contentType.split(';')[0].trim().toLowerCase()
 }
@@ -273,6 +301,57 @@ function compareResults(testCase, modern, legacy, exactBinary) {
 
 function printableSummary(result) {
   return `status=${result.status} bytes=${result.bytes} sha256=${result.sha256.slice(0, 16)} type=${normalizeContentType(result.contentType) || '-'}`
+}
+
+async function writeArtifacts(outputDirectory, testCase, modern, legacy, failures) {
+  if (!outputDirectory) {
+    return
+  }
+  await mkdir(outputDirectory, { recursive: true })
+
+  const stem = safeFileStem(testCase.id)
+  const modernExtension = extensionForResult(modern, testCase.format)
+  const legacyExtension = extensionForResult(legacy, testCase.format)
+  const modernPath = join(outputDirectory, `${stem}.modern.${modernExtension}`)
+  const legacyPath = join(outputDirectory, `${stem}.legacy.${legacyExtension}`)
+  const metadataPath = join(outputDirectory, `${stem}.metadata.json`)
+
+  await Promise.all([
+    writeFile(modernPath, modern.body),
+    writeFile(legacyPath, legacy.body),
+    writeFile(
+      metadataPath,
+      `${JSON.stringify(
+        {
+          id: testCase.id,
+          description: testCase.description,
+          reportId: testCase.reportId,
+          actionMapping: testCase.actionMapping,
+          format: testCase.format,
+          compare: testCase.compare ?? 'metadata',
+          failures,
+          modern: {
+            path: modernPath,
+            status: modern.status,
+            contentType: modern.contentType,
+            contentDisposition: modern.disposition,
+            bytes: modern.bytes,
+            sha256: modern.sha256,
+          },
+          legacy: {
+            path: legacyPath,
+            status: legacy.status,
+            contentType: legacy.contentType,
+            contentDisposition: legacy.disposition,
+            bytes: legacy.bytes,
+            sha256: legacy.sha256,
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    ),
+  ])
 }
 
 async function loadCases(casesFile) {
@@ -325,6 +404,7 @@ async function main() {
       fetchLegacy(options.legacyBase, testCase),
     ])
     const failures = compareResults(testCase, modern, legacy, options.exactBinary)
+    await writeArtifacts(options.outDir, testCase, modern, legacy, failures)
     if (failures.length > 0) {
       failed += 1
       console.log('FAIL')
