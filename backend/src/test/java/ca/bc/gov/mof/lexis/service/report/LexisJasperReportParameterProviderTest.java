@@ -35,6 +35,23 @@ class LexisJasperReportParameterProviderTest {
   }
 
   @Test
+  void offerReportShouldDefaultBlankPdfDatePrompts() {
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("region", "1904", "clientNumber", "00001234"), "PDF");
+
+    Map<String, Object> parameters =
+        provider.buildParameters(LexisJasperReportDefinition.OFFER_REPORT, request);
+
+    assertThat(parameters)
+        .containsEntry("P_APPLICATION_DATE_FROM", "0001-01-01")
+        .containsEntry("P_APPLICATION_DATE_TO", "9999-12-31")
+        .containsEntry("P_ORG_UNIT", "1904")
+        .containsEntry("P_CLIENT_NUMBER", "00001234")
+        .containsEntry("P_WITHDRAWN_DATE_FROM", null)
+        .containsEntry("P_WITHDRAWN_DATE_TO", null);
+  }
+
+  @Test
   void permitReportShouldConvertPermitNumberToBigDecimal() {
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("permitNumber", "900100", "invoiceNumber", "INV-123"), "PDF");
@@ -72,6 +89,21 @@ class LexisJasperReportParameterProviderTest {
 
     assertThat(parameters)
         .containsEntry("P_ORG_UNIT", "1904")
+        .containsEntry("P_EXEMPTION_NUMBER", "EX-123")
+        .containsEntry("P_FROM_DATE", null)
+        .containsEntry("P_TO_DATE", null);
+  }
+
+  @Test
+  void feeReportShouldPassBlankPdfDatePromptsThrough() {
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("orgUnitNumber", "1904", "exemptionNumber", "EX-123"), "PDF");
+
+    Map<String, Object> parameters =
+        provider.buildParameters(LexisJasperReportDefinition.FEE_REPORT, request);
+
+    assertThat(parameters)
+        .containsEntry("P_ORG_UNIT_NUMBER", "1904")
         .containsEntry("P_EXEMPTION_NUMBER", "EX-123")
         .containsEntry("P_FROM_DATE", null)
         .containsEntry("P_TO_DATE", null);
