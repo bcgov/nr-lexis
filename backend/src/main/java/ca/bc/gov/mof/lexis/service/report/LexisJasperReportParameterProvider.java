@@ -102,18 +102,7 @@ public class LexisJasperReportParameterProvider {
 
   private Map<String, Object> approvedExemptionReport(Map<String, String> parameters) {
     Map<String, Object> reportParameters = new HashMap<>();
-    // Temporary migration fallback until the dedicated approved-exemption template is ported.
-    reportParameters.put("P_FROM_DATE", DEFAULT_FROM_DATE);
-    reportParameters.put("P_TO_DATE", DEFAULT_TO_DATE);
-    reportParameters.put("P_LISTING_FROM_DATE", "");
-    reportParameters.put("P_LISTING_TO_DATE", "");
-    reportParameters.put("P_ORG_UNIT", "");
-    reportParameters.put("P_EXEMPTION_REASON", "");
-    reportParameters.put("P_EXEMPTION_TYPE", "");
-    reportParameters.put("P_CLIENT", "");
-    reportParameters.put("P_GROWTH_TYPE", "");
     reportParameters.put("P_EXEMPTION_NUMBER", first(parameters, "exemptionNumber"));
-    reportParameters.put("P_EXEMPTION_STATUS", "");
     return reportParameters;
   }
 

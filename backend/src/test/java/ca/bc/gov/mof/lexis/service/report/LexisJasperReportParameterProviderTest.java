@@ -174,21 +174,14 @@ class LexisJasperReportParameterProviderTest {
   }
 
   @Test
-  void approvedExemptionFallbackShouldPopulateLedgerDefaultsAndFilterByExemptionNumber() {
+  void approvedExemptionReportShouldOnlyProvideLegacyExemptionNumberPrompt() {
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("exemptionNumber", "E-12345"), "PDF");
 
     Map<String, Object> parameters =
         provider.buildParameters(LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT, request);
 
-    assertThat(parameters)
-        .containsEntry("P_FROM_DATE", "0001-01-01")
-        .containsEntry("P_TO_DATE", "9999-12-31")
-        .containsEntry("P_LISTING_FROM_DATE", "")
-        .containsEntry("P_LISTING_TO_DATE", "")
-        .containsEntry("P_ORG_UNIT", "")
-        .containsEntry("P_EXEMPTION_NUMBER", "E-12345")
-        .containsEntry("P_EXEMPTION_STATUS", "");
+    assertThat(parameters).containsOnly(Map.entry("P_EXEMPTION_NUMBER", "E-12345"));
   }
 
   @Test
