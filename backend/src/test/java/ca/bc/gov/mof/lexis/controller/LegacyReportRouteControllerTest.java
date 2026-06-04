@@ -40,7 +40,7 @@ class LegacyReportRouteControllerTest {
   }
 
   @Test
-  void shouldDelegateGenerateWithExplicitPdfFormat() {
+  void shouldDelegateGenerateWithExplicitPdfFormatAndNormalizeLegacyClientNumber() {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/offerReport.do");
 
@@ -66,8 +66,36 @@ class LegacyReportRouteControllerTest {
 
     LexisReportRequestDto delegated = requestCaptor.getValue();
     assertThat(delegated.format()).isEqualTo("PDF");
-    assertThat(delegated.parameters()).containsEntry("clientNumber", "1234567");
+    assertThat(delegated.parameters()).containsEntry("clientNumber", "01234567");
     assertThat(delegated.parameters()).containsEntry("legacyActionMapping", "generate");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldPreserveApplicationClientNumberBecauseLegacyFormDidNotNormalizeIt() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/applicationReport.do");
+
+    when(reportController.applicationReport(any())).thenReturn(ResponseEntity.ok(new byte[] {1, 2}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+    multi.add("clientNumber", "1234567");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "clientNumber", "1234567"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).applicationReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.parameters()).containsEntry("clientNumber", "1234567");
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
   }
 
@@ -115,6 +143,7 @@ class LegacyReportRouteControllerTest {
     multi.add("actionMapping", "generateTenureReport");
     multi.add("outputFormat", "XLS");
     multi.add("reportingDistrict", "DSE");
+    multi.add("clientNumber", "77881");
 
     ResponseEntity<byte[]> response =
         controller.legacyReport(
@@ -133,6 +162,7 @@ class LegacyReportRouteControllerTest {
     assertThat(delegated.format()).isEqualTo("XLS");
     assertThat(delegated.parameters()).containsEntry("legacyActionMapping", "generateTenureReport");
     assertThat(delegated.parameters()).containsEntry("reportingDistrict", "DSE");
+    assertThat(delegated.parameters()).containsEntry("clientNumber", "00077881");
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
   }
 

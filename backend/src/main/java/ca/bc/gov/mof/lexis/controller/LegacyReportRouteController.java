@@ -91,7 +91,7 @@ public class LegacyReportRouteController {
     }
 
     Map<String, String> normalizedParameters =
-        normalizeReportParameters(requestParams, multiValueRequestParams);
+        normalizeReportParameters(reportAction, requestParams, multiValueRequestParams);
     normalizedParameters.put("legacyActionMapping", actionMapping);
 
     LexisReportRequestDto requestDto =
@@ -161,6 +161,7 @@ public class LegacyReportRouteController {
   }
 
   private Map<String, String> normalizeReportParameters(
+      String reportAction,
       Map<String, String> requestParams,
       MultiValueMap<String, String> multiValueRequestParams) {
     Map<String, String> normalized = new LinkedHashMap<>();
@@ -172,7 +173,7 @@ public class LegacyReportRouteController {
           }
           String trimmed = trimToNull(value);
           if (trimmed != null) {
-            normalized.put(key, trimmed);
+            normalized.put(key, normalizeReportValue(reportAction, key, trimmed));
           }
         });
 
@@ -187,13 +188,33 @@ public class LegacyReportRouteController {
             return;
           }
           if (cleaned.size() == 1) {
-            normalized.put(key, cleaned.get(0));
+            normalized.put(key, normalizeReportValue(reportAction, key, cleaned.get(0)));
             return;
           }
           normalized.put(key, String.join(",", cleaned));
         });
 
     return normalized;
+  }
+
+  private String normalizeReportValue(String reportAction, String key, String value) {
+    if ("clientNumber".equals(key) && shouldNormalizeClientNumber(reportAction)) {
+      return normalizeClientNumber(value);
+    }
+    return value;
+  }
+
+  private boolean shouldNormalizeClientNumber(String reportAction) {
+    return "offerReport".equals(reportAction)
+        || "permitLedgerReport".equals(reportAction)
+        || "tenureReport".equals(reportAction);
+  }
+
+  private String normalizeClientNumber(String value) {
+    if (value == null || !value.matches("\\d+")) {
+      return value;
+    }
+    return String.format("%8s", value).replace(' ', '0');
   }
 
   private boolean isControlParam(String key) {
