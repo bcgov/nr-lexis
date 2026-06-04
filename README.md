@@ -67,6 +67,23 @@ docker compose --profile caddy up caddy
 
 This runs Spring Boot + Vite locally with the same Oracle-backed assumptions (VPN + local Oracle config files).
 
+### Jasper report parity check
+
+Use the checked-in parity harness when both this backend and `nr-lexis-main` are running against the same Oracle data. It calls the modern Spring report API and the legacy Struts report URL for each case in `tools/report-parity-cases.json`.
+
+```bash
+LEGACY_REPORT_BASE_URL=http://localhost:8081/nr-lexis \
+REPORT_PARITY_COOKIE='SESSION=...' \
+REPORT_REGION=1904 \
+REPORT_SCHEDULE_ID=12345 \
+APPROVED_EXEMPTION_NUMBER=EX-12345 \
+PERMIT_NUMBER=900100 \
+node tools/compare-report-parity.mjs \
+  --modern-base http://localhost:8080/api/lexis/reports
+```
+
+CSV cases compare exact bytes. PDF and spreadsheet cases compare HTTP status, content type, filename extension, byte count, and hashes because generated report metadata can vary by renderer. Use `--exact-binary` when you need strict byte equality.
+
 ## CI/CD
 
 GitHub Actions handles PR checks, image builds, and OpenShift deployments. Namespace and credential values are environment-driven through repository/environment secrets and variables.

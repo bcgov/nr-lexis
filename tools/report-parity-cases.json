@@ -1,0 +1,106 @@
+[
+  {
+    "id": "application-csv-all-region",
+    "description": "Application ledger CSV with legacy all-region default",
+    "reportId": "applicationReport",
+    "legacyPath": "/applicationReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "0",
+      "exportJurisdictionCode": "P",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "offer-csv",
+    "description": "Offer report CSV with legacy application date filtering",
+    "reportId": "offerReport",
+    "legacyPath": "/offerReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "P",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "permit-ledger-csv",
+    "description": "Permit ledger CSV via explicit legacy reporting procedure",
+    "reportId": "permitLedgerReport",
+    "legacyPath": "/permitLedgerReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "permitStatus": "COM",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "teac-csv",
+    "description": "TEAC package CSV using the jurisdiction-specific legacy procedure",
+    "reportId": "teacReport",
+    "legacyPath": "/teacReport.do",
+    "actionMapping": "generate",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "P",
+      "exportSchedule": "${REPORT_SCHEDULE_ID}",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "approved-exemption-pdf",
+    "description": "Approved exemption prompt-only PDF fallback",
+    "reportId": "approvedExemptionReport",
+    "legacyPath": "/approvedExemptionReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "exemptionNumber": "${APPROVED_EXEMPTION_NUMBER}",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "permit-pdf",
+    "description": "Permit prompt-only PDF with GBMS invoice default",
+    "reportId": "permitReport",
+    "legacyPath": "/permitReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "permitNumber": "${PERMIT_NUMBER}",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "tenure-permit-spreadsheet",
+    "description": "Tenure permit details spreadsheet variant",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generatePermitReport",
+    "format": "XLS",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "CSV"
+    }
+  }
+]
