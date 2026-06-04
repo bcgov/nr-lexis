@@ -308,6 +308,50 @@ describe('report-service', () => {
     )
   })
 
+  it('keeps prompt-only Jasper reports as PDF even when CSV is requested', async () => {
+    postMock.mockResolvedValue({
+      data: new Blob(['report']),
+      headers: {},
+    })
+
+    const approvedResult = await runReport({
+      reportId: 'approvedExemptionReport',
+      actionMapping: 'generate',
+      values: {
+        exemptionNumber: 'E-12345',
+        outputFormat: 'CSV',
+      },
+    })
+    const permitResult = await runReport({
+      reportId: 'permitReport',
+      actionMapping: 'generateCsv',
+      values: {
+        permitNumber: '900100',
+      },
+    })
+
+    expect(approvedResult.filename).toBe('lexis-approvedExemptionReport.pdf')
+    expect(permitResult.filename).toBe('lexis-permitReport.pdf')
+    expect(postMock.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        format: 'PDF',
+        parameters: {
+          legacyActionMapping: 'generate',
+          exemptionNumber: 'E-12345',
+        },
+      }),
+    )
+    expect(postMock.mock.calls[1][1]).toEqual(
+      expect.objectContaining({
+        format: 'PDF',
+        parameters: {
+          legacyActionMapping: 'generateCsv',
+          permitNumber: '900100',
+        },
+      }),
+    )
+  })
+
   it('compacts and normalizes legacy tenure type and timber mark fields', async () => {
     postMock.mockResolvedValue({
       data: new Blob(['report']),

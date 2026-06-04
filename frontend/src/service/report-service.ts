@@ -46,6 +46,7 @@ const shouldNormalizeLegacyUppercase = (reportId: string, key: string): boolean 
   (reportId === 'tenureReport' && key === 'forestFileId')
 
 const LEGACY_TENURE_FIELD_LIMIT = 6
+const PDF_ONLY_PROMPT_REPORT_IDS = new Set(['approvedExemptionReport', 'permitReport'])
 
 const compactLegacyIndexedValues = (
   values: Record<string, string>,
@@ -95,6 +96,10 @@ const resolveReportFormat = (
   values: Record<string, string>,
   actionMapping?: string,
 ): string => {
+  if (PDF_ONLY_PROMPT_REPORT_IDS.has(reportId)) {
+    return 'PDF'
+  }
+
   const normalizedActionMapping = actionMapping?.trim().toLowerCase() ?? ''
   if (normalizedActionMapping.includes('csv')) {
     return 'CSV'
