@@ -1018,9 +1018,7 @@ const ReportsPage: FC = () => {
       ...(reportOptions?.exemptionReasons.length
         ? { exemptionReason: reportOptions.exemptionReasons }
         : {}),
-      ...(reportOptions?.growthTypes.length
-        ? { growthType: reportOptions.growthTypes }
-        : {}),
+      ...(reportOptions?.growthTypes.length ? { growthType: reportOptions.growthTypes } : {}),
       ...(reportOptionSourcesByKey.exemption?.exemptionStatuses.length
         ? {
             exemptionStatus: mergeOptions(
@@ -1052,9 +1050,7 @@ const ReportsPage: FC = () => {
       ...(destinationCountryOptions.length
         ? { destinationCountry: destinationCountryOptions }
         : {}),
-      ...(reportOptions?.portsOfExport.length
-        ? { portOfExport: reportOptions.portsOfExport }
-        : {}),
+      ...(reportOptions?.portsOfExport.length ? { portOfExport: reportOptions.portsOfExport } : {}),
       ...(reportOptions?.currentSchedules.length
         ? { exportSchedule: reportOptions.currentSchedules }
         : {}),
