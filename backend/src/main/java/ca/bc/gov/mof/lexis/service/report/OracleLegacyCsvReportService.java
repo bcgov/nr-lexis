@@ -148,13 +148,13 @@ public class OracleLegacyCsvReportService {
           cs.setDate(1, toSqlDate(first(parameters, "fromDate")));
           cs.setDate(2, toSqlDate(first(parameters, "toDate")));
           setNullableString(cs, 3, csvValue(parameters, "region"));
-          setNullableString(cs, 4, emptyToNull(first(parameters, "permitStatus")));
-          setNullableString(cs, 5, emptyToNull(first(parameters, "exemptionNumber")));
-          setNullableString(cs, 6, emptyToNull(first(parameters, "exemptionType")));
-          setNullableString(cs, 7, emptyToNull(first(parameters, "exemptionReason")));
-          setNullableString(cs, 8, emptyToNull(first(parameters, "growthType")));
-          setNullableString(cs, 9, emptyToNull(first(parameters, "timberMark")));
-          setNullableString(cs, 10, emptyToNull(first(parameters, "forestFileId")));
+          setNullableString(cs, 4, emptyToNull(first(parameters, "exemptionNumber")));
+          setNullableString(cs, 5, emptyToNull(first(parameters, "exemptionType")));
+          setNullableString(cs, 6, emptyToNull(first(parameters, "exemptionReason")));
+          setNullableString(cs, 7, emptyToNull(first(parameters, "growthType")));
+          setNullableString(cs, 8, emptyToNull(first(parameters, "timberMark")));
+          setNullableString(cs, 9, emptyToNull(first(parameters, "forestFileId")));
+          setNullableString(cs, 10, emptyToNull(first(parameters, "permitStatus")));
         },
         11);
   }
