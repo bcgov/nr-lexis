@@ -40,6 +40,10 @@ const shouldNormalizeLegacyClientNumber = (reportId: string): boolean =>
 
 const normalizeUppercase = (value: string): string => value.trim().toUpperCase()
 
+const shouldNormalizeLegacyUppercase = (reportId: string, key: string): boolean =>
+  (reportId === 'permitLedgerReport' && key === 'timberMark') ||
+  (reportId === 'tenureReport' && key === 'forestFileId')
+
 const LEGACY_TENURE_FIELD_LIMIT = 6
 
 const compactLegacyIndexedValues = (
@@ -152,7 +156,7 @@ const buildReportPayload = (
       return
     }
 
-    if (key === 'forestFileId' || key === 'timberMark') {
+    if (shouldNormalizeLegacyUppercase(reportId, key)) {
       parameters[key] = normalizeUppercase(value)
       return
     }

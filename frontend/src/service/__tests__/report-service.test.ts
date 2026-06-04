@@ -130,6 +130,62 @@ describe('report-service', () => {
     )
   })
 
+  it('uppercases only report fields that legacy JavaScript uppercased', async () => {
+    postMock.mockResolvedValue({
+      data: new Blob(['report']),
+      headers: {},
+    })
+
+    await runReport({
+      reportId: 'speciesGradeReport',
+      actionMapping: 'generate',
+      values: {
+        timberMark: ' tm-a ',
+        forestFileId: ' ff-b ',
+      },
+    })
+    await runReport({
+      reportId: 'permitLedgerReport',
+      actionMapping: 'generate',
+      values: {
+        timberMark: ' tm-c ',
+      },
+    })
+    await runReport({
+      reportId: 'tenureReport',
+      actionMapping: 'generateFileReport',
+      values: {
+        forestFileId: ' ff-d ',
+      },
+    })
+
+    expect(postMock.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        parameters: {
+          legacyActionMapping: 'generate',
+          timberMark: 'tm-a',
+          forestFileId: 'ff-b',
+        },
+      }),
+    )
+    expect(postMock.mock.calls[1][1]).toEqual(
+      expect.objectContaining({
+        parameters: {
+          legacyActionMapping: 'generate',
+          timberMark: 'TM-C',
+        },
+      }),
+    )
+    expect(postMock.mock.calls[2][1]).toEqual(
+      expect.objectContaining({
+        parameters: {
+          legacyActionMapping: 'generateFileReport',
+          forestFileId: 'FF-D',
+        },
+      }),
+    )
+  })
+
   it('uses configured report api base and omits actionMapping when disabled', async () => {
     vi.stubEnv('VITE_LEXIS_REPORT_API_BASE', '/lexis/rpc/reports/')
     vi.stubEnv('VITE_LEXIS_REPORT_INCLUDE_ACTION_MAPPING', 'false')
