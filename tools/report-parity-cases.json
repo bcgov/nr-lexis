@@ -111,6 +111,26 @@
     }
   },
   {
+    "id": "biweekly-industry-csv",
+    "description": "Biweekly industry CSV with current schedule defaults",
+    "reportId": "biweeklyListing",
+    "legacyPath": "/biweeklyListing.do",
+    "actionMapping": "generateIndustryCSV",
+    "format": "CSV",
+    "compare": "exact",
+    "parameters": {}
+  },
+  {
+    "id": "biweekly-industry-pdf",
+    "description": "Biweekly industry PDF with current schedule defaults",
+    "reportId": "biweeklyListing",
+    "legacyPath": "/biweeklyListing.do",
+    "actionMapping": "generateIndustryPDF",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {}
+  },
+  {
     "id": "transport-report-csv",
     "description": "Transport report CSV with issue and received date criteria",
     "reportId": "transportReport",
