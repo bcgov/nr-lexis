@@ -181,5 +181,50 @@
       "toDate": "2025-12-31",
       "outputFormat": "CSV"
     }
+  },
+  {
+    "id": "tenure-type-spreadsheet",
+    "description": "Tenure analysis spreadsheet by tenure type",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generateTenureReport",
+    "format": "XLS",
+    "compare": "metadata",
+    "parameters": {
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "tenureType1": "${REPORT_TENURE_TYPE}",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "tenure-mark-spreadsheet",
+    "description": "Tenure analysis spreadsheet by timber mark",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generateMarkReport",
+    "format": "XLS",
+    "compare": "metadata",
+    "parameters": {
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "timberMark1": "${REPORT_TIMBER_MARK}",
+      "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "tenure-file-spreadsheet",
+    "description": "Tenure analysis spreadsheet by forest file",
+    "reportId": "tenureReport",
+    "legacyPath": "/tenureReport.do",
+    "actionMapping": "generateFileReport",
+    "format": "XLS",
+    "compare": "metadata",
+    "parameters": {
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "forestFileId": "${REPORT_FOREST_FILE_ID}",
+      "outputFormat": "CSV"
+    }
   }
 ]
