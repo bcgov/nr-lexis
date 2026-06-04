@@ -3,6 +3,7 @@ import {
   fetchApplicationReviewOptions,
   fetchFederalApplicationOptions,
   fetchProvincialApplicationOptions,
+  fetchReportOptions,
 } from '@/service/search-options-service'
 
 const { getCachedDataMock } = vi.hoisted(() => ({
@@ -67,6 +68,140 @@ describe('search-options-service', () => {
       },
     )
     expect(result).toEqual({ applicationStatuses: [] })
+  })
+
+  it('parses report options for current schedules', async () => {
+    getCachedDataMock.mockResolvedValue({
+      currentSchedules: [
+        { code: '1001', name: '2026-06-15' },
+        { code: '1002', name: '2026-06-29' },
+      ],
+      defaultRegion: '12',
+      regions: [
+        { code: '12', name: 'Coast' },
+        { code: '24', name: 'Skeena' },
+      ],
+      reportJurisdictions: [
+        { code: '', name: 'All' },
+        { code: 'P', name: 'Provincial' },
+        { code: 'F', name: 'Federal' },
+        { code: 'I', name: 'Reserve' },
+      ],
+      biweeklyJurisdictions: [
+        { code: '', name: 'All' },
+        { code: 'P', name: 'Provincial' },
+        { code: 'F', name: 'Federal' },
+      ],
+      teacJurisdictions: [
+        { code: 'P', name: 'Provincial' },
+        { code: 'F', name: 'Federal' },
+      ],
+      exemptionTypes: [
+        { code: '', name: 'All' },
+        { code: 'OIC', name: 'OIC' },
+      ],
+      tenureExemptionTypes: [
+        { code: 'M', name: 'Ministerial' },
+        { code: '', name: 'All' },
+      ],
+      exemptionReasons: [
+        { code: '', name: 'All' },
+        { code: 'SEC128', name: 'Section 128' },
+      ],
+      exemptionStatuses: [
+        { code: '', name: 'All' },
+        { code: 'A', name: 'Approved' },
+      ],
+      growthTypes: [
+        { code: '', name: 'All' },
+        { code: 'O', name: 'Old Growth' },
+      ],
+      permitStatuses: [
+        { code: '', name: 'All' },
+        { code: 'ISS', name: 'Issued' },
+      ],
+      destinationCountries: [
+        { code: '', name: 'All' },
+        { code: 'US', name: 'United States' },
+      ],
+      allDestinationCountries: [
+        { code: 'US', name: 'United States' },
+        { code: 'NZ', name: 'New Zealand' },
+      ],
+      portsOfExport: [
+        { code: '', name: 'All' },
+        { code: 'PAC', name: 'Pacific' },
+      ],
+    })
+
+    const result = await fetchReportOptions()
+
+    expect(getCachedDataMock).toHaveBeenCalledWith('/lexis/reports/options', undefined, {
+      cacheKey: 'search-options:/lexis/reports/options',
+      ttlMs: 300000,
+    })
+    expect(result).toEqual({
+      currentSchedules: [
+        { value: '1001', label: '2026-06-15' },
+        { value: '1002', label: '2026-06-29' },
+      ],
+      defaultRegion: '12',
+      regions: [
+        { value: '12', label: 'Coast' },
+        { value: '24', label: 'Skeena' },
+      ],
+      reportJurisdictions: [
+        { value: '', label: 'All' },
+        { value: 'P', label: 'Provincial' },
+        { value: 'F', label: 'Federal' },
+        { value: 'I', label: 'Reserve' },
+      ],
+      biweeklyJurisdictions: [
+        { value: '', label: 'All' },
+        { value: 'P', label: 'Provincial' },
+        { value: 'F', label: 'Federal' },
+      ],
+      teacJurisdictions: [
+        { value: 'P', label: 'Provincial' },
+        { value: 'F', label: 'Federal' },
+      ],
+      exemptionTypes: [
+        { value: '', label: 'All' },
+        { value: 'OIC', label: 'OIC' },
+      ],
+      tenureExemptionTypes: [
+        { value: 'M', label: 'Ministerial' },
+        { value: '', label: 'All' },
+      ],
+      exemptionReasons: [
+        { value: '', label: 'All' },
+        { value: 'SEC128', label: 'Section 128' },
+      ],
+      exemptionStatuses: [
+        { value: '', label: 'All' },
+        { value: 'A', label: 'Approved' },
+      ],
+      growthTypes: [
+        { value: '', label: 'All' },
+        { value: 'O', label: 'Old Growth' },
+      ],
+      permitStatuses: [
+        { value: '', label: 'All' },
+        { value: 'ISS', label: 'Issued' },
+      ],
+      destinationCountries: [
+        { value: '', label: 'All' },
+        { value: 'US', label: 'United States' },
+      ],
+      allDestinationCountries: [
+        { value: 'US', label: 'United States' },
+        { value: 'NZ', label: 'New Zealand' },
+      ],
+      portsOfExport: [
+        { value: '', label: 'All' },
+        { value: 'PAC', label: 'Pacific' },
+      ],
+    })
   })
 
   it('returns empty option lists when options endpoint throws', async () => {
