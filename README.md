@@ -83,7 +83,7 @@ node tools/compare-report-parity.mjs \
   --out-dir /tmp/lexis-report-parity
 ```
 
-CSV cases compare exact bytes. PDF and spreadsheet cases compare HTTP status, content type, filename extension, byte count, and hashes because generated report metadata can vary by renderer. Use `--exact-binary` when you need strict byte equality. `--out-dir` writes both generated files and a metadata JSON record per case for follow-up diffing.
+CSV cases cover every legacy CSV generator and compare exact bytes. PDF and spreadsheet cases compare HTTP status, content type, filename extension, byte count, and hashes because generated report metadata can vary by renderer. Use `--exact-binary` when you need strict byte equality. `--out-dir` writes both generated files and a metadata JSON record per case for follow-up diffing.
 
 ## CI/CD
 
