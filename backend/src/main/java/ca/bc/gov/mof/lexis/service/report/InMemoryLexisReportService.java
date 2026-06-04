@@ -63,7 +63,7 @@ public class InMemoryLexisReportService implements LexisReportService {
 
   private String resolveMediaType(String extension) {
     return switch (extension) {
-      case "csv" -> "text/csv";
+      case "csv" -> "application/vnd.ms-excel";
       case "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
       case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
       case "rtf" -> "application/rtf";

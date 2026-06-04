@@ -99,7 +99,8 @@ class OracleLexisReportServiceFormatSupportTest {
     OracleLegacyJasperTableReportService legacyJasperTableReportService =
         Mockito.mock(OracleLegacyJasperTableReportService.class);
     LexisGeneratedReport legacyReport =
-        new LexisGeneratedReport("offerReport2026-06-04.csv", "text/csv", "csv".getBytes());
+        new LexisGeneratedReport(
+            "offerReport2026-06-04.csv", "application/vnd.ms-excel", "csv".getBytes());
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("region", "1904"), "CSV");
     Mockito.when(

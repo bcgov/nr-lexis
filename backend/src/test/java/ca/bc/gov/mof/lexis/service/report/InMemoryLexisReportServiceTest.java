@@ -21,7 +21,7 @@ class InMemoryLexisReportServiceTest {
     String content = new String(report.content(), StandardCharsets.UTF_8);
 
     assertThat(report.filename()).isEqualTo("offerReport.csv");
-    assertThat(report.mediaType()).isEqualTo("text/csv");
+    assertThat(report.mediaType()).isEqualTo("application/vnd.ms-excel");
     assertThat(content).contains("reportAction=offerReport");
     assertThat(content).contains("parameter.fromDate=2026-01-01");
     assertThat(content).contains("parameter.toDate=2026-05-01");

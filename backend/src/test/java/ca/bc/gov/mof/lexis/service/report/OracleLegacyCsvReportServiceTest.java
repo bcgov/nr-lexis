@@ -95,7 +95,7 @@ class OracleLegacyCsvReportServiceTest {
 
     assertThat(report).isPresent();
     assertThat(report.orElseThrow().filename()).isEqualTo("TeacReport" + today() + ".csv");
-    assertThat(report.orElseThrow().mediaType()).isEqualTo("text/csv");
+    assertThat(report.orElseThrow().mediaType()).isEqualTo("application/vnd.ms-excel");
 
     String csv = new String(report.orElseThrow().content());
     assertThat(csv).contains("\"ORG_UNIT\",\"VALUE\"");
