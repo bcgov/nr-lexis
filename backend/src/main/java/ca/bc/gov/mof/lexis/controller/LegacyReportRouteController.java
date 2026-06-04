@@ -147,7 +147,7 @@ public class LegacyReportRouteController {
         return "PDF".equalsIgnoreCase(explicitFormat) ? "PDF" : "XLS";
       }
       if (explicitFormat != null) {
-        return explicitFormat.toUpperCase(Locale.ROOT);
+        return "PDF".equalsIgnoreCase(explicitFormat) ? "PDF" : "CSV";
       }
 
       if ("approvedExemptionReport".equals(reportAction) || "permitReport".equals(reportAction)) {

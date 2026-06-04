@@ -133,6 +133,36 @@ class LegacyReportRouteControllerTest {
   }
 
   @Test
+  void shouldMapLegacyNonPdfOutputFormatsToCsvForGenerateActions() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/offerReport.do");
+
+    when(reportController.offerReport(any())).thenReturn(ResponseEntity.ok(new byte[] {3, 4}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+    multi.add("outputFormat", "XLS");
+    multi.add("region", "1904");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "outputFormat", "XLS"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).offerReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.format()).isEqualTo("CSV");
+    assertThat(delegated.parameters()).containsEntry("region", "1904");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
   void shouldRouteTenureGenerateActionMappingsAndKeepSpreadsheetFormat() {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
