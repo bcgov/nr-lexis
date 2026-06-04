@@ -191,7 +191,9 @@ public class LegacyReportRouteController {
             normalized.put(key, normalizeReportValue(reportAction, key, cleaned.get(0)));
             return;
           }
-          normalized.put(key, String.join(",", cleaned));
+          List<String> normalizedValues =
+              cleaned.stream().map(value -> normalizeReportValue(reportAction, key, value)).toList();
+          normalized.put(key, String.join(",", normalizedValues));
         });
 
     return normalized;

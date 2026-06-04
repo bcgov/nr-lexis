@@ -364,6 +364,36 @@ class LegacyReportRouteControllerTest {
   }
 
   @Test
+  void shouldNormalizeRepeatedLegacyValuesBeforeJoiningThem() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
+
+    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 4}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generateMarkReport");
+    multi.add("outputFormat", "PDF");
+    multi.add("timberMark1", "tm001");
+    multi.add("timberMark1", "tm002");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generateMarkReport",
+                "outputFormat", "PDF"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).tenureReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.parameters()).containsEntry("timberMark1", "TM001,TM002");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
   void shouldDefaultApprovedExemptionGenerateToPdfWhenOutputFormatMissing() {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request =
