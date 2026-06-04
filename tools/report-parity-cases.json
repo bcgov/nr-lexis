@@ -64,6 +64,22 @@
     }
   },
   {
+    "id": "species-grade-pdf",
+    "description": "Species and grade PDF using the migrated legacy table fallback",
+    "reportId": "speciesGradeReport",
+    "legacyPath": "/speciesGradeReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "permitStatus": "COM",
+      "fromDate": "2025-01-01",
+      "toDate": "2025-12-31",
+      "outputFormat": "PDF"
+    }
+  },
+  {
     "id": "exemption-ledger-csv",
     "description": "Exemption ledger CSV with approval and listing date criteria",
     "reportId": "exemptionReport",
@@ -159,6 +175,36 @@
       "exportJurisdictionCode": "P",
       "exportSchedule": "${REPORT_SCHEDULE_ID}",
       "outputFormat": "CSV"
+    }
+  },
+  {
+    "id": "teac-provincial-pdf",
+    "description": "Provincial TEAC package PDF using the migrated legacy table fallback",
+    "reportId": "teacReport",
+    "legacyPath": "/teacReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "P",
+      "exportSchedule": "${REPORT_SCHEDULE_ID}",
+      "outputFormat": "PDF"
+    }
+  },
+  {
+    "id": "teac-federal-pdf",
+    "description": "Federal TEAC package PDF using the migrated legacy table fallback",
+    "reportId": "teacReport",
+    "legacyPath": "/teacReport.do",
+    "actionMapping": "generate",
+    "format": "PDF",
+    "compare": "metadata",
+    "parameters": {
+      "region": "${REPORT_REGION}",
+      "exportJurisdictionCode": "F",
+      "exportSchedule": "${REPORT_SCHEDULE_ID}",
+      "outputFormat": "PDF"
     }
   },
   {
