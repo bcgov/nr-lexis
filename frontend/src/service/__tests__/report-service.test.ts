@@ -130,7 +130,7 @@ describe('report-service', () => {
     )
   })
 
-  it('uppercases only report fields that legacy JavaScript uppercased', async () => {
+  it('uppercases report fields that legacy JavaScript uppercased', async () => {
     postMock.mockResolvedValue({
       data: new Blob(['report']),
       headers: {},
@@ -163,8 +163,8 @@ describe('report-service', () => {
       expect.objectContaining({
         parameters: {
           legacyActionMapping: 'generate',
-          timberMark: 'tm-a',
-          forestFileId: 'ff-b',
+          timberMark: 'TM-A',
+          forestFileId: 'FF-B',
         },
       }),
     )

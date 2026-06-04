@@ -41,6 +41,7 @@ const shouldNormalizeLegacyClientNumber = (reportId: string): boolean =>
 const normalizeUppercase = (value: string): string => value.trim().toUpperCase()
 
 const shouldNormalizeLegacyUppercase = (reportId: string, key: string): boolean =>
+  (reportId === 'speciesGradeReport' && (key === 'timberMark' || key === 'forestFileId')) ||
   (reportId === 'permitLedgerReport' && key === 'timberMark') ||
   (reportId === 'tenureReport' && key === 'forestFileId')
 
