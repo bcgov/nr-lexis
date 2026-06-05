@@ -227,6 +227,44 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void addOfferShouldDefaultEntryUserWhenPrincipalIsMissing() {
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L,
+                null,
+                "No Packages",
+                "Example Lumber",
+                "Alex Example",
+                12500.25d,
+                LocalDate.of(2026, 3, 2),
+                null,
+                LocalDate.of(2026, 3, 18),
+                null,
+                null,
+                "Initial offer",
+                null,
+                null,
+                null,
+                null,
+                "00077881",
+                "Port Moody",
+                "Condition notes",
+                99.99d),
+            null);
+
+    assertThat(response.success()).isTrue();
+
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferInsertRecord.class);
+    verify(repository).insertOffer(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().entryUserId()).isEqualTo("system");
+  }
+
+  @Test
   void updateOfferShouldRejectMissingOfferNumberBeforeOracleLookup() {
     PurchaseOfferService.CreateOfferResult response =
         service.updateOffer(
@@ -323,6 +361,71 @@ class PurchaseOfferOracleServiceTest {
     assertThat(record.entryTimestamp()).isEqualTo(entryTimestamp);
     assertThat(record.updateUserId()).isEqualTo("idir\\jsmith");
     assertThat(record.offerVolume()).isEqualTo(99.9d);
+  }
+
+  @Test
+  void updateOfferShouldDefaultUpdateUserWhenPrincipalIsMissing() {
+    Instant entryTimestamp = Instant.parse("2026-03-01T18:00:00Z");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.PurchaseOfferUpdateSourceRow(
+                    81001L,
+                    1000456L,
+                    "PKG-903",
+                    "Example Lumber",
+                    "Alex Example",
+                    12500.25d,
+                    LocalDate.of(2026, 3, 2),
+                    null,
+                    LocalDate.of(2026, 3, 18),
+                    "Y",
+                    "Y",
+                    "Existing remark",
+                    "Y",
+                    null,
+                    "P",
+                    "Existing mill",
+                    "Port Moody",
+                    "Existing condition",
+                    "creator",
+                    entryTimestamp,
+                    95.5d)));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L,
+                81001L,
+                null,
+                null,
+                null,
+                13000.0d,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "Campbell River",
+                null,
+                99.99d),
+            null);
+
+    assertThat(response.success()).isTrue();
+
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().entryUserId()).isEqualTo("creator");
+    assertThat(recordCaptor.getValue().updateUserId()).isEqualTo("system");
   }
 
   private PurchaseOfferSearchResultDto row(Long offerNumber, LocalDate listingDate) {

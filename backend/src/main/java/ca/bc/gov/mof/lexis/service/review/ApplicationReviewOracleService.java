@@ -60,7 +60,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Application number must be a positive value.");
     }
 
-    boolean updated = repository.approve(applicationNumber, trimToNull(updateUserId));
+    boolean updated = repository.approve(applicationNumber, defaultMutationUser(updateUserId));
     if (updated) {
       return new ApplicationReviewStatusUpdateResultDto(
           true,
@@ -107,7 +107,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     String remark = request == null ? null : trimToNull(request.remark());
     String clientEmail = request == null ? null : trimToNull(request.clientEmailAddress());
     boolean updated =
-        repository.updateStatus(applicationNumber, statusCode, remark, trimToNull(updateUserId));
+        repository.updateStatus(applicationNumber, statusCode, remark, defaultMutationUser(updateUserId));
 
     if (updated) {
       return new ApplicationReviewStatusUpdateResultDto(
@@ -186,6 +186,11 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private String defaultMutationUser(String userId) {
+    String normalized = trimToNull(userId);
+    return normalized == null ? "system" : normalized;
   }
 
   private static <T> List<T> safeList(List<T> input) {

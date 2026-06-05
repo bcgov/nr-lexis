@@ -78,7 +78,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
 
     Optional<PurchaseOfferRepository.PurchaseOfferInsertRow> inserted =
-        repository.insertOffer(toInsertRecord(normalized, trimToNull(userId)));
+        repository.insertOffer(toInsertRecord(normalized, defaultMutationUser(userId)));
     Long offerNumber =
         inserted.map(PurchaseOfferRepository.PurchaseOfferInsertRow::exportPurchaseOfferNumber).orElse(null);
 
@@ -162,7 +162,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
 
     boolean updated =
-        repository.updateOffer(toUpdateRecord(merged, current, trimToNull(userId)));
+        repository.updateOffer(toUpdateRecord(merged, current, defaultMutationUser(userId)));
     if (!updated) {
       return new CreateOfferResult(
           false,
@@ -438,6 +438,11 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   private String firstNonBlank(String value, String fallback) {
     String normalized = trimToNull(value);
     return normalized == null ? fallback : normalized;
+  }
+
+  private String defaultMutationUser(String userId) {
+    String normalized = trimToNull(userId);
+    return normalized == null ? "system" : normalized;
   }
 
   private <T> T firstNonNull(T value, T fallback) {

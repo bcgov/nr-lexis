@@ -228,7 +228,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
     ExemptionDetailsRpcRepository.ExemptionRecord current = existing.get();
     ExemptionDetailsRpcRepository.ExemptionUpdateRecord updateRecord =
-        toUpdateRecord(normalized, current, blankToNull(userId));
+        toUpdateRecord(normalized, current, defaultUpdateUser(userId, current.entryUserId()));
 
     List<String> errors = validateUpdateExemption(updateRecord, current, canApproveExemption);
     if (!errors.isEmpty()) {
@@ -359,7 +359,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     Map<String, String> sendGrid = new LinkedHashMap<>();
     StringBuilder errorMessage = new StringBuilder();
     for (String exemptionNumber : numbers) {
-      approveSingleExemption(exemptionNumber, blankToNull(userId), canApproveExemption, sendGrid, errorMessage);
+      approveSingleExemption(exemptionNumber, userId, canApproveExemption, sendGrid, errorMessage);
     }
 
     boolean valid = !sendGrid.isEmpty();
@@ -547,7 +547,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             EXEMPTION_STATUS_ACTIVE,
             current.entryUserId(),
             current.entryTimestamp(),
-            userId,
+            defaultUpdateUser(userId, current.entryUserId()),
             null);
 
     List<String> errors = validateExemptionApproval(updateRecord, current, canApproveExemption);

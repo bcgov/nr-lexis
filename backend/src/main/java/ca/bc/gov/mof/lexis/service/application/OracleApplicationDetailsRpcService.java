@@ -90,7 +90,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     String normalizedRemarkId = trimToNull(remarkId);
-    String normalizedUserId = trimToNull(userId);
+    String normalizedUserId = defaultMutationUser(userId);
     String remark = remarkBody == null ? "" : remarkBody;
 
     if (normalizedRemarkId == null || "new".equalsIgnoreCase(normalizedRemarkId)) {
@@ -122,7 +122,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return new CreateApplicationResult(false, null, null, errors, warnings);
     }
 
-    String entryUserId = trimToNull(userId);
+    String entryUserId = defaultMutationUser(userId);
     Optional<ApplicationDetailsRpcRepository.ApplicationInsertRow> inserted =
         repository.insertApplication(toInsertRecord(normalized, entryUserId));
 
@@ -457,7 +457,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     ApplicationDetailsRpcRepository.PackageMutationRecord record =
-        toPackageMutationRecord(normalized, null, normalized.packageNumber(), userId, true);
+        toPackageMutationRecord(normalized, null, normalized.packageNumber(), defaultMutationUser(userId), true);
     Optional<ApplicationDetailsRpcRepository.PackageMutationRow> inserted = repository.insertPackage(record);
     if (inserted.isEmpty()) {
       return invalidPackageResult(
@@ -485,11 +485,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     String targetPackageNumber = firstNonBlank(normalized.newPackageNumber(), currentPackageNumber);
     ApplicationDetailsRpcRepository.PackageMutationRecord record =
-        toPackageMutationRecord(normalized, existing, targetPackageNumber, userId, false);
+        toPackageMutationRecord(normalized, existing, targetPackageNumber, defaultMutationUser(userId), false);
 
     boolean saved;
     if (!targetPackageNumber.equals(currentPackageNumber)) {
-      saved = renamePackage(currentPackageNumber, record, userId);
+      saved = renamePackage(currentPackageNumber, record, defaultMutationUser(userId));
     } else {
       saved = repository.updatePackage(record);
     }
@@ -521,7 +521,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             normalized.applicationNumber(),
             null,
             0.0d,
-            trimToNull(userId),
+            defaultMutationUser(userId),
             Instant.now(),
             null);
 
@@ -545,7 +545,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (normalizedScaleDetailId == null) {
       return false;
     }
-    return repository.deleteScaleById(normalizedScaleDetailId, trimToNull(userId));
+    return repository.deleteScaleById(normalizedScaleDetailId, defaultMutationUser(userId));
   }
 
   @Override
@@ -554,7 +554,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (normalizedPackageNumber == null) {
       return false;
     }
-    return repository.deletePackageById(normalizedPackageNumber, trimToNull(userId));
+    return repository.deletePackageById(normalizedPackageNumber, defaultMutationUser(userId));
   }
 
   private PackageMutationRequest normalizePackageMutationRequest(PackageMutationRequest request) {
@@ -672,9 +672,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         firstNonBlank(request.status(), existing == null ? null : existing.packageStatusCode()),
         firstNonBlank(request.ageClass(), existing == null ? null : existing.growthTypeCode()),
         firstNonBlank(request.productType(), existing == null ? null : existing.productTypeCode()),
-        insert ? trimToNull(userId) : existing == null ? trimToNull(userId) : existing.entryUserId(),
+        insert ? defaultMutationUser(userId) : existing == null ? defaultMutationUser(userId) : existing.entryUserId(),
         insert || existing == null ? Instant.now() : existing.entryTimestamp(),
-        insert ? null : trimToNull(userId),
+        insert ? null : defaultMutationUser(userId),
         toPackageEndUses(request.speciesCodes(), request.endUseCode()));
   }
 
@@ -717,14 +717,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
                   0.0d,
                   scale.entryUserId(),
                   scale.entryTimestamp(),
-                  trimToNull(userId)));
+                  defaultMutationUser(userId)));
       if (!updated) {
         markRollbackOnly();
         return false;
       }
     }
 
-    boolean deleted = repository.deletePackageById(currentPackageNumber, trimToNull(userId));
+    boolean deleted = repository.deletePackageById(currentPackageNumber, defaultMutationUser(userId));
     if (!deleted) {
       markRollbackOnly();
     }
@@ -1165,5 +1165,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private String firstNonBlank(String value, String fallback) {
     String normalized = trimToNull(value);
     return normalized == null ? fallback : normalized;
+  }
+
+  private String defaultMutationUser(String userId) {
+    String normalized = trimToNull(userId);
+    return normalized == null ? "system" : normalized;
   }
 }
