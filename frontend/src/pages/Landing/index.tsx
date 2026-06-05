@@ -84,10 +84,15 @@ const LandingPage: FC = () => {
               )}
             </div>
 
-            <p className="landing-support-text">
-              Industry users sign in with Business BCeID. Ministry users sign in with IDIR. Access
-              must be granted through Forests Access Management before LEXIS roles appear here.
-            </p>
+            <section className="landing-support" aria-labelledby="landing-support-title">
+              <h2 id="landing-support-title" className="landing-support-title">
+                Access to LEXIS
+              </h2>
+              <p className="landing-support-text">
+                Industry users sign in with Business BCeID. Ministry users sign in with IDIR. Access
+                must be granted through Forests Access Management before LEXIS roles appear here.
+              </p>
+            </section>
 
             {errorMessage && (
               <InlineNotification
