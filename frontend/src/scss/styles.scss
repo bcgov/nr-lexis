@@ -560,7 +560,11 @@ body {
 }
 
 .landing-grid {
+  width: 100vw;
+  max-width: none;
   min-height: 100vh;
+  margin: 0;
+  margin-inline: 0;
   padding: 0;
   padding-inline: 0;
 }
@@ -569,6 +573,7 @@ body {
   display: flex;
   align-items: center;
   padding: 2rem 4rem;
+  padding-inline: 4rem;
 }
 
 .landing-content-wrapper {
@@ -653,7 +658,10 @@ body {
 .landing-img-col {
   display: flex;
   min-height: 100vh;
+  margin: 0;
+  margin-inline: 0;
   padding: 0;
+  padding-inline: 0;
   overflow: hidden;
 }
 
@@ -670,6 +678,7 @@ body {
   .landing-content-col {
     min-height: auto;
     padding: 2rem;
+    padding-inline: 2rem;
   }
 
   .landing-content-wrapper {
@@ -952,6 +961,7 @@ body {
 
   .landing-content-col {
     padding: 1.5rem;
+    padding-inline: 1.5rem;
   }
 
   .landing-content-wrapper {
