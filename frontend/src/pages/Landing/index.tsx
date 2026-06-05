@@ -35,16 +35,7 @@ const LandingPage: FC = () => {
             <div className="landing-title-group">
               <p className="landing-kicker">NR LEXIS</p>
               <h1 className="landing-title">Log Exemption Information System</h1>
-              <p className="landing-subtitle">
-                Ministry and industry access for log export exemption, permit, offer, and
-                application workflows.
-              </p>
             </div>
-
-            <p className="landing-description">
-              Apply for and manage log export exemptions, permits, offers, and related LEXIS
-              workflows.
-            </p>
 
             <div className="landing-actions">
               {!isLoggedIn && (
@@ -85,16 +76,6 @@ const LandingPage: FC = () => {
                 </Button>
               )}
             </div>
-
-            <section className="landing-support" aria-labelledby="landing-support-title">
-              <h2 id="landing-support-title" className="landing-support-title">
-                Access to LEXIS
-              </h2>
-              <p className="landing-support-text">
-                Industry users sign in with Business BCeID. Ministry users sign in with IDIR. Access
-                must be granted through Forests Access Management before LEXIS roles appear here.
-              </p>
-            </section>
 
             {errorMessage && (
               <InlineNotification

@@ -8,7 +8,6 @@ test.describe('frontend smoke coverage', () => {
     ).toBeVisible()
     await expect(page.getByRole('button', { name: /log in with idir/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /log in with business bceid/i })).toBeVisible()
-    await expect(page.getByRole('heading', { name: /access to lexis/i })).toBeVisible()
   })
 
   test('protected routes are not directly accessible without authenticated session', async ({ page }) => {

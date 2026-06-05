@@ -576,9 +576,6 @@ const ProvincialReviewPage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial Review</h1>
-        <p>
-          Base review queue parity for <code>applicationsReview</code> migration.
-        </p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>

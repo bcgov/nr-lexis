@@ -254,14 +254,10 @@ const AdminPoliciesPage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Policy Center</h1>
-        <p>Native React baseline for fee policy and FIL percent policy administration.</p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <p className="landing-help-text">
-            Policy administration is API-backed and follows backend authorization and persistence.
-          </p>
           <div>
             Fee policy access:{' '}
             <Tag type={canManageFeePolicy ? 'green' : 'red'}>

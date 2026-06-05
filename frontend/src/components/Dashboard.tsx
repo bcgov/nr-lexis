@@ -82,7 +82,7 @@ const DASHBOARD_MODULES: DashboardModule[] = [
   {
     id: 'federalApplications',
     title: 'Federal Applications',
-    description: 'Access federal application search workflows.',
+    description: 'Search federal applications.',
     path: '/federal',
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
     countKey: 'federalApplications',
@@ -90,7 +90,7 @@ const DASHBOARD_MODULES: DashboardModule[] = [
   {
     id: 'indianReservePermits',
     title: 'Indigenous Reserve Permits',
-    description: 'Access reserve permit search workflows.',
+    description: 'Search reserve permits.',
     path: '/indian-reserve',
     requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
     countKey: 'indianReservePermits',
@@ -116,7 +116,7 @@ const DASHBOARD_MODULES: DashboardModule[] = [
   {
     id: 'admin',
     title: 'Admin',
-    description: 'Policy and upload administration workflows.',
+    description: 'Policy and upload administration.',
     path: '/admin',
     requiredActions: ['/lexisAgentAdmin'],
   },

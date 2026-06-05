@@ -585,12 +585,12 @@ body {
 
 .landing-logo-mark {
   width: fit-content;
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 0.875rem;
   background-color: #003366;
 }
 
 .landing-logo {
-  width: 10rem;
+  width: 8.5rem;
   height: auto;
   display: block;
 }
@@ -618,36 +618,12 @@ body {
   line-height: 1.05;
 }
 
-.landing-subtitle {
-  max-width: 32rem;
-  margin: 0;
-  color: var(--csp-text-secondary);
-  font-size: 1.25rem;
-  line-height: 1.4;
-}
-
-.landing-description,
-.landing-support-text,
 .landing-help-text {
   max-width: 32rem;
   margin: 0;
   color: var(--csp-text-secondary);
   font-size: 1rem;
   line-height: 1.5;
-}
-
-.landing-support {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.landing-support-title {
-  margin: 0;
-  color: var(--csp-text-primary);
-  font-size: 1.25rem;
-  font-weight: 400;
-  letter-spacing: 0;
-  line-height: 1.3;
 }
 
 .landing-actions {
@@ -977,10 +953,6 @@ body {
 
   .landing-title {
     font-size: 2.25rem;
-  }
-
-  .landing-subtitle {
-    font-size: 1rem;
   }
 
   .landing-img-col,

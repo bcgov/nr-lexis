@@ -86,7 +86,7 @@ const WORKFLOWS: ProvincialWorkflowDefinition[] = [
   {
     id: 'applicationsReview',
     title: 'Review Queue',
-    description: 'Review queue for application approval workflow.',
+    description: 'Application approval queue.',
     path: '/provincial/review',
     requiredActions: ['/applicationsReview'],
     metricKey: 'reviewQueue',
@@ -331,19 +331,18 @@ const ProvincialPage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial</h1>
-        <p>Provincial module landing with route access checks and search totals.</p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <p>
-            Accessible workflows: <strong>{accessibleCount}</strong> of{' '}
+            Available areas: <strong>{accessibleCount}</strong> of{' '}
             <strong>{WORKFLOWS.length}</strong>
           </p>
           <div className="legacy-search-grid">
             <TextInput
               id="provincialWorkflowSearch"
-              labelText="Search workflow"
+              labelText="Search area"
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               placeholder="Search title, route, or description"
@@ -351,7 +350,7 @@ const ProvincialPage: FC = () => {
             <div>
               <Checkbox
                 id="provincialShowAccessibleOnly"
-                labelText="Show accessible workflows only"
+                labelText="Show available areas only"
                 checked={showAccessibleOnly}
                 onChange={(_, payload) => setShowAccessibleOnly(Boolean(payload.checked))}
               />
@@ -416,7 +415,7 @@ const ProvincialPage: FC = () => {
           <Table useZebraStyles>
             <TableHead>
               <TableRow>
-                <TableHeader>Workflow</TableHeader>
+                <TableHeader>Area</TableHeader>
                 <TableHeader>Description</TableHeader>
                 <TableHeader>Route</TableHeader>
                 <TableHeader>Access</TableHeader>
@@ -462,7 +461,7 @@ const ProvincialPage: FC = () => {
               {visibleWorkflows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6}>
-                    No provincial workflows matched the current filters.
+                    No provincial areas matched the current filters.
                   </TableCell>
                 </TableRow>
               )}
