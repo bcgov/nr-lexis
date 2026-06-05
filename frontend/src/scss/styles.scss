@@ -584,19 +584,9 @@ body {
 }
 
 .landing-logo-mark {
-  position: relative;
   width: fit-content;
-  padding: 0.75rem 1rem 0.875rem;
+  padding: 0.75rem 1rem;
   background-color: #003366;
-}
-
-.landing-logo-mark::after {
-  position: absolute;
-  inset-inline: 0;
-  inset-block-end: 0;
-  height: 0.25rem;
-  background-color: #fcba19;
-  content: '';
 }
 
 .landing-logo {
