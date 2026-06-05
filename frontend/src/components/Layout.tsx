@@ -399,7 +399,7 @@ const Layout: FC<Props> = ({ children }) => {
             <p className="page-header__eyebrow" aria-label="Current page">
               {breadcrumbRoute.section}
             </p>
-            <h1 className="page-header__title">{breadcrumbRoute.subsection}</h1>
+            <div className="page-header__title">{breadcrumbRoute.subsection}</div>
           </header>
           {children}
         </main>

@@ -47,7 +47,7 @@ describe('Layout shell', () => {
     const uploadsLink = screen.getByRole('link', { name: 'Upload Center' })
     const activeLinks = document.querySelectorAll('.csp-side-nav__link.cds--side-nav__link--active')
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Upload Center' })).toBeInTheDocument()
+    expect(document.querySelector('.page-header__title')).toHaveTextContent('Upload Center')
     expect(activeLinks).toHaveLength(1)
     expect(uploadsLink).toHaveClass('cds--side-nav__link--active')
     expect(uploadsLink).toHaveAttribute('aria-current', 'page')
