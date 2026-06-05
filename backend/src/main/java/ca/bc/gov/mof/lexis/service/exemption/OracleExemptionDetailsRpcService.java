@@ -181,8 +181,9 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       return new CreateExemptionResult(false, null, null, false, errors, warnings);
     }
 
+    String entryUserId = defaultEntryUser(userId);
     Optional<ExemptionDetailsRpcRepository.ExemptionInsertRow> inserted =
-        repository.insertExemption(toInsertRecord(normalized, blankToNull(userId)));
+        repository.insertExemption(toInsertRecord(normalized, entryUserId));
     String exemptionNumber =
         inserted.map(ExemptionDetailsRpcRepository.ExemptionInsertRow::exemptionNumber).orElse(null);
 
@@ -200,7 +201,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         exemptionNumber,
         normalized.enableRateOverride(),
         normalized.feeRate(),
-        blankToNull(userId));
+        entryUserId);
 
     return new CreateExemptionResult(
         true, SAVE_SUCCESS_MESSAGE, exemptionNumber, true, List.of(), warnings);
@@ -501,6 +502,11 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private String defaultUpdateUser(String userId, String fallback) {
     String normalized = blankToNull(userId);
     return normalized == null ? blankToNull(fallback) : normalized;
+  }
+
+  private String defaultEntryUser(String userId) {
+    String normalized = blankToNull(userId);
+    return normalized == null ? "system" : normalized;
   }
 
   private String displayApplicationNumber(Long applicationNumber) {

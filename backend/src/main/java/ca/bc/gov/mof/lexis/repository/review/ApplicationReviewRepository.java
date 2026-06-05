@@ -23,7 +23,6 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
 
   private static final String FIND_ALL_PRODUCT_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_PRODUCT_TYPE_CODES(?)";
-  private static final String FIND_ALL_ORG_UNITS = LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)";
   private static final String FIND_ALL_APPLICATION_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
 
@@ -48,18 +47,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return queryCursorProcedure(
-        FIND_ALL_ORG_UNITS,
-        null,
-        1,
-        rs -> {
-          Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-          String regionCode = getString(rs, "ORG_UNIT_CODE");
-          String regionName = getString(rs, "ORG_UNIT_NAME");
-          return new CodeNameDto(
-              orgUnitNo == null ? null : orgUnitNo.toString(),
-              regionCode == null ? regionName : regionCode);
-        });
+    return loadOrgUnitOptions(false);
   }
 
   public List<CodeNameDto> loadReviewStatusOptions() {

@@ -18,7 +18,6 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   private static final String RESERVE_JURISDICTION_CODE = "I";
   private static final String FIND_CURRENT_SCHEDULES =
       LEXIS_CODES_PACKAGE + "FIND_CURRENT_SCHEDULES(?)";
-  private static final String FIND_ALL_ORG_UNITS = LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)";
   private static final String FIND_ALL_JURISDICTION_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_JURISDICTION_CODES(?)";
   private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
@@ -56,18 +55,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return queryCursorProcedure(
-        FIND_ALL_ORG_UNITS,
-        null,
-        1,
-        rs -> {
-          Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-          String regionCode = getString(rs, "ORG_UNIT_CODE");
-          String regionName = getString(rs, "ORG_UNIT_NAME");
-          return new CodeNameDto(
-              orgUnitNo == null ? null : orgUnitNo.toString(),
-              regionName == null ? regionCode : regionName);
-        });
+    return loadOrgUnitOptions(true);
   }
 
   public List<CodeNameDto> loadReportJurisdictionOptions() {

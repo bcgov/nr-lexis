@@ -20,8 +20,6 @@ public class ExemptionRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
   private static final String FIND_ALL_EXEMPTION_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_STS_CODES(?)";
-  private static final String FIND_ALL_ORG_UNITS = LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)";
-
   private static final String FIND_EXEMPTIONS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTIONS_BY_CRITERIA(?,?,?,?,?)";
   private static final String FIND_EXEMPTION_BY_NUMBER =
@@ -46,18 +44,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return queryCursorProcedure(
-        FIND_ALL_ORG_UNITS,
-        null,
-        1,
-        rs -> {
-          Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-          String regionCode = getString(rs, "ORG_UNIT_CODE");
-          String regionName = getString(rs, "ORG_UNIT_NAME");
-          return new CodeNameDto(
-              orgUnitNo == null ? null : orgUnitNo.toString(),
-              regionCode == null ? regionName : regionCode);
-        });
+    return loadOrgUnitOptions(false);
   }
 
   public List<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {

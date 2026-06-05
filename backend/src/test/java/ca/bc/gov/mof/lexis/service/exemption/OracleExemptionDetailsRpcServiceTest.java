@@ -177,6 +177,42 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
+  void addExemptionShouldDefaultEntryUserWhenPrincipalIsMissing() {
+    when(repository.insertExemption(any(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class)))
+        .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-205")));
+    when(repository.findExemptionRate("EX-205")).thenReturn(Optional.empty());
+    when(repository.insertExemptionRate(any(ExemptionDetailsRpcRepository.ExemptionRateMutationRecord.class)))
+        .thenReturn(Optional.of(exemptionRate(18.25d)));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                " Conditions ",
+                "B",
+                "ACT",
+                18.25d,
+                true,
+                List.of(11L, 12L)),
+            null);
+
+    assertThat(response.success()).isTrue();
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class);
+    verify(repository).insertExemption(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().entryUserId()).isEqualTo("system");
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionRateMutationRecord> rateCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionRateMutationRecord.class);
+    verify(repository).insertExemptionRate(rateCaptor.capture());
+    assertThat(rateCaptor.getValue().userId()).isEqualTo("system");
+  }
+
+  @Test
   void checkExemptionNumberShouldReturnValidWhenNumberIsAvailable() {
     when(repository.existsByExemptionNumber("EX-205")).thenReturn(false);
 

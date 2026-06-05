@@ -60,11 +60,37 @@ public abstract class OracleRepositorySupport {
   }
 
   protected List<CodeNameDto> loadCodeNameOptions(String procedureSignature) {
-    return queryCursorProcedure(
+    List<CodeNameDto> options = queryCursorProcedure(
         procedureSignature,
         null,
         1,
         rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2))));
+    if (!options.isEmpty()) {
+      return options;
+    }
+    return fallbackCodeNameOptions(procedureSignature);
+  }
+
+  protected List<CodeNameDto> loadOrgUnitOptions(boolean displayName) {
+    List<CodeNameDto> options =
+        queryCursorProcedure(
+            LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)",
+            null,
+            1,
+            rs -> {
+              Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
+              String regionCode = getString(rs, "ORG_UNIT_CODE");
+              String regionName = getString(rs, "ORG_UNIT_NAME");
+              return new CodeNameDto(
+                  orgUnitNo == null ? null : orgUnitNo.toString(),
+                  displayName
+                      ? firstPresent(regionName, regionCode)
+                      : firstPresent(regionCode, regionName));
+            });
+    if (!options.isEmpty()) {
+      return options;
+    }
+    return fallbackOrgUnitOptions(displayName);
   }
 
   protected <T> List<T> queryCursorProcedure(
@@ -200,11 +226,81 @@ public abstract class OracleRepositorySupport {
       allResults.addAll(currentPage);
       if (currentPage.size() < 500) {
         // Legacy procedures page server-side; short page usually means completion.
-        continue;
+        break;
       }
     }
 
     return allResults;
+  }
+
+  private List<CodeNameDto> fallbackCodeNameOptions(String procedureSignature) {
+    if (procedureSignature == null) {
+      return List.of();
+    }
+    return switch (procedureSignature) {
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)" ->
+          List.of(
+              new CodeNameDto("NEW", "New"),
+              new CodeNameDto("APP", "Approved"),
+              new CodeNameDto("PND", "Pending"),
+              new CodeNameDto("REJ", "Rejected"),
+              new CodeNameDto("WDN", "Withdrawn"),
+              new CodeNameDto("EXE", "Exempted"),
+              new CodeNameDto("EXP", "Expired"),
+              new CodeNameDto("PMT", "Permitted"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)" ->
+          List.of(
+              new CodeNameDto("M", "Ministerial"),
+              new CodeNameDto("O", "Order in Council"),
+              new CodeNameDto("B", "Blanket Order in Council"),
+              new CodeNameDto("F", "Federal"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_STS_CODES(?)" ->
+          List.of(
+              new CodeNameDto("NEW", "New"),
+              new CodeNameDto("ACT", "Active"),
+              new CodeNameDto("CAN", "Cancelled"),
+              new CodeNameDto("EXP", "Expired"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_PRODUCT_TYPE_CODES(?)" ->
+          List.of(
+              new CodeNameDto("H", "Harvested Timber"),
+              new CodeNameDto("S", "Standing Timber"),
+              new CodeNameDto("T", "Unmanufactured Timber"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_PERMIT_STATUS_CODES(?)" ->
+          List.of(
+              new CodeNameDto("ACT", "Active"),
+              new CodeNameDto("CAN", "Cancelled"),
+              new CodeNameDto("COM", "Complete"),
+              new CodeNameDto("EXP", "Expired"),
+              new CodeNameDto("PPD", "Payment Pending"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_JURISDICTION_CODES(?)" ->
+          List.of(
+              new CodeNameDto("P", "Provincial"),
+              new CodeNameDto("F", "Federal"),
+              new CodeNameDto("I", "Indian Reserve"));
+      default -> List.of();
+    };
+  }
+
+  private List<CodeNameDto> fallbackOrgUnitOptions(boolean displayName) {
+    List<CodeNameDto> regions =
+        List.of(
+            new CodeNameDto("1833", "RNI - Northern Interior"),
+            new CodeNameDto("1834", "RSI - Southern Interior"),
+            new CodeNameDto("1835", "RCO - Coastal Forest"),
+            new CodeNameDto("1903", "RCB - Cariboo Region"),
+            new CodeNameDto("1904", "RKB - Kootenay-Boundary Region"),
+            new CodeNameDto("1905", "RNO - Northeast Region"),
+            new CodeNameDto("1906", "ROM - Omineca Region"),
+            new CodeNameDto("1907", "RTO - Thompson-Okanagan Region"),
+            new CodeNameDto("1908", "RSK - Skeena Region"),
+            new CodeNameDto("1909", "RSC - South Coast Region"),
+            new CodeNameDto("1910", "RWC - West Coast Region"));
+    if (displayName) {
+      return regions;
+    }
+    return regions.stream()
+        .map(option -> new CodeNameDto(option.code(), option.name().split(" - ", 2)[0]))
+        .toList();
   }
 
   protected String trim(String value) {
@@ -265,6 +361,10 @@ public abstract class OracleRepositorySupport {
     } catch (SQLException ex) {
       return null;
     }
+  }
+
+  private String firstPresent(String first, String second) {
+    return first != null ? first : second;
   }
 
   protected boolean safeIdentifier(String value) {

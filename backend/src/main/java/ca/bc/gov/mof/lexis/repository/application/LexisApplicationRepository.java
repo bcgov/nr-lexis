@@ -37,8 +37,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
   private static final String FIND_ALL_PRODUCT_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_PRODUCT_TYPE_CODES(?)";
-  private static final String FIND_ALL_ORG_UNITS = LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)";
-
   private static final String FIND_APPLICATIONS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATIONS_BY_CRITERIA(?,?,?,?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
@@ -85,18 +83,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return queryCursorProcedure(
-        FIND_ALL_ORG_UNITS,
-        null,
-        1,
-        rs -> {
-          Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-          String regionCode = getString(rs, "ORG_UNIT_CODE");
-          String regionName = getString(rs, "ORG_UNIT_NAME");
-          return new CodeNameDto(
-              orgUnitNo == null ? null : orgUnitNo.toString(),
-              regionCode == null ? regionName : regionCode);
-        });
+    return loadOrgUnitOptions(false);
   }
 
   public List<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
