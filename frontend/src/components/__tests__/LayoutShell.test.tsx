@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Layout from '@/components/Layout'
@@ -51,5 +52,26 @@ describe('Layout shell', () => {
     expect(uploadsLink).toHaveAttribute('aria-current', 'page')
     expect(adminLink).not.toHaveClass('cds--side-nav__link--active')
     expect(adminLink).not.toHaveAttribute('aria-current')
+  })
+
+  it('defaults the side nav open and supports collapsing it', async () => {
+    renderLayout('/admin/uploads')
+
+    const shell = document.querySelector('.app-shell')
+    const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
+    const collapseButton = screen.getByRole('button', { name: 'Collapse side navigation' })
+
+    expect(shell).not.toHaveClass('is-side-nav-collapsed')
+    expect(sideNav).not.toHaveClass('is-collapsed')
+    expect(collapseButton).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.click(collapseButton)
+
+    expect(shell).toHaveClass('is-side-nav-collapsed')
+    expect(sideNav).toHaveClass('is-collapsed')
+    expect(screen.getByRole('button', { name: 'Expand side navigation' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
   })
 })

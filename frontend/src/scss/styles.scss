@@ -24,6 +24,8 @@
 :root {
   --csp-header-height: 48px;
   --csp-side-nav-width: 205px;
+  --csp-side-nav-collapsed-width: 48px;
+  --csp-active-side-nav-width: var(--csp-side-nav-width);
   --csp-profile-panel-width: 320px;
   --csp-interactive: #0f62fe;
   --csp-interactive-hover: #0353e9;
@@ -63,6 +65,10 @@ body {
   min-height: 100vh;
   color: var(--csp-text-primary);
   background-color: var(--csp-content-bg);
+}
+
+.app-shell.is-side-nav-collapsed {
+  --csp-active-side-nav-width: var(--csp-side-nav-collapsed-width);
 }
 
 .cds--g100 .app-shell {
@@ -199,12 +205,56 @@ body {
   inset-block: var(--csp-header-height) 0;
   inset-inline-start: 0;
   z-index: 7000;
-  width: var(--csp-side-nav-width);
-  inline-size: var(--csp-side-nav-width);
-  max-inline-size: var(--csp-side-nav-width);
+  width: var(--csp-active-side-nav-width);
+  inline-size: var(--csp-active-side-nav-width);
+  max-inline-size: var(--csp-active-side-nav-width);
   overflow-y: auto;
   background-color: var(--csp-layer-01);
   border-inline-end: 1px solid var(--csp-border-subtle-01);
+  transition:
+    width 0.16s ease,
+    inline-size 0.16s ease,
+    max-inline-size 0.16s ease;
+}
+
+.csp-side-nav__toggle {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  height: 40px;
+  padding: 0 16px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--csp-border-subtle-01);
+  color: var(--csp-text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: left;
+}
+
+.csp-side-nav__toggle:hover,
+.csp-side-nav__toggle:focus-visible {
+  background-color: var(--csp-layer-hover);
+}
+
+.csp-side-nav__toggle-icon {
+  align-items: center;
+  color: var(--csp-interactive);
+  display: flex;
+  flex: 0 0 16px;
+  height: 16px;
+  justify-content: center;
+  width: 16px;
+}
+
+.csp-side-nav__toggle-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .csp-side-nav__items,
@@ -265,6 +315,31 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.csp-side-nav.is-collapsed {
+  overflow-x: hidden;
+}
+
+.csp-side-nav.is-collapsed .csp-side-nav__toggle {
+  justify-content: center;
+  padding: 0;
+}
+
+.csp-side-nav.is-collapsed .csp-side-nav__toggle-text,
+.csp-side-nav.is-collapsed .csp-side-nav__category,
+.csp-side-nav.is-collapsed .csp-side-nav__link-text {
+  display: none;
+}
+
+.csp-side-nav.is-collapsed .csp-side-nav__link {
+  justify-content: center;
+  padding: 0;
+  border-left-width: 3px;
+}
+
+.csp-side-nav.is-collapsed .csp-side-nav__icon {
+  margin-right: 0;
 }
 
 .profile-panel {
@@ -407,11 +482,14 @@ body {
   min-width: 0;
   min-height: calc(100vh - var(--csp-header-height));
   margin-top: var(--csp-header-height);
-  margin-left: var(--csp-side-nav-width);
-  margin-inline-start: var(--csp-side-nav-width);
+  margin-left: var(--csp-active-side-nav-width);
+  margin-inline-start: var(--csp-active-side-nav-width);
   padding: 16px 32px 64px;
   background-color: var(--csp-content-bg);
   overflow-x: hidden;
+  transition:
+    margin-left 0.16s ease,
+    margin-inline-start 0.16s ease;
 }
 
 .page-header {
@@ -700,6 +778,11 @@ body {
 }
 
 @media (max-width: 671px) {
+  .app-shell,
+  .app-shell.is-side-nav-collapsed {
+    --csp-active-side-nav-width: 100%;
+  }
+
   .csp-header-name {
     max-width: calc(100vw - 96px);
   }
@@ -721,11 +804,33 @@ body {
     margin-top: var(--csp-header-height);
     border-bottom: 1px solid var(--csp-border-subtle-01);
     border-right: 0;
+    transition: none;
+  }
+
+  .csp-side-nav__toggle {
+    display: none;
   }
 
   .csp-side-nav__items {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  }
+
+  .csp-side-nav.is-collapsed .csp-side-nav__category {
+    display: block;
+  }
+
+  .csp-side-nav.is-collapsed .csp-side-nav__link-text {
+    display: inline;
+  }
+
+  .csp-side-nav.is-collapsed .csp-side-nav__link {
+    justify-content: flex-start;
+    padding: 0 16px;
+  }
+
+  .csp-side-nav.is-collapsed .csp-side-nav__icon {
+    margin-right: 16px;
   }
 
   .csp-side-nav__link {
@@ -738,5 +843,6 @@ body {
     margin-left: 0;
     margin-inline-start: 0;
     padding: 16px 16px 48px;
+    transition: none;
   }
 }

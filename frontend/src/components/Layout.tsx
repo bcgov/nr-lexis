@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
-import { AsleepFilled, Close, LightFilled, Logout, Search, UserAvatar } from '@carbon/icons-react'
+import {
+  AsleepFilled,
+  Close,
+  LightFilled,
+  Logout,
+  Search,
+  SidePanelClose,
+  SidePanelOpen,
+  UserAvatar,
+} from '@carbon/icons-react'
 import { IconButton, SkipToContent, Theme } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
@@ -211,6 +220,7 @@ const Layout: FC<Props> = ({ children }) => {
   const breadcrumbRoute = getBreadcrumbRoute(location.pathname)
   const [isDarkTheme, setIsDarkTheme] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [isSideNavCollapsed, setIsSideNavCollapsed] = useState(false)
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
     [capabilities.principal],
@@ -250,7 +260,7 @@ const Layout: FC<Props> = ({ children }) => {
 
   return (
     <Theme theme={isDarkTheme ? 'g100' : 'white'}>
-      <div className="app-shell">
+      <div className={`app-shell${isSideNavCollapsed ? ' is-side-nav-collapsed' : ''}`}>
         <SkipToContent />
         <header className="cds--header csp-app-header" aria-label="NR LEXIS">
           <button
@@ -332,8 +342,25 @@ const Layout: FC<Props> = ({ children }) => {
           </button>
         </aside>
 
-        <nav className="cds--side-nav csp-side-nav" aria-label="Side navigation">
-          <ul className="cds--side-nav__items csp-side-nav__items">
+        <nav
+          className={`cds--side-nav csp-side-nav${isSideNavCollapsed ? ' is-collapsed' : ''}`}
+          aria-label="Side navigation"
+        >
+          <button
+            type="button"
+            className="csp-side-nav__toggle"
+            aria-controls="side-navigation-list"
+            aria-expanded={!isSideNavCollapsed}
+            aria-label={isSideNavCollapsed ? 'Expand side navigation' : 'Collapse side navigation'}
+            onClick={() => setIsSideNavCollapsed((current) => !current)}
+          >
+            <span className="csp-side-nav__toggle-icon" aria-hidden="true">
+              {isSideNavCollapsed ? <SidePanelOpen size={18} /> : <SidePanelClose size={18} />}
+            </span>
+            <span className="csp-side-nav__toggle-text">LEXIS Menu</span>
+          </button>
+
+          <ul id="side-navigation-list" className="cds--side-nav__items csp-side-nav__items">
             {visibleNavigationSections.map((section) => (
               <li key={section.label} className="csp-side-nav__section">
                 <span className="cds--side-nav__category csp-side-nav__category">
@@ -351,6 +378,8 @@ const Layout: FC<Props> = ({ children }) => {
                             : 'cds--side-nav__link csp-side-nav__link'
                         }
                         aria-current={location.pathname === link.to ? 'page' : undefined}
+                        aria-label={isSideNavCollapsed ? link.label : undefined}
+                        title={isSideNavCollapsed ? link.label : undefined}
                       >
                         <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
                           <Search size={16} />
