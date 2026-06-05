@@ -96,7 +96,11 @@ public abstract class OracleRepositorySupport {
             return results;
           });
     } catch (DataAccessException ex) {
-      logger.warn("Oracle procedure call failed [{}]: {}", procedureSignature, ex.getMessage());
+      logger.warn(
+          "Oracle procedure call failed [{}]: {}; rootCause={}",
+          procedureSignature,
+          ex.getMessage(),
+          describeRootCause(ex));
       return List.of();
     }
   }
@@ -158,7 +162,11 @@ public abstract class OracleRepositorySupport {
             return results;
           });
     } catch (DataAccessException ex) {
-      logger.warn("Oracle dynamic call failed [{}]: {}", procedureSignature, ex.getMessage());
+      logger.warn(
+          "Oracle dynamic call failed [{}]: {}; rootCause={}",
+          procedureSignature,
+          ex.getMessage(),
+          describeRootCause(ex));
       return List.of();
     }
   }
@@ -179,7 +187,11 @@ public abstract class OracleRepositorySupport {
                   });
       return Boolean.TRUE.equals(result);
     } catch (DataAccessException ex) {
-      logger.warn("Oracle procedure execution failed [{}]: {}", procedureSignature, ex.getMessage());
+      logger.warn(
+          "Oracle procedure execution failed [{}]: {}; rootCause={}",
+          procedureSignature,
+          ex.getMessage(),
+          describeRootCause(ex));
       return false;
     }
   }
@@ -213,6 +225,24 @@ public abstract class OracleRepositorySupport {
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private String describeRootCause(Throwable throwable) {
+    Throwable root = throwable;
+    while (root.getCause() != null) {
+      root = root.getCause();
+    }
+
+    if (root instanceof SQLException sqlException) {
+      return "%s: SQLState=%s, errorCode=%d, message=%s"
+          .formatted(
+              sqlException.getClass().getName(),
+              sqlException.getSQLState(),
+              sqlException.getErrorCode(),
+              sqlException.getMessage());
+    }
+
+    return root.getClass().getName() + ": " + root.getMessage();
   }
 
   protected LocalDate toLocalDate(Date value) {
