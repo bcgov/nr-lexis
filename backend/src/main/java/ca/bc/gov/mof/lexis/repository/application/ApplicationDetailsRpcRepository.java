@@ -326,7 +326,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         DELETE_SCALE_DETAIL,
         cs -> {
           cs.setString(1, normalizedScaleDetailId);
-          cs.setString(2, trim(userId));
+          cs.setString(2, auditUserOrDefault(userId));
         });
   }
 
@@ -339,7 +339,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         DELETE_PACKAGE,
         cs -> {
           cs.setString(1, normalizedPackageNumber);
-          cs.setString(2, trim(userId));
+          cs.setString(2, auditUserOrDefault(userId));
         });
   }
 
@@ -437,7 +437,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         cs -> {
           cs.setTimestamp(1, timestamp);
           cs.setString(2, remark);
-          cs.setString(3, trim(entryUserId));
+          cs.setString(3, auditUserOrDefault(entryUserId));
           cs.setTimestamp(4, Timestamp.from(Instant.now()));
           cs.setLong(5, applicationNumber);
         },
@@ -460,7 +460,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
           cs.setLong(1, remarkId);
           cs.setTimestamp(2, timestamp);
           cs.setString(3, remark);
-          cs.setString(4, trim(updateUserId));
+          cs.setString(4, auditUserOrDefault(updateUserId));
           cs.setTimestamp(5, Timestamp.from(Instant.now()));
           cs.setLong(6, applicationNumber);
         });
@@ -706,7 +706,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
             cs -> cs.setString(1, normalized),
             2,
             rs -> trim(rs.getString(2)))
-        .filter(value -> value != null && !value.isBlank());
+        .filter(value -> value != null && !value.isBlank())
+        .or(() -> fallbackCodeDescription(procedureSignature, normalized));
   }
 
   private void bindApplicationInsert(CallableStatement cs, ApplicationInsertRecord record)
@@ -719,7 +720,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setDoubleOrNull(cs, index++, record.applicationVolume());
     setDoubleOrNull(cs, index++, record.averageLogVolume());
     setStringOrNull(cs, index++, record.productLocation());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     cs.setNull(index++, Types.VARCHAR);
     cs.setNull(index++, Types.TIMESTAMP);
@@ -757,7 +758,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.packageStatusCode());
     setStringOrNull(cs, index++, record.growthTypeCode());
     setStringOrNull(cs, index++, record.productTypeCode());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
     setStringOrNull(cs, index++, null);
     setTimestampOrNull(cs, index, null);
@@ -779,9 +780,9 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.packageStatusCode());
     setStringOrNull(cs, index++, record.growthTypeCode());
     setStringOrNull(cs, index++, record.productTypeCode());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
-    setStringOrNull(cs, index++, record.updateUserId());
+    cs.setString(index++, auditUserOrDefault(record.updateUserId()));
     cs.setTimestamp(index, Timestamp.from(Instant.now()));
   }
 
@@ -791,7 +792,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.timberMark());
     setLongOrNull(cs, index++, record.piecesCount());
     setDoubleOrNull(cs, index++, record.speciesGradeVolume());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
     setStringOrNull(cs, index++, null);
     setTimestampOrNull(cs, index++, null);
@@ -813,9 +814,9 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.packageNumber());
     setStringOrNull(cs, index++, record.speciesCode());
     setStringOrNull(cs, index++, record.gradeCode());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
-    setStringOrNull(cs, index++, record.updateUserId());
+    cs.setString(index++, auditUserOrDefault(record.updateUserId()));
     cs.setTimestamp(index, Timestamp.from(Instant.now()));
   }
 

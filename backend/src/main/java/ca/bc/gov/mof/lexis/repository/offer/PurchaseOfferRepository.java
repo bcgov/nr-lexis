@@ -189,7 +189,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.withdrawReason());
     setStringOrNull(cs, index++, record.exportJurisdictionCode());
     setStringOrNull(cs, index++, record.manufacturingFacilityInfo());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     setStringOrNull(cs, index++, record.updateUserId());
     cs.setNull(index++, Types.TIMESTAMP);
@@ -249,9 +249,9 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.manufacturingFacilityInfo());
     setStringOrNull(cs, index++, record.pickupLocation());
     setStringOrNull(cs, index++, record.offerCondition());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
-    setStringOrNull(cs, index++, record.updateUserId());
+    cs.setString(index++, auditUserOrDefault(record.updateUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     setDoubleOrNull(cs, index, record.offerVolume());
   }

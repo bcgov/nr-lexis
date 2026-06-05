@@ -225,9 +225,9 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     setDoubleOrNull(cs, index++, record.exemptionApplicationVolume());
     setDoubleOrNull(cs, index++, record.averageLogVolume());
     setStringOrNull(cs, index++, record.productLocation());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
-    setStringOrNull(cs, index++, updateUserId);
+    cs.setString(index++, auditUserOrDefault(updateUserId));
     cs.setTimestamp(index++, new Timestamp(System.currentTimeMillis()));
     setLongOrNull(cs, index++, record.exportScheduleId());
     setStringOrNull(cs, index++, record.agentClientNumber());
@@ -253,7 +253,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
         cs -> {
           cs.setTimestamp(1, new Timestamp(System.currentTimeMillis()));
           cs.setString(2, remark);
-          cs.setString(3, updateUserId);
+          cs.setString(3, auditUserOrDefault(updateUserId));
           cs.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
           cs.setString(5, applicationNumber.toString());
         },

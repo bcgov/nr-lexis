@@ -11,22 +11,31 @@ Full-stack LEXIS application for log export workflows.
 |-----------|------------|
 | Frontend | React 19, TypeScript, Carbon Design System |
 | Backend | Spring Boot 3.5, Java 21 |
-| Database | Oracle |
-| Auth | AWS Cognito (FAM roles) |
-| Reports | JasperReports library (embedded) |
+| Database | Oracle (shared, BC Gov-managed) |
+| Auth | AWS Cognito (FAM) |
+| Reports | JasperReports library (embedded, no remote server) |
 
 ## Local Development
 
-Primary workflow is direct local run (backend + frontend in separate terminals).
+Two supported ways to run LEXIS locally. Pick whichever fits your workflow.
 
-### Prerequisites
+| | Option A - direct on host | Option B - Docker Compose |
+|---|---|---|
+| **Backend hot reload** | Manual restart | Manual restart |
+| **Frontend hot reload (Vite HMR)** | Yes | Yes |
+| **First-time setup cost** | Install Java 21 + Node 22 on host | Docker Desktop |
+| **Best for** | Day-to-day backend/frontend work | Quick smoke tests and container parity |
 
-1. BC Gov VPN connected (required for Oracle connectivity).
-2. Java 21 and Maven 3.9+.
-3. Node 22+.
-4. Docker Desktop (optional).
+Both options use the same local property files below. Reports are generated inside the Spring Boot backend with checked-in JRXML templates; no Jasper Server URL, username, or password is required.
 
-### Local configuration files
+### Shared prerequisites
+
+1. **BC Gov VPN connected.** The backend needs to reach the BC Gov Oracle host configured in `application-local.yml`; Compose cannot route that for you.
+2. **Java 21 and Maven 3.9+** (Option A only).
+3. **Node 22+** (Option A only).
+4. **Docker Desktop** (Option B only).
+
+### Property files you create once
 
 These files are gitignored and stay local:
 
@@ -34,7 +43,11 @@ These files are gitignored and stay local:
 2. `backend/src/main/resources/cert/jssecacerts`
 3. `frontend/.env` (copy from `frontend/.env.example`)
 
-### Run backend
+### Option A - direct on host
+
+Run the backend and frontend in separate terminal tabs.
+
+**Backend:**
 
 ```bash
 cd backend
@@ -48,7 +61,7 @@ curl http://localhost:8080/actuator/health
 curl http://localhost:8080/actuator/prometheus
 ```
 
-### Run frontend
+**Frontend:**
 
 ```bash
 cd frontend
@@ -58,7 +71,7 @@ npm run dev
 
 Frontend: `http://localhost:3000`
 
-### Optional Docker Compose flow
+### Option B - Docker Compose
 
 ```bash
 docker compose up
@@ -67,7 +80,7 @@ docker compose --profile caddy up caddy
 
 This runs Spring Boot + Vite locally with the same Oracle-backed assumptions (VPN + local Oracle config files).
 
-### Jasper report parity check
+### Embedded report parity check
 
 Use the checked-in parity harness when both this backend and `nr-lexis-main` are running against the same Oracle data. It calls the modern Spring report API and the legacy Struts report URL for each case in `tools/report-parity-cases.json`.
 

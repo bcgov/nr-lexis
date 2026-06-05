@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -69,6 +70,37 @@ public abstract class OracleRepositorySupport {
       return options;
     }
     return fallbackCodeNameOptions(procedureSignature);
+  }
+
+  protected Optional<String> fallbackCodeDescription(String procedureSignature, String code) {
+    String normalized = trim(code);
+    if (procedureSignature == null || normalized == null) {
+      return Optional.empty();
+    }
+    String upperCode = normalized.toUpperCase(Locale.ROOT);
+    return Optional.ofNullable(
+        switch (procedureSignature) {
+          case LEXIS_CODES_PACKAGE + "FIND_GROWTH_TYPE_CODE(?,?)" ->
+              switch (upperCode) {
+                case "O" -> "Old Growth";
+                case "S" -> "Second Growth";
+                default -> null;
+              };
+          case LEXIS_CODES_PACKAGE + "FIND_PACKAGE_STATUS_CODE(?,?)" ->
+              switch (upperCode) {
+                case "ACT" -> "Active";
+                case "SHT" -> "Shutout";
+                default -> null;
+              };
+          case LEXIS_CODES_PACKAGE + "FIND_PRODUCT_TYPE_CODE(?,?)" ->
+              switch (upperCode) {
+                case "H" -> "Harvested Timber";
+                case "S" -> "Standing Timber";
+                case "T" -> "Unmanufactured Timber";
+                default -> null;
+              };
+          default -> null;
+        });
   }
 
   protected List<CodeNameDto> loadOrgUnitOptions(boolean displayName) {
@@ -277,6 +309,25 @@ public abstract class OracleRepositorySupport {
               new CodeNameDto("P", "Provincial"),
               new CodeNameDto("F", "Federal"),
               new CodeNameDto("I", "Indian Reserve"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_RSN_CODES(?)" ->
+          List.of(
+              new CodeNameDto("S", "Surplus"),
+              new CodeNameDto("U", "Utilization"),
+              new CodeNameDto("E", "Economic"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_GROWTH_TYPE_CODES(?)" ->
+          List.of(
+              new CodeNameDto("O", "Old Growth"),
+              new CodeNameDto("S", "Second Growth"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)" ->
+          List.of(
+              new CodeNameDto("US", "United States"),
+              new CodeNameDto("JP", "Japan"),
+              new CodeNameDto("CN", "China"),
+              new CodeNameDto("NZ", "New Zealand"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_PORT_CODES(?)" ->
+          List.of(
+              new CodeNameDto("VAN", "Vancouver"),
+              new CodeNameDto("OT", "Other"));
       default -> List.of();
     };
   }
@@ -309,6 +360,11 @@ public abstract class OracleRepositorySupport {
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  protected String auditUserOrDefault(String value) {
+    String normalized = trim(value);
+    return normalized == null ? "system" : normalized;
   }
 
   protected LocalDate toLocalDate(Date value) {

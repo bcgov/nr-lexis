@@ -95,7 +95,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadReportDestinationCountryOptions() {
-    return withAll(
+    List<CodeNameDto> options =
         queryCursorProcedure(
                 FIND_COUNTRY_GROUP,
                 cs -> cs.setInt(1, 1),
@@ -103,7 +103,11 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
                 rs ->
                     new CodeNameDto(getString(rs, "CODE"), getString(rs, "DESCRIPTION")))
             .stream()
-            .toList());
+            .toList();
+    if (options.isEmpty()) {
+      options = fallbackReportDestinationCountryOptions();
+    }
+    return withAll(options);
   }
 
   public List<CodeNameDto> loadAllReportDestinationCountryOptions() {
@@ -164,6 +168,14 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     return options.stream()
         .filter(option -> !RESERVE_JURISDICTION_CODE.equalsIgnoreCase(option.code()))
         .toList();
+  }
+
+  private List<CodeNameDto> fallbackReportDestinationCountryOptions() {
+    return List.of(
+        new CodeNameDto("US", "United States"),
+        new CodeNameDto("JP", "Japan"),
+        new CodeNameDto("CN", "China"),
+        new CodeNameDto("NZ", "New Zealand"));
   }
 
   public record CurrentScheduleRow(Long exportScheduleId, LocalDate advertisingDate) {}

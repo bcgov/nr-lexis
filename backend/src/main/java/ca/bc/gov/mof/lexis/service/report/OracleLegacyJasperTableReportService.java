@@ -58,17 +58,25 @@ public class OracleLegacyJasperTableReportService {
     JRMapCollectionDataSource dataSource = new JRMapCollectionDataSource(buildRowMaps(data));
 
     try {
-      JasperPrint print = JasperFillManager.fillReport(getOrCompileTemplate(), parameters, dataSource);
-      byte[] pdfBytes = JasperExportManager.exportReportToPdf(print);
+      byte[] pdfBytes = renderPdf(parameters, dataSource);
       return Optional.of(
           new LexisGeneratedReport(
               definition.resolveFilename(LexisReportFormat.PDF),
               LexisReportFormat.PDF.mediaType(),
               pdfBytes));
     } catch (JRException ex) {
-      LOGGER.error("Failed to generate migrated legacy PDF table for action [{}]", definition.action(), ex);
-      throw new IllegalStateException("Failed to generate migrated legacy PDF table for " + definition.action(), ex);
+      LOGGER.warn(
+          "Failed to generate migrated legacy PDF table for action [{}]: {}",
+          definition.action(),
+          ex.getMessage());
+      return Optional.empty();
     }
+  }
+
+  byte[] renderPdf(Map<String, Object> parameters, JRMapCollectionDataSource dataSource)
+      throws JRException {
+    JasperPrint print = JasperFillManager.fillReport(getOrCompileTemplate(), parameters, dataSource);
+    return JasperExportManager.exportReportToPdf(print);
   }
 
   private boolean supportsPdfMigration(LexisJasperReportDefinition definition) {

@@ -7,6 +7,8 @@ import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import net.sf.jasperreports.engine.JRException;
+import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -232,6 +234,30 @@ class OracleLegacyJasperTableReportServiceTest {
             LexisJasperReportDefinition.EXEMPTION_REPORT,
             new LexisReportRequestDto(Map.of(), "PDF"),
             LexisReportFormat.PDF);
+
+    assertThat(report).isEmpty();
+  }
+
+  @Test
+  void shouldReturnEmptyWhenMigratedLegacyPdfRenderFails() {
+    LegacyTabularReportData tabularData =
+        new LegacyTabularReportData(List.of("ORG_UNIT"), List.of(List.of("RKB")));
+    LexisReportRequestDto request = new LexisReportRequestDto(Map.of(), "PDF");
+    when(legacyCsvReportService.loadLegacyTabularReportData(
+            LexisJasperReportDefinition.TEAC_REPORT, request))
+        .thenReturn(Optional.of(tabularData));
+    OracleLegacyJasperTableReportService service =
+        new OracleLegacyJasperTableReportService(legacyCsvReportService) {
+          @Override
+          byte[] renderPdf(Map<String, Object> parameters, JRMapCollectionDataSource dataSource)
+              throws JRException {
+            throw new JRException("render failed");
+          }
+        };
+
+    Optional<LexisGeneratedReport> report =
+        service.generateLegacyPdfReport(
+            LexisJasperReportDefinition.TEAC_REPORT, request, LexisReportFormat.PDF);
 
     assertThat(report).isEmpty();
   }
