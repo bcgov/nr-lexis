@@ -200,6 +200,8 @@ body {
   inset-inline-start: 0;
   z-index: 7000;
   width: var(--csp-side-nav-width);
+  inline-size: var(--csp-side-nav-width);
+  max-inline-size: var(--csp-side-nav-width);
   overflow-y: auto;
   background-color: var(--csp-layer-01);
   border-inline-end: 1px solid var(--csp-border-subtle-01);
@@ -712,6 +714,8 @@ body {
   .csp-side-nav {
     position: static;
     width: 100%;
+    inline-size: 100%;
+    max-inline-size: none;
     max-height: 42vh;
     margin-top: var(--csp-header-height);
     border-bottom: 1px solid var(--csp-border-subtle-01);

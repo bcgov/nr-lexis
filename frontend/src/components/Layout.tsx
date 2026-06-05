@@ -343,6 +343,7 @@ const Layout: FC<Props> = ({ children }) => {
                   {section.links.map((link) => (
                     <li key={link.to}>
                       <NavLink
+                        end
                         to={link.to}
                         className={({ isActive }) =>
                           isActive
