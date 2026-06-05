@@ -23,7 +23,7 @@ const LandingPage: FC = () => {
   }
 
   return (
-    <div className="landing-page">
+    <main className="landing-page" id="main-content" aria-busy={isLoading}>
       <Grid fullWidth className="landing-grid">
         <Column sm={4} md={8} lg={16}>
           <img src={logo} alt="Government of British Columbia" className="landing-logo" />
@@ -101,7 +101,7 @@ const LandingPage: FC = () => {
           </Column>
         )}
       </Grid>
-    </div>
+    </main>
   )
 }
 

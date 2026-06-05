@@ -124,6 +124,24 @@ body {
   background-color: var(--csp-interactive-hover);
 }
 
+.csp-header-name:focus-visible,
+.csp-theme-switch:focus-visible,
+.csp-header-action:focus-visible,
+.csp-side-nav__toggle:focus-visible,
+.csp-side-nav__link:focus-visible,
+.profile-panel__close:focus-visible,
+.profile-panel__signout:focus-visible {
+  outline: 2px solid var(--csp-text-inverse);
+  outline-offset: -2px;
+}
+
+.csp-side-nav__toggle:focus-visible,
+.csp-side-nav__link:focus-visible,
+.profile-panel__close:focus-visible,
+.profile-panel__signout:focus-visible {
+  outline-color: var(--csp-focus);
+}
+
 .csp-header-global {
   align-items: center;
   display: flex;

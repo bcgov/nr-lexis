@@ -80,6 +80,8 @@ describe('Landing auth flow smoke', () => {
 
     renderPage()
 
+    expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'false')
+
     const loginButton = screen.getByRole('button', { name: 'Log in with IDIR' })
     await userEvent.click(loginButton)
 
