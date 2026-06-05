@@ -47,12 +47,31 @@ describe('Layout shell', () => {
     const uploadsLink = screen.getByRole('link', { name: 'Upload Center' })
     const activeLinks = document.querySelectorAll('.csp-side-nav__link.cds--side-nav__link--active')
 
-    expect(document.querySelector('.page-header__title')).toHaveTextContent('Upload Center')
+    expect(document.querySelector('.page-header__eyebrow')).toHaveTextContent('Administration')
     expect(activeLinks).toHaveLength(1)
     expect(uploadsLink).toHaveClass('cds--side-nav__link--active')
     expect(uploadsLink).toHaveAttribute('aria-current', 'page')
     expect(adminLink).not.toHaveClass('cds--side-nav__link--active')
     expect(adminLink).not.toHaveAttribute('aria-current')
+  })
+
+  it('renders side-nav links as text without repeated search icons', () => {
+    renderLayout('/admin/uploads')
+
+    const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
+
+    expect(screen.getByRole('link', { name: 'LEXIS Administration' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Upload Center' })).toBeVisible()
+    expect(document.querySelector('.csp-side-nav__icon')).not.toBeInTheDocument()
+    expect(sideNav.querySelector('.csp-side-nav__link svg')).not.toBeInTheDocument()
+  })
+
+  it('lets pages own the only visible page title', () => {
+    renderLayout('/admin/uploads')
+
+    expect(document.querySelector('.page-header__title')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByRole('heading', { name: 'Current page content', level: 1 })).toBeVisible()
   })
 
   it('defaults the side nav open and supports collapsing it', async () => {
