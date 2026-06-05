@@ -302,12 +302,19 @@ body {
 }
 
 .profile-panel__close {
+  width: 32px;
+  height: 32px;
   color: var(--csp-icon-primary);
 }
 
 .profile-panel__close:hover,
 .profile-panel__close:focus-visible {
   background-color: var(--csp-layer-hover);
+}
+
+.profile-panel__close svg {
+  display: block;
+  fill: currentColor;
 }
 
 .profile-panel__body {
