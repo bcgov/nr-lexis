@@ -1,10 +1,11 @@
 import { useState, type FC } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Column, Grid, InlineNotification, Tile } from '@carbon/react'
+import { Button, Column, Grid, InlineNotification } from '@carbon/react'
 import { Login } from '@carbon/icons-react'
 import type { LoginProvider } from '@/context/auth/types'
 import { useAuth } from '@/context/auth/useAuth'
 import logo from '@/assets/gov-bc-logo-horiz.png'
+import landingImage from '@/assets/landing.jpg'
 
 const LandingPage: FC = () => {
   const navigate = useNavigate()
@@ -23,20 +24,26 @@ const LandingPage: FC = () => {
   }
 
   return (
-    <main className="landing-page" id="main-content" aria-busy={isLoading}>
+    <main className="landing-grid-container" id="main-content" aria-busy={isLoading}>
       <Grid fullWidth className="landing-grid">
-        <Column sm={4} md={8} lg={16}>
-          <img src={logo} alt="Government of British Columbia" className="landing-logo" />
-        </Column>
+        <Column className="landing-content-col" sm={4} md={8} lg={8}>
+          <div className="landing-content-wrapper">
+            <img src={logo} alt="Government of British Columbia" className="landing-logo" />
 
-        <Column sm={4} md={8} lg={9}>
-          <Tile className="landing-card">
-            <p className="landing-kicker">Government of British Columbia</p>
-            <h1>Log Exemption Information System</h1>
-            <p>
+            <div className="landing-title-group">
+              <p className="landing-kicker">NR LEXIS</p>
+              <h1 className="landing-title">Log Exemption Information System</h1>
+              <p className="landing-subtitle">
+                Ministry and industry access for log export exemption, permit, offer, and
+                application workflows.
+              </p>
+            </div>
+
+            <p className="landing-description">
               Apply for and manage log export exemptions, permits, offers, and related LEXIS
               workflows.
             </p>
+
             <div className="landing-actions">
               {!isLoggedIn && (
                 <>
@@ -76,30 +83,27 @@ const LandingPage: FC = () => {
                 </Button>
               )}
             </div>
-          </Tile>
-        </Column>
 
-        <Column sm={4} md={8} lg={7}>
-          <Tile className="landing-card landing-card--support">
-            <h2>Access to LEXIS</h2>
-            <p>
+            <p className="landing-support-text">
               Industry users sign in with Business BCeID. Ministry users sign in with IDIR. Access
               must be granted through Forests Access Management before LEXIS roles appear here.
             </p>
-          </Tile>
+
+            {errorMessage && (
+              <InlineNotification
+                kind="error"
+                title="Session Error"
+                subtitle={errorMessage}
+                lowContrast
+                onCloseButtonClick={() => setErrorMessage('')}
+              />
+            )}
+          </div>
         </Column>
 
-        {errorMessage && (
-          <Column sm={4} md={8} lg={16}>
-            <InlineNotification
-              kind="error"
-              title="Session Error"
-              subtitle={errorMessage}
-              lowContrast
-              onCloseButtonClick={() => setErrorMessage('')}
-            />
-          </Column>
-        )}
+        <Column className="landing-img-col" sm={4} md={8} lg={8}>
+          <img src={landingImage} alt="" className="landing-img" aria-hidden="true" />
+        </Column>
       </Grid>
     </main>
   )
