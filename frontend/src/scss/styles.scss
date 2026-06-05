@@ -402,12 +402,13 @@ body {
   fill: currentColor;
 }
 
-.app-main {
+.cds--content.app-main {
   flex: 1;
   min-width: 0;
   min-height: calc(100vh - var(--csp-header-height));
   margin-top: var(--csp-header-height);
   margin-left: var(--csp-side-nav-width);
+  margin-inline-start: var(--csp-side-nav-width);
   padding: 16px 32px 64px;
   background-color: var(--csp-content-bg);
   overflow-x: hidden;
@@ -731,10 +732,11 @@ body {
     height: 36px;
   }
 
-  .app-main {
+  .cds--content.app-main {
     min-height: auto;
     margin-top: 0;
     margin-left: 0;
+    margin-inline-start: 0;
     padding: 16px 16px 48px;
   }
 }
