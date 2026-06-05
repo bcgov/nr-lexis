@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
@@ -37,6 +38,7 @@ class ExemptionDetailsRpcControllerTest {
   @Mock private ClientLookupService clientLookupService;
   @Mock private LexisSessionService sessionService;
   @Mock private LexisAuthorizationService authorizationService;
+  @Mock private LexisPrincipalService principalService;
 
   private ExemptionDetailsRpcController controller;
 
@@ -44,7 +46,11 @@ class ExemptionDetailsRpcControllerTest {
   void setup() {
     controller =
         new ExemptionDetailsRpcController(
-            serviceProvider, clientLookupServiceProvider, sessionService, authorizationService);
+            serviceProvider,
+            clientLookupServiceProvider,
+            sessionService,
+            authorizationService,
+            principalService);
   }
 
   @Test
@@ -175,12 +181,13 @@ class ExemptionDetailsRpcControllerTest {
   void addApplicationToExemptionLegacyShouldUseAuthzFlagsAndReturnLinkPayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewFederalApplication"))
         .thenReturn(true);
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewOICApplication"))
         .thenReturn(true);
-    when(service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true, true))
+    when(service.addApplicationToExemption(1000456L, "EX-205", "IDIR\\JSMITH", true, true))
         .thenReturn(new ExemptionDetailsRpcService.ApplicationExemptionLinkResult(true, List.of()));
 
     ResponseEntity<ExemptionDetailsRpcController.ApplicationExemptionLinkResponseDto> response =
@@ -190,14 +197,15 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isTrue();
     assertThat(response.getBody().errors()).isEmpty();
-    verify(service).addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true, true);
+    verify(service).addApplicationToExemption(1000456L, "EX-205", "IDIR\\JSMITH", true, true);
   }
 
   @Test
   void removeApplicationFromExemptionLegacyShouldReturnLinkPayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
-    when(service.removeApplicationFromExemption(1000456L, "idir\\jsmith"))
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
+    when(service.removeApplicationFromExemption(1000456L, "IDIR\\JSMITH"))
         .thenReturn(new ExemptionDetailsRpcService.ApplicationExemptionLinkResult(true, List.of()));
 
     ResponseEntity<ExemptionDetailsRpcController.ApplicationExemptionLinkResponseDto> response =
@@ -206,13 +214,13 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isTrue();
-    verify(service).removeApplicationFromExemption(1000456L, "idir\\jsmith");
+    verify(service).removeApplicationFromExemption(1000456L, "IDIR\\JSMITH");
   }
 
   @Test
   void addExemptionLegacyShouldMapAliasesAndReturnPersistencePayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.addExemption(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+    when(service.addExemption(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("IDIR\\JSMITH")))
         .thenReturn(
             new ExemptionDetailsRpcService.CreateExemptionResult(
                 true, "The exemption was saved successfully.", "EX-205", true, List.of(), List.of()));
@@ -230,6 +238,7 @@ class ExemptionDetailsRpcControllerTest {
     params.add("region", "11,12");
 
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
     ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
         controller.addExemptionLegacy(params, authentication);
 
@@ -241,7 +250,7 @@ class ExemptionDetailsRpcControllerTest {
 
     ArgumentCaptor<ExemptionDetailsRpcService.CreateExemptionRequest> requestCaptor =
         ArgumentCaptor.forClass(ExemptionDetailsRpcService.CreateExemptionRequest.class);
-    verify(service).addExemption(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    verify(service).addExemption(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("IDIR\\JSMITH"));
     ExemptionDetailsRpcService.CreateExemptionRequest request = requestCaptor.getValue();
     assertThat(request.approvedVolume()).isEqualTo(250.5d);
     assertThat(request.approvalDate()).isEqualTo(LocalDate.of(2026, 3, 1));
@@ -255,12 +264,13 @@ class ExemptionDetailsRpcControllerTest {
   void updateExemptionLegacyShouldMapAliasesAndApprovalAuthz() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
         .thenReturn(true);
     when(service.updateExemption(
             org.mockito.ArgumentMatchers.any(),
-            org.mockito.ArgumentMatchers.eq("idir\\jsmith"),
+            org.mockito.ArgumentMatchers.eq("IDIR\\JSMITH"),
             org.mockito.ArgumentMatchers.eq(true)))
         .thenReturn(
             new ExemptionDetailsRpcService.CreateExemptionResult(
@@ -289,7 +299,7 @@ class ExemptionDetailsRpcControllerTest {
 
     ArgumentCaptor<ExemptionDetailsRpcService.UpdateExemptionRequest> requestCaptor =
         ArgumentCaptor.forClass(ExemptionDetailsRpcService.UpdateExemptionRequest.class);
-    verify(service).updateExemption(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"), org.mockito.ArgumentMatchers.eq(true));
+    verify(service).updateExemption(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("IDIR\\JSMITH"), org.mockito.ArgumentMatchers.eq(true));
     ExemptionDetailsRpcService.UpdateExemptionRequest request = requestCaptor.getValue();
     assertThat(request.exemptionNumber()).isEqualTo("EX-206");
     assertThat(request.previousExemptionNumber()).isEqualTo("EX-205");
@@ -364,10 +374,11 @@ class ExemptionDetailsRpcControllerTest {
   void approveExemptionsLegacyShouldUseApprovalAuthzAndReturnSendGridPayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
         .thenReturn(true);
-    when(service.approveExemptions("EX-205,EX-206", "idir\\jsmith", true))
+    when(service.approveExemptions("EX-205,EX-206", "IDIR\\JSMITH", true))
         .thenReturn(
             new ExemptionDetailsRpcService.ExemptionApprovalResult(
                 true,
@@ -386,7 +397,7 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(response.getBody().success()).isTrue();
     assertThat(response.getBody().valid()).isTrue();
     assertThat(response.getBody().sendGrid()).containsExactly(List.of("EX-205", "client@example.com"));
-    verify(service).approveExemptions("EX-205,EX-206", "idir\\jsmith", true);
+    verify(service).approveExemptions("EX-205,EX-206", "IDIR\\JSMITH", true);
   }
 
   @Test
