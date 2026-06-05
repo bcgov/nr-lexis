@@ -28,7 +28,9 @@ const LandingPage: FC = () => {
       <Grid fullWidth className="landing-grid">
         <Column className="landing-content-col" sm={4} md={8} lg={8}>
           <div className="landing-content-wrapper">
-            <img src={logo} alt="Government of British Columbia" className="landing-logo" />
+            <div className="landing-logo-mark">
+              <img src={logo} alt="Government of British Columbia" className="landing-logo" />
+            </div>
 
             <div className="landing-title-group">
               <p className="landing-kicker">NR LEXIS</p>
