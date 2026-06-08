@@ -12,8 +12,11 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -72,6 +75,32 @@ public class LexisAdminController {
     return executeFeePolicyRpc(normalizeRpcRequest(request));
   }
 
+  @GetMapping("/policies/fee")
+  public ResponseEntity<Object> feePolicies() {
+    return executeFeePolicyRpc(new LexisAdminRpcRequestDto("view", Map.of("actionMapping", "view")));
+  }
+
+  @PostMapping("/policies/fee")
+  public ResponseEntity<Object> addFeePolicy(
+      @RequestBody(required = false) Map<String, String> request) {
+    return executeFeePolicyRpc(new LexisAdminRpcRequestDto("addPolicy", feePolicyParameters(null, request)));
+  }
+
+  @PutMapping("/policies/fee/{policyId}")
+  public ResponseEntity<Object> updateFeePolicy(
+      @PathVariable String policyId,
+      @RequestBody(required = false) Map<String, String> request) {
+    return executeFeePolicyRpc(new LexisAdminRpcRequestDto("updatePolicy", feePolicyParameters(policyId, request)));
+  }
+
+  @DeleteMapping("/policies/fee/{policyId}")
+  public ResponseEntity<Object> deleteFeePolicy(@PathVariable String policyId) {
+    return executeFeePolicyRpc(
+        new LexisAdminRpcRequestDto(
+            "deletePolicy",
+            Map.of("actionMapping", "deletePolicy", "feePolicyId", policyId)));
+  }
+
   @PostMapping(
       value = {"/policy/rpc", "/lexisPolicyAdminRPC"},
       consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
@@ -84,6 +113,33 @@ public class LexisAdminController {
   public ResponseEntity<Object> filPolicyRpc(
       @RequestBody(required = false) LexisAdminRpcRequestDto request) {
     return executeFilPolicyRpc(normalizeRpcRequest(request));
+  }
+
+  @GetMapping("/policies/fil")
+  public ResponseEntity<Object> filPolicies() {
+    return executeFilPolicyRpc(new LexisAdminRpcRequestDto("view", Map.of("actionMapping", "view")));
+  }
+
+  @PostMapping("/policies/fil")
+  public ResponseEntity<Object> addFilPolicy(
+      @RequestBody(required = false) Map<String, String> request) {
+    return executeFilPolicyRpc(new LexisAdminRpcRequestDto("addFilPolicy", filPolicyParameters(null, request)));
+  }
+
+  @PutMapping("/policies/fil/{policyId}")
+  public ResponseEntity<Object> updateFilPolicy(
+      @PathVariable String policyId,
+      @RequestBody(required = false) Map<String, String> request) {
+    return executeFilPolicyRpc(
+        new LexisAdminRpcRequestDto("updateFilPolicy", filPolicyParameters(policyId, request)));
+  }
+
+  @DeleteMapping("/policies/fil/{policyId}")
+  public ResponseEntity<Object> deleteFilPolicy(@PathVariable String policyId) {
+    return executeFilPolicyRpc(
+        new LexisAdminRpcRequestDto(
+            "deleteFilPolicy",
+            Map.of("actionMapping", "deleteFilPolicy", "filPolicyId", policyId)));
   }
 
   @PostMapping(
@@ -149,6 +205,48 @@ public class LexisAdminController {
     }
     parameters.put("actionMapping", action);
     return new LexisAdminRpcRequestDto(action, parameters);
+  }
+
+  private Map<String, String> feePolicyParameters(String policyId, Map<String, String> request) {
+    LinkedHashMap<String, String> parameters = new LinkedHashMap<>();
+    String action = policyId == null ? "addPolicy" : "updatePolicy";
+    parameters.put("actionMapping", action);
+    if (policyId != null) {
+      parameters.put("feePolicyId", policyId);
+    }
+    parameters.put("effectiveDate", first(request, "effectiveDate", "policyEffectiveDate"));
+    parameters.put("orgUnitNo", first(request, "orgUnitNo", "orgUnitCode", "regionCode"));
+    parameters.put(
+        "feeIncrease",
+        first(request, "feeIncrease", "policyPercentage", "feeIncreasePercentage", "percentIncrease"));
+    return parameters;
+  }
+
+  private Map<String, String> filPolicyParameters(String policyId, Map<String, String> request) {
+    LinkedHashMap<String, String> parameters = new LinkedHashMap<>();
+    String action = policyId == null ? "addFilPolicy" : "updateFilPolicy";
+    parameters.put("actionMapping", action);
+    if (policyId != null) {
+      parameters.put("filPolicyId", policyId);
+    }
+    parameters.put("effectiveDate", first(request, "effectiveDate", "policyEffectiveDate"));
+    parameters.put(
+        "filPolicyPercentage",
+        first(request, "filPolicyPercentage", "filPercentage", "policyPercentage", "filPercent"));
+    return parameters;
+  }
+
+  private String first(Map<String, String> values, String... keys) {
+    if (values == null) {
+      return "";
+    }
+    for (String key : keys) {
+      String value = values.get(key);
+      if (value != null && !value.isBlank()) {
+        return value.trim();
+      }
+    }
+    return "";
   }
 
   private String trimToNull(String value) {

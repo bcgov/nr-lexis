@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchFeePolicies, upsertFeePolicy } from '@/service/admin-policy-service'
+import { fetchFeePolicies, fetchFilPolicies, upsertFeePolicy } from '@/service/admin-policy-service'
 
 const { deleteMock, getCachedResponseMock, getMock, postMock, putMock } = vi.hoisted(() => ({
   deleteMock: vi.fn(),
@@ -57,6 +57,61 @@ describe('admin-policy-service', () => {
         orgUnitCode: 'CO',
         orgUnitName: 'Coast',
         policyPercentage: '3.5',
+      }),
+    ])
+  })
+
+  it('normalizes legacy fee policy RPC rows', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: [
+        {
+          lexisFeePolicyId: 15,
+          effectiveDate: '2026-02-01',
+          orgUnitNo: 1904,
+          orgUnitName: 'Kootenay-Boundary Natural Resource Region',
+          percentIncrease: 4,
+          entryUserId: 'admin',
+          entryTimestamp: '2026-02-01',
+          updateUserId: 'admin',
+          updateTimestamp: '2026-02-02',
+        },
+      ],
+    })
+
+    const result = await fetchFeePolicies()
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: '15',
+        orgUnitCode: '1904',
+        orgUnitName: 'Kootenay-Boundary Natural Resource Region',
+        policyPercentage: '4',
+      }),
+    ])
+  })
+
+  it('normalizes legacy FIL policy RPC rows', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: [
+        {
+          lexisFeePolicyId: 21,
+          effectiveDate: '2026-03-01',
+          filPercent: 12,
+          entryUserId: 'admin',
+          entryTimestamp: '2026-03-01',
+          updateUserId: 'admin',
+          updateTimestamp: '2026-03-02',
+        },
+      ],
+    })
+
+    const result = await fetchFilPolicies()
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: '21',
+        effectiveDate: '2026-03-01',
+        filPercentage: '12',
       }),
     ])
   })

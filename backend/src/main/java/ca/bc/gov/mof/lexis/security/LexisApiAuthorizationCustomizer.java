@@ -227,7 +227,11 @@ public class LexisApiAuthorizationCustomizer
     authorizeAction(
         authorize,
         HttpMethod.GET,
-        new String[] {"/api/lexis/admin/policy", "/api/lexis/admin/lexisPolicyAdmin"},
+        new String[] {
+          "/api/lexis/admin/policy",
+          "/api/lexis/admin/lexisPolicyAdmin",
+          "/api/lexis/admin/policies/fee"
+        },
         "/lexisPolicyAdmin");
     authorizeAction(
         authorize,
@@ -237,7 +241,11 @@ public class LexisApiAuthorizationCustomizer
     authorizeAction(
         authorize,
         HttpMethod.GET,
-        new String[] {"/api/lexis/admin/fil-policy", "/api/lexis/admin/lexisFILAdmin"},
+        new String[] {
+          "/api/lexis/admin/fil-policy",
+          "/api/lexis/admin/lexisFILAdmin",
+          "/api/lexis/admin/policies/fil"
+        },
         "/lexisFILAdmin");
     authorizeAction(
         authorize,
@@ -247,7 +255,21 @@ public class LexisApiAuthorizationCustomizer
     authorizeAction(
         authorize,
         HttpMethod.POST,
-        new String[] {"/api/lexis/admin/policy/rpc", "/api/lexis/admin/lexisPolicyAdminRPC"},
+        new String[] {
+          "/api/lexis/admin/policy/rpc",
+          "/api/lexis/admin/lexisPolicyAdminRPC",
+          "/api/lexis/admin/policies/fee"
+        },
+        "/lexisPolicyAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.PUT,
+        new String[] {"/api/lexis/admin/policies/fee/*"},
+        "/lexisPolicyAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.DELETE,
+        new String[] {"/api/lexis/admin/policies/fee/*"},
         "/lexisPolicyAdmin");
     authorizeAction(
         authorize,
@@ -262,7 +284,21 @@ public class LexisApiAuthorizationCustomizer
     authorizeAction(
         authorize,
         HttpMethod.POST,
-        new String[] {"/api/lexis/admin/fil-policy/rpc", "/api/lexis/admin/lexisFILAdminRPC"},
+        new String[] {
+          "/api/lexis/admin/fil-policy/rpc",
+          "/api/lexis/admin/lexisFILAdminRPC",
+          "/api/lexis/admin/policies/fil"
+        },
+        "/lexisFILAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.PUT,
+        new String[] {"/api/lexis/admin/policies/fil/*"},
+        "/lexisFILAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.DELETE,
+        new String[] {"/api/lexis/admin/policies/fil/*"},
         "/lexisFILAdmin");
     authorizeAction(
         authorize,

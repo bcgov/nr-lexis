@@ -120,6 +120,48 @@ class LexisAdminControllerTest {
   }
 
   @Test
+  void feePoliciesShouldDelegateModernListRouteToRpcView() {
+    when(adminRpcServiceProvider.getIfAvailable()).thenReturn(adminRpcService);
+    LexisAdminController controller =
+        new LexisAdminController(adminServiceProvider, adminRpcServiceProvider);
+    when(adminRpcService.executeFeePolicyRpc(any(LexisAdminRpcRequestDto.class)))
+        .thenReturn(Optional.of(Map.of("rows", "ok")));
+
+    ResponseEntity<Object> response = controller.feePolicies();
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(adminRpcService)
+        .executeFeePolicyRpc(new LexisAdminRpcRequestDto("view", Map.of("actionMapping", "view")));
+  }
+
+  @Test
+  void addFeePolicyShouldTranslateModernPayloadToLegacyRpc() {
+    when(adminRpcServiceProvider.getIfAvailable()).thenReturn(adminRpcService);
+    LexisAdminController controller =
+        new LexisAdminController(adminServiceProvider, adminRpcServiceProvider);
+    when(adminRpcService.executeFeePolicyRpc(any(LexisAdminRpcRequestDto.class)))
+        .thenReturn(Optional.of(Map.of("success", true)));
+
+    ResponseEntity<Object> response =
+        controller.addFeePolicy(
+            Map.of(
+                "effectiveDate", "2026-07-01",
+                "orgUnitCode", "1904",
+                "policyPercentage", "5"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(adminRpcService)
+        .executeFeePolicyRpc(
+            new LexisAdminRpcRequestDto(
+                "addPolicy",
+                Map.of(
+                    "actionMapping", "addPolicy",
+                    "effectiveDate", "2026-07-01",
+                    "orgUnitNo", "1904",
+                    "feeIncrease", "5")));
+  }
+
+  @Test
   void filPolicyRpcShouldDelegateToService() {
     when(adminRpcServiceProvider.getIfAvailable()).thenReturn(adminRpcService);
     LexisAdminController controller =
@@ -136,6 +178,21 @@ class LexisAdminControllerTest {
     verify(adminRpcService)
         .executeFilPolicyRpc(
             new LexisAdminRpcRequestDto("save", Map.of("code", "F1", "actionMapping", "save")));
+  }
+
+  @Test
+  void filPoliciesShouldDelegateModernListRouteToRpcView() {
+    when(adminRpcServiceProvider.getIfAvailable()).thenReturn(adminRpcService);
+    LexisAdminController controller =
+        new LexisAdminController(adminServiceProvider, adminRpcServiceProvider);
+    when(adminRpcService.executeFilPolicyRpc(any(LexisAdminRpcRequestDto.class)))
+        .thenReturn(Optional.of(Map.of("rows", "ok")));
+
+    ResponseEntity<Object> response = controller.filPolicies();
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(adminRpcService)
+        .executeFilPolicyRpc(new LexisAdminRpcRequestDto("view", Map.of("actionMapping", "view")));
   }
 
   @Test

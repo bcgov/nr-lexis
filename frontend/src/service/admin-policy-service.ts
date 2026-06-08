@@ -90,11 +90,15 @@ const parseArrayPayload = (payload: unknown): unknown[] | null => {
 const normalizeFeePolicyRow = (row: unknown): FeePolicyRow => {
   const source = (row ?? {}) as Record<string, unknown>
   return {
-    id: asString(source.id || source.policyId) || createRowId(),
+    id: asString(source.id || source.policyId || source.lexisFeePolicyId) || createRowId(),
     effectiveDate: asString(source.effectiveDate || source.policyEffectiveDate),
-    orgUnitCode: asString(source.orgUnitCode || source.regionCode).toUpperCase(),
+    orgUnitCode: asString(
+      source.orgUnitCode || source.regionCode || source.orgUnitNo,
+    ).toUpperCase(),
     orgUnitName: asString(source.orgUnitName || source.regionName),
-    policyPercentage: asString(source.policyPercentage || source.feeIncreasePercentage),
+    policyPercentage: asString(
+      source.policyPercentage || source.feeIncreasePercentage || source.percentIncrease,
+    ),
     entryUserId: asString(source.entryUserId || source.entryUser) || DEFAULT_USER_ID,
     entryTimestamp: asString(source.entryTimestamp || source.entryDateTime) || createTimestamp(),
     updateUserId: asString(source.updateUserId || source.updateUser) || DEFAULT_USER_ID,
@@ -107,9 +111,12 @@ const normalizeFeePolicyRow = (row: unknown): FeePolicyRow => {
 const normalizeFilPolicyRow = (row: unknown): FilPolicyRow => {
   const source = (row ?? {}) as Record<string, unknown>
   return {
-    id: asString(source.id || source.policyId) || createRowId(),
+    id:
+      asString(
+        source.id || source.policyId || source.lexisFILPolicyId || source.lexisFeePolicyId,
+      ) || createRowId(),
     effectiveDate: asString(source.effectiveDate || source.policyEffectiveDate),
-    filPercentage: asString(source.filPercentage || source.policyPercentage),
+    filPercentage: asString(source.filPercentage || source.policyPercentage || source.filPercent),
     entryUserId: asString(source.entryUserId || source.entryUser) || DEFAULT_USER_ID,
     entryTimestamp: asString(source.entryTimestamp || source.entryDateTime) || createTimestamp(),
     updateUserId: asString(source.updateUserId || source.updateUser) || DEFAULT_USER_ID,
