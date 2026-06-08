@@ -59,6 +59,10 @@ jobs:
       environment: dev
       target: ${{ github.event.number }}
       slot: ${{ needs.vars.outputs.slot }}
+      # TODO(infra): Raise PR preview resources once nr-lexis has its own namespace/quota.
+      # Shared dev namespace quota currently requires smaller backend requests and one frontend replica.
+      backend_memory_request: "450Mi"
+      frontend_replicas: "1"
       triggers: ('backend/', 'frontend/', '.github/workflows/')
 
   tests:

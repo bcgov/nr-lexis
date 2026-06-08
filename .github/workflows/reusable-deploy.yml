@@ -21,6 +21,10 @@ on:
         description: Backend replica count (also HPA min/max)
         default: "1"
         type: string
+      backend_memory_request:
+        description: Backend container memory request
+        default: "500Mi"
+        type: string
       frontend_replicas:
         description: Frontend replica count
         default: "2"
@@ -93,6 +97,7 @@ jobs:
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p MIN_REPLICAS="${{ inputs.backend_replicas }}"
             -p MAX_REPLICAS="${{ inputs.backend_replicas }}"
+            -p MIN_MEM="${{ inputs.backend_memory_request }}"
             -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
             -p COGNITO_USERINFO_URI="${{ vars.COGNITO_USERINFO_URI }}"
             -p IDENTITY_LOOKUP_BASE_URL="${{ vars.IDENTITY_LOOKUP_BASE_URL }}"
