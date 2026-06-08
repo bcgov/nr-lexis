@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -72,20 +73,28 @@ class PermitRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadAllLegacyPages() {
+  void searchShouldLoadOnlyRequestedLegacyPage() {
+    List<PermitSearchResultDto> firstPage =
+        java.util.stream.LongStream.rangeClosed(700001L, 700010L)
+            .mapToObj(PermitRepositoryTest::permitResult)
+            .toList();
     TestPermitRepository repository =
-        new TestPermitRepository(
-            List.of(
-                List.of(new PermitSearchResultDto(700001L, "Active", "00000001", "00000002", 100d, null, "Region 1")),
-                List.of(new PermitSearchResultDto(700002L, "Active", "00000003", "00000004", 200d, null, "Region 2"))));
+        new TestPermitRepository(List.<List<?>>of(firstPage, List.of(permitResult(700011L))));
 
-    List<PermitSearchResultDto> results =
+    DynamicSearchPage<PermitSearchResultDto> results =
         repository.search(
             new PermitSearchCriteria(
                 null, null, null, null, null, null, null, null, null, List.of(), null, 0, 10));
 
-    assertThat(results).extracting(PermitSearchResultDto::permitNumber).containsExactly(700001L, 700002L);
-    assertThat(repository.pageCalls()).isEqualTo(3);
+    assertThat(results.results())
+        .extracting(PermitSearchResultDto::permitNumber)
+        .containsExactly(700001L, 700002L, 700003L, 700004L, 700005L, 700006L, 700007L, 700008L, 700009L, 700010L);
+    assertThat(results.total()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  private static PermitSearchResultDto permitResult(long permitNumber) {
+    return new PermitSearchResultDto(permitNumber, "Active", "00000001", "00000002", 100d, null, "Region");
   }
 
   private static final class TestPermitRepository extends PermitRepository {

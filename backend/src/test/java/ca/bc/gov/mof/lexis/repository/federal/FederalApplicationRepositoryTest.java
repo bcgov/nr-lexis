@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -53,26 +54,30 @@ class FederalApplicationRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadAllLegacyPages() {
+  void searchShouldLoadOnlyRequestedLegacyPage() {
+    List<FederalApplicationSearchResultDto> firstPage =
+        java.util.stream.LongStream.rangeClosed(900101L, 900110L)
+            .mapToObj(FederalApplicationRepositoryTest::federalResult)
+            .toList();
     TestFederalApplicationRepository repository =
         new TestFederalApplicationRepository(
-            List.of(
-                List.of(
-                    new FederalApplicationSearchResultDto(
-                        900123L, "FED-1", "New", "Client 1", null, null, null, null, null, true)),
-                List.of(
-                    new FederalApplicationSearchResultDto(
-                        900124L, "FED-2", "New", "Client 2", null, null, null, null, null, true))));
+            List.<List<?>>of(firstPage, List.of(federalResult(900111L))));
 
-    List<FederalApplicationSearchResultDto> results =
+    DynamicSearchPage<FederalApplicationSearchResultDto> results =
         repository.search(
             new FederalApplicationSearchCriteria(
                 null, null, null, null, null, null, null, null, null, null, 0, 10));
 
-    assertThat(results)
+    assertThat(results.results())
         .extracting(FederalApplicationSearchResultDto::applicationNumber)
-        .containsExactly(900123L, 900124L);
-    assertThat(repository.pageCalls()).isEqualTo(3);
+        .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
+    assertThat(results.total()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  private static FederalApplicationSearchResultDto federalResult(long applicationNumber) {
+    return new FederalApplicationSearchResultDto(
+        applicationNumber, "FED-" + applicationNumber, "New", "Client", null, null, null, null, null, true);
   }
 
   private static final class TestFederalApplicationRepository extends FederalApplicationRepository {

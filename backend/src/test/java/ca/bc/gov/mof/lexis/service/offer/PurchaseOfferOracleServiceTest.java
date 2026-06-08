@@ -12,6 +12,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -48,7 +49,7 @@ class PurchaseOfferOracleServiceTest {
         new PurchaseOfferSearchCriteria(
             null, null, null, null, null, null, null, List.of(), null, 0, 25);
     when(repository.search(any(PurchaseOfferSearchCriteria.class)))
-        .thenReturn(List.of(row(81001L, LocalDate.of(2026, 2, 1))));
+        .thenReturn(new DynamicSearchPage<>(List.of(row(81001L, LocalDate.of(2026, 2, 1))), 1));
 
     PurchaseOfferSearchResponseDto response = service.search(criteria);
 
@@ -59,17 +60,16 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
-  void searchShouldReturnPagedSliceFromRepository() {
+  void searchShouldReturnRepositoryPage() {
     PurchaseOfferSearchCriteria criteria =
         new PurchaseOfferSearchCriteria(
             null, null, null, null, null, null, null, List.of(12L), null, 1, 2);
     List<PurchaseOfferSearchResultDto> rows =
         List.of(
-            row(81001L, LocalDate.of(2026, 2, 1)),
-            row(81002L, LocalDate.of(2026, 2, 2)),
             row(81003L, LocalDate.of(2026, 2, 3)),
             row(81004L, LocalDate.of(2026, 2, 4)));
-    when(repository.search(any(PurchaseOfferSearchCriteria.class))).thenReturn(rows);
+    when(repository.search(any(PurchaseOfferSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(rows, 4));
 
     PurchaseOfferSearchResponseDto response = service.search(criteria);
 
@@ -95,7 +95,8 @@ class PurchaseOfferOracleServiceTest {
             " offerNumber DESC ",
             -3,
             0);
-    when(repository.search(any(PurchaseOfferSearchCriteria.class))).thenReturn(List.of());
+    when(repository.search(any(PurchaseOfferSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
 
     service.search(criteria);
 

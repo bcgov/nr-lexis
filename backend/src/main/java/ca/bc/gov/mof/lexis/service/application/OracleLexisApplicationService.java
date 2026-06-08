@@ -6,6 +6,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
 import java.util.List;
 import java.util.Optional;
@@ -37,13 +38,12 @@ public class OracleLexisApplicationService implements LexisApplicationService {
     int page = normalized.page();
     int size = normalized.size();
 
-    List<LexisApplicationSearchResultDto> results = safeList(repository.search(normalized));
-    int fromIndex = Math.min(page * size, results.size());
-    int toIndex = Math.min(fromIndex + size, results.size());
+    DynamicSearchPage<LexisApplicationSearchResultDto> searchPage = repository.search(normalized);
+    List<LexisApplicationSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.results());
 
     return new LexisApplicationSearchResponseDto(
-        results.subList(fromIndex, toIndex),
-        results.size(),
+        results,
+        searchPage == null ? 0 : searchPage.total(),
         page,
         size);
   }

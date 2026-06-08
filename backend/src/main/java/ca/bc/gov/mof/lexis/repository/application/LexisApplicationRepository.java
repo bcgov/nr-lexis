@@ -5,6 +5,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.ResultSet;
 import java.time.LocalDate;
@@ -86,7 +87,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public List<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
+  public DynamicSearchPage<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("v.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -132,10 +133,12 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     SqlWhere sqlWhere = where.build(buildSortOrder(criteria.sortField()));
 
     LocalDate today = LocalDate.now(ZoneId.systemDefault());
-    return queryDynamicAllPages(
+    return queryDynamicPage(
         FIND_APPLICATIONS_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
         rs -> toSearchResult(rs, today));
   }
 

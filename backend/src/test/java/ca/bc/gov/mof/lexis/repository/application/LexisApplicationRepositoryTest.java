@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -78,24 +79,30 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadAllLegacyPages() {
+  void searchShouldLoadOnlyRequestedLegacyPage() {
+    List<LexisApplicationSearchResultDto> firstPage =
+        java.util.stream.LongStream.rangeClosed(900101L, 900110L)
+            .mapToObj(LexisApplicationRepositoryTest::applicationResult)
+            .toList();
     TestLexisApplicationRepository repository =
         new TestLexisApplicationRepository(
-            List.of(
-                List.of(
-                    new LexisApplicationSearchResultDto(
-                        900123L, "New", "Client 1", "00000001", null, null, "Region 1", 100d, true, false)),
-                List.of(
-                    new LexisApplicationSearchResultDto(
-                        900124L, "New", "Client 2", "00000002", null, null, "Region 2", 200d, true, false))));
+            List.<List<?>>of(firstPage, List.of(applicationResult(900111L))));
 
-    List<LexisApplicationSearchResultDto> results =
+    DynamicSearchPage<LexisApplicationSearchResultDto> results =
         repository.search(
             new LexisApplicationSearchCriteria(
                 null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 10));
 
-    assertThat(results).extracting(LexisApplicationSearchResultDto::application).containsExactly(900123L, 900124L);
-    assertThat(repository.pageCalls()).isEqualTo(3);
+    assertThat(results.results())
+        .extracting(LexisApplicationSearchResultDto::application)
+        .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
+    assertThat(results.total()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  private static LexisApplicationSearchResultDto applicationResult(long applicationNumber) {
+    return new LexisApplicationSearchResultDto(
+        applicationNumber, "New", "Client", "00000001", null, null, "Region", 100d, true, false);
   }
 
   private static final class TestLexisApplicationRepository extends LexisApplicationRepository {

@@ -13,6 +13,7 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionRepository;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -46,19 +47,18 @@ class ExemptionOracleServiceTest {
   }
 
   @Test
-  void searchShouldReturnPagedSliceFromRepository() {
+  void searchShouldReturnRepositoryPage() {
     ExemptionSearchCriteria criteria =
         new ExemptionSearchCriteria(
             null, null, null, null, null, null, null, null, null, null, null, List.of(11L), 1, 2);
 
     List<ExemptionSearchResultDto> rows =
         List.of(
-            row("EX-001", LocalDate.of(2026, 1, 1)),
-            row("EX-002", LocalDate.of(2026, 1, 2)),
             row("EX-003", LocalDate.of(2026, 1, 3)),
             row("EX-004", LocalDate.of(2026, 1, 4)));
 
-    when(repository.search(any(ExemptionSearchCriteria.class))).thenReturn(rows);
+    when(repository.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(rows, 4));
 
     ExemptionSearchResponseDto response = service.search(criteria);
 
@@ -107,7 +107,7 @@ class ExemptionOracleServiceTest {
         new ExemptionSearchCriteria(
             null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 25);
     when(repository.search(any(ExemptionSearchCriteria.class)))
-        .thenReturn(List.of(row("EX-001", LocalDate.of(2026, 1, 1))));
+        .thenReturn(new DynamicSearchPage<>(List.of(row("EX-001", LocalDate.of(2026, 1, 1))), 1));
 
     ExemptionSearchResponseDto response = service.search(criteria);
 
@@ -136,7 +136,8 @@ class ExemptionOracleServiceTest {
             0,
             25);
 
-    when(repository.search(any(ExemptionSearchCriteria.class))).thenReturn(List.of());
+    when(repository.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
 
     service.search(criteria);
 
@@ -168,7 +169,8 @@ class ExemptionOracleServiceTest {
             0,
             25);
 
-    when(repository.search(any(ExemptionSearchCriteria.class))).thenReturn(List.of());
+    when(repository.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
 
     service.search(criteria);
 

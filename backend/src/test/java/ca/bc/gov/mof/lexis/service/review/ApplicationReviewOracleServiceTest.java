@@ -15,6 +15,7 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -48,16 +49,15 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
-  void searchShouldReturnPagedSliceFromRepository() {
+  void searchShouldReturnRepositoryPage() {
     ApplicationReviewSearchCriteria criteria =
         new ApplicationReviewSearchCriteria(null, null, null, null, null, null, List.of(), null, 1, 2);
     List<ApplicationReviewSearchResultDto> rows =
         List.of(
-            row(10001L, LocalDate.of(2026, 3, 1)),
-            row(10002L, LocalDate.of(2026, 3, 2)),
             row(10003L, LocalDate.of(2026, 3, 3)),
             row(10004L, LocalDate.of(2026, 3, 4)));
-    when(repository.search(any(ApplicationReviewSearchCriteria.class))).thenReturn(rows);
+    when(repository.search(any(ApplicationReviewSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(rows, 4));
 
     ApplicationReviewSearchResponseDto response = service.search(criteria);
 
@@ -82,7 +82,8 @@ class ApplicationReviewOracleServiceTest {
             " applicationNumber DESC ",
             -2,
             0);
-    when(repository.search(any(ApplicationReviewSearchCriteria.class))).thenReturn(List.of());
+    when(repository.search(any(ApplicationReviewSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
 
     service.search(criteria);
 

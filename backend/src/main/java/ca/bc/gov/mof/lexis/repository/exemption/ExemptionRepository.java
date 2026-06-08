@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -73,7 +74,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public List<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
+  public DynamicSearchPage<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -107,10 +108,12 @@ public class ExemptionRepository extends OracleRepositorySupport {
 
     SqlWhere sqlWhere = where.build(SEARCH_GROUP_BY + " ORDER BY EE.EXEMPTION_NUMBER DESC");
 
-    return queryDynamicAllPages(
+    return queryDynamicPage(
         FIND_EXEMPTIONS_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
         rs ->
             new ExemptionSearchResultDto(
                 getString(rs, "EXEMPTION_NUMBER"),

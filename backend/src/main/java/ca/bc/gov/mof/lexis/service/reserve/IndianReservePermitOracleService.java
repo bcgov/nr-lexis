@@ -6,6 +6,7 @@ import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository;
@@ -49,13 +50,12 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
     int page = normalized.page();
     int size = normalized.size();
 
-    List<IndianReservePermitSearchResultDto> results = safeList(repository.search(normalized));
-    int fromIndex = Math.min(page * size, results.size());
-    int toIndex = Math.min(fromIndex + size, results.size());
+    DynamicSearchPage<IndianReservePermitSearchResultDto> searchPage = repository.search(normalized);
+    List<IndianReservePermitSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.results());
 
     return new IndianReservePermitSearchResponseDto(
-        results.subList(fromIndex, toIndex),
-        results.size(),
+        results,
+        searchPage == null ? 0 : searchPage.total(),
         page,
         size);
   }

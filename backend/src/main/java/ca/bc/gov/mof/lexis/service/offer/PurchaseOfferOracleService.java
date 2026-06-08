@@ -5,6 +5,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -43,13 +44,12 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     int page = normalized.page();
     int size = normalized.size();
 
-    List<PurchaseOfferSearchResultDto> results = safeList(repository.search(normalized));
-    int fromIndex = Math.min(page * size, results.size());
-    int toIndex = Math.min(fromIndex + size, results.size());
+    DynamicSearchPage<PurchaseOfferSearchResultDto> searchPage = repository.search(normalized);
+    List<PurchaseOfferSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.results());
 
     return new PurchaseOfferSearchResponseDto(
-        results.subList(fromIndex, toIndex),
-        results.size(),
+        results,
+        searchPage == null ? 0 : searchPage.total(),
         page,
         size);
   }

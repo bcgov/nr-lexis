@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -40,20 +41,27 @@ class IndianReservePermitRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadAllLegacyPages() {
+  void searchShouldLoadOnlyRequestedLegacyPage() {
+    List<IndianReservePermitSearchResultDto> firstPage =
+        java.util.stream.LongStream.rangeClosed(700001L, 700010L)
+            .mapToObj(number -> permitResult(String.valueOf(number)))
+            .toList();
     TestIndianReservePermitRepository repository =
         new TestIndianReservePermitRepository(
-            List.of(
-                List.of(new IndianReservePermitSearchResultDto("700001", "00000001", null, null)),
-                List.of(new IndianReservePermitSearchResultDto("700002", "00000002", null, null))));
+            List.<List<?>>of(firstPage, List.of(permitResult("700011"))));
 
-    List<IndianReservePermitSearchResultDto> results =
+    DynamicSearchPage<IndianReservePermitSearchResultDto> results =
         repository.search(new IndianReservePermitSearchCriteria(null, null, null, null, null, null, 0, 10));
 
-    assertThat(results)
+    assertThat(results.results())
         .extracting(IndianReservePermitSearchResultDto::permitNumber)
-        .containsExactly("700001", "700002");
-    assertThat(repository.pageCalls()).isEqualTo(3);
+        .containsExactly("700001", "700002", "700003", "700004", "700005", "700006", "700007", "700008", "700009", "700010");
+    assertThat(results.total()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  private static IndianReservePermitSearchResultDto permitResult(String permitNumber) {
+    return new IndianReservePermitSearchResultDto(permitNumber, "00000001", null, null);
   }
 
   private static final class TestIndianReservePermitRepository extends IndianReservePermitRepository {

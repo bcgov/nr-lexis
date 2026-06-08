@@ -8,6 +8,7 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
@@ -37,13 +38,12 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     int page = normalized.page();
     int size = normalized.size();
 
-    List<ApplicationReviewSearchResultDto> results = safeList(repository.search(normalized));
-    int fromIndex = Math.min(page * size, results.size());
-    int toIndex = Math.min(fromIndex + size, results.size());
+    DynamicSearchPage<ApplicationReviewSearchResultDto> searchPage = repository.search(normalized);
+    List<ApplicationReviewSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.results());
 
     return new ApplicationReviewSearchResponseDto(
-        results.subList(fromIndex, toIndex),
-        results.size(),
+        results,
+        searchPage == null ? 0 : searchPage.total(),
         page,
         size);
   }

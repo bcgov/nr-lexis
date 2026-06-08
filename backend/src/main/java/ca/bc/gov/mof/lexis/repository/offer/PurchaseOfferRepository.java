@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.CallableStatement;
 import java.sql.Date;
@@ -42,7 +43,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public List<PurchaseOfferSearchResultDto> search(PurchaseOfferSearchCriteria criteria) {
+  public DynamicSearchPage<PurchaseOfferSearchResultDto> search(PurchaseOfferSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -93,10 +94,12 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
 
     SqlWhere sqlWhere = where.build(orderBy);
 
-    return queryDynamicAllPages(
+    return queryDynamicPage(
         FIND_PURCHASE_OFFERS_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
         rs ->
             new PurchaseOfferSearchResultDto(
                 getLong(rs, "EXPORT_PURCHASE_OFFER_NUMBER"),

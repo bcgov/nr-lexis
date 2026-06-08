@@ -6,7 +6,6 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import java.sql.CallableStatement;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +13,30 @@ import org.junit.jupiter.api.Test;
 class OracleRepositorySupportTest {
 
   @Test
-  void queryDynamicAllPagesShouldContinuePastShortLegacyPagesUntilEmptyPage() {
+  void queryDynamicPageShouldLoadOnlyRequestedLegacyPage() {
+    List<String> firstPage =
+        List.of(
+            "row-1",
+            "row-2",
+            "row-3",
+            "row-4",
+            "row-5",
+            "row-6",
+            "row-7",
+            "row-8",
+            "row-9",
+            "row-10");
+    TestRepository repository = new TestRepository(List.of(firstPage, List.of("row-11")));
+
+    DynamicSearchPage<String> results = repository.loadPage(0, 10);
+
+    assertThat(results.results()).containsExactlyElementsOf(firstPage);
+    assertThat(results.total()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @Test
+  void queryDynamicPageShouldSpanLegacyPagesForLargerPageSize() {
     List<String> firstPage =
         List.of(
             "row-1",
@@ -30,30 +52,35 @@ class OracleRepositorySupportTest {
     List<String> secondPage = List.of("row-11", "row-12", "row-13");
     TestRepository repository = new TestRepository(List.of(firstPage, secondPage));
 
-    List<String> results = repository.loadAllPages();
+    DynamicSearchPage<String> results = repository.loadPage(0, 20);
 
-    assertThat(results).containsExactlyElementsOf(concat(firstPage, secondPage));
-    assertThat(repository.pageCalls()).isEqualTo(3);
-  }
-
-  @Test
-  void queryDynamicAllPagesShouldStopAfterEmptyPage() {
-    TestRepository repository = new TestRepository(List.of(List.of("row")));
-
-    List<String> results = repository.loadAllPages();
-
-    assertThat(results).containsExactly("row");
+    assertThat(results.results()).containsExactlyElementsOf(concat(firstPage, secondPage));
+    assertThat(results.total()).isEqualTo(13);
     assertThat(repository.pageCalls()).isEqualTo(2);
   }
 
   @Test
-  void queryDynamicAllPagesShouldStopWhenProcedureRepeatsTheSamePage() {
-    TestRepository repository = new TestRepository(List.of(List.of("row"), List.of("row")));
+  void queryDynamicPageShouldOffsetWithinLegacyPage() {
+    TestRepository repository =
+        new TestRepository(
+            List.of(
+                List.of(
+                    "row-1",
+                    "row-2",
+                    "row-3",
+                    "row-4",
+                    "row-5",
+                    "row-6",
+                    "row-7",
+                    "row-8",
+                    "row-9",
+                    "row-10")));
 
-    List<String> results = repository.loadAllPages();
+    DynamicSearchPage<String> results = repository.loadPage(1, 5);
 
-    assertThat(results).containsExactly("row");
-    assertThat(repository.pageCalls()).isEqualTo(2);
+    assertThat(results.results()).containsExactly("row-6", "row-7", "row-8", "row-9", "row-10");
+    assertThat(results.total()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
   @Test
@@ -133,8 +160,8 @@ class OracleRepositorySupportTest {
       this.pages = pages;
     }
 
-    List<String> loadAllPages() {
-      return queryDynamicAllPages("LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)", " WHERE 1=1", List.of(), rs -> "");
+    DynamicSearchPage<String> loadPage(int page, int size) {
+      return queryDynamicPage("LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)", " WHERE 1=1", List.of(), page, size, rs -> "");
     }
 
     List<CodeNameDto> loadApplicationStatuses() {
@@ -207,6 +234,6 @@ class OracleRepositorySupportTest {
   }
 
   private static List<String> concat(List<String> first, List<String> second) {
-    return Stream.concat(first.stream(), second.stream()).toList();
+    return java.util.stream.Stream.concat(first.stream(), second.stream()).toList();
   }
 }

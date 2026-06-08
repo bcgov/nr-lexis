@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import java.sql.CallableStatement;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -78,20 +79,28 @@ class PurchaseOfferRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadAllLegacyPages() {
+  void searchShouldLoadOnlyRequestedLegacyPage() {
+    List<PurchaseOfferSearchResultDto> firstPage =
+        java.util.stream.LongStream.rangeClosed(810001L, 810010L)
+            .mapToObj(PurchaseOfferRepositoryTest::offerResult)
+            .toList();
     TestPurchaseOfferRepository repository =
-        new TestPurchaseOfferRepository(
-            List.of(
-                List.of(new PurchaseOfferSearchResultDto(810001L, 900123L, "PKG-1", null, "Region 1", null)),
-                List.of(new PurchaseOfferSearchResultDto(810002L, 900124L, "PKG-2", null, "Region 2", null))));
+        new TestPurchaseOfferRepository(List.<List<?>>of(firstPage, List.of(offerResult(810011L))));
 
-    List<PurchaseOfferSearchResultDto> results =
+    DynamicSearchPage<PurchaseOfferSearchResultDto> results =
         repository.search(
             new PurchaseOfferSearchCriteria(
                 null, null, null, null, null, null, null, List.of(), null, 0, 10));
 
-    assertThat(results).extracting(PurchaseOfferSearchResultDto::offerNumber).containsExactly(810001L, 810002L);
-    assertThat(repository.pageCalls()).isEqualTo(3);
+    assertThat(results.results())
+        .extracting(PurchaseOfferSearchResultDto::offerNumber)
+        .containsExactly(810001L, 810002L, 810003L, 810004L, 810005L, 810006L, 810007L, 810008L, 810009L, 810010L);
+    assertThat(results.total()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  private static PurchaseOfferSearchResultDto offerResult(long offerNumber) {
+    return new PurchaseOfferSearchResultDto(offerNumber, 900123L, "PKG-1", null, "Region", null);
   }
 
   @Test

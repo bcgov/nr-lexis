@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.time.LocalDate;
 import java.util.List;
@@ -27,25 +28,29 @@ class ApplicationReviewRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadAllLegacyPages() {
+  void searchShouldLoadOnlyRequestedLegacyPage() {
+    List<ApplicationReviewSearchResultDto> firstPage =
+        java.util.stream.LongStream.rangeClosed(900101L, 900110L)
+            .mapToObj(ApplicationReviewRepositoryTest::reviewResult)
+            .toList();
     TestApplicationReviewRepository repository =
         new TestApplicationReviewRepository(
-            List.of(
-                List.of(
-                    new ApplicationReviewSearchResultDto(
-                        900123L, 100d, "Cedar", LocalDate.of(2026, 1, 1), "New", "Region 1", true)),
-                List.of(
-                    new ApplicationReviewSearchResultDto(
-                        900124L, 200d, "Hemlock", LocalDate.of(2026, 1, 2), "New", "Region 2", true))));
+            List.<List<?>>of(firstPage, List.of(reviewResult(900111L))));
 
-    List<ApplicationReviewSearchResultDto> results =
+    DynamicSearchPage<ApplicationReviewSearchResultDto> results =
         repository.search(
             new ApplicationReviewSearchCriteria(null, null, null, null, null, null, List.of(), null, 0, 10));
 
-    assertThat(results)
+    assertThat(results.results())
         .extracting(ApplicationReviewSearchResultDto::applicationNumber)
-        .containsExactly(900123L, 900124L);
-    assertThat(repository.pageCalls()).isEqualTo(3);
+        .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
+    assertThat(results.total()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  private static ApplicationReviewSearchResultDto reviewResult(long applicationNumber) {
+    return new ApplicationReviewSearchResultDto(
+        applicationNumber, 100d, "Cedar", LocalDate.of(2026, 1, 1), "New", "Region", true);
   }
 
   private static final class TestApplicationReviewRepository extends ApplicationReviewRepository {

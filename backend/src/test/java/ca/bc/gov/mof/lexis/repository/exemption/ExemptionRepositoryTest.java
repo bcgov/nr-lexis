@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -75,24 +76,29 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadAllLegacyPages() {
+  void searchShouldLoadOnlyRequestedLegacyPage() {
+    List<ExemptionSearchResultDto> firstPage =
+        java.util.stream.LongStream.rangeClosed(1L, 10L)
+            .mapToObj(number -> exemptionResult("EX-" + number))
+            .toList();
     TestExemptionRepository repository =
-        new TestExemptionRepository(
-            List.of(
-                List.of(
-                    new ExemptionSearchResultDto(
-                        "EX-1", "Type 1", "New", "00000001", 900123L, null, null, "Region 1", 100d, false)),
-                List.of(
-                    new ExemptionSearchResultDto(
-                        "EX-2", "Type 2", "New", "00000002", 900124L, null, null, "Region 2", 200d, false))));
+        new TestExemptionRepository(List.<List<?>>of(firstPage, List.of(exemptionResult("EX-11"))));
 
-    List<ExemptionSearchResultDto> results =
+    DynamicSearchPage<ExemptionSearchResultDto> results =
         repository.search(
             new ExemptionSearchCriteria(
                 null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
 
-    assertThat(results).extracting(ExemptionSearchResultDto::exemptionNumber).containsExactly("EX-1", "EX-2");
-    assertThat(repository.pageCalls()).isEqualTo(3);
+    assertThat(results.results())
+        .extracting(ExemptionSearchResultDto::exemptionNumber)
+        .containsExactly("EX-1", "EX-2", "EX-3", "EX-4", "EX-5", "EX-6", "EX-7", "EX-8", "EX-9", "EX-10");
+    assertThat(results.total()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  private static ExemptionSearchResultDto exemptionResult(String exemptionNumber) {
+    return new ExemptionSearchResultDto(
+        exemptionNumber, "Type", "New", "00000001", 900123L, null, null, "Region", 100d, false);
   }
 
   private static final class TestExemptionRepository extends ExemptionRepository {

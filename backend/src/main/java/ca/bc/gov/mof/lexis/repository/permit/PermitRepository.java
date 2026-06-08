@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -36,7 +37,7 @@ public class PermitRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public List<PermitSearchResultDto> search(PermitSearchCriteria criteria) {
+  public DynamicSearchPage<PermitSearchResultDto> search(PermitSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("EP.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -89,10 +90,12 @@ public class PermitRepository extends OracleRepositorySupport {
 
     SqlWhere sqlWhere = where.build(orderBy);
 
-    return queryDynamicAllPages(
+    return queryDynamicPage(
         FIND_PERMIT_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
         rs ->
             new PermitSearchResultDto(
                 getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
