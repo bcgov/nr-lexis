@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 class LexisApplicationRepositoryTest {
 
   @Test
-  void searchShouldUseProvincialApplicationAliasesForDynamicCriteria() {
+  void searchShouldUseProvincialApplicationViewAliasForDynamicCriteria() {
     TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
 
     repository.search(
@@ -35,12 +35,14 @@ class LexisApplicationRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("EEA.APPLICATION_NUMBER")
-        .contains("EP.PACKAGE_NUMBER")
-        .contains("ES.ADVERTISING_DATE")
-        .contains("EEA.EXPORT_JURISDICTION_CODE <> 'F'")
-        .contains("ORDER BY ES.ADVERTISING_DATE DESC, EEA.APPLICATION_NUMBER ASC")
-        .doesNotContain("v.");
+        .contains("v.APPLICATION_NUMBER")
+        .contains("v.PACKAGE_NUMBER")
+        .contains("v.ADVERTISING_DATE")
+        .contains("v.EXPORT_JURISDICTION_CODE <> 'F'")
+        .contains("ORDER BY v.ADVERTISING_DATE DESC, v.APPLICATION_NUMBER ASC")
+        .doesNotContain("EEA.")
+        .doesNotContain("EP.")
+        .doesNotContain("ES.");
     assertThat(repository.bindValues())
         .containsExactly(
             "900123",
@@ -70,6 +72,7 @@ class LexisApplicationRepositoryTest {
             null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 10));
 
     assertThat(repository.whereSql()).doesNotContain("EEA.ORG_UNIT_NO");
+    assertThat(repository.whereSql()).doesNotContain("v.ORG_UNIT_NO");
     assertThat(repository.bindValues()).containsExactly("N");
   }
 

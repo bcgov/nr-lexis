@@ -38,6 +38,8 @@ class ExemptionRepositoryTest {
         .contains("EE.EXEMPTION_NUMBER")
         .contains("ES.ADVERTISING_DATE")
         .contains("EO.ORG_UNIT_NO")
+        .contains("GROUP BY EE.EXEMPTION_NUMBER")
+        .contains("EEA.APPLICATION_NUMBER")
         .contains("ORDER BY EE.EXEMPTION_NUMBER DESC")
         .doesNotContain(" v.");
     assertThat(repository.bindValues())

@@ -89,26 +89,26 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   public List<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
-    where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
-    where.addRaw(" AND EEA.APPLICATION_NUMBER > TO_NUMBER(0)");
-    where.addLike("EP.PACKAGE_NUMBER", criteria.packageNumber());
-    where.addLike("EEA.EXEMPTION_NUMBER", criteria.exemptionNumber());
-    where.addEquals("EEA.EXPORT_APPLICATION_STATUS_CODE", criteria.applicationStatus());
-    where.addEquals("EEA.EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
-    where.addDateGte("EEA.RECEIVED_DATE", criteria.receivedFromDate());
-    where.addDateLte("EEA.RECEIVED_DATE", criteria.receivedToDate());
-    where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
-    where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
-    where.addLike("EEA.OWNER_CLIENT_NUMBER", criteria.ownerClientNumber());
-    where.addRaw(" AND EEA.EXPORT_JURISDICTION_CODE <> '" + JURISDICTION_FEDERAL + "'");
-    where.addEquals("EEA.OIC_INDICATOR", OIC_INDICATOR_NO);
+    where.addLike("v.APPLICATION_NUMBER", criteria.applicationNumber());
+    where.addRaw(" AND v.APPLICATION_NUMBER > TO_NUMBER(0)");
+    where.addLike("v.PACKAGE_NUMBER", criteria.packageNumber());
+    where.addLike("v.EXEMPTION_NUMBER", criteria.exemptionNumber());
+    where.addEquals("v.EXPORT_APPLICATION_STATUS_CODE", criteria.applicationStatus());
+    where.addEquals("v.EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
+    where.addDateGte("v.RECEIVED_DATE", criteria.receivedFromDate());
+    where.addDateLte("v.RECEIVED_DATE", criteria.receivedToDate());
+    where.addDateGte("v.ADVERTISING_DATE", criteria.listingFromDate());
+    where.addDateLte("v.ADVERTISING_DATE", criteria.listingToDate());
+    where.addLike("v.OWNER_CLIENT_NUMBER", criteria.ownerClientNumber());
+    where.addRaw(" AND v.EXPORT_JURISDICTION_CODE <> '" + JURISDICTION_FEDERAL + "'");
+    where.addEquals("v.OIC_INDICATOR", OIC_INDICATOR_NO);
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
-      where.addInEqualsNumberOrNoResults("EEA.ORG_UNIT_NO", criteria.regionNumbers());
+      where.addInEqualsNumberOrNoResults("v.ORG_UNIT_NO", criteria.regionNumbers());
     }
 
     String exemptionType = trim(criteria.exemptionType());
     if (exemptionType != null && !"ALL".equalsIgnoreCase(exemptionType)) {
-      where.addEquals("EEA.EXPORT_EXEMPTION_TYPE_CODE", exemptionType);
+      where.addEquals("v.EXPORT_EXEMPTION_TYPE_CODE", exemptionType);
     }
 
     String agentClientNumber = trim(criteria.agentClientNumber());
@@ -116,13 +116,13 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       int idx1 = where.nextBindIndex();
       int idx2 = idx1 + 1;
       where.addRawWithBinds(
-          " AND ((EEA.OWNER_CLIENT_NUMBER LIKE '%' || :"
+          " AND ((v.OWNER_CLIENT_NUMBER LIKE '%' || :"
               + idx1
-              + " || '%' AND EEA.EXPORT_APPLICANT_TYPE_CODE = '"
+              + " || '%' AND v.EXPORT_APPLICANT_TYPE_CODE = '"
               + APPLICANT_TYPE_OWNER
-              + "') OR (EEA.AGENT_CLIENT_NUMBER LIKE '%' || :"
+              + "') OR (v.AGENT_CLIENT_NUMBER LIKE '%' || :"
               + idx2
-              + " || '%' AND EEA.EXPORT_APPLICANT_TYPE_CODE = '"
+              + " || '%' AND v.EXPORT_APPLICANT_TYPE_CODE = '"
               + APPLICANT_TYPE_AGENT
               + "'))",
           agentClientNumber,
@@ -467,17 +467,17 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   private String buildSortOrder(String sortField) {
     Map<String, String> allowedColumns =
         mapOf(
-            "applicationNumber", "EEA.APPLICATION_NUMBER",
-            "application", "EEA.APPLICATION_NUMBER",
-            "applicantClientNumber", "EEA.OWNER_CLIENT_NUMBER",
-            "displayOwnerClientNumber", "EEA.OWNER_CLIENT_NUMBER",
-            "ownerClientNumber", "EEA.OWNER_CLIENT_NUMBER",
-            "exemptionNumber", "EEA.EXEMPTION_NUMBER",
-            "listingDate", "ES.ADVERTISING_DATE",
-            "regionCode", "OU.ORG_UNIT_CODE",
-            "region", "OU.ORG_UNIT_CODE");
+            "applicationNumber", "v.APPLICATION_NUMBER",
+            "application", "v.APPLICATION_NUMBER",
+            "applicantClientNumber", "v.OWNER_CLIENT_NUMBER",
+            "displayOwnerClientNumber", "v.OWNER_CLIENT_NUMBER",
+            "ownerClientNumber", "v.OWNER_CLIENT_NUMBER",
+            "exemptionNumber", "v.EXEMPTION_NUMBER",
+            "listingDate", "v.ADVERTISING_DATE",
+            "regionCode", "v.REGION_CODE",
+            "region", "v.REGION_CODE");
 
-    String fallbackColumn = "EEA.APPLICATION_NUMBER";
+    String fallbackColumn = "v.APPLICATION_NUMBER";
     String direction = "ASC";
     String key = trim(sortField);
 
@@ -495,10 +495,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       column = fallbackColumn;
     }
 
-    if ("EEA.APPLICATION_NUMBER".equals(column)) {
-      return " ORDER BY EEA.APPLICATION_NUMBER " + direction;
+    if ("v.APPLICATION_NUMBER".equals(column)) {
+      return " ORDER BY v.APPLICATION_NUMBER " + direction;
     }
-    return " ORDER BY " + column + " " + direction + ", EEA.APPLICATION_NUMBER ASC";
+    return " ORDER BY " + column + " " + direction + ", v.APPLICATION_NUMBER ASC";
   }
 
   private String offerNumberAsString(ResultSet rs) {
