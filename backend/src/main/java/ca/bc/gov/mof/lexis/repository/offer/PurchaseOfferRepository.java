@@ -50,7 +50,9 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
     where.addDateGte("PO.OFFER_WITHDRAWAL_DATE", criteria.withdrawalFromDate());
     where.addDateLte("PO.OFFER_WITHDRAWAL_DATE", criteria.withdrawalToDate());
-    where.addInEqualsNumberOrNoResults("EEA.ORG_UNIT_NO", criteria.regionNumbers());
+    if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
+      where.addInEqualsNumberOrNoResults("EEA.ORG_UNIT_NO", criteria.regionNumbers());
+    }
 
     String clientNumber = trim(criteria.clientNumber());
     if (clientNumber != null) {

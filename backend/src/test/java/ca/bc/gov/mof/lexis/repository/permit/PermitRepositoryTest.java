@@ -56,6 +56,20 @@ class PermitRepositoryTest {
             "1904");
   }
 
+  @Test
+  void searchShouldNotConstrainRegionWhenNoRegionSelected() {
+    TestPermitRepository repository = new TestPermitRepository();
+
+    repository.search(
+        new PermitSearchCriteria(
+            null, null, null, null, null, null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(repository.whereSql())
+        .doesNotContain("EPD.ORG_UNIT_NO")
+        .doesNotContain("TO_NUMBER(0)");
+    assertThat(repository.bindValues()).isEmpty();
+  }
+
   private static final class TestPermitRepository extends PermitRepository {
     private String whereSql;
     private List<String> bindValues;

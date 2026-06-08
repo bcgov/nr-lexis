@@ -56,6 +56,20 @@ class PurchaseOfferRepositoryTest {
             "00088999");
   }
 
+  @Test
+  void searchShouldNotConstrainRegionWhenNoRegionSelected() {
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+
+    repository.search(
+        new PurchaseOfferSearchCriteria(
+            null, null, null, null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(repository.whereSql())
+        .doesNotContain("EEA.ORG_UNIT_NO")
+        .doesNotContain("TO_NUMBER(0)");
+    assertThat(repository.bindValues()).isEmpty();
+  }
+
   private static final class TestPurchaseOfferRepository extends PurchaseOfferRepository {
     private String whereSql;
     private List<String> bindValues;

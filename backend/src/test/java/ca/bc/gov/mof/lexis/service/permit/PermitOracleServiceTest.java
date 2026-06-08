@@ -44,16 +44,19 @@ class PermitOracleServiceTest {
   }
 
   @Test
-  void searchShouldReturnEmptyWhenRegionNotSelected() {
+  void searchShouldQueryRepositoryWhenRegionNotSelected() {
     PermitSearchCriteria criteria =
         new PermitSearchCriteria(
             null, null, null, null, null, null, null, null, null, List.of(), null, 0, 25);
+    when(repository.search(any(PermitSearchCriteria.class)))
+        .thenReturn(List.of(row(90001L, LocalDate.of(2026, 2, 1))));
 
     PermitSearchResponseDto response = service.search(criteria);
 
-    assertThat(response.total()).isZero();
-    assertThat(response.results()).isEmpty();
-    verifyNoInteractions(repository);
+    assertThat(response.total()).isEqualTo(1);
+    assertThat(response.results()).extracting(PermitSearchResultDto::permitNumber)
+        .containsExactly(90001L);
+    verify(repository).search(any(PermitSearchCriteria.class));
   }
 
   @Test

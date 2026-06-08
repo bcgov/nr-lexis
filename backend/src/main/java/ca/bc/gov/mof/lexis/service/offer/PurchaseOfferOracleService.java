@@ -43,10 +43,6 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     int page = normalized.page();
     int size = normalized.size();
 
-    if (normalized.regionNumbers().isEmpty()) {
-      return new PurchaseOfferSearchResponseDto(List.of(), 0, page, size);
-    }
-
     List<PurchaseOfferSearchResultDto> results = safeList(repository.search(normalized));
     int fromIndex = Math.min(page * size, results.size());
     int toIndex = Math.min(fromIndex + size, results.size());
