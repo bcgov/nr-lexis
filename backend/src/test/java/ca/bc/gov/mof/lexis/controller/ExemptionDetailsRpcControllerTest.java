@@ -233,12 +233,19 @@ class ExemptionDetailsRpcControllerTest {
     params.add("otherConditions", "Conditions");
     params.add("exemptionTypeCode", "B");
     params.add("exemptionStatusCode", "ACT");
+    params.add("applicationNumber", "1000456");
+    params.add("applications", "1000456,1000457");
     params.add("feeRate", "18.25");
     params.add("enableRateOverride", "true");
     params.add("region", "11,12");
 
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
     when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewFederalApplication"))
+        .thenReturn(true);
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewOICApplication"))
+        .thenReturn(true);
     ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
         controller.addExemptionLegacy(params, authentication);
 
@@ -257,6 +264,9 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(request.expiryDate()).isEqualTo(LocalDate.of(2026, 12, 31));
     assertThat(request.feeRate()).isEqualTo(18.25d);
     assertThat(request.enableRateOverride()).isTrue();
+    assertThat(request.applicationNumbers()).containsExactly(1000456L, 1000457L);
+    assertThat(request.canViewFederalApplications()).isTrue();
+    assertThat(request.canViewReserveApplications()).isTrue();
     assertThat(request.regionNumbers()).containsExactly(11L, 12L);
   }
 

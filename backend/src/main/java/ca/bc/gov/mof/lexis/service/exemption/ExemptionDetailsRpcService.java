@@ -91,6 +91,9 @@ public interface ExemptionDetailsRpcService {
       String exemptionStatusCode,
       Double feeRate,
       Boolean enableRateOverride,
+      List<Long> applicationNumbers,
+      boolean canViewFederalApplications,
+      boolean canViewReserveApplications,
       List<Long> regionNumbers) {}
 
   record UpdateExemptionRequest(

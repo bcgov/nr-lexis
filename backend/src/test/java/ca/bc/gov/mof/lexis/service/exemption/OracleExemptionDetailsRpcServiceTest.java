@@ -123,7 +123,7 @@ class OracleExemptionDetailsRpcServiceTest {
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.addExemption(
             new ExemptionDetailsRpcService.CreateExemptionRequest(
-                "", null, null, null, "", "", "", null, null, List.of()),
+                "", null, null, null, "", "", "", null, null, List.of(), false, false, List.of()),
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
@@ -151,6 +151,9 @@ class OracleExemptionDetailsRpcServiceTest {
                 "ACT",
                 18.25d,
                 true,
+                List.of(),
+                false,
+                false,
                 List.of(11L, 12L, 11L)),
             "idir\\jsmith");
 
@@ -177,6 +180,101 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
+  void addExemptionShouldReturnDuplicateExemptionNumberBeforeOracleInsert() {
+    when(repository.existsByExemptionNumber("EX-205")).thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of(),
+                false,
+                false,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).contains("* - this exemption number has already been assigned");
+    verify(repository, never()).insertExemption(any());
+  }
+
+  @Test
+  void addExemptionShouldLinkApplicationWhenRequestIncludesApplicationNumber() {
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord application = application("APP", null, "P");
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
+    when(repository.insertExemption(any(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class)))
+        .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-205")));
+    when(repository.updateApplicationExemption(any(ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class)))
+        .thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of(1000456L),
+                false,
+                false,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.exemptionNumber()).isEqualTo("EX-205");
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord> linkCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class);
+    verify(repository).updateApplicationExemption(linkCaptor.capture());
+    ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord linkRecord = linkCaptor.getValue();
+    assertThat(linkRecord.application()).isEqualTo(application);
+    assertThat(linkRecord.exemptionNumber()).isEqualTo("EX-205");
+    assertThat(linkRecord.applicationStatusCode()).isEqualTo("EXE");
+    assertThat(linkRecord.updateUserId()).isEqualTo("idir\\jsmith");
+  }
+
+  @Test
+  void addExemptionShouldRejectAlreadyAssignedApplicationBeforeOracleInsert() {
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(application("APP", "EX-101", "P")));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of(1000456L),
+                false,
+                false,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).contains("Application 1000456 is already assigned to exemption EX-101.");
+    verify(repository, never()).insertExemption(any());
+  }
+
+  @Test
   void addExemptionShouldDefaultEntryUserWhenPrincipalIsMissing() {
     when(repository.insertExemption(any(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class)))
         .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-205")));
@@ -196,6 +294,9 @@ class OracleExemptionDetailsRpcServiceTest {
                 "ACT",
                 18.25d,
                 true,
+                List.of(),
+                false,
+                false,
                 List.of(11L, 12L)),
             null);
 
