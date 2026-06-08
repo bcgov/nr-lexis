@@ -71,7 +71,9 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     where.addDateGte("ADVERTISING_DATE", criteria.listingFromDate());
     where.addDateLte("ADVERTISING_DATE", criteria.listingToDate());
     where.addRaw(" AND (EXPORT_APPLICATION_STATUS_CODE = 'NEW' OR EXPORT_APPLICATION_STATUS_CODE = 'PND')");
-    where.addInEqualsNumberOrNoResults("ORG_UNIT_NO", criteria.regionNumbers());
+    if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
+      where.addInEqualsNumberOrNoResults("ORG_UNIT_NO", criteria.regionNumbers());
+    }
 
     String orderBy =
         sanitizedSort(

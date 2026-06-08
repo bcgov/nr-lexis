@@ -37,10 +37,6 @@ public class ExemptionOracleService implements ExemptionService {
     int page = normalized.page();
     int size = normalized.size();
 
-    if (normalized.regionNumbers().isEmpty()) {
-      return new ExemptionSearchResponseDto(List.of(), 0, page, size);
-    }
-
     List<ExemptionSearchResultDto> results = safeList(repository.search(normalized));
 
     int fromIndex = Math.min(page * size, results.size());

@@ -57,6 +57,20 @@ class ExemptionRepositoryTest {
             "1904");
   }
 
+  @Test
+  void searchShouldNotConstrainRegionWhenNoRegionSelected() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.search(
+        new ExemptionSearchCriteria(
+            null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
+
+    assertThat(repository.whereSql())
+        .doesNotContain("EO.ORG_UNIT_NO")
+        .doesNotContain("TO_NUMBER(0)");
+    assertThat(repository.bindValues()).isEmpty();
+  }
+
   private static final class TestExemptionRepository extends ExemptionRepository {
     private String whereSql;
     private List<String> bindValues;
