@@ -1,10 +1,16 @@
 package ca.bc.gov.mof.lexis.repository.offer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
+import java.sql.CallableStatement;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -70,9 +76,74 @@ class PurchaseOfferRepositoryTest {
     assertThat(repository.bindValues()).isEmpty();
   }
 
+  @Test
+  void insertShouldBindBlankManufacturingFacilityDefaultWhenInputIsBlank() throws Exception {
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+
+    repository.insertOffer(
+        new PurchaseOfferRepository.PurchaseOfferInsertRecord(
+            null,
+            "Example Lumber",
+            "Alex Example",
+            12500.25d,
+            LocalDate.of(2026, 3, 2),
+            null,
+            null,
+            "N",
+            "Y",
+            null,
+            "N",
+            null,
+            "P",
+            " ",
+            "idir\\jsmith",
+            null,
+            null,
+            "Port Moody",
+            null,
+            1000456L,
+            99.9d));
+
+    verify(repository.callableStatement()).setString(14, " ");
+    verify(repository.callableStatement(), never()).setNull(14, java.sql.Types.VARCHAR);
+  }
+
+  @Test
+  void updateShouldBindBlankManufacturingFacilityDefaultWhenInputIsMissing() throws Exception {
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+
+    repository.updateOffer(
+        new PurchaseOfferRepository.PurchaseOfferUpdateRecord(
+            81001L,
+            null,
+            "Example Lumber",
+            "Alex Example",
+            12500.25d,
+            LocalDate.of(2026, 3, 2),
+            null,
+            null,
+            "N",
+            "Y",
+            null,
+            "N",
+            null,
+            "P",
+            null,
+            "Port Moody",
+            null,
+            "creator",
+            null,
+            "idir\\jsmith",
+            99.9d));
+
+    verify(repository.callableStatement()).setString(15, " ");
+    verify(repository.callableStatement(), never()).setNull(15, java.sql.Types.VARCHAR);
+  }
+
   private static final class TestPurchaseOfferRepository extends PurchaseOfferRepository {
     private String whereSql;
     private List<String> bindValues;
+    private CallableStatement callableStatement;
 
     TestPurchaseOfferRepository() {
       super(null);
@@ -86,6 +157,10 @@ class PurchaseOfferRepositoryTest {
       return bindValues;
     }
 
+    CallableStatement callableStatement() {
+      return callableStatement;
+    }
+
     @Override
     protected <T> List<T> queryDynamicPagedProcedure(
         String procedureSignature,
@@ -96,6 +171,31 @@ class PurchaseOfferRepositoryTest {
       this.whereSql = whereSql;
       this.bindValues = bindValues;
       return List.of();
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingle(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      bind(binder);
+      return Optional.empty();
+    }
+
+    @Override
+    protected boolean executeProcedure(String procedureSignature, SqlConsumer<CallableStatement> binder) {
+      bind(binder);
+      return true;
+    }
+
+    private void bind(SqlConsumer<CallableStatement> binder) {
+      callableStatement = mock(CallableStatement.class);
+      try {
+        binder.accept(callableStatement);
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
     }
   }
 }

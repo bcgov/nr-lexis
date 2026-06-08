@@ -24,6 +24,7 @@ import org.springframework.stereotype.Repository;
 @Profile("oracle")
 public class PurchaseOfferRepository extends OracleRepositorySupport {
 
+  private static final String MANUFACTURING_FACILITY_DEFAULT = " ";
   private static final String FIND_PURCHASE_OFFERS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_POS_BY_CRITERIA(?,?,?,?,?)";
   private static final String FIND_PURCHASE_OFFER_BY_NUMBER =
@@ -190,7 +191,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.approvalIndicator());
     setStringOrNull(cs, index++, record.withdrawReason());
     setStringOrNull(cs, index++, record.exportJurisdictionCode());
-    setStringOrNull(cs, index++, record.manufacturingFacilityInfo());
+    setStringOrDefault(cs, index++, record.manufacturingFacilityInfo(), MANUFACTURING_FACILITY_DEFAULT);
     cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     setStringOrNull(cs, index++, record.updateUserId());
@@ -248,7 +249,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.approvalIndicator());
     setStringOrNull(cs, index++, record.withdrawReason());
     setStringOrNull(cs, index++, record.exportJurisdictionCode());
-    setStringOrNull(cs, index++, record.manufacturingFacilityInfo());
+    setStringOrDefault(cs, index++, record.manufacturingFacilityInfo(), MANUFACTURING_FACILITY_DEFAULT);
     setStringOrNull(cs, index++, record.pickupLocation());
     setStringOrNull(cs, index++, record.offerCondition());
     cs.setString(index++, auditUserOrDefault(record.entryUserId()));
@@ -344,6 +345,12 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     } else {
       cs.setString(index, normalized);
     }
+  }
+
+  private void setStringOrDefault(CallableStatement cs, int index, String value, String fallback)
+      throws SQLException {
+    String normalized = trim(value);
+    cs.setString(index, normalized == null ? fallback : normalized);
   }
 
   private void setLongOrNull(CallableStatement cs, int index, Long value) throws SQLException {
