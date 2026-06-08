@@ -73,6 +73,8 @@ class OracleRepositorySupportTest {
     assertThat(repository.auditUser(null)).isEqualTo("system");
     assertThat(repository.auditUser("  ")).isEqualTo("system");
     assertThat(repository.auditUser(" idir\\jsmith ")).isEqualTo("idir\\jsmith");
+    assertThat(repository.auditUser("12345678-1234-1234-1234-123456789012"))
+        .isEqualTo("12345678-1234-1234-1234-123456");
   }
 
   @Test
