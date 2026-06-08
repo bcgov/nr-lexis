@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   submitIndianReservePermitCreate,
   submitProvincialApplicationCreate,
+  submitProvincialExemptionCreate,
   submitProvincialOfferCreate,
   submitProvincialPermitCreate,
 } from '@/service/create-submit-service'
@@ -35,12 +36,17 @@ describe('create-submit-service', () => {
       applicationNumber: '1001',
       packageNumber: 'PKG-1',
       ownerClientNumber: '00011111',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
       applicantClientNumber: '00022222',
       productTypeCode: 'LOG',
       exemptionType: 'SECTION_1',
       region: '11',
+      applicationDate: '2026-01-01',
+      applicationTermDays: '30',
       receivedDate: '2026-01-01',
       listingDate: '2026-01-02',
+      applicationVolume: '125.5',
       comments: 'ready',
     })
 
@@ -64,6 +70,12 @@ describe('create-submit-service', () => {
     expect(body.get('actionMapping')).toBe('addApplication')
     expect(body.get('applicationNumber')).toBe('1001')
     expect(body.get('agentClientNumber')).toBe('00022222')
+    expect(body.get('ownerClientLocationCode')).toBe('00')
+    expect(body.get('ownerContactName')).toBe('Owner Contact')
+    expect(body.get('applicationDate')).toBe('2026-01-01')
+    expect(body.get('exemptionTerm')).toBe('30')
+    expect(body.get('dateReceived')).toBe('2026-01-01')
+    expect(body.get('applicationVolume')).toBe('125.5')
   })
 
   it('returns offer created id from exportPurchaseOfferNumber payload', async () => {
@@ -80,15 +92,49 @@ describe('create-submit-service', () => {
       applicationNumber: '200',
       packageNumber: 'PKG-9',
       offeringClientNumber: '00012345',
+      companyName: 'Example Lumber',
+      contactName: 'Alex Example',
       region: '11',
       purchaseOfferAmount: '25000',
       purchaseOfferDate: '2026-01-10',
       offerEndDate: '2026-01-20',
+      withdrawReason: 'Withdrawn by buyer',
       pickupLocation: 'yard',
       offerCondition: 'none',
     })
 
     expect(result.createdId).toBe('OP-900')
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('companyName')).toBe('Example Lumber')
+    expect(body.get('contactName')).toBe('Alex Example')
+    expect(body.get('withdrawReason')).toBe('Withdrawn by buyer')
+  })
+
+  it('surfaces provincial exemption backend errors without a generic prefix', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        success: false,
+        errors: ['Application 123 is already assigned to exemption 1234.'],
+      },
+    })
+
+    const result = await submitProvincialExemptionCreate({
+      exemptionNumber: '1235',
+      applicationNumber: '123',
+      linkedApplicationNumbers: ['123'],
+      exemptionTypeCode: 'M',
+      exemptionStatusCode: 'NEW',
+      ownerClientNumber: '123',
+      applicantClientNumber: '123',
+      approvalDate: '2026-04-04',
+      expiryDate: '2027-04-04',
+      approvedVolume: '333333',
+      otherConditions: '',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toBe('')
+    expect(result.errors).toEqual(['Application 123 is already assigned to exemption 1234.'])
   })
 
   it('uses configured create endpoint overrides when provided', async () => {
@@ -105,12 +151,17 @@ describe('create-submit-service', () => {
       applicationNumber: '1001',
       packageNumber: 'PKG-1',
       ownerClientNumber: '00011111',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
       applicantClientNumber: '00022222',
       productTypeCode: 'LOG',
       exemptionType: 'SECTION_1',
       region: '11',
+      applicationDate: '2026-01-01',
+      applicationTermDays: '30',
       receivedDate: '2026-01-01',
       listingDate: '2026-01-02',
+      applicationVolume: '125.5',
       comments: 'ready',
     })
 
@@ -132,12 +183,17 @@ describe('create-submit-service', () => {
       applicationNumber: '1001',
       packageNumber: 'PKG-1',
       ownerClientNumber: '00011111',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
       applicantClientNumber: '00022222',
       productTypeCode: 'LOG',
       exemptionType: 'SECTION_1',
       region: '11',
+      applicationDate: '2026-01-01',
+      applicationTermDays: '30',
       receivedDate: '2026-01-01',
       listingDate: '2026-01-02',
+      applicationVolume: '125.5',
       comments: 'ready',
     })
 

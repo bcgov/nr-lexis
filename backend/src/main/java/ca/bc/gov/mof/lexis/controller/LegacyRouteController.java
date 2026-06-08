@@ -378,6 +378,16 @@ public class LegacyRouteController {
     return indianReservePermitController.getByPermitNumber(permitNumber);
   }
 
+  @RequestMapping(
+      value = {"/indianReservePermitDetails", "/indianReservePermitDetails.do"},
+      method = RequestMethod.POST,
+      params = "actionMapping=saveReservePermit")
+  public ResponseEntity<?> saveIndianReservePermit(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return indianReservePermitController.addPermit(parameters, authentication);
+  }
+
   @GetMapping({"/offersSearch", "/offersSearch.do"})
   public ResponseEntity<?> offersSearch(
       @RequestParam(name = "actionMapping", required = false) String actionMapping,

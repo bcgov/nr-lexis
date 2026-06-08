@@ -404,6 +404,16 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyIndianReservePermitCreateShouldAllowApplicationApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/indianReservePermitDetails")
+                .param("actionMapping", "saveReservePermit")
+                .param("permitNumber", "111")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void legacyExemptionDetailsCreateShouldAllowExemptionApproverRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/exemptionDetails")
@@ -493,10 +503,34 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void modernFeePoliciesShouldAllowAdminRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/admin/policies/fee")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
+  void modernFeePoliciesShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/admin/policies/fee")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void legacyFilAdminRpcShouldAllowAdminRoleForDoRoute() throws Exception {
     mockMvc.perform(
             get("/api/lexis/lexisFILAdminRPC.do")
                 .param("actionMapping", "view")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
+  void modernFilPoliciesShouldAllowAdminRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/admin/policies/fil")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
         .andExpect(status().is2xxSuccessful());
   }

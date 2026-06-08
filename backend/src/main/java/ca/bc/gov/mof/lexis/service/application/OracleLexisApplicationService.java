@@ -37,10 +37,6 @@ public class OracleLexisApplicationService implements LexisApplicationService {
     int page = normalized.page();
     int size = normalized.size();
 
-    if (normalized.regionNumbers().isEmpty()) {
-      return new LexisApplicationSearchResponseDto(List.of(), 0, page, size);
-    }
-
     List<LexisApplicationSearchResultDto> results = safeList(repository.search(normalized));
     int fromIndex = Math.min(page * size, results.size());
     int toIndex = Math.min(fromIndex + size, results.size());

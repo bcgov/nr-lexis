@@ -130,9 +130,11 @@ const parseCreateResponse = (
   createdIdKeyCandidates: Array<keyof LegacyCreateResponse>,
 ): CreateSubmissionResult => {
   const success = payload.success ?? payload.valid ?? false
-  const message = asString(payload.message) ?? (success ? 'Saved successfully.' : 'Save failed.')
   const errors = asStringArray(payload.errors)
   const warnings = asStringArray(payload.warnings)
+  const message =
+    asString(payload.message) ??
+    (success ? 'Saved successfully.' : errors.length > 0 ? '' : 'Save failed.')
   const createdId = createdIdKeyCandidates
     .map((key) => asString(payload[key]))
     .find((value) => Boolean(value))
@@ -203,12 +205,17 @@ export type ProvincialApplicationCreateSubmission = {
   applicationNumber: string
   packageNumber: string
   ownerClientNumber: string
+  ownerClientLocationCode: string
+  ownerContactName: string
   applicantClientNumber: string
   productTypeCode: string
   exemptionType: string
   region: string
+  applicationDate: string
+  applicationTermDays: string
   receivedDate: string
   listingDate: string
+  applicationVolume: string
   comments: string
 }
 
@@ -222,6 +229,9 @@ export const submitProvincialApplicationCreate = async (
         applicationNumber: form.applicationNumber,
         packageNumber: form.packageNumber,
         ownerClientNumber: form.ownerClientNumber,
+        ownerClientLocationCode: form.ownerClientLocationCode,
+        ownerClientLocation: form.ownerClientLocationCode,
+        ownerContactName: form.ownerContactName,
         applicantClientNumber: form.applicantClientNumber,
         agentClientNumber: form.applicantClientNumber,
         productTypeCode: form.productTypeCode,
@@ -229,8 +239,13 @@ export const submitProvincialApplicationCreate = async (
         exemptionTypeCode: form.exemptionType,
         region: form.region,
         orgUnitNumber: form.region,
+        applicationDate: form.applicationDate,
+        exemptionTerm: form.applicationTermDays,
+        termDays: form.applicationTermDays,
         receivedDate: form.receivedDate,
+        dateReceived: form.receivedDate,
         listingDate: form.listingDate,
+        applicationVolume: form.applicationVolume,
         comments: form.comments,
         additionalRemarks: form.comments,
       }),
@@ -287,10 +302,13 @@ export type ProvincialOfferCreateSubmission = {
   applicationNumber: string
   packageNumber: string
   offeringClientNumber: string
+  companyName: string
+  contactName: string
   region: string
   purchaseOfferAmount: string
   purchaseOfferDate: string
   offerEndDate: string
+  withdrawReason: string
   pickupLocation: string
   offerCondition: string
 }
@@ -306,12 +324,15 @@ export const submitProvincialOfferCreate = async (
         exportPurchaseOfferNumber: form.offerNumber,
         applicationNumber: form.applicationNumber,
         packageNumber: form.packageNumber,
+        companyName: form.companyName,
+        contactName: form.contactName,
         offeringClientNumber: form.offeringClientNumber,
         clientNumber: form.offeringClientNumber,
         region: form.region,
         purchaseOfferAmount: form.purchaseOfferAmount,
         purchaseOfferDate: form.purchaseOfferDate,
         offerEndDate: form.offerEndDate,
+        withdrawReason: form.withdrawReason,
         pickupLocation: form.pickupLocation,
         offerCondition: form.offerCondition,
         offerRemark: form.offerCondition,

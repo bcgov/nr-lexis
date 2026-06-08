@@ -102,7 +102,9 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     where.addLike("EEA.OWNER_CLIENT_NUMBER", criteria.ownerClientNumber());
     where.addRaw(" AND EEA.EXPORT_JURISDICTION_CODE <> '" + JURISDICTION_FEDERAL + "'");
     where.addEquals("EEA.OIC_INDICATOR", OIC_INDICATOR_NO);
-    where.addInEqualsNumberOrNoResults("EEA.ORG_UNIT_NO", criteria.regionNumbers());
+    if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
+      where.addInEqualsNumberOrNoResults("EEA.ORG_UNIT_NO", criteria.regionNumbers());
+    }
 
     String exemptionType = trim(criteria.exemptionType());
     if (exemptionType != null && !"ALL".equalsIgnoreCase(exemptionType)) {

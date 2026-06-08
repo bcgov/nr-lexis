@@ -75,7 +75,9 @@ public class ExemptionRepository extends OracleRepositorySupport {
     where.addDateLte("EE.APPROVAL_DATE", criteria.approvalToDate());
     where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
     where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
-    where.addInLikeOrNoResults("EO.ORG_UNIT_NO", criteria.regionNumbers());
+    if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
+      where.addInLikeOrNoResults("EO.ORG_UNIT_NO", criteria.regionNumbers());
+    }
 
     SqlWhere sqlWhere = where.build(" ORDER BY EE.EXEMPTION_NUMBER DESC");
 

@@ -61,6 +61,18 @@ class LexisApplicationRepositoryTest {
             "00055667");
   }
 
+  @Test
+  void searchShouldNotConstrainRegionWhenNoRegionSelected() {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+
+    repository.search(
+        new LexisApplicationSearchCriteria(
+            null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(repository.whereSql()).doesNotContain("EEA.ORG_UNIT_NO");
+    assertThat(repository.bindValues()).containsExactly("N");
+  }
+
   private static final class TestLexisApplicationRepository extends LexisApplicationRepository {
     private String whereSql;
     private List<String> bindValues;

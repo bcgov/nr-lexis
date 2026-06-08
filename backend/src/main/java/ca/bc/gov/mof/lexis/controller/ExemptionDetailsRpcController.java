@@ -330,8 +330,11 @@ public class ExemptionDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
     ExemptionDetailsRpcService.CreateExemptionResult result =
-        service.addExemption(toCreateExemptionRequest(parameters), userId(authentication));
+        service.addExemption(
+            toCreateExemptionRequest(parameters, roles),
+            userId(authentication));
     return ResponseEntity.ok(
         new ExemptionPersistenceResponseDto(
             result.success(),
@@ -586,7 +589,7 @@ public class ExemptionDetailsRpcController {
   }
 
   private ExemptionDetailsRpcService.CreateExemptionRequest toCreateExemptionRequest(
-      MultiValueMap<String, String> parameters) {
+      MultiValueMap<String, String> parameters, List<String> roles) {
     return new ExemptionDetailsRpcService.CreateExemptionRequest(
         first(parameters, "exemptionNumber", "legacyExemptionNumber"),
         parseDouble(first(parameters, "approvedVolume")),
@@ -597,6 +600,9 @@ public class ExemptionDetailsRpcController {
         first(parameters, "exemptionStatusCode"),
         parseDouble(first(parameters, "feeRate")),
         resolveRateOverride(parameters),
+        parseApplicationNumbers(parameters),
+        authorizationService.canPerformAction(roles, "viewFederalApplication"),
+        authorizationService.canPerformAction(roles, "viewOICApplication"),
         parseRegions(parameters));
   }
 
@@ -694,6 +700,25 @@ public class ExemptionDetailsRpcController {
     rawValues.addAll(parameters.getOrDefault("region", List.of()));
     rawValues.addAll(parameters.getOrDefault("regions", List.of()));
     rawValues.addAll(parameters.getOrDefault("orgUnitNumber", List.of()));
+
+    return rawValues.stream()
+        .flatMap(value -> List.of(value.split(",")).stream())
+        .map(String::trim)
+        .filter(value -> !value.isBlank())
+        .map(this::parsePositiveLong)
+        .filter(value -> value != null && value > 0)
+        .distinct()
+        .toList();
+  }
+
+  private List<Long> parseApplicationNumbers(MultiValueMap<String, String> parameters) {
+    if (parameters == null) {
+      return List.of();
+    }
+    List<String> rawValues = new ArrayList<>();
+    rawValues.addAll(parameters.getOrDefault("applicationNumber", List.of()));
+    rawValues.addAll(parameters.getOrDefault("applications", List.of()));
+    rawValues.addAll(parameters.getOrDefault("applicationNumbers", List.of()));
 
     return rawValues.stream()
         .flatMap(value -> List.of(value.split(",")).stream())

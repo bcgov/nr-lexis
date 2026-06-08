@@ -27,10 +27,13 @@ type ProvincialOfferCreateForm = {
   applicationNumber: string
   packageNumber: string
   offeringClientNumber: string
+  companyName: string
+  contactName: string
   region: string
   purchaseOfferAmount: string
   purchaseOfferDate: string
   offerEndDate: string
+  withdrawReason: string
   pickupLocation: string
   offerCondition: string
 }
@@ -42,10 +45,13 @@ const INITIAL_FORM: ProvincialOfferCreateForm = {
   applicationNumber: '',
   packageNumber: '',
   offeringClientNumber: '',
+  companyName: '',
+  contactName: '',
   region: '',
   purchaseOfferAmount: '',
   purchaseOfferDate: '',
   offerEndDate: '',
+  withdrawReason: '',
   pickupLocation: '',
   offerCondition: '',
 }
@@ -67,7 +73,10 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialOfferCreat
     applicationNumber: query.get('applicationNumber') ?? '',
     packageNumber: query.get('packageNumber') ?? '',
     offeringClientNumber: query.get('offeringClientNumber') ?? query.get('clientNumber') ?? '',
+    companyName: query.get('companyName') ?? '',
+    contactName: query.get('contactName') ?? '',
     region: query.get('region') ?? '',
+    withdrawReason: query.get('withdrawReason') ?? '',
   }
 }
 
@@ -105,6 +114,11 @@ const ProvincialOfferCreatePage: FC = () => {
       !normalizeText(form.applicationNumber) ||
       !normalizeText(form.packageNumber) ||
       !normalizeText(form.offeringClientNumber) ||
+      !normalizeText(form.companyName) ||
+      !normalizeText(form.contactName) ||
+      !normalizeText(form.purchaseOfferDate) ||
+      !normalizeText(form.pickupLocation) ||
+      (!!normalizeText(form.offerEndDate) && !normalizeText(form.withdrawReason)) ||
       !isPositiveNumeric(form.offerNumber) ||
       !isPositiveNumeric(form.applicationNumber) ||
       !isPositiveNumeric(form.purchaseOfferAmount) ||
@@ -249,6 +263,22 @@ const ProvincialOfferCreatePage: FC = () => {
                 setForm((current) => ({ ...current, offeringClientNumber: event.target.value }))
               }
             />
+            <TextInput
+              id="companyName"
+              labelText="Company Name (required)"
+              value={form.companyName}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, companyName: event.target.value }))
+              }
+            />
+            <TextInput
+              id="contactName"
+              labelText="Contact Name (required)"
+              value={form.contactName}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, contactName: event.target.value }))
+              }
+            />
             <Select
               id="region"
               labelText="Region"
@@ -274,7 +304,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="purchaseOfferDate"
-              labelText="Offer Date (YYYY-MM-DD)"
+              labelText="Offer Date (YYYY-MM-DD) (required)"
               value={form.purchaseOfferDate}
               invalid={!isValidIsoDate(form.purchaseOfferDate)}
               invalidText="Date must be YYYY-MM-DD."
@@ -284,7 +314,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="offerEndDate"
-              labelText="Offer End Date (YYYY-MM-DD)"
+              labelText="Withdrawal Date (YYYY-MM-DD)"
               value={form.offerEndDate}
               invalid={!isValidIsoDate(form.offerEndDate)}
               invalidText="Date must be YYYY-MM-DD."
@@ -293,8 +323,16 @@ const ProvincialOfferCreatePage: FC = () => {
               }
             />
             <TextInput
+              id="withdrawReason"
+              labelText="Withdraw Reason (required when withdrawn)"
+              value={form.withdrawReason}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, withdrawReason: event.target.value }))
+              }
+            />
+            <TextInput
               id="pickupLocation"
-              labelText="Pickup Location"
+              labelText="Pickup Location (required)"
               value={form.pickupLocation}
               onChange={(event) =>
                 setForm((current) => ({ ...current, pickupLocation: event.target.value }))

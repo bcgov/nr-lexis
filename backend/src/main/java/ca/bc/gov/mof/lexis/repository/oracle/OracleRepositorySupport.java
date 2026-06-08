@@ -41,6 +41,7 @@ public abstract class OracleRepositorySupport {
   protected static final String LEXIS_READ_ONLY_PACKAGE = "LEXIS_READ_ONLY.";
 
   private static final String STRING_ARRAY_TYPE = "CBR_VARCHAR2_ARRAY";
+  private static final int AUDIT_USER_MAX_LENGTH = 30;
   private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
@@ -364,7 +365,12 @@ public abstract class OracleRepositorySupport {
 
   protected String auditUserOrDefault(String value) {
     String normalized = trim(value);
-    return normalized == null ? "system" : normalized;
+    if (normalized == null) {
+      return "system";
+    }
+    return normalized.length() <= AUDIT_USER_MAX_LENGTH
+        ? normalized
+        : normalized.substring(0, AUDIT_USER_MAX_LENGTH);
   }
 
   protected LocalDate toLocalDate(Date value) {

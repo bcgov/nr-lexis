@@ -29,12 +29,17 @@ type ProvincialApplicationCreateForm = {
   applicationNumber: string
   packageNumber: string
   ownerClientNumber: string
+  ownerClientLocationCode: string
+  ownerContactName: string
   applicantClientNumber: string
   productTypeCode: string
   exemptionType: string
   region: string
+  applicationDate: string
+  applicationTermDays: string
   receivedDate: string
   listingDate: string
+  applicationVolume: string
   comments: string
 }
 
@@ -44,12 +49,17 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   applicationNumber: '',
   packageNumber: '',
   ownerClientNumber: '',
+  ownerClientLocationCode: '',
+  ownerContactName: '',
   applicantClientNumber: '',
   productTypeCode: '',
   exemptionType: '',
   region: '',
+  applicationDate: '',
+  applicationTermDays: '',
   receivedDate: '',
   listingDate: '',
+  applicationVolume: '',
   comments: '',
 }
 
@@ -70,12 +80,19 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     applicationNumber: query.get('applicationNumber') ?? '',
     packageNumber: query.get('packageNumber') ?? '',
     ownerClientNumber: query.get('ownerClientNumber') ?? '',
+    ownerClientLocationCode:
+      query.get('ownerClientLocationCode') ?? query.get('ownerClientLocation') ?? '',
+    ownerContactName: query.get('ownerContactName') ?? query.get('ownerName') ?? '',
     applicantClientNumber: query.get('applicantClientNumber') ?? '',
     productTypeCode: query.get('productTypeCode') ?? '',
     exemptionType: query.get('exemptionType') ?? query.get('exemptionTypeCode') ?? '',
     region: query.get('region') ?? query.get('orgUnitNumber') ?? '',
+    applicationDate: query.get('applicationDate') ?? '',
+    applicationTermDays:
+      query.get('applicationTermDays') ?? query.get('exemptionTerm') ?? query.get('termDays') ?? '',
     receivedDate: query.get('receivedDate') ?? '',
     listingDate: query.get('listingDate') ?? '',
+    applicationVolume: query.get('applicationVolume') ?? '',
     comments: query.get('comments') ?? '',
   }
 }
@@ -117,9 +134,19 @@ const ProvincialApplicationCreatePage: FC = () => {
       !normalizeText(form.applicationNumber) ||
       !normalizeText(form.packageNumber) ||
       !normalizeText(form.ownerClientNumber) ||
+      !normalizeText(form.ownerClientLocationCode) ||
+      !normalizeText(form.ownerContactName) ||
       !normalizeText(form.applicantClientNumber) ||
       !normalizeText(form.productTypeCode) ||
+      !normalizeText(form.region) ||
+      !normalizeText(form.applicationDate) ||
+      !normalizeText(form.applicationTermDays) ||
+      !normalizeText(form.receivedDate) ||
+      !normalizeText(form.applicationVolume) ||
       !isPositiveNumeric(form.applicationNumber) ||
+      !isPositiveNumeric(form.applicationTermDays) ||
+      !isPositiveNumeric(form.applicationVolume) ||
+      !isValidIsoDate(form.applicationDate) ||
       !isValidIsoDate(form.receivedDate) ||
       !isValidIsoDate(form.listingDate)
     )
@@ -265,6 +292,25 @@ const ProvincialApplicationCreatePage: FC = () => {
               }
             />
             <TextInput
+              id="ownerClientLocationCode"
+              labelText="Owner Client Location (required)"
+              value={form.ownerClientLocationCode}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  ownerClientLocationCode: event.target.value,
+                }))
+              }
+            />
+            <TextInput
+              id="ownerContactName"
+              labelText="Owner Name (required)"
+              value={form.ownerContactName}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, ownerContactName: event.target.value }))
+              }
+            />
+            <TextInput
               id="applicantClientNumber"
               labelText="Applicant Client Number (required)"
               value={form.applicantClientNumber}
@@ -300,7 +346,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             </Select>
             <Select
               id="region"
-              labelText="Region"
+              labelText="Region (required)"
               value={form.region}
               onChange={(event) =>
                 setForm((current) => ({ ...current, region: event.target.value }))
@@ -312,8 +358,28 @@ const ProvincialApplicationCreatePage: FC = () => {
               ))}
             </Select>
             <TextInput
+              id="applicationDate"
+              labelText="Application Date (YYYY-MM-DD) (required)"
+              value={form.applicationDate}
+              invalid={!isValidIsoDate(form.applicationDate)}
+              invalidText="Date must be YYYY-MM-DD."
+              onChange={(event) =>
+                setForm((current) => ({ ...current, applicationDate: event.target.value }))
+              }
+            />
+            <TextInput
+              id="applicationTermDays"
+              labelText="Application Term Days (required)"
+              value={form.applicationTermDays}
+              invalid={!isPositiveNumeric(form.applicationTermDays)}
+              invalidText="Use a positive numeric value."
+              onChange={(event) =>
+                setForm((current) => ({ ...current, applicationTermDays: event.target.value }))
+              }
+            />
+            <TextInput
               id="receivedDate"
-              labelText="Received Date (YYYY-MM-DD)"
+              labelText="Received Date (YYYY-MM-DD) (required)"
               value={form.receivedDate}
               invalid={!isValidIsoDate(form.receivedDate)}
               invalidText="Date must be YYYY-MM-DD."
@@ -329,6 +395,16 @@ const ProvincialApplicationCreatePage: FC = () => {
               invalidText="Date must be YYYY-MM-DD."
               onChange={(event) =>
                 setForm((current) => ({ ...current, listingDate: event.target.value }))
+              }
+            />
+            <TextInput
+              id="applicationVolume"
+              labelText="Application Volume (required)"
+              value={form.applicationVolume}
+              invalid={!isPositiveNumeric(form.applicationVolume)}
+              invalidText="Use a positive numeric value."
+              onChange={(event) =>
+                setForm((current) => ({ ...current, applicationVolume: event.target.value }))
               }
             />
           </div>

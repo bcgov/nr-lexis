@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
 import { Button, Column, Grid, InlineLoading, InlineNotification, Tag, Tile } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
@@ -371,6 +371,10 @@ const Dashboard: FC = () => {
       }
     }
   }, [beginCountsRequest, canAccessModule])
+
+  useEffect(() => {
+    void loadCounts()
+  }, [loadCounts])
 
   return (
     <Grid fullWidth className="default-grid">

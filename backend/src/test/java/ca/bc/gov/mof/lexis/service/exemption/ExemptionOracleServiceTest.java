@@ -102,16 +102,19 @@ class ExemptionOracleServiceTest {
   }
 
   @Test
-  void searchShouldReturnEmptyWhenRegionNotSelected() {
+  void searchShouldQueryRepositoryWhenRegionNotSelected() {
     ExemptionSearchCriteria criteria =
         new ExemptionSearchCriteria(
             null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 25);
+    when(repository.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(List.of(row("EX-001", LocalDate.of(2026, 1, 1))));
 
     ExemptionSearchResponseDto response = service.search(criteria);
 
-    assertThat(response.total()).isZero();
-    assertThat(response.results()).isEmpty();
-    verifyNoInteractions(repository);
+    assertThat(response.total()).isEqualTo(1);
+    assertThat(response.results()).extracting(ExemptionSearchResultDto::exemptionNumber)
+        .containsExactly("EX-001");
+    verify(repository).search(any(ExemptionSearchCriteria.class));
   }
 
   @Test

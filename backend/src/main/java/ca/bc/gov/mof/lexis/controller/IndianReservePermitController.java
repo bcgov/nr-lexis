@@ -4,7 +4,9 @@ import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.reserve.IndianReservePermitService;
+import ca.bc.gov.mof.lexis.service.reserve.IndianReservePermitService.CreatePermitRequest;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -16,9 +18,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -92,6 +97,22 @@ public class IndianReservePermitController {
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
+  @PostMapping
+  public ResponseEntity<PermitMutationRpcResponseDto> addPermit(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    IndianReservePermitService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Indian reserve permit service unavailable - returning no content for add permit");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(
+        service.addPermit(
+            toCreatePermitRequest(parameters),
+            authentication == null ? null : authentication.getName()));
+  }
+
   private LocalDate parseDate(String input) {
     if (input == null || input.trim().isEmpty()) {
       return null;
@@ -112,5 +133,33 @@ public class IndianReservePermitController {
           "Invalid date value '" + value + "'. Use yyyy-MM-dd or MM/dd/yyyy.",
           ex);
     }
+  }
+
+  private CreatePermitRequest toCreatePermitRequest(MultiValueMap<String, String> parameters) {
+    return new CreatePermitRequest(
+        firstValue(parameters, "permitNumber"),
+        firstValue(parameters, "packageNumber"),
+        firstValue(parameters, "clientNumber"),
+        firstValue(parameters, "applicationDate"),
+        firstValue(parameters, "permitIssueDate"),
+        firstValue(parameters, "estimatedShippingDate", "estShippingDate"),
+        firstValue(parameters, "destinationCountry"),
+        firstValue(parameters, "transportTypeCode"),
+        firstValue(parameters, "transportName"),
+        firstValue(parameters, "portOfExport"),
+        firstValue(parameters, "permitRemarks", "remarks"));
+  }
+
+  private String firstValue(MultiValueMap<String, String> parameters, String... names) {
+    if (parameters == null || names == null) {
+      return null;
+    }
+    for (String name : names) {
+      String value = parameters.getFirst(name);
+      if (value != null) {
+        return value;
+      }
+    }
+    return null;
   }
 }

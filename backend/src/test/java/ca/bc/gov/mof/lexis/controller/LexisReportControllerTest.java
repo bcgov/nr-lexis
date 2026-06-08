@@ -67,6 +67,20 @@ class LexisReportControllerTest {
   }
 
   @Test
+  void applicationReportShouldRejectUnboundedRequest() {
+    LexisReportController controller = new LexisReportController(reportServiceProvider);
+
+    ResponseEntity<byte[]> response =
+        controller.applicationReport(new LexisReportRequestDto(Map.of("region", "0"), "PDF"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.TEXT_PLAIN);
+    assertThat(new String(response.getBody()))
+        .contains("Choose at least one Application Report filter before generating");
+    verifyNoInteractions(reportService);
+  }
+
+  @Test
   void approvedExemptionReportShouldDelegateToReportService() {
     assertDelegatesTo(
         "approvedExemptionReport", controller -> controller.approvedExemptionReport(sampleRequest()));
@@ -144,4 +158,3 @@ class LexisReportControllerTest {
     return new LexisReportRequestDto(Map.of("fromDate", "2026-01-01"), "PDF");
   }
 }
-

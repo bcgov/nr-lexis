@@ -49,16 +49,19 @@ class OracleLexisApplicationServiceTest {
   }
 
   @Test
-  void searchShouldReturnEmptyWhenRegionNotSelected() {
+  void searchShouldQueryRepositoryWhenRegionNotSelected() {
     LexisApplicationSearchCriteria criteria =
         new LexisApplicationSearchCriteria(
             null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 25);
+    when(repository.search(any(LexisApplicationSearchCriteria.class)))
+        .thenReturn(List.of(row(1001L, LocalDate.of(2026, 2, 1))));
 
     LexisApplicationSearchResponseDto response = service.search(criteria);
 
-    assertThat(response.total()).isZero();
-    assertThat(response.results()).isEmpty();
-    verifyNoInteractions(repository);
+    assertThat(response.total()).isEqualTo(1);
+    assertThat(response.results()).extracting(LexisApplicationSearchResultDto::application)
+        .containsExactly(1001L);
+    verify(repository).search(any(LexisApplicationSearchCriteria.class));
   }
 
   @Test

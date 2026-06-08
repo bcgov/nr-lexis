@@ -43,16 +43,19 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
-  void searchShouldReturnEmptyWhenRegionNotSelected() {
+  void searchShouldQueryRepositoryWhenRegionNotSelected() {
     PurchaseOfferSearchCriteria criteria =
         new PurchaseOfferSearchCriteria(
             null, null, null, null, null, null, null, List.of(), null, 0, 25);
+    when(repository.search(any(PurchaseOfferSearchCriteria.class)))
+        .thenReturn(List.of(row(81001L, LocalDate.of(2026, 2, 1))));
 
     PurchaseOfferSearchResponseDto response = service.search(criteria);
 
-    assertThat(response.total()).isZero();
-    assertThat(response.results()).isEmpty();
-    verifyNoInteractions(repository);
+    assertThat(response.total()).isEqualTo(1);
+    assertThat(response.results()).extracting(PurchaseOfferSearchResultDto::offerNumber)
+        .containsExactly(81001L);
+    verify(repository).search(any(PurchaseOfferSearchCriteria.class));
   }
 
   @Test

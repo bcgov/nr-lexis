@@ -25,6 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class LexisReportController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(LexisReportController.class);
+  private static final String APPLICATION_REPORT_LIMITER_MESSAGE =
+      "Choose at least one Application Report filter before generating: region, jurisdiction, "
+          + "exemption reason, client number, growth type, or received date.";
 
   private final ObjectProvider<LexisReportService> reportServiceProvider;
 
@@ -56,7 +59,13 @@ public class LexisReportController {
   @PostMapping({"/applicationReport", "/application-report"})
   public ResponseEntity<byte[]> applicationReport(
       @RequestBody(required = false) LexisReportRequestDto request) {
-    return executeReport("applicationReport", "application report", request);
+    LexisReportRequestDto normalizedRequest = normalizeRequest(request);
+    if (!hasApplicationReportLimiter(normalizedRequest.parameters())) {
+      return ResponseEntity.badRequest()
+          .contentType(MediaType.TEXT_PLAIN)
+          .body(APPLICATION_REPORT_LIMITER_MESSAGE.getBytes(StandardCharsets.UTF_8));
+    }
+    return executeReport("applicationReport", "application report", normalizedRequest);
   }
 
   @PostMapping({"/approvedExemptionReport", "/approved-exemption-report"})
@@ -125,6 +134,37 @@ public class LexisReportController {
     return new LexisReportRequestDto(normalizedParameters, normalizedFormat);
   }
 
+  private boolean hasApplicationReportLimiter(Map<String, String> parameters) {
+    return hasNonAllRegion(parameters)
+        || hasText(parameters, "exportJurisdictionCode")
+        || hasText(parameters, "jurisdiction")
+        || hasText(parameters, "exemptionReason")
+        || hasText(parameters, "clientNumber")
+        || hasText(parameters, "growthType")
+        || hasText(parameters, "fromDate")
+        || hasText(parameters, "toDate");
+  }
+
+  private boolean hasNonAllRegion(Map<String, String> parameters) {
+    String region = parameters.get("region");
+    if (region == null || region.isBlank()) {
+      return false;
+    }
+
+    for (String value : region.split(",")) {
+      String trimmed = value.trim();
+      if (!trimmed.isEmpty() && !"0".equals(trimmed)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean hasText(Map<String, String> parameters, String key) {
+    String value = parameters.get(key);
+    return value != null && !value.isBlank();
+  }
+
   private ResponseEntity<byte[]> toResponse(LexisGeneratedReport report) {
     String filename =
         report.filename() == null || report.filename().isBlank() ? "lexis-report.bin" : report.filename();
@@ -151,4 +191,3 @@ public class LexisReportController {
     }
   }
 }
-
