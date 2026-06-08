@@ -249,6 +249,7 @@ public abstract class OracleRepositorySupport {
       List<String> bindValues,
       SqlRowMapper<T> rowMapper) {
     List<T> allResults = new ArrayList<>();
+    List<T> previousPage = List.of();
 
     for (int page = 0; page < 10_000; page++) {
       List<T> currentPage =
@@ -256,11 +257,15 @@ public abstract class OracleRepositorySupport {
       if (currentPage.isEmpty()) {
         break;
       }
-      allResults.addAll(currentPage);
-      if (currentPage.size() < 500) {
-        // Legacy procedures page server-side; short page usually means completion.
+      if (page > 0 && currentPage.equals(previousPage)) {
+        logger.warn(
+            "Oracle dynamic call [{}] returned duplicate data for page {}; stopping pagination",
+            procedureSignature,
+            page);
         break;
       }
+      allResults.addAll(currentPage);
+      previousPage = currentPage;
     }
 
     return allResults;

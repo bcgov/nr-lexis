@@ -6,6 +6,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import java.sql.CallableStatement;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -13,13 +14,46 @@ import org.junit.jupiter.api.Test;
 class OracleRepositorySupportTest {
 
   @Test
-  void queryDynamicAllPagesShouldStopAfterShortFinalPage() {
+  void queryDynamicAllPagesShouldContinuePastShortLegacyPagesUntilEmptyPage() {
+    List<String> firstPage =
+        List.of(
+            "row-1",
+            "row-2",
+            "row-3",
+            "row-4",
+            "row-5",
+            "row-6",
+            "row-7",
+            "row-8",
+            "row-9",
+            "row-10");
+    List<String> secondPage = List.of("row-11", "row-12", "row-13");
+    TestRepository repository = new TestRepository(List.of(firstPage, secondPage));
+
+    List<String> results = repository.loadAllPages();
+
+    assertThat(results).containsExactlyElementsOf(concat(firstPage, secondPage));
+    assertThat(repository.pageCalls()).isEqualTo(3);
+  }
+
+  @Test
+  void queryDynamicAllPagesShouldStopAfterEmptyPage() {
     TestRepository repository = new TestRepository(List.of(List.of("row")));
 
     List<String> results = repository.loadAllPages();
 
     assertThat(results).containsExactly("row");
-    assertThat(repository.pageCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(2);
+  }
+
+  @Test
+  void queryDynamicAllPagesShouldStopWhenProcedureRepeatsTheSamePage() {
+    TestRepository repository = new TestRepository(List.of(List.of("row"), List.of("row")));
+
+    List<String> results = repository.loadAllPages();
+
+    assertThat(results).containsExactly("row");
+    assertThat(repository.pageCalls()).isEqualTo(2);
   }
 
   @Test
@@ -170,5 +204,9 @@ class OracleRepositorySupportTest {
       }
       return (List<T>) pages.get(page);
     }
+  }
+
+  private static List<String> concat(List<String> first, List<String> second) {
+    return Stream.concat(first.stream(), second.stream()).toList();
   }
 }
