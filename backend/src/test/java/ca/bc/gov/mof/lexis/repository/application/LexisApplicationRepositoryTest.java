@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.repository.application;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -76,12 +77,40 @@ class LexisApplicationRepositoryTest {
     assertThat(repository.bindValues()).containsExactly("N");
   }
 
+  @Test
+  void searchShouldLoadAllLegacyPages() {
+    TestLexisApplicationRepository repository =
+        new TestLexisApplicationRepository(
+            List.of(
+                List.of(
+                    new LexisApplicationSearchResultDto(
+                        900123L, "New", "Client 1", "00000001", null, null, "Region 1", 100d, true, false)),
+                List.of(
+                    new LexisApplicationSearchResultDto(
+                        900124L, "New", "Client 2", "00000002", null, null, "Region 2", 200d, true, false))));
+
+    List<LexisApplicationSearchResultDto> results =
+        repository.search(
+            new LexisApplicationSearchCriteria(
+                null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(results).extracting(LexisApplicationSearchResultDto::application).containsExactly(900123L, 900124L);
+    assertThat(repository.pageCalls()).isEqualTo(3);
+  }
+
   private static final class TestLexisApplicationRepository extends LexisApplicationRepository {
+    private final List<List<?>> pages;
     private String whereSql;
     private List<String> bindValues;
+    private int pageCalls;
 
     TestLexisApplicationRepository() {
+      this(List.of());
+    }
+
+    TestLexisApplicationRepository(List<List<?>> pages) {
       super(null);
+      this.pages = pages;
     }
 
     String whereSql() {
@@ -92,7 +121,12 @@ class LexisApplicationRepositoryTest {
       return bindValues;
     }
 
+    int pageCalls() {
+      return pageCalls;
+    }
+
     @Override
+    @SuppressWarnings("unchecked")
     protected <T> List<T> queryDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
@@ -101,7 +135,11 @@ class LexisApplicationRepositoryTest {
         SqlRowMapper<T> rowMapper) {
       this.whereSql = whereSql;
       this.bindValues = bindValues;
-      return List.of();
+      pageCalls++;
+      if (page >= pages.size()) {
+        return List.of();
+      }
+      return (List<T>) pages.get(page);
     }
   }
 }

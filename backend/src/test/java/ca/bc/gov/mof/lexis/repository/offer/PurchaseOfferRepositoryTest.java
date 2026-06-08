@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
+import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import java.sql.CallableStatement;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -77,6 +78,23 @@ class PurchaseOfferRepositoryTest {
   }
 
   @Test
+  void searchShouldLoadAllLegacyPages() {
+    TestPurchaseOfferRepository repository =
+        new TestPurchaseOfferRepository(
+            List.of(
+                List.of(new PurchaseOfferSearchResultDto(810001L, 900123L, "PKG-1", null, "Region 1", null)),
+                List.of(new PurchaseOfferSearchResultDto(810002L, 900124L, "PKG-2", null, "Region 2", null))));
+
+    List<PurchaseOfferSearchResultDto> results =
+        repository.search(
+            new PurchaseOfferSearchCriteria(
+                null, null, null, null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(results).extracting(PurchaseOfferSearchResultDto::offerNumber).containsExactly(810001L, 810002L);
+    assertThat(repository.pageCalls()).isEqualTo(3);
+  }
+
+  @Test
   void insertShouldBindBlankManufacturingFacilityDefaultWhenInputIsBlank() throws Exception {
     TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
 
@@ -141,12 +159,19 @@ class PurchaseOfferRepositoryTest {
   }
 
   private static final class TestPurchaseOfferRepository extends PurchaseOfferRepository {
+    private final List<List<?>> pages;
     private String whereSql;
     private List<String> bindValues;
     private CallableStatement callableStatement;
+    private int pageCalls;
 
     TestPurchaseOfferRepository() {
+      this(List.of());
+    }
+
+    TestPurchaseOfferRepository(List<List<?>> pages) {
       super(null);
+      this.pages = pages;
     }
 
     String whereSql() {
@@ -161,7 +186,12 @@ class PurchaseOfferRepositoryTest {
       return callableStatement;
     }
 
+    int pageCalls() {
+      return pageCalls;
+    }
+
     @Override
+    @SuppressWarnings("unchecked")
     protected <T> List<T> queryDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
@@ -170,7 +200,11 @@ class PurchaseOfferRepositoryTest {
         SqlRowMapper<T> rowMapper) {
       this.whereSql = whereSql;
       this.bindValues = bindValues;
-      return List.of();
+      pageCalls++;
+      if (page >= pages.size()) {
+        return List.of();
+      }
+      return (List<T>) pages.get(page);
     }
 
     @Override

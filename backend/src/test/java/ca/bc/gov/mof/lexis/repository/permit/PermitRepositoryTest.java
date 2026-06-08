@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.repository.permit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
+import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -70,12 +71,36 @@ class PermitRepositoryTest {
     assertThat(repository.bindValues()).isEmpty();
   }
 
+  @Test
+  void searchShouldLoadAllLegacyPages() {
+    TestPermitRepository repository =
+        new TestPermitRepository(
+            List.of(
+                List.of(new PermitSearchResultDto(700001L, "Active", "00000001", "00000002", 100d, null, "Region 1")),
+                List.of(new PermitSearchResultDto(700002L, "Active", "00000003", "00000004", 200d, null, "Region 2"))));
+
+    List<PermitSearchResultDto> results =
+        repository.search(
+            new PermitSearchCriteria(
+                null, null, null, null, null, null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(results).extracting(PermitSearchResultDto::permitNumber).containsExactly(700001L, 700002L);
+    assertThat(repository.pageCalls()).isEqualTo(3);
+  }
+
   private static final class TestPermitRepository extends PermitRepository {
+    private final List<List<?>> pages;
     private String whereSql;
     private List<String> bindValues;
+    private int pageCalls;
 
     TestPermitRepository() {
+      this(List.of());
+    }
+
+    TestPermitRepository(List<List<?>> pages) {
       super(null);
+      this.pages = pages;
     }
 
     String whereSql() {
@@ -86,7 +111,12 @@ class PermitRepositoryTest {
       return bindValues;
     }
 
+    int pageCalls() {
+      return pageCalls;
+    }
+
     @Override
+    @SuppressWarnings("unchecked")
     protected <T> List<T> queryDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
@@ -95,7 +125,11 @@ class PermitRepositoryTest {
         SqlRowMapper<T> rowMapper) {
       this.whereSql = whereSql;
       this.bindValues = bindValues;
-      return List.of();
+      pageCalls++;
+      if (page >= pages.size()) {
+        return List.of();
+      }
+      return (List<T>) pages.get(page);
     }
   }
 }

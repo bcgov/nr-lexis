@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.repository.federal;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
+import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -51,12 +52,42 @@ class FederalApplicationRepositoryTest {
             "00055667");
   }
 
+  @Test
+  void searchShouldLoadAllLegacyPages() {
+    TestFederalApplicationRepository repository =
+        new TestFederalApplicationRepository(
+            List.of(
+                List.of(
+                    new FederalApplicationSearchResultDto(
+                        900123L, "FED-1", "New", "Client 1", null, null, null, null, null, true)),
+                List.of(
+                    new FederalApplicationSearchResultDto(
+                        900124L, "FED-2", "New", "Client 2", null, null, null, null, null, true))));
+
+    List<FederalApplicationSearchResultDto> results =
+        repository.search(
+            new FederalApplicationSearchCriteria(
+                null, null, null, null, null, null, null, null, null, null, 0, 10));
+
+    assertThat(results)
+        .extracting(FederalApplicationSearchResultDto::applicationNumber)
+        .containsExactly(900123L, 900124L);
+    assertThat(repository.pageCalls()).isEqualTo(3);
+  }
+
   private static final class TestFederalApplicationRepository extends FederalApplicationRepository {
+    private final List<List<?>> pages;
     private String whereSql;
     private List<String> bindValues;
+    private int pageCalls;
 
     TestFederalApplicationRepository() {
+      this(List.of());
+    }
+
+    TestFederalApplicationRepository(List<List<?>> pages) {
       super(null);
+      this.pages = pages;
     }
 
     String whereSql() {
@@ -67,7 +98,12 @@ class FederalApplicationRepositoryTest {
       return bindValues;
     }
 
+    int pageCalls() {
+      return pageCalls;
+    }
+
     @Override
+    @SuppressWarnings("unchecked")
     protected <T> List<T> queryDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
@@ -76,7 +112,11 @@ class FederalApplicationRepositoryTest {
         SqlRowMapper<T> rowMapper) {
       this.whereSql = whereSql;
       this.bindValues = bindValues;
-      return List.of();
+      pageCalls++;
+      if (page >= pages.size()) {
+        return List.of();
+      }
+      return (List<T>) pages.get(page);
     }
   }
 }

@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.repository.exemption;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -73,12 +74,40 @@ class ExemptionRepositoryTest {
     assertThat(repository.bindValues()).isEmpty();
   }
 
+  @Test
+  void searchShouldLoadAllLegacyPages() {
+    TestExemptionRepository repository =
+        new TestExemptionRepository(
+            List.of(
+                List.of(
+                    new ExemptionSearchResultDto(
+                        "EX-1", "Type 1", "New", "00000001", 900123L, null, null, "Region 1", 100d, false)),
+                List.of(
+                    new ExemptionSearchResultDto(
+                        "EX-2", "Type 2", "New", "00000002", 900124L, null, null, "Region 2", 200d, false))));
+
+    List<ExemptionSearchResultDto> results =
+        repository.search(
+            new ExemptionSearchCriteria(
+                null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
+
+    assertThat(results).extracting(ExemptionSearchResultDto::exemptionNumber).containsExactly("EX-1", "EX-2");
+    assertThat(repository.pageCalls()).isEqualTo(3);
+  }
+
   private static final class TestExemptionRepository extends ExemptionRepository {
+    private final List<List<?>> pages;
     private String whereSql;
     private List<String> bindValues;
+    private int pageCalls;
 
     TestExemptionRepository() {
+      this(List.of());
+    }
+
+    TestExemptionRepository(List<List<?>> pages) {
       super(null);
+      this.pages = pages;
     }
 
     String whereSql() {
@@ -89,7 +118,12 @@ class ExemptionRepositoryTest {
       return bindValues;
     }
 
+    int pageCalls() {
+      return pageCalls;
+    }
+
     @Override
+    @SuppressWarnings("unchecked")
     protected <T> List<T> queryDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
@@ -98,7 +132,11 @@ class ExemptionRepositoryTest {
         SqlRowMapper<T> rowMapper) {
       this.whereSql = whereSql;
       this.bindValues = bindValues;
-      return List.of();
+      pageCalls++;
+      if (page >= pages.size()) {
+        return List.of();
+      }
+      return (List<T>) pages.get(page);
     }
   }
 }
