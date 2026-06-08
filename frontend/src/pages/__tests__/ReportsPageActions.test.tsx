@@ -175,8 +175,6 @@ describe('Reports Page Actions', () => {
           exemptionReasonLabel: 'Section 128',
           growthType: 'O',
           growthTypeLabel: 'Old Growth',
-          region: '12',
-          regionLabel: 'Coast',
         },
       })
     })
@@ -271,7 +269,46 @@ describe('Reports Page Actions', () => {
     })
   })
 
-  it('defaults application report region to the legacy all-regions sentinel', async () => {
+  it('leaves unchanged TEAC region criteria unset instead of submitting every region', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => true,
+    } as any)
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+      ],
+      currentSchedules: [{ value: '1001', label: '2026-06-15' }],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=teacReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'TEAC Package Report' })
+    await screen.findByRole('option', { name: '2026-06-15' })
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'teacReport',
+        actionMapping: 'generate',
+        values: {
+          exportJurisdictionCode: 'P',
+          exportJurisdictionCodeLabel: 'Provincial',
+          exportSchedule: '1001',
+          exportScheduleLabel: '2026-06-15',
+        },
+      })
+    })
+  })
+
+  it('blocks the application report when only the legacy all-regions sentinel is selected', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => true,
     } as any)
@@ -303,15 +340,13 @@ describe('Reports Page Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
-      expect(mockedRunReport).toHaveBeenCalledWith({
-        reportId: 'applicationReport',
-        actionMapping: 'generate',
-        values: {
-          region: '0',
-          regionLabel: 'All',
-        },
-      })
+      expect(
+        screen.getByText(
+          'Choose at least one Application Report filter before generating: region, jurisdiction, exemption reason, client number, growth type, or received date.',
+        ),
+      ).toBeInTheDocument()
     })
+    expect(mockedRunReport).not.toHaveBeenCalled()
   })
 
   it('submits the report default region for unchanged legacy multi-select reports', async () => {
@@ -377,6 +412,46 @@ describe('Reports Page Actions', () => {
     await screen.findByRole('heading', { name: 'Species and Grade Report' })
     await screen.findByRole('option', { name: 'Complete' })
     expect(screen.getByLabelText('Permit Status')).toHaveValue('COM')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'speciesGradeReport',
+        actionMapping: 'generate',
+        values: {
+          permitStatus: 'COM',
+          permitStatusLabel: 'Complete',
+        },
+      })
+    })
+  })
+
+  it('leaves unchanged species and grade regions unset instead of submitting every region', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => true,
+    } as any)
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+      ],
+      permitStatuses: [
+        { value: '', label: 'All' },
+        { value: 'COM', label: 'Complete' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=speciesGradeReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Species and Grade Report' })
+    await screen.findByRole('option', { name: 'Complete' })
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -762,7 +837,7 @@ describe('Reports Page Actions', () => {
     expect(anchorClickSpy).not.toHaveBeenCalled()
   })
 
-  it('defaults the biweekly listing to the legacy filtered generate action', async () => {
+  it('does not submit unchanged biweekly listing regions as every region option', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => true,
     } as any)
@@ -804,8 +879,6 @@ describe('Reports Page Actions', () => {
           exportJurisdictionCodeLabel: 'Federal',
           fromDate: '2026-06-01',
           toDate: '2026-06-30',
-          region: '1903,1904',
-          regionLabel: 'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
         },
       })
     })
@@ -860,6 +933,7 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Reports' })
+    await userEvent.type(screen.getByLabelText('Received From Date'), '2026-01-01')
     await userEvent.selectOptions(screen.getByLabelText('Output Format'), 'CSV')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
@@ -868,6 +942,7 @@ describe('Reports Page Actions', () => {
         reportId: 'applicationReport',
         actionMapping: 'generate',
         values: {
+          fromDate: '2026-01-01',
           region: '0',
           regionLabel: 'All',
           outputFormat: 'CSV',
@@ -896,6 +971,7 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Reports' })
+    await userEvent.type(screen.getByLabelText('Received From Date'), '2026-01-01')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {

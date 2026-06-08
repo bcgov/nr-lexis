@@ -798,11 +798,6 @@ const buildEffectiveReportValues = (
     ) {
       if (defaultRegion) {
         effectiveValues[field.key] = defaultRegion
-        return
-      }
-      const options = optionsByKey[field.optionKey ?? field.key] ?? []
-      if (options.length > 0) {
-        effectiveValues[field.key] = options.map((option) => option.value).join(',')
       }
       return
     }
@@ -908,6 +903,49 @@ const isDownloadReportRequest = (
   }
   const outputFormat = values.outputFormat?.trim().toUpperCase()
   return outputFormat === 'CSV' || outputFormat === 'XLS' || outputFormat === 'XLSX'
+}
+
+const APPLICATION_REPORT_LIMITER_MESSAGE =
+  'Choose at least one Application Report filter before generating: region, jurisdiction, exemption reason, client number, growth type, or received date.'
+
+const hasApplicationReportLimiter = (values: Record<string, string>): boolean => {
+  const limiterKeys = [
+    'region',
+    'exportJurisdictionCode',
+    'jurisdiction',
+    'exemptionReason',
+    'clientNumber',
+    'growthType',
+    'fromDate',
+    'toDate',
+  ]
+
+  return limiterKeys.some((key) => {
+    const value = values[key]?.trim()
+    if (!value) {
+      return false
+    }
+
+    if (key === 'region') {
+      return value
+        .split(',')
+        .map((item) => item.trim())
+        .some((item) => item && item !== '0')
+    }
+
+    return true
+  })
+}
+
+const validateReportLaunch = (
+  report: ReportDefinition,
+  values: Record<string, string>,
+): string | null => {
+  if (report.id === 'applicationReport' && !hasApplicationReportLimiter(values)) {
+    return APPLICATION_REPORT_LIMITER_MESSAGE
+  }
+
+  return null
 }
 
 const ReportsPage: FC = () => {
@@ -1196,6 +1234,12 @@ const ReportsPage: FC = () => {
         defaultReportRegion,
         selectedActionMapping,
       )
+      const validationError = validateReportLaunch(selectedReport, effectiveReportValues)
+      if (validationError) {
+        setLaunchErrorMessage(validationError)
+        return
+      }
+
       const runResult = await runReport({
         reportId: selectedReport.id,
         actionMapping: selectedActionMapping,
