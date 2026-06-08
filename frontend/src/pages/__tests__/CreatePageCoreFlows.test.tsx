@@ -80,7 +80,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&applicantClientNumber=00022222&productTypeCode=LOG&exemptionType=SECTION_1&region=11&receivedDate=2026-01-10&listingDate=2026-01-11&comments=Ready',
+          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionType=SECTION_1&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&applicationVolume=125.5&comments=Ready',
         ]}
       >
         <Routes>
@@ -100,12 +100,17 @@ describe('Create Page Core Flows', () => {
       applicationNumber: '1001',
       packageNumber: 'PKG-55',
       ownerClientNumber: '00011111',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
       applicantClientNumber: '00022222',
       productTypeCode: 'LOG',
       exemptionType: 'SECTION_1',
       region: '11',
+      applicationDate: '2026-01-09',
+      applicationTermDays: '30',
       receivedDate: '2026-01-10',
       listingDate: '2026-01-11',
+      applicationVolume: '125.5',
       comments: 'Ready',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
@@ -170,10 +175,16 @@ describe('Create Page Core Flows', () => {
 
     await screen.findByText('Create Provincial Offer')
     await userEvent.type(screen.getByLabelText('Offer Number (required)'), '8080')
+    await userEvent.type(screen.getByLabelText('Company Name (required)'), 'Example Lumber')
+    await userEvent.type(screen.getByLabelText('Contact Name (required)'), 'Alex Example')
     await userEvent.type(screen.getByLabelText('Offer Amount (required)'), '25000')
-    await userEvent.type(screen.getByLabelText('Offer Date (YYYY-MM-DD)'), '2026-03-10')
-    await userEvent.type(screen.getByLabelText('Offer End Date (YYYY-MM-DD)'), '2026-03-20')
-    await userEvent.type(screen.getByLabelText('Pickup Location'), 'Yard A')
+    await userEvent.type(screen.getByLabelText('Offer Date (YYYY-MM-DD) (required)'), '2026-03-10')
+    await userEvent.type(screen.getByLabelText('Withdrawal Date (YYYY-MM-DD)'), '2026-03-20')
+    await userEvent.type(
+      screen.getByLabelText('Withdraw Reason (required when withdrawn)'),
+      'Withdrawn by buyer',
+    )
+    await userEvent.type(screen.getByLabelText('Pickup Location (required)'), 'Yard A')
     await userEvent.type(screen.getByLabelText('Offer Conditions / Remarks'), 'No partial loads')
 
     const submitButton = screen.getByRole('button', { name: 'Submit' })
@@ -186,10 +197,13 @@ describe('Create Page Core Flows', () => {
         applicationNumber: '2001',
         packageNumber: 'PKG-9',
         offeringClientNumber: '00099999',
+        companyName: 'Example Lumber',
+        contactName: 'Alex Example',
         region: '11',
         purchaseOfferAmount: '25000',
         purchaseOfferDate: '2026-03-10',
         offerEndDate: '2026-03-20',
+        withdrawReason: 'Withdrawn by buyer',
         pickupLocation: 'Yard A',
         offerCondition: 'No partial loads',
       })
