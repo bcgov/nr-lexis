@@ -404,6 +404,16 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyIndianReservePermitCreateShouldAllowApplicationApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/indianReservePermitDetails")
+                .param("actionMapping", "saveReservePermit")
+                .param("permitNumber", "111")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
   void legacyExemptionDetailsCreateShouldAllowExemptionApproverRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/exemptionDetails")

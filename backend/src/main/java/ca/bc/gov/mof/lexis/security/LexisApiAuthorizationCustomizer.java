@@ -130,6 +130,15 @@ public class LexisApiAuthorizationCustomizer
           "/api/lexis/indian-reserve/permits/*"
         },
         "/indianReservePermitDetails");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {
+          "/api/lexis/indianReservePermitDetails",
+          "/api/lexis/indianReservePermitDetails.do",
+          "/api/lexis/indian-reserve/permits"
+        },
+        "/indianReservePermitDetails");
 
     authorizeAction(
         authorize,
@@ -359,7 +368,11 @@ public class LexisApiAuthorizationCustomizer
     authorizeAction(
         authorize,
         HttpMethod.POST,
-        new String[] {"/api/lexis/permitDetailsRPC", "/api/lexis/permitDetailsRPC.do"},
+        new String[] {
+          "/api/lexis/rpc/permit-details/**",
+          "/api/lexis/permitDetailsRPC",
+          "/api/lexis/permitDetailsRPC.do"
+        },
         "/permitDetails");
     authorizeAction(
         authorize,

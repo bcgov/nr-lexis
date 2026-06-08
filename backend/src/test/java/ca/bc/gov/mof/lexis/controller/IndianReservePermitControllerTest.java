@@ -12,7 +12,9 @@ import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.reserve.IndianReservePermitService;
+import ca.bc.gov.mof.lexis.service.reserve.IndianReservePermitService.CreatePermitRequest;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +28,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | IndianReservePermitController")
@@ -167,5 +172,66 @@ class IndianReservePermitControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
+  }
+
+  @Test
+  void addPermitShouldReturnNoContentWhenServiceMissing() {
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.addPermit(new LinkedMultiValueMap<>(), null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void addPermitShouldMapLegacyParametersAndAuthentication() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
+    when(authentication.getName()).thenReturn("idir\\jsmith");
+    PermitMutationRpcResponseDto dto =
+        new PermitMutationRpcResponseDto(
+            true,
+            "saved",
+            List.of(),
+            List.of(),
+            900L,
+            "ACT",
+            null,
+            false,
+            false,
+            null);
+    when(service.addPermit(any(CreatePermitRequest.class), org.mockito.Mockito.eq("idir\\jsmith")))
+        .thenReturn(dto);
+
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    parameters.add("permitNumber", "111");
+    parameters.add("packageNumber", "PKG-1");
+    parameters.add("clientNumber", "00012345");
+    parameters.add("applicationDate", "2026-04-04");
+    parameters.add("permitIssueDate", "2026-04-05");
+    parameters.add("estShippingDate", "2026-04-06");
+    parameters.add("destinationCountry", "CA");
+    parameters.add("transportTypeCode", "TRK");
+    parameters.add("transportName", "Truck");
+    parameters.add("portOfExport", "VAN");
+    parameters.add("permitRemarks", "Ready");
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.addPermit(parameters, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+
+    ArgumentCaptor<CreatePermitRequest> requestCaptor =
+        ArgumentCaptor.forClass(CreatePermitRequest.class);
+    verify(service).addPermit(requestCaptor.capture(), org.mockito.Mockito.eq("idir\\jsmith"));
+    CreatePermitRequest request = requestCaptor.getValue();
+    assertThat(request.permitNumber()).isEqualTo("111");
+    assertThat(request.packageNumber()).isEqualTo("PKG-1");
+    assertThat(request.clientNumber()).isEqualTo("00012345");
+    assertThat(request.estimatedShippingDate()).isEqualTo("2026-04-06");
+    assertThat(request.remarks()).isEqualTo("Ready");
   }
 }
