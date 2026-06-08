@@ -359,7 +359,9 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         firstNonBlank(normalized.approvalIndicator(), current.approvalIndicator()),
         firstNonNull(normalized.withdrawReason(), current.withdrawReason()),
         firstNonBlank(normalized.exportJurisdictionCode(), current.exportJurisdictionCode()),
-        firstNonBlank(normalized.manufacturingFacilityInfo(), current.manufacturingFacilityInfo()),
+        firstNonBlank(
+            normalized.manufacturingFacilityInfo(),
+            firstNonBlank(current.manufacturingFacilityInfo(), MANUFACTURING_FACILITY_DEFAULT)),
         normalized.offeringClientNumber(),
         firstNonNull(normalized.pickupLocation(), current.pickupLocation()),
         firstNonNull(normalized.offerCondition(), current.offerCondition()),

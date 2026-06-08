@@ -84,6 +84,30 @@ class OracleRepositorySupportTest {
   }
 
   @Test
+  void queryDynamicPageShouldLoadOnlySecondLegacyPageForSecondUiPage() {
+    List<String> secondPage =
+        List.of(
+            "row-11",
+            "row-12",
+            "row-13",
+            "row-14",
+            "row-15",
+            "row-16",
+            "row-17",
+            "row-18",
+            "row-19",
+            "row-20");
+    TestRepository repository = new TestRepository(List.of(List.of("row-1"), secondPage, List.of("row-21")));
+
+    DynamicSearchPage<String> results = repository.loadPage(1, 10);
+
+    assertThat(results.results()).containsExactlyElementsOf(secondPage);
+    assertThat(results.total()).isEqualTo(21);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+    assertThat(repository.requestedPages()).containsExactly(1);
+  }
+
+  @Test
   void loadCodeNameOptionsShouldFallbackWhenCodePackageReturnsEmpty() {
     TestRepository repository = new TestRepository(List.of());
 
@@ -153,6 +177,7 @@ class OracleRepositorySupportTest {
 
   private static final class TestRepository extends OracleRepositorySupport {
     private final List<List<String>> pages;
+    private final List<Integer> requestedPages = new java.util.ArrayList<>();
     private int pageCalls;
 
     TestRepository(List<List<String>> pages) {
@@ -208,6 +233,10 @@ class OracleRepositorySupportTest {
       return pageCalls;
     }
 
+    List<Integer> requestedPages() {
+      return requestedPages;
+    }
+
     @Override
     protected <T> List<T> queryCursorProcedure(
         String procedureSignature,
@@ -226,6 +255,7 @@ class OracleRepositorySupportTest {
         int page,
         SqlRowMapper<T> rowMapper) {
       pageCalls++;
+      requestedPages.add(page);
       if (page >= pages.size()) {
         return List.of();
       }

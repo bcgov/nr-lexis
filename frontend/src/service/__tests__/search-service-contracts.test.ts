@@ -282,6 +282,72 @@ describe('search-service contracts', () => {
   it.each([
     {
       name: 'provincial applications',
+      endpoint: '/lexis/applications/search',
+      run: () => searchProvincialApplications({ ...applicationRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'provincial exemptions',
+      endpoint: '/lexis/exemptions/search',
+      run: () => searchProvincialExemptions({ ...exemptionRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'provincial offers',
+      endpoint: '/lexis/purchase-offers/search',
+      run: () => searchProvincialOffers({ ...offerRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'provincial permits',
+      endpoint: '/lexis/permits/search',
+      run: () => searchProvincialPermits({ ...permitRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'federal applications',
+      endpoint: '/lexis/federal/applications/search',
+      run: () => searchFederalApplications({ ...federalRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'application review',
+      endpoint: '/lexis/application-reviews/search',
+      run: () => searchApplicationReviews({ ...reviewRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'indigenous reserve permits',
+      endpoint: '/lexis/indian-reserve/permits/search',
+      run: () => searchIndianReservePermits({ ...indigenousRequest, page: 2, pageSize: 30 }),
+    },
+  ])(
+    '$name preserves backend pagination metadata and request page params',
+    async ({ endpoint, run }) => {
+      getCachedResponseMock.mockResolvedValue({
+        data: {
+          results: [],
+          total: 91,
+          page: 2,
+          size: 30,
+        },
+      })
+
+      const result = await run()
+
+      expect(getCachedResponseMock).toHaveBeenCalledWith(endpoint, expect.any(Object), {
+        ttlMs: 10_000,
+      })
+      const params = readParams()
+      expect(params.get('page')).toBe('2')
+      expect(params.get('size')).toBe('30')
+      expect(result.content).toEqual([])
+      expect(result.page).toEqual({
+        number: 2,
+        size: 30,
+        totalElements: 91,
+        totalPages: 4,
+      })
+    },
+  )
+
+  it.each([
+    {
+      name: 'provincial applications',
       run: () => searchProvincialApplications(applicationRequest),
       message: 'Backend provincial application response did not include results.',
     },
