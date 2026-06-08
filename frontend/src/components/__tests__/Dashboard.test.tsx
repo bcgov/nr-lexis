@@ -83,11 +83,13 @@ describe('Dashboard', () => {
     expect(screen.getByText(/LEXIS Dashboard/i)).toBeInTheDocument()
   })
 
-  test('does not load dashboard counts until explicitly refreshed', async () => {
+  test('loads dashboard counts on mount and still supports explicit refresh', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => true,
     } as any)
-    mockedSearchProvincialApplications.mockResolvedValue(searchResponse(456))
+    mockedSearchProvincialApplications
+      .mockResolvedValueOnce(searchResponse(456))
+      .mockResolvedValueOnce(searchResponse(789))
 
     render(
       <MemoryRouter>
@@ -95,14 +97,17 @@ describe('Dashboard', () => {
       </MemoryRouter>,
     )
 
-    expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
-    expect(screen.getAllByText('-')).toHaveLength(7)
-
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh Dashboard' }))
     expect(await screen.findByText('456')).toBeInTheDocument()
 
     await waitFor(() => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh Dashboard' }))
+    expect(await screen.findByText('789')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(2)
     })
   })
 })
