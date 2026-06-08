@@ -10,24 +10,15 @@ type ChildRoute = {
 type Props = {
   title: string
   description: string
-  legacySourcePath: string
   childRoutes?: ChildRoute[]
 }
 
-const LegacyModulePage: FC<Props> = ({
-  title,
-  description,
-  legacySourcePath,
-  childRoutes = [],
-}) => {
+const LegacyModulePage: FC<Props> = ({ title, description, childRoutes = [] }) => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={12}>
         <h1>{title}</h1>
         <p>{description}</p>
-        <p>
-          Legacy source reference: <code>{legacySourcePath}</code>
-        </p>
       </Column>
       {childRoutes.length > 0 && (
         <Column sm={4} md={8} lg={12}>

@@ -31,21 +31,21 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
     id: 'lexisAgentAdmin',
     label: 'LEXIS Administration',
     requiredAction: '/lexisAgentAdmin',
-    description: 'Legacy administration dashboard.',
+    description: 'User and access administration.',
     reactPath: '/admin',
   },
   {
     id: 'lexisPolicyAdmin',
     label: 'Fee Policy Administration',
     requiredAction: '/lexisPolicyAdmin',
-    description: 'Legacy fee policy administration page.',
+    description: 'Fee policy administration.',
     reactPath: '/admin/policies',
   },
   {
     id: 'lexisFILAdmin',
     label: 'FIL Percent Administration',
     requiredAction: '/lexisFILAdmin',
-    description: 'Legacy fee-in-lieu percent policy page.',
+    description: 'Fee-in-lieu percent policy administration.',
     reactPath: '/admin/policies',
   },
 ]
@@ -55,28 +55,28 @@ const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
     id: 'fileApplicationUpload',
     label: 'Application Upload',
     requiredAction: '/fileApplicationUpload',
-    description: 'Legacy file upload workflow for applications.',
+    description: 'Application document upload.',
     reactUploadType: 'application',
   },
   {
     id: 'fileExemptionUpload',
     label: 'Exemption Upload',
     requiredAction: '/fileExemptionUpload',
-    description: 'Legacy file upload workflow for exemptions.',
+    description: 'Exemption document upload.',
     reactUploadType: 'exemption',
   },
   {
     id: 'filePermitUpload',
     label: 'Permit Upload',
     requiredAction: '/filePermitUpload',
-    description: 'Legacy file upload workflow for permits.',
+    description: 'Permit document upload.',
     reactUploadType: 'permit',
   },
   {
     id: 'fileInvoiceUpload',
     label: 'Invoice Upload',
     requiredAction: '/fileInvoiceUpload',
-    description: 'Legacy file upload workflow for invoices.',
+    description: 'Invoice document upload.',
     reactUploadType: 'invoice',
   },
 ]
@@ -173,7 +173,6 @@ const AdminPage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Administration</h1>
-        <p>Base administration and authorization visibility for migration parity.</p>
       </Column>
 
       <Column sm={4} md={8} lg={8}>
@@ -187,9 +186,6 @@ const AdminPage: FC = () => {
           </p>
           <p>
             Welcome Target: <strong>{capabilities.welcomeTarget ?? 'N/A'}</strong>
-          </p>
-          <p>
-            Legacy Path: <strong>{capabilities.legacyPath ?? 'N/A'}</strong>
           </p>
           <div className="landing-role-tags">
             {capabilities.roles.length === 0 && <Tag type="gray">No roles</Tag>}
@@ -237,10 +233,6 @@ const AdminPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <h2 className="dashboard-title">Admin and Upload Tools</h2>
-          <p>
-            Open native React workflows for admin and upload tasks while backend migration
-            progresses.
-          </p>
 
           <Table useZebraStyles>
             <TableHead>

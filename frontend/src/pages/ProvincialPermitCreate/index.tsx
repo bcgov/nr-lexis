@@ -208,7 +208,6 @@ const ProvincialPermitCreatePage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Create Provincial Permit</h1>
-        <p>Base create form for provincial permit migration.</p>
       </Column>
 
       {missingRequiredOptions && (
@@ -216,7 +215,7 @@ const ProvincialPermitCreatePage: FC = () => {
           <InlineNotification
             kind="warning"
             title="Required options unavailable"
-            subtitle="Permit status values are unavailable from backend options. Submit remains disabled until a valid status is available."
+            subtitle="Permit status values are unavailable. Submit remains disabled until a valid status is available."
             lowContrast
             hideCloseButton
           />

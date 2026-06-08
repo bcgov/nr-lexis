@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
-import { AsleepFilled, Close, LightFilled, Logout, Search, UserAvatar } from '@carbon/icons-react'
+import {
+  AsleepFilled,
+  Close,
+  LightFilled,
+  Logout,
+  SidePanelClose,
+  SidePanelOpen,
+  UserAvatar,
+} from '@carbon/icons-react'
 import { IconButton, SkipToContent, Theme } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
@@ -22,7 +30,6 @@ type NavigationSection = {
 type BreadcrumbRoute = {
   path: string
   section: string
-  subsection: string
 }
 
 const NAVIGATION_SECTIONS: NavigationSection[] = [
@@ -147,38 +154,26 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
 ]
 
 const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
-  { path: '/dashboard', section: 'LEXIS Menu', subsection: 'Dashboard' },
-  { path: '/provincial/summary', section: 'Provincial', subsection: 'Summary' },
-  { path: '/provincial/review', section: 'Provincial', subsection: 'Application Review' },
-  {
-    path: '/provincial/application/create',
-    section: 'Provincial',
-    subsection: 'Create/Edit Application',
-  },
-  { path: '/provincial/application', section: 'Provincial', subsection: 'Application Search' },
-  {
-    path: '/provincial/exemption/create',
-    section: 'Provincial',
-    subsection: 'Create/Edit Exemption',
-  },
-  { path: '/provincial/exemption', section: 'Provincial', subsection: 'Exemption Search' },
-  { path: '/provincial/offers/create', section: 'Provincial', subsection: 'Create/Edit Offer' },
-  { path: '/provincial/offers', section: 'Provincial', subsection: 'Offer Search' },
-  { path: '/provincial/permit/create', section: 'Provincial', subsection: 'Create/Edit Permit' },
-  { path: '/provincial/permit', section: 'Provincial', subsection: 'Permit Search' },
-  { path: '/provincial', section: 'Provincial', subsection: 'Menu' },
-  { path: '/federal', section: 'Federal', subsection: 'Application Search' },
-  {
-    path: '/indian-reserve/permit/create',
-    section: 'Indian Reserve',
-    subsection: 'Create/Edit Permit',
-  },
-  { path: '/indian-reserve', section: 'Indian Reserve', subsection: 'Permit Search' },
-  { path: '/reports', section: 'Reports', subsection: 'Reports Menu' },
-  { path: '/admin/uploads', section: 'Administration', subsection: 'Upload Center' },
-  { path: '/admin/policies', section: 'Administration', subsection: 'Fee Policy Administration' },
-  { path: '/admin', section: 'Administration', subsection: 'LEXIS Administration' },
-  { path: '/unauthorized', section: 'LEXIS', subsection: 'Unauthorized' },
+  { path: '/dashboard', section: 'LEXIS Menu' },
+  { path: '/provincial/summary', section: 'Provincial' },
+  { path: '/provincial/review', section: 'Provincial' },
+  { path: '/provincial/application/create', section: 'Provincial' },
+  { path: '/provincial/application', section: 'Provincial' },
+  { path: '/provincial/exemption/create', section: 'Provincial' },
+  { path: '/provincial/exemption', section: 'Provincial' },
+  { path: '/provincial/offers/create', section: 'Provincial' },
+  { path: '/provincial/offers', section: 'Provincial' },
+  { path: '/provincial/permit/create', section: 'Provincial' },
+  { path: '/provincial/permit', section: 'Provincial' },
+  { path: '/provincial', section: 'Provincial' },
+  { path: '/federal', section: 'Federal' },
+  { path: '/indian-reserve/permit/create', section: 'Indian Reserve' },
+  { path: '/indian-reserve', section: 'Indian Reserve' },
+  { path: '/reports', section: 'Reports' },
+  { path: '/admin/uploads', section: 'Administration' },
+  { path: '/admin/policies', section: 'Administration' },
+  { path: '/admin', section: 'Administration' },
+  { path: '/unauthorized', section: 'LEXIS' },
 ]
 
 const getBreadcrumbRoute = (pathname: string): BreadcrumbRoute => {
@@ -186,7 +181,7 @@ const getBreadcrumbRoute = (pathname: string): BreadcrumbRoute => {
     return pathname === route.path || pathname.startsWith(`${route.path}/`)
   })
 
-  return matchedRoute ?? { path: pathname, section: 'LEXIS', subsection: 'Page' }
+  return matchedRoute ?? { path: pathname, section: 'LEXIS' }
 }
 
 const getProfileInitials = (principal: string | null): string => {
@@ -211,6 +206,7 @@ const Layout: FC<Props> = ({ children }) => {
   const breadcrumbRoute = getBreadcrumbRoute(location.pathname)
   const [isDarkTheme, setIsDarkTheme] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [isSideNavCollapsed, setIsSideNavCollapsed] = useState(false)
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
     [capabilities.principal],
@@ -250,7 +246,7 @@ const Layout: FC<Props> = ({ children }) => {
 
   return (
     <Theme theme={isDarkTheme ? 'g100' : 'white'}>
-      <div className="app-shell">
+      <div className={`app-shell${isSideNavCollapsed ? ' is-side-nav-collapsed' : ''}`}>
         <SkipToContent />
         <header className="cds--header csp-app-header" aria-label="NR LEXIS">
           <button
@@ -332,8 +328,25 @@ const Layout: FC<Props> = ({ children }) => {
           </button>
         </aside>
 
-        <nav className="cds--side-nav csp-side-nav" aria-label="Side navigation">
-          <ul className="cds--side-nav__items csp-side-nav__items">
+        <nav
+          className={`cds--side-nav csp-side-nav${isSideNavCollapsed ? ' is-collapsed' : ''}`}
+          aria-label="Side navigation"
+        >
+          <button
+            type="button"
+            className="csp-side-nav__toggle"
+            aria-controls="side-navigation-list"
+            aria-expanded={!isSideNavCollapsed}
+            aria-label={isSideNavCollapsed ? 'Expand side navigation' : 'Collapse side navigation'}
+            onClick={() => setIsSideNavCollapsed((current) => !current)}
+          >
+            <span className="csp-side-nav__toggle-icon" aria-hidden="true">
+              {isSideNavCollapsed ? <SidePanelOpen size={18} /> : <SidePanelClose size={18} />}
+            </span>
+            <span className="csp-side-nav__toggle-text">LEXIS Menu</span>
+          </button>
+
+          <ul id="side-navigation-list" className="cds--side-nav__items csp-side-nav__items">
             {visibleNavigationSections.map((section) => (
               <li key={section.label} className="csp-side-nav__section">
                 <span className="cds--side-nav__category csp-side-nav__category">
@@ -343,6 +356,7 @@ const Layout: FC<Props> = ({ children }) => {
                   {section.links.map((link) => (
                     <li key={link.to}>
                       <NavLink
+                        end
                         to={link.to}
                         className={({ isActive }) =>
                           isActive
@@ -350,11 +364,12 @@ const Layout: FC<Props> = ({ children }) => {
                             : 'cds--side-nav__link csp-side-nav__link'
                         }
                         aria-current={location.pathname === link.to ? 'page' : undefined}
+                        aria-label={isSideNavCollapsed ? link.label : undefined}
+                        title={isSideNavCollapsed ? link.label : undefined}
                       >
-                        <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
-                          <Search size={16} />
+                        <span className="cds--side-nav__link-text csp-side-nav__link-text">
+                          {link.label}
                         </span>
-                        <span className="cds--side-nav__link-text">{link.label}</span>
                       </NavLink>
                     </li>
                   ))}
@@ -366,10 +381,9 @@ const Layout: FC<Props> = ({ children }) => {
 
         <main id="main-content" className="cds--content app-main">
           <header className="page-header">
-            <p className="page-header__eyebrow" aria-label="Current page">
+            <p className="page-header__eyebrow" aria-label="Current section">
               {breadcrumbRoute.section}
             </p>
-            <div className="page-header__title">{breadcrumbRoute.subsection}</div>
           </header>
           {children}
         </main>

@@ -589,7 +589,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     title: 'MOFR Listing Export',
     category: 'Federal',
     action: 'mofrListing',
-    description: 'Exportable listing output for MOFR workflows.',
+    description: 'MOFR listing output.',
     actionMappings: [
       { value: 'generate', label: 'Generate With Filters' },
       { value: 'generateIndustryPDF', label: 'Advertising List PDF' },

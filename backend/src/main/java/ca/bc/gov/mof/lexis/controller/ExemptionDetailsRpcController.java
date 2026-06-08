@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
@@ -61,16 +62,19 @@ public class ExemptionDetailsRpcController {
   private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
+  private final LexisPrincipalService principalService;
 
   public ExemptionDetailsRpcController(
       ObjectProvider<ExemptionDetailsRpcService> serviceProvider,
       ObjectProvider<ClientLookupService> clientLookupServiceProvider,
       LexisSessionService sessionService,
-      LexisAuthorizationService authorizationService) {
+      LexisAuthorizationService authorizationService,
+      LexisPrincipalService principalService) {
     this.serviceProvider = serviceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
+    this.principalService = principalService;
   }
 
   @GetMapping("/rpc/exemption-details/applications")
@@ -278,7 +282,7 @@ public class ExemptionDetailsRpcController {
         service.addApplicationToExemption(
             parsePositiveLong(applicationNumber),
             exemptionNumber,
-            authentication == null ? null : authentication.getName(),
+            userId(authentication),
             authorizationService.canPerformAction(roles, "viewFederalApplication"),
             authorizationService.canPerformAction(roles, "viewOICApplication"));
     return ResponseEntity.ok(new ApplicationExemptionLinkResponseDto(result.success(), result.errors()));
@@ -305,7 +309,7 @@ public class ExemptionDetailsRpcController {
     ExemptionDetailsRpcService.ApplicationExemptionLinkResult result =
         service.removeApplicationFromExemption(
             parsePositiveLong(applicationNumber),
-            authentication == null ? null : authentication.getName());
+            userId(authentication));
     return ResponseEntity.ok(new ApplicationExemptionLinkResponseDto(result.success(), result.errors()));
   }
 
@@ -326,9 +330,8 @@ public class ExemptionDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    String userId = authentication == null ? null : authentication.getName();
     ExemptionDetailsRpcService.CreateExemptionResult result =
-        service.addExemption(toCreateExemptionRequest(parameters), userId);
+        service.addExemption(toCreateExemptionRequest(parameters), userId(authentication));
     return ResponseEntity.ok(
         new ExemptionPersistenceResponseDto(
             result.success(),
@@ -357,11 +360,10 @@ public class ExemptionDetailsRpcController {
     }
 
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
-    String userId = authentication == null ? null : authentication.getName();
     ExemptionDetailsRpcService.CreateExemptionResult result =
         service.updateExemption(
             toUpdateExemptionRequest(parameters),
-            userId,
+            userId(authentication),
             authorizationService.canPerformAction(roles, "approveExemption"));
     return ResponseEntity.ok(
         new ExemptionPersistenceResponseDto(
@@ -394,7 +396,7 @@ public class ExemptionDetailsRpcController {
     ExemptionDetailsRpcService.ExemptionApprovalResult result =
         service.approveExemptions(
             exemptionNumbers,
-            authentication == null ? null : authentication.getName(),
+            userId(authentication),
             authorizationService.canPerformAction(roles, "approveExemption"));
     return ResponseEntity.ok(toApprovalResponse(result));
   }
@@ -651,6 +653,10 @@ public class ExemptionDetailsRpcController {
 
   private boolean hasParameter(MultiValueMap<String, String> parameters, String name) {
     return parameters != null && parameters.containsKey(name);
+  }
+
+  private String userId(Authentication authentication) {
+    return principalService.resolvePrincipalName(authentication);
   }
 
   private LocalDate parseDate(String rawValue) {

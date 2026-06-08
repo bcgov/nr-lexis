@@ -10,12 +10,14 @@ import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javax.sql.DataSource;
 import net.sf.jasperreports.engine.JasperPrint;
+import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.base.JRBasePrintPage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -191,6 +193,52 @@ class OracleLexisReportServiceFormatSupportTest {
             eq(LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT),
             any(LexisReportRequestDto.class),
             eq(LexisReportFormat.PDF));
+    verifyNoInteractions(dataSource);
+  }
+
+  @Test
+  void shouldReturnEmptyWhenJasperReportCannotConnectToOracle() throws Exception {
+    DataSource dataSource = Mockito.mock(DataSource.class);
+    OracleLegacyCsvReportService legacyCsvReportService =
+        Mockito.mock(OracleLegacyCsvReportService.class);
+    OracleLegacyJasperTableReportService legacyJasperTableReportService =
+        Mockito.mock(OracleLegacyJasperTableReportService.class);
+    Mockito.when(dataSource.getConnection()).thenThrow(new SQLException("package invalid"));
+    OracleLexisReportService service =
+        createService(dataSource, legacyCsvReportService, legacyJasperTableReportService);
+
+    Optional<LexisGeneratedReport> result =
+        service.generateReport("feeReport", new LexisReportRequestDto(Map.of(), "PDF"));
+
+    assertThat(result).isEmpty();
+  }
+
+  @Test
+  void shouldReturnEmptyWhenJasperTemplatePreparationFails() {
+    DataSource dataSource = Mockito.mock(DataSource.class);
+    OracleLegacyCsvReportService legacyCsvReportService =
+        Mockito.mock(OracleLegacyCsvReportService.class);
+    OracleLegacyJasperTableReportService legacyJasperTableReportService =
+        Mockito.mock(OracleLegacyJasperTableReportService.class);
+    OracleLexisReportService service =
+        new OracleLexisReportService(
+            dataSource,
+            new LexisJasperReportParameterProvider(),
+            legacyCsvReportService,
+            legacyJasperTableReportService,
+            Mockito.mock(PermitRpcRepository.class),
+            Mockito.mock(LexisReportScheduleRepository.class),
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER")) {
+          @Override
+          JasperReport compileTemplate(LexisJasperReportDefinition definition) {
+            throw new IllegalStateException("template invalid");
+          }
+        };
+
+    Optional<LexisGeneratedReport> result =
+        service.generateReport("feeReport", new LexisReportRequestDto(Map.of(), "PDF"));
+
+    assertThat(result).isEmpty();
     verifyNoInteractions(dataSource);
   }
 

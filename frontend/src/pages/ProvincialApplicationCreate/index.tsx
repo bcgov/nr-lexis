@@ -209,7 +209,6 @@ const ProvincialApplicationCreatePage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Create Provincial Application</h1>
-        <p>Base create form for provincial application migration.</p>
       </Column>
 
       {missingRequiredOptions && (
@@ -217,7 +216,7 @@ const ProvincialApplicationCreatePage: FC = () => {
           <InlineNotification
             kind="warning"
             title="Required options unavailable"
-            subtitle="Product type values are unavailable from backend options. Submit remains disabled until a valid product type is available."
+            subtitle="Product type values are unavailable. Submit remains disabled until a valid product type is available."
             lowContrast
             hideCloseButton
           />

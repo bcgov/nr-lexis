@@ -180,7 +180,6 @@ const IndianReservePermitCreatePage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Create Indigenous Reserve Permit</h1>
-        <p>Base create form for indigenous reserve permit migration.</p>
       </Column>
 
       {!!status && (

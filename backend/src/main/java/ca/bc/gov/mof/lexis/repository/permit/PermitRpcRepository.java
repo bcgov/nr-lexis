@@ -283,7 +283,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public List<CountryCodeRow> findAllCountryCodes() {
-    return queryCursorProcedure(
+    List<CountryCodeRow> rows =
+        queryCursorProcedure(
             FIND_ALL_COUNTRY_CODES,
             null,
             1,
@@ -296,6 +297,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .stream()
         .filter(row -> row.code() != null && row.description() != null)
         .toList();
+    if (!rows.isEmpty()) {
+      return rows;
+    }
+    return fallbackCountryCodeRows();
   }
 
   public List<AttachmentTypeRow> findAllAttachmentTypes() {
@@ -403,7 +408,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           setLongOrNull(cs, 12, row.feeInLieuVolume());
           cs.setString(13, trim(row.federalPermitNumber()));
           cs.setString(14, trim(row.remarks()));
-          cs.setString(15, normalizedEntryUserId);
+          cs.setString(15, auditUserOrDefault(normalizedEntryUserId));
           cs.setTimestamp(16, now);
           cs.setNull(17, Types.VARCHAR);
           cs.setNull(18, Types.TIMESTAMP);
@@ -457,9 +462,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           setLongOrNull(cs, 13, row.feeInLieuVolume());
           cs.setString(14, trim(row.federalPermitNumber()));
           cs.setString(15, trim(row.remarks()));
-          cs.setString(16, trim(row.entryUserId()));
+          cs.setString(16, auditUserOrDefault(row.entryUserId()));
           cs.setTimestamp(17, row.entryTimestamp());
-          cs.setString(18, normalizedUpdateUserId);
+          cs.setString(18, auditUserOrDefault(normalizedUpdateUserId));
           cs.setTimestamp(19, now);
           cs.setString(20, trim(row.transportTypeCode()));
           cs.setString(21, trim(row.scaleMethodCode()));
@@ -510,7 +515,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           cs.setBigDecimal(3, exportValue);
           cs.setBigDecimal(4, currencyConversionRate);
           cs.setBigDecimal(5, feeInLieu);
-          cs.setString(6, normalizedUserId);
+          cs.setString(6, auditUserOrDefault(normalizedUserId));
           cs.setTimestamp(7, now);
           cs.setNull(8, Types.VARCHAR);
           cs.setNull(9, Types.TIMESTAMP);
@@ -898,7 +903,18 @@ public class PermitRpcRepository extends OracleRepositorySupport {
             cs -> cs.setString(1, normalized),
             2,
             rs -> trim(rs.getString(2)))
-        .filter(value -> value != null && !value.isBlank());
+        .filter(value -> value != null && !value.isBlank())
+        .or(() -> fallbackCodeDescription(procedureSignature, normalized));
+  }
+
+  private List<CountryCodeRow> fallbackCountryCodeRows() {
+    return List.of(
+        new CountryCodeRow("CA", "Canada", 1L, 1L),
+        new CountryCodeRow("US", "United States", 2L, 1L),
+        new CountryCodeRow("JP", "Japan", 2L, 2L),
+        new CountryCodeRow("CN", "China", 2L, 3L),
+        new CountryCodeRow("NZ", "New Zealand", 2L, 4L),
+        new CountryCodeRow("GB", "United Kingdom", 2L, 5L));
   }
 
   private String firstNonNull(String first, String second) {

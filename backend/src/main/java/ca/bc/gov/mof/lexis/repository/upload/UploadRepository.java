@@ -51,7 +51,7 @@ public class UploadRepository extends OracleRepositorySupport {
           cs.setString(3, description);
           cs.setString(4, attachmentTypeCode);
           cs.setString(5, fileTypeCode);
-          cs.setString(6, entryUserId);
+          cs.setString(6, auditUserOrDefault(entryUserId));
           cs.setTimestamp(7, new Timestamp(System.currentTimeMillis()));
           cs.setNull(8, Types.VARCHAR);
           cs.setNull(9, Types.TIMESTAMP);
@@ -83,7 +83,7 @@ public class UploadRepository extends OracleRepositorySupport {
           cs.setString(3, description);
           cs.setString(4, attachmentTypeCode);
           cs.setString(5, fileTypeCode);
-          cs.setString(6, entryUserId);
+          cs.setString(6, auditUserOrDefault(entryUserId));
           cs.setTimestamp(7, new Timestamp(System.currentTimeMillis()));
           cs.setNull(8, Types.VARCHAR);
           cs.setNull(9, Types.TIMESTAMP);
@@ -116,7 +116,7 @@ public class UploadRepository extends OracleRepositorySupport {
           cs.setString(3, description);
           cs.setString(4, attachmentTypeCode);
           cs.setString(5, fileTypeCode);
-          cs.setString(6, entryUserId);
+          cs.setString(6, auditUserOrDefault(entryUserId));
           cs.setTimestamp(7, new Timestamp(System.currentTimeMillis()));
           cs.setNull(8, Types.VARCHAR);
           cs.setNull(9, Types.TIMESTAMP);
@@ -161,7 +161,7 @@ public class UploadRepository extends OracleRepositorySupport {
           cs.setBigDecimal(7, defaultDecimal(exportValue));
           cs.setBigDecimal(8, defaultDecimal(currencyConversionRate));
           cs.setBigDecimal(9, defaultDecimal(feeInLieu));
-          cs.setString(10, entryUserId);
+          cs.setString(10, auditUserOrDefault(entryUserId));
           cs.setTimestamp(11, new Timestamp(System.currentTimeMillis()));
           cs.setNull(12, Types.VARCHAR);
           cs.setNull(13, Types.TIMESTAMP);

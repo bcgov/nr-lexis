@@ -192,7 +192,7 @@ const AdminUploadsPage: FC = () => {
     setSuccessMessage('')
 
     if (!hasUploadAccess) {
-      setErrorMessage('Your session does not include the required upload action for this workflow.')
+      setErrorMessage('Your session does not include the required upload permission.')
       return
     }
 
@@ -249,7 +249,7 @@ const AdminUploadsPage: FC = () => {
       if (status) {
         setErrorMessage(`Upload request failed with status ${status}.`)
       } else {
-        setErrorMessage('Upload request failed. Confirm backend upload endpoints are available.')
+        setErrorMessage('Upload request failed. Please try again or contact support.')
       }
     } finally {
       setIsSubmitting(false)
@@ -267,20 +267,14 @@ const AdminUploadsPage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Upload Center</h1>
-        <p>
-          Native React upload workflows for application, exemption, permit, and invoice documents.
-        </p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <p className="landing-help-text">
-            Upload workflows submit directly to the Spring backend upload APIs.
-          </p>
           <div className="legacy-search-grid">
             <Select
               id="uploadWorkflowType"
-              labelText="Workflow"
+              labelText="Upload Type"
               value={selectedWorkflowType}
               onChange={(event) => setWorkflowType(event.target.value as UploadWorkflowType)}
             >

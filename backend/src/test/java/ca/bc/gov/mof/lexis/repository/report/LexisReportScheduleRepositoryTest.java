@@ -159,6 +159,27 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
+  void destinationCountryOptionsShouldFallbackWhenCodePackageReturnsEmpty() throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_COUNTRY_GROUP(?,?) }", 2);
+    when(resultSet.next()).thenReturn(false);
+
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    var options = repository.loadReportDestinationCountryOptions();
+
+    assertThat(options)
+        .extracting("code", "name")
+        .containsExactly(
+            tuple("", "All"),
+            tuple("US", "United States"),
+            tuple("JP", "Japan"),
+            tuple("CN", "China"),
+            tuple("NZ", "New Zealand"));
+    verify(callableStatement).setInt(1, 1);
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
   void allDestinationCountryOptionsShouldUseLegacyFullCountryProcedureWithoutAll() throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_COUNTRY_CODES(?) }");
     when(resultSet.next()).thenReturn(true, true, false);

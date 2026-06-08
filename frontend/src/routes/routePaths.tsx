@@ -1,5 +1,4 @@
-import { DashboardReference, Document, Search, UserAvatar } from '@carbon/icons-react'
-import type { ComponentType, FC, ReactNode } from 'react'
+import type { FC, ReactNode } from 'react'
 import { Navigate, type RouteObject } from 'react-router-dom'
 import Layout from '@/components/Layout'
 import { useAuth } from '@/context/auth/useAuth'
@@ -36,7 +35,6 @@ export type RouteDescription = {
   id: string
   path: string
   element: ReactNode
-  icon?: ComponentType
   isNavigation: boolean
   requiredActions?: string[]
   requiredActionsMatch?: 'any' | 'all'
@@ -112,7 +110,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/dashboard',
     id: 'Dashboard',
-    icon: DashboardReference,
     element: (
       <Layout>
         <DashboardPage />
@@ -123,7 +120,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial',
     id: 'Provincial',
-    icon: Search,
     requiredActions: [
       '/summary',
       '/applicationsReview',
@@ -304,7 +300,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/federal',
     id: 'Federal',
-    icon: Search,
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
     element: (
       <Layout>
@@ -328,7 +323,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/indian-reserve',
     id: 'Indigenous Reserve',
-    icon: Search,
     requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
     element: (
       <Layout>
@@ -364,7 +358,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/reports',
     id: 'Reports',
-    icon: Document,
     requiredActions: [
       '/applicationReport',
       '/offerReport',
@@ -387,7 +380,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/admin',
     id: 'Admin',
-    icon: UserAvatar,
     requiredActions: ['/lexisAgentAdmin'],
     element: (
       <Layout>

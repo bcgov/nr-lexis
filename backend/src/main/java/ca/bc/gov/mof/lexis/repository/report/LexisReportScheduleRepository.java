@@ -18,7 +18,6 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   private static final String RESERVE_JURISDICTION_CODE = "I";
   private static final String FIND_CURRENT_SCHEDULES =
       LEXIS_CODES_PACKAGE + "FIND_CURRENT_SCHEDULES(?)";
-  private static final String FIND_ALL_ORG_UNITS = LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)";
   private static final String FIND_ALL_JURISDICTION_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_JURISDICTION_CODES(?)";
   private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
@@ -56,18 +55,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return queryCursorProcedure(
-        FIND_ALL_ORG_UNITS,
-        null,
-        1,
-        rs -> {
-          Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-          String regionCode = getString(rs, "ORG_UNIT_CODE");
-          String regionName = getString(rs, "ORG_UNIT_NAME");
-          return new CodeNameDto(
-              orgUnitNo == null ? null : orgUnitNo.toString(),
-              regionName == null ? regionCode : regionName);
-        });
+    return loadOrgUnitOptions(true);
   }
 
   public List<CodeNameDto> loadReportJurisdictionOptions() {
@@ -107,7 +95,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadReportDestinationCountryOptions() {
-    return withAll(
+    List<CodeNameDto> options =
         queryCursorProcedure(
                 FIND_COUNTRY_GROUP,
                 cs -> cs.setInt(1, 1),
@@ -115,7 +103,11 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
                 rs ->
                     new CodeNameDto(getString(rs, "CODE"), getString(rs, "DESCRIPTION")))
             .stream()
-            .toList());
+            .toList();
+    if (options.isEmpty()) {
+      options = fallbackReportDestinationCountryOptions();
+    }
+    return withAll(options);
   }
 
   public List<CodeNameDto> loadAllReportDestinationCountryOptions() {
@@ -176,6 +168,14 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
     return options.stream()
         .filter(option -> !RESERVE_JURISDICTION_CODE.equalsIgnoreCase(option.code()))
         .toList();
+  }
+
+  private List<CodeNameDto> fallbackReportDestinationCountryOptions() {
+    return List.of(
+        new CodeNameDto("US", "United States"),
+        new CodeNameDto("JP", "Japan"),
+        new CodeNameDto("CN", "China"),
+        new CodeNameDto("NZ", "New Zealand"));
   }
 
   public record CurrentScheduleRow(Long exportScheduleId, LocalDate advertisingDate) {}

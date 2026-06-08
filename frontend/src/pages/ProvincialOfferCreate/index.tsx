@@ -196,7 +196,6 @@ const ProvincialOfferCreatePage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Create Provincial Offer</h1>
-        <p>Base create form for provincial offer migration.</p>
       </Column>
 
       {!!status && (

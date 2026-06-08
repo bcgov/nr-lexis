@@ -318,7 +318,6 @@ const ProvincialExemptionCreatePage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Create Provincial Exemption</h1>
-        <p>Base create form for provincial exemption migration.</p>
       </Column>
 
       {missingRequiredOptions && (
@@ -326,7 +325,7 @@ const ProvincialExemptionCreatePage: FC = () => {
           <InlineNotification
             kind="warning"
             title="Required options unavailable"
-            subtitle="Exemption type values are unavailable from backend options. Submit remains disabled until a valid type is available."
+            subtitle="Exemption type values are unavailable. Submit remains disabled until a valid type is available."
             lowContrast
             hideCloseButton
           />

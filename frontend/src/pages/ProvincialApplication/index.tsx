@@ -412,10 +412,6 @@ const ProvincialApplicationPage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial Application Search</h1>
-        <p>
-          Migrated from <code>src/main/webapp/WEB-INF/jsp/provincial/application/search.jsp</code>{' '}
-          and <code>src/main/webapp/javascript/provincial/application/search.js</code>.
-        </p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>

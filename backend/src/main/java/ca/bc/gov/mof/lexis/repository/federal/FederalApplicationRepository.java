@@ -48,33 +48,33 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
   public List<FederalApplicationSearchResultDto> search(FederalApplicationSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
-    where.addLike("EEA.FED_APPLICATION_NUMBER", criteria.federalApplicationNumber());
-    where.addLike("EP.PACKAGE_NUMBER", criteria.packageNumber());
-    where.addEquals("EEA.EXPORT_JURISDICTION_CODE", "F");
-    where.addLike("EEA.EXEMPTION_NUMBER", criteria.exemptionNumber());
-    where.addEquals("EEA.EXPORT_APPLICATION_STATUS_CODE", criteria.applicationStatus());
-    where.addDateGte("EEA.RECEIVED_DATE", criteria.receivedFromDate());
-    where.addDateLte("EEA.RECEIVED_DATE", criteria.receivedToDate());
-    where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
-    where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
+    where.addLike("v.FED_APPLICATION_NUMBER", criteria.federalApplicationNumber());
+    where.addLike("v.PACKAGE_NUMBER", criteria.packageNumber());
+    where.addEquals("v.EXPORT_JURISDICTION_CODE", "F");
+    where.addLike("v.EXEMPTION_NUMBER", criteria.exemptionNumber());
+    where.addEquals("v.EXPORT_APPLICATION_STATUS_CODE", criteria.applicationStatus());
+    where.addDateGte("v.RECEIVED_DATE", criteria.receivedFromDate());
+    where.addDateLte("v.RECEIVED_DATE", criteria.receivedToDate());
+    where.addDateGte("v.ADVERTISING_DATE", criteria.listingFromDate());
+    where.addDateLte("v.ADVERTISING_DATE", criteria.listingToDate());
 
     String ownerClientNumber = trim(criteria.ownerClientNumber());
     if (ownerClientNumber != null) {
       int idx1 = where.nextBindIndex();
       int idx2 = idx1 + 1;
       where.addRawWithBinds(
-          " AND (EEA.OWNER_CLIENT_NUMBER LIKE '%' || :"
+          " AND (v.OWNER_CLIENT_NUMBER LIKE '%' || :"
               + idx1
-              + " || '%' OR EEA.AGENT_CLIENT_NUMBER LIKE '%' || :"
+              + " || '%' OR v.AGENT_CLIENT_NUMBER LIKE '%' || :"
               + idx2
               + " || '%')",
           ownerClientNumber,
           ownerClientNumber);
     }
 
-    where.addLike("EEA.AGENT_CLIENT_NUMBER", criteria.agentClientNumber());
+    where.addLike("v.AGENT_CLIENT_NUMBER", criteria.agentClientNumber());
 
-    SqlWhere sqlWhere = where.build(" ORDER BY EEA.APPLICATION_NUMBER DESC");
+    SqlWhere sqlWhere = where.build(" ORDER BY v.APPLICATION_NUMBER DESC");
 
     return queryDynamicAllPages(
         FIND_APPLICATIONS_BY_CRITERIA,

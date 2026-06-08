@@ -177,6 +177,42 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
+  void addExemptionShouldDefaultEntryUserWhenPrincipalIsMissing() {
+    when(repository.insertExemption(any(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class)))
+        .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-205")));
+    when(repository.findExemptionRate("EX-205")).thenReturn(Optional.empty());
+    when(repository.insertExemptionRate(any(ExemptionDetailsRpcRepository.ExemptionRateMutationRecord.class)))
+        .thenReturn(Optional.of(exemptionRate(18.25d)));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                " Conditions ",
+                "B",
+                "ACT",
+                18.25d,
+                true,
+                List.of(11L, 12L)),
+            null);
+
+    assertThat(response.success()).isTrue();
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class);
+    verify(repository).insertExemption(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().entryUserId()).isEqualTo("system");
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionRateMutationRecord> rateCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionRateMutationRecord.class);
+    verify(repository).insertExemptionRate(rateCaptor.capture());
+    assertThat(rateCaptor.getValue().userId()).isEqualTo("system");
+  }
+
+  @Test
   void checkExemptionNumberShouldReturnValidWhenNumberIsAvailable() {
     when(repository.existsByExemptionNumber("EX-205")).thenReturn(false);
 
@@ -353,6 +389,38 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
+  void updateExemptionShouldDefaultUpdateUserWhenPrincipalIsMissing() {
+    ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("ACT");
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                " Updated conditions ",
+                "M",
+                "ACT",
+                null,
+                null,
+                List.of()),
+            null,
+            true);
+
+    assertThat(response.success()).isTrue();
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionUpdateRecord> updateCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class);
+    verify(repository).updateExemption(updateCaptor.capture());
+    assertThat(updateCaptor.getValue().updateUserId()).isEqualTo("creator");
+  }
+
+  @Test
   void updateExemptionShouldDeleteExistingFeeRateWhenOverrideDisabled() {
     ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("ACT");
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
@@ -426,6 +494,29 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(updateRecord.approvalDate()).isEqualTo(LocalDate.now());
     assertThat(updateRecord.updateUserId()).isEqualTo("idir\\jsmith");
     assertThat(updateRecord.regionNumbers()).isNull();
+  }
+
+  @Test
+  void approveExemptionsShouldDefaultUpdateUserWhenPrincipalIsMissing() {
+    ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("NEW");
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
+
+    ExemptionDetailsRpcService.ExemptionApprovalResult response =
+        service.approveExemptions("EX-205", null, true);
+
+    assertThat(response.success()).isTrue();
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionUpdateRecord> updateCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class);
+    verify(repository).updateExemption(updateCaptor.capture());
+    assertThat(updateCaptor.getValue().updateUserId()).isEqualTo("creator");
   }
 
   @Test

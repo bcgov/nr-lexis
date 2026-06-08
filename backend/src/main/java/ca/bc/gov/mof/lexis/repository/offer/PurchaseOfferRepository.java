@@ -24,8 +24,6 @@ import org.springframework.stereotype.Repository;
 @Profile("oracle")
 public class PurchaseOfferRepository extends OracleRepositorySupport {
 
-  private static final String FIND_ALL_ORG_UNITS = LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)";
-
   private static final String FIND_PURCHASE_OFFERS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_POS_BY_CRITERIA(?,?,?,?,?)";
   private static final String FIND_PURCHASE_OFFER_BY_NUMBER =
@@ -40,18 +38,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return queryCursorProcedure(
-        FIND_ALL_ORG_UNITS,
-        null,
-        1,
-        rs -> {
-          Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-          String regionCode = getString(rs, "ORG_UNIT_CODE");
-          String regionName = getString(rs, "ORG_UNIT_NAME");
-          return new CodeNameDto(
-              orgUnitNo == null ? null : orgUnitNo.toString(),
-              regionCode == null ? regionName : regionCode);
-        });
+    return loadOrgUnitOptions(false);
   }
 
   public List<PurchaseOfferSearchResultDto> search(PurchaseOfferSearchCriteria criteria) {
@@ -202,7 +189,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.withdrawReason());
     setStringOrNull(cs, index++, record.exportJurisdictionCode());
     setStringOrNull(cs, index++, record.manufacturingFacilityInfo());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     setStringOrNull(cs, index++, record.updateUserId());
     cs.setNull(index++, Types.TIMESTAMP);
@@ -262,9 +249,9 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.manufacturingFacilityInfo());
     setStringOrNull(cs, index++, record.pickupLocation());
     setStringOrNull(cs, index++, record.offerCondition());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
-    setStringOrNull(cs, index++, record.updateUserId());
+    cs.setString(index++, auditUserOrDefault(record.updateUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     setDoubleOrNull(cs, index, record.offerVolume());
   }

@@ -121,6 +121,17 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void approveShouldDefaultUpdateUserWhenPrincipalIsMissing() {
+    when(repository.approve(1000456L, "system")).thenReturn(true);
+
+    ApplicationReviewStatusUpdateResultDto result = service.approve(1000456L, null);
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.updated()).isTrue();
+    verify(repository).approve(1000456L, "system");
+  }
+
+  @Test
   void updateStatusShouldShortCircuitWhenStatusMissing() {
     ApplicationReviewStatusUpdateResultDto result =
         service.updateStatus(
@@ -148,6 +159,20 @@ class ApplicationReviewOracleServiceTest {
     assertThat(result.clientEmail()).isEqualTo("client@gov.bc.ca");
     assertThat(result.remark()).isEqualTo("Missing docs");
     verify(repository).updateStatus(1000456L, "REJ", "Missing docs", "idir\\jsmith");
+  }
+
+  @Test
+  void updateStatusShouldDefaultUpdateUserWhenPrincipalIsMissing() {
+    ApplicationReviewStatusUpdateRequestDto request =
+        new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");
+    when(repository.updateStatus(1000456L, "REJ", "Missing docs", "system")).thenReturn(true);
+
+    ApplicationReviewStatusUpdateResultDto result =
+        service.updateStatus(1000456L, request, null);
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.updated()).isTrue();
+    verify(repository).updateStatus(1000456L, "REJ", "Missing docs", "system");
   }
 
   @Test

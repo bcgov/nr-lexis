@@ -181,8 +181,9 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       return new CreateExemptionResult(false, null, null, false, errors, warnings);
     }
 
+    String entryUserId = defaultEntryUser(userId);
     Optional<ExemptionDetailsRpcRepository.ExemptionInsertRow> inserted =
-        repository.insertExemption(toInsertRecord(normalized, blankToNull(userId)));
+        repository.insertExemption(toInsertRecord(normalized, entryUserId));
     String exemptionNumber =
         inserted.map(ExemptionDetailsRpcRepository.ExemptionInsertRow::exemptionNumber).orElse(null);
 
@@ -200,7 +201,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         exemptionNumber,
         normalized.enableRateOverride(),
         normalized.feeRate(),
-        blankToNull(userId));
+        entryUserId);
 
     return new CreateExemptionResult(
         true, SAVE_SUCCESS_MESSAGE, exemptionNumber, true, List.of(), warnings);
@@ -227,7 +228,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
     ExemptionDetailsRpcRepository.ExemptionRecord current = existing.get();
     ExemptionDetailsRpcRepository.ExemptionUpdateRecord updateRecord =
-        toUpdateRecord(normalized, current, blankToNull(userId));
+        toUpdateRecord(normalized, current, defaultUpdateUser(userId, current.entryUserId()));
 
     List<String> errors = validateUpdateExemption(updateRecord, current, canApproveExemption);
     if (!errors.isEmpty()) {
@@ -358,7 +359,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     Map<String, String> sendGrid = new LinkedHashMap<>();
     StringBuilder errorMessage = new StringBuilder();
     for (String exemptionNumber : numbers) {
-      approveSingleExemption(exemptionNumber, blankToNull(userId), canApproveExemption, sendGrid, errorMessage);
+      approveSingleExemption(exemptionNumber, userId, canApproveExemption, sendGrid, errorMessage);
     }
 
     boolean valid = !sendGrid.isEmpty();
@@ -503,6 +504,11 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return normalized == null ? blankToNull(fallback) : normalized;
   }
 
+  private String defaultEntryUser(String userId) {
+    String normalized = blankToNull(userId);
+    return normalized == null ? "system" : normalized;
+  }
+
   private String displayApplicationNumber(Long applicationNumber) {
     return applicationNumber == null ? "" : applicationNumber.toString();
   }
@@ -541,7 +547,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             EXEMPTION_STATUS_ACTIVE,
             current.entryUserId(),
             current.entryTimestamp(),
-            userId,
+            defaultUpdateUser(userId, current.entryUserId()),
             null);
 
     List<String> errors = validateExemptionApproval(updateRecord, current, canApproveExemption);

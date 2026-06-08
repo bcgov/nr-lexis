@@ -94,7 +94,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
           cs.setTimestamp(1, toTimestamp(effectiveDate));
           cs.setLong(2, orgUnitNo);
           cs.setInt(3, percentIncrease);
-          cs.setString(4, trim(entryUserId));
+          cs.setString(4, auditUserOrDefault(entryUserId));
         },
         5,
         this::mapFeePolicyRow);
@@ -122,7 +122,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
           cs.setTimestamp(2, toTimestamp(effectiveDate));
           cs.setLong(3, orgUnitNo);
           cs.setInt(4, percentIncrease);
-          cs.setString(5, trim(updateUserId));
+          cs.setString(5, auditUserOrDefault(updateUserId));
         });
   }
 
@@ -186,7 +186,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
         cs -> {
           cs.setTimestamp(1, toTimestamp(effectiveDate));
           cs.setInt(2, filPercent);
-          cs.setString(3, trim(entryUserId));
+          cs.setString(3, auditUserOrDefault(entryUserId));
         },
         4,
         this::mapFilPolicyRow);
@@ -204,7 +204,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
           cs.setLong(1, filPolicyId);
           cs.setTimestamp(2, toTimestamp(effectiveDate));
           cs.setInt(3, filPercent);
-          cs.setString(4, trim(updateUserId));
+          cs.setString(4, auditUserOrDefault(updateUserId));
         });
   }
 

@@ -308,7 +308,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         cs -> {
           setStringOrNull(cs, 1, record.exemptionNumber());
           setDoubleOrNull(cs, 2, record.fixedExemptionRate());
-          setStringOrNull(cs, 3, record.userId());
+          cs.setString(3, auditUserOrDefault(record.userId()));
           cs.setTimestamp(4, Timestamp.from(Instant.now()));
         },
         5,
@@ -324,7 +324,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         cs -> {
           setStringOrNull(cs, 1, record.exemptionNumber());
           setDoubleOrNull(cs, 2, record.fixedExemptionRate());
-          setStringOrNull(cs, 3, record.userId());
+          cs.setString(3, auditUserOrDefault(record.userId()));
           cs.setTimestamp(4, Timestamp.from(Instant.now()));
         });
   }
@@ -347,7 +347,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.otherConditions() == null ? "" : record.otherConditions());
     setStringOrNull(cs, index++, record.exemptionTypeCode());
     setStringOrNull(cs, index++, record.exemptionStatusCode());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     cs.setNull(index++, Types.VARCHAR);
     cs.setNull(index, Types.TIMESTAMP);
@@ -363,9 +363,9 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.otherConditions() == null ? "" : record.otherConditions());
     setStringOrNull(cs, index++, record.exemptionTypeCode());
     setStringOrNull(cs, index++, record.exemptionStatusCode());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
-    setStringOrNull(cs, index++, record.updateUserId());
+    cs.setString(index++, auditUserOrDefault(record.updateUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     setStringOrNull(cs, index, record.previousExemptionNumber());
   }
@@ -502,9 +502,9 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     setDoubleOrNull(cs, index++, app.exemptionApplicationVolume());
     setDoubleOrNull(cs, index++, app.averageLogVolume());
     setStringOrNull(cs, index++, app.productLocation());
-    setStringOrNull(cs, index++, app.entryUserId());
+    cs.setString(index++, auditUserOrDefault(app.entryUserId()));
     setTimestampOrNull(cs, index++, app.entryTimestamp());
-    setStringOrNull(cs, index++, record.updateUserId());
+    cs.setString(index++, auditUserOrDefault(record.updateUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     setLongOrNull(cs, index++, app.exportScheduleId());
     setStringOrNull(cs, index++, app.agentClientNumber());

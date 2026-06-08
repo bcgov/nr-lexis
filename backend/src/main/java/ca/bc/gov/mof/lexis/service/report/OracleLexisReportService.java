@@ -150,12 +150,20 @@ public class OracleLexisReportService implements LexisReportService {
       return Optional.empty();
     }
 
-    prepareRuntimeResources();
-
-    JasperReport jasperReport =
-        compiledTemplateCache.computeIfAbsent(
-            definition.templateName(),
-            templateName -> compileTemplate(definition));
+    JasperReport jasperReport;
+    try {
+      prepareRuntimeResources();
+      jasperReport =
+          compiledTemplateCache.computeIfAbsent(
+              definition.templateName(),
+              templateName -> compileTemplate(definition));
+    } catch (IllegalStateException ex) {
+      LOGGER.warn(
+          "Jasper template preparation failed for report action [{}]: {}",
+          definition.action(),
+          ex.getMessage());
+      return Optional.empty();
+    }
 
     HashMap<String, Object> parameters =
         new HashMap<>(parameterProvider.buildParameters(definition, effectiveRequest));
@@ -171,11 +179,11 @@ public class OracleLexisReportService implements LexisReportService {
               effectiveFormat.mediaType(),
               reportBytes));
     } catch (JRException ex) {
-      LOGGER.error("Jasper fill/export failed for report action [{}]", definition.action(), ex);
-      throw new IllegalStateException("Failed to render report " + definition.action(), ex);
+      LOGGER.warn("Jasper fill/export failed for report action [{}]: {}", definition.action(), ex.getMessage());
+      return Optional.empty();
     } catch (SQLException ex) {
-      LOGGER.error("Oracle connection failed for report action [{}]", definition.action(), ex);
-      throw new IllegalStateException("Failed to connect to Oracle for report " + definition.action(), ex);
+      LOGGER.warn("Oracle connection failed for report action [{}]: {}", definition.action(), ex.getMessage());
+      return Optional.empty();
     }
   }
 
@@ -429,7 +437,7 @@ public class OracleLexisReportService implements LexisReportService {
     return output.toByteArray();
   }
 
-  private JasperReport compileTemplate(LexisJasperReportDefinition definition) {
+  JasperReport compileTemplate(LexisJasperReportDefinition definition) {
     Path templatePath = runtimeTemplateDirectory.resolve(definition.templateName() + ".jrxml");
     if (!Files.exists(templatePath)) {
       throw new IllegalStateException(

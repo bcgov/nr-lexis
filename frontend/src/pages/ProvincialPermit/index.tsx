@@ -285,10 +285,6 @@ const ProvincialPermitPage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial Permit Search</h1>
-        <p>
-          Migrated from <code>src/main/webapp/WEB-INF/jsp/provincial/permit/search.jsp</code> and
-          <code> src/main/webapp/javascript/provincial/permit/search.js</code>.
-        </p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
