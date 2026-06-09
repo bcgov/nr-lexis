@@ -12,7 +12,7 @@ const args = process.argv.slice(2)
 function usage() {
   return `Usage: node tools/compare-report-parity.mjs [options]
 
-Compares modern Spring/Jasper report output with legacy nr-lexis-main report output.
+Compares modern Spring/Jasper report output with reference application report output.
 
 Options:
   --cases <path>           Case manifest path. Default: ${DEFAULT_CASES_FILE}

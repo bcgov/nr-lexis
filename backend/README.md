@@ -113,15 +113,3 @@ backend/
     ├── fonts/
     └── reports/lexis/
 ```
-
-## Origins
-
-This backend is the Spring Boot service for `nr-lexis`.
-
-CI/CD and OpenShift workflow conventions derive from [bcgov/quickstart-openshift](https://github.com/bcgov/quickstart-openshift).
-
-The modern backend replaces the legacy Struts/Jasper Server report path with embedded JasperReports execution inside Spring Boot. Legacy behaviour is still referenced against `nr-lexis-main` where migration parity matters.
-
-## Resources
-
-[NRM Architecture Confluence: GitHub Repository Best Practices](https://apps.nrs.gov.bc.ca/int/confluence/x/TZ_9CQ)

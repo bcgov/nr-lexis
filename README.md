@@ -30,7 +30,7 @@ Both options share the same prerequisites and property files below. Reports are 
 
 ### Shared prerequisites
 
-1. **BC Gov VPN connected.** The backend needs to reach the BC Gov Oracle host configured in `application-local.yml`; Compose cannot route that for you.
+1. **Network access to the BC Gov Oracle environment.** Compose cannot route that for you.
 2. **Maven 3.9+ and Java 21** (Option A only). The repo has no Maven wrapper.
 3. **Node 22+** (Option A only).
 4. **Docker Desktop** (Option B only).
@@ -41,13 +41,13 @@ These files are gitignored and stay local.
 
 #### `backend/src/main/resources/application-local.yml`
 
-Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, IDIR base URL, and `TRUSTSTORE_PATH`. Copy from a teammate or from the deployed environment template used by the backend.
+Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, IDIR base URL, and `TRUSTSTORE_PATH`. Obtain these values through approved team channels and keep them out of git.
 
 For Option B, Compose overrides `TRUSTSTORE_PATH` inside Docker to `/app/src/main/resources/cert/jssecacerts`; no local edit is needed for the container path.
 
 #### `backend/src/main/resources/cert/jssecacerts`
 
-Java keystore containing the trusted CA chain for the Oracle TLS connection. Copy it from a running backend pod or another local checkout.
+Java keystore containing the trusted CA chain for the Oracle TLS connection. Obtain it through approved team channels and keep it out of git.
 
 #### `frontend/.env`
 
@@ -119,7 +119,7 @@ Regardless of option:
 - `curl http://localhost:8080/actuator/health` returns `{"status":"UP"}`.
 - Open `http://localhost:3000` and complete the Cognito login round trip.
 
-If `/actuator/health` returns `DOWN`, the most likely cause is Oracle connectivity. Check VPN, `application-local.yml` credentials, and the truststore path.
+If `/actuator/health` returns `DOWN`, the most likely cause is Oracle connectivity. Check network access, `application-local.yml` credentials, and the truststore path.
 
 ### Report parity check
 
