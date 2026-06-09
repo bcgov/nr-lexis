@@ -76,7 +76,7 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadOnlyRequestedLegacyPage() {
+  void searchShouldLoadAllLegacyPagesForTotal() {
     List<ExemptionSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(1L, 10L)
             .mapToObj(number -> exemptionResult("EX-" + number))
@@ -93,7 +93,7 @@ class ExemptionRepositoryTest {
         .extracting(ExemptionSearchResultDto::exemptionNumber)
         .containsExactly("EX-1", "EX-2", "EX-3", "EX-4", "EX-5", "EX-6", "EX-7", "EX-8", "EX-9", "EX-10");
     assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(2);
   }
 
   private static ExemptionSearchResultDto exemptionResult(String exemptionNumber) {

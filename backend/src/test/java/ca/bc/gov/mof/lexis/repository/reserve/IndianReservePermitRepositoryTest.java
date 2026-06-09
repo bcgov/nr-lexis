@@ -41,7 +41,7 @@ class IndianReservePermitRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadOnlyRequestedLegacyPage() {
+  void searchShouldLoadAllLegacyPagesForTotal() {
     List<IndianReservePermitSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(700001L, 700010L)
             .mapToObj(number -> permitResult(String.valueOf(number)))
@@ -57,7 +57,7 @@ class IndianReservePermitRepositoryTest {
         .extracting(IndianReservePermitSearchResultDto::permitNumber)
         .containsExactly("700001", "700002", "700003", "700004", "700005", "700006", "700007", "700008", "700009", "700010");
     assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(2);
   }
 
   private static IndianReservePermitSearchResultDto permitResult(String permitNumber) {

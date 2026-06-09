@@ -259,50 +259,35 @@ public abstract class OracleRepositorySupport {
     }
 
     int offset = (int) offsetLong;
-    int legacyStartPage = offset / LEGACY_DYNAMIC_PAGE_SIZE;
-    int firstPageOffset = offset % LEGACY_DYNAMIC_PAGE_SIZE;
-    int requiredRows = firstPageOffset + normalizedSize;
-    List<T> bufferedRows = new ArrayList<>(requiredRows);
+    List<T> allRows = new ArrayList<>();
     List<T> previousPage = List.of();
-    boolean lastFetchedPageWasFull = false;
 
-    for (int legacyPage = legacyStartPage; bufferedRows.size() < requiredRows && legacyPage < 10_000; legacyPage++) {
+    for (int legacyPage = 0; legacyPage < 10_000; legacyPage++) {
       List<T> currentPage =
           queryDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
       if (currentPage.isEmpty()) {
-        lastFetchedPageWasFull = false;
         break;
       }
-      if (legacyPage > legacyStartPage && currentPage.equals(previousPage)) {
+      if (legacyPage > 0 && currentPage.equals(previousPage)) {
         logger.warn(
             "Oracle dynamic call [{}] returned duplicate data for page {}; stopping pagination",
             procedureSignature,
             legacyPage);
-        lastFetchedPageWasFull = false;
         break;
       }
-      bufferedRows.addAll(currentPage);
+      allRows.addAll(currentPage);
       previousPage = currentPage;
-      lastFetchedPageWasFull = currentPage.size() >= LEGACY_DYNAMIC_PAGE_SIZE;
-      if (!lastFetchedPageWasFull) {
+      if (currentPage.size() < LEGACY_DYNAMIC_PAGE_SIZE) {
         break;
       }
     }
 
-    if (bufferedRows.size() <= firstPageOffset) {
-      return new DynamicSearchPage<>(List.of(), offset);
+    if (offset >= allRows.size()) {
+      return new DynamicSearchPage<>(List.of(), allRows.size());
     }
 
-    int toIndex = Math.min(firstPageOffset + normalizedSize, bufferedRows.size());
-    List<T> results = List.copyOf(bufferedRows.subList(firstPageOffset, toIndex));
-    boolean maybeHasMore = results.size() == normalizedSize && lastFetchedPageWasFull;
-    int total = safeTotal(offset, results.size(), maybeHasMore);
-    return new DynamicSearchPage<>(results, total);
-  }
-
-  private int safeTotal(int offset, int resultCount, boolean maybeHasMore) {
-    long total = (long) offset + resultCount + (maybeHasMore ? 1L : 0L);
-    return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
+    int toIndex = Math.min(offset + normalizedSize, allRows.size());
+    return new DynamicSearchPage<>(List.copyOf(allRows.subList(offset, toIndex)), allRows.size());
   }
 
   private List<CodeNameDto> fallbackCodeNameOptions(String procedureSignature) {

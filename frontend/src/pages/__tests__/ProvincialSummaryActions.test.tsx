@@ -83,19 +83,19 @@ describe('Provincial Summary action smoke', () => {
 
     mockedSearchProvincialApplications.mockResolvedValue({
       content: [],
-      page: { number: 0, size: 1, totalElements: 5, totalPages: 5 },
+      page: { number: 0, size: 1, totalElements: 501, totalPages: 501 },
     })
     mockedSearchProvincialExemptions.mockResolvedValue({
       content: [],
-      page: { number: 0, size: 1, totalElements: 6, totalPages: 6 },
+      page: { number: 0, size: 1, totalElements: 602, totalPages: 602 },
     })
     mockedSearchProvincialOffers.mockResolvedValue({
       content: [],
-      page: { number: 0, size: 1, totalElements: 7, totalPages: 7 },
+      page: { number: 0, size: 1, totalElements: 703, totalPages: 703 },
     })
     mockedSearchProvincialPermits.mockResolvedValue({
       content: [],
-      page: { number: 0, size: 1, totalElements: 8, totalPages: 8 },
+      page: { number: 0, size: 1, totalElements: 804, totalPages: 804 },
     })
     mockedSearchApplicationReviews.mockResolvedValue({
       content: [
@@ -109,15 +109,15 @@ describe('Provincial Summary action smoke', () => {
           showInfoIcon: false,
         },
       ],
-      page: { number: 0, size: 5, totalElements: 9, totalPages: 2 },
+      page: { number: 0, size: 5, totalElements: 905, totalPages: 181 },
     })
     mockedSearchFederalApplications.mockResolvedValue({
       content: [],
-      page: { number: 0, size: 1, totalElements: 10, totalPages: 10 },
+      page: { number: 0, size: 1, totalElements: 1006, totalPages: 1006 },
     })
     mockedSearchIndianReservePermits.mockResolvedValue({
       content: [],
-      page: { number: 0, size: 1, totalElements: 11, totalPages: 11 },
+      page: { number: 0, size: 1, totalElements: 1107, totalPages: 1107 },
     })
   })
 
@@ -132,6 +132,34 @@ describe('Provincial Summary action smoke', () => {
     expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1)
     expect(mockedSearchFederalApplications).toHaveBeenCalledTimes(1)
     expect(mockedSearchIndianReservePermits).toHaveBeenCalledTimes(1)
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 0, pageSize: 1 }),
+    )
+    expect(mockedSearchProvincialExemptions).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 0, pageSize: 1 }),
+    )
+    expect(mockedSearchProvincialOffers).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 0, pageSize: 1 }),
+    )
+    expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 0, pageSize: 1 }),
+    )
+    expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 0, pageSize: 5 }),
+    )
+    expect(mockedSearchFederalApplications).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 0, pageSize: 1 }),
+    )
+    expect(mockedSearchIndianReservePermits).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 0, pageSize: 1 }),
+    )
+    expect(screen.getByText('501')).toBeInTheDocument()
+    expect(screen.getByText('602')).toBeInTheDocument()
+    expect(screen.getByText('703')).toBeInTheDocument()
+    expect(screen.getByText('804')).toBeInTheDocument()
+    expect(screen.getByText('905')).toBeInTheDocument()
+    expect(screen.getByText('1,006')).toBeInTheDocument()
+    expect(screen.getByText('1,107')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Open Review Queue' }))
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/review')

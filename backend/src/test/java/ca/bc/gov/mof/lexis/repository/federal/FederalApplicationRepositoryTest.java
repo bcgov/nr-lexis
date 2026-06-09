@@ -54,7 +54,7 @@ class FederalApplicationRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadOnlyRequestedLegacyPage() {
+  void searchShouldLoadAllLegacyPagesForTotal() {
     List<FederalApplicationSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(900101L, 900110L)
             .mapToObj(FederalApplicationRepositoryTest::federalResult)
@@ -72,7 +72,7 @@ class FederalApplicationRepositoryTest {
         .extracting(FederalApplicationSearchResultDto::applicationNumber)
         .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
     assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(2);
   }
 
   private static FederalApplicationSearchResultDto federalResult(long applicationNumber) {

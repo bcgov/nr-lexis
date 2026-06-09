@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 class OracleRepositorySupportTest {
 
   @Test
-  void queryDynamicPageShouldLoadOnlyRequestedLegacyPage() {
+  void queryDynamicPageShouldReturnExactTotalForFirstPage() {
     List<String> firstPage =
         List.of(
             "row-1",
@@ -32,7 +32,8 @@ class OracleRepositorySupportTest {
 
     assertThat(results.results()).containsExactlyElementsOf(firstPage);
     assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(2);
+    assertThat(repository.requestedPages()).containsExactly(0, 1);
   }
 
   @Test
@@ -79,12 +80,25 @@ class OracleRepositorySupportTest {
     DynamicSearchPage<String> results = repository.loadPage(1, 5);
 
     assertThat(results.results()).containsExactly("row-6", "row-7", "row-8", "row-9", "row-10");
-    assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(1);
+    assertThat(results.total()).isEqualTo(10);
+    assertThat(repository.pageCalls()).isEqualTo(2);
+    assertThat(repository.requestedPages()).containsExactly(0, 1);
   }
 
   @Test
-  void queryDynamicPageShouldLoadOnlySecondLegacyPageForSecondUiPage() {
+  void queryDynamicPageShouldReturnExactTotalForSecondUiPage() {
+    List<String> firstPage =
+        List.of(
+            "row-1",
+            "row-2",
+            "row-3",
+            "row-4",
+            "row-5",
+            "row-6",
+            "row-7",
+            "row-8",
+            "row-9",
+            "row-10");
     List<String> secondPage =
         List.of(
             "row-11",
@@ -97,14 +111,36 @@ class OracleRepositorySupportTest {
             "row-18",
             "row-19",
             "row-20");
-    TestRepository repository = new TestRepository(List.of(List.of("row-1"), secondPage, List.of("row-21")));
+    TestRepository repository = new TestRepository(List.of(firstPage, secondPage, List.of("row-21")));
 
     DynamicSearchPage<String> results = repository.loadPage(1, 10);
 
     assertThat(results.results()).containsExactlyElementsOf(secondPage);
     assertThat(results.total()).isEqualTo(21);
-    assertThat(repository.pageCalls()).isEqualTo(1);
-    assertThat(repository.requestedPages()).containsExactly(1);
+    assertThat(repository.pageCalls()).isEqualTo(3);
+    assertThat(repository.requestedPages()).containsExactly(0, 1, 2);
+  }
+
+  @Test
+  void queryDynamicPageShouldReturnExactTotalForLargeResultSets() {
+    List<List<String>> pages = new java.util.ArrayList<>();
+    for (int page = 0; page < 50; page++) {
+      List<String> rows = new java.util.ArrayList<>();
+      for (int row = 1; row <= 10; row++) {
+        rows.add("row-" + ((page * 10) + row));
+      }
+      pages.add(rows);
+    }
+    TestRepository repository = new TestRepository(pages);
+
+    DynamicSearchPage<String> results = repository.loadPage(0, 10);
+
+    assertThat(results.results())
+        .containsExactly("row-1", "row-2", "row-3", "row-4", "row-5", "row-6", "row-7", "row-8", "row-9", "row-10");
+    assertThat(results.total()).isEqualTo(500);
+    assertThat(repository.pageCalls()).isEqualTo(51);
+    assertThat(repository.requestedPages().get(0)).isZero();
+    assertThat(repository.requestedPages().get(50)).isEqualTo(50);
   }
 
   @Test

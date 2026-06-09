@@ -73,7 +73,7 @@ class PermitRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadOnlyRequestedLegacyPage() {
+  void searchShouldLoadAllLegacyPagesForTotal() {
     List<PermitSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(700001L, 700010L)
             .mapToObj(PermitRepositoryTest::permitResult)
@@ -90,7 +90,7 @@ class PermitRepositoryTest {
         .extracting(PermitSearchResultDto::permitNumber)
         .containsExactly(700001L, 700002L, 700003L, 700004L, 700005L, 700006L, 700007L, 700008L, 700009L, 700010L);
     assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(2);
   }
 
   private static PermitSearchResultDto permitResult(long permitNumber) {
