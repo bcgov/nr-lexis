@@ -24,6 +24,10 @@ type BackendProvincialPermitSearchResponse = {
   size: number
 }
 
+type ProvincialPermitSearchOptions = {
+  knownTotal?: number
+}
+
 const buildBackendParams = (request: ProvincialPermitSearchRequest): URLSearchParams => {
   const params = new URLSearchParams()
 
@@ -94,11 +98,17 @@ const parseBackendResponse = (payload: unknown): ProvincialPermitSearchResponse 
 
 export const searchProvincialPermits = async (
   request: ProvincialPermitSearchRequest,
+  options: ProvincialPermitSearchOptions = {},
 ): Promise<ProvincialPermitSearchResponse> => {
   try {
+    const params = buildBackendParams(request)
+    if (Number.isInteger(options.knownTotal) && options.knownTotal >= 0) {
+      params.append('knownTotal', String(options.knownTotal))
+    }
+
     const response = await getCachedSearchResponse<unknown>(
       '/lexis/permits/search',
-      buildBackendParams(request),
+      params,
     )
 
     const parsed = parseBackendResponse(response.data)

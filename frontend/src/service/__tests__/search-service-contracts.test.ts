@@ -367,6 +367,31 @@ describe('search-service contracts', () => {
     },
   )
 
+  it('provincial permit search can reuse a known total without changing paging metadata', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [],
+        total: 91,
+        page: 2,
+        size: 30,
+      },
+    })
+
+    const result = await searchProvincialPermits(
+      { ...permitRequest, page: 2, pageSize: 30 },
+      { knownTotal: 91 },
+    )
+
+    const params = readParams()
+    expect(params.get('knownTotal')).toBe('91')
+    expect(result.page).toEqual({
+      number: 2,
+      size: 30,
+      totalElements: 91,
+      totalPages: 4,
+    })
+  })
+
   it.each([
     {
       name: 'provincial applications',

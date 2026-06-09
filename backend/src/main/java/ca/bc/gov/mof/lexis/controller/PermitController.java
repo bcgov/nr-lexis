@@ -66,7 +66,8 @@ public class PermitController {
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal) {
     PermitService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit service unavailable - returning no content for search");
@@ -89,6 +90,9 @@ public class PermitController {
             page,
             size);
 
+    if (knownTotal != null) {
+      return ResponseEntity.ok(service.search(criteria, knownTotal));
+    }
     return ResponseEntity.ok(service.search(criteria));
   }
 

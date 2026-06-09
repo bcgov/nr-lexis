@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -81,6 +82,22 @@ class PermitOracleServiceTest {
     assertThat(response.size()).isEqualTo(2);
     assertThat(response.results()).extracting(PermitSearchResultDto::permitNumber)
         .containsExactly(90003L, 90004L);
+  }
+
+  @Test
+  void searchShouldPassKnownTotalToRepository() {
+    PermitSearchCriteria criteria =
+        new PermitSearchCriteria(
+            null, null, null, null, null, null, null, null, null, List.of(12L), null, 2, 30);
+    when(repository.search(any(PermitSearchCriteria.class), eq(91)))
+        .thenReturn(page(List.of(row(90005L, LocalDate.of(2026, 2, 5))), 91));
+
+    PermitSearchResponseDto response = service.search(criteria, 91);
+
+    assertThat(response.total()).isEqualTo(91);
+    assertThat(response.page()).isEqualTo(2);
+    assertThat(response.size()).isEqualTo(30);
+    verify(repository).search(any(PermitSearchCriteria.class), eq(91));
   }
 
   @Test
