@@ -147,10 +147,6 @@ const ProvincialSummaryPage: FC = () => {
   const canOpenReviewApplication =
     canPerform('/applicationSearch') && canPerform('/applicationDetails')
 
-  const accessibleMetricCount = useMemo(() => {
-    return INITIAL_METRICS.filter((metric) => canAccessSummaryRoute(metric.key)).length
-  }, [canAccessSummaryRoute])
-
   const visibleMetrics = useMemo(
     () => INITIAL_METRICS.filter((metric) => canAccessSummaryRoute(metric.key)),
     [canAccessSummaryRoute],
@@ -379,10 +375,6 @@ const ProvincialSummaryPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <p>
-            Accessible modules: <strong>{accessibleMetricCount}</strong> of{' '}
-            <strong>{INITIAL_METRICS.length}</strong>
-          </p>
           <div className="legacy-search-actions">
             <Button kind="secondary" onClick={() => void loadSummary()} disabled={loading}>
               Refresh Summary

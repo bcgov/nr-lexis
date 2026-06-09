@@ -328,12 +328,6 @@ const ProvincialPage: FC = () => {
     [canPerform],
   )
 
-  const accessibleCount = useMemo(() => {
-    return WORKFLOWS.filter((workflow) =>
-      workflow.requiredActions.some((action) => canPerform(action)),
-    ).length
-  }, [canPerform])
-
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
@@ -342,10 +336,6 @@ const ProvincialPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <p>
-            Available areas: <strong>{accessibleCount}</strong> of{' '}
-            <strong>{WORKFLOWS.length}</strong>
-          </p>
           <div className="legacy-search-grid">
             <TextInput
               id="provincialWorkflowSearch"

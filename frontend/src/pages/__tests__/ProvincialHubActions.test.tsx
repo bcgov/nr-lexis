@@ -104,6 +104,7 @@ describe('Provincial hub actions', () => {
     expect(screen.queryByRole('button', { name: 'Create Exemption' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create Offer' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create Permit' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Available areas:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Show available areas only')).not.toBeInTheDocument()
   })

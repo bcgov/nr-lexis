@@ -152,6 +152,7 @@ describe('Provincial Summary action smoke', () => {
     expect(screen.getByText('905')).toBeInTheDocument()
     expect(screen.getByText('1,006')).toBeInTheDocument()
     expect(screen.getByText('1,107')).toBeInTheDocument()
+    expect(screen.queryByText(/Accessible modules:/)).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Open Review Queue' }))
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/review')

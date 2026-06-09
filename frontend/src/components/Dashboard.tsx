@@ -197,10 +197,6 @@ const Dashboard: FC = () => {
     [canPerform],
   )
 
-  const accessibleModuleCount = useMemo(() => {
-    return DASHBOARD_MODULES.filter((module) => canAccessModule(module.requiredActions)).length
-  }, [canAccessModule])
-
   const visibleModules = useMemo(
     () => DASHBOARD_MODULES.filter((module) => canAccessModule(module.requiredActions)),
     [canAccessModule],
@@ -403,10 +399,6 @@ const Dashboard: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <p>
-            Accessible modules: <strong>{accessibleModuleCount}</strong> of{' '}
-            <strong>{DASHBOARD_MODULES.length}</strong>
-          </p>
           <div className="legacy-search-actions">
             <Button kind="secondary" onClick={() => void loadCounts()} disabled={loading}>
               Refresh Dashboard

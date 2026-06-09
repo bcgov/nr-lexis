@@ -114,6 +114,7 @@ describe('Reports Page Actions', () => {
     expect(screen.getByRole('heading', { name: 'No Reports Available' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Report Variant')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Generate Report' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Accessible reports:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
   })
 
@@ -135,6 +136,7 @@ describe('Reports Page Actions', () => {
     expect(screen.getAllByText('Exemption Report')).toHaveLength(2)
     expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
     expect(screen.queryByText('Offer Report')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Accessible reports:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
   })
 

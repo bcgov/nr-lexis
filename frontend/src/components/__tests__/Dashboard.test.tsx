@@ -131,6 +131,7 @@ describe('Dashboard', () => {
     expect(screen.queryByText('Federal Applications')).not.toBeInTheDocument()
     expect(screen.queryByText('Indigenous Reserve Permits')).not.toBeInTheDocument()
     expect(screen.queryByText('Admin')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Accessible modules:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
   })
 })
