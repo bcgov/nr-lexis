@@ -16,6 +16,14 @@ import {
   Tile,
 } from '@carbon/react'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
+import {
+  firstValidationError,
+  getVisibleFieldError,
+  numericFieldError,
+  requiredFieldError,
+  type FieldErrors,
+  type TouchedFields,
+} from '@/pages/shared/create-form-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   addApplicationPackage,
@@ -58,6 +66,21 @@ type ScaleFormState = {
   pieces: string
   volume: string
 }
+
+type ApplicationItemField =
+  | 'packageNewPackageNumber'
+  | 'packageVolume'
+  | 'packageAverageLength'
+  | 'packageAverageDiameter'
+  | 'createPackageNumber'
+  | 'createPackageVolume'
+  | 'createPackageAverageLength'
+  | 'createPackageAverageDiameter'
+  | 'scaleTimberMark'
+  | 'scaleSpeciesCode'
+  | 'scaleGradeCode'
+  | 'scalePieces'
+  | 'scaleVolume'
 
 type PackageSelectionState = {
   packageNumbers: string[]
@@ -221,7 +244,86 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   const [isSavingPackage, setIsSavingPackage] = useState(false)
   const [isSavingScale, setIsSavingScale] = useState(false)
   const [deletingScaleId, setDeletingScaleId] = useState('')
+  const [touchedItemFields, setTouchedItemFields] = useState<TouchedFields<ApplicationItemField>>(
+    {},
+  )
+  const [showPackageValidationErrors, setShowPackageValidationErrors] = useState(false)
+  const [showCreatePackageValidationErrors, setShowCreatePackageValidationErrors] = useState(false)
+  const [showScaleValidationErrors, setShowScaleValidationErrors] = useState(false)
   const beginItemsRequest = useLatestRequestGuard()
+
+  const itemFieldErrors = useMemo<FieldErrors<ApplicationItemField>>(
+    () => ({
+      packageNewPackageNumber:
+        requiredFieldError(packageForm.newPackageNumber, 'Package number') ?? undefined,
+      packageVolume: numericFieldError(packageForm.volume, 'Package volume') ?? undefined,
+      packageAverageLength:
+        numericFieldError(packageForm.averageLength, 'Average length') ?? undefined,
+      packageAverageDiameter:
+        numericFieldError(packageForm.averageDiameter, 'Average diameter') ?? undefined,
+      createPackageNumber:
+        requiredFieldError(createPackageForm.packageNumber, 'Package number') ?? undefined,
+      createPackageVolume:
+        numericFieldError(createPackageForm.volume, 'Package volume') ?? undefined,
+      createPackageAverageLength:
+        numericFieldError(createPackageForm.averageLength, 'Average length') ?? undefined,
+      createPackageAverageDiameter:
+        numericFieldError(createPackageForm.averageDiameter, 'Average diameter') ?? undefined,
+      scaleTimberMark: requiredFieldError(scaleForm.timberMark, 'Timber mark') ?? undefined,
+      scaleSpeciesCode: requiredFieldError(scaleForm.speciesCode, 'Species') ?? undefined,
+      scaleGradeCode: requiredFieldError(scaleForm.gradeCode, 'Grade') ?? undefined,
+      scalePieces: firstValidationError(
+        () => requiredFieldError(scaleForm.pieces, 'Pieces'),
+        () => numericFieldError(scaleForm.pieces, 'Pieces'),
+      ),
+      scaleVolume: firstValidationError(
+        () => requiredFieldError(scaleForm.volume, 'Scale volume'),
+        () => numericFieldError(scaleForm.volume, 'Scale volume'),
+      ),
+    }),
+    [createPackageForm, packageForm, scaleForm],
+  )
+
+  const hasPackageValidationError = Boolean(
+    itemFieldErrors.packageNewPackageNumber ||
+    itemFieldErrors.packageVolume ||
+    itemFieldErrors.packageAverageLength ||
+    itemFieldErrors.packageAverageDiameter,
+  )
+  const hasCreatePackageValidationError = Boolean(
+    itemFieldErrors.createPackageNumber ||
+    itemFieldErrors.createPackageVolume ||
+    itemFieldErrors.createPackageAverageLength ||
+    itemFieldErrors.createPackageAverageDiameter,
+  )
+  const hasScaleValidationError = Boolean(
+    itemFieldErrors.scaleTimberMark ||
+    itemFieldErrors.scaleSpeciesCode ||
+    itemFieldErrors.scaleGradeCode ||
+    itemFieldErrors.scalePieces ||
+    itemFieldErrors.scaleVolume,
+  )
+
+  const markItemFieldTouched = (field: ApplicationItemField): void => {
+    setTouchedItemFields((current) => ({ ...current, [field]: true }))
+  }
+
+  const packageFieldError = (field: ApplicationItemField): string | undefined =>
+    getVisibleFieldError(field, itemFieldErrors, touchedItemFields, showPackageValidationErrors)
+
+  const createPackageFieldError = (field: ApplicationItemField): string | undefined =>
+    getVisibleFieldError(
+      field,
+      itemFieldErrors,
+      touchedItemFields,
+      showCreatePackageValidationErrors,
+    )
+
+  const scaleFieldError = (field: ApplicationItemField): string | undefined =>
+    getVisibleFieldError(field, itemFieldErrors, touchedItemFields, showScaleValidationErrors)
+
+  const firstItemError = (...fields: ApplicationItemField[]): string | undefined =>
+    fields.map((field) => itemFieldErrors[field]).find((error): error is string => !!error)
 
   useEffect(() => {
     dispatchPackageSelection({ type: 'sync', packageNumbers: packageNumbersFromDetail })
@@ -276,6 +378,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         }
         const nextSpeciesDraft = uniqueCodes(speciesResult)
         setPackageForm(toPackageForm(productTypeCode, detailsResult, speciesResult))
+        setShowPackageValidationErrors(false)
         setPackageSpeciesRows(speciesResult)
         setSpeciesDraft(nextSpeciesDraft)
         setScales(scalesResult)
@@ -435,6 +538,19 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       return
     }
 
+    if (hasPackageValidationError) {
+      setShowPackageValidationErrors(true)
+      setItemsErrorMessage(
+        firstItemError(
+          'packageNewPackageNumber',
+          'packageVolume',
+          'packageAverageLength',
+          'packageAverageDiameter',
+        ) ?? 'Please fix validation errors before saving the package.',
+      )
+      return
+    }
+
     setIsSavingPackage(true)
     setItemsErrorMessage('')
     setItemsInfoMessage('')
@@ -466,6 +582,19 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   }
 
   const onCreatePackage = async () => {
+    if (hasCreatePackageValidationError) {
+      setShowCreatePackageValidationErrors(true)
+      setItemsErrorMessage(
+        firstItemError(
+          'createPackageNumber',
+          'createPackageVolume',
+          'createPackageAverageLength',
+          'createPackageAverageDiameter',
+        ) ?? 'Please fix validation errors before creating the package.',
+      )
+      return
+    }
+
     setIsSavingPackage(true)
     setItemsErrorMessage('')
     setItemsInfoMessage('')
@@ -492,6 +621,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       const nextPackageNumber = result.packageNumber || createPackageForm.packageNumber
       dispatchPackageSelection({ type: 'add', packageNumber: nextPackageNumber })
       setCreatePackageForm(emptyPackageForm(productTypeCode))
+      setShowCreatePackageValidationErrors(false)
       setItemsInfoMessage(`Package ${nextPackageNumber} created.`)
       await onDetailChanged()
       await loadPackageItems(nextPackageNumber)
@@ -535,6 +665,20 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       return
     }
 
+    if (hasScaleValidationError) {
+      setShowScaleValidationErrors(true)
+      setItemsErrorMessage(
+        firstItemError(
+          'scaleTimberMark',
+          'scaleSpeciesCode',
+          'scaleGradeCode',
+          'scalePieces',
+          'scaleVolume',
+        ) ?? 'Please fix validation errors before adding the scale.',
+      )
+      return
+    }
+
     setIsSavingScale(true)
     setItemsErrorMessage('')
     setItemsInfoMessage('')
@@ -555,6 +699,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
 
       setScales((current) => [...current, result.result as ApplicationPackageScaleRow])
       setScaleForm(emptyScaleForm)
+      setShowScaleValidationErrors(false)
       setItemsInfoMessage(`Scale ${result.result.id} added.`)
       await onDetailChanged()
       await loadPackageItems(selectedPackageNumber)
@@ -663,6 +808,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Package Number"
               value={packageForm.newPackageNumber}
               disabled={!canManageItems || !selectedPackageNumber}
+              invalid={!!packageFieldError('packageNewPackageNumber')}
+              invalidText={packageFieldError('packageNewPackageNumber')}
+              onBlur={() => markItemFieldTouched('packageNewPackageNumber')}
               onChange={(event) => setPackageField('newPackageNumber', event.target.value)}
             />
             <TextInput
@@ -670,6 +818,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Package Volume"
               value={packageForm.volume}
               disabled={!canManageItems || !selectedPackageNumber}
+              invalid={!!packageFieldError('packageVolume')}
+              invalidText={packageFieldError('packageVolume')}
+              onBlur={() => markItemFieldTouched('packageVolume')}
               onChange={(event) => setPackageField('volume', event.target.value)}
             />
             <TextInput
@@ -677,6 +828,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Average Length"
               value={packageForm.averageLength}
               disabled={!canManageItems || !selectedPackageNumber}
+              invalid={!!packageFieldError('packageAverageLength')}
+              invalidText={packageFieldError('packageAverageLength')}
+              onBlur={() => markItemFieldTouched('packageAverageLength')}
               onChange={(event) => setPackageField('averageLength', event.target.value)}
             />
             <TextInput
@@ -684,6 +838,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Average Diameter"
               value={packageForm.averageDiameter}
               disabled={!canManageItems || !selectedPackageNumber}
+              invalid={!!packageFieldError('packageAverageDiameter')}
+              invalidText={packageFieldError('packageAverageDiameter')}
+              onBlur={() => markItemFieldTouched('packageAverageDiameter')}
               onChange={(event) => setPackageField('averageDiameter', event.target.value)}
             />
             <TextInput
@@ -824,6 +981,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Package Number"
               value={createPackageForm.packageNumber}
               disabled={!canManageItems}
+              invalid={!!createPackageFieldError('createPackageNumber')}
+              invalidText={createPackageFieldError('createPackageNumber')}
+              onBlur={() => markItemFieldTouched('createPackageNumber')}
               onChange={(event) => setCreatePackageField('packageNumber', event.target.value)}
             />
             <TextInput
@@ -831,6 +991,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Package Volume"
               value={createPackageForm.volume}
               disabled={!canManageItems}
+              invalid={!!createPackageFieldError('createPackageVolume')}
+              invalidText={createPackageFieldError('createPackageVolume')}
+              onBlur={() => markItemFieldTouched('createPackageVolume')}
               onChange={(event) => setCreatePackageField('volume', event.target.value)}
             />
             <TextInput
@@ -838,6 +1001,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Average Length"
               value={createPackageForm.averageLength}
               disabled={!canManageItems}
+              invalid={!!createPackageFieldError('createPackageAverageLength')}
+              invalidText={createPackageFieldError('createPackageAverageLength')}
+              onBlur={() => markItemFieldTouched('createPackageAverageLength')}
               onChange={(event) => setCreatePackageField('averageLength', event.target.value)}
             />
             <TextInput
@@ -845,6 +1011,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Average Diameter"
               value={createPackageForm.averageDiameter}
               disabled={!canManageItems}
+              invalid={!!createPackageFieldError('createPackageAverageDiameter')}
+              invalidText={createPackageFieldError('createPackageAverageDiameter')}
+              onBlur={() => markItemFieldTouched('createPackageAverageDiameter')}
               onChange={(event) => setCreatePackageField('averageDiameter', event.target.value)}
             />
             <TextInput
@@ -859,7 +1028,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             <Button
               kind="secondary"
               size="sm"
-              disabled={!canManageItems || isSavingPackage || !createPackageForm.packageNumber}
+              disabled={!canManageItems || isSavingPackage}
               onClick={() => void onCreatePackage()}
             >
               Create Package
@@ -875,6 +1044,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Timber Mark"
               value={scaleForm.timberMark}
               disabled={!canManageItems || !selectedPackageNumber}
+              invalid={!!scaleFieldError('scaleTimberMark')}
+              invalidText={scaleFieldError('scaleTimberMark')}
+              onBlur={() => markItemFieldTouched('scaleTimberMark')}
               onChange={(event) => setScaleField('timberMark', event.target.value)}
             />
             <Select
@@ -882,6 +1054,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Species"
               value={scaleForm.speciesCode}
               disabled={!canManageItems || !selectedPackageNumber}
+              invalid={!!scaleFieldError('scaleSpeciesCode')}
+              invalidText={scaleFieldError('scaleSpeciesCode')}
+              onBlur={() => markItemFieldTouched('scaleSpeciesCode')}
               onChange={(event) => setScaleField('speciesCode', event.target.value)}
             >
               <SelectItem value="" text="Select species" />
@@ -894,6 +1069,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Grade"
               value={scaleForm.gradeCode}
               disabled={!canManageItems || !selectedPackageNumber}
+              invalid={!!scaleFieldError('scaleGradeCode')}
+              invalidText={scaleFieldError('scaleGradeCode')}
+              onBlur={() => markItemFieldTouched('scaleGradeCode')}
               onChange={(event) => setScaleField('gradeCode', event.target.value)}
             >
               <SelectItem value="" text="Select grade" />
@@ -906,6 +1084,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Pieces"
               value={scaleForm.pieces}
               disabled={!canManageItems || !selectedPackageNumber}
+              invalid={!!scaleFieldError('scalePieces')}
+              invalidText={scaleFieldError('scalePieces')}
+              onBlur={() => markItemFieldTouched('scalePieces')}
               onChange={(event) => setScaleField('pieces', event.target.value)}
             />
             <TextInput
@@ -913,6 +1094,9 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Scale Volume"
               value={scaleForm.volume}
               disabled={!canManageItems || !selectedPackageNumber}
+              invalid={!!scaleFieldError('scaleVolume')}
+              invalidText={scaleFieldError('scaleVolume')}
+              onBlur={() => markItemFieldTouched('scaleVolume')}
               onChange={(event) => setScaleField('volume', event.target.value)}
             />
           </div>

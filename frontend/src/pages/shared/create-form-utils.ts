@@ -36,6 +36,11 @@ export const positiveNumericFieldError = (value: string): string | null => {
   return isPositiveNumeric(value) ? null : 'Use a positive numeric value.'
 }
 
+export const numericFieldError = (value: string, label = 'Value'): string | null => {
+  if (!value.trim()) return null
+  return /^\d+(\.\d+)?$/.test(value.trim()) ? null : `${label} must be numeric.`
+}
+
 export const isoDateFieldError = (value: string): string | null => {
   return isValidIsoDate(value) ? null : 'Date must be YYYY-MM-DD.'
 }

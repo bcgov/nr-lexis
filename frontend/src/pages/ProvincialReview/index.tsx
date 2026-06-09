@@ -35,6 +35,12 @@ import {
   parseSortDirectionParam,
   setSearchParam,
 } from '@/pages/shared/search-query-utils'
+import {
+  getVisibleFieldError,
+  requiredFieldError,
+  type FieldErrors,
+  type TouchedFields,
+} from '@/pages/shared/create-form-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
@@ -54,6 +60,8 @@ type ReviewActionStatus = {
   kind: 'success' | 'error'
   message: string
 }
+
+type ReviewStatusField = 'reviewStatusCode' | 'reviewStatusEmail'
 
 const INITIAL_FILTERS: ApplicationReviewSearchFilters = {
   applicationNumber: '',
@@ -152,6 +160,10 @@ const ProvincialReviewPage: FC = () => {
   const [statusRemark, setStatusRemark] = useState('')
   const [statusEmailAddress, setStatusEmailAddress] = useState('')
   const [reviewActionStatus, setReviewActionStatus] = useState<ReviewActionStatus | null>(null)
+  const [touchedStatusFields, setTouchedStatusFields] = useState<TouchedFields<ReviewStatusField>>(
+    {},
+  )
+  const [showStatusValidationErrors, setShowStatusValidationErrors] = useState(false)
   const canApproveApplications = canPerform('/applicationsReview')
   const canOpenApplicationDetails =
     canPerform('/applicationSearch') && canPerform('/applicationDetails')
@@ -167,6 +179,23 @@ const ProvincialReviewPage: FC = () => {
     [selectedStatusCode],
   )
   const canSendStatusEmail = EMAIL_SUPPORTED_STATUS_CODES.has(normalizedStatusCode)
+  const statusFieldErrors = useMemo<FieldErrors<ReviewStatusField>>(
+    () => ({
+      reviewStatusCode: requiredFieldError(selectedStatusCode, 'Update status code') ?? undefined,
+      reviewStatusEmail:
+        statusEmailAddress.trim() && !isValidEmail(statusEmailAddress)
+          ? 'Enter a valid email address.'
+          : undefined,
+    }),
+    [selectedStatusCode, statusEmailAddress],
+  )
+
+  const markStatusFieldTouched = (field: ReviewStatusField): void => {
+    setTouchedStatusFields((current) => ({ ...current, [field]: true }))
+  }
+
+  const statusFieldError = (field: ReviewStatusField): string | undefined =>
+    getVisibleFieldError(field, statusFieldErrors, touchedStatusFields, showStatusValidationErrors)
 
   const urlState = useMemo(() => {
     const urlFilters: ApplicationReviewSearchFilters = {
@@ -465,6 +494,7 @@ const ProvincialReviewPage: FC = () => {
     }
 
     if (!normalizedStatusCode) {
+      setShowStatusValidationErrors(true)
       setReviewActionStatus({
         kind: 'error',
         message: 'Select a review status before updating.',
@@ -483,6 +513,7 @@ const ProvincialReviewPage: FC = () => {
       }
 
       if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
+        setShowStatusValidationErrors(true)
         setReviewActionStatus({
           kind: 'error',
           message: 'Enter a valid client email address before sending status email.',
@@ -675,8 +706,12 @@ const ProvincialReviewPage: FC = () => {
               value={selectedStatusCode}
               onChange={(event) => {
                 setReviewActionStatus(null)
+                setShowStatusValidationErrors(false)
                 setSelectedStatusCode(event.target.value)
               }}
+              invalid={!!statusFieldError('reviewStatusCode')}
+              invalidText={statusFieldError('reviewStatusCode')}
+              onBlur={() => markStatusFieldTouched('reviewStatusCode')}
             >
               <SelectItem value="" text="Select status" />
               {reviewStatusOptions.map((option) => (
@@ -687,8 +722,12 @@ const ProvincialReviewPage: FC = () => {
               id="reviewStatusEmail"
               labelText="Client Email Address (required for status email)"
               value={statusEmailAddress}
-              invalid={Boolean(statusEmailAddress) && !isValidEmail(statusEmailAddress)}
-              invalidText="Enter a valid email address."
+              invalid={
+                !!statusFieldError('reviewStatusEmail') ||
+                (Boolean(statusEmailAddress) && !isValidEmail(statusEmailAddress))
+              }
+              invalidText={statusFieldError('reviewStatusEmail') ?? 'Enter a valid email address.'}
+              onBlur={() => markStatusFieldTouched('reviewStatusEmail')}
               onChange={(event) => {
                 setReviewActionStatus(null)
                 setStatusEmailAddress(event.target.value)
@@ -704,8 +743,7 @@ const ProvincialReviewPage: FC = () => {
                 submittingApproval ||
                 submittingStatusUpdate ||
                 selectedRowsCount === 0 ||
-                !canApproveApplications ||
-                !normalizedStatusCode
+                !canApproveApplications
               }
             >
               Update Selected Status
@@ -718,9 +756,7 @@ const ProvincialReviewPage: FC = () => {
                 submittingApproval ||
                 submittingStatusUpdate ||
                 selectedRowsCount === 0 ||
-                !canApproveApplications ||
-                !normalizedStatusCode ||
-                !canSendStatusEmail
+                !canApproveApplications
               }
             >
               Update Status and Send Email

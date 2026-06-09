@@ -204,6 +204,26 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
+  it('shows field validation when adding invoice without required values', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const addInvoiceButton = await screen.findByRole('button', { name: 'Add Invoice' })
+    await userEvent.click(addInvoiceButton)
+
+    expect(screen.getAllByText('Invoice number is required.').length).toBeGreaterThan(0)
+    expect(screen.getByText('Invoice export value is required.')).toBeInTheDocument()
+    expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
+  })
+
   it('navigates to upload center with permit context', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>

@@ -73,4 +73,18 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('/fileInvoiceUpload')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit Upload' })).toBeDisabled()
   })
+
+  it('shows field validation for missing permit upload inputs', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === '/filePermitUpload',
+    } as any)
+
+    renderPage('/admin/uploads?type=permit')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    expect(screen.getByText('Permit number is required.')).toBeInTheDocument()
+    expect(screen.getByText('Choose a file to upload.')).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
 })

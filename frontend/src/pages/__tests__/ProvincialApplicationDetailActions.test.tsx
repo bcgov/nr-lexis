@@ -12,6 +12,7 @@ import {
   removeApplicationDocument,
 } from '@/service/provincial-application-documents-service'
 import {
+  addApplicationPackage,
   addApplicationScaleToPackage,
   deleteApplicationScale,
   fetchApplicationEndUsesForSpeciesRegion,
@@ -60,6 +61,7 @@ const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicat
 const mockedFetchApplicationDocuments = vi.mocked(fetchApplicationDocuments)
 const mockedOpenApplicationDocument = vi.mocked(openApplicationDocument)
 const mockedRemoveApplicationDocument = vi.mocked(removeApplicationDocument)
+const mockedAddApplicationPackage = vi.mocked(addApplicationPackage)
 const mockedAddApplicationScaleToPackage = vi.mocked(addApplicationScaleToPackage)
 const mockedDeleteApplicationScale = vi.mocked(deleteApplicationScale)
 const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
@@ -191,6 +193,12 @@ describe('Provincial Application Detail Document Actions', () => {
     mockedUpdateApplicationPackage.mockResolvedValue({
       valid: true,
       packageNumber: 'PKG-1',
+      errors: [],
+      warnings: [],
+    })
+    mockedAddApplicationPackage.mockResolvedValue({
+      valid: true,
+      packageNumber: 'PKG-NEW',
       errors: [],
       warnings: [],
     })
@@ -511,6 +519,25 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
   })
 
+  it('shows field validation before creating an empty package', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('button', { name: 'Create Package' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Create Package' }))
+
+    expect(screen.getAllByText('Package number is required.').length).toBeGreaterThan(0)
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+  })
+
   it('ignores stale package item responses after selecting another package', async () => {
     const detailWithTwoPackages: ProvincialApplicationDetail = {
       ...applicationDetail,
@@ -661,6 +688,29 @@ describe('Provincial Application Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55')
     })
+  })
+
+  it('shows field validation before adding an empty scale', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('TM001')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
+
+    expect(screen.getAllByText('Timber mark is required.').length).toBeGreaterThan(0)
+    expect(screen.getByText('Species is required.')).toBeInTheDocument()
+    expect(screen.getByText('Grade is required.')).toBeInTheDocument()
+    expect(screen.getByText('Pieces is required.')).toBeInTheDocument()
+    expect(screen.getByText('Scale volume is required.')).toBeInTheDocument()
+    expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
   it('disables upload and delete without file upload permission', async () => {

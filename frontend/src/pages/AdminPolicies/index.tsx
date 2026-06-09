@@ -17,6 +17,14 @@ import {
 } from '@carbon/react'
 import { useAuth } from '@/context/auth/useAuth'
 import {
+  firstValidationError,
+  getVisibleFieldError,
+  numericFieldError,
+  requiredFieldError,
+  type FieldErrors,
+  type TouchedFields,
+} from '@/pages/shared/create-form-utils'
+import {
   deleteFeePolicy as deleteFeePolicyRequest,
   deleteFilPolicy as deleteFilPolicyRequest,
   fetchFeePolicies,
@@ -26,6 +34,13 @@ import {
   upsertFeePolicy as upsertFeePolicyRequest,
   upsertFilPolicy as upsertFilPolicyRequest,
 } from '@/service/admin-policy-service'
+
+type PolicyField =
+  | 'feeEffectiveDate'
+  | 'feeOrgUnitCode'
+  | 'feePolicyPercentage'
+  | 'filEffectiveDate'
+  | 'filPolicyPercentage'
 
 const AdminPoliciesPage: FC = () => {
   const { canPerform } = useAuth()
@@ -49,9 +64,45 @@ const AdminPoliciesPage: FC = () => {
   const [successMessage, setSuccessMessage] = useState('')
   const [isLoadingPolicies, setIsLoadingPolicies] = useState(true)
   const [isMutatingPolicies, setIsMutatingPolicies] = useState(false)
+  const [touchedFields, setTouchedFields] = useState<TouchedFields<PolicyField>>({})
+  const [showFeeValidationErrors, setShowFeeValidationErrors] = useState(false)
+  const [showFilValidationErrors, setShowFilValidationErrors] = useState(false)
 
   const feePolicyCount = useMemo(() => feePolicies.length, [feePolicies.length])
   const filPolicyCount = useMemo(() => filPolicies.length, [filPolicies.length])
+  const fieldErrors = useMemo<FieldErrors<PolicyField>>(
+    () => ({
+      feeEffectiveDate: requiredFieldError(feeEffectiveDate, 'Policy effective date') ?? undefined,
+      feeOrgUnitCode: requiredFieldError(feeOrgUnitCode, 'Region code') ?? undefined,
+      feePolicyPercentage: firstValidationError(
+        () => requiredFieldError(feePolicyPercentage, 'Fee increase percentage'),
+        () => numericFieldError(feePolicyPercentage, 'Fee policy percentage'),
+      ),
+      filEffectiveDate: requiredFieldError(filEffectiveDate, 'Policy effective date') ?? undefined,
+      filPolicyPercentage: firstValidationError(
+        () => requiredFieldError(filPolicyPercentage, 'FIL percentage'),
+        () => numericFieldError(filPolicyPercentage, 'FIL policy percentage'),
+      ),
+    }),
+    [feeEffectiveDate, feeOrgUnitCode, feePolicyPercentage, filEffectiveDate, filPolicyPercentage],
+  )
+
+  const feeHasValidationError = Boolean(
+    fieldErrors.feeEffectiveDate || fieldErrors.feeOrgUnitCode || fieldErrors.feePolicyPercentage,
+  )
+  const filHasValidationError = Boolean(
+    fieldErrors.filEffectiveDate || fieldErrors.filPolicyPercentage,
+  )
+
+  const markFieldTouched = (field: PolicyField): void => {
+    setTouchedFields((current) => ({ ...current, [field]: true }))
+  }
+
+  const feeFieldError = (field: PolicyField): string | undefined =>
+    getVisibleFieldError(field, fieldErrors, touchedFields, showFeeValidationErrors)
+
+  const filFieldError = (field: PolicyField): string | undefined =>
+    getVisibleFieldError(field, fieldErrors, touchedFields, showFilValidationErrors)
 
   const clearNotifications = (): void => {
     setErrorMessage('')
@@ -64,15 +115,15 @@ const AdminPoliciesPage: FC = () => {
     setFeeOrgUnitName('')
     setFeePolicyPercentage('')
     setEditingFeePolicyId(null)
+    setShowFeeValidationErrors(false)
   }
 
   const resetFilForm = (): void => {
     setFilEffectiveDate('')
     setFilPolicyPercentage('')
     setEditingFilPolicyId(null)
+    setShowFilValidationErrors(false)
   }
-
-  const isValidPercentage = (value: string): boolean => /^\d+(\.\d+)?$/.test(value.trim())
 
   const loadPolicies = useCallback(async () => {
     setIsLoadingPolicies(true)
@@ -108,13 +159,9 @@ const AdminPoliciesPage: FC = () => {
       return
     }
 
-    if (!feeEffectiveDate || !feeOrgUnitCode.trim() || !feePolicyPercentage.trim()) {
+    if (feeHasValidationError) {
+      setShowFeeValidationErrors(true)
       setErrorMessage('Fee policy requires effective date, region code, and percentage.')
-      return
-    }
-
-    if (!isValidPercentage(feePolicyPercentage)) {
-      setErrorMessage('Fee policy percentage must be numeric.')
       return
     }
 
@@ -150,6 +197,7 @@ const AdminPoliciesPage: FC = () => {
     setFeeOrgUnitName(row.orgUnitName)
     setFeePolicyPercentage(row.policyPercentage)
     setEditingFeePolicyId(row.id)
+    setShowFeeValidationErrors(false)
     clearNotifications()
   }
 
@@ -185,13 +233,9 @@ const AdminPoliciesPage: FC = () => {
       return
     }
 
-    if (!filEffectiveDate || !filPolicyPercentage.trim()) {
+    if (filHasValidationError) {
+      setShowFilValidationErrors(true)
       setErrorMessage('FIL policy requires effective date and percentage.')
-      return
-    }
-
-    if (!isValidPercentage(filPolicyPercentage)) {
-      setErrorMessage('FIL policy percentage must be numeric.')
       return
     }
 
@@ -223,6 +267,7 @@ const AdminPoliciesPage: FC = () => {
     setFilEffectiveDate(row.effectiveDate)
     setFilPolicyPercentage(row.filPercentage)
     setEditingFilPolicyId(row.id)
+    setShowFilValidationErrors(false)
     clearNotifications()
   }
 
@@ -304,12 +349,18 @@ const AdminPoliciesPage: FC = () => {
               type="date"
               labelText="Policy Effective Date"
               value={feeEffectiveDate}
+              invalid={!!feeFieldError('feeEffectiveDate')}
+              invalidText={feeFieldError('feeEffectiveDate')}
+              onBlur={() => markFieldTouched('feeEffectiveDate')}
               onChange={(event) => setFeeEffectiveDate(event.target.value)}
             />
             <TextInput
               id="feeOrgUnitCode"
               labelText="Region Code"
               value={feeOrgUnitCode}
+              invalid={!!feeFieldError('feeOrgUnitCode')}
+              invalidText={feeFieldError('feeOrgUnitCode')}
+              onBlur={() => markFieldTouched('feeOrgUnitCode')}
               onChange={(event) => setFeeOrgUnitCode(event.target.value)}
             />
             <TextInput
@@ -322,6 +373,9 @@ const AdminPoliciesPage: FC = () => {
               id="feePolicyPercentage"
               labelText="Fee Increase Percentage"
               value={feePolicyPercentage}
+              invalid={!!feeFieldError('feePolicyPercentage')}
+              invalidText={feeFieldError('feePolicyPercentage')}
+              onBlur={() => markFieldTouched('feePolicyPercentage')}
               onChange={(event) => setFeePolicyPercentage(event.target.value)}
             />
           </div>
@@ -407,12 +461,18 @@ const AdminPoliciesPage: FC = () => {
               type="date"
               labelText="Policy Effective Date"
               value={filEffectiveDate}
+              invalid={!!filFieldError('filEffectiveDate')}
+              invalidText={filFieldError('filEffectiveDate')}
+              onBlur={() => markFieldTouched('filEffectiveDate')}
               onChange={(event) => setFilEffectiveDate(event.target.value)}
             />
             <TextInput
               id="filPolicyPercentage"
               labelText="FIL Percentage"
               value={filPolicyPercentage}
+              invalid={!!filFieldError('filPolicyPercentage')}
+              invalidText={filFieldError('filPolicyPercentage')}
+              onBlur={() => markFieldTouched('filPolicyPercentage')}
               onChange={(event) => setFilPolicyPercentage(event.target.value)}
             />
           </div>

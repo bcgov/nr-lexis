@@ -13,6 +13,14 @@ import {
 } from '@carbon/react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import {
+  firstValidationError,
+  getVisibleFieldError,
+  numericFieldError,
+  requiredFieldError,
+  type FieldErrors,
+  type TouchedFields,
+} from '@/pages/shared/create-form-utils'
 import { submitAdminUpload, type UploadWorkflowType } from '@/service/admin-upload-service'
 
 type UploadWorkflowDefinition = {
@@ -65,6 +73,8 @@ type UploadFormState = {
   fileDescription: string
 }
 
+type UploadField = keyof UploadFormState | 'uploadFile'
+
 const INITIAL_FORM_STATE: UploadFormState = {
   applicationNumber: '',
   exemptionNumber: '',
@@ -75,8 +85,6 @@ const INITIAL_FORM_STATE: UploadFormState = {
   invoiceFeeInLieu: '1.00',
   fileDescription: '',
 }
-
-const isNumericWithOptionalDecimal = (value: string): boolean => /^\d+(\.\d+)?$/.test(value.trim())
 
 const getWorkflowFromQuery = (value: string | null): UploadWorkflowType => {
   if (
@@ -125,6 +133,8 @@ const AdminUploadsPage: FC = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [touchedFields, setTouchedFields] = useState<TouchedFields<UploadField>>({})
+  const [showValidationErrors, setShowValidationErrors] = useState(false)
 
   const selectedWorkflow = useMemo(() => {
     return (
@@ -135,55 +145,62 @@ const AdminUploadsPage: FC = () => {
 
   const hasUploadAccess = canPerform(selectedWorkflow.requiredAction)
 
-  const validate = (): string[] => {
-    const errors: string[] = []
-    if (!selectedFile) {
-      errors.push('Choose a file to upload.')
-    }
+  const fieldErrors = useMemo<FieldErrors<UploadField>>(
+    () => ({
+      uploadFile: selectedFile ? undefined : 'Choose a file to upload.',
+      applicationNumber:
+        selectedWorkflowType === 'application'
+          ? (requiredFieldError(formState.applicationNumber, 'Application number') ?? undefined)
+          : undefined,
+      exemptionNumber:
+        selectedWorkflowType === 'exemption'
+          ? (requiredFieldError(formState.exemptionNumber, 'Exemption number') ?? undefined)
+          : undefined,
+      permitNumber:
+        selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice'
+          ? (requiredFieldError(formState.permitNumber, 'Permit number') ?? undefined)
+          : undefined,
+      salesInvoiceNumber:
+        selectedWorkflowType === 'invoice'
+          ? (requiredFieldError(formState.salesInvoiceNumber, 'Invoice number') ?? undefined)
+          : undefined,
+      invoiceExportValue:
+        selectedWorkflowType === 'invoice'
+          ? firstValidationError(
+              () => requiredFieldError(formState.invoiceExportValue, 'Invoice export value'),
+              () => numericFieldError(formState.invoiceExportValue, 'Invoice export value'),
+            )
+          : undefined,
+      invoiceConversionRate:
+        selectedWorkflowType === 'invoice'
+          ? (numericFieldError(formState.invoiceConversionRate, 'Invoice conversion rate') ??
+            undefined)
+          : undefined,
+      invoiceFeeInLieu:
+        selectedWorkflowType === 'invoice'
+          ? (numericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu') ?? undefined)
+          : undefined,
+    }),
+    [formState, selectedFile, selectedWorkflowType],
+  )
 
-    if (selectedWorkflowType === 'application' && !formState.applicationNumber.trim()) {
-      errors.push('Application number is required.')
-    }
+  const validationErrors = useMemo(
+    () => Object.values(fieldErrors).filter((error): error is string => !!error),
+    [fieldErrors],
+  )
 
-    if (selectedWorkflowType === 'exemption' && !formState.exemptionNumber.trim()) {
-      errors.push('Exemption number is required.')
-    }
-
-    if (
-      (selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') &&
-      !formState.permitNumber.trim()
-    ) {
-      errors.push('Permit number is required.')
-    }
-
-    if (selectedWorkflowType === 'invoice') {
-      if (!formState.salesInvoiceNumber.trim()) {
-        errors.push('Invoice number is required.')
-      }
-      if (!formState.invoiceExportValue.trim()) {
-        errors.push('Invoice export value is required.')
-      }
-      if (
-        formState.invoiceExportValue.trim() &&
-        !isNumericWithOptionalDecimal(formState.invoiceExportValue)
-      ) {
-        errors.push('Invoice export value must be numeric.')
-      }
-      if (!isNumericWithOptionalDecimal(formState.invoiceConversionRate)) {
-        errors.push('Invoice conversion rate must be numeric.')
-      }
-      if (!isNumericWithOptionalDecimal(formState.invoiceFeeInLieu)) {
-        errors.push('Invoice fee in lieu must be numeric.')
-      }
-    }
-
-    return errors
+  const markFieldTouched = (field: UploadField): void => {
+    setTouchedFields((current) => ({ ...current, [field]: true }))
   }
+
+  const fieldError = (field: UploadField): string | undefined =>
+    getVisibleFieldError(field, fieldErrors, touchedFields, showValidationErrors)
 
   const setWorkflowType = (workflowType: UploadWorkflowType): void => {
     setSelectedWorkflowType(workflowType)
     setErrorMessage('')
     setSuccessMessage('')
+    setShowValidationErrors(false)
     setSearchParams({ type: workflowType }, { replace: true })
   }
 
@@ -196,8 +213,8 @@ const AdminUploadsPage: FC = () => {
       return
     }
 
-    const validationErrors = validate()
     if (validationErrors.length > 0) {
+      setShowValidationErrors(true)
       setErrorMessage(validationErrors.join(' '))
       return
     }
@@ -261,6 +278,7 @@ const AdminUploadsPage: FC = () => {
     setSelectedFile(null)
     setErrorMessage('')
     setSuccessMessage('')
+    setShowValidationErrors(false)
   }
 
   return (
@@ -298,6 +316,9 @@ const AdminUploadsPage: FC = () => {
                 labelText={selectedWorkflow.numberFieldLabel}
                 value={formState.applicationNumber}
                 placeholder={selectedWorkflow.numberFieldPlaceholder}
+                invalid={!!fieldError('applicationNumber')}
+                invalidText={fieldError('applicationNumber')}
+                onBlur={() => markFieldTouched('applicationNumber')}
                 onChange={(event) =>
                   setFormState((current) => ({
                     ...current,
@@ -313,6 +334,9 @@ const AdminUploadsPage: FC = () => {
                 labelText={selectedWorkflow.numberFieldLabel}
                 value={formState.exemptionNumber}
                 placeholder={selectedWorkflow.numberFieldPlaceholder}
+                invalid={!!fieldError('exemptionNumber')}
+                invalidText={fieldError('exemptionNumber')}
+                onBlur={() => markFieldTouched('exemptionNumber')}
                 onChange={(event) =>
                   setFormState((current) => ({
                     ...current,
@@ -328,6 +352,9 @@ const AdminUploadsPage: FC = () => {
                 labelText={selectedWorkflow.numberFieldLabel}
                 value={formState.permitNumber}
                 placeholder={selectedWorkflow.numberFieldPlaceholder}
+                invalid={!!fieldError('permitNumber')}
+                invalidText={fieldError('permitNumber')}
+                onBlur={() => markFieldTouched('permitNumber')}
                 onChange={(event) =>
                   setFormState((current) => ({
                     ...current,
@@ -343,6 +370,9 @@ const AdminUploadsPage: FC = () => {
                   id="salesInvoiceNumber"
                   labelText="Invoice Number"
                   value={formState.salesInvoiceNumber}
+                  invalid={!!fieldError('salesInvoiceNumber')}
+                  invalidText={fieldError('salesInvoiceNumber')}
+                  onBlur={() => markFieldTouched('salesInvoiceNumber')}
                   onChange={(event) =>
                     setFormState((current) => ({
                       ...current,
@@ -354,6 +384,9 @@ const AdminUploadsPage: FC = () => {
                   id="invoiceExportValue"
                   labelText="Export Value (CAD)"
                   value={formState.invoiceExportValue}
+                  invalid={!!fieldError('invoiceExportValue')}
+                  invalidText={fieldError('invoiceExportValue')}
+                  onBlur={() => markFieldTouched('invoiceExportValue')}
                   onChange={(event) =>
                     setFormState((current) => ({
                       ...current,
@@ -365,6 +398,9 @@ const AdminUploadsPage: FC = () => {
                   id="invoiceConversionRate"
                   labelText="Conversion Rate"
                   value={formState.invoiceConversionRate}
+                  invalid={!!fieldError('invoiceConversionRate')}
+                  invalidText={fieldError('invoiceConversionRate')}
+                  onBlur={() => markFieldTouched('invoiceConversionRate')}
                   onChange={(event) =>
                     setFormState((current) => ({
                       ...current,
@@ -376,6 +412,9 @@ const AdminUploadsPage: FC = () => {
                   id="invoiceFeeInLieu"
                   labelText="Fee In Lieu"
                   value={formState.invoiceFeeInLieu}
+                  invalid={!!fieldError('invoiceFeeInLieu')}
+                  invalidText={fieldError('invoiceFeeInLieu')}
+                  onBlur={() => markFieldTouched('invoiceFeeInLieu')}
                   onChange={(event) =>
                     setFormState((current) => ({
                       ...current,
@@ -390,9 +429,12 @@ const AdminUploadsPage: FC = () => {
               id="uploadFile"
               type="file"
               labelText="Document File"
+              invalid={!!fieldError('uploadFile')}
+              invalidText={fieldError('uploadFile')}
               onChange={(event) => {
                 const target = event.target as HTMLInputElement
                 setSelectedFile(target.files?.[0] ?? null)
+                markFieldTouched('uploadFile')
               }}
             />
             <TextArea

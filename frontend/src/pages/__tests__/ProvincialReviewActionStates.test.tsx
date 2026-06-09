@@ -145,7 +145,7 @@ describe('Provincial Review Action State Smoke', () => {
     })
   })
 
-  it('enables review actions only when NEW rows are selected and status code is chosen', async () => {
+  it('shows review status validation only after NEW rows are selected', async () => {
     renderPage()
     await screen.findByText('1000123')
 
@@ -167,8 +167,12 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.click(newRowCheckbox)
 
     expect(approveButton).toBeEnabled()
-    expect(updateStatusButton).toBeDisabled()
-    expect(updateAndEmailButton).toBeDisabled()
+    expect(updateStatusButton).toBeEnabled()
+    expect(updateAndEmailButton).toBeEnabled()
+
+    await userEvent.click(updateStatusButton)
+    expect(screen.getByText('Update status code is required.')).toBeInTheDocument()
+    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
 
     await userEvent.selectOptions(screen.getByLabelText('Update Status Code'), 'REJ')
 

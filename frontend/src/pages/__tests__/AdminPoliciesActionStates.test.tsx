@@ -177,6 +177,9 @@ describe('Admin policy action states', () => {
         screen.getByText('Fee policy requires effective date, region code, and percentage.'),
       ).toBeInTheDocument()
     })
+    expect(screen.getByText('Policy effective date is required.')).toBeInTheDocument()
+    expect(screen.getByText('Region code is required.')).toBeInTheDocument()
+    expect(screen.getByText('Fee increase percentage is required.')).toBeInTheDocument()
     expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
   })
 })

@@ -19,6 +19,14 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import {
+  firstValidationError,
+  getVisibleFieldError,
+  numericFieldError,
+  requiredFieldError,
+  type FieldErrors,
+  type TouchedFields,
+} from '@/pages/shared/create-form-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialPermitDetail } from '@/service/lexis-detail-service'
 import {
@@ -108,6 +116,8 @@ const isApplicationDocumentRow = (row: PermitDocumentRow): boolean => {
   return row.typeCode.trim().toUpperCase() === 'INS'
 }
 
+type PermitInvoiceField = 'invoiceDraftNumber' | 'invoiceDraftExportValue' | 'invoiceDraftFeeInLieu'
+
 const ProvincialPermitDetailsPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
@@ -129,6 +139,10 @@ const ProvincialPermitDetailsPage: FC = () => {
   const [invoiceDraftExportValue, setInvoiceDraftExportValue] = useState('')
   const [invoiceDraftFeeInLieu, setInvoiceDraftFeeInLieu] = useState('')
   const [isAddingInvoice, setIsAddingInvoice] = useState(false)
+  const [touchedInvoiceFields, setTouchedInvoiceFields] = useState<
+    TouchedFields<PermitInvoiceField>
+  >({})
+  const [showInvoiceValidationErrors, setShowInvoiceValidationErrors] = useState(false)
   const beginDetailRequest = useLatestRequestGuard()
   const beginDocumentRefreshRequest = useLatestRequestGuard()
   const beginAddInvoiceRequest = useLatestRequestGuard()
@@ -353,6 +367,30 @@ const ProvincialPermitDetailsPage: FC = () => {
 
   const canDeletePermitDocuments = canPerform('/filePermitUpload')
   const canDeleteInvoiceDocuments = canPerform('/fileInvoiceUpload')
+  const invoiceFieldErrors = useMemo<FieldErrors<PermitInvoiceField>>(
+    () => ({
+      invoiceDraftNumber: requiredFieldError(invoiceDraftNumber, 'Invoice number') ?? undefined,
+      invoiceDraftExportValue: firstValidationError(
+        () => requiredFieldError(invoiceDraftExportValue, 'Invoice export value'),
+        () => numericFieldError(invoiceDraftExportValue, 'Invoice export value'),
+      ),
+      invoiceDraftFeeInLieu: numericFieldError(invoiceDraftFeeInLieu, 'Fee in lieu') ?? undefined,
+    }),
+    [invoiceDraftExportValue, invoiceDraftFeeInLieu, invoiceDraftNumber],
+  )
+  const hasInvoiceValidationError = Object.values(invoiceFieldErrors).some((error) => !!error)
+
+  const markInvoiceFieldTouched = (field: PermitInvoiceField): void => {
+    setTouchedInvoiceFields((current) => ({ ...current, [field]: true }))
+  }
+
+  const invoiceFieldError = (field: PermitInvoiceField): string | undefined =>
+    getVisibleFieldError(
+      field,
+      invoiceFieldErrors,
+      touchedInvoiceFields,
+      showInvoiceValidationErrors,
+    )
 
   const onOpenPermitReport = useCallback(async () => {
     if (!detail) {
@@ -483,16 +521,12 @@ const ProvincialPermitDetailsPage: FC = () => {
     const invoiceExportValue = invoiceDraftExportValue.trim()
     const invoiceFeeInLieu = invoiceDraftFeeInLieu.trim() || invoiceExportValue
 
-    if (!salesInvoiceNumber) {
-      setActionErrorMessage('Invoice number is required before adding an invoice.')
-      return
-    }
-    if (!invoiceExportValue) {
-      setActionErrorMessage('Invoice export value is required before adding an invoice.')
-      return
-    }
-    if (!invoiceFeeInLieu) {
-      setActionErrorMessage('Fee in lieu is required before adding an invoice.')
+    if (hasInvoiceValidationError) {
+      setShowInvoiceValidationErrors(true)
+      setActionErrorMessage(
+        Object.values(invoiceFieldErrors).find((error): error is string => !!error) ??
+          'Please fix validation errors before adding an invoice.',
+      )
       return
     }
 
@@ -541,6 +575,7 @@ const ProvincialPermitDetailsPage: FC = () => {
         setInvoiceDraftNumber('')
         setInvoiceDraftExportValue('')
         setInvoiceDraftFeeInLieu('')
+        setShowInvoiceValidationErrors(false)
       }
     } catch (error) {
       if (isLatestRequest()) {
@@ -857,6 +892,9 @@ const ProvincialPermitDetailsPage: FC = () => {
                   id="permitInvoiceDraftNumber"
                   labelText="Invoice Number"
                   value={invoiceDraftNumber}
+                  invalid={!!invoiceFieldError('invoiceDraftNumber')}
+                  invalidText={invoiceFieldError('invoiceDraftNumber')}
+                  onBlur={() => markInvoiceFieldTouched('invoiceDraftNumber')}
                   onChange={(event) => setInvoiceDraftNumber(event.target.value)}
                   placeholder="Enter sales invoice number"
                 />
@@ -864,6 +902,9 @@ const ProvincialPermitDetailsPage: FC = () => {
                   id="permitInvoiceDraftExportValue"
                   labelText="Export Value"
                   value={invoiceDraftExportValue}
+                  invalid={!!invoiceFieldError('invoiceDraftExportValue')}
+                  invalidText={invoiceFieldError('invoiceDraftExportValue')}
+                  onBlur={() => markInvoiceFieldTouched('invoiceDraftExportValue')}
                   onChange={(event) => setInvoiceDraftExportValue(event.target.value)}
                   placeholder="Enter export value"
                 />
@@ -871,6 +912,9 @@ const ProvincialPermitDetailsPage: FC = () => {
                   id="permitInvoiceDraftFeeInLieu"
                   labelText="Fee In Lieu"
                   value={invoiceDraftFeeInLieu}
+                  invalid={!!invoiceFieldError('invoiceDraftFeeInLieu')}
+                  invalidText={invoiceFieldError('invoiceDraftFeeInLieu')}
+                  onBlur={() => markInvoiceFieldTouched('invoiceDraftFeeInLieu')}
                   onChange={(event) => setInvoiceDraftFeeInLieu(event.target.value)}
                   placeholder="Enter fee in lieu (defaults to export value)"
                 />
