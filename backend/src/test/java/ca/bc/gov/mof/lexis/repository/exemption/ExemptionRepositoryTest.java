@@ -15,7 +15,8 @@ class ExemptionRepositoryTest {
 
   @Test
   void searchShouldUseExemptionPackageAliasesForDynamicCriteria() {
-    TestExemptionRepository repository = new TestExemptionRepository();
+    TestExemptionRepository repository =
+        new TestExemptionRepository(List.of(List.of(exemptionResult("EX-1"))));
 
     repository.search(
         new ExemptionSearchCriteria(
@@ -73,6 +74,21 @@ class ExemptionRepositoryTest {
         .doesNotContain("EO.ORG_UNIT_NO")
         .doesNotContain("TO_NUMBER(0)");
     assertThat(repository.bindValues()).isEmpty();
+  }
+
+  @Test
+  void countShouldUseGroupedCriteriaWithoutPageOrdering() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.count(
+        new ExemptionSearchCriteria(
+            null, null, "EX-1", null, null, null, null, null, null, null, null, List.of(), 0, 10));
+
+    assertThat(repository.whereSql())
+        .contains("EE.EXEMPTION_NUMBER")
+        .contains("GROUP BY EE.EXEMPTION_NUMBER")
+        .doesNotContain("ORDER BY");
+    assertThat(repository.bindValues()).containsExactly("EX-1");
   }
 
   @Test
