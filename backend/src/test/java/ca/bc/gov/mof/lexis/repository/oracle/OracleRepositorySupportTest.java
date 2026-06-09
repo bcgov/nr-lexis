@@ -144,6 +144,42 @@ class OracleRepositorySupportTest {
   }
 
   @Test
+  void queryLegacyDynamicPageWithTotalShouldFetchOnlyRequiredLegacyPages() {
+    List<String> firstPage =
+        List.of(
+            "row-1",
+            "row-2",
+            "row-3",
+            "row-4",
+            "row-5",
+            "row-6",
+            "row-7",
+            "row-8",
+            "row-9",
+            "row-10");
+    List<String> secondPage =
+        List.of(
+            "row-11",
+            "row-12",
+            "row-13",
+            "row-14",
+            "row-15",
+            "row-16",
+            "row-17",
+            "row-18",
+            "row-19",
+            "row-20");
+    TestRepository repository = new TestRepository(List.of(firstPage, secondPage, List.of("row-21")));
+
+    SearchPage<String> results = repository.loadPageWithTotal(1, 10, 21);
+
+    assertThat(results.results()).containsExactlyElementsOf(secondPage);
+    assertThat(results.total()).isEqualTo(21);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+    assertThat(repository.requestedPages()).containsExactly(1);
+  }
+
+  @Test
   void queryLegacyDynamicSliceShouldStopAfterPreviewWindow() {
     List<String> firstPage =
         List.of(
@@ -258,6 +294,17 @@ class OracleRepositorySupportTest {
 
     SearchPage<String> loadPage(int page, int size) {
       return queryLegacyDynamicPage("LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)", " WHERE 1=1", List.of(), page, size, rs -> "");
+    }
+
+    SearchPage<String> loadPageWithTotal(int page, int size, int totalElements) {
+      return queryLegacyDynamicPage(
+          "LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)",
+          " WHERE 1=1",
+          List.of(),
+          page,
+          size,
+          totalElements,
+          rs -> "");
     }
 
     SearchSlice<String> loadSlice(int page, int size) {

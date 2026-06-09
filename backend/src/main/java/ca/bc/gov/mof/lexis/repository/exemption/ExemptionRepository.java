@@ -23,6 +23,8 @@ public class ExemptionRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_STS_CODES(?)";
   private static final String FIND_EXEMPTIONS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTIONS_BY_CRITERIA(?,?,?,?,?)";
+  private static final String COUNT_EXEMPTIONS_BY_CRITERIA =
+      LEXIS_GROUP_5_PACKAGE + "COUNT_EXEMPTIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_EXEMPTION =
@@ -76,12 +78,15 @@ public class ExemptionRepository extends OracleRepositorySupport {
 
   public SearchPage<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
+    int totalElements =
+        queryLegacyDynamicCountProcedure(COUNT_EXEMPTIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
     return queryLegacyDynamicPage(
         FIND_EXEMPTIONS_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
         criteria.page(),
         criteria.size(),
+        totalElements,
         rs ->
             new ExemptionSearchResultDto(
                 getString(rs, "EXEMPTION_NUMBER"),
@@ -98,7 +103,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
 
   public int count(ExemptionSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
-    return countLegacyDynamicResults(FIND_EXEMPTIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+    return queryLegacyDynamicCountProcedure(COUNT_EXEMPTIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
   }
 
   private SqlWhere buildSearchWhere(ExemptionSearchCriteria criteria) {

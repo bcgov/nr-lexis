@@ -28,7 +28,7 @@ class ApplicationReviewRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadAllLegacyPagesForTotal() {
+  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<ApplicationReviewSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(900101L, 900110L)
             .mapToObj(ApplicationReviewRepositoryTest::reviewResult)
@@ -45,7 +45,7 @@ class ApplicationReviewRepositoryTest {
         .extracting(ApplicationReviewSearchResultDto::applicationNumber)
         .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
     assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(2);
+    assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
   private static ApplicationReviewSearchResultDto reviewResult(long applicationNumber) {
@@ -78,6 +78,16 @@ class ApplicationReviewRepositoryTest {
 
     int pageCalls() {
       return pageCalls;
+    }
+
+    @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues) {
+      this.whereSql = whereSql;
+      this.bindValues = bindValues;
+      return pages.stream().mapToInt(List::size).sum();
     }
 
     @Override

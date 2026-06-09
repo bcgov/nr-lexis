@@ -79,7 +79,7 @@ class PurchaseOfferRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadAllLegacyPagesForTotal() {
+  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<PurchaseOfferSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(810001L, 810010L)
             .mapToObj(PurchaseOfferRepositoryTest::offerResult)
@@ -96,7 +96,7 @@ class PurchaseOfferRepositoryTest {
         .extracting(PurchaseOfferSearchResultDto::offerNumber)
         .containsExactly(810001L, 810002L, 810003L, 810004L, 810005L, 810006L, 810007L, 810008L, 810009L, 810010L);
     assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(2);
+    assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
   private static PurchaseOfferSearchResultDto offerResult(long offerNumber) {
@@ -197,6 +197,16 @@ class PurchaseOfferRepositoryTest {
 
     int pageCalls() {
       return pageCalls;
+    }
+
+    @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues) {
+      this.whereSql = whereSql;
+      this.bindValues = bindValues;
+      return pages.stream().mapToInt(List::size).sum();
     }
 
     @Override

@@ -73,7 +73,7 @@ class PermitRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadAllLegacyPagesForTotal() {
+  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<PermitSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(700001L, 700010L)
             .mapToObj(PermitRepositoryTest::permitResult)
@@ -90,7 +90,7 @@ class PermitRepositoryTest {
         .extracting(PermitSearchResultDto::permitNumber)
         .containsExactly(700001L, 700002L, 700003L, 700004L, 700005L, 700006L, 700007L, 700008L, 700009L, 700010L);
     assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(2);
+    assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
   private static PermitSearchResultDto permitResult(long permitNumber) {
@@ -122,6 +122,16 @@ class PermitRepositoryTest {
 
     int pageCalls() {
       return pageCalls;
+    }
+
+    @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues) {
+      this.whereSql = whereSql;
+      this.bindValues = bindValues;
+      return pages.stream().mapToInt(List::size).sum();
     }
 
     @Override

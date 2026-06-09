@@ -25,6 +25,8 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
 
   private static final String FIND_APPLICATIONS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATIONS_BY_CRITERIA(?,?,?,?,?)";
+  private static final String COUNT_APPLICATIONS_BY_CRITERIA =
+      LEXIS_GROUP_5_PACKAGE + "COUNT_APPLICATIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_FEDERAL_PERMIT_BY_APP =
@@ -48,12 +50,15 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
 
   public SearchPage<FederalApplicationSearchResultDto> search(FederalApplicationSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
+    int totalElements =
+        queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
     return queryLegacyDynamicPage(
         FIND_APPLICATIONS_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
         criteria.page(),
         criteria.size(),
+        totalElements,
         rs -> {
           String statusCode = getString(rs, "EXPORT_APPLICATION_STATUS_CODE");
           String exemptionNumber = getString(rs, "EXEMPTION_NUMBER");
@@ -75,7 +80,7 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
 
   public int count(FederalApplicationSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
-    return countLegacyDynamicResults(FIND_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+    return queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
   }
 
   private SqlWhere buildSearchWhere(FederalApplicationSearchCriteria criteria) {

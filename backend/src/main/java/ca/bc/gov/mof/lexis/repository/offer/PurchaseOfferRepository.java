@@ -28,6 +28,8 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
   private static final String MANUFACTURING_FACILITY_DEFAULT = " ";
   private static final String FIND_PURCHASE_OFFERS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_POS_BY_CRITERIA(?,?,?,?,?)";
+  private static final String COUNT_PURCHASE_OFFERS_BY_CRITERIA =
+      LEXIS_GROUP_5_PACKAGE + "COUNT_POS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_PURCHASE_OFFER_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_NUM(?,?)";
   private static final String INSERT_PURCHASE_OFFER =
@@ -45,12 +47,15 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
 
   public SearchPage<PurchaseOfferSearchResultDto> search(PurchaseOfferSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
+    int totalElements =
+        queryLegacyDynamicCountProcedure(COUNT_PURCHASE_OFFERS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
     return queryLegacyDynamicPage(
         FIND_PURCHASE_OFFERS_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
         criteria.page(),
         criteria.size(),
+        totalElements,
         rs ->
             new PurchaseOfferSearchResultDto(
                 getLong(rs, "EXPORT_PURCHASE_OFFER_NUMBER"),
@@ -63,7 +68,10 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
 
   public int count(PurchaseOfferSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
-    return countLegacyDynamicResults(FIND_PURCHASE_OFFERS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+    return queryLegacyDynamicCountProcedure(
+        COUNT_PURCHASE_OFFERS_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues());
   }
 
   private SqlWhere buildSearchWhere(PurchaseOfferSearchCriteria criteria) {

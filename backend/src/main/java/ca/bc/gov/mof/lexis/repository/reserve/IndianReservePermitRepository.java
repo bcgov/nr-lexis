@@ -24,6 +24,8 @@ public class IndianReservePermitRepository extends OracleRepositorySupport {
 
   private static final String FIND_PERMIT_BY_CRITERIA =
       LEXIS_GROUP_3_PACKAGE + "FIND_IR_PERMIT_BY_CRITERIA(?,?,?,?,?)";
+  private static final String COUNT_PERMIT_BY_CRITERIA =
+      LEXIS_GROUP_3_PACKAGE + "COUNT_IR_PERMIT_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_3_PACKAGE + "FIND_IR_PERM_DET_BY_ID(?,?)";
 
@@ -45,12 +47,15 @@ public class IndianReservePermitRepository extends OracleRepositorySupport {
 
   public SearchPage<IndianReservePermitSearchResultDto> search(IndianReservePermitSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
+    int totalElements =
+        queryLegacyDynamicCountProcedure(COUNT_PERMIT_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
     return queryLegacyDynamicPage(
         FIND_PERMIT_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
         criteria.page(),
         criteria.size(),
+        totalElements,
         rs ->
             new IndianReservePermitSearchResultDto(
                 getString(rs, "EXPORT_INDIAN_RSRV_PRMT_DTL_ID"),
@@ -61,7 +66,7 @@ public class IndianReservePermitRepository extends OracleRepositorySupport {
 
   public int count(IndianReservePermitSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
-    return countLegacyDynamicResults(FIND_PERMIT_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+    return queryLegacyDynamicCountProcedure(COUNT_PERMIT_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
   }
 
   private SqlWhere buildSearchWhere(IndianReservePermitSearchCriteria criteria) {

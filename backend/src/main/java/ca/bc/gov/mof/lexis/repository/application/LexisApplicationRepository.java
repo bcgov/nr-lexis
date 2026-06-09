@@ -40,6 +40,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_PRODUCT_TYPE_CODES(?)";
   private static final String FIND_APPLICATIONS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATIONS_BY_CRITERIA(?,?,?,?,?)";
+  private static final String COUNT_APPLICATIONS_BY_CRITERIA =
+      LEXIS_GROUP_5_PACKAGE + "COUNT_APPLICATIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_PACKAGE_BY_NUMBER =
@@ -90,18 +92,21 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   public SearchPage<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     LocalDate today = LocalDate.now(ZoneId.systemDefault());
+    int totalElements =
+        queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
     return queryLegacyDynamicPage(
         FIND_APPLICATIONS_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
         criteria.page(),
         criteria.size(),
+        totalElements,
         rs -> toSearchResult(rs, today));
   }
 
   public int count(LexisApplicationSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
-    return countLegacyDynamicResults(FIND_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+    return queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
   }
 
   private SqlWhere buildSearchWhere(LexisApplicationSearchCriteria criteria) {

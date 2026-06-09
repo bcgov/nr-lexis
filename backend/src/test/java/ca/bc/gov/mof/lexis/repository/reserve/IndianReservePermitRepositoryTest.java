@@ -41,7 +41,7 @@ class IndianReservePermitRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadAllLegacyPagesForTotal() {
+  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<IndianReservePermitSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(700001L, 700010L)
             .mapToObj(number -> permitResult(String.valueOf(number)))
@@ -57,7 +57,7 @@ class IndianReservePermitRepositoryTest {
         .extracting(IndianReservePermitSearchResultDto::permitNumber)
         .containsExactly("700001", "700002", "700003", "700004", "700005", "700006", "700007", "700008", "700009", "700010");
     assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(2);
+    assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
   private static IndianReservePermitSearchResultDto permitResult(String permitNumber) {
@@ -89,6 +89,16 @@ class IndianReservePermitRepositoryTest {
 
     int pageCalls() {
       return pageCalls;
+    }
+
+    @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues) {
+      this.whereSql = whereSql;
+      this.bindValues = bindValues;
+      return pages.stream().mapToInt(List::size).sum();
     }
 
     @Override

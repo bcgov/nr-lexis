@@ -223,6 +223,54 @@ public abstract class OracleRepositorySupport {
     }
   }
 
+  protected int queryLegacyDynamicCountProcedure(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues) {
+    String call = "{ call " + procedureSignature + " }";
+
+    try {
+      Integer total =
+          jdbcTemplate.execute(
+              call,
+              (CallableStatementCallback<Integer>) cs -> {
+                cs.setString(1, whereSql);
+
+                Array array = null;
+                if (bindValues != null && !bindValues.isEmpty()) {
+                  Connection connection = cs.getConnection();
+                  OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
+                  array =
+                      oracleConnection.createOracleArray(
+                          STRING_ARRAY_TYPE, bindValues.toArray(String[]::new));
+                  cs.setArray(2, array);
+                } else {
+                  cs.setNull(2, Types.ARRAY, STRING_ARRAY_TYPE);
+                }
+
+                cs.setInt(3, bindValues == null ? 0 : bindValues.size());
+                cs.registerOutParameter(4, Types.REF_CURSOR);
+                cs.execute();
+
+                try (ResultSet rs = (ResultSet) cs.getObject(4)) {
+                  if (rs == null || !rs.next()) {
+                    return 0;
+                  }
+                  long resultCount = Math.max(0L, rs.getLong("RESULTS_COUNT"));
+                  return (int) Math.min(Integer.MAX_VALUE, resultCount);
+                } finally {
+                  if (array != null) {
+                    array.free();
+                  }
+                }
+              });
+      return total == null ? 0 : total;
+    } catch (DataAccessException ex) {
+      logger.warn("Oracle dynamic count call failed [{}]: {}", procedureSignature, ex.getMessage());
+      return 0;
+    }
+  }
+
   protected boolean executeProcedure(String procedureSignature, SqlConsumer<CallableStatement> binder) {
     String call = "{ call " + procedureSignature + " }";
     try {
@@ -294,6 +342,63 @@ public abstract class OracleRepositorySupport {
         normalizedSize);
   }
 
+  protected <T> SearchPage<T> queryLegacyDynamicPage(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues,
+      int page,
+      int size,
+      int totalElements,
+      SqlRowMapper<T> rowMapper) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    int normalizedTotal = Math.max(0, totalElements);
+    long offsetLong = (long) normalizedPage * normalizedSize;
+    if (offsetLong > Integer.MAX_VALUE || offsetLong >= normalizedTotal) {
+      return new SearchPage<>(List.of(), normalizedTotal, normalizedPage, normalizedSize);
+    }
+
+    int offset = (int) offsetLong;
+    int firstLegacyPage = offset / LEGACY_DYNAMIC_PAGE_SIZE;
+    int firstLegacyPageOffset = offset % LEGACY_DYNAMIC_PAGE_SIZE;
+    int requestedRows = Math.min(normalizedSize, normalizedTotal - offset);
+    List<T> rows = new ArrayList<>();
+    List<T> previousPage = List.of();
+
+    for (int legacyPage = firstLegacyPage; legacyPage < 10_000 && rows.size() < requestedRows; legacyPage++) {
+      List<T> currentPage =
+          queryLegacyDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
+      if (currentPage.isEmpty()) {
+        break;
+      }
+      if (legacyPage > firstLegacyPage && currentPage.equals(previousPage)) {
+        logger.warn(
+            "Oracle dynamic call [{}] returned duplicate data for page {}; stopping pagination",
+            procedureSignature,
+            legacyPage);
+        break;
+      }
+
+      int fromIndex =
+          legacyPage == firstLegacyPage
+              ? Math.min(firstLegacyPageOffset, currentPage.size())
+              : 0;
+      if (fromIndex < currentPage.size()) {
+        rows.addAll(currentPage.subList(fromIndex, currentPage.size()));
+      }
+      previousPage = currentPage;
+      if (currentPage.size() < LEGACY_DYNAMIC_PAGE_SIZE) {
+        break;
+      }
+    }
+
+    return new SearchPage<>(
+        List.copyOf(rows.subList(0, Math.min(rows.size(), requestedRows))),
+        normalizedTotal,
+        normalizedPage,
+        normalizedSize);
+  }
+
   protected <T> SearchSlice<T> queryLegacyDynamicSlice(
       String procedureSignature,
       String whereSql,
@@ -344,31 +449,6 @@ public abstract class OracleRepositorySupport {
         normalizedPage,
         normalizedSize,
         hasNext);
-  }
-
-  protected int countLegacyDynamicResults(
-      String procedureSignature,
-      String whereSql,
-      List<String> bindValues) {
-    int total = 0;
-    for (int legacyPage = 0; legacyPage < 10_000; legacyPage++) {
-      int pageSize =
-          queryLegacyDynamicPagedProcedure(
-              procedureSignature,
-              whereSql,
-              bindValues,
-              legacyPage,
-              rs -> Integer.valueOf(1))
-              .size();
-      if (pageSize == 0) {
-        break;
-      }
-      total += pageSize;
-      if (pageSize < LEGACY_DYNAMIC_PAGE_SIZE) {
-        break;
-      }
-    }
-    return total;
   }
 
   private List<CodeNameDto> fallbackCodeNameOptions(String procedureSignature) {
