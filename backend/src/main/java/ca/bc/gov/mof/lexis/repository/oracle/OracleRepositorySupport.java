@@ -24,6 +24,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -292,7 +297,7 @@ public abstract class OracleRepositorySupport {
     }
   }
 
-  protected <T> SearchPage<T> queryLegacyDynamicPage(
+  protected <T> Page<T> queryLegacyDynamicPage(
       String procedureSignature,
       String whereSql,
       List<String> bindValues,
@@ -303,7 +308,10 @@ public abstract class OracleRepositorySupport {
     int normalizedSize = Math.max(1, size);
     long offsetLong = (long) normalizedPage * normalizedSize;
     if (offsetLong > Integer.MAX_VALUE) {
-      return new SearchPage<>(List.of(), Integer.MAX_VALUE, normalizedPage, normalizedSize);
+      return new PageImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          Integer.MAX_VALUE);
     }
 
     int offset = (int) offsetLong;
@@ -331,18 +339,20 @@ public abstract class OracleRepositorySupport {
     }
 
     if (offset >= allRows.size()) {
-      return new SearchPage<>(List.of(), allRows.size(), normalizedPage, normalizedSize);
+      return new PageImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          allRows.size());
     }
 
     int toIndex = Math.min(offset + normalizedSize, allRows.size());
-    return new SearchPage<>(
+    return new PageImpl<>(
         List.copyOf(allRows.subList(offset, toIndex)),
-        allRows.size(),
-        normalizedPage,
-        normalizedSize);
+        PageRequest.of(normalizedPage, normalizedSize),
+        allRows.size());
   }
 
-  protected <T> SearchPage<T> queryLegacyDynamicPage(
+  protected <T> Page<T> queryLegacyDynamicPage(
       String procedureSignature,
       String whereSql,
       List<String> bindValues,
@@ -355,7 +365,10 @@ public abstract class OracleRepositorySupport {
     int normalizedTotal = Math.max(0, totalElements);
     long offsetLong = (long) normalizedPage * normalizedSize;
     if (offsetLong > Integer.MAX_VALUE || offsetLong >= normalizedTotal) {
-      return new SearchPage<>(List.of(), normalizedTotal, normalizedPage, normalizedSize);
+      return new PageImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          normalizedTotal);
     }
 
     int offset = (int) offsetLong;
@@ -392,14 +405,13 @@ public abstract class OracleRepositorySupport {
       }
     }
 
-    return new SearchPage<>(
+    return new PageImpl<>(
         List.copyOf(rows.subList(0, Math.min(rows.size(), requestedRows))),
-        normalizedTotal,
-        normalizedPage,
-        normalizedSize);
+        PageRequest.of(normalizedPage, normalizedSize),
+        normalizedTotal);
   }
 
-  protected <T> SearchSlice<T> queryLegacyDynamicSlice(
+  protected <T> Slice<T> queryLegacyDynamicSlice(
       String procedureSignature,
       String whereSql,
       List<String> bindValues,
@@ -410,7 +422,10 @@ public abstract class OracleRepositorySupport {
     int normalizedSize = Math.max(1, size);
     long requiredRowsLong = ((long) normalizedPage * normalizedSize) + normalizedSize + 1L;
     if (requiredRowsLong > Integer.MAX_VALUE) {
-      return new SearchSlice<>(List.of(), normalizedPage, normalizedSize, false);
+      return new SliceImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          false);
     }
 
     int offset = normalizedPage * normalizedSize;
@@ -439,15 +454,17 @@ public abstract class OracleRepositorySupport {
     }
 
     if (offset >= rows.size()) {
-      return new SearchSlice<>(List.of(), normalizedPage, normalizedSize, false);
+      return new SliceImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          false);
     }
 
     int toIndex = Math.min(offset + normalizedSize, rows.size());
     boolean hasNext = rows.size() > toIndex;
-    return new SearchSlice<>(
+    return new SliceImpl<>(
         List.copyOf(rows.subList(offset, toIndex)),
-        normalizedPage,
-        normalizedSize,
+        PageRequest.of(normalizedPage, normalizedSize),
         hasNext);
   }
 

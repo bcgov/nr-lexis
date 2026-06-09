@@ -14,7 +14,6 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -26,6 +25,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | OracleLexisApplicationService")
@@ -55,7 +57,7 @@ class OracleLexisApplicationServiceTest {
         new LexisApplicationSearchCriteria(
             null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 25);
     when(repository.search(any(LexisApplicationSearchCriteria.class)))
-        .thenReturn(new SearchPage<>(List.of(row(1001L, LocalDate.of(2026, 2, 1))), 1));
+        .thenReturn(page(List.of(row(1001L, LocalDate.of(2026, 2, 1))), 1));
 
     LexisApplicationSearchResponseDto response = service.search(criteria);
 
@@ -75,7 +77,7 @@ class OracleLexisApplicationServiceTest {
             row(1003L, LocalDate.of(2026, 2, 3)),
             row(1004L, LocalDate.of(2026, 2, 4)));
     when(repository.search(any(LexisApplicationSearchCriteria.class)))
-        .thenReturn(new SearchPage<>(rows, 4));
+        .thenReturn(page(rows, 4));
 
     LexisApplicationSearchResponseDto response = service.search(criteria);
 
@@ -107,7 +109,7 @@ class OracleLexisApplicationServiceTest {
             -2,
             0);
     when(repository.search(any(LexisApplicationSearchCriteria.class)))
-        .thenReturn(new SearchPage<>(List.of(), 0));
+        .thenReturn(page(List.of(), 0));
 
     service.search(criteria);
 
@@ -238,5 +240,9 @@ class OracleLexisApplicationServiceTest {
         95.0,
         false,
         false);
+  }
+
+  private static <T> Page<T> page(List<T> content, long total) {
+    return new PageImpl<>(content, PageRequest.of(0, Math.max(1, content.size())), total);
   }
 }

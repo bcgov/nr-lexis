@@ -5,7 +5,7 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -48,7 +48,7 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public SearchPage<FederalApplicationSearchResultDto> search(FederalApplicationSearchCriteria criteria) {
+  public Page<FederalApplicationSearchResultDto> search(FederalApplicationSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     int totalElements =
         queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());

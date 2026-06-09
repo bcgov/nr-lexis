@@ -4,7 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -39,7 +39,7 @@ public class PermitRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public SearchPage<PermitSearchResultDto> search(PermitSearchCriteria criteria) {
+  public Page<PermitSearchResultDto> search(PermitSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     int totalElements =
         queryLegacyDynamicCountProcedure(COUNT_PERMIT_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());

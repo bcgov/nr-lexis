@@ -5,7 +5,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.ResultSet;
 import java.time.LocalDate;
@@ -89,7 +89,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public SearchPage<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
+  public Page<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     LocalDate today = LocalDate.now(ZoneId.systemDefault());
     int totalElements =

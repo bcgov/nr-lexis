@@ -5,7 +5,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -44,12 +44,12 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     int page = normalized.page();
     int size = normalized.size();
 
-    SearchPage<PurchaseOfferSearchResultDto> searchPage = repository.search(normalized);
-    List<PurchaseOfferSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.content());
+    Page<PurchaseOfferSearchResultDto> searchPage = repository.search(normalized);
+    List<PurchaseOfferSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.getContent());
 
     return new PurchaseOfferSearchResponseDto(
         results,
-        searchPage == null ? 0 : searchPage.totalElements(),
+        searchPage == null ? 0 : (int) Math.min(Integer.MAX_VALUE, searchPage.getTotalElements()),
         page,
         size);
   }

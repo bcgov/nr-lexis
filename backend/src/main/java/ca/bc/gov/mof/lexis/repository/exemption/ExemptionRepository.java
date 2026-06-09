@@ -4,7 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -76,7 +76,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public SearchPage<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
+  public Page<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     int totalElements =
         queryLegacyDynamicCountProcedure(COUNT_EXEMPTIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());

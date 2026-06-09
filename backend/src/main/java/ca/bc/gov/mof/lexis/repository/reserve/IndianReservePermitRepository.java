@@ -4,7 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -45,7 +45,7 @@ public class IndianReservePermitRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public SearchPage<IndianReservePermitSearchResultDto> search(IndianReservePermitSearchCriteria criteria) {
+  public Page<IndianReservePermitSearchResultDto> search(IndianReservePermitSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     int totalElements =
         queryLegacyDynamicCountProcedure(COUNT_PERMIT_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());

@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 
 @DisplayName("Unit Test | OracleRepositorySupport")
 class OracleRepositorySupportTest {
@@ -28,10 +30,10 @@ class OracleRepositorySupportTest {
             "row-10");
     TestRepository repository = new TestRepository(List.of(firstPage, List.of("row-11")));
 
-    SearchPage<String> results = repository.loadPage(0, 10);
+    Page<String> results = repository.loadPage(0, 10);
 
-    assertThat(results.results()).containsExactlyElementsOf(firstPage);
-    assertThat(results.total()).isEqualTo(11);
+    assertThat(results.getContent()).containsExactlyElementsOf(firstPage);
+    assertThat(results.getTotalElements()).isEqualTo(11);
     assertThat(repository.pageCalls()).isEqualTo(2);
     assertThat(repository.requestedPages()).containsExactly(0, 1);
   }
@@ -53,10 +55,10 @@ class OracleRepositorySupportTest {
     List<String> secondPage = List.of("row-11", "row-12", "row-13");
     TestRepository repository = new TestRepository(List.of(firstPage, secondPage));
 
-    SearchPage<String> results = repository.loadPage(0, 20);
+    Page<String> results = repository.loadPage(0, 20);
 
-    assertThat(results.results()).containsExactlyElementsOf(concat(firstPage, secondPage));
-    assertThat(results.total()).isEqualTo(13);
+    assertThat(results.getContent()).containsExactlyElementsOf(concat(firstPage, secondPage));
+    assertThat(results.getTotalElements()).isEqualTo(13);
     assertThat(repository.pageCalls()).isEqualTo(2);
   }
 
@@ -77,10 +79,10 @@ class OracleRepositorySupportTest {
                     "row-9",
                     "row-10")));
 
-    SearchPage<String> results = repository.loadPage(1, 5);
+    Page<String> results = repository.loadPage(1, 5);
 
-    assertThat(results.results()).containsExactly("row-6", "row-7", "row-8", "row-9", "row-10");
-    assertThat(results.total()).isEqualTo(10);
+    assertThat(results.getContent()).containsExactly("row-6", "row-7", "row-8", "row-9", "row-10");
+    assertThat(results.getTotalElements()).isEqualTo(10);
     assertThat(repository.pageCalls()).isEqualTo(2);
     assertThat(repository.requestedPages()).containsExactly(0, 1);
   }
@@ -113,10 +115,10 @@ class OracleRepositorySupportTest {
             "row-20");
     TestRepository repository = new TestRepository(List.of(firstPage, secondPage, List.of("row-21")));
 
-    SearchPage<String> results = repository.loadPage(1, 10);
+    Page<String> results = repository.loadPage(1, 10);
 
-    assertThat(results.results()).containsExactlyElementsOf(secondPage);
-    assertThat(results.total()).isEqualTo(21);
+    assertThat(results.getContent()).containsExactlyElementsOf(secondPage);
+    assertThat(results.getTotalElements()).isEqualTo(21);
     assertThat(repository.pageCalls()).isEqualTo(3);
     assertThat(repository.requestedPages()).containsExactly(0, 1, 2);
   }
@@ -133,11 +135,11 @@ class OracleRepositorySupportTest {
     }
     TestRepository repository = new TestRepository(pages);
 
-    SearchPage<String> results = repository.loadPage(0, 10);
+    Page<String> results = repository.loadPage(0, 10);
 
-    assertThat(results.results())
+    assertThat(results.getContent())
         .containsExactly("row-1", "row-2", "row-3", "row-4", "row-5", "row-6", "row-7", "row-8", "row-9", "row-10");
-    assertThat(results.total()).isEqualTo(500);
+    assertThat(results.getTotalElements()).isEqualTo(500);
     assertThat(repository.pageCalls()).isEqualTo(51);
     assertThat(repository.requestedPages().get(0)).isZero();
     assertThat(repository.requestedPages().get(50)).isEqualTo(50);
@@ -171,10 +173,10 @@ class OracleRepositorySupportTest {
             "row-20");
     TestRepository repository = new TestRepository(List.of(firstPage, secondPage, List.of("row-21")));
 
-    SearchPage<String> results = repository.loadPageWithTotal(1, 10, 21);
+    Page<String> results = repository.loadPageWithTotal(1, 10, 21);
 
-    assertThat(results.results()).containsExactlyElementsOf(secondPage);
-    assertThat(results.total()).isEqualTo(21);
+    assertThat(results.getContent()).containsExactlyElementsOf(secondPage);
+    assertThat(results.getTotalElements()).isEqualTo(21);
     assertThat(repository.pageCalls()).isEqualTo(1);
     assertThat(repository.requestedPages()).containsExactly(1);
   }
@@ -207,9 +209,9 @@ class OracleRepositorySupportTest {
             "row-20");
     TestRepository repository = new TestRepository(List.of(firstPage, secondPage, List.of("row-21")));
 
-    SearchSlice<String> results = repository.loadSlice(0, 5);
+    Slice<String> results = repository.loadSlice(0, 5);
 
-    assertThat(results.content()).containsExactly("row-1", "row-2", "row-3", "row-4", "row-5");
+    assertThat(results.getContent()).containsExactly("row-1", "row-2", "row-3", "row-4", "row-5");
     assertThat(results.hasNext()).isTrue();
     assertThat(repository.requestedPages()).containsExactly(0);
   }
@@ -292,11 +294,11 @@ class OracleRepositorySupportTest {
       this.pages = pages;
     }
 
-    SearchPage<String> loadPage(int page, int size) {
+    Page<String> loadPage(int page, int size) {
       return queryLegacyDynamicPage("LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)", " WHERE 1=1", List.of(), page, size, rs -> "");
     }
 
-    SearchPage<String> loadPageWithTotal(int page, int size, int totalElements) {
+    Page<String> loadPageWithTotal(int page, int size, int totalElements) {
       return queryLegacyDynamicPage(
           "LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)",
           " WHERE 1=1",
@@ -307,7 +309,7 @@ class OracleRepositorySupportTest {
           rs -> "");
     }
 
-    SearchSlice<String> loadSlice(int page, int size) {
+    Slice<String> loadSlice(int page, int size) {
       return queryLegacyDynamicSlice("LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)", " WHERE 1=1", List.of(), page, size, rs -> "");
     }
 

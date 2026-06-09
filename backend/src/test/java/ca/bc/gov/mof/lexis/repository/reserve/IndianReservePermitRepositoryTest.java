@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import org.springframework.data.domain.Page;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -50,13 +50,13 @@ class IndianReservePermitRepositoryTest {
         new TestIndianReservePermitRepository(
             List.<List<?>>of(firstPage, List.of(permitResult("700011"))));
 
-    SearchPage<IndianReservePermitSearchResultDto> results =
+    Page<IndianReservePermitSearchResultDto> results =
         repository.search(new IndianReservePermitSearchCriteria(null, null, null, null, null, null, 0, 10));
 
-    assertThat(results.results())
+    assertThat(results.getContent())
         .extracting(IndianReservePermitSearchResultDto::permitNumber)
         .containsExactly("700001", "700002", "700003", "700004", "700005", "700006", "700007", "700008", "700009", "700010");
-    assertThat(results.total()).isEqualTo(11);
+    assertThat(results.getTotalElements()).isEqualTo(11);
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 

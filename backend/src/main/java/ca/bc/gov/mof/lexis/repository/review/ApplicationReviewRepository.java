@@ -3,8 +3,8 @@ package ca.bc.gov.mof.lexis.repository.review;
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchSlice;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
@@ -66,7 +66,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public SearchPage<ApplicationReviewSearchResultDto> search(ApplicationReviewSearchCriteria criteria) {
+  public Page<ApplicationReviewSearchResultDto> search(ApplicationReviewSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     int totalElements =
         queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
@@ -85,7 +85,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     return queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
   }
 
-  public SearchSlice<ApplicationReviewSearchResultDto> slice(ApplicationReviewSearchCriteria criteria) {
+  public Slice<ApplicationReviewSearchResultDto> slice(ApplicationReviewSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     return queryLegacyDynamicSlice(
         FIND_APPLICATIONS_BY_CRITERIA,

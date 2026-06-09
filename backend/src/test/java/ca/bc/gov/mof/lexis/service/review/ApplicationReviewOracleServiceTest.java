@@ -15,7 +15,9 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -57,7 +59,7 @@ class ApplicationReviewOracleServiceTest {
             row(10003L, LocalDate.of(2026, 3, 3)),
             row(10004L, LocalDate.of(2026, 3, 4)));
     when(repository.search(any(ApplicationReviewSearchCriteria.class)))
-        .thenReturn(new SearchPage<>(rows, 4));
+        .thenReturn(page(rows, 4));
 
     ApplicationReviewSearchResponseDto response = service.search(criteria);
 
@@ -83,7 +85,7 @@ class ApplicationReviewOracleServiceTest {
             -2,
             0);
     when(repository.search(any(ApplicationReviewSearchCriteria.class)))
-        .thenReturn(new SearchPage<>(List.of(), 0));
+        .thenReturn(page(List.of(), 0));
 
     service.search(criteria);
 
@@ -207,5 +209,9 @@ class ApplicationReviewOracleServiceTest {
         "Pending",
         "R2",
         true);
+  }
+
+  private static <T> Page<T> page(List<T> content, long total) {
+    return new PageImpl<>(content, PageRequest.of(0, Math.max(1, content.size())), total);
   }
 }

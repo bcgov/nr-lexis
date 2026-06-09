@@ -9,8 +9,8 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchSlice;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
@@ -40,12 +40,12 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     int page = normalized.page();
     int size = normalized.size();
 
-    SearchPage<ApplicationReviewSearchResultDto> searchPage = repository.search(normalized);
-    List<ApplicationReviewSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.content());
+    Page<ApplicationReviewSearchResultDto> searchPage = repository.search(normalized);
+    List<ApplicationReviewSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.getContent());
 
     return new ApplicationReviewSearchResponseDto(
         results,
-        searchPage == null ? 0 : searchPage.totalElements(),
+        searchPage == null ? 0 : (int) Math.min(Integer.MAX_VALUE, searchPage.getTotalElements()),
         page,
         size);
   }
@@ -58,8 +58,8 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
   @Override
   public ApplicationReviewPreviewResponseDto preview(ApplicationReviewSearchCriteria criteria) {
     ApplicationReviewSearchCriteria normalized = normalizeCriteria(criteria);
-    SearchSlice<ApplicationReviewSearchResultDto> slice = repository.slice(normalized);
-    List<ApplicationReviewSearchResultDto> results = slice == null ? List.of() : safeList(slice.content());
+    Slice<ApplicationReviewSearchResultDto> slice = repository.slice(normalized);
+    List<ApplicationReviewSearchResultDto> results = slice == null ? List.of() : safeList(slice.getContent());
     return new ApplicationReviewPreviewResponseDto(
         results,
         slice != null && slice.hasNext(),

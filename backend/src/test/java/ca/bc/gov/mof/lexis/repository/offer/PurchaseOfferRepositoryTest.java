@@ -7,7 +7,7 @@ import static org.mockito.Mockito.verify;
 
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import org.springframework.data.domain.Page;
 import java.sql.CallableStatement;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -87,15 +87,15 @@ class PurchaseOfferRepositoryTest {
     TestPurchaseOfferRepository repository =
         new TestPurchaseOfferRepository(List.<List<?>>of(firstPage, List.of(offerResult(810011L))));
 
-    SearchPage<PurchaseOfferSearchResultDto> results =
+    Page<PurchaseOfferSearchResultDto> results =
         repository.search(
             new PurchaseOfferSearchCriteria(
                 null, null, null, null, null, null, null, List.of(), null, 0, 10));
 
-    assertThat(results.results())
+    assertThat(results.getContent())
         .extracting(PurchaseOfferSearchResultDto::offerNumber)
         .containsExactly(810001L, 810002L, 810003L, 810004L, 810005L, 810006L, 810007L, 810008L, 810009L, 810010L);
-    assertThat(results.total()).isEqualTo(11);
+    assertThat(results.getTotalElements()).isEqualTo(11);
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 

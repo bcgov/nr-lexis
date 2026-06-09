@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import org.springframework.data.domain.Page;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -84,15 +84,15 @@ class ExemptionRepositoryTest {
     TestExemptionRepository repository =
         new TestExemptionRepository(List.<List<?>>of(firstPage, List.of(exemptionResult("EX-11"))));
 
-    SearchPage<ExemptionSearchResultDto> results =
+    Page<ExemptionSearchResultDto> results =
         repository.search(
             new ExemptionSearchCriteria(
                 null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
 
-    assertThat(results.results())
+    assertThat(results.getContent())
         .extracting(ExemptionSearchResultDto::exemptionNumber)
         .containsExactly("EX-1", "EX-2", "EX-3", "EX-4", "EX-5", "EX-6", "EX-7", "EX-8", "EX-9", "EX-10");
-    assertThat(results.total()).isEqualTo(11);
+    assertThat(results.getTotalElements()).isEqualTo(11);
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 

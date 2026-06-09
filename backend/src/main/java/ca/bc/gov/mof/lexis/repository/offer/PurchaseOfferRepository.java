@@ -4,7 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.CallableStatement;
 import java.sql.Date;
@@ -45,7 +45,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public SearchPage<PurchaseOfferSearchResultDto> search(PurchaseOfferSearchCriteria criteria) {
+  public Page<PurchaseOfferSearchResultDto> search(PurchaseOfferSearchCriteria criteria) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     int totalElements =
         queryLegacyDynamicCountProcedure(COUNT_PURCHASE_OFFERS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
