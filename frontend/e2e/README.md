@@ -26,5 +26,5 @@ npm run e2e:report
 Override base URL when needed:
 
 ```bash
-E2E_BASE_URL=http://localhost:4173 npm run e2e
+E2E_BASE_URL=http://127.0.0.1:4173 npm run e2e
 ```

@@ -8,7 +8,8 @@ Spring Boot backend service for the Log Exemption Information System (LEXIS).
 |------------|---------|---------|
 | Java | 21 | Runtime |
 | Spring Boot | 3.5.x | Framework |
-| Oracle JDBC | 21.3.x (ojdbc11) | Database connectivity |
+| Spring Security | Spring Boot managed | OAuth2 Resource Server + JWT |
+| Oracle JDBC | 21.3.x (ojdbc11) | Database connectivity (TCPS to BC Gov shared Oracle) |
 | Undertow | 2.3.x | Embedded HTTP server (Tomcat excluded) |
 | JasperReports | 6.21.5 | Embedded report generation; no Jasper Server |
 | Resilience4j | 2.3.x | Retry / circuit-breaker support |
@@ -43,6 +44,7 @@ Reports are rendered in-process with the embedded JasperReports library and the 
 | `DATABASE_SERVICE_NAME` | Oracle service name | - |
 | `DATABASE_USER` | Oracle username | - |
 | `DATABASE_PASSWORD` | Oracle password | - |
+| `TRUSTSTORE_PATH` | Path to `jssecacerts` JKS | - |
 | `KEYSTORE_SECRET` | Oracle truststore secret/passphrase | - |
 | `ALLOWED_ORIGINS` | Frontend CORS origins | http://localhost:3000 |
 | `AWS_COGNITO_ISSUER_URI` | Cognito issuer URI | - |
@@ -77,6 +79,7 @@ Grouped by area; see `controller/` for request and response contracts.
 | Indian Reserve permits | `/api/lexis/indian-reserve/permits/search`, `/search/options`, `/{permitNumber}` | Indian Reserve permit search/detail endpoints. |
 | Reports | `/api/lexis/reports/*` | Generates CSV, PDF, and spreadsheet outputs with embedded JasperReports templates and legacy-compatible routes. |
 | Admin and uploads | `/api/lexis/admin/*`, `/api/lexis/*Upload` | Admin policy screens and legacy upload workflows. |
+| Permit detail RPC | `/api/lexis/rpc/permit-details/*` | Legacy-compatible permit detail tables, documents, invoices, and mutation workflows. |
 
 ## Testing
 
@@ -117,7 +120,7 @@ This backend is the Spring Boot service for `nr-lexis`.
 
 CI/CD and OpenShift workflow conventions derive from [bcgov/quickstart-openshift](https://github.com/bcgov/quickstart-openshift).
 
-The modern backend replaces the legacy Struts/Jasper Server report path with embedded JasperReports execution inside Spring Boot.
+The modern backend replaces the legacy Struts/Jasper Server report path with embedded JasperReports execution inside Spring Boot. Legacy behaviour is still referenced against `nr-lexis-main` where migration parity matters.
 
 ## Resources
 
