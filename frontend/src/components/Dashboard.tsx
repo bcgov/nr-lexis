@@ -467,11 +467,7 @@ const Dashboard: FC = () => {
               )}
               <p>{module.description}</p>
               <div className="legacy-search-actions">
-                <Button
-                  kind="primary"
-                  size="sm"
-                  onClick={() => navigate(module.path)}
-                >
+                <Button kind="primary" size="sm" onClick={() => navigate(module.path)}>
                   Open
                 </Button>
               </div>

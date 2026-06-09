@@ -74,6 +74,32 @@ describe('Layout shell', () => {
     expect(screen.getByRole('heading', { name: 'Current page content', level: 1 })).toBeVisible()
   })
 
+  it('hides create links when the role only has search access', () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'idir\\readonly',
+        roles: ['READ_ONLY'],
+        welcomeTarget: '/provincial/application',
+        legacyPath: null,
+        grantedActions: [],
+      },
+      defaultRoute: '/provincial/application',
+      canPerform: (action: string) =>
+        ['/applicationSearch', '/exemptionSearch', '/offersSearch'].includes(action),
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderLayout('/provincial/application')
+
+    expect(screen.getByRole('link', { name: 'Application Search' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Exemption Search' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Offer Search' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Create/Edit Application' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Create/Edit Exemption' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Create/Edit Offer' })).not.toBeInTheDocument()
+  })
+
   it('defaults the side nav open and supports collapsing it', async () => {
     renderLayout('/admin/uploads')
 

@@ -321,7 +321,7 @@ const ProvincialPage: FC = () => {
   const visibleQuickActions = useMemo(
     () =>
       QUICK_ACTIONS.filter((action) =>
-        action.requiredActions.some((requiredAction) => canPerform(requiredAction)),
+        action.requiredActions.every((requiredAction) => canPerform(requiredAction)),
       ),
     [canPerform],
   )
@@ -433,11 +433,7 @@ const ProvincialPage: FC = () => {
                         : workflowTotal.toLocaleString()}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        kind="primary"
-                        size="sm"
-                        onClick={() => navigate(workflow.path)}
-                      >
+                      <Button kind="primary" size="sm" onClick={() => navigate(workflow.path)}>
                         Open
                       </Button>
                     </TableCell>

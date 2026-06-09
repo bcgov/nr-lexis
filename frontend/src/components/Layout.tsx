@@ -20,6 +20,7 @@ type NavigationLink = {
   to: string
   label: string
   requiredActions?: string[]
+  requiredActionsMatch?: 'any' | 'all'
 }
 
 type NavigationSection = {
@@ -46,6 +47,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: '/provincial/application/create',
         label: 'Create/Edit Application',
         requiredActions: ['/applicationSearch', 'createApplication'],
+        requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/application',
@@ -56,6 +58,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: '/provincial/exemption/create',
         label: 'Create/Edit Exemption',
         requiredActions: ['/exemptionSearch', '/createExemption'],
+        requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/exemption',
@@ -66,6 +69,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: '/provincial/offers/create',
         label: 'Create/Edit Offer',
         requiredActions: ['/offersSearch', 'createOffer'],
+        requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/offers',
@@ -215,6 +219,10 @@ const Layout: FC<Props> = ({ children }) => {
   const canShowLink = (link: NavigationLink): boolean => {
     if (!link.requiredActions || link.requiredActions.length === 0) {
       return true
+    }
+
+    if (link.requiredActionsMatch === 'all') {
+      return link.requiredActions.every((action) => canPerform(action))
     }
 
     return link.requiredActions.some((action) => canPerform(action))

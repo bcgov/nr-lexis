@@ -97,7 +97,7 @@ describe('Reports Page Actions', () => {
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
   })
 
-  it('hides report variant selector for single-action reports and blocks generation without access', async () => {
+  it('hides report controls when no report actions are granted', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => false,
     } as any)
@@ -111,8 +111,31 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Reports' })
+    expect(screen.getByRole('heading', { name: 'No Reports Available' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Report Variant')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Generate Report' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Generate Report' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
+  })
+
+  it('lists only reports granted to the current session', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === '/exemptionReport',
+    } as any)
+
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Exemption Report' })
+
+    expect(screen.getAllByText('Exemption Report')).toHaveLength(2)
+    expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offer Report')).not.toBeInTheDocument()
+    expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
   })
 
   it('loads report field options from the report options endpoint only', async () => {

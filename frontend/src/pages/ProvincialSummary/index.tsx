@@ -393,7 +393,9 @@ const ProvincialSummaryPage: FC = () => {
 
       {!loading &&
         metrics
-          .filter((metric) => visibleMetrics.some((visibleMetric) => visibleMetric.key === metric.key))
+          .filter((metric) =>
+            visibleMetrics.some((visibleMetric) => visibleMetric.key === metric.key),
+          )
           .map((metric) => (
             <Column key={metric.key} sm={4} md={4} lg={5}>
               <Tile>
