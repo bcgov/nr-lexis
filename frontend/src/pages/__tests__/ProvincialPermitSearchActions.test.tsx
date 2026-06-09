@@ -24,7 +24,7 @@ const mockedSearchProvincialPermits = vi.mocked(searchProvincialPermits)
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
 
 const renderPage = () => {
-  render(
+  return render(
     <MemoryRouter initialEntries={['/provincial/permit']}>
       <Routes>
         <Route path="/provincial/permit" element={<ProvincialPermitPage />} />
@@ -87,6 +87,22 @@ describe('Provincial Permit Search Actions', () => {
     await screen.findByText('7001')
 
     expect(screen.queryByRole('link', { name: 'Add Permit' })).not.toBeInTheDocument()
+  })
+
+  it('reuses cached search results when the route remounts with the same URL state', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => false,
+    } as any)
+
+    const firstRender = renderPage()
+    await screen.findByText('7001')
+    expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
+
+    firstRender.unmount()
+    renderPage()
+
+    await screen.findByText('7001')
+    expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
   })
 
   it('reuses the first search total when pagination changes page', async () => {

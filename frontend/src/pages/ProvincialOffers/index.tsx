@@ -24,6 +24,11 @@ import type {
 } from '@/interfaces/ProvincialOfferSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
+import {
   parseCsvParam,
   parseEnumParam,
   parsePositiveIntParam,
@@ -118,7 +123,7 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 }
 
 const ProvincialOffersPage: FC = () => {
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
@@ -208,7 +213,22 @@ const ProvincialOffersPage: FC = () => {
   const beginSearchRequest = useLatestRequestGuard()
 
   const runSearch = useCallback(
-    async (request: ProvincialOfferSearchRequest) => {
+    async (request: ProvincialOfferSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheKey = buildPageDataCacheKey(
+        'provincial-offer-search',
+        capabilities?.principal,
+        request,
+      )
+      if (!options.force) {
+        const cachedResults = getPageDataCache<ProvincialOfferSearchResponse>(pageCacheKey)
+        if (cachedResults) {
+          setResults(cachedResults)
+          setLoading(false)
+          setErrorMessage('')
+          return
+        }
+      }
+
       const isLatestRequest = beginSearchRequest()
       if (
         !isValidIsoDate(request.filters.listingFromDate) ||
@@ -225,6 +245,7 @@ const ProvincialOffersPage: FC = () => {
       try {
         const response = await searchProvincialOffers(request)
         if (isLatestRequest()) {
+          setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
       } catch (error) {
@@ -239,7 +260,7 @@ const ProvincialOffersPage: FC = () => {
         }
       }
     },
-    [beginSearchRequest],
+    [beginSearchRequest, capabilities?.principal],
   )
 
   useEffect(() => {

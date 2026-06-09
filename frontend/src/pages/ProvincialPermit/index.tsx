@@ -32,6 +32,11 @@ import {
   parseSortDirectionParam,
   setSearchParam,
 } from '@/pages/shared/search-query-utils'
+import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
@@ -144,7 +149,7 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 }
 
 const ProvincialPermitPage: FC = () => {
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
@@ -226,7 +231,26 @@ const ProvincialPermitPage: FC = () => {
   const beginSearchRequest = useLatestRequestGuard()
 
   const runSearch = useCallback(
-    async (request: ProvincialPermitSearchRequest) => {
+    async (request: ProvincialPermitSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheKey = buildPageDataCacheKey(
+        'provincial-permit-search',
+        capabilities?.principal,
+        request,
+      )
+      if (!options.force) {
+        const cachedResults = getPageDataCache<ProvincialPermitSearchResponse>(pageCacheKey)
+        if (cachedResults) {
+          permitTotalCacheRef.current.set(buildPermitTotalCacheKey(request.filters), {
+            total: cachedResults.page.totalElements,
+            expiresAt: Date.now() + PERMIT_TOTAL_CACHE_TTL_MS,
+          })
+          setResults(cachedResults)
+          setLoading(false)
+          setErrorMessage('')
+          return
+        }
+      }
+
       const isLatestRequest = beginSearchRequest()
       if (
         !isValidIsoDate(request.filters.issuedFromDate) ||
@@ -255,6 +279,7 @@ const ProvincialPermitPage: FC = () => {
             total: response.page.totalElements,
             expiresAt: Date.now() + PERMIT_TOTAL_CACHE_TTL_MS,
           })
+          setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
       } catch (error) {
@@ -269,7 +294,7 @@ const ProvincialPermitPage: FC = () => {
         }
       }
     },
-    [beginSearchRequest],
+    [beginSearchRequest, capabilities?.principal],
   )
 
   useEffect(() => {

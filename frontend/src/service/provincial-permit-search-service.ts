@@ -106,10 +106,7 @@ export const searchProvincialPermits = async (
       params.append('knownTotal', String(options.knownTotal))
     }
 
-    const response = await getCachedSearchResponse<unknown>(
-      '/lexis/permits/search',
-      params,
-    )
+    const response = await getCachedSearchResponse<unknown>('/lexis/permits/search', params)
 
     const parsed = parseBackendResponse(response.data)
     if (!parsed) {

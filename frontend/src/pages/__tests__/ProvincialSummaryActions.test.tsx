@@ -69,7 +69,7 @@ const mockedCountFederalApplications = vi.mocked(countFederalApplications)
 const mockedCountIndianReservePermits = vi.mocked(countIndianReservePermits)
 
 const renderPage = () => {
-  render(
+  return render(
     <MemoryRouter initialEntries={['/provincial/summary']}>
       <Routes>
         <Route path="/provincial/summary" element={<ProvincialSummaryPage />} />
@@ -164,6 +164,37 @@ describe('Provincial Summary action smoke', () => {
       within(reviewRow as HTMLTableRowElement).getByRole('button', { name: 'Open' }),
     )
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
+  })
+
+  it('reuses cached summary metrics when the route remounts', async () => {
+    const firstRender = renderPage()
+
+    await screen.findByText('901')
+    expect(mockedCountProvincialApplications).toHaveBeenCalledTimes(1)
+    expect(mockedCountProvincialPermits).toHaveBeenCalledTimes(1)
+    expect(mockedPreviewApplicationReviews).toHaveBeenCalledTimes(1)
+
+    firstRender.unmount()
+    renderPage()
+
+    await screen.findByText('901')
+    expect(screen.getByText('804')).toBeInTheDocument()
+    expect(mockedCountProvincialApplications).toHaveBeenCalledTimes(1)
+    expect(mockedCountProvincialPermits).toHaveBeenCalledTimes(1)
+    expect(mockedPreviewApplicationReviews).toHaveBeenCalledTimes(1)
+  })
+
+  it('refresh summary button bypasses cached metrics', async () => {
+    renderPage()
+
+    await screen.findByText('901')
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh Summary' }))
+
+    await waitFor(() => {
+      expect(mockedCountProvincialApplications).toHaveBeenCalledTimes(2)
+    })
+    expect(mockedCountProvincialPermits).toHaveBeenCalledTimes(2)
+    expect(mockedPreviewApplicationReviews).toHaveBeenCalledTimes(2)
   })
 
   it('hides summary route actions when the user lacks all route permissions', async () => {

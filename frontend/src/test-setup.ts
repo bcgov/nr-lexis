@@ -2,6 +2,7 @@ import '@testing-library/jest-dom'
 import { afterAll, afterEach, beforeAll } from 'vitest'
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
+import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 
 const users = [
   {
@@ -39,4 +40,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
 
 // Reset handlers after each test `important for test isolation`
-afterEach(() => server.resetHandlers())
+afterEach(() => {
+  server.resetHandlers()
+  clearAllPageDataCache()
+})

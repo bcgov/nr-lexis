@@ -8,6 +8,7 @@ import {
 import { AuthContext } from '@/context/auth/AuthContext'
 import type { AuthContextType, LoginProvider } from '@/context/auth/types'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
+import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import apiService from '@/service/api-service'
 import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
 
@@ -284,6 +285,7 @@ export const AuthProvider: FC<Props> = ({ children }) => {
       console.warn('Unable to complete backend logoff. Clearing local auth state.', error)
     } finally {
       apiService.clearCachedGetData()
+      clearAllPageDataCache()
       setCapabilities(DEFAULT_CAPABILITIES)
       setIsLoading(false)
     }

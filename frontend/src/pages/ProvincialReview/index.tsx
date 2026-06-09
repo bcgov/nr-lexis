@@ -29,6 +29,11 @@ import type {
 } from '@/interfaces/ApplicationReviewSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
+import {
   parseCsvParam,
   parseEnumParam,
   parsePositiveIntParam,
@@ -145,7 +150,7 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 }
 
 const ProvincialReviewPage: FC = () => {
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
   const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
@@ -293,7 +298,22 @@ const ProvincialReviewPage: FC = () => {
   const beginSearchRequest = useLatestRequestGuard()
 
   const runSearch = useCallback(
-    async (request: ApplicationReviewSearchRequest) => {
+    async (request: ApplicationReviewSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheKey = buildPageDataCacheKey(
+        'provincial-review-search',
+        capabilities?.principal,
+        request,
+      )
+      if (!options.force) {
+        const cachedResults = getPageDataCache<ApplicationReviewSearchResponse>(pageCacheKey)
+        if (cachedResults) {
+          setResults(cachedResults)
+          setLoading(false)
+          setErrorMessage('')
+          return
+        }
+      }
+
       const isLatestRequest = beginSearchRequest()
       if (
         !isValidIsoDate(request.filters.receivedFromDate) ||
@@ -310,6 +330,7 @@ const ProvincialReviewPage: FC = () => {
       try {
         const response = await searchApplicationReviews(request)
         if (isLatestRequest()) {
+          setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
       } catch (error) {
@@ -324,7 +345,7 @@ const ProvincialReviewPage: FC = () => {
         }
       }
     },
-    [beginSearchRequest],
+    [beginSearchRequest, capabilities?.principal],
   )
 
   useEffect(() => {
@@ -463,13 +484,16 @@ const ProvincialReviewPage: FC = () => {
       }
 
       setSelectedRowsById({})
-      await runSearch({
-        filters: urlState.filters,
-        page: urlState.page - 1,
-        pageSize: urlState.pageSize,
-        sortField: urlState.sortField,
-        sortDirection: urlState.sortDirection,
-      })
+      await runSearch(
+        {
+          filters: urlState.filters,
+          page: urlState.page - 1,
+          pageSize: urlState.pageSize,
+          sortField: urlState.sortField,
+          sortDirection: urlState.sortDirection,
+        },
+        { force: true },
+      )
     } finally {
       setSubmittingApproval(false)
     }
@@ -591,13 +615,16 @@ const ProvincialReviewPage: FC = () => {
       }
 
       setSelectedRowsById({})
-      await runSearch({
-        filters: urlState.filters,
-        page: urlState.page - 1,
-        pageSize: urlState.pageSize,
-        sortField: urlState.sortField,
-        sortDirection: urlState.sortDirection,
-      })
+      await runSearch(
+        {
+          filters: urlState.filters,
+          page: urlState.page - 1,
+          pageSize: urlState.pageSize,
+          sortField: urlState.sortField,
+          sortDirection: urlState.sortDirection,
+        },
+        { force: true },
+      )
     } finally {
       setSubmittingStatusUpdate(false)
     }

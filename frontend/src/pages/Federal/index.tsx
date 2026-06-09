@@ -28,6 +28,11 @@ import type {
 } from '@/interfaces/FederalApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
+import {
   parseEnumParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
@@ -122,7 +127,7 @@ type ExemptionCreatePrefillState = {
 
 const FederalPage: FC = () => {
   const navigate = useNavigate()
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
   const [results, setResults] = useState<FederalApplicationSearchResponse>(EMPTY_RESULTS)
@@ -211,7 +216,22 @@ const FederalPage: FC = () => {
   const beginSearchRequest = useLatestRequestGuard()
 
   const runSearch = useCallback(
-    async (request: FederalApplicationSearchRequest) => {
+    async (request: FederalApplicationSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheKey = buildPageDataCacheKey(
+        'federal-application-search',
+        capabilities?.principal,
+        request,
+      )
+      if (!options.force) {
+        const cachedResults = getPageDataCache<FederalApplicationSearchResponse>(pageCacheKey)
+        if (cachedResults) {
+          setResults(cachedResults)
+          setLoading(false)
+          setErrorMessage('')
+          return
+        }
+      }
+
       const isLatestRequest = beginSearchRequest()
       if (
         !isValidIsoDate(request.filters.receivedFromDate) ||
@@ -228,6 +248,7 @@ const FederalPage: FC = () => {
       try {
         const response = await searchFederalApplications(request)
         if (isLatestRequest()) {
+          setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
       } catch (error) {
@@ -242,7 +263,7 @@ const FederalPage: FC = () => {
         }
       }
     },
-    [beginSearchRequest],
+    [beginSearchRequest, capabilities?.principal],
   )
 
   useEffect(() => {
