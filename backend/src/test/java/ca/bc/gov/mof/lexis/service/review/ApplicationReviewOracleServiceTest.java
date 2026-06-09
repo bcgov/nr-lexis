@@ -15,7 +15,7 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -57,7 +57,7 @@ class ApplicationReviewOracleServiceTest {
             row(10003L, LocalDate.of(2026, 3, 3)),
             row(10004L, LocalDate.of(2026, 3, 4)));
     when(repository.search(any(ApplicationReviewSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(rows, 4));
+        .thenReturn(new SearchPage<>(rows, 4));
 
     ApplicationReviewSearchResponseDto response = service.search(criteria);
 
@@ -83,7 +83,7 @@ class ApplicationReviewOracleServiceTest {
             -2,
             0);
     when(repository.search(any(ApplicationReviewSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
+        .thenReturn(new SearchPage<>(List.of(), 0));
 
     service.search(criteria);
 

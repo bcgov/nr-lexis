@@ -4,7 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -74,7 +74,34 @@ public class ExemptionRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public DynamicSearchPage<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
+  public SearchPage<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return queryLegacyDynamicPage(
+        FIND_EXEMPTIONS_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        rs ->
+            new ExemptionSearchResultDto(
+                getString(rs, "EXEMPTION_NUMBER"),
+                getString(rs, "EXPORT_EXEMPTION_TYPE_CODE"),
+                firstNonNull(getString(rs, "EXPORT_EXEMPTION_STATUS_CODE"), getString(rs, "STATUS_DESCRIPTION")),
+                getString(rs, "OWNER_CLIENT_NUMBER"),
+                getLong(rs, "APPLICATION_NUMBER"),
+                getLocalDate(rs, "APPROVAL_DATE"),
+                getLocalDate(rs, "ADVERTISING_DATE"),
+                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE")),
+                coalesce(getDouble(rs, "APPROVED_VOLUME"), 0.0d),
+                false));
+  }
+
+  public int count(ExemptionSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return countLegacyDynamicResults(FIND_EXEMPTIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+  }
+
+  private SqlWhere buildSearchWhere(ExemptionSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -106,26 +133,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
       where.addInLikeOrNoResults("EO.ORG_UNIT_NO", criteria.regionNumbers());
     }
 
-    SqlWhere sqlWhere = where.build(SEARCH_GROUP_BY + " ORDER BY EE.EXEMPTION_NUMBER DESC");
-
-    return queryDynamicPage(
-        FIND_EXEMPTIONS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        criteria.page(),
-        criteria.size(),
-        rs ->
-            new ExemptionSearchResultDto(
-                getString(rs, "EXEMPTION_NUMBER"),
-                getString(rs, "EXPORT_EXEMPTION_TYPE_CODE"),
-                firstNonNull(getString(rs, "EXPORT_EXEMPTION_STATUS_CODE"), getString(rs, "STATUS_DESCRIPTION")),
-                getString(rs, "OWNER_CLIENT_NUMBER"),
-                getLong(rs, "APPLICATION_NUMBER"),
-                getLocalDate(rs, "APPROVAL_DATE"),
-                getLocalDate(rs, "ADVERTISING_DATE"),
-                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE")),
-                coalesce(getDouble(rs, "APPROVED_VOLUME"), 0.0d),
-                false));
+    return where.build(SEARCH_GROUP_BY + " ORDER BY EE.EXEMPTION_NUMBER DESC");
   }
 
   public Optional<ExemptionDetailDto> findByExemptionNumber(String exemptionNumber) {

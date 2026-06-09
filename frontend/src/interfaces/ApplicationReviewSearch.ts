@@ -43,3 +43,12 @@ export type ApplicationReviewSearchResponse = {
     totalPages: number
   }
 }
+
+export type ApplicationReviewPreviewResponse = {
+  content: ApplicationReviewSearchItem[]
+  page: {
+    number: number
+    size: number
+    hasNext: boolean
+  }
+}

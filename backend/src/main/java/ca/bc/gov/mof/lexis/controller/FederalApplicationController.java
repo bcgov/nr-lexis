@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
@@ -76,21 +77,59 @@ public class FederalApplicationController {
     }
 
     FederalApplicationSearchCriteria criteria =
-        new FederalApplicationSearchCriteria(
-            firstNonBlank(federalApplicationNumberAlias, federalApplicationNumber),
+        buildCriteria(
+            federalApplicationNumber,
+            federalApplicationNumberAlias,
             packageNumber,
             exemptionNumber,
             applicationStatus,
-            parseDate(receivedFromDate),
-            parseDate(receivedToDate),
-            parseDate(listingFromDate),
-            parseDate(listingToDate),
+            receivedFromDate,
+            receivedToDate,
+            listingFromDate,
+            listingToDate,
             ownerClientNumber,
             agentClientNumber,
             page,
             size);
 
     return ResponseEntity.ok(service.search(criteria));
+  }
+
+  @GetMapping("/search/count")
+  public ResponseEntity<SearchCountResponseDto> count(
+      @RequestParam(name = "applicationNumber", required = false) String federalApplicationNumber,
+      @RequestParam(name = "federalApplicationNumber", required = false) String federalApplicationNumberAlias,
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      @RequestParam(name = "applicationStatus", required = false) String applicationStatus,
+      @RequestParam(name = "receivedFromDate", required = false) String receivedFromDate,
+      @RequestParam(name = "receivedToDate", required = false) String receivedToDate,
+      @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
+      @RequestParam(name = "listingToDate", required = false) String listingToDate,
+      @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
+      @RequestParam(name = "agentClientNumber", required = false) String agentClientNumber) {
+    FederalApplicationService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Federal application service unavailable - returning no content for count");
+      return ResponseEntity.noContent().build();
+    }
+
+    FederalApplicationSearchCriteria criteria =
+        buildCriteria(
+            federalApplicationNumber,
+            federalApplicationNumberAlias,
+            packageNumber,
+            exemptionNumber,
+            applicationStatus,
+            receivedFromDate,
+            receivedToDate,
+            listingFromDate,
+            listingToDate,
+            ownerClientNumber,
+            agentClientNumber,
+            0,
+            1);
+    return ResponseEntity.ok(new SearchCountResponseDto(service.count(criteria)));
   }
 
   @GetMapping("/{applicationNumber}")
@@ -146,6 +185,35 @@ public class FederalApplicationController {
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "`applications` must be a comma-separated numeric list", ex);
     }
+  }
+
+  private FederalApplicationSearchCriteria buildCriteria(
+      String federalApplicationNumber,
+      String federalApplicationNumberAlias,
+      String packageNumber,
+      String exemptionNumber,
+      String applicationStatus,
+      String receivedFromDate,
+      String receivedToDate,
+      String listingFromDate,
+      String listingToDate,
+      String ownerClientNumber,
+      String agentClientNumber,
+      Integer page,
+      Integer size) {
+    return new FederalApplicationSearchCriteria(
+        firstNonBlank(federalApplicationNumberAlias, federalApplicationNumber),
+        packageNumber,
+        exemptionNumber,
+        applicationStatus,
+        parseDate(receivedFromDate),
+        parseDate(receivedToDate),
+        parseDate(listingFromDate),
+        parseDate(listingToDate),
+        ownerClientNumber,
+        agentClientNumber,
+        page,
+        size);
   }
 
   private LocalDate parseDate(String input) {

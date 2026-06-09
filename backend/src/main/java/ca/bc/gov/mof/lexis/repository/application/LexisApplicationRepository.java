@@ -5,7 +5,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.ResultSet;
 import java.time.LocalDate;
@@ -87,7 +87,24 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public DynamicSearchPage<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
+  public SearchPage<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    LocalDate today = LocalDate.now(ZoneId.systemDefault());
+    return queryLegacyDynamicPage(
+        FIND_APPLICATIONS_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        rs -> toSearchResult(rs, today));
+  }
+
+  public int count(LexisApplicationSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return countLegacyDynamicResults(FIND_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+  }
+
+  private SqlWhere buildSearchWhere(LexisApplicationSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("v.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -130,16 +147,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
           agentClientNumber);
     }
 
-    SqlWhere sqlWhere = where.build(buildSortOrder(criteria.sortField()));
-
-    LocalDate today = LocalDate.now(ZoneId.systemDefault());
-    return queryDynamicPage(
-        FIND_APPLICATIONS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        criteria.page(),
-        criteria.size(),
-        rs -> toSearchResult(rs, today));
+    return where.build(buildSortOrder(criteria.sortField()));
   }
 
   public Optional<LexisApplicationDetailDto> findByApplicationNumber(Long applicationNumber) {

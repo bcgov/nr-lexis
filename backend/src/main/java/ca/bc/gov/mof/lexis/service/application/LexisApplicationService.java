@@ -14,6 +14,8 @@ public interface LexisApplicationService {
 
   LexisApplicationSearchResponseDto search(LexisApplicationSearchCriteria criteria);
 
+  int count(LexisApplicationSearchCriteria criteria);
+
   Optional<LexisApplicationDetailDto> findByApplicationNumber(long applicationNumber);
 
   Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber);

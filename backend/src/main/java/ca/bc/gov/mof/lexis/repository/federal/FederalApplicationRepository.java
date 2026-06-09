@@ -5,7 +5,7 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -46,7 +46,39 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public DynamicSearchPage<FederalApplicationSearchResultDto> search(FederalApplicationSearchCriteria criteria) {
+  public SearchPage<FederalApplicationSearchResultDto> search(FederalApplicationSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return queryLegacyDynamicPage(
+        FIND_APPLICATIONS_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        rs -> {
+          String statusCode = getString(rs, "EXPORT_APPLICATION_STATUS_CODE");
+          String exemptionNumber = getString(rs, "EXEMPTION_NUMBER");
+          boolean selectable = "APP".equalsIgnoreCase(statusCode) && exemptionNumber == null;
+
+          return new FederalApplicationSearchResultDto(
+              getLong(rs, "APPLICATION_NUMBER"),
+              firstNonNull(getString(rs, "FED_APPLICATION_NUMBER"), getString(rs, "FEDERAL_APPLICATION_NUMBER")),
+              firstNonNull(getString(rs, "STATUS_DESCRIPTION"), statusCode),
+              getString(rs, "OWNER_CLIENT_NUMBER"),
+              getString(rs, "REASON_DESCRIPTION"),
+              firstNonNull(getString(rs, "TYPE_DESCRIPTION"), getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
+              exemptionNumber,
+              getLocalDate(rs, "RECEIVED_DATE"),
+              getLocalDate(rs, "ADVERTISING_DATE"),
+              selectable);
+        });
+  }
+
+  public int count(FederalApplicationSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return countLegacyDynamicResults(FIND_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+  }
+
+  private SqlWhere buildSearchWhere(FederalApplicationSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("v.FED_APPLICATION_NUMBER", criteria.federalApplicationNumber());
@@ -75,31 +107,7 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
 
     where.addLike("v.AGENT_CLIENT_NUMBER", criteria.agentClientNumber());
 
-    SqlWhere sqlWhere = where.build(" ORDER BY v.APPLICATION_NUMBER DESC");
-
-    return queryDynamicPage(
-        FIND_APPLICATIONS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        criteria.page(),
-        criteria.size(),
-        rs -> {
-          String statusCode = getString(rs, "EXPORT_APPLICATION_STATUS_CODE");
-          String exemptionNumber = getString(rs, "EXEMPTION_NUMBER");
-          boolean selectable = "APP".equalsIgnoreCase(statusCode) && exemptionNumber == null;
-
-          return new FederalApplicationSearchResultDto(
-              getLong(rs, "APPLICATION_NUMBER"),
-              firstNonNull(getString(rs, "FED_APPLICATION_NUMBER"), getString(rs, "FEDERAL_APPLICATION_NUMBER")),
-              firstNonNull(getString(rs, "STATUS_DESCRIPTION"), statusCode),
-              getString(rs, "OWNER_CLIENT_NUMBER"),
-              getString(rs, "REASON_DESCRIPTION"),
-              firstNonNull(getString(rs, "TYPE_DESCRIPTION"), getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
-              exemptionNumber,
-              getLocalDate(rs, "RECEIVED_DATE"),
-              getLocalDate(rs, "ADVERTISING_DATE"),
-              selectable);
-        });
+    return where.build(" ORDER BY v.APPLICATION_NUMBER DESC");
   }
 
   public Optional<FederalApplicationDetailDto> findByApplicationNumber(Long applicationNumber) {

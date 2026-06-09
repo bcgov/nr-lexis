@@ -4,7 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -37,7 +37,31 @@ public class PermitRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public DynamicSearchPage<PermitSearchResultDto> search(PermitSearchCriteria criteria) {
+  public SearchPage<PermitSearchResultDto> search(PermitSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return queryLegacyDynamicPage(
+        FIND_PERMIT_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        rs ->
+            new PermitSearchResultDto(
+                getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+                firstNonNull(getString(rs, "STATUS_DESCRIPTION"), getString(rs, "EXPORT_PERMIT_STATUS_CODE")),
+                getString(rs, "AGENT_NUMBER"),
+                getString(rs, "CLIENT_NUMBER"),
+                coalesce(getDouble(rs, "PERMIT_VOLUME"), 0.0d),
+                getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
+                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
+  }
+
+  public int count(PermitSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return countLegacyDynamicResults(FIND_PERMIT_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+  }
+
+  private SqlWhere buildSearchWhere(PermitSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("EP.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -88,23 +112,7 @@ public class PermitRepository extends OracleRepositorySupport {
             "permitNumber",
             "DESC");
 
-    SqlWhere sqlWhere = where.build(orderBy);
-
-    return queryDynamicPage(
-        FIND_PERMIT_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        criteria.page(),
-        criteria.size(),
-        rs ->
-            new PermitSearchResultDto(
-                getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-                firstNonNull(getString(rs, "STATUS_DESCRIPTION"), getString(rs, "EXPORT_PERMIT_STATUS_CODE")),
-                getString(rs, "AGENT_NUMBER"),
-                getString(rs, "CLIENT_NUMBER"),
-                coalesce(getDouble(rs, "PERMIT_VOLUME"), 0.0d),
-                getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
-                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
+    return where.build(orderBy);
   }
 
   public Optional<PermitDetailDto> findByPermitNumber(Long permitNumber) {

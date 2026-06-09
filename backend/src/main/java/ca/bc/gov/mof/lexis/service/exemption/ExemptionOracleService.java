@@ -6,7 +6,7 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionRepository;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
@@ -38,14 +38,19 @@ public class ExemptionOracleService implements ExemptionService {
     int page = normalized.page();
     int size = normalized.size();
 
-    DynamicSearchPage<ExemptionSearchResultDto> searchPage = repository.search(normalized);
-    List<ExemptionSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.results());
+    SearchPage<ExemptionSearchResultDto> searchPage = repository.search(normalized);
+    List<ExemptionSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.content());
 
     return new ExemptionSearchResponseDto(
         results,
-        searchPage == null ? 0 : searchPage.total(),
+        searchPage == null ? 0 : searchPage.totalElements(),
         page,
         size);
+  }
+
+  @Override
+  public int count(ExemptionSearchCriteria criteria) {
+    return repository.count(normalizeCriteria(criteria));
   }
 
   @Override

@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -84,7 +84,7 @@ class ExemptionRepositoryTest {
     TestExemptionRepository repository =
         new TestExemptionRepository(List.<List<?>>of(firstPage, List.of(exemptionResult("EX-11"))));
 
-    DynamicSearchPage<ExemptionSearchResultDto> results =
+    SearchPage<ExemptionSearchResultDto> results =
         repository.search(
             new ExemptionSearchCriteria(
                 null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
@@ -130,7 +130,7 @@ class ExemptionRepositoryTest {
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryDynamicPagedProcedure(
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
         List<String> bindValues,

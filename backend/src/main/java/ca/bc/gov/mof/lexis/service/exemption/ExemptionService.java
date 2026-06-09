@@ -12,5 +12,7 @@ public interface ExemptionService {
 
   ExemptionSearchResponseDto search(ExemptionSearchCriteria criteria);
 
+  int count(ExemptionSearchCriteria criteria);
+
   Optional<ExemptionDetailDto> findByExemptionNumber(String exemptionNumber);
 }

@@ -17,11 +17,11 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { searchApplicationReviews } from '@/service/application-review-search-service'
-import { searchProvincialApplications } from '@/service/provincial-application-search-service'
-import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
-import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
-import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
+import { countApplicationReviews } from '@/service/application-review-search-service'
+import { countProvincialApplications } from '@/service/provincial-application-search-service'
+import { countProvincialExemptions } from '@/service/provincial-exemption-search-service'
+import { countProvincialOffers } from '@/service/provincial-offer-search-service'
+import { countProvincialPermits } from '@/service/provincial-permit-search-service'
 
 type WorkflowMetricKey =
   | 'provincialApplications'
@@ -178,109 +178,111 @@ const ProvincialPage: FC = () => {
         load: () => Promise<T>,
       ): Promise<T | null> => (canAccess ? load() : null)
 
-      const applications = await loadMetric(canAccessWorkflowTotal('provincialApplications'), () =>
-        searchProvincialApplications({
-          filters: {
-            applicationNumber: '',
-            packageNumber: '',
-            exemptionType: '',
-            exemptionNumber: '',
-            applicationStatus: '',
-            productTypeCode: '',
-            region: [],
-            listingFromDate: '',
-            listingToDate: '',
-            applicantClientNumber: '',
-            ownerClientNumber: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'applicationNumber',
-          sortDirection: 'desc',
-        }),
-      )
-      const exemptions = await loadMetric(canAccessWorkflowTotal('provincialExemptions'), () =>
-        searchProvincialExemptions({
-          filters: {
-            applicationNumber: '',
-            packageNumber: '',
-            exemptionNumber: '',
-            region: [],
-            listFromDate: '',
-            listToDate: '',
-            exemptionTypeCode: '',
-            exemptionStatusCode: '',
-            applicantClientNumber: '',
-            ownerClientNumber: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'exemptionNumber',
-          sortDirection: 'asc',
-        }),
-      )
-      const offers = await loadMetric(canAccessWorkflowTotal('provincialOffers'), () =>
-        searchProvincialOffers({
-          filters: {
-            applicationNumber: '',
-            packageNumber: '',
-            clientNumber: '',
-            listingFromDate: '',
-            listingToDate: '',
-            region: [],
-            withdrawalFromDate: '',
-            withdrawalToDate: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'offerNumber',
-          sortDirection: 'asc',
-        }),
-      )
-      const permits = await loadMetric(canAccessWorkflowTotal('provincialPermits'), () =>
-        searchProvincialPermits({
-          filters: {
-            applicationNumber: '',
-            packageNumber: '',
-            region: [],
-            issuedFromDate: '',
-            issuedToDate: '',
-            permitStatus: '',
-            permitNumber: '',
-            ownerClientNumber: '',
-            applicantClientNumber: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'permitNumber',
-          sortDirection: 'asc',
-        }),
-      )
-      const reviewQueue = await loadMetric(canAccessWorkflowTotal('reviewQueue'), () =>
-        searchApplicationReviews({
-          filters: {
-            applicationNumber: '',
-            productTypeCode: '',
-            region: [],
-            receivedFromDate: '',
-            receivedToDate: '',
-            listingFromDate: '',
-            listingToDate: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'applicationNumber',
-          sortDirection: 'asc',
-        }),
-      )
+      const [applications, exemptions, offers, permits, reviewQueue] = await Promise.all([
+        loadMetric(canAccessWorkflowTotal('provincialApplications'), () =>
+          countProvincialApplications({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              exemptionType: '',
+              exemptionNumber: '',
+              applicationStatus: '',
+              productTypeCode: '',
+              region: [],
+              listingFromDate: '',
+              listingToDate: '',
+              applicantClientNumber: '',
+              ownerClientNumber: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'applicationNumber',
+            sortDirection: 'desc',
+          }),
+        ),
+        loadMetric(canAccessWorkflowTotal('provincialExemptions'), () =>
+          countProvincialExemptions({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              exemptionNumber: '',
+              region: [],
+              listFromDate: '',
+              listToDate: '',
+              exemptionTypeCode: '',
+              exemptionStatusCode: '',
+              applicantClientNumber: '',
+              ownerClientNumber: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'exemptionNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+        loadMetric(canAccessWorkflowTotal('provincialOffers'), () =>
+          countProvincialOffers({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              clientNumber: '',
+              listingFromDate: '',
+              listingToDate: '',
+              region: [],
+              withdrawalFromDate: '',
+              withdrawalToDate: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'offerNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+        loadMetric(canAccessWorkflowTotal('provincialPermits'), () =>
+          countProvincialPermits({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              region: [],
+              issuedFromDate: '',
+              issuedToDate: '',
+              permitStatus: '',
+              permitNumber: '',
+              ownerClientNumber: '',
+              applicantClientNumber: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'permitNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+        loadMetric(canAccessWorkflowTotal('reviewQueue'), () =>
+          countApplicationReviews({
+            filters: {
+              applicationNumber: '',
+              productTypeCode: '',
+              region: [],
+              receivedFromDate: '',
+              receivedToDate: '',
+              listingFromDate: '',
+              listingToDate: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'applicationNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+      ])
 
       if (isLatestRequest()) {
         setTotals({
-          provincialApplications: applications?.page.totalElements ?? 0,
-          provincialExemptions: exemptions?.page.totalElements ?? 0,
-          provincialOffers: offers?.page.totalElements ?? 0,
-          provincialPermits: permits?.page.totalElements ?? 0,
-          reviewQueue: reviewQueue?.page.totalElements ?? 0,
+          provincialApplications: applications ?? 0,
+          provincialExemptions: exemptions ?? 0,
+          provincialOffers: offers ?? 0,
+          provincialPermits: permits ?? 0,
+          reviewQueue: reviewQueue ?? 0,
         })
         setTotalsLoaded(true)
       }

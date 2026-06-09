@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.time.LocalDate;
 import java.util.List;
@@ -37,7 +37,7 @@ class ApplicationReviewRepositoryTest {
         new TestApplicationReviewRepository(
             List.<List<?>>of(firstPage, List.of(reviewResult(900111L))));
 
-    DynamicSearchPage<ApplicationReviewSearchResultDto> results =
+    SearchPage<ApplicationReviewSearchResultDto> results =
         repository.search(
             new ApplicationReviewSearchCriteria(null, null, null, null, null, null, List.of(), null, 0, 10));
 
@@ -82,7 +82,7 @@ class ApplicationReviewRepositoryTest {
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryDynamicPagedProcedure(
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
         List<String> bindValues,

@@ -7,7 +7,7 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
@@ -36,14 +36,19 @@ public class FederalApplicationOracleService implements FederalApplicationServic
     int page = normalized.page();
     int size = normalized.size();
 
-    DynamicSearchPage<FederalApplicationSearchResultDto> searchPage = repository.search(normalized);
-    List<FederalApplicationSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.results());
+    SearchPage<FederalApplicationSearchResultDto> searchPage = repository.search(normalized);
+    List<FederalApplicationSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.content());
 
     return new FederalApplicationSearchResponseDto(
         results,
-        searchPage == null ? 0 : searchPage.total(),
+        searchPage == null ? 0 : searchPage.totalElements(),
         page,
         size);
+  }
+
+  @Override
+  public int count(FederalApplicationSearchCriteria criteria) {
+    return repository.count(normalizeCriteria(criteria));
   }
 
   @Override

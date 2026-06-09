@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.review;
 
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchOptionsDto;
+import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewPreviewResponseDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
@@ -13,6 +14,10 @@ public interface ApplicationReviewService {
   ApplicationReviewSearchOptionsDto searchOptions();
 
   ApplicationReviewSearchResponseDto search(ApplicationReviewSearchCriteria criteria);
+
+  int count(ApplicationReviewSearchCriteria criteria);
+
+  ApplicationReviewPreviewResponseDto preview(ApplicationReviewSearchCriteria criteria);
 
   ApplicationReviewStatusUpdateResultDto approve(Long applicationNumber, String updateUserId);
 

@@ -5,7 +5,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -44,14 +44,19 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     int page = normalized.page();
     int size = normalized.size();
 
-    DynamicSearchPage<PurchaseOfferSearchResultDto> searchPage = repository.search(normalized);
-    List<PurchaseOfferSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.results());
+    SearchPage<PurchaseOfferSearchResultDto> searchPage = repository.search(normalized);
+    List<PurchaseOfferSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.content());
 
     return new PurchaseOfferSearchResponseDto(
         results,
-        searchPage == null ? 0 : searchPage.total(),
+        searchPage == null ? 0 : searchPage.totalElements(),
         page,
         size);
+  }
+
+  @Override
+  public int count(PurchaseOfferSearchCriteria criteria) {
+    return repository.count(normalizeCriteria(criteria));
   }
 
   @Override

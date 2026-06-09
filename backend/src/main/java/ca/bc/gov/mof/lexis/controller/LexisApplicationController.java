@@ -6,6 +6,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationValidationDto;
+import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -65,7 +66,7 @@ public class LexisApplicationController {
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
 
     LexisApplicationSearchCriteria criteria =
-        new LexisApplicationSearchCriteria(
+        buildCriteria(
             applicationNumber,
             packageNumber,
             exemptionNumber,
@@ -74,16 +75,51 @@ public class LexisApplicationController {
             ownerClientNumber,
             agentClientNumber,
             productTypeCode,
-            parseDate(receivedFromDate),
-            parseDate(receivedToDate),
-            parseDate(listingFromDate),
-            parseDate(listingToDate),
-            regionNumbers == null ? List.of() : regionNumbers,
+            receivedFromDate,
+            receivedToDate,
+            listingFromDate,
+            listingToDate,
+            regionNumbers,
             sortField,
             page,
             size);
-
     return ResponseEntity.ok(service.search(criteria));
+  }
+
+  @GetMapping("/search/count")
+  public ResponseEntity<SearchCountResponseDto> count(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      @RequestParam(name = "exemptionType", required = false) String exemptionType,
+      @RequestParam(name = "applicationStatus", required = false) String applicationStatus,
+      @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
+      @RequestParam(name = "agentClientNumber", required = false) String agentClientNumber,
+      @RequestParam(name = "productTypeCode", required = false) String productTypeCode,
+      @RequestParam(name = "receivedFromDate", required = false) String receivedFromDate,
+      @RequestParam(name = "receivedToDate", required = false) String receivedToDate,
+      @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
+      @RequestParam(name = "listingToDate", required = false) String listingToDate,
+      @RequestParam(name = "region", required = false) List<Long> regionNumbers) {
+    LexisApplicationSearchCriteria criteria =
+        buildCriteria(
+            applicationNumber,
+            packageNumber,
+            exemptionNumber,
+            exemptionType,
+            applicationStatus,
+            ownerClientNumber,
+            agentClientNumber,
+            productTypeCode,
+            receivedFromDate,
+            receivedToDate,
+            listingFromDate,
+            listingToDate,
+            regionNumbers,
+            null,
+            0,
+            1);
+    return ResponseEntity.ok(new SearchCountResponseDto(service.count(criteria)));
   }
 
   @GetMapping("/{applicationNumber}")
@@ -123,6 +159,42 @@ public class LexisApplicationController {
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "`applications` must be a comma-separated numeric list", ex);
     }
+  }
+
+  private LexisApplicationSearchCriteria buildCriteria(
+      String applicationNumber,
+      String packageNumber,
+      String exemptionNumber,
+      String exemptionType,
+      String applicationStatus,
+      String ownerClientNumber,
+      String agentClientNumber,
+      String productTypeCode,
+      String receivedFromDate,
+      String receivedToDate,
+      String listingFromDate,
+      String listingToDate,
+      List<Long> regionNumbers,
+      String sortField,
+      Integer page,
+      Integer size) {
+    return new LexisApplicationSearchCriteria(
+        applicationNumber,
+        packageNumber,
+        exemptionNumber,
+        exemptionType,
+        applicationStatus,
+        ownerClientNumber,
+        agentClientNumber,
+        productTypeCode,
+        parseDate(receivedFromDate),
+        parseDate(receivedToDate),
+        parseDate(listingFromDate),
+        parseDate(listingToDate),
+        regionNumbers == null ? List.of() : regionNumbers,
+        sortField,
+        page,
+        size);
   }
 
   private LocalDate parseDate(String input) {

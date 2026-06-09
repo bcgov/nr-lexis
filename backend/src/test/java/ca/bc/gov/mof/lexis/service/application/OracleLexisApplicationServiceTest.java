@@ -14,7 +14,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -55,7 +55,7 @@ class OracleLexisApplicationServiceTest {
         new LexisApplicationSearchCriteria(
             null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 25);
     when(repository.search(any(LexisApplicationSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(List.of(row(1001L, LocalDate.of(2026, 2, 1))), 1));
+        .thenReturn(new SearchPage<>(List.of(row(1001L, LocalDate.of(2026, 2, 1))), 1));
 
     LexisApplicationSearchResponseDto response = service.search(criteria);
 
@@ -75,7 +75,7 @@ class OracleLexisApplicationServiceTest {
             row(1003L, LocalDate.of(2026, 2, 3)),
             row(1004L, LocalDate.of(2026, 2, 4)));
     when(repository.search(any(LexisApplicationSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(rows, 4));
+        .thenReturn(new SearchPage<>(rows, 4));
 
     LexisApplicationSearchResponseDto response = service.search(criteria);
 
@@ -107,7 +107,7 @@ class OracleLexisApplicationServiceTest {
             -2,
             0);
     when(repository.search(any(LexisApplicationSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
+        .thenReturn(new SearchPage<>(List.of(), 0));
 
     service.search(criteria);
 

@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -63,7 +63,7 @@ class FederalApplicationRepositoryTest {
         new TestFederalApplicationRepository(
             List.<List<?>>of(firstPage, List.of(federalResult(900111L))));
 
-    DynamicSearchPage<FederalApplicationSearchResultDto> results =
+    SearchPage<FederalApplicationSearchResultDto> results =
         repository.search(
             new FederalApplicationSearchCriteria(
                 null, null, null, null, null, null, null, null, null, null, 0, 10));
@@ -109,7 +109,7 @@ class FederalApplicationRepositoryTest {
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryDynamicPagedProcedure(
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
         List<String> bindValues,

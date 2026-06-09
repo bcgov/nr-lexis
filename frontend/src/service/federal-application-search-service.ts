@@ -1,4 +1,5 @@
 import { getCachedSearchResponse } from '@/service/cached-search-service'
+import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
   FederalApplicationSearchRequest,
@@ -117,3 +118,12 @@ export const searchFederalApplications = async (
     throw toSearchServiceError('Unable to load federal application search results.', error)
   }
 }
+
+export const countFederalApplications = async (
+  request: FederalApplicationSearchRequest,
+): Promise<number> =>
+  getSearchCount(
+    '/lexis/federal/applications/search/count',
+    buildBackendParams(request),
+    'Unable to count federal application search results.',
+  )

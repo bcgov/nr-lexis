@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -50,7 +50,7 @@ class IndianReservePermitRepositoryTest {
         new TestIndianReservePermitRepository(
             List.<List<?>>of(firstPage, List.of(permitResult("700011"))));
 
-    DynamicSearchPage<IndianReservePermitSearchResultDto> results =
+    SearchPage<IndianReservePermitSearchResultDto> results =
         repository.search(new IndianReservePermitSearchCriteria(null, null, null, null, null, null, 0, 10));
 
     assertThat(results.results())
@@ -93,7 +93,7 @@ class IndianReservePermitRepositoryTest {
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryDynamicPagedProcedure(
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
         List<String> bindValues,

@@ -12,7 +12,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -49,7 +49,7 @@ class PurchaseOfferOracleServiceTest {
         new PurchaseOfferSearchCriteria(
             null, null, null, null, null, null, null, List.of(), null, 0, 25);
     when(repository.search(any(PurchaseOfferSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(List.of(row(81001L, LocalDate.of(2026, 2, 1))), 1));
+        .thenReturn(new SearchPage<>(List.of(row(81001L, LocalDate.of(2026, 2, 1))), 1));
 
     PurchaseOfferSearchResponseDto response = service.search(criteria);
 
@@ -69,7 +69,7 @@ class PurchaseOfferOracleServiceTest {
             row(81003L, LocalDate.of(2026, 2, 3)),
             row(81004L, LocalDate.of(2026, 2, 4)));
     when(repository.search(any(PurchaseOfferSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(rows, 4));
+        .thenReturn(new SearchPage<>(rows, 4));
 
     PurchaseOfferSearchResponseDto response = service.search(criteria);
 
@@ -96,7 +96,7 @@ class PurchaseOfferOracleServiceTest {
             -3,
             0);
     when(repository.search(any(PurchaseOfferSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
+        .thenReturn(new SearchPage<>(List.of(), 0));
 
     service.search(criteria);
 

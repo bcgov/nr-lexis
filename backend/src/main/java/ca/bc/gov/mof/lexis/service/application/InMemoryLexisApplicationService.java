@@ -166,23 +166,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
     int page = Math.max(0, criteria.page());
     int size = Math.max(1, criteria.size());
 
-    List<ApplicationRecord> filtered =
-        APPLICATIONS.stream()
-            .filter(matchesApplicationNumber(criteria.applicationNumber()))
-            .filter(matchesPackageNumber(criteria.packageNumber()))
-            .filter(matchesText(ApplicationRecord::exemptionNumber, criteria.exemptionNumber()))
-            .filter(matchesText(ApplicationRecord::ownerClientNumber, criteria.ownerClientNumber()))
-            .filter(matchesExact(ApplicationRecord::exemptionType, criteria.exemptionType()))
-            .filter(matchesExact(ApplicationRecord::statusCode, criteria.applicationStatus()))
-            .filter(matchesExact(ApplicationRecord::productTypeCode, criteria.productTypeCode()))
-            .filter(matchesAgentClientLogic(criteria.agentClientNumber()))
-            .filter(matchesDateRange(
-                ApplicationRecord::receivedDate, criteria.receivedFromDate(), criteria.receivedToDate()))
-            .filter(matchesDateRange(
-                ApplicationRecord::listingDate, criteria.listingFromDate(), criteria.listingToDate()))
-            .filter(matchesRegion(criteria.regionNumbers()))
-            .sorted(resolveSort(criteria.sortField()))
-            .toList();
+    List<ApplicationRecord> filtered = filterApplications(criteria);
 
     int fromIndex = Math.min(page * size, filtered.size());
     int toIndex = Math.min(fromIndex + size, filtered.size());
@@ -191,6 +175,11 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         filtered.subList(fromIndex, toIndex).stream().map(this::toSearchResult).toList();
 
     return new LexisApplicationSearchResponseDto(paged, filtered.size(), page, size);
+  }
+
+  @Override
+  public int count(LexisApplicationSearchCriteria criteria) {
+    return filterApplications(criteria).size();
   }
 
   @Override
@@ -271,6 +260,25 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
       }
     }
     return false;
+  }
+
+  private List<ApplicationRecord> filterApplications(LexisApplicationSearchCriteria criteria) {
+    return APPLICATIONS.stream()
+        .filter(matchesApplicationNumber(criteria.applicationNumber()))
+        .filter(matchesPackageNumber(criteria.packageNumber()))
+        .filter(matchesText(ApplicationRecord::exemptionNumber, criteria.exemptionNumber()))
+        .filter(matchesText(ApplicationRecord::ownerClientNumber, criteria.ownerClientNumber()))
+        .filter(matchesExact(ApplicationRecord::exemptionType, criteria.exemptionType()))
+        .filter(matchesExact(ApplicationRecord::statusCode, criteria.applicationStatus()))
+        .filter(matchesExact(ApplicationRecord::productTypeCode, criteria.productTypeCode()))
+        .filter(matchesAgentClientLogic(criteria.agentClientNumber()))
+        .filter(matchesDateRange(
+            ApplicationRecord::receivedDate, criteria.receivedFromDate(), criteria.receivedToDate()))
+        .filter(matchesDateRange(
+            ApplicationRecord::listingDate, criteria.listingFromDate(), criteria.listingToDate()))
+        .filter(matchesRegion(criteria.regionNumbers()))
+        .sorted(resolveSort(criteria.sortField()))
+        .toList();
   }
 
   private List<ApplicationRecord> resolveRequested(List<Long> applicationNumbers) {

@@ -1,4 +1,5 @@
 import { getCachedSearchResponse } from '@/service/cached-search-service'
+import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
   IndianReservePermitSearchRequest,
@@ -93,3 +94,12 @@ export const searchIndianReservePermits = async (
     throw toSearchServiceError('Unable to load indigenous reserve permit search results.', error)
   }
 }
+
+export const countIndianReservePermits = async (
+  request: IndianReservePermitSearchRequest,
+): Promise<number> =>
+  getSearchCount(
+    '/lexis/indian-reserve/permits/search/count',
+    buildBackendParams(request),
+    'Unable to count indigenous reserve permit search results.',
+  )

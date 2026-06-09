@@ -5,7 +5,7 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
 import java.util.List;
 import java.util.Optional;
@@ -35,14 +35,19 @@ public class PermitOracleService implements PermitService {
     int page = normalized.page();
     int size = normalized.size();
 
-    DynamicSearchPage<PermitSearchResultDto> searchPage = repository.search(normalized);
-    List<PermitSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.results());
+    SearchPage<PermitSearchResultDto> searchPage = repository.search(normalized);
+    List<PermitSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.content());
 
     return new PermitSearchResponseDto(
         results,
-        searchPage == null ? 0 : searchPage.total(),
+        searchPage == null ? 0 : searchPage.totalElements(),
         page,
         size);
+  }
+
+  @Override
+  public int count(PermitSearchCriteria criteria) {
+    return repository.count(normalizeCriteria(criteria));
   }
 
   @Override

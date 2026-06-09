@@ -1,4 +1,5 @@
 import { getCachedSearchResponse } from '@/service/cached-search-service'
+import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
   ProvincialExemptionSearchRequest,
@@ -123,3 +124,12 @@ export const searchProvincialExemptions = async (
     throw toSearchServiceError('Unable to load provincial exemption search results.', error)
   }
 }
+
+export const countProvincialExemptions = async (
+  request: ProvincialExemptionSearchRequest,
+): Promise<number> =>
+  getSearchCount(
+    '/lexis/exemptions/search/count',
+    buildBackendParams(request),
+    'Unable to count provincial exemption search results.',
+  )

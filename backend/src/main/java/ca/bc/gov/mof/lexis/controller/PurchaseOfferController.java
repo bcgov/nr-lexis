@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
@@ -73,20 +74,58 @@ public class PurchaseOfferController {
     }
 
     PurchaseOfferSearchCriteria criteria =
-        new PurchaseOfferSearchCriteria(
+        buildCriteria(
             applicationNumber,
             packageNumber,
-            parseDate(firstPresent(listingFromDate, listFromDate)),
-            parseDate(firstPresent(listingToDate, listToDate)),
-            parseDate(withdrawalFromDate),
-            parseDate(withdrawalToDate),
+            listingFromDate,
+            listFromDate,
+            listingToDate,
+            listToDate,
+            withdrawalFromDate,
+            withdrawalToDate,
             clientNumber,
-            regionNumbers == null ? List.of() : regionNumbers,
+            regionNumbers,
             sortField,
             page,
             size);
 
     return ResponseEntity.ok(service.search(criteria));
+  }
+
+  @GetMapping("/search/count")
+  public ResponseEntity<SearchCountResponseDto> count(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
+      @RequestParam(name = "listFromDate", required = false) String listFromDate,
+      @RequestParam(name = "listingToDate", required = false) String listingToDate,
+      @RequestParam(name = "listToDate", required = false) String listToDate,
+      @RequestParam(name = "withdrawalFromDate", required = false) String withdrawalFromDate,
+      @RequestParam(name = "withdrawalToDate", required = false) String withdrawalToDate,
+      @RequestParam(name = "clientNumber", required = false) String clientNumber,
+      @RequestParam(name = "region", required = false) List<Long> regionNumbers) {
+    PurchaseOfferService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Purchase offer service unavailable - returning no content for count");
+      return ResponseEntity.noContent().build();
+    }
+
+    PurchaseOfferSearchCriteria criteria =
+        buildCriteria(
+            applicationNumber,
+            packageNumber,
+            listingFromDate,
+            listFromDate,
+            listingToDate,
+            listToDate,
+            withdrawalFromDate,
+            withdrawalToDate,
+            clientNumber,
+            regionNumbers,
+            null,
+            0,
+            1);
+    return ResponseEntity.ok(new SearchCountResponseDto(service.count(criteria)));
   }
 
   @GetMapping("/{offerNumber}")
@@ -107,6 +146,34 @@ public class PurchaseOfferController {
       return primary;
     }
     return fallback;
+  }
+
+  private PurchaseOfferSearchCriteria buildCriteria(
+      String applicationNumber,
+      String packageNumber,
+      String listingFromDate,
+      String listFromDate,
+      String listingToDate,
+      String listToDate,
+      String withdrawalFromDate,
+      String withdrawalToDate,
+      String clientNumber,
+      List<Long> regionNumbers,
+      String sortField,
+      Integer page,
+      Integer size) {
+    return new PurchaseOfferSearchCriteria(
+        applicationNumber,
+        packageNumber,
+        parseDate(firstPresent(listingFromDate, listFromDate)),
+        parseDate(firstPresent(listingToDate, listToDate)),
+        parseDate(withdrawalFromDate),
+        parseDate(withdrawalToDate),
+        clientNumber,
+        regionNumbers == null ? List.of() : regionNumbers,
+        sortField,
+        page,
+        size);
   }
 
   private LocalDate parseDate(String input) {

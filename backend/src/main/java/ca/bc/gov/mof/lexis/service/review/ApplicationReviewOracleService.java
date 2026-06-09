@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.review;
 
+import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewPreviewResponseDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResponseDto;
@@ -8,7 +9,8 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchSlice;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
@@ -38,14 +40,31 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     int page = normalized.page();
     int size = normalized.size();
 
-    DynamicSearchPage<ApplicationReviewSearchResultDto> searchPage = repository.search(normalized);
-    List<ApplicationReviewSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.results());
+    SearchPage<ApplicationReviewSearchResultDto> searchPage = repository.search(normalized);
+    List<ApplicationReviewSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.content());
 
     return new ApplicationReviewSearchResponseDto(
         results,
-        searchPage == null ? 0 : searchPage.total(),
+        searchPage == null ? 0 : searchPage.totalElements(),
         page,
         size);
+  }
+
+  @Override
+  public int count(ApplicationReviewSearchCriteria criteria) {
+    return repository.count(normalizeCriteria(criteria));
+  }
+
+  @Override
+  public ApplicationReviewPreviewResponseDto preview(ApplicationReviewSearchCriteria criteria) {
+    ApplicationReviewSearchCriteria normalized = normalizeCriteria(criteria);
+    SearchSlice<ApplicationReviewSearchResultDto> slice = repository.slice(normalized);
+    List<ApplicationReviewSearchResultDto> results = slice == null ? List.of() : safeList(slice.content());
+    return new ApplicationReviewPreviewResponseDto(
+        results,
+        slice != null && slice.hasNext(),
+        normalized.page(),
+        normalized.size());
   }
 
   @Override

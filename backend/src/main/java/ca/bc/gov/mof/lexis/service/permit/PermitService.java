@@ -12,5 +12,7 @@ public interface PermitService {
 
   PermitSearchResponseDto search(PermitSearchCriteria criteria);
 
+  int count(PermitSearchCriteria criteria);
+
   Optional<PermitDetailDto> findByPermitNumber(Long permitNumber);
 }

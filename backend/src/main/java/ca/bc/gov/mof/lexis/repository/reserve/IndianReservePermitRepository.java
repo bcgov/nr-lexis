@@ -4,7 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import ca.bc.gov.mof.lexis.repository.oracle.SearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -43,20 +43,9 @@ public class IndianReservePermitRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public DynamicSearchPage<IndianReservePermitSearchResultDto> search(IndianReservePermitSearchCriteria criteria) {
-    SqlWhereBuilder where = newWhereBuilder();
-
-    where.addRaw(" AND CLIENT_NUMBER IS NOT NULL");
-    where.addLike("EIRPD.EXPORT_INDIAN_RSRV_PRMT_DTL_ID", criteria.permitNumber());
-    where.addLike("EP.PACKAGE_NUMBER", criteria.packageNumber());
-    where.addDateGte("EIRPD.EXPORT_PERMIT_ISSUE_DATE", criteria.issuedFromDate());
-    where.addDateLte("EIRPD.EXPORT_PERMIT_ISSUE_DATE", criteria.issuedToDate());
-    where.addDateGte("EIRPD.ESTIMATED_SHIPPING_DATE", criteria.shippingFromDate());
-    where.addDateLte("EIRPD.ESTIMATED_SHIPPING_DATE", criteria.shippingToDate());
-
-    SqlWhere sqlWhere = where.build(" ORDER BY EIRPD.EXPORT_INDIAN_RSRV_PRMT_DTL_ID DESC");
-
-    return queryDynamicPage(
+  public SearchPage<IndianReservePermitSearchResultDto> search(IndianReservePermitSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return queryLegacyDynamicPage(
         FIND_PERMIT_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
@@ -68,6 +57,25 @@ public class IndianReservePermitRepository extends OracleRepositorySupport {
                 getString(rs, "CLIENT_NUMBER"),
                 getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
                 getLocalDate(rs, "ESTIMATED_SHIPPING_DATE")));
+  }
+
+  public int count(IndianReservePermitSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return countLegacyDynamicResults(FIND_PERMIT_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+  }
+
+  private SqlWhere buildSearchWhere(IndianReservePermitSearchCriteria criteria) {
+    SqlWhereBuilder where = newWhereBuilder();
+
+    where.addRaw(" AND CLIENT_NUMBER IS NOT NULL");
+    where.addLike("EIRPD.EXPORT_INDIAN_RSRV_PRMT_DTL_ID", criteria.permitNumber());
+    where.addLike("EP.PACKAGE_NUMBER", criteria.packageNumber());
+    where.addDateGte("EIRPD.EXPORT_PERMIT_ISSUE_DATE", criteria.issuedFromDate());
+    where.addDateLte("EIRPD.EXPORT_PERMIT_ISSUE_DATE", criteria.issuedToDate());
+    where.addDateGte("EIRPD.ESTIMATED_SHIPPING_DATE", criteria.shippingFromDate());
+    where.addDateLte("EIRPD.ESTIMATED_SHIPPING_DATE", criteria.shippingToDate());
+
+    return where.build(" ORDER BY EIRPD.EXPORT_INDIAN_RSRV_PRMT_DTL_ID DESC");
   }
 
   public Optional<IndianReservePermitDetailDto> findByPermitNumber(String permitNumber) {

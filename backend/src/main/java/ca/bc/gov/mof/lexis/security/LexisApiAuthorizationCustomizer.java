@@ -57,6 +57,7 @@ public class LexisApiAuthorizationCustomizer
           "/api/lexis/applicationSearch.do",
           "/api/lexis/applications/search/options",
           "/api/lexis/applications/search",
+          "/api/lexis/applications/search/count",
           "/api/lexis/applications/search/verify-clients",
           "/api/lexis/applications/search/has-valid-offer"
         },
@@ -78,7 +79,8 @@ public class LexisApiAuthorizationCustomizer
           "/api/lexis/exemptionSearch",
           "/api/lexis/exemptionSearch.do",
           "/api/lexis/exemptions/search/options",
-          "/api/lexis/exemptions/search"
+          "/api/lexis/exemptions/search",
+          "/api/lexis/exemptions/search/count"
         },
         "/exemptionSearch");
     authorizeAction(
@@ -99,6 +101,7 @@ public class LexisApiAuthorizationCustomizer
           "/api/lexis/federalApplicationSearch.do",
           "/api/lexis/federal/applications/search/options",
           "/api/lexis/federal/applications/search",
+          "/api/lexis/federal/applications/search/count",
           "/api/lexis/federal/applications/search/verify-clients"
         },
         "/federalApplicationSearch");
@@ -118,7 +121,9 @@ public class LexisApiAuthorizationCustomizer
         new String[] {
           "/api/lexis/indianReservePermitSearch",
           "/api/lexis/indianReservePermitSearch.do",
-          "/api/lexis/indian-reserve/permits/search/options", "/api/lexis/indian-reserve/permits/search"
+          "/api/lexis/indian-reserve/permits/search/options",
+          "/api/lexis/indian-reserve/permits/search",
+          "/api/lexis/indian-reserve/permits/search/count"
         },
         "/indianReservePermitSearch");
     authorizeAction(
@@ -146,7 +151,9 @@ public class LexisApiAuthorizationCustomizer
         new String[] {
           "/api/lexis/offersSearch",
           "/api/lexis/offersSearch.do",
-          "/api/lexis/purchase-offers/search/options", "/api/lexis/purchase-offers/search"
+          "/api/lexis/purchase-offers/search/options",
+          "/api/lexis/purchase-offers/search",
+          "/api/lexis/purchase-offers/search/count"
         },
         "/offersSearch");
     authorizeAction(
@@ -166,7 +173,8 @@ public class LexisApiAuthorizationCustomizer
           "/api/lexis/permitSearch",
           "/api/lexis/permitSearch.do",
           "/api/lexis/permits/search/options",
-          "/api/lexis/permits/search"
+          "/api/lexis/permits/search",
+          "/api/lexis/permits/search/count"
         },
         "/permitSearch");
     authorizeAction(
@@ -199,7 +207,10 @@ public class LexisApiAuthorizationCustomizer
         new String[] {
           "/api/lexis/applicationsReview",
           "/api/lexis/applicationsReview.do",
-          "/api/lexis/application-reviews/search/options", "/api/lexis/application-reviews/search"
+          "/api/lexis/application-reviews/search/options",
+          "/api/lexis/application-reviews/search",
+          "/api/lexis/application-reviews/search/count",
+          "/api/lexis/application-reviews/search/preview"
         },
         "/applicationsReview");
     authorizeAction(
