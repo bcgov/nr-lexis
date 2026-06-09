@@ -33,15 +33,8 @@ Mirrors `frontend/.env.example`. Vite bundles these values at dev/build time; ch
 | `VITE_REDIRECT_SIGN_OUT` | OAuth sign-out redirect URL | http://localhost:3000 |
 | `VITE_COGNITO_SCOPES` | OAuth scopes | openid profile email |
 | `VITE_ZONE` | Environment zone used for IDIR provider selection | dev |
-| `VITE_LEXIS_REPORT_API_BASE` | Report API base path | /lexis/reports |
-| `VITE_LEXIS_REPORT_INCLUDE_ACTION_MAPPING` | Include legacy action mapping when requesting reports | true |
-| `VITE_LEXIS_CREATE_SUBMIT_REQUEST_MODE` | Create-submit payload mode (`form` or `json`) | form |
-| `VITE_LEXIS_CREATE_SUBMIT_INCLUDE_ACTION_MAPPING` | Include legacy action mapping for create-submit | true |
-| `VITE_LEXIS_CREATE_APPLICATION_ENDPOINT` | Create application endpoint | /lexis/applicationDetailsRPC |
-| `VITE_LEXIS_CREATE_EXEMPTION_ENDPOINT` | Create exemption endpoint | /lexis/exemptionDetailsRPC |
-| `VITE_LEXIS_CREATE_OFFER_ENDPOINT` | Create offer endpoint | /lexis/offerDetailsRPC |
-| `VITE_LEXIS_CREATE_PERMIT_ENDPOINT` | Create permit endpoint | /lexis/rpc/permit-details/add-permit |
-| `VITE_LEXIS_CREATE_INDIGENOUS_PERMIT_ENDPOINT` | Create indigenous permit endpoint | /lexis/indianReservePermitDetails |
+
+Additional route and endpoint overrides are listed in `frontend/.env.example`.
 
 ### Development Server Options
 

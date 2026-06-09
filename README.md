@@ -13,7 +13,7 @@ Full-stack LEXIS application for log export workflows.
 | Backend | Spring Boot 3.5, Java 21 |
 | Database | Oracle (shared, BC Gov-managed) |
 | Auth | AWS Cognito (FAM) |
-| Reports | JasperReports library (embedded, no remote server) |
+| Reports | JasperReports library |
 
 ## Local Development
 
@@ -26,7 +26,7 @@ Two supported ways to run LEXIS locally. Pick whichever fits your workflow.
 | **First-time setup cost** | Install Java 21 + Node 22 on host | Just Docker Desktop |
 | **Best for** | Day-to-day backend/frontend work | Quick smoke tests, frontend-only work, and container parity |
 
-Both options share the same prerequisites and property files below. Reports are generated inside the Spring Boot backend with checked-in JRXML templates; no Jasper Server URL, username, or password is required.
+Both options share the same prerequisites and property files below. Reports use the checked-in JRXML templates in the Spring Boot backend.
 
 ### Shared prerequisites
 
@@ -121,21 +121,7 @@ Regardless of option:
 
 If `/actuator/health` returns `DOWN`, the most likely cause is Oracle connectivity. Check network access, `application-local.yml` credentials, and the truststore path.
 
-### Report parity check
-
-The embedded report parity harness lives under `tools/`. Use it when comparing modern Spring/Jasper output with legacy `nr-lexis-main` output against the same Oracle data. See [tools/README.md](tools/README.md).
-
-## CI/CD
-
-GitHub Actions handles PR checks, image builds, and OpenShift deployments. Namespace and credential values are environment-driven through repository/environment secrets and variables.
-
 ## Component docs
 
-- [backend/README.md](backend/README.md)
-- [frontend/README.md](frontend/README.md)
-- [tools/README.md](tools/README.md)
-
-## Notes
-
-- Source-of-truth legacy behavior reference: `nr-lexis-main`.
-- Repository structure and operational conventions reference: `nr-rept`.
+- [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.
+- [frontend/README.md](frontend/README.md) - Vite scripts, env-var table, project structure, testing libraries.
