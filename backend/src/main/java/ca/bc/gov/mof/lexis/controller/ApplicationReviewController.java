@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
+import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewPreviewResponseDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResponseDto;
@@ -80,19 +82,82 @@ public class ApplicationReviewController {
     }
 
     ApplicationReviewSearchCriteria criteria =
-        new ApplicationReviewSearchCriteria(
+        buildCriteria(
             applicationNumber,
             productTypeCode,
-            parseDate(receivedFromDate),
-            parseDate(receivedToDate),
-            parseDate(listingFromDate),
-            parseDate(listingToDate),
-            regionNumbers == null ? List.of() : regionNumbers,
+            receivedFromDate,
+            receivedToDate,
+            listingFromDate,
+            listingToDate,
+            regionNumbers,
             sortField,
             page,
             size);
 
     return ResponseEntity.ok(service.search(criteria));
+  }
+
+  @GetMapping("/search/count")
+  public ResponseEntity<SearchCountResponseDto> count(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "productTypeCode", required = false) String productTypeCode,
+      @RequestParam(name = "receivedFromDate", required = false) String receivedFromDate,
+      @RequestParam(name = "receivedToDate", required = false) String receivedToDate,
+      @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
+      @RequestParam(name = "listingToDate", required = false) String listingToDate,
+      @RequestParam(name = "region", required = false) List<Long> regionNumbers) {
+    ApplicationReviewService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application review service unavailable - returning no content for count");
+      return ResponseEntity.noContent().build();
+    }
+
+    ApplicationReviewSearchCriteria criteria =
+        buildCriteria(
+            applicationNumber,
+            productTypeCode,
+            receivedFromDate,
+            receivedToDate,
+            listingFromDate,
+            listingToDate,
+            regionNumbers,
+            null,
+            0,
+            1);
+    return ResponseEntity.ok(new SearchCountResponseDto(service.count(criteria)));
+  }
+
+  @GetMapping("/search/preview")
+  public ResponseEntity<ApplicationReviewPreviewResponseDto> preview(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "productTypeCode", required = false) String productTypeCode,
+      @RequestParam(name = "receivedFromDate", required = false) String receivedFromDate,
+      @RequestParam(name = "receivedToDate", required = false) String receivedToDate,
+      @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
+      @RequestParam(name = "listingToDate", required = false) String listingToDate,
+      @RequestParam(name = "region", required = false) List<Long> regionNumbers,
+      @RequestParam(name = "sortField", required = false) String sortField,
+      @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
+      @RequestParam(name = "size", defaultValue = "5") @Min(1) @Max(50) Integer size) {
+    ApplicationReviewService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application review service unavailable - returning no content for preview");
+      return ResponseEntity.noContent().build();
+    }
+
+    ApplicationReviewSearchCriteria criteria =
+        buildCriteria(
+            applicationNumber,
+            productTypeCode,
+            receivedFromDate,
+            receivedToDate,
+            listingFromDate,
+            listingToDate,
+            regionNumbers,
+            sortField,
+            page,
+            size);
+    return ResponseEntity.ok(service.preview(criteria));
   }
 
   @PostMapping("/{applicationNumber}/approve")
@@ -268,6 +333,30 @@ public class ApplicationReviewController {
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private ApplicationReviewSearchCriteria buildCriteria(
+      String applicationNumber,
+      String productTypeCode,
+      String receivedFromDate,
+      String receivedToDate,
+      String listingFromDate,
+      String listingToDate,
+      List<Long> regionNumbers,
+      String sortField,
+      Integer page,
+      Integer size) {
+    return new ApplicationReviewSearchCriteria(
+        applicationNumber,
+        productTypeCode,
+        parseDate(receivedFromDate),
+        parseDate(receivedToDate),
+        parseDate(listingFromDate),
+        parseDate(listingToDate),
+        regionNumbers == null ? List.of() : regionNumbers,
+        sortField,
+        page,
+        size);
   }
 
   private LocalDate parseDate(String input) {

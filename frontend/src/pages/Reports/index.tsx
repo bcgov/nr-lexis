@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type FC } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Button,
-  Checkbox,
   Column,
   Grid,
   InlineNotification,
@@ -15,7 +14,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
   TextArea,
   TextInput,
   Tile,
@@ -653,15 +651,6 @@ function getLegacyTenureToDateFromFromDate(fromDate: string): string {
   return formatLocalDate(toDate)
 }
 
-const parseBooleanFlag = (value: string | null): boolean => {
-  if (!value) {
-    return false
-  }
-
-  const normalized = value.trim().toLowerCase()
-  return normalized === '1' || normalized === 'true' || normalized === 'yes'
-}
-
 const mergeOptions = (...optionGroups: SearchOption[][]): SearchOption[] => {
   const byCode = new Map<string, SearchOption>()
   optionGroups.flat().forEach((option) => {
@@ -837,7 +826,6 @@ const resolveActionMapping = (report: ReportDefinition, actionValue: string | nu
 const buildReportSearchParams = (payload: {
   searchText: string
   selectedCategory: ReportCategoryFilter
-  showGrantedOnly: boolean
   selectedReportId: string
   selectedActionMapping: string
   selectedReportValues: Record<string, string>
@@ -847,9 +835,6 @@ const buildReportSearchParams = (payload: {
   setSearchParam(params, 'q', payload.searchText)
   if (payload.selectedCategory !== 'ALL') {
     setSearchParam(params, 'category', payload.selectedCategory)
-  }
-  if (payload.showGrantedOnly) {
-    params.set('granted', '1')
   }
   setSearchParam(params, 'report', payload.selectedReportId)
   setSearchParam(params, 'action', payload.selectedActionMapping)
@@ -971,9 +956,6 @@ const ReportsPage: FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<ReportCategoryFilter>(() =>
     parseEnumParam(searchParams.get('category'), REPORT_CATEGORY_OPTIONS, 'ALL'),
   )
-  const [showGrantedOnly, setShowGrantedOnly] = useState(() =>
-    parseBooleanFlag(searchParams.get('granted')),
-  )
   const [selectedReportId, setSelectedReportId] = useState(initialReport.id)
   const [reportValuesById, setReportValuesById] = useState<Record<string, Record<string, string>>>({
     [initialReport.id]: initialReportValues,
@@ -994,7 +976,7 @@ const ReportsPage: FC = () => {
   const visibleReports = useMemo(() => {
     return REPORT_DEFINITIONS.filter((report) => {
       const hasAccess = canPerform(report.action)
-      if (showGrantedOnly && !hasAccess) {
+      if (!hasAccess) {
         return false
       }
       if (selectedCategory !== 'ALL' && report.category !== selectedCategory) {
@@ -1008,14 +990,23 @@ const ReportsPage: FC = () => {
         normalizeText(report.action).includes(normalizeText(searchText))
       )
     })
-  }, [canPerform, searchText, selectedCategory, showGrantedOnly])
+  }, [canPerform, searchText, selectedCategory])
 
-  const accessibleCount = useMemo(() => {
-    return REPORT_DEFINITIONS.filter((report) => canPerform(report.action)).length
+  const accessibleReports = useMemo(() => {
+    return REPORT_DEFINITIONS.filter((report) => canPerform(report.action))
   }, [canPerform])
 
+  const accessibleCount = useMemo(() => {
+    return accessibleReports.length
+  }, [accessibleReports.length])
+
   const selectedReport =
-    REPORT_DEFINITIONS.find((report) => report.id === selectedReportId) ?? REPORT_DEFINITIONS[0]
+    accessibleReports.find((report) => report.id === selectedReportId) ??
+    accessibleReports[0] ??
+    REPORT_DEFINITIONS[0]
+  const hasSelectedReportAccess = accessibleReports.some(
+    (report) => report.id === selectedReport.id,
+  )
 
   const selectedReportValues = useMemo(() => {
     return reportValuesById[selectedReport.id] ?? {}
@@ -1026,8 +1017,8 @@ const ReportsPage: FC = () => {
     selectedActionById[selectedReport.id] ?? null,
   )
   const requiredReportOptionSources = useMemo(
-    () => getRequiredReportOptionSources(selectedReport),
-    [selectedReport],
+    () => (hasSelectedReportAccess ? getRequiredReportOptionSources(selectedReport) : []),
+    [hasSelectedReportAccess, selectedReport],
   )
   const reportFieldOptionsByKey = useMemo(() => {
     const reportOptions = reportOptionSourcesByKey.report
@@ -1119,7 +1110,6 @@ const ReportsPage: FC = () => {
     const nextParams = buildReportSearchParams({
       searchText,
       selectedCategory,
-      showGrantedOnly,
       selectedReportId: selectedReport.id,
       selectedActionMapping,
       selectedReportValues,
@@ -1136,7 +1126,6 @@ const ReportsPage: FC = () => {
     selectedReport.id,
     selectedReportValues,
     setSearchParams,
-    showGrantedOnly,
   ])
 
   useEffect(() => {
@@ -1219,7 +1208,6 @@ const ReportsPage: FC = () => {
   const onResetReportFilters = (): void => {
     setSearchText('')
     setSelectedCategory('ALL')
-    setShowGrantedOnly(false)
   }
 
   const onOpenReportRequest = async (): Promise<void> => {
@@ -1301,14 +1289,6 @@ const ReportsPage: FC = () => {
               <SelectItem value="Federal" text="Federal" />
               <SelectItem value="Cross-Module" text="Cross-Module" />
             </Select>
-            <div>
-              <Checkbox
-                id="showGrantedReportsOnly"
-                labelText="Show accessible reports only"
-                checked={showGrantedOnly}
-                onChange={(_, payload) => setShowGrantedOnly(Boolean(payload.checked))}
-              />
-            </div>
           </div>
           <div className="legacy-search-actions">
             <Button kind="ghost" size="sm" onClick={onResetReportFilters}>
@@ -1326,13 +1306,11 @@ const ReportsPage: FC = () => {
                 <TableHeader>Report</TableHeader>
                 <TableHeader>Category</TableHeader>
                 <TableHeader>Required Action</TableHeader>
-                <TableHeader>Access</TableHeader>
                 <TableHeader>Open</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
               {visibleReports.map((report) => {
-                const hasAccess = canPerform(report.action)
                 const isSelected = selectedReport.id === report.id
                 return (
                   <TableRow key={report.id} className={isSelected ? 'selected-row' : undefined}>
@@ -1340,11 +1318,6 @@ const ReportsPage: FC = () => {
                     <TableCell>{report.category}</TableCell>
                     <TableCell>
                       <code>{report.action}</code>
-                    </TableCell>
-                    <TableCell>
-                      <Tag type={hasAccess ? 'green' : 'red'}>
-                        {hasAccess ? 'Available' : 'Not Granted'}
-                      </Tag>
                     </TableCell>
                     <TableCell>
                       <Button
@@ -1360,7 +1333,7 @@ const ReportsPage: FC = () => {
               })}
               {visibleReports.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5}>No reports matched the current filters.</TableCell>
+                  <TableCell colSpan={4}>No reports matched the current filters.</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -1370,195 +1343,208 @@ const ReportsPage: FC = () => {
 
       <Column sm={4} md={8} lg={7}>
         <Tile>
-          <h2 className="dashboard-title">{selectedReport.title}</h2>
-          <p>{selectedReport.description}</p>
-          <p>
-            Required action: <code>{selectedReport.action}</code>
-          </p>
-          <div className="legacy-search-grid">
-            {selectedReport.actionMappings.length > 1 && (
-              <Select
-                id="reportActionMapping"
-                labelText="Report Variant"
-                value={selectedActionMapping}
-                onChange={(event) =>
-                  setSelectedActionById((current) => ({
-                    ...current,
-                    [selectedReport.id]: event.target.value,
-                  }))
-                }
-              >
-                {selectedReport.actionMappings.map((actionMapping) => (
-                  <SelectItem
-                    key={actionMapping.value}
-                    value={actionMapping.value}
-                    text={actionMapping.label}
-                  />
-                ))}
-              </Select>
-            )}
-            {selectedReport.fields.map((field) => {
-              const defaultMultiselectValue =
-                (field.key === 'region' || field.key === 'orgUnitNumber') && defaultReportRegion
-                  ? defaultReportRegion
-                  : ''
-              const currentValue =
-                selectedReportValues[field.key] ??
-                field.defaultValue ??
-                (defaultMultiselectValue || (field.key === 'outputFormat' ? 'PDF' : ''))
-              const dynamicOptions = reportFieldOptionsByKey[field.optionKey ?? field.key] ?? []
-              const resolvedCurrentValue =
-                field.type === 'select' &&
-                field.key !== 'outputFormat' &&
-                !currentValue &&
-                dynamicOptions.length > 0 &&
-                !dynamicOptions.some((option) => option.value === '')
-                  ? dynamicOptions[0].value
-                  : currentValue
+          {hasSelectedReportAccess ? (
+            <>
+              <h2 className="dashboard-title">{selectedReport.title}</h2>
+              <p>{selectedReport.description}</p>
+              <p>
+                Required action: <code>{selectedReport.action}</code>
+              </p>
+              <div className="legacy-search-grid">
+                {selectedReport.actionMappings.length > 1 && (
+                  <Select
+                    id="reportActionMapping"
+                    labelText="Report Variant"
+                    value={selectedActionMapping}
+                    onChange={(event) =>
+                      setSelectedActionById((current) => ({
+                        ...current,
+                        [selectedReport.id]: event.target.value,
+                      }))
+                    }
+                  >
+                    {selectedReport.actionMappings.map((actionMapping) => (
+                      <SelectItem
+                        key={actionMapping.value}
+                        value={actionMapping.value}
+                        text={actionMapping.label}
+                      />
+                    ))}
+                  </Select>
+                )}
+                {selectedReport.fields.map((field) => {
+                  const defaultMultiselectValue =
+                    (field.key === 'region' || field.key === 'orgUnitNumber') && defaultReportRegion
+                      ? defaultReportRegion
+                      : ''
+                  const currentValue =
+                    selectedReportValues[field.key] ??
+                    field.defaultValue ??
+                    (defaultMultiselectValue || (field.key === 'outputFormat' ? 'PDF' : ''))
+                  const dynamicOptions = reportFieldOptionsByKey[field.optionKey ?? field.key] ?? []
+                  const resolvedCurrentValue =
+                    field.type === 'select' &&
+                    field.key !== 'outputFormat' &&
+                    !currentValue &&
+                    dynamicOptions.length > 0 &&
+                    !dynamicOptions.some((option) => option.value === '')
+                      ? dynamicOptions[0].value
+                      : currentValue
 
-              if (field.type === 'multiselect' && dynamicOptions.length > 0) {
-                const selectedValues = new Set(
-                  resolvedCurrentValue
-                    .split(',')
-                    .map((value) => value.trim())
-                    .filter(Boolean),
-                )
-                const selectedItems = dynamicOptions.filter((option) =>
-                  selectedValues.has(option.value),
-                )
+                  if (field.type === 'multiselect' && dynamicOptions.length > 0) {
+                    const selectedValues = new Set(
+                      resolvedCurrentValue
+                        .split(',')
+                        .map((value) => value.trim())
+                        .filter(Boolean),
+                    )
+                    const selectedItems = dynamicOptions.filter((option) =>
+                      selectedValues.has(option.value),
+                    )
 
-                return (
-                  <MultiSelect
-                    key={field.key}
-                    id={`${selectedReport.id}-${field.key}`}
-                    titleText={field.label}
-                    items={dynamicOptions}
-                    itemToString={(item) => (item ? item.label : '')}
-                    label="Select region(s)"
-                    selectionFeedback="fixed"
-                    selectedItems={selectedItems}
-                    onChange={(event) => {
-                      const nextSelected = (event.selectedItems ?? []) as SearchOption[]
-                      onUpdateField(field.key, nextSelected.map((option) => option.value).join(','))
-                    }}
-                  />
-                )
-              }
+                    return (
+                      <MultiSelect
+                        key={field.key}
+                        id={`${selectedReport.id}-${field.key}`}
+                        titleText={field.label}
+                        items={dynamicOptions}
+                        itemToString={(item) => (item ? item.label : '')}
+                        label="Select region(s)"
+                        selectionFeedback="fixed"
+                        selectedItems={selectedItems}
+                        onChange={(event) => {
+                          const nextSelected = (event.selectedItems ?? []) as SearchOption[]
+                          onUpdateField(
+                            field.key,
+                            nextSelected.map((option) => option.value).join(','),
+                          )
+                        }}
+                      />
+                    )
+                  }
 
-              const shouldRenderSelect = field.type === 'select' || dynamicOptions.length > 0
+                  const shouldRenderSelect = field.type === 'select' || dynamicOptions.length > 0
 
-              if (shouldRenderSelect) {
-                const canExpandDestinationCountries =
-                  field.key === 'destinationCountry' &&
-                  Boolean(reportOptionSourcesByKey.report?.allDestinationCountries.length) &&
-                  !expandedDestinationCountryReports[selectedReport.id]
-                const providedOptions =
-                  dynamicOptions.length > 0
-                    ? dynamicOptions
-                    : (field.options ?? [{ value: '', label: 'Select an option' }])
-                const hasCurrentValue = providedOptions.some(
-                  (option) => option.value === resolvedCurrentValue,
-                )
-                const resolvedOptions = hasCurrentValue
-                  ? providedOptions
-                  : resolvedCurrentValue
-                    ? [
-                        ...providedOptions,
-                        {
-                          value: resolvedCurrentValue,
-                          label: `Custom (${resolvedCurrentValue})`,
-                        },
-                      ]
-                    : providedOptions
-                return (
-                  <div key={field.key}>
-                    <Select
+                  if (shouldRenderSelect) {
+                    const canExpandDestinationCountries =
+                      field.key === 'destinationCountry' &&
+                      Boolean(reportOptionSourcesByKey.report?.allDestinationCountries.length) &&
+                      !expandedDestinationCountryReports[selectedReport.id]
+                    const providedOptions =
+                      dynamicOptions.length > 0
+                        ? dynamicOptions
+                        : (field.options ?? [{ value: '', label: 'Select an option' }])
+                    const hasCurrentValue = providedOptions.some(
+                      (option) => option.value === resolvedCurrentValue,
+                    )
+                    const resolvedOptions = hasCurrentValue
+                      ? providedOptions
+                      : resolvedCurrentValue
+                        ? [
+                            ...providedOptions,
+                            {
+                              value: resolvedCurrentValue,
+                              label: `Custom (${resolvedCurrentValue})`,
+                            },
+                          ]
+                        : providedOptions
+                    return (
+                      <div key={field.key}>
+                        <Select
+                          id={`${selectedReport.id}-${field.key}`}
+                          labelText={field.label}
+                          value={resolvedCurrentValue}
+                          onChange={(event) => onUpdateField(field.key, event.target.value)}
+                        >
+                          {resolvedOptions.map((option) => (
+                            <SelectItem
+                              key={option.value}
+                              value={option.value}
+                              text={option.label}
+                            />
+                          ))}
+                        </Select>
+                        {canExpandDestinationCountries && (
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setExpandedDestinationCountryReports((current) => ({
+                                ...current,
+                                [selectedReport.id]: true,
+                              }))
+                            }
+                          >
+                            More...
+                          </Button>
+                        )}
+                      </div>
+                    )
+                  }
+
+                  if (field.type === 'textarea') {
+                    return (
+                      <TextArea
+                        key={field.key}
+                        id={`${selectedReport.id}-${field.key}`}
+                        labelText={field.label}
+                        value={resolvedCurrentValue}
+                        placeholder={field.placeholder}
+                        helperText={field.helperText}
+                        onChange={(event) => onUpdateField(field.key, event.target.value)}
+                        rows={3}
+                      />
+                    )
+                  }
+
+                  return (
+                    <TextInput
+                      key={field.key}
                       id={`${selectedReport.id}-${field.key}`}
+                      type={field.type === 'date' ? 'date' : 'text'}
                       labelText={field.label}
                       value={resolvedCurrentValue}
+                      placeholder={field.placeholder}
+                      helperText={field.helperText}
+                      disabled={
+                        selectedReport.id === 'speciesGradeReport' &&
+                        ((field.key === 'timberMark' &&
+                          Boolean(selectedReportValues.forestFileId)) ||
+                          (field.key === 'forestFileId' &&
+                            Boolean(selectedReportValues.timberMark)))
+                      }
                       onChange={(event) => onUpdateField(field.key, event.target.value)}
-                    >
-                      {resolvedOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value} text={option.label} />
-                      ))}
-                    </Select>
-                    {canExpandDestinationCountries && (
-                      <Button
-                        kind="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setExpandedDestinationCountryReports((current) => ({
-                            ...current,
-                            [selectedReport.id]: true,
-                          }))
-                        }
-                      >
-                        More...
-                      </Button>
-                    )}
-                  </div>
-                )
-              }
-
-              if (field.type === 'textarea') {
-                return (
-                  <TextArea
-                    key={field.key}
-                    id={`${selectedReport.id}-${field.key}`}
-                    labelText={field.label}
-                    value={resolvedCurrentValue}
-                    placeholder={field.placeholder}
-                    helperText={field.helperText}
-                    onChange={(event) => onUpdateField(field.key, event.target.value)}
-                    rows={3}
-                  />
-                )
-              }
-
-              return (
-                <TextInput
-                  key={field.key}
-                  id={`${selectedReport.id}-${field.key}`}
-                  type={field.type === 'date' ? 'date' : 'text'}
-                  labelText={field.label}
-                  value={resolvedCurrentValue}
-                  placeholder={field.placeholder}
-                  helperText={field.helperText}
-                  disabled={
-                    selectedReport.id === 'speciesGradeReport' &&
-                    ((field.key === 'timberMark' && Boolean(selectedReportValues.forestFileId)) ||
-                      (field.key === 'forestFileId' && Boolean(selectedReportValues.timberMark)))
-                  }
-                  onChange={(event) => onUpdateField(field.key, event.target.value)}
+                    />
+                  )
+                })}
+              </div>
+              <div className="legacy-search-actions">
+                <Button
+                  kind="primary"
+                  onClick={() => void onOpenReportRequest()}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? 'Generating Report...' : 'Generate Report'}
+                </Button>
+                <Button kind="ghost" onClick={onResetFields}>
+                  Reset Fields
+                </Button>
+              </div>
+              {launchErrorMessage && (
+                <InlineNotification
+                  kind="error"
+                  title="Report Launch Error"
+                  subtitle={launchErrorMessage}
+                  lowContrast
+                  onCloseButtonClick={() => setLaunchErrorMessage('')}
                 />
-              )
-            })}
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={() => void onOpenReportRequest()}
-              disabled={!canPerform(selectedReport.action) || isGenerating}
-            >
-              {isGenerating ? 'Generating Report...' : 'Generate Report'}
-            </Button>
-            <Button kind="ghost" onClick={onResetFields}>
-              Reset Fields
-            </Button>
-          </div>
-          {!canPerform(selectedReport.action) && (
-            <p className="landing-help-text">
-              This report is blocked because the required action is not granted.
-            </p>
-          )}
-          {launchErrorMessage && (
-            <InlineNotification
-              kind="error"
-              title="Report Launch Error"
-              subtitle={launchErrorMessage}
-              lowContrast
-              onCloseButtonClick={() => setLaunchErrorMessage('')}
-            />
+              )}
+            </>
+          ) : (
+            <>
+              <h2 className="dashboard-title">No Reports Available</h2>
+              <p>No report actions are available for the current session.</p>
+            </>
           )}
         </Tile>
       </Column>

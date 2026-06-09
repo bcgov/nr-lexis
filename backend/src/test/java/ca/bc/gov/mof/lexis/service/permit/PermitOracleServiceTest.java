@@ -12,7 +12,9 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -50,7 +52,7 @@ class PermitOracleServiceTest {
         new PermitSearchCriteria(
             null, null, null, null, null, null, null, null, null, List.of(), null, 0, 25);
     when(repository.search(any(PermitSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(List.of(row(90001L, LocalDate.of(2026, 2, 1))), 1));
+        .thenReturn(page(List.of(row(90001L, LocalDate.of(2026, 2, 1))), 1));
 
     PermitSearchResponseDto response = service.search(criteria);
 
@@ -70,7 +72,7 @@ class PermitOracleServiceTest {
             row(90003L, LocalDate.of(2026, 2, 3)),
             row(90004L, LocalDate.of(2026, 2, 4)));
     when(repository.search(any(PermitSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(rows, 4));
+        .thenReturn(page(rows, 4));
 
     PermitSearchResponseDto response = service.search(criteria);
 
@@ -99,7 +101,7 @@ class PermitOracleServiceTest {
             -2,
             0);
     when(repository.search(any(PermitSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
+        .thenReturn(page(List.of(), 0));
 
     service.search(criteria);
 
@@ -173,5 +175,9 @@ class PermitOracleServiceTest {
         80.0,
         issueDate,
         "R2");
+  }
+
+  private static <T> Page<T> page(List<T> content, long total) {
+    return new PageImpl<>(content, PageRequest.of(0, Math.max(1, content.size())), total);
   }
 }

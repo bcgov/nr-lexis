@@ -14,6 +14,8 @@ public interface FederalApplicationService {
 
   FederalApplicationSearchResponseDto search(FederalApplicationSearchCriteria criteria);
 
+  int count(FederalApplicationSearchCriteria criteria);
+
   Optional<FederalApplicationDetailDto> findByApplicationNumber(Long applicationNumber);
 
   Optional<FederalApplicationPermitDto> findPermitByApplicationNumber(Long applicationNumber);

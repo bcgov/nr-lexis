@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.time.LocalDate;
 import java.util.List;
@@ -28,7 +28,7 @@ class ApplicationReviewRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadOnlyRequestedLegacyPage() {
+  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<ApplicationReviewSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(900101L, 900110L)
             .mapToObj(ApplicationReviewRepositoryTest::reviewResult)
@@ -37,14 +37,14 @@ class ApplicationReviewRepositoryTest {
         new TestApplicationReviewRepository(
             List.<List<?>>of(firstPage, List.of(reviewResult(900111L))));
 
-    DynamicSearchPage<ApplicationReviewSearchResultDto> results =
+    Page<ApplicationReviewSearchResultDto> results =
         repository.search(
             new ApplicationReviewSearchCriteria(null, null, null, null, null, null, List.of(), null, 0, 10));
 
-    assertThat(results.results())
+    assertThat(results.getContent())
         .extracting(ApplicationReviewSearchResultDto::applicationNumber)
         .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
-    assertThat(results.total()).isEqualTo(11);
+    assertThat(results.getTotalElements()).isEqualTo(11);
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
@@ -81,8 +81,18 @@ class ApplicationReviewRepositoryTest {
     }
 
     @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues) {
+      this.whereSql = whereSql;
+      this.bindValues = bindValues;
+      return pages.stream().mapToInt(List::size).sum();
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryDynamicPagedProcedure(
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
         List<String> bindValues,

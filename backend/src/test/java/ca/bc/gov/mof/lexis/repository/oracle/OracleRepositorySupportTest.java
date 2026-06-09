@@ -8,12 +8,14 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 
 @DisplayName("Unit Test | OracleRepositorySupport")
 class OracleRepositorySupportTest {
 
   @Test
-  void queryDynamicPageShouldLoadOnlyRequestedLegacyPage() {
+  void queryLegacyDynamicPageShouldReturnExactTotalForFirstPage() {
     List<String> firstPage =
         List.of(
             "row-1",
@@ -28,15 +30,16 @@ class OracleRepositorySupportTest {
             "row-10");
     TestRepository repository = new TestRepository(List.of(firstPage, List.of("row-11")));
 
-    DynamicSearchPage<String> results = repository.loadPage(0, 10);
+    Page<String> results = repository.loadPage(0, 10);
 
-    assertThat(results.results()).containsExactlyElementsOf(firstPage);
-    assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(1);
+    assertThat(results.getContent()).containsExactlyElementsOf(firstPage);
+    assertThat(results.getTotalElements()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(2);
+    assertThat(repository.requestedPages()).containsExactly(0, 1);
   }
 
   @Test
-  void queryDynamicPageShouldSpanLegacyPagesForLargerPageSize() {
+  void queryLegacyDynamicPageShouldSpanLegacyPagesForLargerPageSize() {
     List<String> firstPage =
         List.of(
             "row-1",
@@ -52,15 +55,15 @@ class OracleRepositorySupportTest {
     List<String> secondPage = List.of("row-11", "row-12", "row-13");
     TestRepository repository = new TestRepository(List.of(firstPage, secondPage));
 
-    DynamicSearchPage<String> results = repository.loadPage(0, 20);
+    Page<String> results = repository.loadPage(0, 20);
 
-    assertThat(results.results()).containsExactlyElementsOf(concat(firstPage, secondPage));
-    assertThat(results.total()).isEqualTo(13);
+    assertThat(results.getContent()).containsExactlyElementsOf(concat(firstPage, secondPage));
+    assertThat(results.getTotalElements()).isEqualTo(13);
     assertThat(repository.pageCalls()).isEqualTo(2);
   }
 
   @Test
-  void queryDynamicPageShouldOffsetWithinLegacyPage() {
+  void queryLegacyDynamicPageShouldOffsetWithinLegacyPage() {
     TestRepository repository =
         new TestRepository(
             List.of(
@@ -76,15 +79,28 @@ class OracleRepositorySupportTest {
                     "row-9",
                     "row-10")));
 
-    DynamicSearchPage<String> results = repository.loadPage(1, 5);
+    Page<String> results = repository.loadPage(1, 5);
 
-    assertThat(results.results()).containsExactly("row-6", "row-7", "row-8", "row-9", "row-10");
-    assertThat(results.total()).isEqualTo(11);
-    assertThat(repository.pageCalls()).isEqualTo(1);
+    assertThat(results.getContent()).containsExactly("row-6", "row-7", "row-8", "row-9", "row-10");
+    assertThat(results.getTotalElements()).isEqualTo(10);
+    assertThat(repository.pageCalls()).isEqualTo(2);
+    assertThat(repository.requestedPages()).containsExactly(0, 1);
   }
 
   @Test
-  void queryDynamicPageShouldLoadOnlySecondLegacyPageForSecondUiPage() {
+  void queryLegacyDynamicPageShouldReturnExactTotalForSecondUiPage() {
+    List<String> firstPage =
+        List.of(
+            "row-1",
+            "row-2",
+            "row-3",
+            "row-4",
+            "row-5",
+            "row-6",
+            "row-7",
+            "row-8",
+            "row-9",
+            "row-10");
     List<String> secondPage =
         List.of(
             "row-11",
@@ -97,14 +113,107 @@ class OracleRepositorySupportTest {
             "row-18",
             "row-19",
             "row-20");
-    TestRepository repository = new TestRepository(List.of(List.of("row-1"), secondPage, List.of("row-21")));
+    TestRepository repository = new TestRepository(List.of(firstPage, secondPage, List.of("row-21")));
 
-    DynamicSearchPage<String> results = repository.loadPage(1, 10);
+    Page<String> results = repository.loadPage(1, 10);
 
-    assertThat(results.results()).containsExactlyElementsOf(secondPage);
-    assertThat(results.total()).isEqualTo(21);
+    assertThat(results.getContent()).containsExactlyElementsOf(secondPage);
+    assertThat(results.getTotalElements()).isEqualTo(21);
+    assertThat(repository.pageCalls()).isEqualTo(3);
+    assertThat(repository.requestedPages()).containsExactly(0, 1, 2);
+  }
+
+  @Test
+  void queryLegacyDynamicPageShouldReturnExactTotalForLargeResultSets() {
+    List<List<String>> pages = new java.util.ArrayList<>();
+    for (int page = 0; page < 50; page++) {
+      List<String> rows = new java.util.ArrayList<>();
+      for (int row = 1; row <= 10; row++) {
+        rows.add("row-" + ((page * 10) + row));
+      }
+      pages.add(rows);
+    }
+    TestRepository repository = new TestRepository(pages);
+
+    Page<String> results = repository.loadPage(0, 10);
+
+    assertThat(results.getContent())
+        .containsExactly("row-1", "row-2", "row-3", "row-4", "row-5", "row-6", "row-7", "row-8", "row-9", "row-10");
+    assertThat(results.getTotalElements()).isEqualTo(500);
+    assertThat(repository.pageCalls()).isEqualTo(51);
+    assertThat(repository.requestedPages().get(0)).isZero();
+    assertThat(repository.requestedPages().get(50)).isEqualTo(50);
+  }
+
+  @Test
+  void queryLegacyDynamicPageWithTotalShouldFetchOnlyRequiredLegacyPages() {
+    List<String> firstPage =
+        List.of(
+            "row-1",
+            "row-2",
+            "row-3",
+            "row-4",
+            "row-5",
+            "row-6",
+            "row-7",
+            "row-8",
+            "row-9",
+            "row-10");
+    List<String> secondPage =
+        List.of(
+            "row-11",
+            "row-12",
+            "row-13",
+            "row-14",
+            "row-15",
+            "row-16",
+            "row-17",
+            "row-18",
+            "row-19",
+            "row-20");
+    TestRepository repository = new TestRepository(List.of(firstPage, secondPage, List.of("row-21")));
+
+    Page<String> results = repository.loadPageWithTotal(1, 10, 21);
+
+    assertThat(results.getContent()).containsExactlyElementsOf(secondPage);
+    assertThat(results.getTotalElements()).isEqualTo(21);
     assertThat(repository.pageCalls()).isEqualTo(1);
     assertThat(repository.requestedPages()).containsExactly(1);
+  }
+
+  @Test
+  void queryLegacyDynamicSliceShouldStopAfterPreviewWindow() {
+    List<String> firstPage =
+        List.of(
+            "row-1",
+            "row-2",
+            "row-3",
+            "row-4",
+            "row-5",
+            "row-6",
+            "row-7",
+            "row-8",
+            "row-9",
+            "row-10");
+    List<String> secondPage =
+        List.of(
+            "row-11",
+            "row-12",
+            "row-13",
+            "row-14",
+            "row-15",
+            "row-16",
+            "row-17",
+            "row-18",
+            "row-19",
+            "row-20");
+    TestRepository repository = new TestRepository(List.of(firstPage, secondPage, List.of("row-21")));
+
+    Slice<String> results = repository.loadSlice(0, 5);
+
+    assertThat(results.getContent()).containsExactly("row-1", "row-2", "row-3", "row-4", "row-5");
+    assertThat(results.hasNext()).isTrue();
+    assertThat(repository.requestedPages()).containsExactly(0);
   }
 
   @Test
@@ -185,8 +294,23 @@ class OracleRepositorySupportTest {
       this.pages = pages;
     }
 
-    DynamicSearchPage<String> loadPage(int page, int size) {
-      return queryDynamicPage("LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)", " WHERE 1=1", List.of(), page, size, rs -> "");
+    Page<String> loadPage(int page, int size) {
+      return queryLegacyDynamicPage("LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)", " WHERE 1=1", List.of(), page, size, rs -> "");
+    }
+
+    Page<String> loadPageWithTotal(int page, int size, int totalElements) {
+      return queryLegacyDynamicPage(
+          "LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)",
+          " WHERE 1=1",
+          List.of(),
+          page,
+          size,
+          totalElements,
+          rs -> "");
+    }
+
+    Slice<String> loadSlice(int page, int size) {
+      return queryLegacyDynamicSlice("LEXIS_GROUP_5.FIND_TEST(?,?,?,?,?)", " WHERE 1=1", List.of(), page, size, rs -> "");
     }
 
     List<CodeNameDto> loadApplicationStatuses() {
@@ -248,7 +372,7 @@ class OracleRepositorySupportTest {
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryDynamicPagedProcedure(
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
         List<String> bindValues,

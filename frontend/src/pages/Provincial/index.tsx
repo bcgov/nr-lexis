@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState, type FC } from 'react'
 import {
   Button,
-  Checkbox,
   Column,
   Grid,
   InlineLoading,
@@ -12,18 +11,17 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
   TextInput,
   Tile,
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { searchApplicationReviews } from '@/service/application-review-search-service'
-import { searchProvincialApplications } from '@/service/provincial-application-search-service'
-import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
-import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
-import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
+import { countApplicationReviews } from '@/service/application-review-search-service'
+import { countProvincialApplications } from '@/service/provincial-application-search-service'
+import { countProvincialExemptions } from '@/service/provincial-exemption-search-service'
+import { countProvincialOffers } from '@/service/provincial-offer-search-service'
+import { countProvincialPermits } from '@/service/provincial-permit-search-service'
 
 type WorkflowMetricKey =
   | 'provincialApplications'
@@ -156,7 +154,6 @@ const ProvincialPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const [searchText, setSearchText] = useState('')
-  const [showAccessibleOnly, setShowAccessibleOnly] = useState(false)
   const [loadingTotals, setLoadingTotals] = useState(false)
   const [totalsError, setTotalsError] = useState('')
   const [totals, setTotals] = useState<WorkflowTotals>(EMPTY_TOTALS)
@@ -181,109 +178,111 @@ const ProvincialPage: FC = () => {
         load: () => Promise<T>,
       ): Promise<T | null> => (canAccess ? load() : null)
 
-      const applications = await loadMetric(canAccessWorkflowTotal('provincialApplications'), () =>
-        searchProvincialApplications({
-          filters: {
-            applicationNumber: '',
-            packageNumber: '',
-            exemptionType: '',
-            exemptionNumber: '',
-            applicationStatus: '',
-            productTypeCode: '',
-            region: [],
-            listingFromDate: '',
-            listingToDate: '',
-            applicantClientNumber: '',
-            ownerClientNumber: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'applicationNumber',
-          sortDirection: 'desc',
-        }),
-      )
-      const exemptions = await loadMetric(canAccessWorkflowTotal('provincialExemptions'), () =>
-        searchProvincialExemptions({
-          filters: {
-            applicationNumber: '',
-            packageNumber: '',
-            exemptionNumber: '',
-            region: [],
-            listFromDate: '',
-            listToDate: '',
-            exemptionTypeCode: '',
-            exemptionStatusCode: '',
-            applicantClientNumber: '',
-            ownerClientNumber: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'exemptionNumber',
-          sortDirection: 'asc',
-        }),
-      )
-      const offers = await loadMetric(canAccessWorkflowTotal('provincialOffers'), () =>
-        searchProvincialOffers({
-          filters: {
-            applicationNumber: '',
-            packageNumber: '',
-            clientNumber: '',
-            listingFromDate: '',
-            listingToDate: '',
-            region: [],
-            withdrawalFromDate: '',
-            withdrawalToDate: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'offerNumber',
-          sortDirection: 'asc',
-        }),
-      )
-      const permits = await loadMetric(canAccessWorkflowTotal('provincialPermits'), () =>
-        searchProvincialPermits({
-          filters: {
-            applicationNumber: '',
-            packageNumber: '',
-            region: [],
-            issuedFromDate: '',
-            issuedToDate: '',
-            permitStatus: '',
-            permitNumber: '',
-            ownerClientNumber: '',
-            applicantClientNumber: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'permitNumber',
-          sortDirection: 'asc',
-        }),
-      )
-      const reviewQueue = await loadMetric(canAccessWorkflowTotal('reviewQueue'), () =>
-        searchApplicationReviews({
-          filters: {
-            applicationNumber: '',
-            productTypeCode: '',
-            region: [],
-            receivedFromDate: '',
-            receivedToDate: '',
-            listingFromDate: '',
-            listingToDate: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'applicationNumber',
-          sortDirection: 'asc',
-        }),
-      )
+      const [applications, exemptions, offers, permits, reviewQueue] = await Promise.all([
+        loadMetric(canAccessWorkflowTotal('provincialApplications'), () =>
+          countProvincialApplications({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              exemptionType: '',
+              exemptionNumber: '',
+              applicationStatus: '',
+              productTypeCode: '',
+              region: [],
+              listingFromDate: '',
+              listingToDate: '',
+              applicantClientNumber: '',
+              ownerClientNumber: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'applicationNumber',
+            sortDirection: 'desc',
+          }),
+        ),
+        loadMetric(canAccessWorkflowTotal('provincialExemptions'), () =>
+          countProvincialExemptions({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              exemptionNumber: '',
+              region: [],
+              listFromDate: '',
+              listToDate: '',
+              exemptionTypeCode: '',
+              exemptionStatusCode: '',
+              applicantClientNumber: '',
+              ownerClientNumber: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'exemptionNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+        loadMetric(canAccessWorkflowTotal('provincialOffers'), () =>
+          countProvincialOffers({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              clientNumber: '',
+              listingFromDate: '',
+              listingToDate: '',
+              region: [],
+              withdrawalFromDate: '',
+              withdrawalToDate: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'offerNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+        loadMetric(canAccessWorkflowTotal('provincialPermits'), () =>
+          countProvincialPermits({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              region: [],
+              issuedFromDate: '',
+              issuedToDate: '',
+              permitStatus: '',
+              permitNumber: '',
+              ownerClientNumber: '',
+              applicantClientNumber: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'permitNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+        loadMetric(canAccessWorkflowTotal('reviewQueue'), () =>
+          countApplicationReviews({
+            filters: {
+              applicationNumber: '',
+              productTypeCode: '',
+              region: [],
+              receivedFromDate: '',
+              receivedToDate: '',
+              listingFromDate: '',
+              listingToDate: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'applicationNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+      ])
 
       if (isLatestRequest()) {
         setTotals({
-          provincialApplications: applications?.page.totalElements ?? 0,
-          provincialExemptions: exemptions?.page.totalElements ?? 0,
-          provincialOffers: offers?.page.totalElements ?? 0,
-          provincialPermits: permits?.page.totalElements ?? 0,
-          reviewQueue: reviewQueue?.page.totalElements ?? 0,
+          provincialApplications: applications ?? 0,
+          provincialExemptions: exemptions ?? 0,
+          provincialOffers: offers ?? 0,
+          provincialPermits: permits ?? 0,
+          reviewQueue: reviewQueue ?? 0,
         })
         setTotalsLoaded(true)
       }
@@ -304,7 +303,7 @@ const ProvincialPage: FC = () => {
   const visibleWorkflows = useMemo(() => {
     return WORKFLOWS.filter((workflow) => {
       const hasAccess = workflow.requiredActions.some((action) => canPerform(action))
-      if (showAccessibleOnly && !hasAccess) {
+      if (!hasAccess) {
         return false
       }
 
@@ -319,7 +318,15 @@ const ProvincialPage: FC = () => {
         normalizeText(workflow.path).includes(normalized)
       )
     })
-  }, [canPerform, searchText, showAccessibleOnly])
+  }, [canPerform, searchText])
+
+  const visibleQuickActions = useMemo(
+    () =>
+      QUICK_ACTIONS.filter((action) =>
+        action.requiredActions.every((requiredAction) => canPerform(requiredAction)),
+      ),
+    [canPerform],
+  )
 
   const accessibleCount = useMemo(() => {
     return WORKFLOWS.filter((workflow) =>
@@ -347,50 +354,39 @@ const ProvincialPage: FC = () => {
               onChange={(event) => setSearchText(event.target.value)}
               placeholder="Search title, route, or description"
             />
-            <div>
-              <Checkbox
-                id="provincialShowAccessibleOnly"
-                labelText="Show available areas only"
-                checked={showAccessibleOnly}
-                onChange={(_, payload) => setShowAccessibleOnly(Boolean(payload.checked))}
-              />
-            </div>
           </div>
           <div className="legacy-search-actions">
             <Button kind="secondary" onClick={() => void loadTotals()} disabled={loadingTotals}>
               Refresh Totals
             </Button>
-            <Button kind="ghost" onClick={() => navigate('/provincial/summary')}>
-              Open Summary
-            </Button>
+            {canPerform('/summary') && (
+              <Button kind="ghost" onClick={() => navigate('/provincial/summary')}>
+                Open Summary
+              </Button>
+            )}
           </div>
         </Tile>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Quick Actions</h2>
-          <div className="legacy-search-actions">
-            {QUICK_ACTIONS.map((action) => {
-              const canAccessAction = action.requiredActions.some((requiredAction) =>
-                canPerform(requiredAction),
-              )
-
-              return (
+      {visibleQuickActions.length > 0 && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">Quick Actions</h2>
+            <div className="legacy-search-actions">
+              {visibleQuickActions.map((action) => (
                 <Button
                   key={action.id}
-                  kind={canAccessAction ? 'primary' : 'ghost'}
+                  kind="primary"
                   size="sm"
-                  disabled={!canAccessAction}
                   onClick={() => navigate(action.path)}
                 >
                   {action.label}
                 </Button>
-              )
-            })}
-          </div>
-        </Tile>
-      </Column>
+              ))}
+            </div>
+          </Tile>
+        </Column>
+      )}
 
       {loadingTotals && (
         <Column sm={4} md={8} lg={16}>
@@ -418,14 +414,12 @@ const ProvincialPage: FC = () => {
                 <TableHeader>Area</TableHeader>
                 <TableHeader>Description</TableHeader>
                 <TableHeader>Route</TableHeader>
-                <TableHeader>Access</TableHeader>
                 <TableHeader>Total</TableHeader>
                 <TableHeader>Open</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
               {visibleWorkflows.map((workflow) => {
-                const hasAccess = workflow.requiredActions.some((action) => canPerform(action))
                 const workflowTotal = workflow.metricKey ? totals[workflow.metricKey] : null
 
                 return (
@@ -436,22 +430,12 @@ const ProvincialPage: FC = () => {
                       <code>{workflow.path}</code>
                     </TableCell>
                     <TableCell>
-                      <Tag type={hasAccess ? 'green' : 'red'}>
-                        {hasAccess ? 'Available' : 'Not Granted'}
-                      </Tag>
-                    </TableCell>
-                    <TableCell>
                       {workflowTotal === null || !totalsLoaded
                         ? '-'
                         : workflowTotal.toLocaleString()}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        kind={hasAccess ? 'primary' : 'ghost'}
-                        size="sm"
-                        disabled={!hasAccess}
-                        onClick={() => navigate(workflow.path)}
-                      >
+                      <Button kind="primary" size="sm" onClick={() => navigate(workflow.path)}>
                         Open
                       </Button>
                     </TableCell>
@@ -460,7 +444,7 @@ const ProvincialPage: FC = () => {
               })}
               {visibleWorkflows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={5}>
                     No provincial areas matched the current filters.
                   </TableCell>
                 </TableRow>

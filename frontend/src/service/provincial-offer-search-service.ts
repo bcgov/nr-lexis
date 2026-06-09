@@ -1,4 +1,5 @@
 import { getCachedSearchResponse } from '@/service/cached-search-service'
+import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
   ProvincialOfferSearchRequest,
@@ -105,3 +106,12 @@ export const searchProvincialOffers = async (
     throw toSearchServiceError('Unable to load provincial offer search results.', error)
   }
 }
+
+export const countProvincialOffers = async (
+  request: ProvincialOfferSearchRequest,
+): Promise<number> =>
+  getSearchCount(
+    '/lexis/purchase-offers/search/count',
+    buildBackendParams(request),
+    'Unable to count provincial offer search results.',
+  )

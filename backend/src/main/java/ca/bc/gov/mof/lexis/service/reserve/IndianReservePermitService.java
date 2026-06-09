@@ -13,6 +13,8 @@ public interface IndianReservePermitService {
 
   IndianReservePermitSearchResponseDto search(IndianReservePermitSearchCriteria criteria);
 
+  int count(IndianReservePermitSearchCriteria criteria);
+
   Optional<IndianReservePermitDetailDto> findByPermitNumber(String permitNumber);
 
   PermitMutationRpcResponseDto addPermit(CreatePermitRequest request, String userId);

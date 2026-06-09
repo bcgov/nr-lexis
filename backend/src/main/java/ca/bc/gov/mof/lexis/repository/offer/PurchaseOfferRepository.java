@@ -4,7 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.CallableStatement;
 import java.sql.Date;
@@ -28,6 +28,8 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
   private static final String MANUFACTURING_FACILITY_DEFAULT = " ";
   private static final String FIND_PURCHASE_OFFERS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_POS_BY_CRITERIA(?,?,?,?,?)";
+  private static final String COUNT_PURCHASE_OFFERS_BY_CRITERIA =
+      LEXIS_GROUP_5_PACKAGE + "COUNT_POS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_PURCHASE_OFFER_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_NUM(?,?)";
   private static final String INSERT_PURCHASE_OFFER =
@@ -43,7 +45,36 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public DynamicSearchPage<PurchaseOfferSearchResultDto> search(PurchaseOfferSearchCriteria criteria) {
+  public Page<PurchaseOfferSearchResultDto> search(PurchaseOfferSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    int totalElements =
+        queryLegacyDynamicCountProcedure(COUNT_PURCHASE_OFFERS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+    return queryLegacyDynamicPage(
+        FIND_PURCHASE_OFFERS_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        totalElements,
+        rs ->
+            new PurchaseOfferSearchResultDto(
+                getLong(rs, "EXPORT_PURCHASE_OFFER_NUMBER"),
+                getLong(rs, "APPLICATION_NUMBER"),
+                getString(rs, "PACKAGE_NUMBER"),
+                getLocalDate(rs, "ADVERTISING_DATE"),
+                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE")),
+                getLocalDate(rs, "OFFER_WITHDRAWAL_DATE")));
+  }
+
+  public int count(PurchaseOfferSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return queryLegacyDynamicCountProcedure(
+        COUNT_PURCHASE_OFFERS_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues());
+  }
+
+  private SqlWhere buildSearchWhere(PurchaseOfferSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -92,22 +123,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
             "offerNumber",
             "DESC");
 
-    SqlWhere sqlWhere = where.build(orderBy);
-
-    return queryDynamicPage(
-        FIND_PURCHASE_OFFERS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        criteria.page(),
-        criteria.size(),
-        rs ->
-            new PurchaseOfferSearchResultDto(
-                getLong(rs, "EXPORT_PURCHASE_OFFER_NUMBER"),
-                getLong(rs, "APPLICATION_NUMBER"),
-                getString(rs, "PACKAGE_NUMBER"),
-                getLocalDate(rs, "ADVERTISING_DATE"),
-                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE")),
-                getLocalDate(rs, "OFFER_WITHDRAWAL_DATE")));
+    return where.build(orderBy);
   }
 
   public Optional<PurchaseOfferDetailDto> findByOfferNumber(Long offerNumber) {

@@ -13,7 +13,9 @@ import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository;
@@ -56,7 +58,7 @@ class IndianReservePermitOracleServiceTest {
             row("IR-10003", LocalDate.of(2026, 3, 3)),
             row("IR-10004", LocalDate.of(2026, 3, 4)));
     when(repository.search(any(IndianReservePermitSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(rows, 4));
+        .thenReturn(page(rows, 4));
 
     IndianReservePermitSearchResponseDto response = service.search(criteria);
 
@@ -80,7 +82,7 @@ class IndianReservePermitOracleServiceTest {
             -2,
             0);
     when(repository.search(any(IndianReservePermitSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
+        .thenReturn(page(List.of(), 0));
 
     service.search(criteria);
 
@@ -233,5 +235,9 @@ class IndianReservePermitOracleServiceTest {
         "00077881",
         issueDate,
         issueDate.plusDays(10));
+  }
+
+  private static <T> Page<T> page(List<T> content, long total) {
+    return new PageImpl<>(content, PageRequest.of(0, Math.max(1, content.size())), total);
   }
 }

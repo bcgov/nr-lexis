@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
@@ -73,22 +74,58 @@ public class PermitController {
     }
 
     PermitSearchCriteria criteria =
-        new PermitSearchCriteria(
+        buildCriteria(
             applicationNumber,
             packageNumber,
             permitNumber,
-            parseDate(issuedFromDate),
-            parseDate(issuedToDate),
+            issuedFromDate,
+            issuedToDate,
             permitStatus,
             invoiceNumber,
             applicantClientNumber,
             ownerClientNumber,
-            regionNumbers == null ? List.of() : regionNumbers,
+            regionNumbers,
             sortField,
             page,
             size);
 
     return ResponseEntity.ok(service.search(criteria));
+  }
+
+  @GetMapping("/search/count")
+  public ResponseEntity<SearchCountResponseDto> count(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "permitNumber", required = false) String permitNumber,
+      @RequestParam(name = "issuedFromDate", required = false) String issuedFromDate,
+      @RequestParam(name = "issuedToDate", required = false) String issuedToDate,
+      @RequestParam(name = "permitStatus", required = false) String permitStatus,
+      @RequestParam(name = "invoiceNumber", required = false) String invoiceNumber,
+      @RequestParam(name = "applicantClientNumber", required = false) String applicantClientNumber,
+      @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
+      @RequestParam(name = "region", required = false) List<Long> regionNumbers) {
+    PermitService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit service unavailable - returning no content for count");
+      return ResponseEntity.noContent().build();
+    }
+
+    PermitSearchCriteria criteria =
+        buildCriteria(
+            applicationNumber,
+            packageNumber,
+            permitNumber,
+            issuedFromDate,
+            issuedToDate,
+            permitStatus,
+            invoiceNumber,
+            applicantClientNumber,
+            ownerClientNumber,
+            regionNumbers,
+            null,
+            0,
+            1);
+    return ResponseEntity.ok(new SearchCountResponseDto(service.count(criteria)));
   }
 
   @GetMapping("/{permitNumber}")
@@ -124,5 +161,35 @@ public class PermitController {
           "Invalid date value '" + value + "'. Use yyyy-MM-dd or MM/dd/yyyy.",
           ex);
     }
+  }
+
+  private PermitSearchCriteria buildCriteria(
+      String applicationNumber,
+      String packageNumber,
+      String permitNumber,
+      String issuedFromDate,
+      String issuedToDate,
+      String permitStatus,
+      String invoiceNumber,
+      String applicantClientNumber,
+      String ownerClientNumber,
+      List<Long> regionNumbers,
+      String sortField,
+      Integer page,
+      Integer size) {
+    return new PermitSearchCriteria(
+        applicationNumber,
+        packageNumber,
+        permitNumber,
+        parseDate(issuedFromDate),
+        parseDate(issuedToDate),
+        permitStatus,
+        invoiceNumber,
+        applicantClientNumber,
+        ownerClientNumber,
+        regionNumbers == null ? List.of() : regionNumbers,
+        sortField,
+        page,
+        size);
   }
 }

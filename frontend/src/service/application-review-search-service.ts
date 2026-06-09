@@ -1,9 +1,12 @@
 import type {
+  ApplicationReviewPreviewResponse,
   ApplicationReviewSearchRequest,
   ApplicationReviewSearchResponse,
+  ApplicationReviewSearchItem,
 } from '@/interfaces/ApplicationReviewSearch'
 import apiService from '@/service/api-service'
 import { getCachedSearchResponse } from '@/service/cached-search-service'
+import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 
 type BackendApplicationReviewSearchResult = {
@@ -19,6 +22,13 @@ type BackendApplicationReviewSearchResult = {
 type BackendApplicationReviewSearchResponse = {
   results: BackendApplicationReviewSearchResult[]
   total: number
+  page: number
+  size: number
+}
+
+type BackendApplicationReviewPreviewResponse = {
+  results: BackendApplicationReviewSearchResult[]
+  hasNext: boolean
   page: number
   size: number
 }
@@ -77,6 +87,18 @@ const buildBackendParams = (request: ApplicationReviewSearchRequest): URLSearchP
   return params
 }
 
+const mapBackendReviewRow = (
+  row: BackendApplicationReviewSearchResult,
+): ApplicationReviewSearchItem => ({
+  applicationNumber: String(row.applicationNumber ?? ''),
+  volume: row.volume ?? 0,
+  speciesEndUse: row.speciesEndUse ?? '',
+  listingDate: row.listingDate ?? '',
+  status: row.status ?? '',
+  region: row.region ?? '',
+  showInfoIcon: Boolean(row.showInfoIcon),
+})
+
 const parseBackendResponse = (payload: unknown): ApplicationReviewSearchResponse | null => {
   if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
     return null
@@ -89,20 +111,31 @@ const parseBackendResponse = (payload: unknown): ApplicationReviewSearchResponse
   const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
 
   return {
-    content: backendResponse.results.map((row) => ({
-      applicationNumber: String(row.applicationNumber ?? ''),
-      volume: row.volume ?? 0,
-      speciesEndUse: row.speciesEndUse ?? '',
-      listingDate: row.listingDate ?? '',
-      status: row.status ?? '',
-      region: row.region ?? '',
-      showInfoIcon: Boolean(row.showInfoIcon),
-    })),
+    content: backendResponse.results.map(mapBackendReviewRow),
     page: {
       number: pageNumber,
       size: pageSize,
       totalElements,
       totalPages,
+    },
+  }
+}
+
+const parseBackendPreviewResponse = (payload: unknown): ApplicationReviewPreviewResponse | null => {
+  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
+    return null
+  }
+
+  const backendResponse = payload as BackendApplicationReviewPreviewResponse
+  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 5
+  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
+
+  return {
+    content: backendResponse.results.map(mapBackendReviewRow),
+    page: {
+      number: pageNumber,
+      size: pageSize,
+      hasNext: Boolean(backendResponse.hasNext),
     },
   }
 }
@@ -124,6 +157,35 @@ export const searchApplicationReviews = async (
     return parsed
   } catch (error) {
     throw toSearchServiceError('Unable to load provincial review search results.', error)
+  }
+}
+
+export const countApplicationReviews = async (
+  request: ApplicationReviewSearchRequest,
+): Promise<number> =>
+  getSearchCount(
+    '/lexis/application-reviews/search/count',
+    buildBackendParams(request),
+    'Unable to count provincial review search results.',
+  )
+
+export const previewApplicationReviews = async (
+  request: ApplicationReviewSearchRequest,
+): Promise<ApplicationReviewPreviewResponse> => {
+  try {
+    const response = await getCachedSearchResponse<unknown>(
+      '/lexis/application-reviews/search/preview',
+      buildBackendParams(request),
+    )
+
+    const parsed = parseBackendPreviewResponse(response.data)
+    if (!parsed) {
+      throw new Error('Backend application review preview response did not include results.')
+    }
+
+    return parsed
+  } catch (error) {
+    throw toSearchServiceError('Unable to load provincial review preview results.', error)
   }
 }
 

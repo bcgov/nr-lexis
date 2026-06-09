@@ -14,6 +14,8 @@ public interface PurchaseOfferService {
 
   PurchaseOfferSearchResponseDto search(PurchaseOfferSearchCriteria criteria);
 
+  int count(PurchaseOfferSearchCriteria criteria);
+
   Optional<PurchaseOfferDetailDto> findByOfferNumber(Long offerNumber);
 
   CreateOfferResult addOffer(CreateOfferRequest request, String userId);

@@ -1,10 +1,11 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.reserve.IndianReservePermitService;
 import ca.bc.gov.mof.lexis.service.reserve.IndianReservePermitService.CreatePermitRequest;
 import jakarta.validation.constraints.Max;
@@ -71,17 +72,44 @@ public class IndianReservePermitController {
     }
 
     IndianReservePermitSearchCriteria criteria =
-        new IndianReservePermitSearchCriteria(
+        buildCriteria(
             permitNumber,
             packageNumber,
-            parseDate(issuedFromDate),
-            parseDate(issuedToDate),
-            parseDate(shippingFromDate),
-            parseDate(shippingToDate),
+            issuedFromDate,
+            issuedToDate,
+            shippingFromDate,
+            shippingToDate,
             page,
             size);
 
     return ResponseEntity.ok(service.search(criteria));
+  }
+
+  @GetMapping("/search/count")
+  public ResponseEntity<SearchCountResponseDto> count(
+      @RequestParam(name = "permitNumber", required = false) String permitNumber,
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "fromPermitIssueDate", required = false) String issuedFromDate,
+      @RequestParam(name = "toPermitIssueDate", required = false) String issuedToDate,
+      @RequestParam(name = "fromEstimatedShippingDate", required = false) String shippingFromDate,
+      @RequestParam(name = "toEstimatedShippingDate", required = false) String shippingToDate) {
+    IndianReservePermitService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Indian reserve permit service unavailable - returning no content for count");
+      return ResponseEntity.noContent().build();
+    }
+
+    IndianReservePermitSearchCriteria criteria =
+        buildCriteria(
+            permitNumber,
+            packageNumber,
+            issuedFromDate,
+            issuedToDate,
+            shippingFromDate,
+            shippingToDate,
+            0,
+            1);
+    return ResponseEntity.ok(new SearchCountResponseDto(service.count(criteria)));
   }
 
   @GetMapping("/{permitNumber}")
@@ -111,6 +139,26 @@ public class IndianReservePermitController {
         service.addPermit(
             toCreatePermitRequest(parameters),
             authentication == null ? null : authentication.getName()));
+  }
+
+  private IndianReservePermitSearchCriteria buildCriteria(
+      String permitNumber,
+      String packageNumber,
+      String issuedFromDate,
+      String issuedToDate,
+      String shippingFromDate,
+      String shippingToDate,
+      Integer page,
+      Integer size) {
+    return new IndianReservePermitSearchCriteria(
+        permitNumber,
+        packageNumber,
+        parseDate(issuedFromDate),
+        parseDate(issuedToDate),
+        parseDate(shippingFromDate),
+        parseDate(shippingToDate),
+        page,
+        size);
   }
 
   private LocalDate parseDate(String input) {

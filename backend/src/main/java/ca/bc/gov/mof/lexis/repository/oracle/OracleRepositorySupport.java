@@ -24,6 +24,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -173,7 +178,7 @@ public abstract class OracleRepositorySupport {
     return Optional.ofNullable(results.get(0));
   }
 
-  protected <T> List<T> queryDynamicPagedProcedure(
+  protected <T> List<T> queryLegacyDynamicPagedProcedure(
       String procedureSignature,
       String whereSql,
       List<String> bindValues,
@@ -223,6 +228,54 @@ public abstract class OracleRepositorySupport {
     }
   }
 
+  protected int queryLegacyDynamicCountProcedure(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues) {
+    String call = "{ call " + procedureSignature + " }";
+
+    try {
+      Integer total =
+          jdbcTemplate.execute(
+              call,
+              (CallableStatementCallback<Integer>) cs -> {
+                cs.setString(1, whereSql);
+
+                Array array = null;
+                if (bindValues != null && !bindValues.isEmpty()) {
+                  Connection connection = cs.getConnection();
+                  OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
+                  array =
+                      oracleConnection.createOracleArray(
+                          STRING_ARRAY_TYPE, bindValues.toArray(String[]::new));
+                  cs.setArray(2, array);
+                } else {
+                  cs.setNull(2, Types.ARRAY, STRING_ARRAY_TYPE);
+                }
+
+                cs.setInt(3, bindValues == null ? 0 : bindValues.size());
+                cs.registerOutParameter(4, Types.REF_CURSOR);
+                cs.execute();
+
+                try (ResultSet rs = (ResultSet) cs.getObject(4)) {
+                  if (rs == null || !rs.next()) {
+                    return 0;
+                  }
+                  long resultCount = Math.max(0L, rs.getLong("RESULTS_COUNT"));
+                  return (int) Math.min(Integer.MAX_VALUE, resultCount);
+                } finally {
+                  if (array != null) {
+                    array.free();
+                  }
+                }
+              });
+      return total == null ? 0 : total;
+    } catch (DataAccessException ex) {
+      logger.warn("Oracle dynamic count call failed [{}]: {}", procedureSignature, ex.getMessage());
+      return 0;
+    }
+  }
+
   protected boolean executeProcedure(String procedureSignature, SqlConsumer<CallableStatement> binder) {
     String call = "{ call " + procedureSignature + " }";
     try {
@@ -244,7 +297,7 @@ public abstract class OracleRepositorySupport {
     }
   }
 
-  protected <T> DynamicSearchPage<T> queryDynamicPage(
+  protected <T> Page<T> queryLegacyDynamicPage(
       String procedureSignature,
       String whereSql,
       List<String> bindValues,
@@ -255,54 +308,164 @@ public abstract class OracleRepositorySupport {
     int normalizedSize = Math.max(1, size);
     long offsetLong = (long) normalizedPage * normalizedSize;
     if (offsetLong > Integer.MAX_VALUE) {
-      return new DynamicSearchPage<>(List.of(), Integer.MAX_VALUE);
+      return new PageImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          Integer.MAX_VALUE);
     }
 
     int offset = (int) offsetLong;
-    int legacyStartPage = offset / LEGACY_DYNAMIC_PAGE_SIZE;
-    int firstPageOffset = offset % LEGACY_DYNAMIC_PAGE_SIZE;
-    int requiredRows = firstPageOffset + normalizedSize;
-    List<T> bufferedRows = new ArrayList<>(requiredRows);
+    List<T> allRows = new ArrayList<>();
     List<T> previousPage = List.of();
-    boolean lastFetchedPageWasFull = false;
 
-    for (int legacyPage = legacyStartPage; bufferedRows.size() < requiredRows && legacyPage < 10_000; legacyPage++) {
+    for (int legacyPage = 0; legacyPage < 10_000; legacyPage++) {
       List<T> currentPage =
-          queryDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
+          queryLegacyDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
       if (currentPage.isEmpty()) {
-        lastFetchedPageWasFull = false;
         break;
       }
-      if (legacyPage > legacyStartPage && currentPage.equals(previousPage)) {
+      if (legacyPage > 0 && currentPage.equals(previousPage)) {
         logger.warn(
             "Oracle dynamic call [{}] returned duplicate data for page {}; stopping pagination",
             procedureSignature,
             legacyPage);
-        lastFetchedPageWasFull = false;
         break;
       }
-      bufferedRows.addAll(currentPage);
+      allRows.addAll(currentPage);
       previousPage = currentPage;
-      lastFetchedPageWasFull = currentPage.size() >= LEGACY_DYNAMIC_PAGE_SIZE;
-      if (!lastFetchedPageWasFull) {
+      if (currentPage.size() < LEGACY_DYNAMIC_PAGE_SIZE) {
         break;
       }
     }
 
-    if (bufferedRows.size() <= firstPageOffset) {
-      return new DynamicSearchPage<>(List.of(), offset);
+    if (offset >= allRows.size()) {
+      return new PageImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          allRows.size());
     }
 
-    int toIndex = Math.min(firstPageOffset + normalizedSize, bufferedRows.size());
-    List<T> results = List.copyOf(bufferedRows.subList(firstPageOffset, toIndex));
-    boolean maybeHasMore = results.size() == normalizedSize && lastFetchedPageWasFull;
-    int total = safeTotal(offset, results.size(), maybeHasMore);
-    return new DynamicSearchPage<>(results, total);
+    int toIndex = Math.min(offset + normalizedSize, allRows.size());
+    return new PageImpl<>(
+        List.copyOf(allRows.subList(offset, toIndex)),
+        PageRequest.of(normalizedPage, normalizedSize),
+        allRows.size());
   }
 
-  private int safeTotal(int offset, int resultCount, boolean maybeHasMore) {
-    long total = (long) offset + resultCount + (maybeHasMore ? 1L : 0L);
-    return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
+  protected <T> Page<T> queryLegacyDynamicPage(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues,
+      int page,
+      int size,
+      int totalElements,
+      SqlRowMapper<T> rowMapper) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    int normalizedTotal = Math.max(0, totalElements);
+    long offsetLong = (long) normalizedPage * normalizedSize;
+    if (offsetLong > Integer.MAX_VALUE || offsetLong >= normalizedTotal) {
+      return new PageImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          normalizedTotal);
+    }
+
+    int offset = (int) offsetLong;
+    int firstLegacyPage = offset / LEGACY_DYNAMIC_PAGE_SIZE;
+    int firstLegacyPageOffset = offset % LEGACY_DYNAMIC_PAGE_SIZE;
+    int requestedRows = Math.min(normalizedSize, normalizedTotal - offset);
+    List<T> rows = new ArrayList<>();
+    List<T> previousPage = List.of();
+
+    for (int legacyPage = firstLegacyPage; legacyPage < 10_000 && rows.size() < requestedRows; legacyPage++) {
+      List<T> currentPage =
+          queryLegacyDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
+      if (currentPage.isEmpty()) {
+        break;
+      }
+      if (legacyPage > firstLegacyPage && currentPage.equals(previousPage)) {
+        logger.warn(
+            "Oracle dynamic call [{}] returned duplicate data for page {}; stopping pagination",
+            procedureSignature,
+            legacyPage);
+        break;
+      }
+
+      int fromIndex =
+          legacyPage == firstLegacyPage
+              ? Math.min(firstLegacyPageOffset, currentPage.size())
+              : 0;
+      if (fromIndex < currentPage.size()) {
+        rows.addAll(currentPage.subList(fromIndex, currentPage.size()));
+      }
+      previousPage = currentPage;
+      if (currentPage.size() < LEGACY_DYNAMIC_PAGE_SIZE) {
+        break;
+      }
+    }
+
+    return new PageImpl<>(
+        List.copyOf(rows.subList(0, Math.min(rows.size(), requestedRows))),
+        PageRequest.of(normalizedPage, normalizedSize),
+        normalizedTotal);
+  }
+
+  protected <T> Slice<T> queryLegacyDynamicSlice(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues,
+      int page,
+      int size,
+      SqlRowMapper<T> rowMapper) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    long requiredRowsLong = ((long) normalizedPage * normalizedSize) + normalizedSize + 1L;
+    if (requiredRowsLong > Integer.MAX_VALUE) {
+      return new SliceImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          false);
+    }
+
+    int offset = normalizedPage * normalizedSize;
+    int requiredRows = (int) requiredRowsLong;
+    List<T> rows = new ArrayList<>();
+    List<T> previousPage = List.of();
+
+    for (int legacyPage = 0; legacyPage < 10_000 && rows.size() < requiredRows; legacyPage++) {
+      List<T> currentPage =
+          queryLegacyDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
+      if (currentPage.isEmpty()) {
+        break;
+      }
+      if (legacyPage > 0 && currentPage.equals(previousPage)) {
+        logger.warn(
+            "Oracle dynamic call [{}] returned duplicate data for page {}; stopping slice",
+            procedureSignature,
+            legacyPage);
+        break;
+      }
+      rows.addAll(currentPage);
+      previousPage = currentPage;
+      if (currentPage.size() < LEGACY_DYNAMIC_PAGE_SIZE) {
+        break;
+      }
+    }
+
+    if (offset >= rows.size()) {
+      return new SliceImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          false);
+    }
+
+    int toIndex = Math.min(offset + normalizedSize, rows.size());
+    boolean hasNext = rows.size() > toIndex;
+    return new SliceImpl<>(
+        List.copyOf(rows.subList(offset, toIndex)),
+        PageRequest.of(normalizedPage, normalizedSize),
+        hasNext);
   }
 
   private List<CodeNameDto> fallbackCodeNameOptions(String procedureSignature) {

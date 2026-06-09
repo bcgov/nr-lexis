@@ -14,7 +14,9 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -55,7 +57,7 @@ class FederalApplicationOracleServiceTest {
             row(10003L, "FED-10003"),
             row(10004L, "FED-10004"));
     when(repository.search(any(FederalApplicationSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(rows, 4));
+        .thenReturn(page(rows, 4));
 
     FederalApplicationSearchResponseDto response = service.search(criteria);
 
@@ -83,7 +85,7 @@ class FederalApplicationOracleServiceTest {
             -3,
             0);
     when(repository.search(any(FederalApplicationSearchCriteria.class)))
-        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
+        .thenReturn(page(List.of(), 0));
 
     service.search(criteria);
 
@@ -188,5 +190,9 @@ class FederalApplicationOracleServiceTest {
         LocalDate.of(2026, 2, 20),
         LocalDate.of(2026, 2, 26),
         true);
+  }
+
+  private static <T> Page<T> page(List<T> content, long total) {
+    return new PageImpl<>(content, PageRequest.of(0, Math.max(1, content.size())), total);
   }
 }

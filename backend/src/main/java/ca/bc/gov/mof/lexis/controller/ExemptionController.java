@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
@@ -77,23 +78,74 @@ public class ExemptionController {
     }
 
     ExemptionSearchCriteria criteria =
-        new ExemptionSearchCriteria(
+        buildCriteria(
             applicationNumber,
             packageNumber,
             exemptionNumber,
-            firstPresent(exemptionType, exemptionTypeCode),
-            firstPresent(exemptionStatus, exemptionStatusCode),
+            exemptionType,
+            exemptionTypeCode,
+            exemptionStatus,
+            exemptionStatusCode,
+            approvalFromDate,
+            approvalToDate,
+            listingFromDate,
+            listFromDate,
+            listingToDate,
+            listToDate,
             applicantClientNumber,
             ownerClientNumber,
-            parseDate(approvalFromDate),
-            parseDate(approvalToDate),
-            parseDate(firstPresent(listingFromDate, listFromDate)),
-            parseDate(firstPresent(listingToDate, listToDate)),
-            regionNumbers == null ? List.of() : regionNumbers,
+            regionNumbers,
             page,
             size);
 
     return ResponseEntity.ok(service.search(criteria));
+  }
+
+  @GetMapping("/search/count")
+  public ResponseEntity<SearchCountResponseDto> count(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
+      @RequestParam(name = "exemptionType", required = false) String exemptionType,
+      @RequestParam(name = "exemptionTypeCode", required = false) String exemptionTypeCode,
+      @RequestParam(name = "exemptionStatus", required = false) String exemptionStatus,
+      @RequestParam(name = "exemptionStatusCode", required = false) String exemptionStatusCode,
+      @RequestParam(name = "approvalFromDate", required = false) String approvalFromDate,
+      @RequestParam(name = "approvalToDate", required = false) String approvalToDate,
+      @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
+      @RequestParam(name = "listFromDate", required = false) String listFromDate,
+      @RequestParam(name = "listingToDate", required = false) String listingToDate,
+      @RequestParam(name = "listToDate", required = false) String listToDate,
+      @RequestParam(name = "applicantClientNumber", required = false) String applicantClientNumber,
+      @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
+      @RequestParam(name = "region", required = false) List<Long> regionNumbers) {
+    ExemptionService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Exemption service unavailable - returning no content for count");
+      return ResponseEntity.noContent().build();
+    }
+
+    ExemptionSearchCriteria criteria =
+        buildCriteria(
+            applicationNumber,
+            packageNumber,
+            exemptionNumber,
+            exemptionType,
+            exemptionTypeCode,
+            exemptionStatus,
+            exemptionStatusCode,
+            approvalFromDate,
+            approvalToDate,
+            listingFromDate,
+            listFromDate,
+            listingToDate,
+            listToDate,
+            applicantClientNumber,
+            ownerClientNumber,
+            regionNumbers,
+            0,
+            1);
+    return ResponseEntity.ok(new SearchCountResponseDto(service.count(criteria)));
   }
 
   @GetMapping("/{exemptionNumber}")
@@ -114,6 +166,42 @@ public class ExemptionController {
       return primary;
     }
     return fallback;
+  }
+
+  private ExemptionSearchCriteria buildCriteria(
+      String applicationNumber,
+      String packageNumber,
+      String exemptionNumber,
+      String exemptionType,
+      String exemptionTypeCode,
+      String exemptionStatus,
+      String exemptionStatusCode,
+      String approvalFromDate,
+      String approvalToDate,
+      String listingFromDate,
+      String listFromDate,
+      String listingToDate,
+      String listToDate,
+      String applicantClientNumber,
+      String ownerClientNumber,
+      List<Long> regionNumbers,
+      Integer page,
+      Integer size) {
+    return new ExemptionSearchCriteria(
+        applicationNumber,
+        packageNumber,
+        exemptionNumber,
+        firstPresent(exemptionType, exemptionTypeCode),
+        firstPresent(exemptionStatus, exemptionStatusCode),
+        applicantClientNumber,
+        ownerClientNumber,
+        parseDate(approvalFromDate),
+        parseDate(approvalToDate),
+        parseDate(firstPresent(listingFromDate, listFromDate)),
+        parseDate(firstPresent(listingToDate, listToDate)),
+        regionNumbers == null ? List.of() : regionNumbers,
+        page,
+        size);
   }
 
   private LocalDate parseDate(String input) {

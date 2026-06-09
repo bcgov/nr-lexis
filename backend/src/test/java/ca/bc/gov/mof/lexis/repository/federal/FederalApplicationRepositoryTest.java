@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import org.springframework.data.domain.Page;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -54,7 +54,7 @@ class FederalApplicationRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadOnlyRequestedLegacyPage() {
+  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<FederalApplicationSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(900101L, 900110L)
             .mapToObj(FederalApplicationRepositoryTest::federalResult)
@@ -63,15 +63,15 @@ class FederalApplicationRepositoryTest {
         new TestFederalApplicationRepository(
             List.<List<?>>of(firstPage, List.of(federalResult(900111L))));
 
-    DynamicSearchPage<FederalApplicationSearchResultDto> results =
+    Page<FederalApplicationSearchResultDto> results =
         repository.search(
             new FederalApplicationSearchCriteria(
                 null, null, null, null, null, null, null, null, null, null, 0, 10));
 
-    assertThat(results.results())
+    assertThat(results.getContent())
         .extracting(FederalApplicationSearchResultDto::applicationNumber)
         .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
-    assertThat(results.total()).isEqualTo(11);
+    assertThat(results.getTotalElements()).isEqualTo(11);
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
@@ -108,8 +108,18 @@ class FederalApplicationRepositoryTest {
     }
 
     @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues) {
+      this.whereSql = whereSql;
+      this.bindValues = bindValues;
+      return pages.stream().mapToInt(List::size).sum();
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryDynamicPagedProcedure(
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
         List<String> bindValues,

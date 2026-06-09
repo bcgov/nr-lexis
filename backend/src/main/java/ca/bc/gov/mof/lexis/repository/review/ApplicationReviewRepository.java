@@ -3,9 +3,11 @@ package ca.bc.gov.mof.lexis.repository.review;
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.CallableStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
@@ -29,6 +31,8 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
 
   private static final String FIND_APPLICATIONS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATIONS_BY_CRITERIA(?,?,?,?,?)";
+  private static final String COUNT_APPLICATIONS_BY_CRITERIA =
+      LEXIS_GROUP_5_PACKAGE + "COUNT_APPLICATIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String UPDATE_EXEMPTION_APPLICATION =
@@ -62,7 +66,37 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public DynamicSearchPage<ApplicationReviewSearchResultDto> search(ApplicationReviewSearchCriteria criteria) {
+  public Page<ApplicationReviewSearchResultDto> search(ApplicationReviewSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    int totalElements =
+        queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+    return queryLegacyDynamicPage(
+        FIND_APPLICATIONS_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        totalElements,
+        this::toSearchResult);
+  }
+
+  public int count(ApplicationReviewSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+  }
+
+  public Slice<ApplicationReviewSearchResultDto> slice(ApplicationReviewSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return queryLegacyDynamicSlice(
+        FIND_APPLICATIONS_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        this::toSearchResult);
+  }
+
+  private SqlWhere buildSearchWhere(ApplicationReviewSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("APPLICATION_NUMBER", criteria.applicationNumber());
@@ -88,25 +122,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
             "applicationNumber",
             "DESC");
 
-    SqlWhere sqlWhere = where.build(orderBy);
-
-    return queryDynamicPage(
-        FIND_APPLICATIONS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        criteria.page(),
-        criteria.size(),
-        rs ->
-            new ApplicationReviewSearchResultDto(
-                getLong(rs, "APPLICATION_NUMBER"),
-                firstNonNullDouble(
-                    getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
-                    getDouble(rs, "APPLICATION_VOLUME")),
-                firstNonNull(getString(rs, "END_USE_SORT"), getString(rs, "EXPORT_PRODUCT_TYPE_CODE")),
-                getLocalDate(rs, "ADVERTISING_DATE"),
-                firstNonNull(getString(rs, "STATUS_DESCRIPTION"), getString(rs, "EXPORT_APPLICATION_STATUS_CODE")),
-                firstNonNull(getString(rs, "REGION_CODE"), getString(rs, "REGION")),
-                "Y".equalsIgnoreCase(getString(rs, "SHOW_INFO_ICON"))));
+    return where.build(orderBy);
   }
 
   public boolean approve(Long applicationNumber, String updateUserId) {
@@ -176,6 +192,19 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     }
 
     return true;
+  }
+
+  private ApplicationReviewSearchResultDto toSearchResult(ResultSet rs) {
+    return new ApplicationReviewSearchResultDto(
+        getLong(rs, "APPLICATION_NUMBER"),
+        firstNonNullDouble(
+            getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
+            getDouble(rs, "APPLICATION_VOLUME")),
+        firstNonNull(getString(rs, "END_USE_SORT"), getString(rs, "EXPORT_PRODUCT_TYPE_CODE")),
+        getLocalDate(rs, "ADVERTISING_DATE"),
+        firstNonNull(getString(rs, "STATUS_DESCRIPTION"), getString(rs, "EXPORT_APPLICATION_STATUS_CODE")),
+        firstNonNull(getString(rs, "REGION_CODE"), getString(rs, "REGION")),
+        "Y".equalsIgnoreCase(getString(rs, "SHOW_INFO_ICON")));
   }
 
   private Optional<ApplicationUpdateRecord> loadApplicationUpdateRecord(Long applicationNumber) {

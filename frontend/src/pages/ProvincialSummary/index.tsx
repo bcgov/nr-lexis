@@ -17,13 +17,16 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { searchApplicationReviews } from '@/service/application-review-search-service'
-import { searchFederalApplications } from '@/service/federal-application-search-service'
-import { searchIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
-import { searchProvincialApplications } from '@/service/provincial-application-search-service'
-import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
-import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
-import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
+import {
+  countApplicationReviews,
+  previewApplicationReviews,
+} from '@/service/application-review-search-service'
+import { countFederalApplications } from '@/service/federal-application-search-service'
+import { countIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
+import { countProvincialApplications } from '@/service/provincial-application-search-service'
+import { countProvincialExemptions } from '@/service/provincial-exemption-search-service'
+import { countProvincialOffers } from '@/service/provincial-offer-search-service'
+import { countProvincialPermits } from '@/service/provincial-permit-search-service'
 
 type SummaryMetricKey =
   | 'provincialApplications'
@@ -148,6 +151,11 @@ const ProvincialSummaryPage: FC = () => {
     return INITIAL_METRICS.filter((metric) => canAccessSummaryRoute(metric.key)).length
   }, [canAccessSummaryRoute])
 
+  const visibleMetrics = useMemo(
+    () => INITIAL_METRICS.filter((metric) => canAccessSummaryRoute(metric.key)),
+    [canAccessSummaryRoute],
+  )
+
   const loadSummary = useCallback(async () => {
     const isLatestRequest = beginSummaryRequest()
     setLoading(true)
@@ -159,10 +167,18 @@ const ProvincialSummaryPage: FC = () => {
         load: () => Promise<T>,
       ): Promise<T | null> => (canAccess ? load() : null)
 
-      const provincialApplications = await loadMetric(
-        canAccessSummaryRoute('provincialApplications'),
-        () =>
-          searchProvincialApplications({
+      const [
+        provincialApplications,
+        provincialExemptions,
+        provincialOffers,
+        provincialPermits,
+        reviewQueueTotal,
+        reviewQueuePreview,
+        federalApplications,
+        indianReservePermits,
+      ] = await Promise.all([
+        loadMetric(canAccessSummaryRoute('provincialApplications'), () =>
+          countProvincialApplications({
             filters: {
               applicationNumber: '',
               packageNumber: '',
@@ -181,11 +197,9 @@ const ProvincialSummaryPage: FC = () => {
             sortField: 'applicationNumber',
             sortDirection: 'desc',
           }),
-      )
-      const provincialExemptions = await loadMetric(
-        canAccessSummaryRoute('provincialExemptions'),
-        () =>
-          searchProvincialExemptions({
+        ),
+        loadMetric(canAccessSummaryRoute('provincialExemptions'), () =>
+          countProvincialExemptions({
             filters: {
               applicationNumber: '',
               packageNumber: '',
@@ -203,65 +217,80 @@ const ProvincialSummaryPage: FC = () => {
             sortField: 'exemptionNumber',
             sortDirection: 'asc',
           }),
-      )
-      const provincialOffers = await loadMetric(canAccessSummaryRoute('provincialOffers'), () =>
-        searchProvincialOffers({
-          filters: {
-            applicationNumber: '',
-            packageNumber: '',
-            clientNumber: '',
-            listingFromDate: '',
-            listingToDate: '',
-            region: [],
-            withdrawalFromDate: '',
-            withdrawalToDate: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'offerNumber',
-          sortDirection: 'asc',
-        }),
-      )
-      const provincialPermits = await loadMetric(canAccessSummaryRoute('provincialPermits'), () =>
-        searchProvincialPermits({
-          filters: {
-            applicationNumber: '',
-            packageNumber: '',
-            region: [],
-            issuedFromDate: '',
-            issuedToDate: '',
-            permitStatus: '',
-            permitNumber: '',
-            ownerClientNumber: '',
-            applicantClientNumber: '',
-          },
-          page: 0,
-          pageSize: 1,
-          sortField: 'permitNumber',
-          sortDirection: 'asc',
-        }),
-      )
-      const reviewQueue = await loadMetric(canAccessSummaryRoute('reviewQueue'), () =>
-        searchApplicationReviews({
-          filters: {
-            applicationNumber: '',
-            productTypeCode: '',
-            region: [],
-            receivedFromDate: '',
-            receivedToDate: '',
-            listingFromDate: '',
-            listingToDate: '',
-          },
-          page: 0,
-          pageSize: 5,
-          sortField: 'applicationNumber',
-          sortDirection: 'asc',
-        }),
-      )
-      const federalApplications = await loadMetric(
-        canAccessSummaryRoute('federalApplications'),
-        () =>
-          searchFederalApplications({
+        ),
+        loadMetric(canAccessSummaryRoute('provincialOffers'), () =>
+          countProvincialOffers({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              clientNumber: '',
+              listingFromDate: '',
+              listingToDate: '',
+              region: [],
+              withdrawalFromDate: '',
+              withdrawalToDate: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'offerNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+        loadMetric(canAccessSummaryRoute('provincialPermits'), () =>
+          countProvincialPermits({
+            filters: {
+              applicationNumber: '',
+              packageNumber: '',
+              region: [],
+              issuedFromDate: '',
+              issuedToDate: '',
+              permitStatus: '',
+              permitNumber: '',
+              ownerClientNumber: '',
+              applicantClientNumber: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'permitNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+        loadMetric(canAccessSummaryRoute('reviewQueue'), () =>
+          countApplicationReviews({
+            filters: {
+              applicationNumber: '',
+              productTypeCode: '',
+              region: [],
+              receivedFromDate: '',
+              receivedToDate: '',
+              listingFromDate: '',
+              listingToDate: '',
+            },
+            page: 0,
+            pageSize: 1,
+            sortField: 'applicationNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+        loadMetric(canAccessSummaryRoute('reviewQueue'), () =>
+          previewApplicationReviews({
+            filters: {
+              applicationNumber: '',
+              productTypeCode: '',
+              region: [],
+              receivedFromDate: '',
+              receivedToDate: '',
+              listingFromDate: '',
+              listingToDate: '',
+            },
+            page: 0,
+            pageSize: 5,
+            sortField: 'applicationNumber',
+            sortDirection: 'asc',
+          }),
+        ),
+        loadMetric(canAccessSummaryRoute('federalApplications'), () =>
+          countFederalApplications({
             filters: {
               applicationNumber: '',
               packageNumber: '',
@@ -277,11 +306,9 @@ const ProvincialSummaryPage: FC = () => {
             sortField: 'federalApplicationNumber',
             sortDirection: 'asc',
           }),
-      )
-      const indianReservePermits = await loadMetric(
-        canAccessSummaryRoute('indianReservePermits'),
-        () =>
-          searchIndianReservePermits({
+        ),
+        loadMetric(canAccessSummaryRoute('indianReservePermits'), () =>
+          countIndianReservePermits({
             filters: {
               permitNumber: '',
               packageNumber: '',
@@ -295,16 +322,17 @@ const ProvincialSummaryPage: FC = () => {
             sortField: 'permitNumber',
             sortDirection: 'asc',
           }),
-      )
+        ),
+      ])
 
       const totalsByKey: Record<SummaryMetricKey, number> = {
-        provincialApplications: provincialApplications?.page.totalElements ?? 0,
-        provincialExemptions: provincialExemptions?.page.totalElements ?? 0,
-        provincialOffers: provincialOffers?.page.totalElements ?? 0,
-        provincialPermits: provincialPermits?.page.totalElements ?? 0,
-        reviewQueue: reviewQueue?.page.totalElements ?? 0,
-        federalApplications: federalApplications?.page.totalElements ?? 0,
-        indianReservePermits: indianReservePermits?.page.totalElements ?? 0,
+        provincialApplications: provincialApplications ?? 0,
+        provincialExemptions: provincialExemptions ?? 0,
+        provincialOffers: provincialOffers ?? 0,
+        provincialPermits: provincialPermits ?? 0,
+        reviewQueue: reviewQueueTotal ?? 0,
+        federalApplications: federalApplications ?? 0,
+        indianReservePermits: indianReservePermits ?? 0,
       }
 
       if (isLatestRequest()) {
@@ -316,7 +344,7 @@ const ProvincialSummaryPage: FC = () => {
         )
 
         setReviewPreview(
-          (reviewQueue?.content ?? []).map((item) => ({
+          (reviewQueuePreview?.content ?? []).map((item) => ({
             applicationNumber: item.applicationNumber,
             status: item.status,
             listingDate: item.listingDate,
@@ -359,13 +387,11 @@ const ProvincialSummaryPage: FC = () => {
             <Button kind="secondary" onClick={() => void loadSummary()} disabled={loading}>
               Refresh Summary
             </Button>
-            <Button
-              kind="ghost"
-              disabled={!canAccessSummaryRoute('reviewQueue')}
-              onClick={() => navigate(SUMMARY_ROUTE_CONFIG.reviewQueue.path)}
-            >
-              Open Review Queue
-            </Button>
+            {canAccessSummaryRoute('reviewQueue') && (
+              <Button kind="ghost" onClick={() => navigate(SUMMARY_ROUTE_CONFIG.reviewQueue.path)}>
+                Open Review Queue
+              </Button>
+            )}
           </div>
         </Tile>
       </Column>
@@ -389,22 +415,21 @@ const ProvincialSummaryPage: FC = () => {
       )}
 
       {!loading &&
-        metrics.map((metric) => {
-          const hasAccess = canAccessSummaryRoute(metric.key)
-          return (
+        metrics
+          .filter((metric) =>
+            visibleMetrics.some((visibleMetric) => visibleMetric.key === metric.key),
+          )
+          .map((metric) => (
             <Column key={metric.key} sm={4} md={4} lg={5}>
               <Tile>
                 <h2 className="dashboard-title">{metric.label}</h2>
-                <Tag type={hasAccess ? 'green' : 'red'}>
-                  {hasAccess ? 'Available' : 'Not Granted'}
-                </Tag>
+                <Tag type="green">Available</Tag>
                 <p className="summary-metric-value">{metric.total.toLocaleString()}</p>
                 <p>{metric.description}</p>
                 <div className="legacy-search-actions">
                   <Button
-                    kind={hasAccess ? 'primary' : 'ghost'}
+                    kind="primary"
                     size="sm"
-                    disabled={!hasAccess}
                     onClick={() => navigate(SUMMARY_ROUTE_CONFIG[metric.key].path)}
                   >
                     Open
@@ -412,54 +437,58 @@ const ProvincialSummaryPage: FC = () => {
                 </div>
               </Tile>
             </Column>
-          )
-        })}
+          ))}
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Review Queue Preview</h2>
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Application</TableHeader>
-                <TableHeader>Status</TableHeader>
-                <TableHeader>Listing Date</TableHeader>
-                <TableHeader>Region</TableHeader>
-                <TableHeader>Open</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {reviewPreview.map((row) => (
-                <TableRow key={row.applicationNumber}>
-                  <TableCell>{row.applicationNumber}</TableCell>
-                  <TableCell>{row.status}</TableCell>
-                  <TableCell>{row.listingDate}</TableCell>
-                  <TableCell>{row.region}</TableCell>
-                  <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      disabled={!canOpenReviewApplication}
-                      onClick={() =>
-                        navigate(
-                          `/provincial/application/${encodeURIComponent(row.applicationNumber)}`,
-                        )
-                      }
-                    >
-                      Open
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {reviewPreview.length === 0 && (
+      {canAccessSummaryRoute('reviewQueue') && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">Review Queue Preview</h2>
+            <Table useZebraStyles>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={5}>No review queue data available.</TableCell>
+                  <TableHeader>Application</TableHeader>
+                  <TableHeader>Status</TableHeader>
+                  <TableHeader>Listing Date</TableHeader>
+                  <TableHeader>Region</TableHeader>
+                  {canOpenReviewApplication && <TableHeader>Open</TableHeader>}
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Tile>
-      </Column>
+              </TableHead>
+              <TableBody>
+                {reviewPreview.map((row) => (
+                  <TableRow key={row.applicationNumber}>
+                    <TableCell>{row.applicationNumber}</TableCell>
+                    <TableCell>{row.status}</TableCell>
+                    <TableCell>{row.listingDate}</TableCell>
+                    <TableCell>{row.region}</TableCell>
+                    {canOpenReviewApplication && (
+                      <TableCell>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          onClick={() =>
+                            navigate(
+                              `/provincial/application/${encodeURIComponent(row.applicationNumber)}`,
+                            )
+                          }
+                        >
+                          Open
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+                {reviewPreview.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={canOpenReviewApplication ? 5 : 4}>
+                      No review queue data available.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Tile>
+        </Column>
+      )}
     </Grid>
   )
 }

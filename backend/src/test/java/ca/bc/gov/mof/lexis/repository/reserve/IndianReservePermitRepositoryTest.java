@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import org.springframework.data.domain.Page;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -41,7 +41,7 @@ class IndianReservePermitRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadOnlyRequestedLegacyPage() {
+  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<IndianReservePermitSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(700001L, 700010L)
             .mapToObj(number -> permitResult(String.valueOf(number)))
@@ -50,13 +50,13 @@ class IndianReservePermitRepositoryTest {
         new TestIndianReservePermitRepository(
             List.<List<?>>of(firstPage, List.of(permitResult("700011"))));
 
-    DynamicSearchPage<IndianReservePermitSearchResultDto> results =
+    Page<IndianReservePermitSearchResultDto> results =
         repository.search(new IndianReservePermitSearchCriteria(null, null, null, null, null, null, 0, 10));
 
-    assertThat(results.results())
+    assertThat(results.getContent())
         .extracting(IndianReservePermitSearchResultDto::permitNumber)
         .containsExactly("700001", "700002", "700003", "700004", "700005", "700006", "700007", "700008", "700009", "700010");
-    assertThat(results.total()).isEqualTo(11);
+    assertThat(results.getTotalElements()).isEqualTo(11);
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
@@ -92,8 +92,18 @@ class IndianReservePermitRepositoryTest {
     }
 
     @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues) {
+      this.whereSql = whereSql;
+      this.bindValues = bindValues;
+      return pages.stream().mapToInt(List::size).sum();
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryDynamicPagedProcedure(
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
         List<String> bindValues,

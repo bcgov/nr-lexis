@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import org.springframework.data.domain.Page;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -76,7 +76,7 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadOnlyRequestedLegacyPage() {
+  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<ExemptionSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(1L, 10L)
             .mapToObj(number -> exemptionResult("EX-" + number))
@@ -84,15 +84,15 @@ class ExemptionRepositoryTest {
     TestExemptionRepository repository =
         new TestExemptionRepository(List.<List<?>>of(firstPage, List.of(exemptionResult("EX-11"))));
 
-    DynamicSearchPage<ExemptionSearchResultDto> results =
+    Page<ExemptionSearchResultDto> results =
         repository.search(
             new ExemptionSearchCriteria(
                 null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
 
-    assertThat(results.results())
+    assertThat(results.getContent())
         .extracting(ExemptionSearchResultDto::exemptionNumber)
         .containsExactly("EX-1", "EX-2", "EX-3", "EX-4", "EX-5", "EX-6", "EX-7", "EX-8", "EX-9", "EX-10");
-    assertThat(results.total()).isEqualTo(11);
+    assertThat(results.getTotalElements()).isEqualTo(11);
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
@@ -129,8 +129,18 @@ class ExemptionRepositoryTest {
     }
 
     @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues) {
+      this.whereSql = whereSql;
+      this.bindValues = bindValues;
+      return pages.stream().mapToInt(List::size).sum();
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryDynamicPagedProcedure(
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
         List<String> bindValues,

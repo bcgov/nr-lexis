@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import org.springframework.data.domain.Page;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -73,7 +73,7 @@ class PermitRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadOnlyRequestedLegacyPage() {
+  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<PermitSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(700001L, 700010L)
             .mapToObj(PermitRepositoryTest::permitResult)
@@ -81,15 +81,15 @@ class PermitRepositoryTest {
     TestPermitRepository repository =
         new TestPermitRepository(List.<List<?>>of(firstPage, List.of(permitResult(700011L))));
 
-    DynamicSearchPage<PermitSearchResultDto> results =
+    Page<PermitSearchResultDto> results =
         repository.search(
             new PermitSearchCriteria(
                 null, null, null, null, null, null, null, null, null, List.of(), null, 0, 10));
 
-    assertThat(results.results())
+    assertThat(results.getContent())
         .extracting(PermitSearchResultDto::permitNumber)
         .containsExactly(700001L, 700002L, 700003L, 700004L, 700005L, 700006L, 700007L, 700008L, 700009L, 700010L);
-    assertThat(results.total()).isEqualTo(11);
+    assertThat(results.getTotalElements()).isEqualTo(11);
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
@@ -125,8 +125,18 @@ class PermitRepositoryTest {
     }
 
     @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues) {
+      this.whereSql = whereSql;
+      this.bindValues = bindValues;
+      return pages.stream().mapToInt(List::size).sum();
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryDynamicPagedProcedure(
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
         List<String> bindValues,

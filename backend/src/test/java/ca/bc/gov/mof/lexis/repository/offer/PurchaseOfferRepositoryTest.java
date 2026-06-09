@@ -7,7 +7,7 @@ import static org.mockito.Mockito.verify;
 
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
+import org.springframework.data.domain.Page;
 import java.sql.CallableStatement;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -79,7 +79,7 @@ class PurchaseOfferRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadOnlyRequestedLegacyPage() {
+  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<PurchaseOfferSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(810001L, 810010L)
             .mapToObj(PurchaseOfferRepositoryTest::offerResult)
@@ -87,15 +87,15 @@ class PurchaseOfferRepositoryTest {
     TestPurchaseOfferRepository repository =
         new TestPurchaseOfferRepository(List.<List<?>>of(firstPage, List.of(offerResult(810011L))));
 
-    DynamicSearchPage<PurchaseOfferSearchResultDto> results =
+    Page<PurchaseOfferSearchResultDto> results =
         repository.search(
             new PurchaseOfferSearchCriteria(
                 null, null, null, null, null, null, null, List.of(), null, 0, 10));
 
-    assertThat(results.results())
+    assertThat(results.getContent())
         .extracting(PurchaseOfferSearchResultDto::offerNumber)
         .containsExactly(810001L, 810002L, 810003L, 810004L, 810005L, 810006L, 810007L, 810008L, 810009L, 810010L);
-    assertThat(results.total()).isEqualTo(11);
+    assertThat(results.getTotalElements()).isEqualTo(11);
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
@@ -200,8 +200,18 @@ class PurchaseOfferRepositoryTest {
     }
 
     @Override
+    protected int queryLegacyDynamicCountProcedure(
+        String procedureSignature,
+        String whereSql,
+        List<String> bindValues) {
+      this.whereSql = whereSql;
+      this.bindValues = bindValues;
+      return pages.stream().mapToInt(List::size).sum();
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryDynamicPagedProcedure(
+    protected <T> List<T> queryLegacyDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
         List<String> bindValues,
