@@ -37,7 +37,20 @@ export type ProvincialPermitDetailTabsData = {
   boicItems: ProvincialPermitEventRow[]
 }
 
+export type ProvincialPermitDetailTabsRequest = {
+  permitNumber: string
+  receiptNumber?: string | number | null
+}
+
 const PERMIT_TAB_CACHE_TTL_MS = 30_000
+
+export const EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: ProvincialPermitDetailTabsData = {
+  items: [],
+  fees: [],
+  gbmsEvents: [],
+  oicItems: [],
+  boicItems: [],
+}
 
 const parseArrayPayload = (payload: unknown): unknown[] | null => {
   if (Array.isArray(payload)) {
@@ -57,6 +70,9 @@ const parseArrayPayload = (payload: unknown): unknown[] | null => {
   }
   if (Array.isArray(objectPayload.items)) {
     return objectPayload.items as unknown[]
+  }
+  if (Array.isArray(objectPayload.scaleList)) {
+    return objectPayload.scaleList as unknown[]
   }
   if (Array.isArray(objectPayload.data)) {
     return objectPayload.data as unknown[]
@@ -80,7 +96,7 @@ const asNumber = (value: unknown): number => {
     return value
   }
   if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value)
+    const parsed = Number.parseFloat(value.replace(/[$,\s]/g, ''))
     if (Number.isFinite(parsed)) {
       return parsed
     }
@@ -91,8 +107,16 @@ const asNumber = (value: unknown): number => {
 const normalizePermitItemRow = (row: unknown, index: number): ProvincialPermitItemRow => {
   const source = (row ?? {}) as Record<string, unknown>
   return {
-    id: asString(source.id || source.itemId || source.lineNumber || `item-${index + 1}`),
-    timberMark: asString(source.timberMark || source.mark || source.timberMarkNumber),
+    id: asString(
+      source.id ||
+        source.itemId ||
+        source.lineNumber ||
+        source.exportScaleDetailId ||
+        `item-${index + 1}`,
+    ),
+    timberMark: asString(
+      source.timberMark || source.timbermark || source.mark || source.timberMarkNumber,
+    ),
     species: asString(source.species || source.speciesCode || source.speciesDescription),
     grade: asString(source.grade || source.gradeCode || source.gradeDescription),
     pieces: asNumber(source.pieces || source.pieceCount || source.numberOfPieces),
@@ -100,37 +124,59 @@ const normalizePermitItemRow = (row: unknown, index: number): ProvincialPermitIt
   }
 }
 
-const normalizePermitFeeRow = (row: unknown, index: number): ProvincialPermitFeeRow => {
+const normalizeScaleFeeRow = (row: unknown, index: number): ProvincialPermitFeeRow => {
   const source = (row ?? {}) as Record<string, unknown>
+  const feeCode = asString(source.fil || source.feeCode || source.code)
+  const descriptor = [
+    asString(source.timberMark || source.timbermark),
+    asString(source.species),
+    asString(source.grade),
+  ]
+    .filter(Boolean)
+    .join(' / ')
+
   return {
     id: asString(source.id || source.feeId || source.lineNumber || `fee-${index + 1}`),
-    feeCode: asString(source.feeCode || source.code),
-    feeDescription: asString(source.feeDescription || source.description || source.feeType),
-    amount: asNumber(source.amount || source.feeAmount || source.total),
+    feeCode: feeCode || 'Scale',
+    feeDescription:
+      descriptor || asString(source.description || source.feeType) || 'Permit scale fee',
+    amount: asNumber(source.fee || source.amount || source.feeAmount || source.total),
     status: asString(source.status || source.feeStatus || source.state),
     invoiceNumber: asString(source.invoiceNumber || source.invoiceNo),
     receiptNumber: asString(source.receiptNumber || source.receiptNo),
   }
 }
 
-const normalizePermitEventRow = (row: unknown, index: number): ProvincialPermitEventRow => {
+const normalizeGbmsHistoryRow = (row: unknown, index: number): ProvincialPermitEventRow => {
   const source = (row ?? {}) as Record<string, unknown>
+  const cancelledByInvoice = asString(source.cancelledByInvoice)
+  const replacedByInvoice = asString(source.replacedByInvoice)
+  const invoiceAmount = asString(source.invoiceAmount)
+  const notes = [
+    cancelledByInvoice ? `Cancelled by ${cancelledByInvoice}` : '',
+    replacedByInvoice ? `Replaced by ${replacedByInvoice}` : '',
+    invoiceAmount ? `Amount ${invoiceAmount}` : '',
+  ]
+    .filter(Boolean)
+    .join('; ')
+
   return {
-    id: asString(source.id || source.eventId || source.lineNumber || `event-${index + 1}`),
-    eventDate: asString(source.eventDate || source.date || source.createdDate || source.issueDate),
-    eventType: asString(source.eventType || source.type || source.code),
-    status: asString(source.status || source.state),
-    reference: asString(source.reference || source.referenceNumber || source.number),
-    notes: asString(source.notes || source.description || source.remark),
+    id: asString(source.id || source.gbmsInvoiceNumber || `gbms-${index + 1}`),
+    eventDate: asString(source.printedDate || source.entryDate || source.updateDate),
+    eventType: 'GBMS Invoice',
+    status: cancelledByInvoice || replacedByInvoice ? 'Updated' : 'Current',
+    reference: asString(source.gbmsInvoiceNumber),
+    notes,
   }
 }
 
 const fetchRows = async <TRow>(
   path: string,
   normalize: (row: unknown, index: number) => TRow,
+  config?: Parameters<typeof apiService.getCachedResponse>[1],
 ): Promise<TRow[]> => {
   try {
-    const response = await apiService.getCachedResponse<unknown>(path, undefined, {
+    const response = await apiService.getCachedResponse<unknown>(path, config, {
       ttlMs: PERMIT_TAB_CACHE_TTL_MS,
     })
     if (response.status === 204) {
@@ -148,33 +194,104 @@ const fetchRows = async <TRow>(
   }
 }
 
-export const fetchProvincialPermitDetailTabs = async (
+const fetchOptionalRows = async <TRow>(
+  path: string,
+  normalize: (row: unknown, index: number) => TRow,
+  config?: Parameters<typeof apiService.getCachedResponse>[1],
+): Promise<TRow[]> => {
+  try {
+    return await fetchRows(path, normalize, config)
+  } catch {
+    return []
+  }
+}
+
+const fetchPackageList = async (permitNumber: string): Promise<string[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/permit-details/package-list',
+      {
+        params: {
+          permitNumber,
+        },
+      },
+      { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
+    )
+    if (response.status === 204) {
+      return []
+    }
+
+    const objectPayload = (response.data ?? {}) as Record<string, unknown>
+    const packageList = Array.isArray(objectPayload.packageList) ? objectPayload.packageList : []
+    return packageList
+      .map(asString)
+      .filter((packageNumber) => packageNumber && packageNumber !== 'No Packages')
+  } catch {
+    return []
+  }
+}
+
+const fetchScaleRows = async (permitNumber: string, packageNumber: string): Promise<unknown[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/permit-details/scale-fees-for-package',
+      {
+        params: {
+          packageNumber,
+          permitNumber,
+        },
+      },
+      { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
+    )
+    if (response.status === 204) {
+      return []
+    }
+
+    return parseArrayPayload(response.data) ?? []
+  } catch {
+    return []
+  }
+}
+
+const fetchGbmsRows = async (
   permitNumber: string,
+  receiptNumber: string | number | null | undefined,
+): Promise<ProvincialPermitEventRow[]> => {
+  const normalizedReceiptNumber = asString(receiptNumber)
+  if (!normalizedReceiptNumber) {
+    return []
+  }
+
+  return fetchOptionalRows(
+    '/lexis/rpc/permit-details/gbms-invoice-history',
+    normalizeGbmsHistoryRow,
+    {
+      params: {
+        receiptNumber: normalizedReceiptNumber,
+        permitNumber,
+      },
+    },
+  )
+}
+
+export const fetchProvincialPermitDetailTabs = async (
+  request: string | ProvincialPermitDetailTabsRequest,
 ): Promise<ProvincialPermitDetailTabsData> => {
-  const encodedPermitNumber = encodeURIComponent(permitNumber)
-  const items = await fetchRows(
-    `/lexis/permits/${encodedPermitNumber}/items`,
-    normalizePermitItemRow,
+  const permitNumber = typeof request === 'string' ? request : request.permitNumber
+  const receiptNumber = typeof request === 'string' ? undefined : request.receiptNumber
+  const packageList = await fetchPackageList(permitNumber)
+
+  const packageScaleRows = await Promise.all(
+    packageList.map((packageNumber) => fetchScaleRows(permitNumber, packageNumber)),
   )
-  const fees = await fetchRows(`/lexis/permits/${encodedPermitNumber}/fees`, normalizePermitFeeRow)
-  const gbmsEvents = await fetchRows(
-    `/lexis/permits/${encodedPermitNumber}/gbms`,
-    normalizePermitEventRow,
-  )
-  const oicItems = await fetchRows(
-    `/lexis/permits/${encodedPermitNumber}/oic-items`,
-    normalizePermitEventRow,
-  )
-  const boicItems = await fetchRows(
-    `/lexis/permits/${encodedPermitNumber}/boic-items`,
-    normalizePermitEventRow,
-  )
+  const scaleRows = packageScaleRows.flat()
+  const gbmsEvents = await fetchGbmsRows(permitNumber, receiptNumber)
 
   return {
-    items,
-    fees,
+    items: scaleRows.map(normalizePermitItemRow),
+    fees: scaleRows.map(normalizeScaleFeeRow),
     gbmsEvents,
-    oicItems,
-    boicItems,
+    oicItems: [],
+    boicItems: [],
   }
 }

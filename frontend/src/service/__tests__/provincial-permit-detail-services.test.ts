@@ -27,57 +27,116 @@ describe('provincial permit detail services', () => {
     vi.clearAllMocks()
   })
 
-  it('loads permit detail tab endpoints sequentially', async () => {
-    let resolveItems: (value: ReturnType<typeof response>) => void = () => {}
+  it('loads permit detail tab rows from permit RPC endpoints', async () => {
     getCachedResponseMock
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveItems = resolve
+      .mockResolvedValueOnce(response({ packageList: ['PKG-100'] }))
+      .mockResolvedValueOnce(
+        response({
+          scaleList: [
+            {
+              id: 'SCALE-1',
+              timbermark: 'TM-1',
+              species: 'Fir',
+              grade: 'A',
+              pieces: 12,
+              volume: '34.5',
+              fil: 'FIL',
+              fee: '$123.45',
+            },
+          ],
         }),
       )
-      .mockResolvedValueOnce(response([]))
-      .mockResolvedValueOnce(response([]))
-      .mockResolvedValueOnce(response([]))
-      .mockResolvedValueOnce(response([]))
+      .mockResolvedValueOnce(
+        response([
+          {
+            gbmsInvoiceNumber: 'GBMS-1',
+            invoiceAmount: '$123.45',
+            printedDate: '2026-06-01',
+          },
+        ]),
+      )
 
-    const resultPromise = fetchProvincialPermitDetailTabs('P-777')
-    await Promise.resolve()
+    const result = await fetchProvincialPermitDetailTabs({
+      permitNumber: 'P-777',
+      receiptNumber: 'RCPT-1',
+    })
 
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(1)
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(3)
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       1,
-      '/lexis/permits/P-777/items',
-      undefined,
+      '/lexis/rpc/permit-details/package-list',
+      { params: { permitNumber: 'P-777' } },
       { ttlMs: 30_000 },
     )
-
-    resolveItems(response([]))
-    const result = await resultPromise
-
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       2,
-      '/lexis/permits/P-777/fees',
-      undefined,
+      '/lexis/rpc/permit-details/scale-fees-for-package',
+      {
+        params: {
+          packageNumber: 'PKG-100',
+          permitNumber: 'P-777',
+        },
+      },
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       3,
-      '/lexis/permits/P-777/gbms',
-      undefined,
+      '/lexis/rpc/permit-details/gbms-invoice-history',
+      {
+        params: {
+          receiptNumber: 'RCPT-1',
+          permitNumber: 'P-777',
+        },
+      },
       { ttlMs: 30_000 },
     )
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      4,
-      '/lexis/permits/P-777/oic-items',
-      undefined,
-      { ttlMs: 30_000 },
-    )
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      5,
-      '/lexis/permits/P-777/boic-items',
-      undefined,
-      { ttlMs: 30_000 },
-    )
+    expect(result).toEqual({
+      items: [
+        {
+          id: 'SCALE-1',
+          timberMark: 'TM-1',
+          species: 'Fir',
+          grade: 'A',
+          pieces: 12,
+          volume: 34.5,
+        },
+      ],
+      fees: [
+        {
+          id: 'SCALE-1',
+          feeCode: 'FIL',
+          feeDescription: 'TM-1 / Fir / A',
+          amount: 123.45,
+          status: '',
+          invoiceNumber: '',
+          receiptNumber: '',
+        },
+      ],
+      gbmsEvents: [
+        {
+          id: 'GBMS-1',
+          eventDate: '2026-06-01',
+          eventType: 'GBMS Invoice',
+          status: 'Current',
+          reference: 'GBMS-1',
+          notes: 'Amount $123.45',
+        },
+      ],
+      oicItems: [],
+      boicItems: [],
+    })
+  })
+
+  it('returns empty permit detail tab rows when optional RPC tables are unavailable', async () => {
+    getCachedResponseMock
+      .mockRejectedValueOnce(new Error('package list unavailable'))
+      .mockRejectedValueOnce(new Error('gbms unavailable'))
+
+    const result = await fetchProvincialPermitDetailTabs({
+      permitNumber: 'P-777',
+      receiptNumber: 'RCPT-1',
+    })
+
     expect(result).toEqual({
       items: [],
       fees: [],
