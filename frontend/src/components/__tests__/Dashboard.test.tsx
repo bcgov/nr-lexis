@@ -110,4 +110,35 @@ describe('Dashboard', () => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(2)
     })
   })
+
+  test('hides inaccessible dashboard modules and quick actions', async () => {
+    const allowedActions = new Set([
+      '/summary',
+      '/applicationSearch',
+      '/exemptionSearch',
+      '/offersSearch',
+      '/permitSearch',
+      '/applicationReport',
+    ])
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => allowedActions.has(action),
+    } as any)
+
+    render(
+      <MemoryRouter>
+        <Dashboard />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Provincial Applications')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open Provincial Summary' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open Reports' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Open Review Queue' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Open Admin' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Provincial Review')).not.toBeInTheDocument()
+    expect(screen.queryByText('Federal Applications')).not.toBeInTheDocument()
+    expect(screen.queryByText('Indigenous Reserve Permits')).not.toBeInTheDocument()
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument()
+    expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
+  })
 })

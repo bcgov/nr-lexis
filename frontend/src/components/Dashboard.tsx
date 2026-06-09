@@ -201,6 +201,16 @@ const Dashboard: FC = () => {
     return DASHBOARD_MODULES.filter((module) => canAccessModule(module.requiredActions)).length
   }, [canAccessModule])
 
+  const visibleModules = useMemo(
+    () => DASHBOARD_MODULES.filter((module) => canAccessModule(module.requiredActions)),
+    [canAccessModule],
+  )
+
+  const visibleQuickActions = useMemo(
+    () => DASHBOARD_QUICK_ACTIONS.filter((action) => canAccessModule(action.requiredActions)),
+    [canAccessModule],
+  )
+
   const loadCounts = useCallback(async () => {
     const isLatestRequest = beginCountsRequest()
     setLoading(true)
@@ -395,38 +405,34 @@ const Dashboard: FC = () => {
             <Button kind="secondary" onClick={() => void loadCounts()} disabled={loading}>
               Refresh Dashboard
             </Button>
-            <Button
-              kind="ghost"
-              disabled={!canAccessModule(['/summary'])}
-              onClick={() => navigate('/provincial/summary')}
-            >
-              Open Provincial Summary
-            </Button>
+            {canAccessModule(['/summary']) && (
+              <Button kind="ghost" onClick={() => navigate('/provincial/summary')}>
+                Open Provincial Summary
+              </Button>
+            )}
           </div>
         </Tile>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Quick Actions</h2>
-          <div className="legacy-search-actions">
-            {DASHBOARD_QUICK_ACTIONS.map((action) => {
-              const hasAccess = canAccessModule(action.requiredActions)
-              return (
+      {visibleQuickActions.length > 0 && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">Quick Actions</h2>
+            <div className="legacy-search-actions">
+              {visibleQuickActions.map((action) => (
                 <Button
                   key={action.id}
-                  kind={hasAccess ? 'primary' : 'ghost'}
+                  kind="primary"
                   size="sm"
-                  disabled={!hasAccess}
                   onClick={() => navigate(action.path)}
                 >
                   {action.title}
                 </Button>
-              )
-            })}
-          </div>
-        </Tile>
-      </Column>
+              ))}
+            </div>
+          </Tile>
+        </Column>
+      )}
 
       {loading && (
         <Column sm={4} md={8} lg={16}>
@@ -446,17 +452,14 @@ const Dashboard: FC = () => {
         </Column>
       )}
 
-      {DASHBOARD_MODULES.map((module) => {
-        const hasAccess = canAccessModule(module.requiredActions)
+      {visibleModules.map((module) => {
         const total = module.countKey ? counts[module.countKey] : null
 
         return (
           <Column key={module.id} sm={4} md={4} lg={8}>
             <Tile>
               <h2 className="dashboard-title">{module.title}</h2>
-              <Tag type={hasAccess ? 'green' : 'red'}>
-                {hasAccess ? 'Available' : 'Not Granted'}
-              </Tag>
+              <Tag type="green">Available</Tag>
               {total !== null && (
                 <p className="summary-metric-value">
                   {countsLoaded ? total.toLocaleString() : '-'}
@@ -465,9 +468,8 @@ const Dashboard: FC = () => {
               <p>{module.description}</p>
               <div className="legacy-search-actions">
                 <Button
-                  kind={hasAccess ? 'primary' : 'ghost'}
+                  kind="primary"
                   size="sm"
-                  disabled={!hasAccess}
                   onClick={() => navigate(module.path)}
                 >
                   Open

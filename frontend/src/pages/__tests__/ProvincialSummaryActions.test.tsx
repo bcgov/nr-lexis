@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -173,14 +173,16 @@ describe('Provincial Summary action smoke', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
   })
 
-  it('disables summary route actions when the user lacks all route permissions', async () => {
+  it('hides summary route actions when the user lacks all route permissions', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => false,
     } as any)
 
     renderPage()
 
-    await screen.findByText('No review queue data available.')
+    await waitFor(() => {
+      expect(screen.queryByText('Loading summary metrics...')).not.toBeInTheDocument()
+    })
 
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
     expect(mockedSearchProvincialExemptions).not.toHaveBeenCalled()
@@ -190,11 +192,9 @@ describe('Provincial Summary action smoke', () => {
     expect(mockedSearchFederalApplications).not.toHaveBeenCalled()
     expect(mockedSearchIndianReservePermits).not.toHaveBeenCalled()
 
-    expect(screen.getByRole('button', { name: 'Open Review Queue' })).toBeDisabled()
-    expect(screen.getByText('No review queue data available.')).toBeInTheDocument()
-    expect(screen.getAllByText('Not Granted')).toHaveLength(7)
-    screen.getAllByRole('button', { name: 'Open' }).forEach((button) => {
-      expect(button).toBeDisabled()
-    })
+    expect(screen.queryByRole('button', { name: 'Open Review Queue' })).not.toBeInTheDocument()
+    expect(screen.queryByText('No review queue data available.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
+    expect(screen.queryAllByRole('button', { name: 'Open' })).toHaveLength(0)
   })
 })

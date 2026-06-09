@@ -92,4 +92,21 @@ describe('Provincial hub actions', () => {
     expect(screen.getByText('11')).toBeInTheDocument()
     expect(screen.getByText('15')).toBeInTheDocument()
   })
+
+  it('hides provincial areas the user cannot access', () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === '/applicationSearch',
+    } as any)
+
+    renderPage()
+
+    expect(screen.getByText('Applications')).toBeInTheDocument()
+    expect(screen.queryByText('Exemptions')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offers')).not.toBeInTheDocument()
+    expect(screen.queryByText('Permits')).not.toBeInTheDocument()
+    expect(screen.queryByText('Review Queue')).not.toBeInTheDocument()
+    expect(screen.queryByText('Summary')).not.toBeInTheDocument()
+    expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Show available areas only')).not.toBeInTheDocument()
+  })
 })

@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState, type FC } from 'react'
 import {
   Button,
-  Checkbox,
   Column,
   Grid,
   InlineLoading,
@@ -12,7 +11,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
   TextInput,
   Tile,
 } from '@carbon/react'
@@ -156,7 +154,6 @@ const ProvincialPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const [searchText, setSearchText] = useState('')
-  const [showAccessibleOnly, setShowAccessibleOnly] = useState(false)
   const [loadingTotals, setLoadingTotals] = useState(false)
   const [totalsError, setTotalsError] = useState('')
   const [totals, setTotals] = useState<WorkflowTotals>(EMPTY_TOTALS)
@@ -304,7 +301,7 @@ const ProvincialPage: FC = () => {
   const visibleWorkflows = useMemo(() => {
     return WORKFLOWS.filter((workflow) => {
       const hasAccess = workflow.requiredActions.some((action) => canPerform(action))
-      if (showAccessibleOnly && !hasAccess) {
+      if (!hasAccess) {
         return false
       }
 
@@ -319,7 +316,15 @@ const ProvincialPage: FC = () => {
         normalizeText(workflow.path).includes(normalized)
       )
     })
-  }, [canPerform, searchText, showAccessibleOnly])
+  }, [canPerform, searchText])
+
+  const visibleQuickActions = useMemo(
+    () =>
+      QUICK_ACTIONS.filter((action) =>
+        action.requiredActions.some((requiredAction) => canPerform(requiredAction)),
+      ),
+    [canPerform],
+  )
 
   const accessibleCount = useMemo(() => {
     return WORKFLOWS.filter((workflow) =>
@@ -347,50 +352,39 @@ const ProvincialPage: FC = () => {
               onChange={(event) => setSearchText(event.target.value)}
               placeholder="Search title, route, or description"
             />
-            <div>
-              <Checkbox
-                id="provincialShowAccessibleOnly"
-                labelText="Show available areas only"
-                checked={showAccessibleOnly}
-                onChange={(_, payload) => setShowAccessibleOnly(Boolean(payload.checked))}
-              />
-            </div>
           </div>
           <div className="legacy-search-actions">
             <Button kind="secondary" onClick={() => void loadTotals()} disabled={loadingTotals}>
               Refresh Totals
             </Button>
-            <Button kind="ghost" onClick={() => navigate('/provincial/summary')}>
-              Open Summary
-            </Button>
+            {canPerform('/summary') && (
+              <Button kind="ghost" onClick={() => navigate('/provincial/summary')}>
+                Open Summary
+              </Button>
+            )}
           </div>
         </Tile>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Quick Actions</h2>
-          <div className="legacy-search-actions">
-            {QUICK_ACTIONS.map((action) => {
-              const canAccessAction = action.requiredActions.some((requiredAction) =>
-                canPerform(requiredAction),
-              )
-
-              return (
+      {visibleQuickActions.length > 0 && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">Quick Actions</h2>
+            <div className="legacy-search-actions">
+              {visibleQuickActions.map((action) => (
                 <Button
                   key={action.id}
-                  kind={canAccessAction ? 'primary' : 'ghost'}
+                  kind="primary"
                   size="sm"
-                  disabled={!canAccessAction}
                   onClick={() => navigate(action.path)}
                 >
                   {action.label}
                 </Button>
-              )
-            })}
-          </div>
-        </Tile>
-      </Column>
+              ))}
+            </div>
+          </Tile>
+        </Column>
+      )}
 
       {loadingTotals && (
         <Column sm={4} md={8} lg={16}>
@@ -418,14 +412,12 @@ const ProvincialPage: FC = () => {
                 <TableHeader>Area</TableHeader>
                 <TableHeader>Description</TableHeader>
                 <TableHeader>Route</TableHeader>
-                <TableHeader>Access</TableHeader>
                 <TableHeader>Total</TableHeader>
                 <TableHeader>Open</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
               {visibleWorkflows.map((workflow) => {
-                const hasAccess = workflow.requiredActions.some((action) => canPerform(action))
                 const workflowTotal = workflow.metricKey ? totals[workflow.metricKey] : null
 
                 return (
@@ -436,20 +428,14 @@ const ProvincialPage: FC = () => {
                       <code>{workflow.path}</code>
                     </TableCell>
                     <TableCell>
-                      <Tag type={hasAccess ? 'green' : 'red'}>
-                        {hasAccess ? 'Available' : 'Not Granted'}
-                      </Tag>
-                    </TableCell>
-                    <TableCell>
                       {workflowTotal === null || !totalsLoaded
                         ? '-'
                         : workflowTotal.toLocaleString()}
                     </TableCell>
                     <TableCell>
                       <Button
-                        kind={hasAccess ? 'primary' : 'ghost'}
+                        kind="primary"
                         size="sm"
-                        disabled={!hasAccess}
                         onClick={() => navigate(workflow.path)}
                       >
                         Open
@@ -460,7 +446,7 @@ const ProvincialPage: FC = () => {
               })}
               {visibleWorkflows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={5}>
                     No provincial areas matched the current filters.
                   </TableCell>
                 </TableRow>

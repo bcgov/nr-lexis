@@ -148,6 +148,11 @@ const ProvincialSummaryPage: FC = () => {
     return INITIAL_METRICS.filter((metric) => canAccessSummaryRoute(metric.key)).length
   }, [canAccessSummaryRoute])
 
+  const visibleMetrics = useMemo(
+    () => INITIAL_METRICS.filter((metric) => canAccessSummaryRoute(metric.key)),
+    [canAccessSummaryRoute],
+  )
+
   const loadSummary = useCallback(async () => {
     const isLatestRequest = beginSummaryRequest()
     setLoading(true)
@@ -359,13 +364,11 @@ const ProvincialSummaryPage: FC = () => {
             <Button kind="secondary" onClick={() => void loadSummary()} disabled={loading}>
               Refresh Summary
             </Button>
-            <Button
-              kind="ghost"
-              disabled={!canAccessSummaryRoute('reviewQueue')}
-              onClick={() => navigate(SUMMARY_ROUTE_CONFIG.reviewQueue.path)}
-            >
-              Open Review Queue
-            </Button>
+            {canAccessSummaryRoute('reviewQueue') && (
+              <Button kind="ghost" onClick={() => navigate(SUMMARY_ROUTE_CONFIG.reviewQueue.path)}>
+                Open Review Queue
+              </Button>
+            )}
           </div>
         </Tile>
       </Column>
@@ -389,22 +392,19 @@ const ProvincialSummaryPage: FC = () => {
       )}
 
       {!loading &&
-        metrics.map((metric) => {
-          const hasAccess = canAccessSummaryRoute(metric.key)
-          return (
+        metrics
+          .filter((metric) => visibleMetrics.some((visibleMetric) => visibleMetric.key === metric.key))
+          .map((metric) => (
             <Column key={metric.key} sm={4} md={4} lg={5}>
               <Tile>
                 <h2 className="dashboard-title">{metric.label}</h2>
-                <Tag type={hasAccess ? 'green' : 'red'}>
-                  {hasAccess ? 'Available' : 'Not Granted'}
-                </Tag>
+                <Tag type="green">Available</Tag>
                 <p className="summary-metric-value">{metric.total.toLocaleString()}</p>
                 <p>{metric.description}</p>
                 <div className="legacy-search-actions">
                   <Button
-                    kind={hasAccess ? 'primary' : 'ghost'}
+                    kind="primary"
                     size="sm"
-                    disabled={!hasAccess}
                     onClick={() => navigate(SUMMARY_ROUTE_CONFIG[metric.key].path)}
                   >
                     Open
@@ -412,54 +412,58 @@ const ProvincialSummaryPage: FC = () => {
                 </div>
               </Tile>
             </Column>
-          )
-        })}
+          ))}
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Review Queue Preview</h2>
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Application</TableHeader>
-                <TableHeader>Status</TableHeader>
-                <TableHeader>Listing Date</TableHeader>
-                <TableHeader>Region</TableHeader>
-                <TableHeader>Open</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {reviewPreview.map((row) => (
-                <TableRow key={row.applicationNumber}>
-                  <TableCell>{row.applicationNumber}</TableCell>
-                  <TableCell>{row.status}</TableCell>
-                  <TableCell>{row.listingDate}</TableCell>
-                  <TableCell>{row.region}</TableCell>
-                  <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      disabled={!canOpenReviewApplication}
-                      onClick={() =>
-                        navigate(
-                          `/provincial/application/${encodeURIComponent(row.applicationNumber)}`,
-                        )
-                      }
-                    >
-                      Open
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {reviewPreview.length === 0 && (
+      {canAccessSummaryRoute('reviewQueue') && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">Review Queue Preview</h2>
+            <Table useZebraStyles>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={5}>No review queue data available.</TableCell>
+                  <TableHeader>Application</TableHeader>
+                  <TableHeader>Status</TableHeader>
+                  <TableHeader>Listing Date</TableHeader>
+                  <TableHeader>Region</TableHeader>
+                  {canOpenReviewApplication && <TableHeader>Open</TableHeader>}
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Tile>
-      </Column>
+              </TableHead>
+              <TableBody>
+                {reviewPreview.map((row) => (
+                  <TableRow key={row.applicationNumber}>
+                    <TableCell>{row.applicationNumber}</TableCell>
+                    <TableCell>{row.status}</TableCell>
+                    <TableCell>{row.listingDate}</TableCell>
+                    <TableCell>{row.region}</TableCell>
+                    {canOpenReviewApplication && (
+                      <TableCell>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          onClick={() =>
+                            navigate(
+                              `/provincial/application/${encodeURIComponent(row.applicationNumber)}`,
+                            )
+                          }
+                        >
+                          Open
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+                {reviewPreview.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={canOpenReviewApplication ? 5 : 4}>
+                      No review queue data available.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Tile>
+        </Column>
+      )}
     </Grid>
   )
 }
