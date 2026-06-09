@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -42,7 +43,7 @@ public class IndianReservePermitRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public List<IndianReservePermitSearchResultDto> search(IndianReservePermitSearchCriteria criteria) {
+  public DynamicSearchPage<IndianReservePermitSearchResultDto> search(IndianReservePermitSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addRaw(" AND CLIENT_NUMBER IS NOT NULL");
@@ -55,10 +56,12 @@ public class IndianReservePermitRepository extends OracleRepositorySupport {
 
     SqlWhere sqlWhere = where.build(" ORDER BY EIRPD.EXPORT_INDIAN_RSRV_PRMT_DTL_ID DESC");
 
-    return queryDynamicAllPages(
+    return queryDynamicPage(
         FIND_PERMIT_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
         rs ->
             new IndianReservePermitSearchResultDto(
                 getString(rs, "EXPORT_INDIAN_RSRV_PRMT_DTL_ID"),

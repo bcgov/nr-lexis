@@ -3,6 +3,8 @@ package ca.bc.gov.mof.lexis.repository.application;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -12,7 +14,7 @@ import org.junit.jupiter.api.Test;
 class LexisApplicationRepositoryTest {
 
   @Test
-  void searchShouldUseProvincialApplicationAliasesForDynamicCriteria() {
+  void searchShouldUseProvincialApplicationViewAliasForDynamicCriteria() {
     TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
 
     repository.search(
@@ -35,12 +37,14 @@ class LexisApplicationRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("EEA.APPLICATION_NUMBER")
-        .contains("EP.PACKAGE_NUMBER")
-        .contains("ES.ADVERTISING_DATE")
-        .contains("EEA.EXPORT_JURISDICTION_CODE <> 'F'")
-        .contains("ORDER BY ES.ADVERTISING_DATE DESC, EEA.APPLICATION_NUMBER ASC")
-        .doesNotContain("v.");
+        .contains("v.APPLICATION_NUMBER")
+        .contains("v.PACKAGE_NUMBER")
+        .contains("v.ADVERTISING_DATE")
+        .contains("v.EXPORT_JURISDICTION_CODE <> 'F'")
+        .contains("ORDER BY v.ADVERTISING_DATE DESC, v.APPLICATION_NUMBER ASC")
+        .doesNotContain("EEA.")
+        .doesNotContain("EP.")
+        .doesNotContain("ES.");
     assertThat(repository.bindValues())
         .containsExactly(
             "900123",
@@ -70,15 +74,50 @@ class LexisApplicationRepositoryTest {
             null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 10));
 
     assertThat(repository.whereSql()).doesNotContain("EEA.ORG_UNIT_NO");
+    assertThat(repository.whereSql()).doesNotContain("v.ORG_UNIT_NO");
     assertThat(repository.bindValues()).containsExactly("N");
   }
 
+  @Test
+  void searchShouldLoadOnlyRequestedLegacyPage() {
+    List<LexisApplicationSearchResultDto> firstPage =
+        java.util.stream.LongStream.rangeClosed(900101L, 900110L)
+            .mapToObj(LexisApplicationRepositoryTest::applicationResult)
+            .toList();
+    TestLexisApplicationRepository repository =
+        new TestLexisApplicationRepository(
+            List.<List<?>>of(firstPage, List.of(applicationResult(900111L))));
+
+    DynamicSearchPage<LexisApplicationSearchResultDto> results =
+        repository.search(
+            new LexisApplicationSearchCriteria(
+                null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(results.results())
+        .extracting(LexisApplicationSearchResultDto::application)
+        .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
+    assertThat(results.total()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  private static LexisApplicationSearchResultDto applicationResult(long applicationNumber) {
+    return new LexisApplicationSearchResultDto(
+        applicationNumber, "New", "Client", "00000001", null, null, "Region", 100d, true, false);
+  }
+
   private static final class TestLexisApplicationRepository extends LexisApplicationRepository {
+    private final List<List<?>> pages;
     private String whereSql;
     private List<String> bindValues;
+    private int pageCalls;
 
     TestLexisApplicationRepository() {
+      this(List.of());
+    }
+
+    TestLexisApplicationRepository(List<List<?>> pages) {
       super(null);
+      this.pages = pages;
     }
 
     String whereSql() {
@@ -89,7 +128,12 @@ class LexisApplicationRepositoryTest {
       return bindValues;
     }
 
+    int pageCalls() {
+      return pageCalls;
+    }
+
     @Override
+    @SuppressWarnings("unchecked")
     protected <T> List<T> queryDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
@@ -98,7 +142,11 @@ class LexisApplicationRepositoryTest {
         SqlRowMapper<T> rowMapper) {
       this.whereSql = whereSql;
       this.bindValues = bindValues;
-      return List.of();
+      pageCalls++;
+      if (page >= pages.size()) {
+        return List.of();
+      }
+      return (List<T>) pages.get(page);
     }
   }
 }

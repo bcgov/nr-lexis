@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +27,32 @@ public class ExemptionRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_EXEMPTION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_EXMP(?,?)";
+  private static final String SEARCH_GROUP_BY =
+      " GROUP BY "
+          + "EE.EXEMPTION_NUMBER, "
+          + "EE.APPROVED_VOLUME, "
+          + "EE.APPROVAL_DATE, "
+          + "EE.EXPIRY_DATE, "
+          + "EE.OTHER_CONDITIONS, "
+          + "EE.ENTRY_USERID, "
+          + "EE.ENTRY_TIMESTAMP, "
+          + "EE.UPDATE_USERID, "
+          + "EE.UPDATE_TIMESTAMP, "
+          + "EE.EXPORT_EXEMPTION_TYPE_CODE, "
+          + "EE.EXPORT_EXEMPTION_STATUS_CODE, "
+          + "EESC.DESCRIPTION, "
+          + "EEA.APPLICATION_NUMBER, "
+          + "CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE != 'B' AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'O' "
+          + "THEN EEA.AGENT_CLIENT_NUMBER END, "
+          + "CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE != 'B' AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'O' "
+          + "THEN EEA.OWNER_CLIENT_NUMBER END, "
+          + "EO.ORG_UNIT_NAME, "
+          + "CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE != 'B' AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'O' "
+          + "THEN ES.ADVERTISING_DATE ELSE NULL END, "
+          + "CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE != 'B' AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'O' "
+          + "THEN (case when EEA.AGENT_CLIENT_NUMBER is null then '' else EEA.AGENT_CLIENT_NUMBER end) ELSE '' END, "
+          + "CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE != 'B' AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'O' "
+          + "THEN (case when EEA.OWNER_CLIENT_NUMBER is null then '' else EEA.OWNER_CLIENT_NUMBER end) ELSE '' END";
 
   public ExemptionRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -47,7 +74,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
     return loadOrgUnitOptions(false);
   }
 
-  public List<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
+  public DynamicSearchPage<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -79,12 +106,14 @@ public class ExemptionRepository extends OracleRepositorySupport {
       where.addInLikeOrNoResults("EO.ORG_UNIT_NO", criteria.regionNumbers());
     }
 
-    SqlWhere sqlWhere = where.build(" ORDER BY EE.EXEMPTION_NUMBER DESC");
+    SqlWhere sqlWhere = where.build(SEARCH_GROUP_BY + " ORDER BY EE.EXEMPTION_NUMBER DESC");
 
-    return queryDynamicAllPages(
+    return queryDynamicPage(
         FIND_EXEMPTIONS_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
         rs ->
             new ExemptionSearchResultDto(
                 getString(rs, "EXEMPTION_NUMBER"),

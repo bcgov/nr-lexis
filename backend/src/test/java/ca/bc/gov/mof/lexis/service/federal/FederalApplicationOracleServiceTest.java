@@ -14,6 +14,7 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -45,17 +46,16 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
-  void searchShouldReturnPagedSliceFromRepository() {
+  void searchShouldReturnRepositoryPage() {
     FederalApplicationSearchCriteria criteria =
         new FederalApplicationSearchCriteria(
             null, null, null, null, null, null, null, null, null, null, 1, 2);
     List<FederalApplicationSearchResultDto> rows =
         List.of(
-            row(10001L, "FED-10001"),
-            row(10002L, "FED-10002"),
             row(10003L, "FED-10003"),
             row(10004L, "FED-10004"));
-    when(repository.search(any(FederalApplicationSearchCriteria.class))).thenReturn(rows);
+    when(repository.search(any(FederalApplicationSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(rows, 4));
 
     FederalApplicationSearchResponseDto response = service.search(criteria);
 
@@ -82,7 +82,8 @@ class FederalApplicationOracleServiceTest {
             " 00055667 ",
             -3,
             0);
-    when(repository.search(any(FederalApplicationSearchCriteria.class))).thenReturn(List.of());
+    when(repository.search(any(FederalApplicationSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
 
     service.search(criteria);
 

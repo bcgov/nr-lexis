@@ -14,6 +14,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -54,7 +55,7 @@ class OracleLexisApplicationServiceTest {
         new LexisApplicationSearchCriteria(
             null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 25);
     when(repository.search(any(LexisApplicationSearchCriteria.class)))
-        .thenReturn(List.of(row(1001L, LocalDate.of(2026, 2, 1))));
+        .thenReturn(new DynamicSearchPage<>(List.of(row(1001L, LocalDate.of(2026, 2, 1))), 1));
 
     LexisApplicationSearchResponseDto response = service.search(criteria);
 
@@ -65,17 +66,16 @@ class OracleLexisApplicationServiceTest {
   }
 
   @Test
-  void searchShouldReturnPagedSliceFromRepository() {
+  void searchShouldReturnRepositoryPage() {
     LexisApplicationSearchCriteria criteria =
         new LexisApplicationSearchCriteria(
             null, null, null, null, null, null, null, null, null, null, null, null, List.of(12L), null, 1, 2);
     List<LexisApplicationSearchResultDto> rows =
         List.of(
-            row(1001L, LocalDate.of(2026, 2, 1)),
-            row(1002L, LocalDate.of(2026, 2, 2)),
             row(1003L, LocalDate.of(2026, 2, 3)),
             row(1004L, LocalDate.of(2026, 2, 4)));
-    when(repository.search(any(LexisApplicationSearchCriteria.class))).thenReturn(rows);
+    when(repository.search(any(LexisApplicationSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(rows, 4));
 
     LexisApplicationSearchResponseDto response = service.search(criteria);
 
@@ -106,7 +106,8 @@ class OracleLexisApplicationServiceTest {
             " listingDate DESC ",
             -2,
             0);
-    when(repository.search(any(LexisApplicationSearchCriteria.class))).thenReturn(List.of());
+    when(repository.search(any(LexisApplicationSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
 
     service.search(criteria);
 

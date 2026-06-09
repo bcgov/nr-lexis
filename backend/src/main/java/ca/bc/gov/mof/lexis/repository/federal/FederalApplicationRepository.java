@@ -5,6 +5,7 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -45,7 +46,7 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public List<FederalApplicationSearchResultDto> search(FederalApplicationSearchCriteria criteria) {
+  public DynamicSearchPage<FederalApplicationSearchResultDto> search(FederalApplicationSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("v.FED_APPLICATION_NUMBER", criteria.federalApplicationNumber());
@@ -76,10 +77,12 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
 
     SqlWhere sqlWhere = where.build(" ORDER BY v.APPLICATION_NUMBER DESC");
 
-    return queryDynamicAllPages(
+    return queryDynamicPage(
         FIND_APPLICATIONS_BY_CRITERIA,
         sqlWhere.sql(),
         sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
         rs -> {
           String statusCode = getString(rs, "EXPORT_APPLICATION_STATUS_CODE");
           String exemptionNumber = getString(rs, "EXEMPTION_NUMBER");

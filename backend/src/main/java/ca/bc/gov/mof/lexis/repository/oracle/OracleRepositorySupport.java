@@ -41,6 +41,7 @@ public abstract class OracleRepositorySupport {
   protected static final String LEXIS_READ_ONLY_PACKAGE = "LEXIS_READ_ONLY.";
 
   private static final String STRING_ARRAY_TYPE = "CBR_VARCHAR2_ARRAY";
+  private static final int LEGACY_DYNAMIC_PAGE_SIZE = 10;
   private static final int AUDIT_USER_MAX_LENGTH = 30;
   private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
 
@@ -243,27 +244,65 @@ public abstract class OracleRepositorySupport {
     }
   }
 
-  protected <T> List<T> queryDynamicAllPages(
+  protected <T> DynamicSearchPage<T> queryDynamicPage(
       String procedureSignature,
       String whereSql,
       List<String> bindValues,
+      int page,
+      int size,
       SqlRowMapper<T> rowMapper) {
-    List<T> allResults = new ArrayList<>();
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    long offsetLong = (long) normalizedPage * normalizedSize;
+    if (offsetLong > Integer.MAX_VALUE) {
+      return new DynamicSearchPage<>(List.of(), Integer.MAX_VALUE);
+    }
 
-    for (int page = 0; page < 10_000; page++) {
+    int offset = (int) offsetLong;
+    int legacyStartPage = offset / LEGACY_DYNAMIC_PAGE_SIZE;
+    int firstPageOffset = offset % LEGACY_DYNAMIC_PAGE_SIZE;
+    int requiredRows = firstPageOffset + normalizedSize;
+    List<T> bufferedRows = new ArrayList<>(requiredRows);
+    List<T> previousPage = List.of();
+    boolean lastFetchedPageWasFull = false;
+
+    for (int legacyPage = legacyStartPage; bufferedRows.size() < requiredRows && legacyPage < 10_000; legacyPage++) {
       List<T> currentPage =
-          queryDynamicPagedProcedure(procedureSignature, whereSql, bindValues, page, rowMapper);
+          queryDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
       if (currentPage.isEmpty()) {
+        lastFetchedPageWasFull = false;
         break;
       }
-      allResults.addAll(currentPage);
-      if (currentPage.size() < 500) {
-        // Legacy procedures page server-side; short page usually means completion.
+      if (legacyPage > legacyStartPage && currentPage.equals(previousPage)) {
+        logger.warn(
+            "Oracle dynamic call [{}] returned duplicate data for page {}; stopping pagination",
+            procedureSignature,
+            legacyPage);
+        lastFetchedPageWasFull = false;
+        break;
+      }
+      bufferedRows.addAll(currentPage);
+      previousPage = currentPage;
+      lastFetchedPageWasFull = currentPage.size() >= LEGACY_DYNAMIC_PAGE_SIZE;
+      if (!lastFetchedPageWasFull) {
         break;
       }
     }
 
-    return allResults;
+    if (bufferedRows.size() <= firstPageOffset) {
+      return new DynamicSearchPage<>(List.of(), offset);
+    }
+
+    int toIndex = Math.min(firstPageOffset + normalizedSize, bufferedRows.size());
+    List<T> results = List.copyOf(bufferedRows.subList(firstPageOffset, toIndex));
+    boolean maybeHasMore = results.size() == normalizedSize && lastFetchedPageWasFull;
+    int total = safeTotal(offset, results.size(), maybeHasMore);
+    return new DynamicSearchPage<>(results, total);
+  }
+
+  private int safeTotal(int offset, int resultCount, boolean maybeHasMore) {
+    long total = (long) offset + resultCount + (maybeHasMore ? 1L : 0L);
+    return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
   }
 
   private List<CodeNameDto> fallbackCodeNameOptions(String procedureSignature) {

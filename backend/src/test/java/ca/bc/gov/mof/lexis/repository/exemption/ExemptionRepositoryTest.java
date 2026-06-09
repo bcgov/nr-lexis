@@ -3,6 +3,8 @@ package ca.bc.gov.mof.lexis.repository.exemption;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +40,8 @@ class ExemptionRepositoryTest {
         .contains("EE.EXEMPTION_NUMBER")
         .contains("ES.ADVERTISING_DATE")
         .contains("EO.ORG_UNIT_NO")
+        .contains("GROUP BY EE.EXEMPTION_NUMBER")
+        .contains("EEA.APPLICATION_NUMBER")
         .contains("ORDER BY EE.EXEMPTION_NUMBER DESC")
         .doesNotContain(" v.");
     assertThat(repository.bindValues())
@@ -71,12 +75,45 @@ class ExemptionRepositoryTest {
     assertThat(repository.bindValues()).isEmpty();
   }
 
+  @Test
+  void searchShouldLoadOnlyRequestedLegacyPage() {
+    List<ExemptionSearchResultDto> firstPage =
+        java.util.stream.LongStream.rangeClosed(1L, 10L)
+            .mapToObj(number -> exemptionResult("EX-" + number))
+            .toList();
+    TestExemptionRepository repository =
+        new TestExemptionRepository(List.<List<?>>of(firstPage, List.of(exemptionResult("EX-11"))));
+
+    DynamicSearchPage<ExemptionSearchResultDto> results =
+        repository.search(
+            new ExemptionSearchCriteria(
+                null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
+
+    assertThat(results.results())
+        .extracting(ExemptionSearchResultDto::exemptionNumber)
+        .containsExactly("EX-1", "EX-2", "EX-3", "EX-4", "EX-5", "EX-6", "EX-7", "EX-8", "EX-9", "EX-10");
+    assertThat(results.total()).isEqualTo(11);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  private static ExemptionSearchResultDto exemptionResult(String exemptionNumber) {
+    return new ExemptionSearchResultDto(
+        exemptionNumber, "Type", "New", "00000001", 900123L, null, null, "Region", 100d, false);
+  }
+
   private static final class TestExemptionRepository extends ExemptionRepository {
+    private final List<List<?>> pages;
     private String whereSql;
     private List<String> bindValues;
+    private int pageCalls;
 
     TestExemptionRepository() {
+      this(List.of());
+    }
+
+    TestExemptionRepository(List<List<?>> pages) {
       super(null);
+      this.pages = pages;
     }
 
     String whereSql() {
@@ -87,7 +124,12 @@ class ExemptionRepositoryTest {
       return bindValues;
     }
 
+    int pageCalls() {
+      return pageCalls;
+    }
+
     @Override
+    @SuppressWarnings("unchecked")
     protected <T> List<T> queryDynamicPagedProcedure(
         String procedureSignature,
         String whereSql,
@@ -96,7 +138,11 @@ class ExemptionRepositoryTest {
         SqlRowMapper<T> rowMapper) {
       this.whereSql = whereSql;
       this.bindValues = bindValues;
-      return List.of();
+      pageCalls++;
+      if (page >= pages.size()) {
+        return List.of();
+      }
+      return (List<T>) pages.get(page);
     }
   }
 }

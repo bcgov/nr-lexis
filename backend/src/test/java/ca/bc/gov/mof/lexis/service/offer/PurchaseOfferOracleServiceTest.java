@@ -12,6 +12,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.oracle.DynamicSearchPage;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -48,7 +49,7 @@ class PurchaseOfferOracleServiceTest {
         new PurchaseOfferSearchCriteria(
             null, null, null, null, null, null, null, List.of(), null, 0, 25);
     when(repository.search(any(PurchaseOfferSearchCriteria.class)))
-        .thenReturn(List.of(row(81001L, LocalDate.of(2026, 2, 1))));
+        .thenReturn(new DynamicSearchPage<>(List.of(row(81001L, LocalDate.of(2026, 2, 1))), 1));
 
     PurchaseOfferSearchResponseDto response = service.search(criteria);
 
@@ -59,17 +60,16 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
-  void searchShouldReturnPagedSliceFromRepository() {
+  void searchShouldReturnRepositoryPage() {
     PurchaseOfferSearchCriteria criteria =
         new PurchaseOfferSearchCriteria(
             null, null, null, null, null, null, null, List.of(12L), null, 1, 2);
     List<PurchaseOfferSearchResultDto> rows =
         List.of(
-            row(81001L, LocalDate.of(2026, 2, 1)),
-            row(81002L, LocalDate.of(2026, 2, 2)),
             row(81003L, LocalDate.of(2026, 2, 3)),
             row(81004L, LocalDate.of(2026, 2, 4)));
-    when(repository.search(any(PurchaseOfferSearchCriteria.class))).thenReturn(rows);
+    when(repository.search(any(PurchaseOfferSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(rows, 4));
 
     PurchaseOfferSearchResponseDto response = service.search(criteria);
 
@@ -95,7 +95,8 @@ class PurchaseOfferOracleServiceTest {
             " offerNumber DESC ",
             -3,
             0);
-    when(repository.search(any(PurchaseOfferSearchCriteria.class))).thenReturn(List.of());
+    when(repository.search(any(PurchaseOfferSearchCriteria.class)))
+        .thenReturn(new DynamicSearchPage<>(List.of(), 0));
 
     service.search(criteria);
 
@@ -429,6 +430,70 @@ class PurchaseOfferOracleServiceTest {
     verify(repository).updateOffer(recordCaptor.capture());
     assertThat(recordCaptor.getValue().entryUserId()).isEqualTo("creator");
     assertThat(recordCaptor.getValue().updateUserId()).isEqualTo("system");
+  }
+
+  @Test
+  void updateOfferShouldDefaultMissingManufacturingFacilityBeforeOracleUpdate() {
+    Instant entryTimestamp = Instant.parse("2026-03-01T18:00:00Z");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.PurchaseOfferUpdateSourceRow(
+                    81001L,
+                    1000456L,
+                    "PKG-903",
+                    "Example Lumber",
+                    "Alex Example",
+                    12500.25d,
+                    LocalDate.of(2026, 3, 2),
+                    null,
+                    LocalDate.of(2026, 3, 18),
+                    "Y",
+                    "Y",
+                    "Existing remark",
+                    "Y",
+                    null,
+                    "P",
+                    null,
+                    "Port Moody",
+                    "Existing condition",
+                    "creator",
+                    entryTimestamp,
+                    95.5d)));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L,
+                81001L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "   ",
+                null,
+                null,
+                null,
+                null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().manufacturingFacilityInfo()).isEqualTo(" ");
   }
 
   private PurchaseOfferSearchResultDto row(Long offerNumber, LocalDate listingDate) {
