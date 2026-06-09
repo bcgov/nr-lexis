@@ -12,7 +12,15 @@ import {
   Tile,
 } from '@carbon/react'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
-import { isPositiveNumeric, isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
+import {
+  firstValidationError,
+  getVisibleFieldError,
+  isoDateFieldError,
+  positiveNumericFieldError,
+  requiredFieldError,
+  type FieldErrors,
+  type TouchedFields,
+} from '@/pages/shared/create-form-utils'
 import {
   deleteCreateDraft,
   listCreateDrafts,
@@ -37,6 +45,8 @@ type ProvincialExemptionCreateForm = {
   approvedVolume: string
   otherConditions: string
 }
+
+type ProvincialExemptionCreateField = keyof ProvincialExemptionCreateForm & string
 
 type ExemptionCreatePrefillState = {
   selectedApplicationNumbers: string[]
@@ -193,6 +203,10 @@ const ProvincialExemptionCreatePage: FC = () => {
   )
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialExemptionCreateField>>(
+    {},
+  )
+  const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
 
   const mapDraftPayloadToForm = (payload: unknown): ProvincialExemptionCreateForm => {
     if (!payload || typeof payload !== 'object') {
@@ -215,24 +229,41 @@ const ProvincialExemptionCreatePage: FC = () => {
     void loadOptions()
   }, [])
 
-  const hasValidationError = useMemo(() => {
-    return (
-      !normalizeText(form.exemptionNumber) ||
-      !normalizeText(form.applicationNumber) ||
-      !normalizeText(form.exemptionTypeCode) ||
-      !normalizeText(form.ownerClientNumber) ||
-      !normalizeText(form.applicantClientNumber) ||
-      !isPositiveNumeric(form.applicationNumber) ||
-      !isPositiveNumeric(form.approvedVolume) ||
-      !isValidIsoDate(form.approvalDate) ||
-      !isValidIsoDate(form.expiryDate)
-    )
-  }, [form])
+  const fieldErrors = useMemo<FieldErrors<ProvincialExemptionCreateField>>(
+    () => ({
+      exemptionNumber: requiredFieldError(form.exemptionNumber, 'Exemption number') ?? undefined,
+      applicationNumber: firstValidationError(
+        () => requiredFieldError(form.applicationNumber, 'Application number'),
+        () => positiveNumericFieldError(form.applicationNumber),
+      ),
+      exemptionTypeCode: requiredFieldError(form.exemptionTypeCode, 'Exemption type') ?? undefined,
+      ownerClientNumber:
+        requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
+      applicantClientNumber:
+        requiredFieldError(form.applicantClientNumber, 'Applicant client number') ?? undefined,
+      approvalDate: isoDateFieldError(form.approvalDate) ?? undefined,
+      expiryDate: isoDateFieldError(form.expiryDate) ?? undefined,
+      approvedVolume: positiveNumericFieldError(form.approvedVolume) ?? undefined,
+    }),
+    [form],
+  )
+  const hasValidationError = useMemo(
+    () => Object.values(fieldErrors).some((error) => !!error),
+    [fieldErrors],
+  )
   const missingRequiredOptions = exemptionTypes.length === 0
+
+  const markFieldTouched = (field: ProvincialExemptionCreateField): void => {
+    setTouchedFields((current) => ({ ...current, [field]: true }))
+  }
+
+  const fieldError = (field: ProvincialExemptionCreateField): string | undefined =>
+    getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
 
   const onSaveDraft = () => {
     setStatus(null)
     if (hasValidationError) {
+      setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
@@ -248,6 +279,7 @@ const ProvincialExemptionCreatePage: FC = () => {
 
   const onSubmit = async () => {
     if (hasValidationError) {
+      setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
@@ -301,6 +333,8 @@ const ProvincialExemptionCreatePage: FC = () => {
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
     setForm(mapDraftPayloadToForm(record.payload))
+    setTouchedFields({})
+    setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
   }
 
@@ -363,6 +397,9 @@ const ProvincialExemptionCreatePage: FC = () => {
               id="exemptionNumber"
               labelText="Exemption Number (required)"
               value={form.exemptionNumber}
+              invalid={!!fieldError('exemptionNumber')}
+              invalidText={fieldError('exemptionNumber')}
+              onBlur={() => markFieldTouched('exemptionNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, exemptionNumber: event.target.value }))
               }
@@ -371,8 +408,9 @@ const ProvincialExemptionCreatePage: FC = () => {
               id="applicationNumber"
               labelText="Application Number (required)"
               value={form.applicationNumber}
-              invalid={!isPositiveNumeric(form.applicationNumber)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('applicationNumber')}
+              invalidText={fieldError('applicationNumber')}
+              onBlur={() => markFieldTouched('applicationNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicationNumber: event.target.value }))
               }
@@ -381,6 +419,9 @@ const ProvincialExemptionCreatePage: FC = () => {
               id="exemptionTypeCode"
               labelText="Exemption Type (required)"
               value={form.exemptionTypeCode}
+              invalid={!!fieldError('exemptionTypeCode')}
+              invalidText={fieldError('exemptionTypeCode')}
+              onBlur={() => markFieldTouched('exemptionTypeCode')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, exemptionTypeCode: event.target.value }))
               }
@@ -407,6 +448,9 @@ const ProvincialExemptionCreatePage: FC = () => {
               id="ownerClientNumber"
               labelText="Owner Client Number (required)"
               value={form.ownerClientNumber}
+              invalid={!!fieldError('ownerClientNumber')}
+              invalidText={fieldError('ownerClientNumber')}
+              onBlur={() => markFieldTouched('ownerClientNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, ownerClientNumber: event.target.value }))
               }
@@ -415,6 +459,9 @@ const ProvincialExemptionCreatePage: FC = () => {
               id="applicantClientNumber"
               labelText="Applicant Client Number (required)"
               value={form.applicantClientNumber}
+              invalid={!!fieldError('applicantClientNumber')}
+              invalidText={fieldError('applicantClientNumber')}
+              onBlur={() => markFieldTouched('applicantClientNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicantClientNumber: event.target.value }))
               }
@@ -423,8 +470,9 @@ const ProvincialExemptionCreatePage: FC = () => {
               id="approvalDate"
               labelText="Approval Date (YYYY-MM-DD)"
               value={form.approvalDate}
-              invalid={!isValidIsoDate(form.approvalDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('approvalDate')}
+              invalidText={fieldError('approvalDate')}
+              onBlur={() => markFieldTouched('approvalDate')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, approvalDate: event.target.value }))
               }
@@ -433,8 +481,9 @@ const ProvincialExemptionCreatePage: FC = () => {
               id="expiryDate"
               labelText="Expiry Date (YYYY-MM-DD)"
               value={form.expiryDate}
-              invalid={!isValidIsoDate(form.expiryDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('expiryDate')}
+              invalidText={fieldError('expiryDate')}
+              onBlur={() => markFieldTouched('expiryDate')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, expiryDate: event.target.value }))
               }
@@ -443,25 +492,33 @@ const ProvincialExemptionCreatePage: FC = () => {
               id="approvedVolume"
               labelText="Approved Volume (m³)"
               value={form.approvedVolume}
-              invalid={!isPositiveNumeric(form.approvedVolume)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('approvedVolume')}
+              invalidText={fieldError('approvedVolume')}
+              onBlur={() => markFieldTouched('approvedVolume')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, approvedVolume: event.target.value }))
               }
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
+            <Button kind="primary" onClick={onSaveDraft}>
               Save Draft
             </Button>
             <Button
               kind="primary"
               onClick={() => void onSubmit()}
-              disabled={hasValidationError || isSubmitting}
+              disabled={missingRequiredOptions || isSubmitting}
             >
               Submit
             </Button>
-            <Button kind="secondary" onClick={() => setForm(initialForm)}>
+            <Button
+              kind="secondary"
+              onClick={() => {
+                setForm(initialForm)
+                setTouchedFields({})
+                setShowAllValidationErrors(false)
+              }}
+            >
               Reset
             </Button>
             <Link className="cds--link" to="/provincial/exemption">

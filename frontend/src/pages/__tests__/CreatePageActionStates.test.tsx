@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -51,7 +51,7 @@ describe('Create Page Action State Smoke', () => {
     } as any)
   })
 
-  it('keeps provincial permit submit disabled when required fields are empty', async () => {
+  it('shows provincial permit field validation when required fields are empty', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/create']}>
         <Routes>
@@ -61,7 +61,13 @@ describe('Create Page Action State Smoke', () => {
     )
 
     const submitButton = await screen.findByRole('button', { name: 'Submit' })
-    expect(submitButton).toBeDisabled()
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(screen.getByText('Permit number is required.')).toBeInTheDocument()
+    expect(screen.getByText('Application number is required.')).toBeInTheDocument()
+    expect(screen.getByText('Permit status is required.')).toBeInTheDocument()
+    expect(mockedSubmitProvincialPermitCreate).not.toHaveBeenCalled()
   })
 
   it('submits provincial permit prefilled form and navigates to permit details', async () => {
@@ -99,7 +105,7 @@ describe('Create Page Action State Smoke', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/permit/9001')
   })
 
-  it('keeps indigenous reserve permit submit disabled when required fields are empty', async () => {
+  it('shows indigenous reserve permit field validation when required fields are empty', async () => {
     render(
       <MemoryRouter initialEntries={['/indian-reserve/permit/create']}>
         <Routes>
@@ -109,7 +115,13 @@ describe('Create Page Action State Smoke', () => {
     )
 
     const submitButton = await screen.findByRole('button', { name: 'Submit' })
-    expect(submitButton).toBeDisabled()
+    expect(submitButton).toBeEnabled()
+    await userEvent.click(submitButton)
+
+    expect(screen.getByText('Permit number is required.')).toBeInTheDocument()
+    expect(screen.getByText('Package number is required.')).toBeInTheDocument()
+    expect(screen.getByText('Client number is required.')).toBeInTheDocument()
+    expect(mockedSubmitIndianReservePermitCreate).not.toHaveBeenCalled()
   })
 
   it('submits indigenous reserve permit prefilled form and navigates to permit details', async () => {

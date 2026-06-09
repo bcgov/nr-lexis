@@ -2,7 +2,13 @@ import { useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
-import { isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
+import {
+  getVisibleFieldError,
+  isoDateFieldError,
+  requiredFieldError,
+  type FieldErrors,
+  type TouchedFields,
+} from '@/pages/shared/create-form-utils'
 import {
   deleteCreateDraft,
   listCreateDrafts,
@@ -24,6 +30,8 @@ type IndianReservePermitCreateForm = {
   portOfExport: string
   remarks: string
 }
+
+type IndianReservePermitCreateField = keyof IndianReservePermitCreateForm & string
 
 const MODULE_KEY = 'indian-reserve-permit'
 
@@ -85,21 +93,38 @@ const IndianReservePermitCreatePage: FC = () => {
   )
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [touchedFields, setTouchedFields] = useState<TouchedFields<IndianReservePermitCreateField>>(
+    {},
+  )
+  const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
 
-  const hasValidationError = useMemo(() => {
-    return (
-      !normalizeText(form.permitNumber) ||
-      !normalizeText(form.packageNumber) ||
-      !normalizeText(form.clientNumber) ||
-      !isValidIsoDate(form.applicationDate) ||
-      !isValidIsoDate(form.permitIssueDate) ||
-      !isValidIsoDate(form.estimatedShippingDate)
-    )
-  }, [form])
+  const fieldErrors = useMemo<FieldErrors<IndianReservePermitCreateField>>(
+    () => ({
+      permitNumber: requiredFieldError(form.permitNumber, 'Permit number') ?? undefined,
+      packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
+      clientNumber: requiredFieldError(form.clientNumber, 'Client number') ?? undefined,
+      applicationDate: isoDateFieldError(form.applicationDate) ?? undefined,
+      permitIssueDate: isoDateFieldError(form.permitIssueDate) ?? undefined,
+      estimatedShippingDate: isoDateFieldError(form.estimatedShippingDate) ?? undefined,
+    }),
+    [form],
+  )
+  const hasValidationError = useMemo(
+    () => Object.values(fieldErrors).some((error) => !!error),
+    [fieldErrors],
+  )
+
+  const markFieldTouched = (field: IndianReservePermitCreateField): void => {
+    setTouchedFields((current) => ({ ...current, [field]: true }))
+  }
+
+  const fieldError = (field: IndianReservePermitCreateField): string | undefined =>
+    getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
 
   const onSaveDraft = () => {
     setStatus(null)
     if (hasValidationError) {
+      setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
@@ -115,6 +140,7 @@ const IndianReservePermitCreatePage: FC = () => {
 
   const onSubmit = async () => {
     if (hasValidationError) {
+      setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
@@ -163,6 +189,8 @@ const IndianReservePermitCreatePage: FC = () => {
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
     setForm(mapDraftPayloadToForm(record.payload))
+    setTouchedFields({})
+    setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
   }
 
@@ -201,6 +229,9 @@ const IndianReservePermitCreatePage: FC = () => {
               id="permitNumber"
               labelText="Permit Number (required)"
               value={form.permitNumber}
+              invalid={!!fieldError('permitNumber')}
+              invalidText={fieldError('permitNumber')}
+              onBlur={() => markFieldTouched('permitNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, permitNumber: event.target.value }))
               }
@@ -209,6 +240,9 @@ const IndianReservePermitCreatePage: FC = () => {
               id="packageNumber"
               labelText="Package Number (required)"
               value={form.packageNumber}
+              invalid={!!fieldError('packageNumber')}
+              invalidText={fieldError('packageNumber')}
+              onBlur={() => markFieldTouched('packageNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, packageNumber: event.target.value }))
               }
@@ -217,6 +251,9 @@ const IndianReservePermitCreatePage: FC = () => {
               id="clientNumber"
               labelText="Client Number (required)"
               value={form.clientNumber}
+              invalid={!!fieldError('clientNumber')}
+              invalidText={fieldError('clientNumber')}
+              onBlur={() => markFieldTouched('clientNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, clientNumber: event.target.value }))
               }
@@ -225,8 +262,9 @@ const IndianReservePermitCreatePage: FC = () => {
               id="applicationDate"
               labelText="Application Date (YYYY-MM-DD)"
               value={form.applicationDate}
-              invalid={!isValidIsoDate(form.applicationDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('applicationDate')}
+              invalidText={fieldError('applicationDate')}
+              onBlur={() => markFieldTouched('applicationDate')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicationDate: event.target.value }))
               }
@@ -235,8 +273,9 @@ const IndianReservePermitCreatePage: FC = () => {
               id="permitIssueDate"
               labelText="Permit Issue Date (YYYY-MM-DD)"
               value={form.permitIssueDate}
-              invalid={!isValidIsoDate(form.permitIssueDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('permitIssueDate')}
+              invalidText={fieldError('permitIssueDate')}
+              onBlur={() => markFieldTouched('permitIssueDate')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, permitIssueDate: event.target.value }))
               }
@@ -245,8 +284,9 @@ const IndianReservePermitCreatePage: FC = () => {
               id="estimatedShippingDate"
               labelText="Estimated Shipping Date (YYYY-MM-DD)"
               value={form.estimatedShippingDate}
-              invalid={!isValidIsoDate(form.estimatedShippingDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('estimatedShippingDate')}
+              invalidText={fieldError('estimatedShippingDate')}
+              onBlur={() => markFieldTouched('estimatedShippingDate')}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
@@ -288,17 +328,20 @@ const IndianReservePermitCreatePage: FC = () => {
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
+            <Button kind="primary" onClick={onSaveDraft}>
               Save Draft
             </Button>
-            <Button
-              kind="primary"
-              onClick={() => void onSubmit()}
-              disabled={hasValidationError || isSubmitting}
-            >
+            <Button kind="primary" onClick={() => void onSubmit()} disabled={isSubmitting}>
               Submit
             </Button>
-            <Button kind="secondary" onClick={() => setForm(initialForm)}>
+            <Button
+              kind="secondary"
+              onClick={() => {
+                setForm(initialForm)
+                setTouchedFields({})
+                setShowAllValidationErrors(false)
+              }}
+            >
               Reset
             </Button>
             <Link className="cds--link" to="/indian-reserve">

@@ -12,7 +12,15 @@ import {
   Tile,
 } from '@carbon/react'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
-import { isPositiveNumeric, isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
+import {
+  firstValidationError,
+  getVisibleFieldError,
+  isoDateFieldError,
+  positiveNumericFieldError,
+  requiredFieldError,
+  type FieldErrors,
+  type TouchedFields,
+} from '@/pages/shared/create-form-utils'
 import {
   deleteCreateDraft,
   listCreateDrafts,
@@ -42,6 +50,8 @@ type ProvincialApplicationCreateForm = {
   applicationVolume: string
   comments: string
 }
+
+type ProvincialApplicationCreateField = keyof ProvincialApplicationCreateForm & string
 
 const MODULE_KEY = 'provincial-application'
 
@@ -117,6 +127,10 @@ const ProvincialApplicationCreatePage: FC = () => {
   )
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [touchedFields, setTouchedFields] = useState<
+    TouchedFields<ProvincialApplicationCreateField>
+  >({})
+  const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -129,33 +143,59 @@ const ProvincialApplicationCreatePage: FC = () => {
     void loadOptions()
   }, [])
 
-  const hasValidationError = useMemo(() => {
-    return (
-      !normalizeText(form.applicationNumber) ||
-      !normalizeText(form.packageNumber) ||
-      !normalizeText(form.ownerClientNumber) ||
-      !normalizeText(form.ownerClientLocationCode) ||
-      !normalizeText(form.ownerContactName) ||
-      !normalizeText(form.applicantClientNumber) ||
-      !normalizeText(form.productTypeCode) ||
-      !normalizeText(form.region) ||
-      !normalizeText(form.applicationDate) ||
-      !normalizeText(form.applicationTermDays) ||
-      !normalizeText(form.receivedDate) ||
-      !normalizeText(form.applicationVolume) ||
-      !isPositiveNumeric(form.applicationNumber) ||
-      !isPositiveNumeric(form.applicationTermDays) ||
-      !isPositiveNumeric(form.applicationVolume) ||
-      !isValidIsoDate(form.applicationDate) ||
-      !isValidIsoDate(form.receivedDate) ||
-      !isValidIsoDate(form.listingDate)
-    )
-  }, [form])
+  const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
+    () => ({
+      applicationNumber: firstValidationError(
+        () => requiredFieldError(form.applicationNumber, 'Application number'),
+        () => positiveNumericFieldError(form.applicationNumber),
+      ),
+      packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
+      ownerClientNumber:
+        requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
+      ownerClientLocationCode:
+        requiredFieldError(form.ownerClientLocationCode, 'Owner client location') ?? undefined,
+      ownerContactName: requiredFieldError(form.ownerContactName, 'Owner name') ?? undefined,
+      applicantClientNumber:
+        requiredFieldError(form.applicantClientNumber, 'Applicant client number') ?? undefined,
+      productTypeCode: requiredFieldError(form.productTypeCode, 'Product type') ?? undefined,
+      region: requiredFieldError(form.region, 'Region') ?? undefined,
+      applicationDate: firstValidationError(
+        () => requiredFieldError(form.applicationDate, 'Application date'),
+        () => isoDateFieldError(form.applicationDate),
+      ),
+      applicationTermDays: firstValidationError(
+        () => requiredFieldError(form.applicationTermDays, 'Application term days'),
+        () => positiveNumericFieldError(form.applicationTermDays),
+      ),
+      receivedDate: firstValidationError(
+        () => requiredFieldError(form.receivedDate, 'Received date'),
+        () => isoDateFieldError(form.receivedDate),
+      ),
+      listingDate: isoDateFieldError(form.listingDate) ?? undefined,
+      applicationVolume: firstValidationError(
+        () => requiredFieldError(form.applicationVolume, 'Application volume'),
+        () => positiveNumericFieldError(form.applicationVolume),
+      ),
+    }),
+    [form],
+  )
+  const hasValidationError = useMemo(
+    () => Object.values(fieldErrors).some((error) => !!error),
+    [fieldErrors],
+  )
   const missingRequiredOptions = productTypes.length === 0
+
+  const markFieldTouched = (field: ProvincialApplicationCreateField): void => {
+    setTouchedFields((current) => ({ ...current, [field]: true }))
+  }
+
+  const fieldError = (field: ProvincialApplicationCreateField): string | undefined =>
+    getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
 
   const onSaveDraft = () => {
     setStatus(null)
     if (hasValidationError) {
+      setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
@@ -171,6 +211,7 @@ const ProvincialApplicationCreatePage: FC = () => {
 
   const onSubmit = async () => {
     if (hasValidationError) {
+      setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
@@ -219,6 +260,8 @@ const ProvincialApplicationCreatePage: FC = () => {
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
     setForm(mapDraftPayloadToForm(record.payload))
+    setTouchedFields({})
+    setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
   }
 
@@ -269,8 +312,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="applicationNumber"
               labelText="Application Number (required)"
               value={form.applicationNumber}
-              invalid={!isPositiveNumeric(form.applicationNumber)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('applicationNumber')}
+              invalidText={fieldError('applicationNumber')}
+              onBlur={() => markFieldTouched('applicationNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicationNumber: event.target.value }))
               }
@@ -279,6 +323,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="packageNumber"
               labelText="Package Number (required)"
               value={form.packageNumber}
+              invalid={!!fieldError('packageNumber')}
+              invalidText={fieldError('packageNumber')}
+              onBlur={() => markFieldTouched('packageNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, packageNumber: event.target.value }))
               }
@@ -287,6 +334,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="ownerClientNumber"
               labelText="Owner Client Number (required)"
               value={form.ownerClientNumber}
+              invalid={!!fieldError('ownerClientNumber')}
+              invalidText={fieldError('ownerClientNumber')}
+              onBlur={() => markFieldTouched('ownerClientNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, ownerClientNumber: event.target.value }))
               }
@@ -295,6 +345,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="ownerClientLocationCode"
               labelText="Owner Client Location (required)"
               value={form.ownerClientLocationCode}
+              invalid={!!fieldError('ownerClientLocationCode')}
+              invalidText={fieldError('ownerClientLocationCode')}
+              onBlur={() => markFieldTouched('ownerClientLocationCode')}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
@@ -306,6 +359,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="ownerContactName"
               labelText="Owner Name (required)"
               value={form.ownerContactName}
+              invalid={!!fieldError('ownerContactName')}
+              invalidText={fieldError('ownerContactName')}
+              onBlur={() => markFieldTouched('ownerContactName')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, ownerContactName: event.target.value }))
               }
@@ -314,6 +370,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="applicantClientNumber"
               labelText="Applicant Client Number (required)"
               value={form.applicantClientNumber}
+              invalid={!!fieldError('applicantClientNumber')}
+              invalidText={fieldError('applicantClientNumber')}
+              onBlur={() => markFieldTouched('applicantClientNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicantClientNumber: event.target.value }))
               }
@@ -322,6 +381,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="productTypeCode"
               labelText="Product Type (required)"
               value={form.productTypeCode}
+              invalid={!!fieldError('productTypeCode')}
+              invalidText={fieldError('productTypeCode')}
+              onBlur={() => markFieldTouched('productTypeCode')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, productTypeCode: event.target.value }))
               }
@@ -348,6 +410,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="region"
               labelText="Region (required)"
               value={form.region}
+              invalid={!!fieldError('region')}
+              invalidText={fieldError('region')}
+              onBlur={() => markFieldTouched('region')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, region: event.target.value }))
               }
@@ -361,8 +426,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="applicationDate"
               labelText="Application Date (YYYY-MM-DD) (required)"
               value={form.applicationDate}
-              invalid={!isValidIsoDate(form.applicationDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('applicationDate')}
+              invalidText={fieldError('applicationDate')}
+              onBlur={() => markFieldTouched('applicationDate')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicationDate: event.target.value }))
               }
@@ -371,8 +437,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="applicationTermDays"
               labelText="Application Term Days (required)"
               value={form.applicationTermDays}
-              invalid={!isPositiveNumeric(form.applicationTermDays)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('applicationTermDays')}
+              invalidText={fieldError('applicationTermDays')}
+              onBlur={() => markFieldTouched('applicationTermDays')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicationTermDays: event.target.value }))
               }
@@ -381,8 +448,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="receivedDate"
               labelText="Received Date (YYYY-MM-DD) (required)"
               value={form.receivedDate}
-              invalid={!isValidIsoDate(form.receivedDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('receivedDate')}
+              invalidText={fieldError('receivedDate')}
+              onBlur={() => markFieldTouched('receivedDate')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, receivedDate: event.target.value }))
               }
@@ -391,8 +459,9 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="listingDate"
               labelText="Listing Date (YYYY-MM-DD)"
               value={form.listingDate}
-              invalid={!isValidIsoDate(form.listingDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('listingDate')}
+              invalidText={fieldError('listingDate')}
+              onBlur={() => markFieldTouched('listingDate')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, listingDate: event.target.value }))
               }
@@ -401,25 +470,33 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="applicationVolume"
               labelText="Application Volume (required)"
               value={form.applicationVolume}
-              invalid={!isPositiveNumeric(form.applicationVolume)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('applicationVolume')}
+              invalidText={fieldError('applicationVolume')}
+              onBlur={() => markFieldTouched('applicationVolume')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicationVolume: event.target.value }))
               }
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
+            <Button kind="primary" onClick={onSaveDraft}>
               Save Draft
             </Button>
             <Button
               kind="primary"
               onClick={() => void onSubmit()}
-              disabled={hasValidationError || isSubmitting}
+              disabled={missingRequiredOptions || isSubmitting}
             >
               Submit
             </Button>
-            <Button kind="secondary" onClick={() => setForm(INITIAL_FORM)}>
+            <Button
+              kind="secondary"
+              onClick={() => {
+                setForm(INITIAL_FORM)
+                setTouchedFields({})
+                setShowAllValidationErrors(false)
+              }}
+            >
               Reset
             </Button>
             <Link className="cds--link" to="/provincial/application">

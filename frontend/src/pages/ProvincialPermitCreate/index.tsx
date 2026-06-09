@@ -12,7 +12,15 @@ import {
   Tile,
 } from '@carbon/react'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
-import { isPositiveNumeric, isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
+import {
+  firstValidationError,
+  getVisibleFieldError,
+  isoDateFieldError,
+  positiveNumericFieldError,
+  requiredFieldError,
+  type FieldErrors,
+  type TouchedFields,
+} from '@/pages/shared/create-form-utils'
 import {
   deleteCreateDraft,
   listCreateDrafts,
@@ -35,6 +43,8 @@ type ProvincialPermitCreateForm = {
   permitVolume: string
   remarks: string
 }
+
+type ProvincialPermitCreateField = keyof ProvincialPermitCreateForm & string
 
 const MODULE_KEY = 'provincial-permit'
 
@@ -98,6 +108,8 @@ const ProvincialPermitCreatePage: FC = () => {
   )
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialPermitCreateField>>({})
+  const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -108,26 +120,45 @@ const ProvincialPermitCreatePage: FC = () => {
     void loadOptions()
   }, [])
 
-  const hasValidationError = useMemo(() => {
-    return (
-      !normalizeText(form.permitNumber) ||
-      !normalizeText(form.applicationNumber) ||
-      !normalizeText(form.packageNumber) ||
-      !normalizeText(form.permitStatus) ||
-      !normalizeText(form.applicantClientNumber) ||
-      !normalizeText(form.ownerClientNumber) ||
-      !isPositiveNumeric(form.permitNumber) ||
-      !isPositiveNumeric(form.applicationNumber) ||
-      !isPositiveNumeric(form.permitVolume) ||
-      !isValidIsoDate(form.issueDate) ||
-      !isValidIsoDate(form.estimatedShippingDate)
-    )
-  }, [form])
+  const fieldErrors = useMemo<FieldErrors<ProvincialPermitCreateField>>(
+    () => ({
+      permitNumber: firstValidationError(
+        () => requiredFieldError(form.permitNumber, 'Permit number'),
+        () => positiveNumericFieldError(form.permitNumber),
+      ),
+      applicationNumber: firstValidationError(
+        () => requiredFieldError(form.applicationNumber, 'Application number'),
+        () => positiveNumericFieldError(form.applicationNumber),
+      ),
+      packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
+      permitStatus: requiredFieldError(form.permitStatus, 'Permit status') ?? undefined,
+      applicantClientNumber:
+        requiredFieldError(form.applicantClientNumber, 'Applicant client number') ?? undefined,
+      ownerClientNumber:
+        requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
+      issueDate: isoDateFieldError(form.issueDate) ?? undefined,
+      estimatedShippingDate: isoDateFieldError(form.estimatedShippingDate) ?? undefined,
+      permitVolume: positiveNumericFieldError(form.permitVolume) ?? undefined,
+    }),
+    [form],
+  )
+  const hasValidationError = useMemo(
+    () => Object.values(fieldErrors).some((error) => !!error),
+    [fieldErrors],
+  )
   const missingRequiredOptions = permitStatuses.length === 0
+
+  const markFieldTouched = (field: ProvincialPermitCreateField): void => {
+    setTouchedFields((current) => ({ ...current, [field]: true }))
+  }
+
+  const fieldError = (field: ProvincialPermitCreateField): string | undefined =>
+    getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
 
   const onSaveDraft = () => {
     setStatus(null)
     if (hasValidationError) {
+      setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
@@ -143,6 +174,7 @@ const ProvincialPermitCreatePage: FC = () => {
 
   const onSubmit = async () => {
     if (hasValidationError) {
+      setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
@@ -191,6 +223,8 @@ const ProvincialPermitCreatePage: FC = () => {
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
     setForm(mapDraftPayloadToForm(record.payload))
+    setTouchedFields({})
+    setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
   }
 
@@ -241,8 +275,9 @@ const ProvincialPermitCreatePage: FC = () => {
               id="permitNumber"
               labelText="Permit Number (required)"
               value={form.permitNumber}
-              invalid={!isPositiveNumeric(form.permitNumber)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('permitNumber')}
+              invalidText={fieldError('permitNumber')}
+              onBlur={() => markFieldTouched('permitNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, permitNumber: event.target.value }))
               }
@@ -251,8 +286,9 @@ const ProvincialPermitCreatePage: FC = () => {
               id="applicationNumber"
               labelText="Application Number (required)"
               value={form.applicationNumber}
-              invalid={!isPositiveNumeric(form.applicationNumber)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('applicationNumber')}
+              invalidText={fieldError('applicationNumber')}
+              onBlur={() => markFieldTouched('applicationNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicationNumber: event.target.value }))
               }
@@ -261,6 +297,9 @@ const ProvincialPermitCreatePage: FC = () => {
               id="packageNumber"
               labelText="Package Number (required)"
               value={form.packageNumber}
+              invalid={!!fieldError('packageNumber')}
+              invalidText={fieldError('packageNumber')}
+              onBlur={() => markFieldTouched('packageNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, packageNumber: event.target.value }))
               }
@@ -277,6 +316,9 @@ const ProvincialPermitCreatePage: FC = () => {
               id="permitStatus"
               labelText="Permit Status (required)"
               value={form.permitStatus}
+              invalid={!!fieldError('permitStatus')}
+              invalidText={fieldError('permitStatus')}
+              onBlur={() => markFieldTouched('permitStatus')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, permitStatus: event.target.value }))
               }
@@ -290,6 +332,9 @@ const ProvincialPermitCreatePage: FC = () => {
               id="applicantClientNumber"
               labelText="Applicant Client Number (required)"
               value={form.applicantClientNumber}
+              invalid={!!fieldError('applicantClientNumber')}
+              invalidText={fieldError('applicantClientNumber')}
+              onBlur={() => markFieldTouched('applicantClientNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicantClientNumber: event.target.value }))
               }
@@ -298,6 +343,9 @@ const ProvincialPermitCreatePage: FC = () => {
               id="ownerClientNumber"
               labelText="Owner Client Number (required)"
               value={form.ownerClientNumber}
+              invalid={!!fieldError('ownerClientNumber')}
+              invalidText={fieldError('ownerClientNumber')}
+              onBlur={() => markFieldTouched('ownerClientNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, ownerClientNumber: event.target.value }))
               }
@@ -306,8 +354,9 @@ const ProvincialPermitCreatePage: FC = () => {
               id="issueDate"
               labelText="Issue Date (YYYY-MM-DD)"
               value={form.issueDate}
-              invalid={!isValidIsoDate(form.issueDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('issueDate')}
+              invalidText={fieldError('issueDate')}
+              onBlur={() => markFieldTouched('issueDate')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, issueDate: event.target.value }))
               }
@@ -316,8 +365,9 @@ const ProvincialPermitCreatePage: FC = () => {
               id="estimatedShippingDate"
               labelText="Estimated Shipping Date (YYYY-MM-DD)"
               value={form.estimatedShippingDate}
-              invalid={!isValidIsoDate(form.estimatedShippingDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('estimatedShippingDate')}
+              invalidText={fieldError('estimatedShippingDate')}
+              onBlur={() => markFieldTouched('estimatedShippingDate')}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
@@ -329,25 +379,33 @@ const ProvincialPermitCreatePage: FC = () => {
               id="permitVolume"
               labelText="Permit Volume (m³)"
               value={form.permitVolume}
-              invalid={!isPositiveNumeric(form.permitVolume)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('permitVolume')}
+              invalidText={fieldError('permitVolume')}
+              onBlur={() => markFieldTouched('permitVolume')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, permitVolume: event.target.value }))
               }
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
+            <Button kind="primary" onClick={onSaveDraft}>
               Save Draft
             </Button>
             <Button
               kind="primary"
               onClick={() => void onSubmit()}
-              disabled={hasValidationError || isSubmitting}
+              disabled={missingRequiredOptions || isSubmitting}
             >
               Submit
             </Button>
-            <Button kind="secondary" onClick={() => setForm(initialForm)}>
+            <Button
+              kind="secondary"
+              onClick={() => {
+                setForm(initialForm)
+                setTouchedFields({})
+                setShowAllValidationErrors(false)
+              }}
+            >
               Reset
             </Button>
             <Link className="cds--link" to="/provincial/permit">

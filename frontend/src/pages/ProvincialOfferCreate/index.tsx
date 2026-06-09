@@ -12,7 +12,15 @@ import {
   Tile,
 } from '@carbon/react'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
-import { isPositiveNumeric, isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
+import {
+  firstValidationError,
+  getVisibleFieldError,
+  isoDateFieldError,
+  positiveNumericFieldError,
+  requiredFieldError,
+  type FieldErrors,
+  type TouchedFields,
+} from '@/pages/shared/create-form-utils'
 import {
   deleteCreateDraft,
   listCreateDrafts,
@@ -37,6 +45,8 @@ type ProvincialOfferCreateForm = {
   pickupLocation: string
   offerCondition: string
 }
+
+type ProvincialOfferCreateField = keyof ProvincialOfferCreateForm & string
 
 const MODULE_KEY = 'provincial-offer'
 
@@ -98,6 +108,8 @@ const ProvincialOfferCreatePage: FC = () => {
   )
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialOfferCreateField>>({})
+  const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -108,28 +120,54 @@ const ProvincialOfferCreatePage: FC = () => {
     void loadOptions()
   }, [])
 
-  const hasValidationError = useMemo(() => {
-    return (
-      !normalizeText(form.offerNumber) ||
-      !normalizeText(form.applicationNumber) ||
-      !normalizeText(form.packageNumber) ||
-      !normalizeText(form.offeringClientNumber) ||
-      !normalizeText(form.companyName) ||
-      !normalizeText(form.contactName) ||
-      !normalizeText(form.purchaseOfferDate) ||
-      !normalizeText(form.pickupLocation) ||
-      (!!normalizeText(form.offerEndDate) && !normalizeText(form.withdrawReason)) ||
-      !isPositiveNumeric(form.offerNumber) ||
-      !isPositiveNumeric(form.applicationNumber) ||
-      !isPositiveNumeric(form.purchaseOfferAmount) ||
-      !isValidIsoDate(form.purchaseOfferDate) ||
-      !isValidIsoDate(form.offerEndDate)
-    )
-  }, [form])
+  const fieldErrors = useMemo<FieldErrors<ProvincialOfferCreateField>>(
+    () => ({
+      offerNumber: firstValidationError(
+        () => requiredFieldError(form.offerNumber, 'Offer number'),
+        () => positiveNumericFieldError(form.offerNumber),
+      ),
+      applicationNumber: firstValidationError(
+        () => requiredFieldError(form.applicationNumber, 'Application number'),
+        () => positiveNumericFieldError(form.applicationNumber),
+      ),
+      packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
+      offeringClientNumber:
+        requiredFieldError(form.offeringClientNumber, 'Offering client number') ?? undefined,
+      companyName: requiredFieldError(form.companyName, 'Company name') ?? undefined,
+      contactName: requiredFieldError(form.contactName, 'Contact name') ?? undefined,
+      purchaseOfferAmount: firstValidationError(
+        () => requiredFieldError(form.purchaseOfferAmount, 'Offer amount'),
+        () => positiveNumericFieldError(form.purchaseOfferAmount),
+      ),
+      purchaseOfferDate: firstValidationError(
+        () => requiredFieldError(form.purchaseOfferDate, 'Offer date'),
+        () => isoDateFieldError(form.purchaseOfferDate),
+      ),
+      offerEndDate: isoDateFieldError(form.offerEndDate) ?? undefined,
+      withdrawReason:
+        form.offerEndDate.trim().length > 0
+          ? (requiredFieldError(form.withdrawReason, 'Withdraw reason') ?? undefined)
+          : undefined,
+      pickupLocation: requiredFieldError(form.pickupLocation, 'Pickup location') ?? undefined,
+    }),
+    [form],
+  )
+  const hasValidationError = useMemo(
+    () => Object.values(fieldErrors).some((error) => !!error),
+    [fieldErrors],
+  )
+
+  const markFieldTouched = (field: ProvincialOfferCreateField): void => {
+    setTouchedFields((current) => ({ ...current, [field]: true }))
+  }
+
+  const fieldError = (field: ProvincialOfferCreateField): string | undefined =>
+    getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
 
   const onSaveDraft = () => {
     setStatus(null)
     if (hasValidationError) {
+      setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
@@ -145,6 +183,7 @@ const ProvincialOfferCreatePage: FC = () => {
 
   const onSubmit = async () => {
     if (hasValidationError) {
+      setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
@@ -193,6 +232,8 @@ const ProvincialOfferCreatePage: FC = () => {
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
     setForm(mapDraftPayloadToForm(record.payload))
+    setTouchedFields({})
+    setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
   }
 
@@ -231,8 +272,9 @@ const ProvincialOfferCreatePage: FC = () => {
               id="offerNumber"
               labelText="Offer Number (required)"
               value={form.offerNumber}
-              invalid={!isPositiveNumeric(form.offerNumber)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('offerNumber')}
+              invalidText={fieldError('offerNumber')}
+              onBlur={() => markFieldTouched('offerNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, offerNumber: event.target.value }))
               }
@@ -241,8 +283,9 @@ const ProvincialOfferCreatePage: FC = () => {
               id="applicationNumber"
               labelText="Application Number (required)"
               value={form.applicationNumber}
-              invalid={!isPositiveNumeric(form.applicationNumber)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('applicationNumber')}
+              invalidText={fieldError('applicationNumber')}
+              onBlur={() => markFieldTouched('applicationNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicationNumber: event.target.value }))
               }
@@ -251,6 +294,9 @@ const ProvincialOfferCreatePage: FC = () => {
               id="packageNumber"
               labelText="Package Number (required)"
               value={form.packageNumber}
+              invalid={!!fieldError('packageNumber')}
+              invalidText={fieldError('packageNumber')}
+              onBlur={() => markFieldTouched('packageNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, packageNumber: event.target.value }))
               }
@@ -259,6 +305,9 @@ const ProvincialOfferCreatePage: FC = () => {
               id="offeringClientNumber"
               labelText="Offering Client Number (required)"
               value={form.offeringClientNumber}
+              invalid={!!fieldError('offeringClientNumber')}
+              invalidText={fieldError('offeringClientNumber')}
+              onBlur={() => markFieldTouched('offeringClientNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, offeringClientNumber: event.target.value }))
               }
@@ -267,6 +316,9 @@ const ProvincialOfferCreatePage: FC = () => {
               id="companyName"
               labelText="Company Name (required)"
               value={form.companyName}
+              invalid={!!fieldError('companyName')}
+              invalidText={fieldError('companyName')}
+              onBlur={() => markFieldTouched('companyName')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, companyName: event.target.value }))
               }
@@ -275,6 +327,9 @@ const ProvincialOfferCreatePage: FC = () => {
               id="contactName"
               labelText="Contact Name (required)"
               value={form.contactName}
+              invalid={!!fieldError('contactName')}
+              invalidText={fieldError('contactName')}
+              onBlur={() => markFieldTouched('contactName')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, contactName: event.target.value }))
               }
@@ -296,8 +351,9 @@ const ProvincialOfferCreatePage: FC = () => {
               id="purchaseOfferAmount"
               labelText="Offer Amount (required)"
               value={form.purchaseOfferAmount}
-              invalid={!isPositiveNumeric(form.purchaseOfferAmount)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('purchaseOfferAmount')}
+              invalidText={fieldError('purchaseOfferAmount')}
+              onBlur={() => markFieldTouched('purchaseOfferAmount')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, purchaseOfferAmount: event.target.value }))
               }
@@ -306,8 +362,9 @@ const ProvincialOfferCreatePage: FC = () => {
               id="purchaseOfferDate"
               labelText="Offer Date (YYYY-MM-DD) (required)"
               value={form.purchaseOfferDate}
-              invalid={!isValidIsoDate(form.purchaseOfferDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('purchaseOfferDate')}
+              invalidText={fieldError('purchaseOfferDate')}
+              onBlur={() => markFieldTouched('purchaseOfferDate')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, purchaseOfferDate: event.target.value }))
               }
@@ -316,8 +373,9 @@ const ProvincialOfferCreatePage: FC = () => {
               id="offerEndDate"
               labelText="Withdrawal Date (YYYY-MM-DD)"
               value={form.offerEndDate}
-              invalid={!isValidIsoDate(form.offerEndDate)}
-              invalidText="Date must be YYYY-MM-DD."
+              invalid={!!fieldError('offerEndDate')}
+              invalidText={fieldError('offerEndDate')}
+              onBlur={() => markFieldTouched('offerEndDate')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, offerEndDate: event.target.value }))
               }
@@ -326,6 +384,9 @@ const ProvincialOfferCreatePage: FC = () => {
               id="withdrawReason"
               labelText="Withdraw Reason (required when withdrawn)"
               value={form.withdrawReason}
+              invalid={!!fieldError('withdrawReason')}
+              invalidText={fieldError('withdrawReason')}
+              onBlur={() => markFieldTouched('withdrawReason')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, withdrawReason: event.target.value }))
               }
@@ -334,23 +395,29 @@ const ProvincialOfferCreatePage: FC = () => {
               id="pickupLocation"
               labelText="Pickup Location (required)"
               value={form.pickupLocation}
+              invalid={!!fieldError('pickupLocation')}
+              invalidText={fieldError('pickupLocation')}
+              onBlur={() => markFieldTouched('pickupLocation')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, pickupLocation: event.target.value }))
               }
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
+            <Button kind="primary" onClick={onSaveDraft}>
               Save Draft
             </Button>
-            <Button
-              kind="primary"
-              onClick={() => void onSubmit()}
-              disabled={hasValidationError || isSubmitting}
-            >
+            <Button kind="primary" onClick={() => void onSubmit()} disabled={isSubmitting}>
               Submit
             </Button>
-            <Button kind="secondary" onClick={() => setForm(initialForm)}>
+            <Button
+              kind="secondary"
+              onClick={() => {
+                setForm(initialForm)
+                setTouchedFields({})
+                setShowAllValidationErrors(false)
+              }}
+            >
               Reset
             </Button>
             <Link className="cds--link" to="/provincial/offers">
