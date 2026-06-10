@@ -49,9 +49,10 @@ describe('Indigenous Reserve Search Actions', () => {
     })
   })
 
-  it('shows add permit link when user has OIC application access', async () => {
+  it('shows add permit link when user has OIC application and permit detail access', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'viewOICApplication',
+      canPerform: (action: string) =>
+        action === 'viewOICApplication' || action === '/indianReservePermitDetails',
     } as any)
 
     renderPage()
@@ -65,7 +66,18 @@ describe('Indigenous Reserve Search Actions', () => {
 
   it('hides add permit link when user lacks OIC application access', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: () => false,
+      canPerform: (action: string) => action === '/indianReservePermitDetails',
+    } as any)
+
+    renderPage()
+    await screen.findByText('IR-1001')
+
+    expect(screen.queryByRole('link', { name: 'Add Permit' })).not.toBeInTheDocument()
+  })
+
+  it('hides add permit link when user lacks permit detail access', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'viewOICApplication',
     } as any)
 
     renderPage()

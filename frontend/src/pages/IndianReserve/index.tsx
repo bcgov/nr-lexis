@@ -108,7 +108,8 @@ const IndianReservePage: FC = () => {
   const [results, setResults] = useState<IndianReservePermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const canCreatePermit = canPerform('viewOICApplication')
+  const canCreatePermit =
+    canPerform('/indianReservePermitDetails') && canPerform('viewOICApplication')
   const withCurrentSearch = useCallback(
     (path: string): string => {
       const query = searchParams.toString()

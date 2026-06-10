@@ -47,6 +47,20 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void sessionShouldAllowDelegatedAdminButNotGrantApplicationRoutes() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/welcome")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"));
+
+    mockMvc.perform(
+            get("/api/lexis/application-reviews/search")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void legacyAccessDeniedForwardShouldRemainPublic() throws Exception {
     mockMvc
         .perform(get("/api/lexis/accessDenied.do"))
@@ -318,6 +332,14 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void modernApplicationDetailsWriteShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/application-details/application")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void legacyExemptionDetailsRpcShouldAllowApproveExemptionsAction() throws Exception {
     mockMvc.perform(
             post("/api/lexis/exemptionDetailsRPC")
@@ -386,6 +408,15 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void modernPermitDetailsWriteActionShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/update-shipping")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void legacyPermitDetailsAddShouldRejectReadOnlyRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/permitDetails")
@@ -411,6 +442,15 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("permitNumber", "111")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
         .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void modernIndianReservePermitCreateShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/indian-reserve/permits")
+                .param("permitNumber", "111")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
   }
 
   @Test

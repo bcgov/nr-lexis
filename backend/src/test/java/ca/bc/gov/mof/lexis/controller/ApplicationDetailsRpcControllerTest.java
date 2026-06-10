@@ -135,6 +135,7 @@ class ApplicationDetailsRpcControllerTest {
 
   @Test
   void persistRemarkShouldReturnOkStatus() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     Instant now = Instant.parse("2026-05-27T17:00:00Z");
     when(service.persistRemark("new", 1000456L, "Long remark", "idir\\jsmith"))
@@ -143,7 +144,6 @@ class ApplicationDetailsRpcControllerTest {
                 new ApplicationDetailsRpcService.PersistedRemark(
                     44L, "Long remark", "Long remark", "idir\\jsmith", now)));
 
-    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
     ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
         controller.persistRemark("new", "1000456", "Long remark", authentication);
 
@@ -156,7 +156,19 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void persistRemarkShouldRejectWithoutCreateApplicationAction() {
+    TestingAuthenticationToken authentication = unauthorized("createApplication");
+
+    ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
+        controller.persistRemark("new", "1000456", "Long remark", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
   void addApplicationLegacyShouldMapAliasesAndReturnLegacyPersistencePayload() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.addApplication(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
         .thenReturn(
@@ -181,7 +193,6 @@ class ApplicationDetailsRpcControllerTest {
     params.add("growthTypeCode", "O");
     params.add("ownerContactName", "Owner Contact");
 
-    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
         controller.addApplicationLegacy(params, authentication);
 
@@ -199,6 +210,17 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(request.agentClientNumber()).isEqualTo("00022222");
     assertThat(request.exemptionReasonCode()).isEqualTo("U");
     assertThat(request.productTypeCode()).isEqualTo("H");
+  }
+
+  @Test
+  void addApplicationLegacyShouldRejectWithoutCreateApplicationAction() {
+    TestingAuthenticationToken authentication = unauthorized("createApplication");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(new LinkedMultiValueMap<>(), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
   }
 
   @Test

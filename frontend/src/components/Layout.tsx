@@ -103,7 +103,8 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/indian-reserve/permit/create',
         label: 'Create/Edit Permit',
-        requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
+        requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
+        requiredActionsMatch: 'all',
       },
       {
         to: '/indian-reserve',

@@ -124,7 +124,8 @@ class LexisAuthorizationServiceTest {
                 "LEXIS_ADMIN", List.of("*"),
                 "LEXIS_READ_ONLY", List.of("/applicationSearch"),
                 "LEXIS_PROVINCIAL_SUBMITTER", List.of("/summary"),
-                "LEXIS_FEDERAL_SUBMITTER", List.of("/summary")));
+                "LEXIS_FEDERAL_SUBMITTER", List.of("/summary"),
+                "LEXIS_DELEGATED_ADMIN", List.of()));
 
     Set<String> roles = service.getConfiguredRoles();
 
@@ -133,8 +134,23 @@ class LexisAuthorizationServiceTest {
             "LEXIS_ADMIN",
             "LEXIS_READ_ONLY",
             "LEXIS_PROVINCIAL_SUBMITTER",
-            "LEXIS_FEDERAL_SUBMITTER")
+            "LEXIS_FEDERAL_SUBMITTER",
+            "LEXIS_DELEGATED_ADMIN")
         .doesNotContain("ADMIN", "READ_ONLY", "PROVINCIAL_SUBMITTER", "FEDERAL_SUBMITTER", "LEXIS_INDUSTRY", "LOG_EXPORT_INDUSTRY");
+  }
+
+  @Test
+  void emptyDelegatedAdminMappingShouldExposeKnownRoleWithoutGrantingActions() {
+    LexisAuthorizationService service =
+        createService(
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
+            Map.of(
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_DELEGATED_ADMIN", List.of()));
+
+    assertThat(service.getConfiguredRoles()).contains("LEXIS_DELEGATED_ADMIN");
+    assertThat(service.resolveGrantedActions(List.of("LEXIS_DELEGATED_ADMIN"))).isEmpty();
+    assertThat(service.canPerformAction(List.of("LEXIS_DELEGATED_ADMIN"), "/applicationSearch")).isFalse();
   }
 
   @Test

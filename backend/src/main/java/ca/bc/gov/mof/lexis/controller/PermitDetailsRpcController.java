@@ -27,9 +27,10 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
-import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
@@ -38,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -56,16 +58,21 @@ public class PermitDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PermitDetailsRpcController.class);
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
+  private static final String LEGACY_ACTION_SAVE_PERMIT = "savePermit";
   private static final String LEGACY_PERMIT_LOCK_SESSION_KEY = "PERMIT_LOCK";
 
   private final ObjectProvider<PermitDetailsRpcService> serviceProvider;
   private final LexisSessionService sessionService;
+  private final LexisAuthorizationService authorizationService;
   private final Set<String> configuredIndustryRoles;
 
   public PermitDetailsRpcController(
-      ObjectProvider<PermitDetailsRpcService> serviceProvider, LexisSessionService sessionService) {
+      ObjectProvider<PermitDetailsRpcService> serviceProvider,
+      LexisSessionService sessionService,
+      LexisAuthorizationService authorizationService) {
     this.serviceProvider = serviceProvider;
     this.sessionService = sessionService;
+    this.authorizationService = authorizationService;
     this.configuredIndustryRoles = sessionService.getConfiguredIndustryRoles();
   }
 
@@ -321,6 +328,10 @@ public class PermitDetailsRpcController {
   @PostMapping("/add-permit")
   public ResponseEntity<PermitMutationRpcResponseDto> addPermit(
       HttpServletRequest request, Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for add permit");
@@ -336,6 +347,10 @@ public class PermitDetailsRpcController {
   @PostMapping("/update-permit")
   public ResponseEntity<PermitMutationRpcResponseDto> updatePermit(
       HttpServletRequest request, Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for update permit");
@@ -351,6 +366,10 @@ public class PermitDetailsRpcController {
   @PostMapping("/update-shipping")
   public ResponseEntity<PermitMutationRpcResponseDto> updateShipping(
       HttpServletRequest request, Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for update shipping");
@@ -371,6 +390,10 @@ public class PermitDetailsRpcController {
       @RequestParam(name = "invoiceConversionRate", required = false) String invoiceConversionRate,
       @RequestParam(name = "invoiceFeeInLieu", required = false) String invoiceFeeInLieu,
       Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for add invoice");
@@ -499,7 +522,12 @@ public class PermitDetailsRpcController {
 
   @DeleteMapping("/document/permit")
   public ResponseEntity<RemoveDocumentResponseDto> removePermitDocument(
-      @RequestParam(name = "documentId", required = false) String documentId) {
+      @RequestParam(name = "documentId", required = false) String documentId,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for remove permit document");
@@ -512,7 +540,12 @@ public class PermitDetailsRpcController {
 
   @DeleteMapping("/document/application")
   public ResponseEntity<RemoveDocumentResponseDto> removeApplicationDocument(
-      @RequestParam(name = "documentId", required = false) String documentId) {
+      @RequestParam(name = "documentId", required = false) String documentId,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for remove application document");
@@ -525,7 +558,12 @@ public class PermitDetailsRpcController {
 
   @DeleteMapping("/document/invoice")
   public ResponseEntity<RemoveDocumentResponseDto> removeInvoiceDocument(
-      @RequestParam(name = "documentId", required = false) String documentId) {
+      @RequestParam(name = "documentId", required = false) String documentId,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for remove invoice document");
@@ -626,6 +664,11 @@ public class PermitDetailsRpcController {
       return false;
     }
     return roles.contains(ROLE_READ_ONLY);
+  }
+
+  private boolean canSavePermit(Authentication authentication) {
+    return authorizationService.canPerformAction(
+        sessionService.parseRolesFromPrincipal(authentication), LEGACY_ACTION_SAVE_PERMIT);
   }
 
   private BigDecimal parsePositiveDecimal(String rawValue) {

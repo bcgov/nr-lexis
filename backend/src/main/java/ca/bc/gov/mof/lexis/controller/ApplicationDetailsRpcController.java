@@ -201,6 +201,10 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       @RequestParam(name = "remarkBody", required = false) String remarkBody,
       Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for persist remark");
@@ -239,6 +243,10 @@ public class ApplicationDetailsRpcController {
   public ResponseEntity<ApplicationPersistenceResponseDto> addApplication(
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for add application");

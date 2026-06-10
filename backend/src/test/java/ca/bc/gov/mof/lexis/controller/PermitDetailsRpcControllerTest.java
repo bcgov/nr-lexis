@@ -35,6 +35,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.util.List;
 import java.util.Optional;
@@ -60,6 +61,7 @@ class PermitDetailsRpcControllerTest {
   @Mock private ObjectProvider<PermitDetailsRpcService> serviceProvider;
   @Mock private PermitDetailsRpcService service;
   @Mock private LexisSessionService sessionService;
+  @Mock private LexisAuthorizationService authorizationService;
   @Mock private HttpServletRequest request;
   @Mock private HttpSession session;
 
@@ -70,7 +72,7 @@ class PermitDetailsRpcControllerTest {
     when(sessionService.getConfiguredIndustryRoles())
         .thenReturn(Set.of("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_FEDERAL_SUBMITTER"));
     controller =
-        new PermitDetailsRpcController(serviceProvider, sessionService);
+        new PermitDetailsRpcController(serviceProvider, sessionService, authorizationService);
   }
 
   @Test
@@ -440,9 +442,7 @@ class PermitDetailsRpcControllerTest {
             "idir\\jsmith"))
         .thenReturn(dto);
 
-    TestingAuthenticationToken authentication =
-        new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
 
     ResponseEntity<PermitPersistenceRpcResponseDto> response =
         controller.addInvoice(
@@ -489,9 +489,7 @@ class PermitDetailsRpcControllerTest {
     when(service.addPermit(org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
         .thenReturn(dto);
 
-    TestingAuthenticationToken authentication =
-        new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.addPermit(request, authentication);
@@ -526,9 +524,7 @@ class PermitDetailsRpcControllerTest {
     when(service.updatePermit(org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
         .thenReturn(dto);
 
-    TestingAuthenticationToken authentication =
-        new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updatePermit(request, authentication);
@@ -563,9 +559,7 @@ class PermitDetailsRpcControllerTest {
     when(service.updateShipping(org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
         .thenReturn(dto);
 
-    TestingAuthenticationToken authentication =
-        new TestingAuthenticationToken(
-            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_ADMIN")));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updateShipping(request, authentication);
@@ -633,11 +627,12 @@ class PermitDetailsRpcControllerTest {
 
   @Test
   void removePermitDocumentShouldReturnSuccessFlag() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.removePermitDocument(33L)).thenReturn(true);
 
     ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removePermitDocument("33");
+        controller.removePermitDocument("33", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -647,11 +642,12 @@ class PermitDetailsRpcControllerTest {
 
   @Test
   void removeApplicationDocumentShouldReturnSuccessFlag() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.removeApplicationDocument(44L)).thenReturn(true);
 
     ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeApplicationDocument("44");
+        controller.removeApplicationDocument("44", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -661,16 +657,39 @@ class PermitDetailsRpcControllerTest {
 
   @Test
   void removeInvoiceDocumentShouldReturnSuccessFlag() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.removeInvoiceDocument(55L)).thenReturn(true);
 
     ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeInvoiceDocument("55");
+        controller.removeInvoiceDocument("55", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isEqualTo("true");
     verify(service).removeInvoiceDocument(55L);
+  }
+
+  @Test
+  void updateShippingShouldRejectWithoutSavePermitAction() {
+    TestingAuthenticationToken authentication = unauthorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updateShipping(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void removePermitDocumentShouldRejectWithoutSavePermitAction() {
+    TestingAuthenticationToken authentication = unauthorizedSavePermit();
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removePermitDocument("33", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
   }
 
   @Test
@@ -710,5 +729,25 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().release()).isEqualTo("ok");
     verify(session).removeAttribute("PERMIT_LOCK");
+  }
+
+  private TestingAuthenticationToken authorizedSavePermit() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\jsmith", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER")));
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(true);
+    return authentication;
+  }
+
+  private TestingAuthenticationToken unauthorizedSavePermit() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\readonly", "n/a", List.of(new SimpleGrantedAuthority("LEXIS_READ_ONLY")));
+    List<String> roles = List.of("LEXIS_READ_ONLY");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(false);
+    return authentication;
   }
 }
