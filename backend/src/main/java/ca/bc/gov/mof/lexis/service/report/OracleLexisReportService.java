@@ -123,6 +123,10 @@ public class OracleLexisReportService implements LexisReportService {
       return Optional.empty();
     }
     LexisReportRequestDto effectiveRequest = applyLegacyReportDefaults(definition, request);
+    if (isUnboundedBiweeklyReport(definition, effectiveRequest)) {
+      LOGGER.warn("Biweekly listing requested without a bounded date range");
+      return Optional.empty();
+    }
 
     Optional<LexisGeneratedReport> legacyCsvReport =
         legacyCsvReportService.generateLegacyCsvReport(definition, effectiveRequest, effectiveFormat);
@@ -234,6 +238,16 @@ public class OracleLexisReportService implements LexisReportService {
     }
 
     return request;
+  }
+
+  private boolean isUnboundedBiweeklyReport(
+      LexisJasperReportDefinition definition, LexisReportRequestDto request) {
+    if (definition != LexisJasperReportDefinition.BIWEEKLY_LISTING) {
+      return false;
+    }
+    Map<String, String> parameters =
+        request == null || request.parameters() == null ? Map.of() : request.parameters();
+    return isBlank(parameters.get("fromDate")) || isBlank(parameters.get("toDate"));
   }
 
   private LexisReportRequestDto applyLegacyBiweeklyDefaults(LexisReportRequestDto request) {
