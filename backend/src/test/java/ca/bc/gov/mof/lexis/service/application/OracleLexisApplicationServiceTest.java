@@ -42,6 +42,7 @@ class OracleLexisApplicationServiceTest {
     when(repository.loadExemptionReasonOptions()).thenReturn(List.of(new CodeNameDto("U", "Unadvertised")));
     when(repository.loadApplicationStatusOptions()).thenReturn(List.of(new CodeNameDto("APP", "Approved")));
     when(repository.loadProductTypeOptions()).thenReturn(List.of(new CodeNameDto("S", "Standing")));
+    when(repository.loadGrowthTypeOptions()).thenReturn(List.of(new CodeNameDto("O", "Old Growth")));
     when(repository.loadRegionOptions()).thenReturn(List.of(new CodeNameDto("12", "Coast")));
 
     LexisApplicationSearchOptionsDto response = service.searchOptions();
@@ -50,6 +51,7 @@ class OracleLexisApplicationServiceTest {
     assertThat(response.exemptionReasons()).hasSize(1);
     assertThat(response.applicationStatuses()).hasSize(1);
     assertThat(response.productTypes()).hasSize(1);
+    assertThat(response.growthTypes()).hasSize(1);
     assertThat(response.regions()).hasSize(1);
   }
 

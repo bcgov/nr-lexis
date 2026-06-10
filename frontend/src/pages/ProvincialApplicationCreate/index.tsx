@@ -44,8 +44,9 @@ type ProvincialApplicationCreateForm = {
   ownerClientNumber: string
   ownerClientLocationCode: string
   ownerContactName: string
-  applicantClientNumber: string
+  applicantTypeCode: string
   productTypeCode: string
+  ageClass: string
   exemptionType: string
   region: string
   applicationDate: string
@@ -67,8 +68,9 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   ownerClientNumber: '',
   ownerClientLocationCode: '',
   ownerContactName: '',
-  applicantClientNumber: '',
+  applicantTypeCode: 'O',
   productTypeCode: '',
+  ageClass: '',
   exemptionType: '',
   region: '',
   applicationDate: '',
@@ -100,8 +102,9 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     ownerClientLocationCode:
       query.get('ownerClientLocationCode') ?? query.get('ownerClientLocation') ?? '',
     ownerContactName: query.get('ownerContactName') ?? query.get('ownerName') ?? '',
-    applicantClientNumber: query.get('applicantClientNumber') ?? '',
+    applicantTypeCode: query.get('ownerApplicantType') ?? query.get('applicantType') ?? 'O',
     productTypeCode: query.get('productTypeCode') ?? '',
+    ageClass: query.get('ageClass') ?? query.get('growthTypeCode') ?? '',
     exemptionType: query.get('exemptionReason') ?? query.get('exemptionReasonCode') ?? '',
     region: query.get('region') ?? query.get('orgUnitNumber') ?? '',
     applicationDate: query.get('applicationDate') ?? '',
@@ -143,6 +146,9 @@ const resolveOwnerClientLocationCode = (
   return locations.find(isSelectableClientLocation)?.locationCode ?? ''
 }
 
+const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
+  productTypeCode === 'H' || productTypeCode === 'S'
+
 type PageStatus = {
   kind: 'success' | 'error'
   title: string
@@ -156,6 +162,7 @@ const ProvincialApplicationCreatePage: FC = () => {
     buildInitialFormFromQuery(searchParams),
   )
   const [productTypes, setProductTypes] = useState<SearchOption[]>([])
+  const [growthTypes, setGrowthTypes] = useState<SearchOption[]>([])
   const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
   const [regions, setRegions] = useState<SearchOption[]>([])
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
@@ -174,6 +181,7 @@ const ProvincialApplicationCreatePage: FC = () => {
     const loadOptions = async () => {
       const options = await fetchProvincialApplicationOptions()
       setProductTypes(options.productTypes)
+      setGrowthTypes(options.growthTypes)
       setExemptionReasons(options.exemptionReasons)
       setRegions(options.regions)
     }
@@ -284,9 +292,11 @@ const ProvincialApplicationCreatePage: FC = () => {
         () => maxLengthFieldError(form.ownerClientLocationCode, 2, 'Owner client location code'),
       ),
       ownerContactName: requiredFieldError(form.ownerContactName, 'Owner name') ?? undefined,
-      applicantClientNumber:
-        requiredFieldError(form.applicantClientNumber, 'Applicant client number') ?? undefined,
+      applicantTypeCode: requiredFieldError(form.applicantTypeCode, 'Applicant type') ?? undefined,
       productTypeCode: requiredFieldError(form.productTypeCode, 'Product type') ?? undefined,
+      ageClass: productTypeRequiresGrowthType(form.productTypeCode)
+        ? (requiredFieldError(form.ageClass, 'Age class') ?? undefined)
+        : undefined,
       exemptionType: firstValidationError(
         () => requiredFieldError(form.exemptionType, 'Exemption reason'),
         () => maxLengthFieldError(form.exemptionType, 1, 'Exemption reason code'),
@@ -518,17 +528,19 @@ const ProvincialApplicationCreatePage: FC = () => {
                 setForm((current) => ({ ...current, ownerContactName: event.target.value }))
               }
             />
-            <TextInput
-              id="applicantClientNumber"
-              labelText="Applicant Client Number (required)"
-              value={form.applicantClientNumber}
-              invalid={!!fieldError('applicantClientNumber')}
-              invalidText={fieldError('applicantClientNumber')}
-              onBlur={() => markFieldTouched('applicantClientNumber')}
+            <Select
+              id="applicantTypeCode"
+              labelText="Applicant Type (required)"
+              value={form.applicantTypeCode}
+              invalid={!!fieldError('applicantTypeCode')}
+              invalidText={fieldError('applicantTypeCode')}
+              onBlur={() => markFieldTouched('applicantTypeCode')}
               onChange={(event) =>
-                setForm((current) => ({ ...current, applicantClientNumber: event.target.value }))
+                setForm((current) => ({ ...current, applicantTypeCode: event.target.value }))
               }
-            />
+            >
+              <SelectItem value="O" text="Owner" />
+            </Select>
             <Select
               id="productTypeCode"
               labelText="Product Type (required)"
@@ -537,11 +549,38 @@ const ProvincialApplicationCreatePage: FC = () => {
               invalidText={fieldError('productTypeCode')}
               onBlur={() => markFieldTouched('productTypeCode')}
               onChange={(event) =>
-                setForm((current) => ({ ...current, productTypeCode: event.target.value }))
+                setForm((current) => ({
+                  ...current,
+                  productTypeCode: event.target.value,
+                  ageClass: productTypeRequiresGrowthType(event.target.value)
+                    ? current.ageClass
+                    : '',
+                }))
               }
             >
               <SelectItem value="" text="Select product type" />
               {productTypes.map((option) => (
+                <SelectItem key={option.value} value={option.value} text={option.label} />
+              ))}
+            </Select>
+            <Select
+              id="ageClass"
+              labelText={
+                productTypeRequiresGrowthType(form.productTypeCode)
+                  ? 'Age Class (required)'
+                  : 'Age Class'
+              }
+              value={form.ageClass}
+              disabled={!productTypeRequiresGrowthType(form.productTypeCode)}
+              invalid={!!fieldError('ageClass')}
+              invalidText={fieldError('ageClass')}
+              onBlur={() => markFieldTouched('ageClass')}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, ageClass: event.target.value }))
+              }
+            >
+              <SelectItem value="" text="Select age class" />
+              {growthTypes.map((option) => (
                 <SelectItem key={option.value} value={option.value} text={option.label} />
               ))}
             </Select>

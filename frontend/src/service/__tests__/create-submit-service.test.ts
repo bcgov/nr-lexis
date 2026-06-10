@@ -38,8 +38,9 @@ describe('create-submit-service', () => {
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
-      applicantClientNumber: '00022222',
+      applicantTypeCode: 'O',
       productTypeCode: 'LOG',
+      ageClass: '',
       exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-01',
@@ -70,9 +71,13 @@ describe('create-submit-service', () => {
     expect(body).toBeInstanceOf(URLSearchParams)
     expect(body.get('actionMapping')).toBe('addApplication')
     expect(body.get('applicationNumber')).toBe('1001')
-    expect(body.get('agentClientNumber')).toBe('00022222')
+    expect(body.get('ownerApplicantType')).toBe('O')
+    expect(body.get('applicantType')).toBe('O')
+    expect(body.get('agentClientNumber')).toBeNull()
     expect(body.get('ownerClientLocationCode')).toBe('00')
     expect(body.get('ownerContactName')).toBe('Owner Contact')
+    expect(body.get('ageClass')).toBeNull()
+    expect(body.get('growthTypeCode')).toBeNull()
     expect(body.get('exemptionReason')).toBe('U')
     expect(body.get('exemptionReasonCode')).toBe('U')
     expect(body.get('applicationDate')).toBe('2026-01-01')
@@ -158,8 +163,9 @@ describe('create-submit-service', () => {
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
-      applicantClientNumber: '00022222',
+      applicantTypeCode: 'O',
       productTypeCode: 'LOG',
+      ageClass: '',
       exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-01',
@@ -191,8 +197,9 @@ describe('create-submit-service', () => {
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
-      applicantClientNumber: '00022222',
+      applicantTypeCode: 'O',
       productTypeCode: 'LOG',
+      ageClass: '',
       exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-01',
@@ -209,6 +216,7 @@ describe('create-submit-service', () => {
       expect.objectContaining({
         actionMapping: 'addApplication',
         applicationNumber: '1001',
+        ownerApplicantType: 'O',
         exemptionReason: 'U',
         logLocation: 'Camp 1',
         productLocation: 'Camp 1',

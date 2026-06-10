@@ -69,6 +69,7 @@ describe('Create Page Core Flows', () => {
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
       exemptionReasons: [{ value: 'U', label: 'Unadvertised' }],
       applicationStatuses: [],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '11', label: 'Cariboo' }],
     } as any)
     mockedFetchProvincialExemptionOptions.mockResolvedValue({
@@ -91,7 +92,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
         ]}
       >
         <Routes>
@@ -114,8 +115,9 @@ describe('Create Page Core Flows', () => {
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
-      applicantClientNumber: '00022222',
+      applicantTypeCode: 'O',
       productTypeCode: 'LOG',
+      ageClass: '',
       exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-09',
@@ -137,7 +139,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
         ]}
       >
         <Routes>
@@ -161,7 +163,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionType=ALL&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionType=ALL&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
         ]}
       >
         <Routes>

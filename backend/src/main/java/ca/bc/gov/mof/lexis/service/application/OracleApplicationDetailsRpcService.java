@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
@@ -23,8 +24,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private static final String DESCRIPTION_NOT_ON_FILE = "Not on file";
   private static final String APPLICATION_STATUS_NEW = "NEW";
+  private static final String APPLICANT_TYPE_OWNER = "O";
+  private static final String APPLICANT_TYPE_AGENT = "A";
   private static final String JURISDICTION_PROVINCIAL = "P";
   private static final String OIC_INDICATOR_NO = "N";
+  private static final String EXPORT_PRODUCT_TYPE_HARVESTED = "H";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
   private static final String SPECIES_TYPE_CEDAR = "CE";
   private static final String EXPORT_SPECIES_ENDUSE_OTHER = "OT";
@@ -1068,8 +1072,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (input == null) {
       return new CreateApplicationRequest(
           null, null, null, null, null, null, null, null, null, null, null, null, null,
-          null, null, null, null, JURISDICTION_PROVINCIAL, null, null, null, OIC_INDICATOR_NO, true);
+          null, APPLICANT_TYPE_OWNER, null, null, JURISDICTION_PROVINCIAL, null, null, null, OIC_INDICATOR_NO, true);
     }
+
+    String applicantTypeCode =
+        firstNonBlank(input.applicantTypeCode(), APPLICANT_TYPE_OWNER).toUpperCase(Locale.ROOT);
+    boolean ownerApplicant = APPLICANT_TYPE_OWNER.equals(applicantTypeCode);
 
     return new CreateApplicationRequest(
         input.federalApplicationNumber(),
@@ -1080,18 +1088,18 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         input.averageLogVolume() == null ? 0.0d : input.averageLogVolume(),
         trimToNull(input.productLocation()),
         input.exportScheduleId(),
-        trimToNull(input.agentClientNumber()),
-        trimToNull(input.agentClientLocationCode()),
+        ownerApplicant ? null : trimToNull(input.agentClientNumber()),
+        ownerApplicant ? null : trimToNull(input.agentClientLocationCode()),
         trimToNull(input.ownerClientNumber()),
         trimToNull(input.ownerClientLocationCode()),
         trimToNull(input.exemptionNumber()),
         trimToNull(input.exemptionReasonCode()),
-        trimToNull(input.applicantTypeCode()),
+        applicantTypeCode,
         input.orgUnitNumber(),
         trimToNull(input.productTypeCode()),
         firstNonBlank(input.jurisdictionCode(), JURISDICTION_PROVINCIAL),
         trimToNull(input.growthTypeCode()),
-        trimToNull(input.agentContactName()),
+        ownerApplicant ? null : trimToNull(input.agentContactName()),
         trimToNull(input.ownerContactName()),
         firstNonBlank(input.oicIndicator(), OIC_INDICATOR_NO),
         input.validationEnabled());
@@ -1116,6 +1124,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
     if (trimToNull(request.productTypeCode()) == null) {
       errors.add(required("product type code"));
+    }
+    if (requiresGrowthType(request.productTypeCode())
+        && trimToNull(request.growthTypeCode()) == null) {
+      errors.add(required("growth type code"));
     }
     if (request.orgUnitNumber() == null || request.orgUnitNumber() <= 0) {
       errors.add(required("application region"));
@@ -1145,6 +1157,25 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     if (trimToNull(request.ownerContactName()) == null) {
       errors.add(required("application owner name"));
+    }
+
+    String applicantTypeCode = trimToNull(request.applicantTypeCode());
+    if (applicantTypeCode == null) {
+      errors.add(required("applicant type code"));
+    } else if (!APPLICANT_TYPE_OWNER.equals(applicantTypeCode)
+        && !APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
+      errors.add("The applicant type code must be O or A.");
+    }
+    if (APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
+      if (trimToNull(request.agentClientNumber()) == null) {
+        errors.add(required("application agent number"));
+      }
+      if (trimToNull(request.agentClientLocationCode()) == null) {
+        errors.add(required("application agent location"));
+      }
+      if (trimToNull(request.agentContactName()) == null) {
+        errors.add(required("application agent name"));
+      }
     }
     return errors;
   }
@@ -1185,6 +1216,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private String maxLength(String fieldName, int maxLength) {
     String unit = maxLength == 1 ? "character" : "characters";
     return "The " + fieldName + " must be " + maxLength + " " + unit + " or fewer.";
+  }
+
+  private boolean requiresGrowthType(String productTypeCode) {
+    String normalized = trimToNull(productTypeCode);
+    return EXPORT_PRODUCT_TYPE_HARVESTED.equals(normalized)
+        || EXPORT_PRODUCT_TYPE_STANDING.equals(normalized);
   }
 
   private String firstNonBlank(String value, String fallback) {

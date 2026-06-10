@@ -49,6 +49,11 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
           new CodeNameDto("LOG", "Logs"),
           new CodeNameDto("LUM", "Lumber"));
 
+  private static final List<CodeNameDto> GROWTH_TYPES =
+      List.of(
+          new CodeNameDto("O", "Old Growth"),
+          new CodeNameDto("S", "Second Growth"));
+
   private static final List<CodeNameDto> REGIONS =
       List.of(
           new CodeNameDto("11", "Cariboo"),
@@ -164,7 +169,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
   @Override
   public LexisApplicationSearchOptionsDto searchOptions() {
     return new LexisApplicationSearchOptionsDto(
-        EXEMPTION_TYPES, EXEMPTION_REASONS, APPLICATION_STATUSES, PRODUCT_TYPES, REGIONS);
+        EXEMPTION_TYPES, EXEMPTION_REASONS, APPLICATION_STATUSES, PRODUCT_TYPES, GROWTH_TYPES, REGIONS);
   }
 
   @Override

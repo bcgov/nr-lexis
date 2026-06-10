@@ -40,6 +40,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
   private static final String FIND_ALL_PRODUCT_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_PRODUCT_TYPE_CODES(?)";
+  private static final String FIND_ALL_GROWTH_TYPE_CODES =
+      LEXIS_CODES_PACKAGE + "FIND_ALL_GROWTH_TYPE_CODES(?)";
   private static final String FIND_APPLICATIONS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATIONS_BY_CRITERIA(?,?,?,?,?)";
   private static final String COUNT_APPLICATIONS_BY_CRITERIA =
@@ -89,6 +91,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     options.add(new CodeNameDto("", "All"));
     options.addAll(loadCodeNameOptions(FIND_ALL_PRODUCT_TYPE_CODES));
     return options;
+  }
+
+  public List<CodeNameDto> loadGrowthTypeOptions() {
+    return loadCodeNameOptions(FIND_ALL_GROWTH_TYPE_CODES);
   }
 
   public List<CodeNameDto> loadRegionOptions() {

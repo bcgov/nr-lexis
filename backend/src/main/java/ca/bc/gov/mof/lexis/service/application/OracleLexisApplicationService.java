@@ -30,6 +30,7 @@ public class OracleLexisApplicationService implements LexisApplicationService {
         safeList(repository.loadExemptionReasonOptions()),
         safeList(repository.loadApplicationStatusOptions()),
         safeList(repository.loadProductTypeOptions()),
+        safeList(repository.loadGrowthTypeOptions()),
         safeList(repository.loadRegionOptions()));
   }
 

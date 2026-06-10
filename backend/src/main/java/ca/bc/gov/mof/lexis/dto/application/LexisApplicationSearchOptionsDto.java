@@ -8,4 +8,5 @@ public record LexisApplicationSearchOptionsDto(
     List<CodeNameDto> exemptionReasons,
     List<CodeNameDto> applicationStatuses,
     List<CodeNameDto> productTypes,
+    List<CodeNameDto> growthTypes,
     List<CodeNameDto> regions) {}

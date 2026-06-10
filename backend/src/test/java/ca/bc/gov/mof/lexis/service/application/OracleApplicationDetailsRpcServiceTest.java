@@ -278,7 +278,128 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(record.applicationStatusCode()).isEqualTo("NEW");
     assertThat(record.jurisdictionCode()).isEqualTo("P");
     assertThat(record.oicIndicator()).isEqualTo("N");
+    assertThat(record.applicantTypeCode()).isEqualTo("A");
+    assertThat(record.agentClientNumber()).isEqualTo("00022222");
+    assertThat(record.agentClientLocationCode()).isEqualTo("01");
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
+  }
+
+  @Test
+  void addApplicationShouldDefaultMissingApplicantTypeToOwnerBeforeOracleInsert() {
+    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                null,
+                "Camp 1",
+                null,
+                "00022222",
+                "01",
+                "00011111",
+                "02",
+                null,
+                "U",
+                null,
+                11L,
+                "T",
+                null,
+                null,
+                "Agent Contact",
+                "Owner Contact",
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class);
+    verify(repository).insertApplication(recordCaptor.capture());
+    ApplicationDetailsRpcRepository.ApplicationInsertRecord record = recordCaptor.getValue();
+    assertThat(record.applicantTypeCode()).isEqualTo("O");
+    assertThat(record.agentClientNumber()).isNull();
+    assertThat(record.agentClientLocationCode()).isNull();
+    assertThat(record.agentContactName()).isNull();
+    assertThat(record.averageLogVolume()).isZero();
+    assertThat(record.jurisdictionCode()).isEqualTo("P");
+    assertThat(record.oicIndicator()).isEqualTo("N");
+  }
+
+  @Test
+  void addApplicationShouldRejectHarvestedWithoutGrowthTypeBeforeOracleInsert() {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                2.4d,
+                "Camp 1",
+                null,
+                null,
+                null,
+                "00011111",
+                "02",
+                null,
+                "U",
+                "O",
+                11L,
+                "H",
+                null,
+                null,
+                null,
+                "Owner Contact",
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("A valid growth type code is required.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addApplicationShouldRejectInvalidApplicantTypeBeforeOracleInsert() {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                2.4d,
+                "Camp 1",
+                null,
+                null,
+                null,
+                "00011111",
+                "02",
+                null,
+                "U",
+                "X",
+                11L,
+                "H",
+                null,
+                null,
+                null,
+                "Owner Contact",
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("The applicant type code must be O or A.");
+    verifyNoInteractions(repository);
   }
 
   @Test

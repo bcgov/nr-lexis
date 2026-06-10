@@ -34,6 +34,7 @@ describe('search-options-service', () => {
       ],
       applicationStatuses: [{ code: 'NEW', name: 'New' }],
       productTypes: [{ code: 'LOG', name: 'Logs' }],
+      growthTypes: [{ code: 'O', name: 'Old Growth' }],
       regions: [{ code: '11', name: 'Cariboo' }, { code: '12' }],
     })
 
@@ -55,6 +56,7 @@ describe('search-options-service', () => {
       exemptionReasons: [{ value: 'U', label: 'Unadvertised' }],
       applicationStatuses: [{ value: 'NEW', label: 'New' }],
       productTypes: [{ value: 'LOG', label: 'Logs' }],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '11', label: 'Cariboo' }],
     })
   })
