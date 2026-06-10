@@ -108,11 +108,14 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
-    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111')
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner')
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith({
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      agentContactName: '',
       applicantTypeCode: 'O',
       productTypeCode: 'LOG',
       ageClass: '',
@@ -127,6 +130,58 @@ describe('Create Page Core Flows', () => {
       comments: 'Ready',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
+  })
+
+  it('submits provincial application with agent applicant fields', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('902'))
+    mockedFetchApplicationClientLocations.mockImplementation(async (clientNumber, applicantType) =>
+      applicantType === 'agent'
+        ? [{ locationCode: '01', locationName: '01 - AGENT LOCATION', selected: false }]
+        : [{ locationCode: '00', locationName: '00 - OWNER LOCATION', selected: false }],
+    )
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=00033333&agentClientLocationCode=01&agentContactName=Agent%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner')
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033333', 'agent')
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith({
+      ownerClientNumber: '00011111',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      agentClientNumber: '00033333',
+      agentClientLocationCode: '01',
+      agentContactName: 'Agent Contact',
+      applicantTypeCode: 'A',
+      productTypeCode: 'LOG',
+      ageClass: '',
+      exemptionType: 'U',
+      region: '11',
+      applicationDate: '2026-01-09',
+      applicationTermDays: '30',
+      receivedDate: '2026-01-10',
+      listingDate: '2026-01-11',
+      productLocation: 'Camp 1',
+      applicationVolume: '125.5',
+      comments: 'Ready',
+    })
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/902')
   })
 
   it('blocks provincial application submit when owner has no selectable locations', async () => {

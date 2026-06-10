@@ -42,6 +42,9 @@ type ProvincialApplicationCreateForm = {
   ownerClientNumber: string
   ownerClientLocationCode: string
   ownerContactName: string
+  agentClientNumber: string
+  agentClientLocationCode: string
+  agentContactName: string
   applicantTypeCode: string
   productTypeCode: string
   ageClass: string
@@ -64,6 +67,9 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   ownerClientNumber: '',
   ownerClientLocationCode: '',
   ownerContactName: '',
+  agentClientNumber: '',
+  agentClientLocationCode: '',
+  agentContactName: '',
   applicantTypeCode: 'O',
   productTypeCode: '',
   ageClass: '',
@@ -96,6 +102,10 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     ownerClientLocationCode:
       query.get('ownerClientLocationCode') ?? query.get('ownerClientLocation') ?? '',
     ownerContactName: query.get('ownerContactName') ?? query.get('ownerName') ?? '',
+    agentClientNumber: query.get('agentClientNumber') ?? query.get('applicantClientNumber') ?? '',
+    agentClientLocationCode:
+      query.get('agentClientLocationCode') ?? query.get('agentClientLocation') ?? '',
+    agentContactName: query.get('agentContactName') ?? '',
     applicantTypeCode: query.get('ownerApplicantType') ?? query.get('applicantType') ?? 'O',
     productTypeCode: query.get('productTypeCode') ?? '',
     ageClass: query.get('ageClass') ?? query.get('growthTypeCode') ?? '',
@@ -143,6 +153,8 @@ const resolveOwnerClientLocationCode = (
 const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
   productTypeCode === 'H' || productTypeCode === 'S'
 
+const isAgentApplicant = (applicantTypeCode: string): boolean => applicantTypeCode === 'A'
+
 type PageStatus = {
   kind: 'success' | 'error'
   title: string
@@ -160,7 +172,9 @@ const ProvincialApplicationCreatePage: FC = () => {
   const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
   const [regions, setRegions] = useState<SearchOption[]>([])
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
+  const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
   const [isLoadingOwnerClientLocations, setIsLoadingOwnerClientLocations] = useState(false)
+  const [isLoadingAgentClientLocations, setIsLoadingAgentClientLocations] = useState(false)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -240,7 +254,7 @@ const ProvincialApplicationCreatePage: FC = () => {
       }
     })
 
-    void fetchApplicationClientLocations(ownerClientNumber)
+    void fetchApplicationClientLocations(ownerClientNumber, 'owner')
       .then((locations) => {
         if (!isActive) {
           return
@@ -272,6 +286,92 @@ const ProvincialApplicationCreatePage: FC = () => {
     }
   }, [form.ownerClientNumber])
 
+  useEffect(() => {
+    if (!isAgentApplicant(form.applicantTypeCode)) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+
+        setAgentClientLocations([])
+        setIsLoadingAgentClientLocations(false)
+        setForm((current) =>
+          current.agentClientNumber || current.agentClientLocationCode || current.agentContactName
+            ? {
+                ...current,
+                agentClientNumber: '',
+                agentClientLocationCode: '',
+                agentContactName: '',
+              }
+            : current,
+        )
+      })
+
+      return () => {
+        isActive = false
+      }
+    }
+
+    const agentClientNumber = form.agentClientNumber.trim()
+    if (!agentClientNumber) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+
+        setAgentClientLocations([])
+        setIsLoadingAgentClientLocations(false)
+        setForm((current) =>
+          current.agentClientLocationCode ? { ...current, agentClientLocationCode: '' } : current,
+        )
+      })
+
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingAgentClientLocations(true)
+      }
+    })
+
+    void fetchApplicationClientLocations(agentClientNumber, 'agent')
+      .then((locations) => {
+        if (!isActive) {
+          return
+        }
+
+        setAgentClientLocations(locations)
+        setForm((current) => {
+          if (current.agentClientNumber.trim() !== agentClientNumber) {
+            return current
+          }
+
+          const nextAgentClientLocationCode = resolveOwnerClientLocationCode(
+            locations,
+            current.agentClientLocationCode,
+          )
+          return current.agentClientLocationCode === nextAgentClientLocationCode
+            ? current
+            : { ...current, agentClientLocationCode: nextAgentClientLocationCode }
+        })
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingAgentClientLocations(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.agentClientNumber, form.applicantTypeCode])
+
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
       ownerClientNumber:
@@ -281,7 +381,26 @@ const ProvincialApplicationCreatePage: FC = () => {
         () => maxLengthFieldError(form.ownerClientLocationCode, 2, 'Owner client location code'),
       ),
       ownerContactName: requiredFieldError(form.ownerContactName, 'Owner name') ?? undefined,
-      applicantTypeCode: requiredFieldError(form.applicantTypeCode, 'Applicant type') ?? undefined,
+      agentClientNumber: isAgentApplicant(form.applicantTypeCode)
+        ? (requiredFieldError(form.agentClientNumber, 'Agent client number') ?? undefined)
+        : undefined,
+      agentClientLocationCode: isAgentApplicant(form.applicantTypeCode)
+        ? firstValidationError(
+            () => requiredFieldError(form.agentClientLocationCode, 'Agent client location code'),
+            () =>
+              maxLengthFieldError(form.agentClientLocationCode, 2, 'Agent client location code'),
+          )
+        : undefined,
+      agentContactName: isAgentApplicant(form.applicantTypeCode)
+        ? (requiredFieldError(form.agentContactName, 'Agent contact name') ?? undefined)
+        : undefined,
+      applicantTypeCode: firstValidationError(
+        () => requiredFieldError(form.applicantTypeCode, 'Applicant type'),
+        () =>
+          form.applicantTypeCode === 'O' || form.applicantTypeCode === 'A'
+            ? undefined
+            : 'Applicant type must be Owner or Agent.',
+      ),
       productTypeCode: requiredFieldError(form.productTypeCode, 'Product type') ?? undefined,
       ageClass: productTypeRequiresGrowthType(form.productTypeCode)
         ? (requiredFieldError(form.ageClass, 'Age class') ?? undefined)
@@ -318,12 +437,20 @@ const ProvincialApplicationCreatePage: FC = () => {
   )
   const missingRequiredOptions = productTypes.length === 0
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
+  const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const ownerClientLocationPlaceholder = !form.ownerClientNumber.trim()
     ? 'Enter owner client number first'
     : isLoadingOwnerClientLocations
       ? 'Loading locations'
       : hasSelectableOwnerClientLocations
         ? 'Select owner client location'
+        : 'No locations on file'
+  const agentClientLocationPlaceholder = !form.agentClientNumber.trim()
+    ? 'Enter agent client number first'
+    : isLoadingAgentClientLocations
+      ? 'Loading locations'
+      : hasSelectableAgentClientLocations
+        ? 'Select agent client location'
         : 'No locations on file'
 
   const markFieldTouched = (field: ProvincialApplicationCreateField): void => {
@@ -502,12 +629,79 @@ const ProvincialApplicationCreatePage: FC = () => {
               invalid={!!fieldError('applicantTypeCode')}
               invalidText={fieldError('applicantTypeCode')}
               onBlur={() => markFieldTouched('applicantTypeCode')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, applicantTypeCode: event.target.value }))
-              }
+              onChange={(event) => {
+                const applicantTypeCode = event.target.value
+                setForm((current) => ({
+                  ...current,
+                  applicantTypeCode,
+                  agentClientNumber: isAgentApplicant(applicantTypeCode)
+                    ? current.agentClientNumber
+                    : '',
+                  agentClientLocationCode: isAgentApplicant(applicantTypeCode)
+                    ? current.agentClientLocationCode
+                    : '',
+                  agentContactName: isAgentApplicant(applicantTypeCode)
+                    ? current.agentContactName
+                    : '',
+                }))
+              }}
             >
               <SelectItem value="O" text="Owner" />
+              <SelectItem value="A" text="Agent" />
             </Select>
+            {isAgentApplicant(form.applicantTypeCode) && (
+              <>
+                <TextInput
+                  id="agentClientNumber"
+                  labelText="Agent Client Number (required)"
+                  value={form.agentClientNumber}
+                  invalid={!!fieldError('agentClientNumber')}
+                  invalidText={fieldError('agentClientNumber')}
+                  onBlur={() => markFieldTouched('agentClientNumber')}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      agentClientNumber: event.target.value,
+                    }))
+                  }
+                />
+                <Select
+                  id="agentClientLocationCode"
+                  labelText="Agent Client Location (required)"
+                  value={form.agentClientLocationCode}
+                  disabled={!form.agentClientNumber.trim() || isLoadingAgentClientLocations}
+                  invalid={!!fieldError('agentClientLocationCode')}
+                  invalidText={fieldError('agentClientLocationCode')}
+                  onBlur={() => markFieldTouched('agentClientLocationCode')}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      agentClientLocationCode: event.target.value,
+                    }))
+                  }
+                >
+                  <SelectItem value="" text={agentClientLocationPlaceholder} />
+                  {agentClientLocations.filter(isSelectableClientLocation).map((location) => (
+                    <SelectItem
+                      key={location.locationCode}
+                      value={location.locationCode}
+                      text={location.locationName}
+                    />
+                  ))}
+                </Select>
+                <TextInput
+                  id="agentContactName"
+                  labelText="Agent Contact Name (required)"
+                  value={form.agentContactName}
+                  invalid={!!fieldError('agentContactName')}
+                  invalidText={fieldError('agentContactName')}
+                  onBlur={() => markFieldTouched('agentContactName')}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, agentContactName: event.target.value }))
+                  }
+                />
+              </>
+            )}
             <Select
               id="productTypeCode"
               labelText="Product Type (required)"
@@ -658,7 +852,12 @@ const ProvincialApplicationCreatePage: FC = () => {
             <Button
               kind="primary"
               onClick={() => void onSubmit()}
-              disabled={missingRequiredOptions || isSubmitting || isLoadingOwnerClientLocations}
+              disabled={
+                missingRequiredOptions ||
+                isSubmitting ||
+                isLoadingOwnerClientLocations ||
+                isLoadingAgentClientLocations
+              }
             >
               Submit
             </Button>

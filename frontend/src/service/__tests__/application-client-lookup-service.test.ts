@@ -45,6 +45,31 @@ describe('application-client-lookup-service', () => {
     ])
   })
 
+  it('loads agent client locations with agent lookup context', async () => {
+    getCachedDataMock.mockResolvedValue([
+      { locationCode: '01', locationName: '01 - AGENT LOCATION', selected: true },
+    ])
+
+    const result = await fetchApplicationClientLocations(' 00033333 ', 'agent')
+
+    expect(getCachedDataMock).toHaveBeenCalledWith(
+      '/lexis/rpc/application-details/client-locations',
+      {
+        params: {
+          applicantType: 'agent',
+          clientNumber: '00033333',
+        },
+      },
+      {
+        cacheKey: 'application-client-locations:agent:00033333',
+        ttlMs: 300000,
+      },
+    )
+    expect(result).toEqual([
+      { locationCode: '01', locationName: '01 - AGENT LOCATION', selected: true },
+    ])
+  })
+
   it('does not call the API when client number is blank', async () => {
     const result = await fetchApplicationClientLocations('  ')
 

@@ -47,6 +47,7 @@ const parseClientLocations = (input: unknown): ApplicationClientLocation[] => {
 
 export const fetchApplicationClientLocations = async (
   clientNumber: string,
+  applicantType: 'owner' | 'agent' = 'owner',
 ): Promise<ApplicationClientLocation[]> => {
   const normalizedClientNumber = clientNumber.trim()
   if (!normalizedClientNumber) {
@@ -58,18 +59,21 @@ export const fetchApplicationClientLocations = async (
       '/lexis/rpc/application-details/client-locations',
       {
         params: {
-          applicantType: 'owner',
+          applicantType,
           clientNumber: normalizedClientNumber,
         },
       },
       {
-        cacheKey: `application-client-locations:owner:${normalizedClientNumber}`,
+        cacheKey: `application-client-locations:${applicantType}:${normalizedClientNumber}`,
         ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
       },
     )
     return parseClientLocations(data)
   } catch (error) {
-    console.warn(`Unable to load owner locations for client ${normalizedClientNumber}.`, error)
+    console.warn(
+      `Unable to load ${applicantType} locations for client ${normalizedClientNumber}.`,
+      error,
+    )
     return []
   }
 }

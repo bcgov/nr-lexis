@@ -205,6 +205,9 @@ export type ProvincialApplicationCreateSubmission = {
   ownerClientNumber: string
   ownerClientLocationCode: string
   ownerContactName: string
+  agentClientNumber?: string
+  agentClientLocationCode?: string
+  agentContactName?: string
   applicantTypeCode: string
   productTypeCode: string
   ageClass: string
@@ -230,6 +233,10 @@ export const submitProvincialApplicationCreate = async (
         ownerClientLocationCode: form.ownerClientLocationCode,
         ownerClientLocation: form.ownerClientLocationCode,
         ownerContactName: form.ownerContactName,
+        agentClientNumber: form.agentClientNumber,
+        agentClientLocationCode: form.agentClientLocationCode,
+        agentClientLocation: form.agentClientLocationCode,
+        agentContactName: form.agentContactName,
         ownerApplicantType: form.applicantTypeCode,
         applicantType: form.applicantTypeCode,
         productTypeCode: form.productTypeCode,

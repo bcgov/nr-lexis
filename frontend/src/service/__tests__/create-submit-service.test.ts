@@ -119,6 +119,45 @@ describe('create-submit-service', () => {
     expect(body.get('withdrawReason')).toBe('Withdrawn by buyer')
   })
 
+  it('posts provincial application agent applicant fields when applicant type is agent', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        success: true,
+        message: 'saved',
+        applicationNumber: '1002',
+      },
+    })
+
+    await submitProvincialApplicationCreate({
+      ownerClientNumber: '00011111',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      agentClientNumber: '00033333',
+      agentClientLocationCode: '01',
+      agentContactName: 'Agent Contact',
+      applicantTypeCode: 'A',
+      productTypeCode: 'LOG',
+      ageClass: '',
+      exemptionType: 'U',
+      region: '11',
+      applicationDate: '2026-01-01',
+      applicationTermDays: '30',
+      receivedDate: '2026-01-01',
+      listingDate: '2026-01-02',
+      productLocation: 'Camp 1',
+      applicationVolume: '125.5',
+      comments: 'ready',
+    })
+
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('ownerApplicantType')).toBe('A')
+    expect(body.get('applicantType')).toBe('A')
+    expect(body.get('agentClientNumber')).toBe('00033333')
+    expect(body.get('agentClientLocationCode')).toBe('01')
+    expect(body.get('agentClientLocation')).toBe('01')
+    expect(body.get('agentContactName')).toBe('Agent Contact')
+  })
+
   it('surfaces provincial exemption backend errors without a generic prefix', async () => {
     postMock.mockResolvedValue({
       data: {
