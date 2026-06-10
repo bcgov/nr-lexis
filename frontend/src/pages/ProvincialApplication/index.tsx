@@ -29,6 +29,11 @@ import type {
 } from '@/interfaces/ProvincialApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
+import {
   parseCsvParam,
   parseEnumParam,
   parsePositiveIntParam,
@@ -146,7 +151,7 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 
 const ProvincialApplicationPage: FC = () => {
   const navigate = useNavigate()
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
@@ -242,7 +247,22 @@ const ProvincialApplicationPage: FC = () => {
   const beginSearchRequest = useLatestRequestGuard()
 
   const runSearch = useCallback(
-    async (request: ProvincialApplicationSearchRequest) => {
+    async (request: ProvincialApplicationSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheKey = buildPageDataCacheKey(
+        'provincial-application-search',
+        capabilities?.principal,
+        request,
+      )
+      if (!options.force) {
+        const cachedResults = getPageDataCache<ProvincialApplicationSearchResponse>(pageCacheKey)
+        if (cachedResults) {
+          setResults(cachedResults)
+          setLoading(false)
+          setErrorMessage('')
+          return
+        }
+      }
+
       const isLatestRequest = beginSearchRequest()
       if (
         !isValidIsoDate(request.filters.listingFromDate) ||
@@ -256,6 +276,7 @@ const ProvincialApplicationPage: FC = () => {
       try {
         const response = await searchProvincialApplications(request)
         if (isLatestRequest()) {
+          setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
       } catch (error) {
@@ -270,7 +291,7 @@ const ProvincialApplicationPage: FC = () => {
         }
       }
     },
-    [beginSearchRequest],
+    [beginSearchRequest, capabilities?.principal],
   )
 
   useEffect(() => {

@@ -469,7 +469,8 @@ public class LegacyRouteController {
         regionNumbers,
         sortField,
         page,
-        size);
+        size,
+        null);
   }
 
   @GetMapping({"/permitDetails", "/permitDetails.do"})

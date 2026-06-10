@@ -408,7 +408,7 @@ class OracleLexisReportServiceFormatSupportTest {
   @Test
   void shouldUseReadOnlyGbmsHistoryPackageForReadOnlyPermitReportUsers() {
     SecurityContextHolder.getContext()
-        .setAuthentication(new TestingAuthenticationToken("user", "password", "LEXIS_READ_ONLY"));
+        .setAuthentication(new TestingAuthenticationToken("user", "n/a", "LEXIS_READ_ONLY"));
     PermitRpcRepository permitRpcRepository = Mockito.mock(PermitRpcRepository.class);
     Mockito.when(permitRpcRepository.findGbmsInvoiceHistory("", 900100L, true))
         .thenReturn(
@@ -481,7 +481,7 @@ class OracleLexisReportServiceFormatSupportTest {
     SecurityContextHolder.getContext()
         .setAuthentication(
             new TestingAuthenticationToken(
-                "user", "password", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
+                "user", "n/a", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
     OracleLegacyCsvReportService legacyCsvReportService =
         Mockito.mock(OracleLegacyCsvReportService.class);
     OracleLegacyJasperTableReportService legacyJasperTableReportService =
@@ -518,7 +518,7 @@ class OracleLexisReportServiceFormatSupportTest {
     SecurityContextHolder.getContext()
         .setAuthentication(
             new TestingAuthenticationToken(
-                "user", "password", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
+                "user", "n/a", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
     OracleLexisReportService service =
         createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
     LexisReportRequestDto request =
@@ -547,7 +547,7 @@ class OracleLexisReportServiceFormatSupportTest {
     SecurityContextHolder.getContext()
         .setAuthentication(
             new TestingAuthenticationToken(
-                "user", "password", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
+                "user", "n/a", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
     OracleLexisReportService service =
         createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
     LexisReportRequestDto request =
@@ -572,7 +572,7 @@ class OracleLexisReportServiceFormatSupportTest {
     SecurityContextHolder.getContext()
         .setAuthentication(
             new TestingAuthenticationToken(
-                "user", "password", "LEXIS_READ_ONLY", "LEXIS_APPLICATION_APPROVER"));
+                "user", "n/a", "LEXIS_READ_ONLY", "LEXIS_APPLICATION_APPROVER"));
     OracleLexisReportService service =
         createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
     LexisReportRequestDto request =

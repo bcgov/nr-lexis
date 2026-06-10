@@ -13,7 +13,7 @@ Full-stack LEXIS application for log export workflows.
 | Backend | Spring Boot 3.5, Java 21 |
 | Database | Oracle (shared, BC Gov-managed) |
 | Auth | AWS Cognito (FAM) |
-| Reports | JasperReports library (embedded, no remote server) |
+| Reports | JasperReports library |
 
 ## Local Development
 
@@ -23,25 +23,35 @@ Two supported ways to run LEXIS locally. Pick whichever fits your workflow.
 |---|---|---|
 | **Backend hot reload** | Manual restart | Manual restart |
 | **Frontend hot reload (Vite HMR)** | Yes | Yes |
-| **First-time setup cost** | Install Java 21 + Node 22 on host | Docker Desktop |
-| **Best for** | Day-to-day backend/frontend work | Quick smoke tests and container parity |
+| **First-time setup cost** | Install Java 21 + Node 22 on host | Just Docker Desktop |
+| **Best for** | Day-to-day backend/frontend work | Quick smoke tests, frontend-only work, and container parity |
 
-Both options use the same local property files below. Reports are generated inside the Spring Boot backend with checked-in JRXML templates; no Jasper Server URL, username, or password is required.
+Both options share the same prerequisites and property files below. Reports use the checked-in JRXML templates in the Spring Boot backend.
 
 ### Shared prerequisites
 
-1. **BC Gov VPN connected.** The backend needs to reach the BC Gov Oracle host configured in `application-local.yml`; Compose cannot route that for you.
-2. **Java 21 and Maven 3.9+** (Option A only).
+1. **Network access to the BC Gov Oracle environment.** Compose cannot route that for you.
+2. **Maven 3.9+ and Java 21** (Option A only). The repo has no Maven wrapper.
 3. **Node 22+** (Option A only).
 4. **Docker Desktop** (Option B only).
 
 ### Property files you create once
 
-These files are gitignored and stay local:
+These files are gitignored and stay local.
 
-1. `backend/src/main/resources/application-local.yml`
-2. `backend/src/main/resources/cert/jssecacerts`
-3. `frontend/.env` (copy from `frontend/.env.example`)
+#### `backend/src/main/resources/application-local.yml`
+
+Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, IDIR base URL, and `TRUSTSTORE_PATH`. Obtain these values through approved team channels and keep them out of git.
+
+For Option B, Compose overrides `TRUSTSTORE_PATH` inside Docker to `/app/src/main/resources/cert/jssecacerts`; no local edit is needed for the container path.
+
+#### `backend/src/main/resources/cert/jssecacerts`
+
+Java keystore containing the trusted CA chain for the Oracle TLS connection. Obtain it through approved team channels and keep it out of git.
+
+#### `frontend/.env`
+
+Copy `frontend/.env.example` and fill in the Cognito client values. Vite inlines these values into the app bundle, so restart `npm run dev` after changing `.env`.
 
 ### Option A - direct on host
 
@@ -74,27 +84,44 @@ Frontend: `http://localhost:3000`
 ### Option B - Docker Compose
 
 ```bash
-docker compose up
-docker compose --profile caddy up caddy
+docker compose up           # foreground; Ctrl-C to stop
+docker compose up -d        # detached
+docker compose down         # stop containers, keep cache
+docker compose down -v      # stop + drop the Maven cache volume
+docker compose logs -f backend
 ```
 
-This runs Spring Boot + Vite locally with the same Oracle-backed assumptions (VPN + local Oracle config files).
+Services:
 
-### Report parity check
+- `backend` -> `localhost:8080` (Spring Boot via `mvn spring-boot:run` inside `maven:3.9.9-amazoncorretto-21-alpine`).
+- `frontend` -> `localhost:3000` (Vite via `npm run dev` inside `node:22-alpine`).
 
-The embedded report parity harness lives under `tools/`. Use it when comparing modern Spring/Jasper output with legacy `nr-lexis-main` output against the same Oracle data. See [tools/README.md](tools/README.md).
+First `up` downloads Maven dependencies into the `maven-cache` named volume. Subsequent starts are faster.
 
-## CI/CD
+An optional production-like frontend variant is on the `caddy` profile:
 
-GitHub Actions handles PR checks, image builds, and OpenShift deployments. Namespace and credential values are environment-driven through repository/environment secrets and variables.
+```bash
+docker compose --profile caddy up caddy backend
+```
+
+That builds the real `frontend/Dockerfile` and serves it at `localhost:3005`.
+
+#### Compose-specific gotchas
+
+- If you Ctrl-C mid dependency download, Maven can leave partial files in `maven-cache`. Fix with `docker compose down -v && docker compose up`.
+- The backend is not hot-reloading. Java changes need `docker compose restart backend`.
+- HMR uses WebSocket from your browser to `localhost:3000`. If you remap the published port, also override `VITE_HMR_PORT` in `docker-compose.yml`.
+
+### Verifying it works
+
+Regardless of option:
+
+- `curl http://localhost:8080/actuator/health` returns `{"status":"UP"}`.
+- Open `http://localhost:3000` and complete the Cognito login round trip.
+
+If `/actuator/health` returns `DOWN`, the most likely cause is Oracle connectivity. Check network access, `application-local.yml` credentials, and the truststore path.
 
 ## Component docs
 
-- [backend/README.md](backend/README.md)
-- [frontend/README.md](frontend/README.md)
-- [tools/README.md](tools/README.md)
-
-## Notes
-
-- Source-of-truth legacy behavior reference: `nr-lexis-main`.
-- Repository structure and operational conventions reference: `nr-rept`.
+- [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.
+- [frontend/README.md](frontend/README.md) - Vite scripts, env-var table, project structure, testing libraries.

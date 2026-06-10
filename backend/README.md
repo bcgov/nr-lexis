@@ -8,9 +8,10 @@ Spring Boot backend service for the Log Exemption Information System (LEXIS).
 |------------|---------|---------|
 | Java | 21 | Runtime |
 | Spring Boot | 3.5.x | Framework |
-| Oracle JDBC | 21.3.x (ojdbc11) | Database connectivity |
+| Spring Security | Spring Boot managed | OAuth2 Resource Server + JWT |
+| Oracle JDBC | 21.3.x (ojdbc11) | Database connectivity (TCPS to BC Gov shared Oracle) |
 | Undertow | 2.3.x | Embedded HTTP server (Tomcat excluded) |
-| JasperReports | 6.21.5 | Embedded report generation; no Jasper Server |
+| JasperReports | 6.21.5 | Report generation |
 | Resilience4j | 2.3.x | Retry / circuit-breaker support |
 | Micrometer Prometheus | Spring Boot managed | Metrics export |
 
@@ -33,8 +34,6 @@ curl http://localhost:8080/actuator/prometheus
 
 In OpenShift deployments these come from the Secret created by `openshift.deploy.yml`. For local development, keep credentials in `src/main/resources/application-local.yml` (gitignored).
 
-Reports are rendered in-process with the embedded JasperReports library and the templates under `src/main/resources/reports/lexis`. The modern backend does not call Jasper Server and does not require Jasper URL, username, or password environment variables.
-
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `SERVER_PORT` | Server port | 8080 |
@@ -43,6 +42,7 @@ Reports are rendered in-process with the embedded JasperReports library and the 
 | `DATABASE_SERVICE_NAME` | Oracle service name | - |
 | `DATABASE_USER` | Oracle username | - |
 | `DATABASE_PASSWORD` | Oracle password | - |
+| `TRUSTSTORE_PATH` | Path to `jssecacerts` JKS | - |
 | `KEYSTORE_SECRET` | Oracle truststore secret/passphrase | - |
 | `ALLOWED_ORIGINS` | Frontend CORS origins | http://localhost:3000 |
 | `AWS_COGNITO_ISSUER_URI` | Cognito issuer URI | - |
@@ -66,17 +66,11 @@ Grouped by area; see `controller/` for request and response contracts.
 | Area | Base path | Notes |
 |---|---|---|
 | Actuator | `/actuator/health`, `/actuator/prometheus` | Public health and metrics endpoints. |
-| Session | `/api/lexis/session/*` | Session capabilities, legacy action visibility, and logoff compatibility routes. |
-| Applications | `/api/lexis/applications/search`, `/search/options`, `/{applicationNumber}` | Application search/detail endpoints. |
-| Application validation | `/api/lexis/applications/search/verify-clients`, `/search/has-valid-offer` | Validation helpers for selected applications. |
-| Application review | `/api/lexis/application-reviews/search`, `/search/options`, status actions | Provincial review queue and status workflows. |
-| Permits | `/api/lexis/permits/search`, `/search/options`, `/{permitNumber}` | Provincial permit search/detail endpoints. |
-| Purchase offers | `/api/lexis/purchase-offers/search`, `/search/options`, `/{offerNumber}` | Purchase-offer search/detail endpoints. |
-| Exemptions | `/api/lexis/exemptions/search`, `/search/options`, `/{exemptionNumber}` | Exemptions search/detail endpoints. |
-| Federal applications | `/api/lexis/federal/applications/search`, `/search/options`, `/{applicationNumber}` | Federal application search/detail endpoints. |
-| Indian Reserve permits | `/api/lexis/indian-reserve/permits/search`, `/search/options`, `/{permitNumber}` | Indian Reserve permit search/detail endpoints. |
-| Reports | `/api/lexis/reports/*` | Generates CSV, PDF, and spreadsheet outputs with embedded JasperReports templates and legacy-compatible routes. |
-| Admin and uploads | `/api/lexis/admin/*`, `/api/lexis/*Upload` | Admin policy screens and legacy upload workflows. |
+| Session | `/api/lexis/session/*` | Session capabilities and logoff routes. |
+| Provincial workflows | `/api/lexis/applications`, `/api/lexis/exemptions`, `/api/lexis/permits`, `/api/lexis/purchase-offers` | Search, options, details, and workflow actions. |
+| Federal and reserve workflows | `/api/lexis/federal`, `/api/lexis/indian-reserve` | Federal application and reserve permit workflows. |
+| Reports | `/api/lexis/reports/*` | CSV, PDF, and spreadsheet outputs. |
+| Admin and uploads | `/api/lexis/admin/*`, `/api/lexis/*Upload` | Policy administration and upload workflows. |
 
 ## Testing
 
@@ -110,15 +104,3 @@ backend/
     ├── fonts/
     └── reports/lexis/
 ```
-
-## Origins
-
-This backend is the Spring Boot service for `nr-lexis`.
-
-CI/CD and OpenShift workflow conventions derive from [bcgov/quickstart-openshift](https://github.com/bcgov/quickstart-openshift).
-
-The modern backend replaces the legacy Struts/Jasper Server report path with embedded JasperReports execution inside Spring Boot.
-
-## Resources
-
-[NRM Architecture Confluence: GitHub Repository Best Practices](https://apps.nrs.gov.bc.ca/int/confluence/x/TZ_9CQ)

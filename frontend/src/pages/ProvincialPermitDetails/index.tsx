@@ -42,6 +42,7 @@ import {
   type PermitInvoiceRow,
 } from '@/service/provincial-permit-documents-invoices-service'
 import {
+  EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS,
   fetchProvincialPermitDetailTabs,
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
@@ -129,7 +130,6 @@ const ProvincialPermitDetailsPage: FC = () => {
   const [invoiceRows, setInvoiceRows] = useState<PermitInvoiceRow[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [tabsErrorMessage, setTabsErrorMessage] = useState('')
   const [documentsInvoicesErrorMessage, setDocumentsInvoicesErrorMessage] = useState('')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
@@ -203,7 +203,6 @@ const ProvincialPermitDetailsPage: FC = () => {
 
       setLoading(true)
       setErrorMessage('')
-      setTabsErrorMessage('')
       setDocumentsInvoicesErrorMessage('')
 
       try {
@@ -222,15 +221,17 @@ const ProvincialPermitDetailsPage: FC = () => {
         }
 
         try {
-          const tabsResult = await fetchProvincialPermitDetailTabs(permitNumber)
+          const tabsResult = await fetchProvincialPermitDetailTabs({
+            permitNumber,
+            receiptNumber: response.receiptNumber,
+          })
           if (isLatestRequest()) {
             setTabsData(tabsResult)
           }
         } catch (error) {
           if (isLatestRequest()) {
             console.error(error)
-            setTabsData(null)
-            setTabsErrorMessage('Unable to retrieve permit item and fee tables.')
+            setTabsData(EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS)
           }
         }
 
@@ -590,6 +591,8 @@ const ProvincialPermitDetailsPage: FC = () => {
   }, [
     beginAddInvoiceRequest,
     detail?.permitNumber,
+    hasInvoiceValidationError,
+    invoiceFieldErrors,
     invoiceDraftExportValue,
     invoiceDraftFeeInLieu,
     invoiceDraftNumber,
@@ -650,17 +653,6 @@ const ProvincialPermitDetailsPage: FC = () => {
             kind="error"
             title="Detail unavailable"
             subtitle={errorMessage}
-            lowContrast
-          />
-        </Column>
-      )}
-
-      {!loading && !!tabsErrorMessage && (
-        <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <InlineNotification
-            kind="warning"
-            title="Permit Tables Unavailable"
-            subtitle={tabsErrorMessage}
             lowContrast
           />
         </Column>

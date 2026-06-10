@@ -31,6 +31,13 @@ vi.mock('@/service/lexis-detail-service', () => ({
 }))
 
 vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
+  EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: {
+    items: [],
+    fees: [],
+    gbmsEvents: [],
+    oicItems: [],
+    boicItems: [],
+  },
   fetchProvincialPermitDetailTabs: vi.fn(),
 }))
 
@@ -525,5 +532,28 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()
     expect(mockedFetchPermitDocuments).not.toHaveBeenCalled()
     expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
+  })
+
+  it('keeps permit table sections visible without an unavailable warning when tab data fails', async () => {
+    mockedFetchProvincialPermitDetailTabs.mockRejectedValue(new Error('tables unavailable'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: /Permit Items/ })).toBeInTheDocument()
+    expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
+      permitNumber: '777',
+      receiptNumber: 'R-1',
+    })
+    expect(screen.queryByText('Permit Tables Unavailable')).not.toBeInTheDocument()
+    expect(screen.getByText('No permit item rows matched the current filter.')).toBeInTheDocument()
   })
 })

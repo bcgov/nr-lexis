@@ -29,6 +29,11 @@ import type {
 } from '@/interfaces/ProvincialExemptionSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
+import {
   parseCsvParam,
   parseEnumParam,
   parsePositiveIntParam,
@@ -139,7 +144,7 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 }
 
 const ProvincialExemptionPage: FC = () => {
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
@@ -233,7 +238,22 @@ const ProvincialExemptionPage: FC = () => {
   const beginSearchRequest = useLatestRequestGuard()
 
   const runSearch = useCallback(
-    async (request: ProvincialExemptionSearchRequest) => {
+    async (request: ProvincialExemptionSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheKey = buildPageDataCacheKey(
+        'provincial-exemption-search',
+        capabilities?.principal,
+        request,
+      )
+      if (!options.force) {
+        const cachedResults = getPageDataCache<ProvincialExemptionSearchResponse>(pageCacheKey)
+        if (cachedResults) {
+          setResults(cachedResults)
+          setLoading(false)
+          setErrorMessage('')
+          return
+        }
+      }
+
       const isLatestRequest = beginSearchRequest()
       if (
         !isValidIsoDate(request.filters.listFromDate) ||
@@ -248,6 +268,7 @@ const ProvincialExemptionPage: FC = () => {
       try {
         const response = await searchProvincialExemptions(request)
         if (isLatestRequest()) {
+          setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
       } catch (error) {
@@ -262,7 +283,7 @@ const ProvincialExemptionPage: FC = () => {
         }
       }
     },
-    [beginSearchRequest],
+    [beginSearchRequest, capabilities?.principal],
   )
 
   useEffect(() => {

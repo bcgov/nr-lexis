@@ -24,7 +24,7 @@ const mockedSearchProvincialPermits = vi.mocked(searchProvincialPermits)
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
 
 const renderPage = () => {
-  render(
+  return render(
     <MemoryRouter initialEntries={['/provincial/permit']}>
       <Routes>
         <Route path="/provincial/permit" element={<ProvincialPermitPage />} />
@@ -87,6 +87,86 @@ describe('Provincial Permit Search Actions', () => {
     await screen.findByText('7001')
 
     expect(screen.queryByRole('link', { name: 'Add Permit' })).not.toBeInTheDocument()
+  })
+
+  it('reuses cached search results when the route remounts with the same URL state', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => false,
+    } as any)
+
+    const firstRender = renderPage()
+    await screen.findByText('7001')
+    expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
+
+    firstRender.unmount()
+    renderPage()
+
+    await screen.findByText('7001')
+    expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
+  })
+
+  it('reuses the first search total when pagination changes page', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => false,
+    } as any)
+    mockedSearchProvincialPermits
+      .mockResolvedValueOnce({
+        content: [
+          {
+            permitNumber: '7001',
+            status: 'Issued',
+            applicantClientNumber: '11111111',
+            ownerClientNumber: '22222222',
+            totalVolume: 120,
+            issueDate: '2026-01-10',
+            region: '11',
+            packageNumber: 'PKG-1',
+            applicationNumber: '3001',
+          },
+        ],
+        page: {
+          number: 0,
+          size: 10,
+          totalElements: 25,
+          totalPages: 3,
+        },
+      } as any)
+      .mockResolvedValueOnce({
+        content: [
+          {
+            permitNumber: '7002',
+            status: 'Issued',
+            applicantClientNumber: '11111111',
+            ownerClientNumber: '22222222',
+            totalVolume: 130,
+            issueDate: '2026-01-11',
+            region: '11',
+            packageNumber: 'PKG-2',
+            applicationNumber: '3002',
+          },
+        ],
+        page: {
+          number: 1,
+          size: 10,
+          totalElements: 25,
+          totalPages: 3,
+        },
+      } as any)
+
+    renderPage()
+    await screen.findByText('7001')
+
+    await userEvent.click(screen.getByRole('button', { name: /next page/i }))
+
+    await screen.findByText('7002')
+    expect(mockedSearchProvincialPermits).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        page: 1,
+        pageSize: 10,
+      }),
+      { knownTotal: 25 },
+    )
   })
 
   it('disables search for invalid dates and requests descending sort when permit header is clicked', async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -32,6 +32,11 @@ import {
   parseSortDirectionParam,
   setSearchParam,
 } from '@/pages/shared/search-query-utils'
+import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
@@ -87,9 +92,30 @@ const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
 const DEFAULT_PAGE = 1
 const DEFAULT_PAGE_SIZE = 10
 const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
+const PERMIT_TOTAL_CACHE_TTL_MS = 60_000
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialPermitSearchSortField[]
+
+type PermitTotalCacheEntry = {
+  total: number
+  expiresAt: number
+}
+
+const trimFilterValue = (value: string): string => value.trim()
+
+const buildPermitTotalCacheKey = (filters: ProvincialPermitSearchFilters): string =>
+  JSON.stringify({
+    applicationNumber: trimFilterValue(filters.applicationNumber),
+    packageNumber: trimFilterValue(filters.packageNumber),
+    region: filters.region.map(trimFilterValue).filter(Boolean).sort(),
+    issuedFromDate: trimFilterValue(filters.issuedFromDate),
+    issuedToDate: trimFilterValue(filters.issuedToDate),
+    permitStatus: trimFilterValue(filters.permitStatus),
+    permitNumber: trimFilterValue(filters.permitNumber),
+    ownerClientNumber: trimFilterValue(filters.ownerClientNumber),
+    applicantClientNumber: trimFilterValue(filters.applicantClientNumber),
+  })
 
 const buildSearchParams = (
   filters: ProvincialPermitSearchFilters,
@@ -123,13 +149,14 @@ const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]):
 }
 
 const ProvincialPermitPage: FC = () => {
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
   const [results, setResults] = useState<ProvincialPermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const permitTotalCacheRef = useRef<Map<string, PermitTotalCacheEntry>>(new Map())
   const canCreatePermit = canPerform('createPermit')
   const withCurrentSearch = useCallback(
     (path: string): string => {
@@ -204,7 +231,26 @@ const ProvincialPermitPage: FC = () => {
   const beginSearchRequest = useLatestRequestGuard()
 
   const runSearch = useCallback(
-    async (request: ProvincialPermitSearchRequest) => {
+    async (request: ProvincialPermitSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheKey = buildPageDataCacheKey(
+        'provincial-permit-search',
+        capabilities?.principal,
+        request,
+      )
+      if (!options.force) {
+        const cachedResults = getPageDataCache<ProvincialPermitSearchResponse>(pageCacheKey)
+        if (cachedResults) {
+          permitTotalCacheRef.current.set(buildPermitTotalCacheKey(request.filters), {
+            total: cachedResults.page.totalElements,
+            expiresAt: Date.now() + PERMIT_TOTAL_CACHE_TTL_MS,
+          })
+          setResults(cachedResults)
+          setLoading(false)
+          setErrorMessage('')
+          return
+        }
+      }
+
       const isLatestRequest = beginSearchRequest()
       if (
         !isValidIsoDate(request.filters.issuedFromDate) ||
@@ -216,8 +262,24 @@ const ProvincialPermitPage: FC = () => {
       setLoading(true)
       setErrorMessage('')
       try {
-        const response = await searchProvincialPermits(request)
+        const cacheKey = buildPermitTotalCacheKey(request.filters)
+        const cachedEntry = permitTotalCacheRef.current.get(cacheKey)
+        const cachedTotal =
+          cachedEntry && cachedEntry.expiresAt > Date.now() ? cachedEntry.total : undefined
+        if (cachedEntry && cachedTotal === undefined) {
+          permitTotalCacheRef.current.delete(cacheKey)
+        }
+
+        const response =
+          cachedTotal === undefined
+            ? await searchProvincialPermits(request)
+            : await searchProvincialPermits(request, { knownTotal: cachedTotal })
         if (isLatestRequest()) {
+          permitTotalCacheRef.current.set(cacheKey, {
+            total: response.page.totalElements,
+            expiresAt: Date.now() + PERMIT_TOTAL_CACHE_TTL_MS,
+          })
+          setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
       } catch (error) {
@@ -232,7 +294,7 @@ const ProvincialPermitPage: FC = () => {
         }
       }
     },
-    [beginSearchRequest],
+    [beginSearchRequest, capabilities?.principal],
   )
 
   useEffect(() => {

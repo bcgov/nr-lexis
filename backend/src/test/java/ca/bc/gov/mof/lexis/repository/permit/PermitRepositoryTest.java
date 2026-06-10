@@ -90,6 +90,30 @@ class PermitRepositoryTest {
         .extracting(PermitSearchResultDto::permitNumber)
         .containsExactly(700001L, 700002L, 700003L, 700004L, 700005L, 700006L, 700007L, 700008L, 700009L, 700010L);
     assertThat(results.getTotalElements()).isEqualTo(11);
+    assertThat(repository.countCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @Test
+  void searchShouldUseKnownTotalWithoutCallingCountProcedure() {
+    List<PermitSearchResultDto> firstPage =
+        java.util.stream.LongStream.rangeClosed(700001L, 700010L)
+            .mapToObj(PermitRepositoryTest::permitResult)
+            .toList();
+    TestPermitRepository repository =
+        new TestPermitRepository(List.<List<?>>of(firstPage, List.of(permitResult(700011L))));
+
+    Page<PermitSearchResultDto> results =
+        repository.search(
+            new PermitSearchCriteria(
+                null, null, null, null, null, null, null, null, null, List.of(), null, 1, 10),
+            11);
+
+    assertThat(results.getContent())
+        .extracting(PermitSearchResultDto::permitNumber)
+        .containsExactly(700011L);
+    assertThat(results.getTotalElements()).isEqualTo(11);
+    assertThat(repository.countCalls()).isZero();
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
@@ -101,6 +125,7 @@ class PermitRepositoryTest {
     private final List<List<?>> pages;
     private String whereSql;
     private List<String> bindValues;
+    private int countCalls;
     private int pageCalls;
 
     TestPermitRepository() {
@@ -124,6 +149,10 @@ class PermitRepositoryTest {
       return pageCalls;
     }
 
+    int countCalls() {
+      return countCalls;
+    }
+
     @Override
     protected int queryLegacyDynamicCountProcedure(
         String procedureSignature,
@@ -131,6 +160,7 @@ class PermitRepositoryTest {
         List<String> bindValues) {
       this.whereSql = whereSql;
       this.bindValues = bindValues;
+      countCalls++;
       return pages.stream().mapToInt(List::size).sum();
     }
 

@@ -23,6 +23,11 @@ import type {
 } from '@/interfaces/IndianReservePermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
+import {
   parseEnumParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
@@ -98,7 +103,7 @@ const isValidIsoDate = (value: string): boolean => {
 }
 
 const IndianReservePage: FC = () => {
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [results, setResults] = useState<IndianReservePermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
@@ -179,7 +184,22 @@ const IndianReservePage: FC = () => {
   const beginSearchRequest = useLatestRequestGuard()
 
   const runSearch = useCallback(
-    async (request: IndianReservePermitSearchRequest) => {
+    async (request: IndianReservePermitSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheKey = buildPageDataCacheKey(
+        'indian-reserve-permit-search',
+        capabilities?.principal,
+        request,
+      )
+      if (!options.force) {
+        const cachedResults = getPageDataCache<IndianReservePermitSearchResponse>(pageCacheKey)
+        if (cachedResults) {
+          setResults(cachedResults)
+          setLoading(false)
+          setErrorMessage('')
+          return
+        }
+      }
+
       const isLatestRequest = beginSearchRequest()
       if (
         !isValidIsoDate(request.filters.fromPermitIssueDate) ||
@@ -196,6 +216,7 @@ const IndianReservePage: FC = () => {
       try {
         const response = await searchIndianReservePermits(request)
         if (isLatestRequest()) {
+          setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
       } catch (error) {
@@ -210,7 +231,7 @@ const IndianReservePage: FC = () => {
         }
       }
     },
-    [beginSearchRequest],
+    [beginSearchRequest, capabilities?.principal],
   )
 
   useEffect(() => {

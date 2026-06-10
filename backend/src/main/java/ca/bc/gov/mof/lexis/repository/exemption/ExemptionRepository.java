@@ -55,6 +55,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
           + "THEN (case when EEA.AGENT_CLIENT_NUMBER is null then '' else EEA.AGENT_CLIENT_NUMBER end) ELSE '' END, "
           + "CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE != 'B' AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'O' "
           + "THEN (case when EEA.OWNER_CLIENT_NUMBER is null then '' else EEA.OWNER_CLIENT_NUMBER end) ELSE '' END";
+  private static final String SEARCH_ORDER_BY = " ORDER BY EE.EXEMPTION_NUMBER DESC";
 
   public ExemptionRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -77,13 +78,15 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   public Page<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    SqlWhere countSqlWhere = buildSearchWhere(criteria, false);
+    SqlWhere pageSqlWhere = buildSearchWhere(criteria, true);
     int totalElements =
-        queryLegacyDynamicCountProcedure(COUNT_EXEMPTIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+        queryLegacyDynamicCountProcedure(
+            COUNT_EXEMPTIONS_BY_CRITERIA, countSqlWhere.sql(), countSqlWhere.bindValues());
     return queryLegacyDynamicPage(
         FIND_EXEMPTIONS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
+        pageSqlWhere.sql(),
+        pageSqlWhere.bindValues(),
         criteria.page(),
         criteria.size(),
         totalElements,
@@ -102,11 +105,11 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   public int count(ExemptionSearchCriteria criteria) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    SqlWhere sqlWhere = buildSearchWhere(criteria, false);
     return queryLegacyDynamicCountProcedure(COUNT_EXEMPTIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
   }
 
-  private SqlWhere buildSearchWhere(ExemptionSearchCriteria criteria) {
+  private SqlWhere buildSearchWhere(ExemptionSearchCriteria criteria, boolean includeOrderBy) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -138,7 +141,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
       where.addInLikeOrNoResults("EO.ORG_UNIT_NO", criteria.regionNumbers());
     }
 
-    return where.build(SEARCH_GROUP_BY + " ORDER BY EE.EXEMPTION_NUMBER DESC");
+    return where.build(SEARCH_GROUP_BY + (includeOrderBy ? SEARCH_ORDER_BY : ""));
   }
 
   public Optional<ExemptionDetailDto> findByExemptionNumber(String exemptionNumber) {

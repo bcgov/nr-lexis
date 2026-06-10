@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -80,7 +81,8 @@ class PermitControllerTest {
             List.of(),
             null,
             0,
-            25);
+            25,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(service);
@@ -120,7 +122,8 @@ class PermitControllerTest {
             List.of(12L),
             "permitNumber DESC",
             0,
-            25);
+            25,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
@@ -141,6 +144,34 @@ class PermitControllerTest {
     assertThat(criteria.ownerClientNumber()).isEqualTo("00077881");
     assertThat(criteria.regionNumbers()).containsExactly(12L);
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
+  }
+
+  @Test
+  void searchShouldPassKnownTotalWhenProvided() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitSearchResponseDto dto = new PermitSearchResponseDto(List.of(), 91, 2, 30);
+    when(service.search(any(PermitSearchCriteria.class), eq(91))).thenReturn(dto);
+
+    ResponseEntity<PermitSearchResponseDto> response =
+        controller.search(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            null,
+            2,
+            30,
+            91);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).search(any(PermitSearchCriteria.class), eq(91));
   }
 
   @Test

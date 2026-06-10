@@ -31,11 +31,17 @@ public class PermitOracleService implements PermitService {
 
   @Override
   public PermitSearchResponseDto search(PermitSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  @Override
+  public PermitSearchResponseDto search(PermitSearchCriteria criteria, Integer knownTotal) {
     PermitSearchCriteria normalized = normalizeCriteria(criteria);
     int page = normalized.page();
     int size = normalized.size();
 
-    Page<PermitSearchResultDto> searchPage = repository.search(normalized);
+    Page<PermitSearchResultDto> searchPage =
+        knownTotal == null ? repository.search(normalized) : repository.search(normalized, knownTotal);
     List<PermitSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.getContent());
 
     return new PermitSearchResponseDto(

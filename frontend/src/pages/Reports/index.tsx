@@ -996,10 +996,6 @@ const ReportsPage: FC = () => {
     return REPORT_DEFINITIONS.filter((report) => canPerform(report.action))
   }, [canPerform])
 
-  const accessibleCount = useMemo(() => {
-    return accessibleReports.length
-  }, [accessibleReports.length])
-
   const selectedReport =
     accessibleReports.find((report) => report.id === selectedReportId) ??
     accessibleReports[0] ??
@@ -1265,10 +1261,6 @@ const ReportsPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <p>
-            Accessible reports: <strong>{accessibleCount}</strong> of{' '}
-            <strong>{REPORT_DEFINITIONS.length}</strong>
-          </p>
           <div className="legacy-search-grid">
             <TextInput
               id="reportSearch"
