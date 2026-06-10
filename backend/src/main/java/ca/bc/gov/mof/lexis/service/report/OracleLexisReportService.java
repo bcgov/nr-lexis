@@ -179,10 +179,18 @@ public class OracleLexisReportService implements LexisReportService {
               effectiveFormat.mediaType(),
               reportBytes));
     } catch (JRException ex) {
-      LOGGER.warn("Jasper fill/export failed for report action [{}]: {}", definition.action(), ex.getMessage());
+      LOGGER.warn(
+          "Jasper fill/export failed for report action [{}]: {}; root cause: {}",
+          definition.action(),
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return Optional.empty();
     } catch (SQLException ex) {
-      LOGGER.warn("Oracle connection failed for report action [{}]: {}", definition.action(), ex.getMessage());
+      LOGGER.warn(
+          "Oracle connection failed for report action [{}]: {}; root cause: {}",
+          definition.action(),
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return Optional.empty();
     }
   }
@@ -457,6 +465,15 @@ public class OracleLexisReportService implements LexisReportService {
           ex);
       throw new IllegalStateException("Failed to compile JRXML for report " + definition.action(), ex);
     }
+  }
+
+  private static String rootCauseMessage(Throwable throwable) {
+    Throwable root = throwable;
+    while (root.getCause() != null && root.getCause() != root) {
+      root = root.getCause();
+    }
+    String message = root.getMessage();
+    return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
   }
 
   private Path initRuntimeTemplateDirectory() {
