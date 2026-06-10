@@ -1111,6 +1111,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (request.applicationVolume() == null || request.applicationVolume() <= 0.0d) {
       errors.add("The application volume must be greater than or equal to 0");
     }
+    if (trimToNull(request.productLocation()) == null) {
+      errors.add(required("location of logs"));
+    }
     if (trimToNull(request.productTypeCode()) == null) {
       errors.add(required("product type code"));
     }
