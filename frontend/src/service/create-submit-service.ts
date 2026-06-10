@@ -202,8 +202,6 @@ const postLegacyForm = async (
 }
 
 export type ProvincialApplicationCreateSubmission = {
-  applicationNumber: string
-  packageNumber: string
   ownerClientNumber: string
   ownerClientLocationCode: string
   ownerContactName: string
@@ -228,8 +226,6 @@ export const submitProvincialApplicationCreate = async (
     const payload = await postLegacyForm(
       getProvincialApplicationCreatePath(),
       withCreateActionMapping('addApplication', {
-        applicationNumber: form.applicationNumber,
-        packageNumber: form.packageNumber,
         ownerClientNumber: form.ownerClientNumber,
         ownerClientLocationCode: form.ownerClientLocationCode,
         ownerClientLocation: form.ownerClientLocationCode,

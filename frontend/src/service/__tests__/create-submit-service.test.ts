@@ -33,8 +33,6 @@ describe('create-submit-service', () => {
     })
 
     const result = await submitProvincialApplicationCreate({
-      applicationNumber: '1001',
-      packageNumber: 'PKG-1',
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
@@ -70,7 +68,8 @@ describe('create-submit-service', () => {
     })
     expect(body).toBeInstanceOf(URLSearchParams)
     expect(body.get('actionMapping')).toBe('addApplication')
-    expect(body.get('applicationNumber')).toBe('1001')
+    expect(body.get('applicationNumber')).toBeNull()
+    expect(body.get('packageNumber')).toBeNull()
     expect(body.get('ownerApplicantType')).toBe('O')
     expect(body.get('applicantType')).toBe('O')
     expect(body.get('agentClientNumber')).toBeNull()
@@ -158,8 +157,6 @@ describe('create-submit-service', () => {
     })
 
     await submitProvincialApplicationCreate({
-      applicationNumber: '1001',
-      packageNumber: 'PKG-1',
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
@@ -215,13 +212,14 @@ describe('create-submit-service', () => {
     expect(body).toEqual(
       expect.objectContaining({
         actionMapping: 'addApplication',
-        applicationNumber: '1001',
         ownerApplicantType: 'O',
         exemptionReason: 'U',
         logLocation: 'Camp 1',
         productLocation: 'Camp 1',
       }),
     )
+    expect(body).not.toHaveProperty('applicationNumber')
+    expect(body).not.toHaveProperty('packageNumber')
     expect(config).toEqual({
       headers: {
         'Content-Type': 'application/json',

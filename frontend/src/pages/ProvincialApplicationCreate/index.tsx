@@ -39,8 +39,6 @@ import {
 } from '@/service/application-client-lookup-service'
 
 type ProvincialApplicationCreateForm = {
-  applicationNumber: string
-  packageNumber: string
   ownerClientNumber: string
   ownerClientLocationCode: string
   ownerContactName: string
@@ -63,8 +61,6 @@ type ProvincialApplicationCreateField = keyof ProvincialApplicationCreateForm & 
 const MODULE_KEY = 'provincial-application'
 
 const INITIAL_FORM: ProvincialApplicationCreateForm = {
-  applicationNumber: '',
-  packageNumber: '',
   ownerClientNumber: '',
   ownerClientLocationCode: '',
   ownerContactName: '',
@@ -96,8 +92,6 @@ const mapDraftPayloadToForm = (payload: unknown): ProvincialApplicationCreateFor
 const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicationCreateForm => {
   return {
     ...INITIAL_FORM,
-    applicationNumber: query.get('applicationNumber') ?? '',
-    packageNumber: query.get('packageNumber') ?? '',
     ownerClientNumber: query.get('ownerClientNumber') ?? '',
     ownerClientLocationCode:
       query.get('ownerClientLocationCode') ?? query.get('ownerClientLocation') ?? '',
@@ -280,11 +274,6 @@ const ProvincialApplicationCreatePage: FC = () => {
 
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
-      applicationNumber: firstValidationError(
-        () => requiredFieldError(form.applicationNumber, 'Application number'),
-        () => positiveNumericFieldError(form.applicationNumber),
-      ),
-      packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
       ownerClientNumber:
         requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
       ownerClientLocationCode: firstValidationError(
@@ -460,28 +449,6 @@ const ProvincialApplicationCreatePage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <div className="legacy-search-grid">
-            <TextInput
-              id="applicationNumber"
-              labelText="Application Number (required)"
-              value={form.applicationNumber}
-              invalid={!!fieldError('applicationNumber')}
-              invalidText={fieldError('applicationNumber')}
-              onBlur={() => markFieldTouched('applicationNumber')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, applicationNumber: event.target.value }))
-              }
-            />
-            <TextInput
-              id="packageNumber"
-              labelText="Package Number (required)"
-              value={form.packageNumber}
-              invalid={!!fieldError('packageNumber')}
-              invalidText={fieldError('packageNumber')}
-              onBlur={() => markFieldTouched('packageNumber')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, packageNumber: event.target.value }))
-              }
-            />
             <TextInput
               id="ownerClientNumber"
               labelText="Owner Client Number (required)"
@@ -730,7 +697,7 @@ const ProvincialApplicationCreatePage: FC = () => {
           onDeleteDraft={onDeleteDraft}
           summarize={(payload) => {
             const value = payload as ProvincialApplicationCreateForm
-            return `${value.applicationNumber || 'N/A'} / ${value.packageNumber || 'N/A'}`
+            return `${value.ownerClientNumber || 'N/A'} / ${value.productLocation || 'N/A'}`
           }}
         />
       </Column>
