@@ -46,6 +46,7 @@ describe('create-submit-service', () => {
       applicationTermDays: '30',
       receivedDate: '2026-01-01',
       listingDate: '2026-01-02',
+      productLocation: 'Camp 1',
       applicationVolume: '125.5',
       comments: 'ready',
     })
@@ -75,6 +76,8 @@ describe('create-submit-service', () => {
     expect(body.get('applicationDate')).toBe('2026-01-01')
     expect(body.get('exemptionTerm')).toBe('30')
     expect(body.get('dateReceived')).toBe('2026-01-01')
+    expect(body.get('productLocation')).toBe('Camp 1')
+    expect(body.get('logLocation')).toBe('Camp 1')
     expect(body.get('applicationVolume')).toBe('125.5')
   })
 
@@ -161,6 +164,7 @@ describe('create-submit-service', () => {
       applicationTermDays: '30',
       receivedDate: '2026-01-01',
       listingDate: '2026-01-02',
+      productLocation: 'Camp 1',
       applicationVolume: '125.5',
       comments: 'ready',
     })
@@ -193,6 +197,7 @@ describe('create-submit-service', () => {
       applicationTermDays: '30',
       receivedDate: '2026-01-01',
       listingDate: '2026-01-02',
+      productLocation: 'Camp 1',
       applicationVolume: '125.5',
       comments: 'ready',
     })
@@ -202,6 +207,8 @@ describe('create-submit-service', () => {
       expect.objectContaining({
         actionMapping: 'addApplication',
         applicationNumber: '1001',
+        logLocation: 'Camp 1',
+        productLocation: 'Camp 1',
       }),
     )
     expect(config).toEqual({

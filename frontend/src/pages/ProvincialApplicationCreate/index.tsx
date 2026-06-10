@@ -47,6 +47,7 @@ type ProvincialApplicationCreateForm = {
   applicationTermDays: string
   receivedDate: string
   listingDate: string
+  productLocation: string
   applicationVolume: string
   comments: string
 }
@@ -69,6 +70,7 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   applicationTermDays: '',
   receivedDate: '',
   listingDate: '',
+  productLocation: '',
   applicationVolume: '',
   comments: '',
 }
@@ -102,6 +104,7 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
       query.get('applicationTermDays') ?? query.get('exemptionTerm') ?? query.get('termDays') ?? '',
     receivedDate: query.get('receivedDate') ?? '',
     listingDate: query.get('listingDate') ?? '',
+    productLocation: query.get('productLocation') ?? query.get('logLocation') ?? '',
     applicationVolume: query.get('applicationVolume') ?? '',
     comments: query.get('comments') ?? '',
   }
@@ -172,6 +175,7 @@ const ProvincialApplicationCreatePage: FC = () => {
         () => isoDateFieldError(form.receivedDate),
       ),
       listingDate: isoDateFieldError(form.listingDate) ?? undefined,
+      productLocation: requiredFieldError(form.productLocation, 'Location of logs') ?? undefined,
       applicationVolume: firstValidationError(
         () => requiredFieldError(form.applicationVolume, 'Application volume'),
         () => positiveNumericFieldError(form.applicationVolume),
@@ -464,6 +468,18 @@ const ProvincialApplicationCreatePage: FC = () => {
               onBlur={() => markFieldTouched('listingDate')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, listingDate: event.target.value }))
+              }
+            />
+            <TextArea
+              id="productLocation"
+              labelText="Location of Logs (required)"
+              maxCount={250}
+              value={form.productLocation}
+              invalid={!!fieldError('productLocation')}
+              invalidText={fieldError('productLocation')}
+              onBlur={() => markFieldTouched('productLocation')}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, productLocation: event.target.value }))
               }
             />
             <TextInput
