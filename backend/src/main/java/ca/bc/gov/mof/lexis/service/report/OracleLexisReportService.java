@@ -212,6 +212,9 @@ public class OracleLexisReportService implements LexisReportService {
   LexisReportRequestDto applyLegacyReportDefaults(
       LexisJasperReportDefinition definition,
       LexisReportRequestDto request) {
+    if (definition == LexisJasperReportDefinition.BIWEEKLY_LISTING) {
+      return applyLegacyBiweeklyDefaults(request);
+    }
     if (definition == LexisJasperReportDefinition.SPECIES_GRADE_REPORT) {
       return applyLegacySpeciesGradeDefaults(request);
     }
@@ -222,30 +225,38 @@ public class OracleLexisReportService implements LexisReportService {
       return applyLegacyPermitReportDefaults(request);
     }
 
-    if (!isBiweeklyIndustryVariant(definition, request)) {
+    return request;
+  }
+
+  private LexisReportRequestDto applyLegacyBiweeklyDefaults(LexisReportRequestDto request) {
+    HashMap<String, String> parameters =
+        new HashMap<>(request == null || request.parameters() == null ? Map.of() : request.parameters());
+    boolean industryVariant = isBiweeklyIndustryVariant(parameters);
+    boolean blankDateRange = isBlank(parameters.get("fromDate")) && isBlank(parameters.get("toDate"));
+    if (!industryVariant && !blankDateRange) {
       return request;
     }
 
     List<LexisReportScheduleRepository.CurrentScheduleRow> schedules =
-        reportScheduleRepository.findCurrentSchedules();
+        Optional.ofNullable(reportScheduleRepository.findCurrentSchedules()).orElse(List.of());
     if (schedules.size() < 2
         || schedules.get(0).advertisingDate() == null
         || schedules.get(1).advertisingDate() == null) {
-      LOGGER.warn("Unable to apply legacy biweekly industry schedule defaults");
+      LOGGER.warn("Unable to apply legacy biweekly schedule defaults");
       return request;
     }
 
     LocalDate fromDate = schedules.get(0).advertisingDate();
     LocalDate toDate = schedules.get(1).advertisingDate().minusDays(1);
-    HashMap<String, String> parameters =
-        new HashMap<>(request == null || request.parameters() == null ? Map.of() : request.parameters());
 
     parameters.put("fromDate", fromDate.toString());
     parameters.put("toDate", toDate.toString());
-    parameters.put("exportJurisdictionCode", "P");
-    parameters.put("jurisdiction", "P");
-    parameters.remove("region");
-    parameters.remove("orgUnitNumber");
+    if (industryVariant) {
+      parameters.put("exportJurisdictionCode", "P");
+      parameters.put("jurisdiction", "P");
+      parameters.remove("region");
+      parameters.remove("orgUnitNumber");
+    }
 
     return new LexisReportRequestDto(parameters, request == null ? null : request.format());
   }
@@ -371,16 +382,8 @@ public class OracleLexisReportService implements LexisReportService {
     return new LexisReportRequestDto(parameters, request == null ? null : request.format());
   }
 
-  private boolean isBiweeklyIndustryVariant(
-      LexisJasperReportDefinition definition,
-      LexisReportRequestDto request) {
-    if (definition != LexisJasperReportDefinition.BIWEEKLY_LISTING
-        || request == null
-        || request.parameters() == null) {
-      return false;
-    }
-
-    String actionMapping = request.parameters().get("legacyActionMapping");
+  private boolean isBiweeklyIndustryVariant(Map<String, String> parameters) {
+    String actionMapping = parameters.get("legacyActionMapping");
     if (actionMapping == null || actionMapping.isBlank()) {
       return false;
     }
