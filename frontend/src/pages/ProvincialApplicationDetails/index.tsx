@@ -34,6 +34,7 @@ import {
   updateApplicationSummary,
   type ApplicationSummarySnapshot,
 } from '@/service/provincial-application-items-service'
+import { submitAdminUpload } from '@/service/admin-upload-service'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -155,6 +156,13 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [selectedApplicationDocumentFile, setSelectedApplicationDocumentFile] =
+    useState<File | null>(null)
+  const [applicationDocumentDescription, setApplicationDocumentDescription] = useState('')
+  const [applicationDocumentValidationMessage, setApplicationDocumentValidationMessage] =
+    useState('')
+  const [isUploadingApplicationDocument, setIsUploadingApplicationDocument] = useState(false)
+  const [applicationDocumentUploadInputKey, setApplicationDocumentUploadInputKey] = useState(0)
   const [remarkBody, setRemarkBody] = useState('')
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
@@ -403,6 +411,42 @@ const ProvincialApplicationDetailsPage: FC = () => {
     },
     [applicationNumber, beginDetailRequest],
   )
+
+  const onUploadApplicationDocument = useCallback(async () => {
+    if (!applicationNumber || !detail) {
+      return
+    }
+
+    if (!selectedApplicationDocumentFile) {
+      setApplicationDocumentValidationMessage('Choose a file to upload.')
+      return
+    }
+
+    setApplicationDocumentValidationMessage('')
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setIsUploadingApplicationDocument(true)
+
+    try {
+      await submitAdminUpload('application', {
+        applicationNumber: String(detail.applicationNumber),
+        file: selectedApplicationDocumentFile,
+        fileDescription: applicationDocumentDescription.trim(),
+      })
+
+      const documentsResult = await fetchApplicationDocuments(applicationNumber)
+      setDocumentRows(documentsResult.rows)
+      setSelectedApplicationDocumentFile(null)
+      setApplicationDocumentDescription('')
+      setApplicationDocumentUploadInputKey((current) => current + 1)
+      setActionInfoMessage('Application document uploaded.')
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to upload application document.')
+    } finally {
+      setIsUploadingApplicationDocument(false)
+    }
+  }, [applicationDocumentDescription, applicationNumber, detail, selectedApplicationDocumentFile])
 
   const onSaveRemark = useCallback(async () => {
     if (!applicationNumber || !detail) {
@@ -1024,6 +1068,54 @@ const ProvincialApplicationDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Documents <Tag type="green">API</Tag>
               </h2>
+              {canManageDocuments && (
+                <div className="legacy-search-grid">
+                  <TextInput
+                    key={applicationDocumentUploadInputKey}
+                    id="applicationDocumentUploadFile"
+                    type="file"
+                    labelText="Application Document File"
+                    invalid={!!applicationDocumentValidationMessage}
+                    invalidText={applicationDocumentValidationMessage}
+                    onChange={(event) => {
+                      const target = event.target as HTMLInputElement
+                      setSelectedApplicationDocumentFile(target.files?.[0] ?? null)
+                      if (applicationDocumentValidationMessage) {
+                        setApplicationDocumentValidationMessage('')
+                      }
+                    }}
+                  />
+                  <TextArea
+                    id="applicationDocumentUploadDescription"
+                    labelText="Document Description"
+                    value={applicationDocumentDescription}
+                    onChange={(event) => setApplicationDocumentDescription(event.target.value)}
+                  />
+                  <div className="legacy-search-actions">
+                    <Button
+                      kind="primary"
+                      size="sm"
+                      disabled={isUploadingApplicationDocument}
+                      onClick={() => void onUploadApplicationDocument()}
+                    >
+                      {isUploadingApplicationDocument ? 'Uploading...' : 'Upload Document'}
+                    </Button>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      disabled={isUploadingApplicationDocument}
+                      onClick={() => {
+                        setSelectedApplicationDocumentFile(null)
+                        setApplicationDocumentDescription('')
+                        setApplicationDocumentValidationMessage('')
+                        setApplicationDocumentUploadInputKey((current) => current + 1)
+                      }}
+                    >
+                      Reset Upload
+                    </Button>
+                  </div>
+                </div>
+              )}
               <TextInput
                 id="applicationDetailDocumentsFilter"
                 labelText="Filter document rows"

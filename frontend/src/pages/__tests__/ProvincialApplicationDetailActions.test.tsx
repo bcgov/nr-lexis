@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
+import { submitAdminUpload } from '@/service/admin-upload-service'
 import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
@@ -37,6 +38,10 @@ vi.mock('@/service/lexis-detail-service', () => ({
   fetchProvincialApplicationDetail: vi.fn(),
 }))
 
+vi.mock('@/service/admin-upload-service', () => ({
+  submitAdminUpload: vi.fn(),
+}))
+
 vi.mock('@/service/provincial-application-documents-service', () => ({
   fetchApplicationDocuments: vi.fn(),
   openApplicationDocument: vi.fn(),
@@ -63,6 +68,7 @@ vi.mock('@/service/provincial-application-items-service', () => ({
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
 const mockedFetchApplicationDocuments = vi.mocked(fetchApplicationDocuments)
 const mockedOpenApplicationDocument = vi.mocked(openApplicationDocument)
@@ -146,6 +152,7 @@ describe('Provincial Application Detail Document Actions', () => {
       success: true,
       source: 'api',
     })
+    mockedSubmitAdminUpload.mockResolvedValue(undefined)
     mockedFetchApplicationPackageDetails.mockResolvedValue({
       success: true,
       packageNumber: 'PKG-1',
@@ -289,6 +296,52 @@ describe('Provincial Application Detail Document Actions', () => {
 
     const location = await screen.findByTestId('location')
     expect(location.textContent).toBe('/admin/uploads?type=application&applicationNumber=321')
+  })
+
+  it('uploads an application document inline and refreshes document rows', async () => {
+    mockedFetchApplicationDocuments
+      .mockResolvedValueOnce({
+        rows: [],
+        source: 'api',
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '200',
+            name: 'uploaded.pdf',
+            description: 'Uploaded from details',
+            type: 'Attachment',
+          },
+        ],
+        source: 'api',
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const file = new File(['uploaded document'], 'uploaded.pdf', { type: 'application/pdf' })
+    await userEvent.upload(await screen.findByLabelText('Application Document File'), file)
+    await userEvent.type(screen.getByLabelText('Document Description'), 'Uploaded from details')
+    await userEvent.click(screen.getByRole('button', { name: 'Upload Document' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith('application', {
+        applicationNumber: '321',
+        file,
+        fileDescription: 'Uploaded from details',
+      })
+      expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('uploaded.pdf')).toBeInTheDocument()
+    expect(screen.getByText('Application document uploaded.')).toBeInTheDocument()
   })
 
   it('ignores stale detail responses after navigating to another application', async () => {
