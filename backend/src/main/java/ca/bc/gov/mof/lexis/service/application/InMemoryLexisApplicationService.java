@@ -32,6 +32,12 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
           new CodeNameDto("FEE", "Fee in Lieu"),
           new CodeNameDto("APP", "Application Exemption"));
 
+  private static final List<CodeNameDto> EXEMPTION_REASONS =
+      List.of(
+          new CodeNameDto("U", "Unadvertised"),
+          new CodeNameDto("S", "Section 127"),
+          new CodeNameDto("E", "Emergency"));
+
   private static final List<CodeNameDto> APPLICATION_STATUSES =
       List.of(
           new CodeNameDto("NEW", "New"),
@@ -158,7 +164,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
   @Override
   public LexisApplicationSearchOptionsDto searchOptions() {
     return new LexisApplicationSearchOptionsDto(
-        EXEMPTION_TYPES, APPLICATION_STATUSES, PRODUCT_TYPES, REGIONS);
+        EXEMPTION_TYPES, EXEMPTION_REASONS, APPLICATION_STATUSES, PRODUCT_TYPES, REGIONS);
   }
 
   @Override

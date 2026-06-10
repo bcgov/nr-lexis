@@ -1123,9 +1123,26 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (trimToNull(request.ownerClientNumber()) == null) {
       errors.add(required("application owner number"));
     }
-    if (trimToNull(request.ownerClientLocationCode()) == null) {
-      errors.add(required("application owner location"));
+
+    String exemptionReasonCode = trimToNull(request.exemptionReasonCode());
+    if (exemptionReasonCode == null) {
+      errors.add(required("application exemption reason code"));
+    } else if (exemptionReasonCode.length() > 1) {
+      errors.add(maxLength("application exemption reason code", 1));
     }
+
+    String ownerClientLocationCode = trimToNull(request.ownerClientLocationCode());
+    if (ownerClientLocationCode == null) {
+      errors.add(required("application owner location"));
+    } else if (ownerClientLocationCode.length() > 2) {
+      errors.add(maxLength("application owner location code", 2));
+    }
+
+    String agentClientLocationCode = trimToNull(request.agentClientLocationCode());
+    if (agentClientLocationCode != null && agentClientLocationCode.length() > 2) {
+      errors.add(maxLength("application agent location code", 2));
+    }
+
     if (trimToNull(request.ownerContactName()) == null) {
       errors.add(required("application owner name"));
     }
@@ -1163,6 +1180,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private String required(String fieldName) {
     return "A valid " + fieldName + " is required.";
+  }
+
+  private String maxLength(String fieldName, int maxLength) {
+    String unit = maxLength == 1 ? "character" : "characters";
+    return "The " + fieldName + " must be " + maxLength + " " + unit + " or fewer.";
   }
 
   private String firstNonBlank(String value, String fallback) {

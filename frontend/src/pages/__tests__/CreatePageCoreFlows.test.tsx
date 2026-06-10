@@ -16,6 +16,7 @@ import {
   fetchProvincialExemptionOptions,
   fetchProvincialOfferOptions,
 } from '@/service/search-options-service'
+import { fetchApplicationClientLocations } from '@/service/application-client-lookup-service'
 
 const mockNavigate = vi.fn()
 
@@ -39,12 +40,17 @@ vi.mock('@/service/create-submit-service', () => ({
   submitProvincialOfferCreate: vi.fn(),
 }))
 
+vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientLocations: vi.fn(),
+}))
+
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 const mockedFetchProvincialOfferOptions = vi.mocked(fetchProvincialOfferOptions)
 const mockedSubmitProvincialApplicationCreate = vi.mocked(submitProvincialApplicationCreate)
 const mockedSubmitProvincialExemptionCreate = vi.mocked(submitProvincialExemptionCreate)
 const mockedSubmitProvincialOfferCreate = vi.mocked(submitProvincialOfferCreate)
+const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 
 const successfulCreate = (createdId: string): CreateSubmissionResult => ({
   success: true,
@@ -61,6 +67,7 @@ describe('Create Page Core Flows', () => {
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
       productTypes: [{ value: 'LOG', label: 'Logs' }],
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
+      exemptionReasons: [{ value: 'U', label: 'Unadvertised' }],
       applicationStatuses: [],
       regions: [{ value: '11', label: 'Cariboo' }],
     } as any)
@@ -72,6 +79,10 @@ describe('Create Page Core Flows', () => {
     mockedFetchProvincialOfferOptions.mockResolvedValue({
       regions: [{ value: '11', label: 'Cariboo' }],
     })
+    mockedFetchApplicationClientLocations.mockResolvedValue([
+      { locationCode: '00', locationName: '00', selected: false },
+      { locationCode: '01', locationName: '01 - MAIN LOCATION', selected: false },
+    ])
   })
 
   it('submits provincial application prefilled form and navigates to details', async () => {
@@ -80,7 +91,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionType=SECTION_1&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
         ]}
       >
         <Routes>
@@ -93,9 +104,10 @@ describe('Create Page Core Flows', () => {
     )
 
     const submitButton = await screen.findByRole('button', { name: 'Submit' })
-    expect(submitButton).toBeEnabled()
+    await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111')
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith({
       applicationNumber: '1001',
       packageNumber: 'PKG-55',
@@ -104,7 +116,7 @@ describe('Create Page Core Flows', () => {
       ownerContactName: 'Owner Contact',
       applicantClientNumber: '00022222',
       productTypeCode: 'LOG',
-      exemptionType: 'SECTION_1',
+      exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-09',
       applicationTermDays: '30',
@@ -115,6 +127,60 @@ describe('Create Page Core Flows', () => {
       comments: 'Ready',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
+  })
+
+  it('blocks provincial application submit when owner has no selectable locations', async () => {
+    mockedFetchApplicationClientLocations.mockResolvedValueOnce([
+      { locationCode: '0', locationName: 'No locations on file', selected: false },
+    ])
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(await screen.findByText('Owner client location code is required.')).toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
+  it('blocks provincial application submit when search exemption type is used as reason', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionType=ALL&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(
+      await screen.findByText('Exemption reason code must be 1 character or fewer.'),
+    ).toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
   it('submits provincial exemption with linked applications and navigates to details', async () => {

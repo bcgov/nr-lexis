@@ -16,6 +16,7 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  maxLengthFieldError,
   positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
@@ -32,6 +33,10 @@ import {
   type SearchOption,
 } from '@/service/search-options-service'
 import { submitProvincialApplicationCreate } from '@/service/create-submit-service'
+import {
+  fetchApplicationClientLocations,
+  type ApplicationClientLocation,
+} from '@/service/application-client-lookup-service'
 
 type ProvincialApplicationCreateForm = {
   applicationNumber: string
@@ -97,7 +102,12 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     ownerContactName: query.get('ownerContactName') ?? query.get('ownerName') ?? '',
     applicantClientNumber: query.get('applicantClientNumber') ?? '',
     productTypeCode: query.get('productTypeCode') ?? '',
-    exemptionType: query.get('exemptionType') ?? query.get('exemptionTypeCode') ?? '',
+    exemptionType:
+      query.get('exemptionReason') ??
+      query.get('exemptionReasonCode') ??
+      query.get('exemptionType') ??
+      query.get('exemptionTypeCode') ??
+      '',
     region: query.get('region') ?? query.get('orgUnitNumber') ?? '',
     applicationDate: query.get('applicationDate') ?? '',
     applicationTermDays:
@@ -108,6 +118,34 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     applicationVolume: query.get('applicationVolume') ?? '',
     comments: query.get('comments') ?? '',
   }
+}
+
+const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
+  location.locationCode !== '0'
+
+const resolveOwnerClientLocationCode = (
+  locations: ApplicationClientLocation[],
+  currentCode: string,
+): string => {
+  const normalizedCurrentCode = currentCode.trim()
+  if (
+    normalizedCurrentCode &&
+    locations.some(
+      (location) =>
+        isSelectableClientLocation(location) && location.locationCode === normalizedCurrentCode,
+    )
+  ) {
+    return normalizedCurrentCode
+  }
+
+  const selectedLocation = locations.find(
+    (location) => isSelectableClientLocation(location) && location.selected,
+  )
+  if (selectedLocation) {
+    return selectedLocation.locationCode
+  }
+
+  return locations.find(isSelectableClientLocation)?.locationCode ?? ''
 }
 
 type PageStatus = {
@@ -123,8 +161,10 @@ const ProvincialApplicationCreatePage: FC = () => {
     buildInitialFormFromQuery(searchParams),
   )
   const [productTypes, setProductTypes] = useState<SearchOption[]>([])
-  const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
+  const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
   const [regions, setRegions] = useState<SearchOption[]>([])
+  const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
+  const [isLoadingOwnerClientLocations, setIsLoadingOwnerClientLocations] = useState(false)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -139,12 +179,72 @@ const ProvincialApplicationCreatePage: FC = () => {
     const loadOptions = async () => {
       const options = await fetchProvincialApplicationOptions()
       setProductTypes(options.productTypes)
-      setExemptionTypes(options.exemptionTypes)
+      setExemptionReasons(options.exemptionReasons)
       setRegions(options.regions)
     }
 
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    const ownerClientNumber = form.ownerClientNumber.trim()
+    if (!ownerClientNumber) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+
+        setOwnerClientLocations([])
+        setIsLoadingOwnerClientLocations(false)
+        setForm((current) =>
+          current.ownerClientLocationCode ? { ...current, ownerClientLocationCode: '' } : current,
+        )
+      })
+
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingOwnerClientLocations(true)
+      }
+    })
+
+    void fetchApplicationClientLocations(ownerClientNumber)
+      .then((locations) => {
+        if (!isActive) {
+          return
+        }
+
+        setOwnerClientLocations(locations)
+        setForm((current) => {
+          if (current.ownerClientNumber.trim() !== ownerClientNumber) {
+            return current
+          }
+
+          const nextOwnerClientLocationCode = resolveOwnerClientLocationCode(
+            locations,
+            current.ownerClientLocationCode,
+          )
+          return current.ownerClientLocationCode === nextOwnerClientLocationCode
+            ? current
+            : { ...current, ownerClientLocationCode: nextOwnerClientLocationCode }
+        })
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingOwnerClientLocations(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.ownerClientNumber])
 
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
@@ -155,12 +255,18 @@ const ProvincialApplicationCreatePage: FC = () => {
       packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
       ownerClientNumber:
         requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
-      ownerClientLocationCode:
-        requiredFieldError(form.ownerClientLocationCode, 'Owner client location') ?? undefined,
+      ownerClientLocationCode: firstValidationError(
+        () => requiredFieldError(form.ownerClientLocationCode, 'Owner client location code'),
+        () => maxLengthFieldError(form.ownerClientLocationCode, 2, 'Owner client location code'),
+      ),
       ownerContactName: requiredFieldError(form.ownerContactName, 'Owner name') ?? undefined,
       applicantClientNumber:
         requiredFieldError(form.applicantClientNumber, 'Applicant client number') ?? undefined,
       productTypeCode: requiredFieldError(form.productTypeCode, 'Product type') ?? undefined,
+      exemptionType: firstValidationError(
+        () => requiredFieldError(form.exemptionType, 'Exemption reason'),
+        () => maxLengthFieldError(form.exemptionType, 1, 'Exemption reason code'),
+      ),
       region: requiredFieldError(form.region, 'Region') ?? undefined,
       applicationDate: firstValidationError(
         () => requiredFieldError(form.applicationDate, 'Application date'),
@@ -188,6 +294,14 @@ const ProvincialApplicationCreatePage: FC = () => {
     [fieldErrors],
   )
   const missingRequiredOptions = productTypes.length === 0
+  const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
+  const ownerClientLocationPlaceholder = !form.ownerClientNumber.trim()
+    ? 'Enter owner client number first'
+    : isLoadingOwnerClientLocations
+      ? 'Loading locations'
+      : hasSelectableOwnerClientLocations
+        ? 'Select owner client location'
+        : 'No locations on file'
 
   const markFieldTouched = (field: ProvincialApplicationCreateField): void => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
@@ -345,10 +459,11 @@ const ProvincialApplicationCreatePage: FC = () => {
                 setForm((current) => ({ ...current, ownerClientNumber: event.target.value }))
               }
             />
-            <TextInput
+            <Select
               id="ownerClientLocationCode"
               labelText="Owner Client Location (required)"
               value={form.ownerClientLocationCode}
+              disabled={!form.ownerClientNumber.trim() || isLoadingOwnerClientLocations}
               invalid={!!fieldError('ownerClientLocationCode')}
               invalidText={fieldError('ownerClientLocationCode')}
               onBlur={() => markFieldTouched('ownerClientLocationCode')}
@@ -358,7 +473,16 @@ const ProvincialApplicationCreatePage: FC = () => {
                   ownerClientLocationCode: event.target.value,
                 }))
               }
-            />
+            >
+              <SelectItem value="" text={ownerClientLocationPlaceholder} />
+              {ownerClientLocations.filter(isSelectableClientLocation).map((location) => (
+                <SelectItem
+                  key={location.locationCode}
+                  value={location.locationCode}
+                  text={location.locationName}
+                />
+              ))}
+            </Select>
             <TextInput
               id="ownerContactName"
               labelText="Owner Name (required)"
@@ -399,14 +523,17 @@ const ProvincialApplicationCreatePage: FC = () => {
             </Select>
             <Select
               id="exemptionType"
-              labelText="Exemption Type"
+              labelText="Exemption Reason (required)"
               value={form.exemptionType}
+              invalid={!!fieldError('exemptionType')}
+              invalidText={fieldError('exemptionType')}
+              onBlur={() => markFieldTouched('exemptionType')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, exemptionType: event.target.value }))
               }
             >
-              <SelectItem value="" text="Select exemption type" />
-              {exemptionTypes.map((option) => (
+              <SelectItem value="" text="Select exemption reason" />
+              {exemptionReasons.map((option) => (
                 <SelectItem key={option.value} value={option.value} text={option.label} />
               ))}
             </Select>
@@ -501,7 +628,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             <Button
               kind="primary"
               onClick={() => void onSubmit()}
-              disabled={missingRequiredOptions || isSubmitting}
+              disabled={missingRequiredOptions || isSubmitting || isLoadingOwnerClientLocations}
             >
               Submit
             </Button>

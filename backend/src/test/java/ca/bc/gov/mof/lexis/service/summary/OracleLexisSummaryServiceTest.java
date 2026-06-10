@@ -74,6 +74,7 @@ class OracleLexisSummaryServiceTest {
                 List.of(),
                 List.of(),
                 List.of(),
+                List.of(),
                 List.of(new CodeNameDto("12", "Coast"), new CodeNameDto("24", "Skeena"))));
 
     when(applicationService.search(any(LexisApplicationSearchCriteria.class)))

@@ -40,7 +40,7 @@ describe('create-submit-service', () => {
       ownerContactName: 'Owner Contact',
       applicantClientNumber: '00022222',
       productTypeCode: 'LOG',
-      exemptionType: 'SECTION_1',
+      exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-01',
       applicationTermDays: '30',
@@ -73,6 +73,8 @@ describe('create-submit-service', () => {
     expect(body.get('agentClientNumber')).toBe('00022222')
     expect(body.get('ownerClientLocationCode')).toBe('00')
     expect(body.get('ownerContactName')).toBe('Owner Contact')
+    expect(body.get('exemptionReason')).toBe('U')
+    expect(body.get('exemptionReasonCode')).toBe('U')
     expect(body.get('applicationDate')).toBe('2026-01-01')
     expect(body.get('exemptionTerm')).toBe('30')
     expect(body.get('dateReceived')).toBe('2026-01-01')
@@ -158,7 +160,7 @@ describe('create-submit-service', () => {
       ownerContactName: 'Owner Contact',
       applicantClientNumber: '00022222',
       productTypeCode: 'LOG',
-      exemptionType: 'SECTION_1',
+      exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-01',
       applicationTermDays: '30',
@@ -191,7 +193,7 @@ describe('create-submit-service', () => {
       ownerContactName: 'Owner Contact',
       applicantClientNumber: '00022222',
       productTypeCode: 'LOG',
-      exemptionType: 'SECTION_1',
+      exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-01',
       applicationTermDays: '30',
@@ -207,6 +209,7 @@ describe('create-submit-service', () => {
       expect.objectContaining({
         actionMapping: 'addApplication',
         applicationNumber: '1001',
+        exemptionReason: 'U',
         logLocation: 'Camp 1',
         productLocation: 'Camp 1',
       }),
