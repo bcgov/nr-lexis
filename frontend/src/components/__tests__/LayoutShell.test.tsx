@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Layout from '@/components/Layout'
 import { useAuth } from '@/context/auth/useAuth'
@@ -11,12 +11,19 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 const mockedUseAuth = vi.mocked(useAuth)
 
+const LocationProbe = () => {
+  const location = useLocation()
+
+  return <span data-testid="current-path">{location.pathname}</span>
+}
+
 const renderLayout = (path: string) => {
   render(
     <MemoryRouter initialEntries={[path]}>
       <Layout>
         <h1>Current page content</h1>
       </Layout>
+      <LocationProbe />
     </MemoryRouter>,
   )
 }
@@ -60,10 +67,21 @@ describe('Layout shell', () => {
 
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
 
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'LEXIS Administration' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Upload Center' })).toBeVisible()
     expect(document.querySelector('.csp-side-nav__icon')).not.toBeInTheDocument()
     expect(sideNav.querySelector('.csp-side-nav__link svg')).not.toBeInTheDocument()
+  })
+
+  it('navigates the app name to the dashboard', async () => {
+    renderLayout('/admin/uploads')
+
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/dashboard')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go to LEXIS dashboard' }))
+
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/dashboard')
   })
 
   it('lets pages own the only visible page title', () => {
