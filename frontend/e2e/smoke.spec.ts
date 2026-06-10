@@ -1,6 +1,25 @@
 import { expect, test } from '@playwright/test'
 
+const unauthenticatedSession = {
+  authenticated: false,
+  principal: null,
+  roles: [],
+  welcomeTarget: null,
+  legacyPath: null,
+  grantedActions: [],
+}
+
 test.describe('frontend smoke coverage', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/lexis/session/capabilities', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(unauthenticatedSession),
+      })
+    })
+  })
+
   test('landing page renders core login shell', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' })
     await expect(
