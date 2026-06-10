@@ -125,7 +125,9 @@ describe('Dashboard', () => {
     expect(await screen.findByText('Provincial Applications')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Provincial Hub' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Reports' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Open Provincial Summary' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Open Provincial Summary' }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open Review Queue' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open Admin' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Provincial Summary' })).not.toBeInTheDocument()
