@@ -20,6 +20,8 @@ public interface ApplicationDetailsRpcService {
 
   CreateApplicationResult addApplication(CreateApplicationRequest request, String userId);
 
+  CreateApplicationResult updateApplicationSummary(ApplicationSummaryUpdateRequest request, String userId);
+
   Optional<ApplicationClientSnapshot> getApplicationClientSnapshot(Long applicationNumber);
 
   List<CodeItem> getSpeciesCodes();
@@ -186,6 +188,16 @@ public interface ApplicationDetailsRpcService {
       String agentContactName,
       String ownerContactName,
       String oicIndicator,
+      boolean validationEnabled) {}
+
+  record ApplicationSummaryUpdateRequest(
+      Long applicationNumber,
+      LocalDate applicationDate,
+      Long termDays,
+      LocalDate receivedDate,
+      Double applicationVolume,
+      Double averageLogVolume,
+      String exemptionReasonCode,
       boolean validationEnabled) {}
 
   record CreateApplicationResult(

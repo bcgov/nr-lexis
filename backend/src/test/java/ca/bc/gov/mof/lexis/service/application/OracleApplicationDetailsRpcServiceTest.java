@@ -990,4 +990,99 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response).isTrue();
     verify(repository).deletePackageById("PKG-903", "idir\\jsmith");
   }
+
+  @Test
+  void updateApplicationSummaryShouldOverlayEditableFieldsAndPreserveExistingRecord() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.updateApplication(any(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class)))
+        .thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            new ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest(
+                1000456L,
+                LocalDate.of(2026, 4, 1),
+                45L,
+                LocalDate.of(2026, 4, 2),
+                125.5d,
+                2.1d,
+                "U",
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.applicationNumber()).isEqualTo(1000456L);
+
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository).updateApplication(recordCaptor.capture());
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord record = recordCaptor.getValue();
+    assertThat(record.applicationDate()).isEqualTo(LocalDate.of(2026, 4, 1));
+    assertThat(record.termDays()).isEqualTo(45L);
+    assertThat(record.receivedDate()).isEqualTo(LocalDate.of(2026, 4, 2));
+    assertThat(record.applicationVolume()).isEqualTo(125.5d);
+    assertThat(record.averageLogVolume()).isEqualTo(2.1d);
+    assertThat(record.exemptionReasonCode()).isEqualTo("U");
+    assertThat(record.applicationStatusCode()).isEqualTo("NEW");
+    assertThat(record.ownerClientNumber()).isEqualTo("00011111");
+    assertThat(record.productLocation()).isEqualTo("Camp 1");
+    assertThat(record.updateUserId()).isEqualTo("idir\\jsmith");
+  }
+
+  @Test
+  void updateApplicationSummaryShouldValidateBeforeOracleUpdate() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            new ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest(
+                1000456L,
+                LocalDate.of(2026, 4, 1),
+                0L,
+                LocalDate.of(2026, 4, 2),
+                125.5d,
+                2.1d,
+                "ALL",
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "The application term days must be greater than or equal to 0",
+            "The application exemption reason code must be 1 character or fewer.");
+    verify(repository).findApplicationUpdateRecord(1000456L);
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationUpdateRecord applicationUpdateRecord() {
+    return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
+        1000456L,
+        null,
+        LocalDate.of(2026, 3, 1),
+        30L,
+        LocalDate.of(2026, 3, 2),
+        100.0d,
+        1.5d,
+        "Camp 1",
+        "idir\\creator",
+        Instant.parse("2026-03-01T18:00:00Z"),
+        null,
+        null,
+        99L,
+        null,
+        null,
+        "00011111",
+        "00",
+        "EX-100",
+        "S",
+        "NEW",
+        "O",
+        11L,
+        "H",
+        "P",
+        "O",
+        null,
+        "Owner Contact",
+        "N");
+  }
 }

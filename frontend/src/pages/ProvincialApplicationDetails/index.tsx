@@ -28,7 +28,10 @@ import {
   removeApplicationDocument,
   type ProvincialApplicationDocumentRow,
 } from '@/service/provincial-application-documents-service'
-import { saveApplicationRemark } from '@/service/provincial-application-items-service'
+import {
+  saveApplicationRemark,
+  updateApplicationSummary,
+} from '@/service/provincial-application-items-service'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -63,6 +66,24 @@ const matchesFilter = (
   return values.some((value) => normalizeText(String(value ?? '')).includes(normalizedFilter))
 }
 
+type ApplicationSummaryFormState = {
+  applicationDate: string
+  receivedDate: string
+  termDays: string
+  applicationVolume: string
+  averageLogVolume: string
+  exemptionReasonCode: string
+}
+
+const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSummaryFormState => ({
+  applicationDate: detail.applicationDate ?? '',
+  receivedDate: detail.receivedDate ?? '',
+  termDays: detail.termDays === null ? '' : String(detail.termDays),
+  applicationVolume: detail.applicationVolume === null ? '' : String(detail.applicationVolume),
+  averageLogVolume: detail.averageLogVolume === null ? '' : String(detail.averageLogVolume),
+  exemptionReasonCode: detail.exemptionReasonCode ?? '',
+})
+
 const ProvincialApplicationDetailsPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
@@ -79,6 +100,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [remarkBody, setRemarkBody] = useState('')
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
+  const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
+  const [isSavingSummary, setIsSavingSummary] = useState(false)
   const beginDetailRequest = useLatestRequestGuard()
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
@@ -117,6 +140,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setActionErrorMessage('')
       setActionInfoMessage('')
       setLoading(false)
+      setSummaryForm(null)
       return
     }
 
@@ -132,6 +156,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
         return
       }
       setDetail(response)
+      setSummaryForm(response ? toSummaryFormState(response) : null)
       if (!response) {
         setErrorMessage(`No provincial application found for ${applicationNumber}.`)
         setDocumentRows([])
@@ -155,6 +180,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
         console.error(error)
         setErrorMessage('Unable to retrieve provincial application detail.')
         setDetail(null)
+        setSummaryForm(null)
         setDocumentRows([])
         setDocumentsErrorMessage('')
       }
@@ -218,6 +244,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const canManageDocuments = canPerform('/fileApplicationUpload')
   const canManageItems = canPerform('createApplication') && !detail?.readOnly && !detail?.locked
   const canManageRemarks = canManageItems
+  const canEditSummary = canManageItems
 
   const onCreateOffer = useCallback(() => {
     if (!detail) {
@@ -340,6 +367,50 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setIsSavingRemark(false)
     }
   }, [applicationNumber, detail, loadApplicationDetail, remarkBody])
+
+  const onSummaryFormChange = useCallback(
+    (key: keyof ApplicationSummaryFormState, value: string) => {
+      setSummaryForm((current) => (current ? { ...current, [key]: value } : current))
+    },
+    [],
+  )
+
+  const onSaveSummary = useCallback(async () => {
+    if (!applicationNumber || !detail || !summaryForm) {
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setIsSavingSummary(true)
+    try {
+      const result = await updateApplicationSummary({
+        applicationNumber: String(detail.applicationNumber),
+        applicationDate: summaryForm.applicationDate,
+        receivedDate: summaryForm.receivedDate,
+        termDays: summaryForm.termDays,
+        applicationVolume: summaryForm.applicationVolume,
+        averageLogVolume: summaryForm.averageLogVolume,
+        exemptionReasonCode: summaryForm.exemptionReasonCode,
+      })
+      if (!result.valid) {
+        setActionErrorMessage(
+          result.errors.length > 0
+            ? result.errors.join(' ')
+            : result.message || 'Unable to save application summary.',
+        )
+        return
+      }
+
+      await loadApplicationDetail()
+      setActionInfoMessage(result.message || 'Application summary saved.')
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to save application summary.')
+    } finally {
+      setIsSavingSummary(false)
+    }
+  }, [applicationNumber, detail, loadApplicationDetail, summaryForm])
 
   return (
     <Grid fullWidth className="default-grid">
@@ -467,34 +538,124 @@ const ProvincialApplicationDetailsPage: FC = () => {
           </Column>
 
           <Column sm={4} md={8} lg={16}>
-            <DetailFieldTile
-              title="Application Summary"
-              fields={[
-                { label: 'Application Number', value: displayValue(detail.applicationNumber) },
-                { label: 'Exemption Number', value: displayValue(detail.exemptionNumber) },
-                {
-                  label: 'Status',
-                  value: displayValue(detail.statusDescription ?? detail.applicationStatusCode),
-                },
-                { label: 'Product Type', value: displayValue(detail.productTypeCode) },
-                { label: 'Owner Client Number', value: displayValue(detail.ownerClientNumber) },
-                { label: 'Agent Client Number', value: displayValue(detail.agentClientNumber) },
-                {
-                  label: 'Org Unit',
-                  value: displayValue(detail.orgUnitName ?? detail.orgUnitNumber),
-                },
-                { label: 'Exemption Reason', value: displayValue(detail.exemptionReasonCode) },
-                { label: 'Application Date', value: displayValue(detail.applicationDate) },
-                { label: 'Received Date', value: displayValue(detail.receivedDate) },
-                { label: 'Listing Date', value: displayValue(detail.listingDate) },
-                { label: 'Term (days)', value: displayValue(detail.termDays) },
-                {
-                  label: 'Application Volume (m³)',
-                  value: displayValue(detail.applicationVolume),
-                },
-                { label: 'Average Log Volume', value: displayValue(detail.averageLogVolume) },
-              ]}
-            />
+            <Tile>
+              <h2 className="detail-tile-title">Application Summary</h2>
+              <dl className="detail-field-grid">
+                {[
+                  ['Application Number', displayValue(detail.applicationNumber)],
+                  ['Exemption Number', displayValue(detail.exemptionNumber)],
+                  [
+                    'Status',
+                    displayValue(detail.statusDescription ?? detail.applicationStatusCode),
+                  ],
+                  ['Product Type', displayValue(detail.productTypeCode)],
+                  ['Owner Client Number', displayValue(detail.ownerClientNumber)],
+                  ['Agent Client Number', displayValue(detail.agentClientNumber)],
+                  ['Org Unit', displayValue(detail.orgUnitName ?? detail.orgUnitNumber)],
+                  ['Listing Date', displayValue(detail.listingDate)],
+                ].map(([label, value]) => (
+                  <div key={label} className="detail-field-item">
+                    <dt className="detail-field-label">{label}</dt>
+                    <dd className="detail-field-value">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {canEditSummary && summaryForm ? (
+                <>
+                  <div className="legacy-search-grid">
+                    <TextInput
+                      id="applicationSummaryExemptionReason"
+                      labelText="Exemption Reason"
+                      maxLength={1}
+                      value={summaryForm.exemptionReasonCode}
+                      onChange={(event) =>
+                        onSummaryFormChange('exemptionReasonCode', event.target.value.toUpperCase())
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryApplicationDate"
+                      labelText="Application Date"
+                      type="date"
+                      value={summaryForm.applicationDate}
+                      onChange={(event) =>
+                        onSummaryFormChange('applicationDate', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryReceivedDate"
+                      labelText="Received Date"
+                      type="date"
+                      value={summaryForm.receivedDate}
+                      onChange={(event) => onSummaryFormChange('receivedDate', event.target.value)}
+                    />
+                    <TextInput
+                      id="applicationSummaryTermDays"
+                      labelText="Term (days)"
+                      type="number"
+                      min={1}
+                      value={summaryForm.termDays}
+                      onChange={(event) => onSummaryFormChange('termDays', event.target.value)}
+                    />
+                    <TextInput
+                      id="applicationSummaryVolume"
+                      labelText="Application Volume (m³)"
+                      type="number"
+                      min={0}
+                      step="0.1"
+                      value={summaryForm.applicationVolume}
+                      onChange={(event) =>
+                        onSummaryFormChange('applicationVolume', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryAverageLogVolume"
+                      labelText="Average Log Volume"
+                      type="number"
+                      min={0}
+                      step="0.1"
+                      value={summaryForm.averageLogVolume}
+                      onChange={(event) =>
+                        onSummaryFormChange('averageLogVolume', event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="legacy-search-actions">
+                    <Button
+                      kind="primary"
+                      size="sm"
+                      disabled={isSavingSummary}
+                      onClick={() => void onSaveSummary()}
+                    >
+                      {isSavingSummary ? 'Saving...' : 'Save Summary'}
+                    </Button>
+                    <Button
+                      kind="secondary"
+                      size="sm"
+                      disabled={isSavingSummary}
+                      onClick={() => setSummaryForm(toSummaryFormState(detail))}
+                    >
+                      Reset Summary
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <dl className="detail-field-grid">
+                  {[
+                    ['Exemption Reason', displayValue(detail.exemptionReasonCode)],
+                    ['Application Date', displayValue(detail.applicationDate)],
+                    ['Received Date', displayValue(detail.receivedDate)],
+                    ['Term (days)', displayValue(detail.termDays)],
+                    ['Application Volume (m³)', displayValue(detail.applicationVolume)],
+                    ['Average Log Volume', displayValue(detail.averageLogVolume)],
+                  ].map(([label, value]) => (
+                    <div key={label} className="detail-field-item">
+                      <dt className="detail-field-label">{label}</dt>
+                      <dd className="detail-field-value">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </Tile>
           </Column>
 
           <Column sm={4} md={8} lg={16}>

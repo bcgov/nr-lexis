@@ -24,6 +24,7 @@ import {
   fetchApplicationScaleDetails,
   fetchApplicationSpeciesCodes,
   saveApplicationRemark,
+  updateApplicationSummary,
   updateApplicationPackage,
 } from '@/service/provincial-application-items-service'
 
@@ -55,6 +56,7 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationScaleDetails: vi.fn(),
   fetchApplicationSpeciesCodes: vi.fn(),
   saveApplicationRemark: vi.fn(),
+  updateApplicationSummary: vi.fn(),
   updateApplicationPackage: vi.fn(),
 }))
 
@@ -77,6 +79,7 @@ const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemaini
 const mockedFetchApplicationScaleDetails = vi.mocked(fetchApplicationScaleDetails)
 const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
 const mockedSaveApplicationRemark = vi.mocked(saveApplicationRemark)
+const mockedUpdateApplicationSummary = vi.mocked(updateApplicationSummary)
 const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
 
 const applicationDetail: ProvincialApplicationDetail = {
@@ -89,7 +92,7 @@ const applicationDetail: ProvincialApplicationDetail = {
   orgUnitNumber: 12,
   orgUnitName: 'Coast',
   productTypeCode: 'LOG',
-  exemptionReasonCode: 'R1',
+  exemptionReasonCode: 'U',
   applicationDate: '2026-01-01',
   receivedDate: '2026-01-02',
   listingDate: '2026-01-03',
@@ -221,6 +224,13 @@ describe('Provincial Application Detail Document Actions', () => {
       warnings: [],
     })
     mockedDeleteApplicationScale.mockResolvedValue({ success: true })
+    mockedUpdateApplicationSummary.mockResolvedValue({
+      valid: true,
+      message: 'The application was saved successfully.',
+      applicationNumber: '321',
+      errors: [],
+      warnings: [],
+    })
     mockedSaveApplicationRemark.mockResolvedValue({
       success: true,
       remarkId: '88',
@@ -760,6 +770,52 @@ describe('Provincial Application Detail Document Actions', () => {
     })
     expect(await screen.findByText('Application remark saved.')).toBeInTheDocument()
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
+  })
+
+  it('saves application summary edits and refreshes detail', async () => {
+    const detailAfterSummarySave: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      termDays: 45,
+      applicationVolume: 125.5,
+    }
+    mockedFetchProvincialApplicationDetail
+      .mockResolvedValueOnce(applicationDetail)
+      .mockResolvedValueOnce(detailAfterSummarySave)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const termInput = await screen.findByLabelText('Term (days)')
+    await userEvent.clear(termInput)
+    await userEvent.type(termInput, '45')
+
+    const volumeInput = screen.getByLabelText('Application Volume (m³)')
+    await userEvent.clear(volumeInput)
+    await userEvent.type(volumeInput, '125.5')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith({
+        applicationNumber: '321',
+        applicationDate: '2026-01-01',
+        receivedDate: '2026-01-02',
+        termDays: '45',
+        applicationVolume: '125.5',
+        averageLogVolume: '2',
+        exemptionReasonCode: 'U',
+      })
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
   })
 
   it('validates application remark before saving', async () => {

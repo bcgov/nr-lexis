@@ -146,6 +146,47 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
+  public CreateApplicationResult updateApplicationSummary(
+      ApplicationSummaryUpdateRequest request, String userId) {
+    ApplicationSummaryUpdateRequest normalized = normalizeApplicationSummaryUpdateRequest(request);
+    if (normalized.applicationNumber() == null || normalized.applicationNumber() < 1) {
+      return new CreateApplicationResult(
+          false, null, null, List.of(required("application number")), List.of());
+    }
+
+    Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> existing =
+        repository.findApplicationUpdateRecord(normalized.applicationNumber());
+    if (existing.isEmpty()) {
+      return new CreateApplicationResult(
+          false,
+          "No application was found for " + normalized.applicationNumber() + ".",
+          normalized.applicationNumber(),
+          List.of(),
+          List.of());
+    }
+
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord updateRecord =
+        toApplicationUpdateRecord(existing.get(), normalized, defaultMutationUser(userId));
+    List<String> errors = validateApplicationUpdate(updateRecord);
+    if (normalized.validationEnabled() && !errors.isEmpty()) {
+      return new CreateApplicationResult(
+          false, null, normalized.applicationNumber(), errors, List.of());
+    }
+
+    if (!repository.updateApplication(updateRecord)) {
+      return new CreateApplicationResult(
+          false,
+          "We were unable to save this application. Please try again.",
+          normalized.applicationNumber(),
+          List.of(),
+          List.of());
+    }
+
+    return new CreateApplicationResult(
+        true, SAVE_SUCCESS_MESSAGE, normalized.applicationNumber(), List.of(), List.of());
+  }
+
+  @Override
   public Optional<ApplicationClientSnapshot> getApplicationClientSnapshot(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
@@ -1105,6 +1146,22 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         input.validationEnabled());
   }
 
+  private ApplicationSummaryUpdateRequest normalizeApplicationSummaryUpdateRequest(
+      ApplicationSummaryUpdateRequest input) {
+    if (input == null) {
+      return new ApplicationSummaryUpdateRequest(null, null, null, null, null, null, null, true);
+    }
+    return new ApplicationSummaryUpdateRequest(
+        input.applicationNumber(),
+        input.applicationDate(),
+        input.termDays(),
+        input.receivedDate(),
+        input.applicationVolume(),
+        input.averageLogVolume(),
+        trimToNull(input.exemptionReasonCode()),
+        input.validationEnabled());
+  }
+
   private List<String> validateCreateApplication(CreateApplicationRequest request) {
     List<String> errors = new ArrayList<>();
     if (request.applicationDate() == null) {
@@ -1180,6 +1237,30 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return errors;
   }
 
+  private List<String> validateApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
+    List<String> errors = new ArrayList<>();
+    if (record.applicationDate() == null) {
+      errors.add(required("application date"));
+    }
+    if (record.termDays() == null || record.termDays() <= 0) {
+      errors.add("The application term days must be greater than or equal to 0");
+    }
+    if (record.receivedDate() == null) {
+      errors.add(required("application received date"));
+    }
+    if (record.applicationVolume() == null || record.applicationVolume() <= 0.0d) {
+      errors.add("The application volume must be greater than or equal to 0");
+    }
+    String exemptionReasonCode = trimToNull(record.exemptionReasonCode());
+    if (exemptionReasonCode == null) {
+      errors.add(required("application exemption reason code"));
+    } else if (exemptionReasonCode.length() > 1) {
+      errors.add(maxLength("application exemption reason code", 1));
+    }
+    return errors;
+  }
+
   private ApplicationDetailsRpcRepository.ApplicationInsertRecord toInsertRecord(
       CreateApplicationRequest request, String entryUserId) {
     return new ApplicationDetailsRpcRepository.ApplicationInsertRecord(
@@ -1207,6 +1288,43 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.agentContactName(),
         request.ownerContactName(),
         request.oicIndicator());
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationUpdateRecord toApplicationUpdateRecord(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationSummaryUpdateRequest request,
+      String updateUserId) {
+    return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
+        existing.applicationNumber(),
+        existing.federalApplicationNumber(),
+        request.applicationDate() == null ? existing.applicationDate() : request.applicationDate(),
+        request.termDays() == null ? existing.termDays() : request.termDays(),
+        request.receivedDate() == null ? existing.receivedDate() : request.receivedDate(),
+        request.applicationVolume() == null ? existing.applicationVolume() : request.applicationVolume(),
+        request.averageLogVolume() == null ? existing.averageLogVolume() : request.averageLogVolume(),
+        existing.productLocation(),
+        existing.entryUserId(),
+        existing.entryTimestamp(),
+        updateUserId,
+        Instant.now(),
+        existing.exportScheduleId(),
+        existing.agentClientNumber(),
+        existing.agentClientLocationCode(),
+        existing.ownerClientNumber(),
+        existing.ownerClientLocationCode(),
+        existing.exemptionNumber(),
+        request.exemptionReasonCode() == null
+            ? existing.exemptionReasonCode()
+            : request.exemptionReasonCode(),
+        existing.applicationStatusCode(),
+        existing.applicantTypeCode(),
+        existing.orgUnitNumber(),
+        existing.productTypeCode(),
+        existing.jurisdictionCode(),
+        existing.growthTypeCode(),
+        existing.agentContactName(),
+        existing.ownerContactName(),
+        existing.oicIndicator());
   }
 
   private String required(String fieldName) {

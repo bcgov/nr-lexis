@@ -98,6 +98,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   private static final String INSERT_EXEMPTION_APPLICATION =
       LEXIS_GROUP_13_PACKAGE
           + "INSERT_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String UPDATE_EXEMPTION_APPLICATION =
+      LEXIS_GROUP_14_PACKAGE + "UPDATE_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
   public ApplicationDetailsRpcRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -478,6 +480,24 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         this::mapApplicationInsertRow);
   }
 
+  public Optional<ApplicationUpdateRecord> findApplicationUpdateRecord(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_APPLICATION_BY_NUMBER,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        this::mapApplicationUpdateRecord);
+  }
+
+  public boolean updateApplication(ApplicationUpdateRecord record) {
+    if (record == null || record.applicationNumber() == null || record.applicationNumber() < 1) {
+      return false;
+    }
+    return executeProcedure(UPDATE_EXEMPTION_APPLICATION, cs -> bindApplicationUpdate(cs, record));
+  }
+
   public Optional<ApplicationClientSnapshotRow> findApplicationClientSnapshot(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
@@ -742,6 +762,39 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index, record.oicIndicator());
   }
 
+  private void bindApplicationUpdate(CallableStatement cs, ApplicationUpdateRecord record)
+      throws SQLException {
+    int index = 1;
+    setLongOrNull(cs, index++, record.applicationNumber());
+    setLongOrNull(cs, index++, emptyToNull(record.federalApplicationNumber()));
+    setDateOrNull(cs, index++, record.applicationDate());
+    setLongOrNull(cs, index++, record.termDays());
+    setDateOrNull(cs, index++, record.receivedDate());
+    setDoubleOrNull(cs, index++, record.applicationVolume());
+    setDoubleOrNull(cs, index++, record.averageLogVolume());
+    setStringOrNull(cs, index++, record.productLocation());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
+    setTimestampOrNull(cs, index++, record.entryTimestamp());
+    cs.setString(index++, auditUserOrDefault(record.updateUserId()));
+    setTimestampOrNull(cs, index++, record.updateTimestamp());
+    setLongOrNull(cs, index++, record.exportScheduleId());
+    setStringOrNull(cs, index++, record.agentClientNumber());
+    setStringOrNull(cs, index++, record.agentClientLocationCode());
+    setStringOrNull(cs, index++, record.ownerClientNumber());
+    setStringOrNull(cs, index++, record.ownerClientLocationCode());
+    setStringOrNull(cs, index++, record.exemptionNumber());
+    setStringOrNull(cs, index++, record.exemptionReasonCode());
+    setStringOrNull(cs, index++, record.applicationStatusCode());
+    setStringOrNull(cs, index++, record.applicantTypeCode());
+    setLongOrNull(cs, index++, record.orgUnitNumber());
+    setStringOrNull(cs, index++, record.productTypeCode());
+    setStringOrNull(cs, index++, record.jurisdictionCode());
+    setStringOrNull(cs, index++, record.growthTypeCode());
+    setStringOrNull(cs, index++, record.agentContactName());
+    setStringOrNull(cs, index++, record.ownerContactName());
+    setStringOrNull(cs, index, record.oicIndicator());
+  }
+
   private void bindPackageInsert(CallableStatement cs, PackageMutationRecord record)
       throws SQLException {
     int index = 1;
@@ -881,6 +934,38 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     return new ApplicationInsertRow(getLong(rs, "APPLICATION_NUMBER"));
   }
 
+  private ApplicationUpdateRecord mapApplicationUpdateRecord(ResultSet rs) {
+    return new ApplicationUpdateRecord(
+        getLong(rs, "APPLICATION_NUMBER"),
+        getLong(rs, "FED_APPLICATION_NUMBER"),
+        getLocalDate(rs, "APPLICATION_DATE"),
+        getLong(rs, "TERM_DAYS"),
+        getLocalDate(rs, "RECEIVED_DATE"),
+        getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
+        getDouble(rs, "AVERAGE_LOG_VOLUME"),
+        getString(rs, "PRODUCT_LOCATION"),
+        getString(rs, "ENTRY_USERID"),
+        getInstant(rs, "ENTRY_TIMESTAMP"),
+        getString(rs, "UPDATE_USERID"),
+        getInstant(rs, "UPDATE_TIMESTAMP"),
+        getLong(rs, "EXPORT_SCHEDULE_ID"),
+        getString(rs, "AGENT_CLIENT_NUMBER"),
+        getString(rs, "AGENT_CLIENT_LOCATION_CODE"),
+        getString(rs, "OWNER_CLIENT_NUMBER"),
+        getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
+        getString(rs, "EXEMPTION_NUMBER"),
+        getString(rs, "EXPORT_EXEMPTION_REASON_CODE"),
+        getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
+        getString(rs, "EXPORT_APPLICANT_TYPE_CODE"),
+        getLong(rs, "ORG_UNIT_NO"),
+        getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
+        getString(rs, "EXPORT_JURISDICTION_CODE"),
+        getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+        getString(rs, "AGENT_CONTACT_NAME"),
+        getString(rs, "OWNER_CONTACT_NAME"),
+        getString(rs, "OIC_INDICATOR"));
+  }
+
   private ApplicationScaleDetailRow mapApplicationScaleDetailRow(ResultSet rs) {
     return new ApplicationScaleDetailRow(
         getString(rs, "EXPORT_SCALE_DETAIL_ID"),
@@ -1006,6 +1091,36 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String oicIndicator) {}
 
   public record ApplicationInsertRow(Long applicationNumber) {}
+
+  public record ApplicationUpdateRecord(
+      Long applicationNumber,
+      Long federalApplicationNumber,
+      LocalDate applicationDate,
+      Long termDays,
+      LocalDate receivedDate,
+      Double applicationVolume,
+      Double averageLogVolume,
+      String productLocation,
+      String entryUserId,
+      Instant entryTimestamp,
+      String updateUserId,
+      Instant updateTimestamp,
+      Long exportScheduleId,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String exemptionNumber,
+      String exemptionReasonCode,
+      String applicationStatusCode,
+      String applicantTypeCode,
+      Long orgUnitNumber,
+      String productTypeCode,
+      String jurisdictionCode,
+      String growthTypeCode,
+      String agentContactName,
+      String ownerContactName,
+      String oicIndicator) {}
 
   public record ApplicationClientSnapshotRow(
       String agentClientNumber,

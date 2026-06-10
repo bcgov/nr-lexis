@@ -45,6 +45,7 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_REMARK = "getRemark";
   private static final String ACTION_PERSIST_REMARK = "persistRemark";
   private static final String ACTION_ADD_APPLICATION = "addApplication";
+  private static final String ACTION_UPDATE_APPLICATION = "updateApplication";
   private static final String ACTION_GET_CLIENT_DATA = "getClientData";
   private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
   private static final String ACTION_GET_CONTACTS_FOR_LOCATION = "getContactsForLocation";
@@ -270,6 +271,39 @@ public class ApplicationDetailsRpcController {
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
     return addApplication(parameters, authentication);
+  }
+
+  @PostMapping("/rpc/application-details/application-summary")
+  public ResponseEntity<ApplicationPersistenceResponseDto> updateApplicationSummary(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for update application");
+      return ResponseEntity.noContent().build();
+    }
+
+    String userId = authentication == null ? null : authentication.getName();
+    ApplicationDetailsRpcService.CreateApplicationResult result =
+        service.updateApplicationSummary(toApplicationSummaryUpdateRequest(parameters), userId);
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            result.valid(),
+            result.message(),
+            result.applicationNumber(),
+            result.errors(),
+            result.warnings()));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_UPDATE_APPLICATION)
+  public ResponseEntity<ApplicationPersistenceResponseDto> updateApplicationLegacy(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return updateApplicationSummary(parameters, authentication);
   }
 
   @GetMapping("/rpc/application-details/client-data")
@@ -850,6 +884,19 @@ public class ApplicationDetailsRpcController {
         first(parameters, "agentContactName"),
         first(parameters, "ownerContactName"),
         first(parameters, "oicIndicator"),
+        !"false".equalsIgnoreCase(first(parameters, "validation")));
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest toApplicationSummaryUpdateRequest(
+      MultiValueMap<String, String> parameters) {
+    return new ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest(
+        parsePositiveLong(first(parameters, "applicationNumber")),
+        parseDate(first(parameters, "applicationDate")),
+        parsePositiveLong(first(parameters, "exemptionTerm", "termDays")),
+        parseDate(first(parameters, "dateReceived", "receivedDate")),
+        parseDouble(first(parameters, "exemptionApplicationVolume", "applicationVolume")),
+        parseDouble(first(parameters, "averageLogVolume")),
+        first(parameters, "exemptionReason", "exemptionReasonCode", "exportExemptionReasonCode"),
         !"false".equalsIgnoreCase(first(parameters, "validation")));
   }
 

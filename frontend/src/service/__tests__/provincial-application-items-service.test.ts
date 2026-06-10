@@ -4,6 +4,7 @@ import {
   deleteApplicationScale,
   fetchApplicationRemainingSpecies,
   saveApplicationRemark,
+  updateApplicationSummary,
   updateApplicationPackage,
 } from '@/service/provincial-application-items-service'
 
@@ -179,6 +180,51 @@ describe('provincial-application-items-service', () => {
     expect(body.get('remarkId')).toBe('new')
     expect(body.get('applicationNumber')).toBe('321')
     expect(body.get('remarkBody')).toBe('New note')
+  })
+
+  it('posts application summary updates as legacy url-encoded form fields', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        valid: true,
+        message: 'The application was saved successfully.',
+        applicationNumber: '321',
+        errors: [],
+        warnings: [],
+      },
+    })
+
+    const result = await updateApplicationSummary({
+      applicationNumber: '321',
+      applicationDate: '2026-01-01',
+      receivedDate: '2026-01-02',
+      termDays: '45',
+      applicationVolume: '125.5',
+      averageLogVolume: '2.1',
+      exemptionReasonCode: 'U',
+    })
+
+    expect(result).toEqual({
+      valid: true,
+      message: 'The application was saved successfully.',
+      applicationNumber: '321',
+      errors: [],
+      warnings: [],
+    })
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/application-details/application-summary')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('applicationNumber')).toBe('321')
+    expect(body.get('applicationDate')).toBe('2026-01-01')
+    expect(body.get('receivedDate')).toBe('2026-01-02')
+    expect(body.get('termDays')).toBe('45')
+    expect(body.get('applicationVolume')).toBe('125.5')
+    expect(body.get('averageLogVolume')).toBe('2.1')
+    expect(body.get('exemptionReasonCode')).toBe('U')
   })
 
   it('deletes scales through the modern item endpoint', async () => {

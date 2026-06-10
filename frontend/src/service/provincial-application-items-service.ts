@@ -100,6 +100,16 @@ export type ApplicationRemarkMutation = {
   remarkId?: string
 }
 
+export type ApplicationSummaryMutation = {
+  applicationNumber: string
+  applicationDate: string
+  receivedDate: string
+  termDays: string
+  applicationVolume: string
+  averageLogVolume: string
+  exemptionReasonCode: string
+}
+
 export type ApplicationRemarkMutationResult = {
   success: boolean
   remarkId: string
@@ -107,6 +117,14 @@ export type ApplicationRemarkMutationResult = {
   title: string
   user: string
   status: string
+}
+
+export type ApplicationSummaryMutationResult = {
+  valid: boolean
+  message: string
+  applicationNumber: string
+  errors: string[]
+  warnings: string[]
 }
 
 const ITEMS_CACHE_TTL_MS = 30_000
@@ -296,6 +314,19 @@ const normalizeRemarkMutationResult = (payload: unknown): ApplicationRemarkMutat
     remark: asString(source.remark),
     title: asString(source.title),
     user: asString(source.user),
+  }
+}
+
+const normalizeApplicationSummaryMutationResult = (
+  payload: unknown,
+): ApplicationSummaryMutationResult => {
+  const source = (payload ?? {}) as Record<string, unknown>
+  return {
+    valid: asBoolean(source.valid),
+    message: asString(source.message),
+    applicationNumber: asString(source.applicationNumber),
+    errors: asStringArray(source.errors),
+    warnings: asStringArray(source.warnings),
   }
 }
 
@@ -525,6 +556,28 @@ export const saveApplicationRemark = async (
     return normalizeRemarkMutationResult(payload)
   } catch (error) {
     throw toSearchServiceError('Unable to save application remark.', error)
+  }
+}
+
+export const updateApplicationSummary = async (
+  request: ApplicationSummaryMutation,
+): Promise<ApplicationSummaryMutationResult> => {
+  try {
+    const payload = await postLegacyForm<unknown>(
+      '/lexis/rpc/application-details/application-summary',
+      {
+        applicationNumber: request.applicationNumber,
+        applicationDate: request.applicationDate,
+        receivedDate: request.receivedDate,
+        termDays: request.termDays,
+        applicationVolume: request.applicationVolume,
+        averageLogVolume: request.averageLogVolume,
+        exemptionReasonCode: request.exemptionReasonCode,
+      },
+    )
+    return normalizeApplicationSummaryMutationResult(payload)
+  } catch (error) {
+    throw toSearchServiceError('Unable to update application summary.', error)
   }
 }
 
