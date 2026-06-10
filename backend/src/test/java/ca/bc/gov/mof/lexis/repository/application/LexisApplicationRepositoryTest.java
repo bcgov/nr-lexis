@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.repository.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import org.springframework.data.domain.Page;
@@ -12,6 +13,16 @@ import org.junit.jupiter.api.Test;
 
 @DisplayName("Unit Test | LexisApplicationRepository")
 class LexisApplicationRepositoryTest {
+
+  @Test
+  void loadExemptionReasonOptionsShouldUseLegacyProcedureName() {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+
+    assertThat(repository.loadExemptionReasonOptions())
+        .containsExactly(new CodeNameDto("U", "Utilization"));
+    assertThat(repository.codeNameProcedureSignature())
+        .isEqualTo("LEXIS_CODES.FIND_ALL_EXEMPT_RSN_CODES(?)");
+  }
 
   @Test
   void searchShouldUseProvincialApplicationViewAliasForDynamicCriteria() {
@@ -109,6 +120,7 @@ class LexisApplicationRepositoryTest {
     private final List<List<?>> pages;
     private String whereSql;
     private List<String> bindValues;
+    private String codeNameProcedureSignature;
     private int pageCalls;
 
     TestLexisApplicationRepository() {
@@ -130,6 +142,16 @@ class LexisApplicationRepositoryTest {
 
     int pageCalls() {
       return pageCalls;
+    }
+
+    String codeNameProcedureSignature() {
+      return codeNameProcedureSignature;
+    }
+
+    @Override
+    protected List<CodeNameDto> loadCodeNameOptions(String procedureSignature) {
+      codeNameProcedureSignature = procedureSignature;
+      return List.of(new CodeNameDto("U", "Utilization"));
     }
 
     @Override

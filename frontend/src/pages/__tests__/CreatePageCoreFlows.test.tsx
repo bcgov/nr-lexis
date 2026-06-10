@@ -157,7 +157,7 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
-  it('blocks provincial application submit when search exemption type is used as reason', async () => {
+  it('does not use search exemption type as create exemption reason', async () => {
     render(
       <MemoryRouter
         initialEntries={[
@@ -177,9 +177,7 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
-    expect(
-      await screen.findByText('Exemption reason code must be 1 character or fewer.'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Exemption reason is required.')).toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 

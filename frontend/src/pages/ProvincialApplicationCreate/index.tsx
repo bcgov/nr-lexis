@@ -102,12 +102,7 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     ownerContactName: query.get('ownerContactName') ?? query.get('ownerName') ?? '',
     applicantClientNumber: query.get('applicantClientNumber') ?? '',
     productTypeCode: query.get('productTypeCode') ?? '',
-    exemptionType:
-      query.get('exemptionReason') ??
-      query.get('exemptionReasonCode') ??
-      query.get('exemptionType') ??
-      query.get('exemptionTypeCode') ??
-      '',
+    exemptionType: query.get('exemptionReason') ?? query.get('exemptionReasonCode') ?? '',
     region: query.get('region') ?? query.get('orgUnitNumber') ?? '',
     applicationDate: query.get('applicationDate') ?? '',
     applicationTermDays:
@@ -185,6 +180,35 @@ const ProvincialApplicationCreatePage: FC = () => {
 
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    if (exemptionReasons.length === 0) {
+      return
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (!isActive) {
+        return
+      }
+
+      setForm((current) => {
+        const currentExemptionReason = current.exemptionType.trim()
+        if (
+          !currentExemptionReason ||
+          exemptionReasons.some((option) => option.value === currentExemptionReason)
+        ) {
+          return current
+        }
+
+        return { ...current, exemptionType: '' }
+      })
+    })
+
+    return () => {
+      isActive = false
+    }
+  }, [exemptionReasons])
 
   useEffect(() => {
     const ownerClientNumber = form.ownerClientNumber.trim()
