@@ -77,7 +77,7 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void countShouldUseGroupedCriteriaWithoutPageOrdering() {
+  void countShouldUseFilterCriteriaWithoutPageGroupingOrOrdering() {
     TestExemptionRepository repository = new TestExemptionRepository();
 
     repository.count(
@@ -86,7 +86,7 @@ class ExemptionRepositoryTest {
 
     assertThat(repository.whereSql())
         .contains("EE.EXEMPTION_NUMBER")
-        .contains("GROUP BY EE.EXEMPTION_NUMBER")
+        .doesNotContain("GROUP BY")
         .doesNotContain("ORDER BY");
     assertThat(repository.bindValues()).containsExactly("EX-1");
   }

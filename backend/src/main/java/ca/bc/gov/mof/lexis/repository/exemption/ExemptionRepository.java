@@ -78,8 +78,8 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   public Page<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
-    SqlWhere countSqlWhere = buildSearchWhere(criteria, false);
-    SqlWhere pageSqlWhere = buildSearchWhere(criteria, true);
+    SqlWhere countSqlWhere = buildSearchWhere(criteria, false, false);
+    SqlWhere pageSqlWhere = buildSearchWhere(criteria, true, true);
     int totalElements =
         queryLegacyDynamicCountProcedure(
             COUNT_EXEMPTIONS_BY_CRITERIA, countSqlWhere.sql(), countSqlWhere.bindValues());
@@ -105,11 +105,12 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   public int count(ExemptionSearchCriteria criteria) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria, false);
+    SqlWhere sqlWhere = buildSearchWhere(criteria, false, false);
     return queryLegacyDynamicCountProcedure(COUNT_EXEMPTIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
   }
 
-  private SqlWhere buildSearchWhere(ExemptionSearchCriteria criteria, boolean includeOrderBy) {
+  private SqlWhere buildSearchWhere(
+      ExemptionSearchCriteria criteria, boolean includeGroupBy, boolean includeOrderBy) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -141,7 +142,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
       where.addInLikeOrNoResults("EO.ORG_UNIT_NO", criteria.regionNumbers());
     }
 
-    return where.build(SEARCH_GROUP_BY + (includeOrderBy ? SEARCH_ORDER_BY : ""));
+    return where.build((includeGroupBy ? SEARCH_GROUP_BY : "") + (includeOrderBy ? SEARCH_ORDER_BY : ""));
   }
 
   public Optional<ExemptionDetailDto> findByExemptionNumber(String exemptionNumber) {

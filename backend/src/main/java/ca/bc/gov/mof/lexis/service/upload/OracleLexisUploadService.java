@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.upload;
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.upload.UploadRepository;
 import java.math.BigDecimal;
+import java.util.Locale;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     if (!validFile(file) || applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
+    String fileTypeCode = fileExtension(file);
+    if (fileTypeCode == null) {
+      return Optional.empty();
+    }
 
     boolean persisted =
         uploadRepository.insertApplicationFile(
@@ -36,7 +41,7 @@ public class OracleLexisUploadService implements LexisUploadService {
             resolveFileName(file),
             defaultDescription(description),
             ATTACHMENT_TYPE_APPLICATION,
-            fileExtension(file),
+            fileTypeCode,
             defaultEntryUser(entryUserId),
             fileBytes(file));
 
@@ -51,6 +56,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     if (!validFile(file) || permitNumber == null || permitNumber < 1) {
       return Optional.empty();
     }
+    String fileTypeCode = fileExtension(file);
+    if (fileTypeCode == null) {
+      return Optional.empty();
+    }
 
     boolean persisted =
         uploadRepository.insertPermitFile(
@@ -58,7 +67,7 @@ public class OracleLexisUploadService implements LexisUploadService {
             resolveFileName(file),
             defaultDescription(description),
             ATTACHMENT_TYPE_PERMIT,
-            fileExtension(file),
+            fileTypeCode,
             defaultEntryUser(entryUserId),
             fileBytes(file));
 
@@ -74,6 +83,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     if (!validFile(file) || normalizedExemptionNumber == null) {
       return Optional.empty();
     }
+    String fileTypeCode = fileExtension(file);
+    if (fileTypeCode == null) {
+      return Optional.empty();
+    }
 
     boolean persisted =
         uploadRepository.insertExemptionFile(
@@ -81,7 +94,7 @@ public class OracleLexisUploadService implements LexisUploadService {
             resolveFileName(file),
             defaultDescription(description),
             ATTACHMENT_TYPE_EXEMPTION,
-            fileExtension(file),
+            fileTypeCode,
             defaultEntryUser(entryUserId),
             fileBytes(file));
 
@@ -107,6 +120,10 @@ public class OracleLexisUploadService implements LexisUploadService {
         || normalizedSalesInvoiceNumber == null) {
       return Optional.empty();
     }
+    String fileTypeCode = fileExtension(file);
+    if (fileTypeCode == null) {
+      return Optional.empty();
+    }
 
     String normalizedDescription =
         trim(description) == null ? "Invoice " + normalizedSalesInvoiceNumber : description.trim();
@@ -118,7 +135,7 @@ public class OracleLexisUploadService implements LexisUploadService {
             resolveFileName(file),
             normalizedDescription,
             ATTACHMENT_TYPE_INVOICE,
-            fileExtension(file),
+            fileTypeCode,
             exportValue,
             currencyConversionRate,
             feeInLieu,
@@ -155,9 +172,9 @@ public class OracleLexisUploadService implements LexisUploadService {
     String fileName = resolveFileName(file);
     int extensionIndex = fileName.lastIndexOf('.');
     if (extensionIndex < 0 || extensionIndex >= fileName.length() - 1) {
-      return "";
+      return null;
     }
-    return fileName.substring(extensionIndex + 1);
+    return fileName.substring(extensionIndex + 1).toUpperCase(Locale.ROOT);
   }
 
   private String defaultDescription(String description) {

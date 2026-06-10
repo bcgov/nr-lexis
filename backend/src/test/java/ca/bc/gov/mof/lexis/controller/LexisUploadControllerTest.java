@@ -93,6 +93,21 @@ class LexisUploadControllerTest {
   }
 
   @Test
+  void fileApplicationUploadShouldReturnUnprocessableEntityWhenPersistenceFails() {
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
+    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    MultipartFile formFile = sampleFile("application.pdf");
+    when(uploadService.uploadApplication(formFile, 7000123L, "App file", null))
+        .thenReturn(Optional.empty());
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileApplicationUpload(null, formFile, 7000123L, "App file", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    verify(uploadService).uploadApplication(formFile, 7000123L, "App file", null);
+  }
+
+  @Test
   void filePermitUploadShouldDelegateToService() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
