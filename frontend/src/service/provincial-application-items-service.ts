@@ -94,6 +94,21 @@ export type DeleteApplicationItemResult = {
   success: boolean
 }
 
+export type ApplicationRemarkMutation = {
+  applicationNumber: string
+  remarkBody: string
+  remarkId?: string
+}
+
+export type ApplicationRemarkMutationResult = {
+  success: boolean
+  remarkId: string
+  remark: string
+  title: string
+  user: string
+  status: string
+}
+
 const ITEMS_CACHE_TTL_MS = 30_000
 
 const asString = (value: unknown): string => {
@@ -268,6 +283,19 @@ const normalizeScaleMutationResult = (payload: unknown): ApplicationScaleMutatio
     result: source.result ? normalizePackageScaleRow(source.result) : null,
     errors: asStringArray(source.errors),
     warnings: asStringArray(source.warnings),
+  }
+}
+
+const normalizeRemarkMutationResult = (payload: unknown): ApplicationRemarkMutationResult => {
+  const source = (payload ?? {}) as Record<string, unknown>
+  const status = asString(source.status)
+  return {
+    success: status.toLowerCase() === 'ok',
+    status,
+    remarkId: asString(source.remarkId),
+    remark: asString(source.remark),
+    title: asString(source.title),
+    user: asString(source.user),
   }
 }
 
@@ -482,6 +510,21 @@ export const addApplicationScaleToPackage = async (
     return normalizeScaleMutationResult(payload)
   } catch (error) {
     throw toSearchServiceError('Unable to add application scale.', error)
+  }
+}
+
+export const saveApplicationRemark = async (
+  request: ApplicationRemarkMutation,
+): Promise<ApplicationRemarkMutationResult> => {
+  try {
+    const payload = await postLegacyForm<unknown>('/lexis/rpc/application-details/remark', {
+      remarkId: request.remarkId || 'new',
+      applicationNumber: request.applicationNumber,
+      remarkBody: request.remarkBody,
+    })
+    return normalizeRemarkMutationResult(payload)
+  } catch (error) {
+    throw toSearchServiceError('Unable to save application remark.', error)
   }
 }
 

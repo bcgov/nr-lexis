@@ -23,6 +23,7 @@ import {
   fetchApplicationRemainingSpecies,
   fetchApplicationScaleDetails,
   fetchApplicationSpeciesCodes,
+  saveApplicationRemark,
   updateApplicationPackage,
 } from '@/service/provincial-application-items-service'
 
@@ -53,6 +54,7 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationRemainingSpecies: vi.fn(),
   fetchApplicationScaleDetails: vi.fn(),
   fetchApplicationSpeciesCodes: vi.fn(),
+  saveApplicationRemark: vi.fn(),
   updateApplicationPackage: vi.fn(),
 }))
 
@@ -74,6 +76,7 @@ const mockedFetchApplicationPackageSpecies = vi.mocked(fetchApplicationPackageSp
 const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemainingSpecies)
 const mockedFetchApplicationScaleDetails = vi.mocked(fetchApplicationScaleDetails)
 const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
+const mockedSaveApplicationRemark = vi.mocked(saveApplicationRemark)
 const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
 
 const applicationDetail: ProvincialApplicationDetail = {
@@ -218,6 +221,14 @@ describe('Provincial Application Detail Document Actions', () => {
       warnings: [],
     })
     mockedDeleteApplicationScale.mockResolvedValue({ success: true })
+    mockedSaveApplicationRemark.mockResolvedValue({
+      success: true,
+      remarkId: '88',
+      remark: 'New application note',
+      title: 'New application note',
+      user: 'idir\\jsmith',
+      status: 'ok',
+    })
   })
 
   it('navigates to upload center with application context', async () => {
@@ -711,6 +722,63 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getByText('Pieces is required.')).toBeInTheDocument()
     expect(screen.getByText('Scale volume is required.')).toBeInTheDocument()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+  })
+
+  it('saves application remarks and refreshes detail', async () => {
+    const detailAfterRemark: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      remarks: [
+        ...applicationDetail.remarks,
+        { title: 'New application note', remark: 'New application note' },
+      ],
+    }
+    mockedFetchProvincialApplicationDetail
+      .mockResolvedValueOnce(applicationDetail)
+      .mockResolvedValueOnce(detailAfterRemark)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText('New Remark')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('New Remark'), 'New application note')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+
+    await waitFor(() => {
+      expect(mockedSaveApplicationRemark).toHaveBeenCalledWith({
+        applicationNumber: '321',
+        remarkBody: 'New application note',
+      })
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('Application remark saved.')).toBeInTheDocument()
+    expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
+  })
+
+  it('validates application remark before saving', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText('New Remark')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+
+    expect(screen.getByText('Remark is required.')).toBeInTheDocument()
+    expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
   })
 
   it('disables upload and delete without file upload permission', async () => {

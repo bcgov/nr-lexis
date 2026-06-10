@@ -3,6 +3,7 @@ import {
   addApplicationScaleToPackage,
   deleteApplicationScale,
   fetchApplicationRemainingSpecies,
+  saveApplicationRemark,
   updateApplicationPackage,
 } from '@/service/provincial-application-items-service'
 
@@ -141,6 +142,43 @@ describe('provincial-application-items-service', () => {
     expect(body.get('applicationNumber')).toBe('321')
     expect(body.get('scalePieces')).toBe('5')
     expect(body.get('scaleVolume')).toBe('20.0')
+  })
+
+  it('posts application remarks as legacy url-encoded form fields', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        status: 'ok',
+        remarkId: '88',
+        remark: 'New note',
+        title: 'New note',
+        user: 'idir\\jsmith',
+      },
+    })
+
+    const result = await saveApplicationRemark({
+      applicationNumber: '321',
+      remarkBody: 'New note',
+    })
+
+    expect(result).toEqual({
+      success: true,
+      status: 'ok',
+      remarkId: '88',
+      remark: 'New note',
+      title: 'New note',
+      user: 'idir\\jsmith',
+    })
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/application-details/remark')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('remarkId')).toBe('new')
+    expect(body.get('applicationNumber')).toBe('321')
+    expect(body.get('remarkBody')).toBe('New note')
   })
 
   it('deletes scales through the modern item endpoint', async () => {

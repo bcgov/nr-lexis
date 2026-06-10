@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
   Tag,
+  TextArea,
   TextInput,
   Tile,
 } from '@carbon/react'
@@ -27,6 +28,7 @@ import {
   removeApplicationDocument,
   type ProvincialApplicationDocumentRow,
 } from '@/service/provincial-application-documents-service'
+import { saveApplicationRemark } from '@/service/provincial-application-items-service'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -74,6 +76,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [remarkBody, setRemarkBody] = useState('')
+  const [isSavingRemark, setIsSavingRemark] = useState(false)
+  const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const beginDetailRequest = useLatestRequestGuard()
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
@@ -212,6 +217,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
   const canManageDocuments = canPerform('/fileApplicationUpload')
   const canManageItems = canPerform('createApplication') && !detail?.readOnly && !detail?.locked
+  const canManageRemarks = canManageItems
 
   const onCreateOffer = useCallback(() => {
     if (!detail) {
@@ -298,6 +304,42 @@ const ProvincialApplicationDetailsPage: FC = () => {
     },
     [applicationNumber, beginDetailRequest],
   )
+
+  const onSaveRemark = useCallback(async () => {
+    if (!applicationNumber || !detail) {
+      return
+    }
+
+    const normalizedRemark = remarkBody.trim()
+    if (!normalizedRemark) {
+      setRemarkValidationMessage('Remark is required.')
+      return
+    }
+
+    setRemarkValidationMessage('')
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setIsSavingRemark(true)
+    try {
+      const result = await saveApplicationRemark({
+        applicationNumber: String(detail.applicationNumber),
+        remarkBody: normalizedRemark,
+      })
+      if (!result.success) {
+        setActionErrorMessage('Unable to save application remark.')
+        return
+      }
+
+      await loadApplicationDetail()
+      setRemarkBody('')
+      setActionInfoMessage('Application remark saved.')
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to save application remark.')
+    } finally {
+      setIsSavingRemark(false)
+    }
+  }, [applicationNumber, detail, loadApplicationDetail, remarkBody])
 
   return (
     <Grid fullWidth className="default-grid">
@@ -650,6 +692,31 @@ const ProvincialApplicationDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">Remarks</h2>
+              {canManageRemarks && (
+                <div className="legacy-search-actions">
+                  <TextArea
+                    id="applicationRemarkBody"
+                    labelText="New Remark"
+                    value={remarkBody}
+                    invalid={!!remarkValidationMessage}
+                    invalidText={remarkValidationMessage}
+                    onChange={(event) => {
+                      setRemarkBody(event.target.value)
+                      if (remarkValidationMessage) {
+                        setRemarkValidationMessage('')
+                      }
+                    }}
+                  />
+                  <Button
+                    kind="primary"
+                    size="sm"
+                    disabled={isSavingRemark}
+                    onClick={() => void onSaveRemark()}
+                  >
+                    {isSavingRemark ? 'Saving...' : 'Save Remark'}
+                  </Button>
+                </div>
+              )}
               <TextInput
                 id="applicationDetailRemarkFilter"
                 labelText="Filter remarks"
