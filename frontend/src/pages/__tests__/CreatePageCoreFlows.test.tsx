@@ -117,6 +117,31 @@ describe('Create Page Core Flows', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
   })
 
+  it('blocks provincial application submit when owner location code is too long', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerClientLocationCode=12345678&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionType=SECTION_1&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await userEvent.click(submitButton)
+
+    expect(
+      await screen.findByText('Owner client location code must be 2 characters or fewer.'),
+    ).toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
   it('submits provincial exemption with linked applications and navigates to details', async () => {
     mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-777'))
 

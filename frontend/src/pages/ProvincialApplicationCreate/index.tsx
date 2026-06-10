@@ -16,6 +16,7 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  maxLengthFieldError,
   positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
@@ -155,8 +156,10 @@ const ProvincialApplicationCreatePage: FC = () => {
       packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
       ownerClientNumber:
         requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
-      ownerClientLocationCode:
-        requiredFieldError(form.ownerClientLocationCode, 'Owner client location') ?? undefined,
+      ownerClientLocationCode: firstValidationError(
+        () => requiredFieldError(form.ownerClientLocationCode, 'Owner client location code'),
+        () => maxLengthFieldError(form.ownerClientLocationCode, 2, 'Owner client location code'),
+      ),
       ownerContactName: requiredFieldError(form.ownerContactName, 'Owner name') ?? undefined,
       applicantClientNumber:
         requiredFieldError(form.applicantClientNumber, 'Applicant client number') ?? undefined,
@@ -347,7 +350,8 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <TextInput
               id="ownerClientLocationCode"
-              labelText="Owner Client Location (required)"
+              labelText="Owner Client Location Code (required)"
+              maxLength={2}
               value={form.ownerClientLocationCode}
               invalid={!!fieldError('ownerClientLocationCode')}
               invalidText={fieldError('ownerClientLocationCode')}

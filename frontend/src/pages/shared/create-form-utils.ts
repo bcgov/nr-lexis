@@ -32,6 +32,16 @@ export const requiredFieldError = (value: string, label = 'This field'): string 
   return normalizeText(value) ? null : `${label} is required.`
 }
 
+export const maxLengthFieldError = (
+  value: string,
+  maxLength: number,
+  label = 'This field',
+): string | null => {
+  return normalizeText(value).length <= maxLength
+    ? null
+    : `${label} must be ${maxLength} characters or fewer.`
+}
+
 export const positiveNumericFieldError = (value: string): string | null => {
   return isPositiveNumeric(value) ? null : 'Use a positive numeric value.'
 }
