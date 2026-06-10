@@ -23,6 +23,7 @@ import {
   fetchApplicationRemainingSpecies,
   fetchApplicationScaleDetails,
   fetchApplicationSpeciesCodes,
+  fetchApplicationSummarySnapshot,
   saveApplicationRemark,
   updateApplicationSummary,
   updateApplicationPackage,
@@ -55,6 +56,7 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationRemainingSpecies: vi.fn(),
   fetchApplicationScaleDetails: vi.fn(),
   fetchApplicationSpeciesCodes: vi.fn(),
+  fetchApplicationSummarySnapshot: vi.fn(),
   saveApplicationRemark: vi.fn(),
   updateApplicationSummary: vi.fn(),
   updateApplicationPackage: vi.fn(),
@@ -78,6 +80,7 @@ const mockedFetchApplicationPackageSpecies = vi.mocked(fetchApplicationPackageSp
 const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemainingSpecies)
 const mockedFetchApplicationScaleDetails = vi.mocked(fetchApplicationScaleDetails)
 const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
+const mockedFetchApplicationSummarySnapshot = vi.mocked(fetchApplicationSummarySnapshot)
 const mockedSaveApplicationRemark = vi.mocked(saveApplicationRemark)
 const mockedUpdateApplicationSummary = vi.mocked(updateApplicationSummary)
 const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
@@ -224,6 +227,32 @@ describe('Provincial Application Detail Document Actions', () => {
       warnings: [],
     })
     mockedDeleteApplicationScale.mockResolvedValue({ success: true })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      applicationNumber: '321',
+      federalApplicationNumber: '',
+      applicationDate: '2026-01-01',
+      receivedDate: '2026-01-02',
+      termDays: '30',
+      applicationVolume: '100',
+      averageLogVolume: '2',
+      exemptionReasonCode: 'U',
+      productLocation: 'BC',
+      exportScheduleId: '987',
+      agentClientNumber: '00033344',
+      agentClientLocationCode: '01',
+      ownerClientNumber: '00011122',
+      ownerClientLocationCode: '00',
+      exemptionNumber: 'EX-555',
+      applicationStatusCode: 'ACTIVE',
+      applicantTypeCode: 'A',
+      orgUnitNumber: '12',
+      productTypeCode: 'LOG',
+      jurisdictionCode: 'P',
+      growthTypeCode: 'O',
+      agentContactName: 'Agent Contact',
+      ownerContactName: 'Owner Contact',
+      oicIndicator: 'N',
+    })
     mockedUpdateApplicationSummary.mockResolvedValue({
       valid: true,
       message: 'The application was saved successfully.',
@@ -812,6 +841,21 @@ describe('Provincial Application Detail Document Actions', () => {
         applicationVolume: '125.5',
         averageLogVolume: '2',
         exemptionReasonCode: 'U',
+        productLocation: 'BC',
+        exportScheduleId: '987',
+        agentClientNumber: '00033344',
+        agentClientLocationCode: '01',
+        ownerClientNumber: '00011122',
+        ownerClientLocationCode: '00',
+        applicationStatusCode: 'ACTIVE',
+        applicantTypeCode: 'A',
+        orgUnitNumber: '12',
+        productTypeCode: 'LOG',
+        jurisdictionCode: 'P',
+        growthTypeCode: 'O',
+        agentContactName: 'Agent Contact',
+        ownerContactName: 'Owner Contact',
+        oicIndicator: 'N',
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })

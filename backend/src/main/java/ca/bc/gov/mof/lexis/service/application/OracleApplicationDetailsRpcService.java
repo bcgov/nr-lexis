@@ -187,6 +187,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
+  public Optional<ApplicationSummarySnapshot> getApplicationSummarySnapshot(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return repository.findApplicationUpdateRecord(applicationNumber).map(this::toApplicationSummarySnapshot);
+  }
+
+  @Override
   public Optional<ApplicationClientSnapshot> getApplicationClientSnapshot(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
@@ -1149,7 +1157,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private ApplicationSummaryUpdateRequest normalizeApplicationSummaryUpdateRequest(
       ApplicationSummaryUpdateRequest input) {
     if (input == null) {
-      return new ApplicationSummaryUpdateRequest(null, null, null, null, null, null, null, true);
+      return new ApplicationSummaryUpdateRequest(
+          null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+          null, null, null, null, null, null, null, null, true);
     }
     return new ApplicationSummaryUpdateRequest(
         input.applicationNumber(),
@@ -1159,6 +1169,21 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         input.applicationVolume(),
         input.averageLogVolume(),
         trimToNull(input.exemptionReasonCode()),
+        trimToNull(input.productLocation()),
+        input.exportScheduleId(),
+        trimToNull(input.agentClientNumber()),
+        trimToNull(input.agentClientLocationCode()),
+        trimToNull(input.ownerClientNumber()),
+        trimToNull(input.ownerClientLocationCode()),
+        trimToNull(input.applicationStatusCode()),
+        trimToNull(input.applicantTypeCode()),
+        input.orgUnitNumber(),
+        trimToNull(input.productTypeCode()),
+        trimToNull(input.jurisdictionCode()),
+        trimToNull(input.growthTypeCode()),
+        trimToNull(input.agentContactName()),
+        trimToNull(input.ownerContactName()),
+        trimToNull(input.oicIndicator()),
         input.validationEnabled());
   }
 
@@ -1258,7 +1283,83 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     } else if (exemptionReasonCode.length() > 1) {
       errors.add(maxLength("application exemption reason code", 1));
     }
+    if (trimToNull(record.productLocation()) == null) {
+      errors.add(required("location of logs"));
+    }
+    if (trimToNull(record.productTypeCode()) == null) {
+      errors.add(required("product type code"));
+    }
+    if (requiresGrowthType(record.productTypeCode())
+        && trimToNull(record.growthTypeCode()) == null) {
+      errors.add(required("growth type code"));
+    }
+    if (record.orgUnitNumber() == null || record.orgUnitNumber() <= 0) {
+      errors.add(required("application region"));
+    }
+    if (trimToNull(record.ownerClientNumber()) == null) {
+      errors.add(required("application owner number"));
+    }
+    String ownerClientLocationCode = trimToNull(record.ownerClientLocationCode());
+    if (ownerClientLocationCode == null) {
+      errors.add(required("application owner location"));
+    } else if (ownerClientLocationCode.length() > 2) {
+      errors.add(maxLength("application owner location code", 2));
+    }
+    String agentClientLocationCode = trimToNull(record.agentClientLocationCode());
+    if (agentClientLocationCode != null && agentClientLocationCode.length() > 2) {
+      errors.add(maxLength("application agent location code", 2));
+    }
+    if (trimToNull(record.ownerContactName()) == null) {
+      errors.add(required("application owner name"));
+    }
+    String applicantTypeCode = trimToNull(record.applicantTypeCode());
+    if (applicantTypeCode == null) {
+      errors.add(required("applicant type code"));
+    } else if (!APPLICANT_TYPE_OWNER.equals(applicantTypeCode)
+        && !APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
+      errors.add("The applicant type code must be O or A.");
+    }
+    if (APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
+      if (trimToNull(record.agentClientNumber()) == null) {
+        errors.add(required("application agent number"));
+      }
+      if (trimToNull(record.agentClientLocationCode()) == null) {
+        errors.add(required("application agent location"));
+      }
+      if (trimToNull(record.agentContactName()) == null) {
+        errors.add(required("application agent name"));
+      }
+    }
     return errors;
+  }
+
+  private ApplicationSummarySnapshot toApplicationSummarySnapshot(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
+    return new ApplicationSummarySnapshot(
+        record.applicationNumber(),
+        record.federalApplicationNumber(),
+        record.applicationDate(),
+        record.termDays(),
+        record.receivedDate(),
+        record.applicationVolume(),
+        record.averageLogVolume(),
+        record.productLocation(),
+        record.exportScheduleId(),
+        record.agentClientNumber(),
+        record.agentClientLocationCode(),
+        record.ownerClientNumber(),
+        record.ownerClientLocationCode(),
+        record.exemptionNumber(),
+        record.exemptionReasonCode(),
+        record.applicationStatusCode(),
+        record.applicantTypeCode(),
+        record.orgUnitNumber(),
+        record.productTypeCode(),
+        record.jurisdictionCode(),
+        record.growthTypeCode(),
+        record.agentContactName(),
+        record.ownerContactName(),
+        record.oicIndicator());
   }
 
   private ApplicationDetailsRpcRepository.ApplicationInsertRecord toInsertRecord(
@@ -1302,29 +1403,35 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.receivedDate() == null ? existing.receivedDate() : request.receivedDate(),
         request.applicationVolume() == null ? existing.applicationVolume() : request.applicationVolume(),
         request.averageLogVolume() == null ? existing.averageLogVolume() : request.averageLogVolume(),
-        existing.productLocation(),
+        request.productLocation() == null ? existing.productLocation() : request.productLocation(),
         existing.entryUserId(),
         existing.entryTimestamp(),
         updateUserId,
         Instant.now(),
-        existing.exportScheduleId(),
-        existing.agentClientNumber(),
-        existing.agentClientLocationCode(),
-        existing.ownerClientNumber(),
-        existing.ownerClientLocationCode(),
+        request.exportScheduleId() == null ? existing.exportScheduleId() : request.exportScheduleId(),
+        request.agentClientNumber() == null ? existing.agentClientNumber() : request.agentClientNumber(),
+        request.agentClientLocationCode() == null
+            ? existing.agentClientLocationCode()
+            : request.agentClientLocationCode(),
+        request.ownerClientNumber() == null ? existing.ownerClientNumber() : request.ownerClientNumber(),
+        request.ownerClientLocationCode() == null
+            ? existing.ownerClientLocationCode()
+            : request.ownerClientLocationCode(),
         existing.exemptionNumber(),
         request.exemptionReasonCode() == null
             ? existing.exemptionReasonCode()
             : request.exemptionReasonCode(),
-        existing.applicationStatusCode(),
-        existing.applicantTypeCode(),
-        existing.orgUnitNumber(),
-        existing.productTypeCode(),
-        existing.jurisdictionCode(),
-        existing.growthTypeCode(),
-        existing.agentContactName(),
-        existing.ownerContactName(),
-        existing.oicIndicator());
+        request.applicationStatusCode() == null
+            ? existing.applicationStatusCode()
+            : request.applicationStatusCode(),
+        request.applicantTypeCode() == null ? existing.applicantTypeCode() : request.applicantTypeCode(),
+        request.orgUnitNumber() == null ? existing.orgUnitNumber() : request.orgUnitNumber(),
+        request.productTypeCode() == null ? existing.productTypeCode() : request.productTypeCode(),
+        request.jurisdictionCode() == null ? existing.jurisdictionCode() : request.jurisdictionCode(),
+        request.growthTypeCode() == null ? existing.growthTypeCode() : request.growthTypeCode(),
+        request.agentContactName() == null ? existing.agentContactName() : request.agentContactName(),
+        request.ownerContactName() == null ? existing.ownerContactName() : request.ownerContactName(),
+        request.oicIndicator() == null ? existing.oicIndicator() : request.oicIndicator());
   }
 
   private String required(String fieldName) {

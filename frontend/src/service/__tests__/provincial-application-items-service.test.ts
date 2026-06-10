@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addApplicationScaleToPackage,
   deleteApplicationScale,
+  fetchApplicationSummarySnapshot,
   fetchApplicationRemainingSpecies,
   saveApplicationRemark,
   updateApplicationSummary,
@@ -201,6 +202,21 @@ describe('provincial-application-items-service', () => {
       applicationVolume: '125.5',
       averageLogVolume: '2.1',
       exemptionReasonCode: 'U',
+      productLocation: 'BC',
+      exportScheduleId: '987',
+      agentClientNumber: '00033344',
+      agentClientLocationCode: '01',
+      ownerClientNumber: '00011122',
+      ownerClientLocationCode: '00',
+      applicationStatusCode: 'NEW',
+      applicantTypeCode: 'A',
+      orgUnitNumber: '12',
+      productTypeCode: 'H',
+      jurisdictionCode: 'P',
+      growthTypeCode: 'O',
+      agentContactName: 'Agent Contact',
+      ownerContactName: 'Owner Contact',
+      oicIndicator: 'N',
     })
 
     expect(result).toEqual({
@@ -225,6 +241,69 @@ describe('provincial-application-items-service', () => {
     expect(body.get('applicationVolume')).toBe('125.5')
     expect(body.get('averageLogVolume')).toBe('2.1')
     expect(body.get('exemptionReasonCode')).toBe('U')
+    expect(body.get('productLocation')).toBe('BC')
+    expect(body.get('exportScheduleId')).toBe('987')
+    expect(body.get('agentClientNumber')).toBe('00033344')
+    expect(body.get('agentClientLocationCode')).toBe('01')
+    expect(body.get('ownerClientNumber')).toBe('00011122')
+    expect(body.get('ownerClientLocationCode')).toBe('00')
+    expect(body.get('applicationStatusCode')).toBe('NEW')
+    expect(body.get('applicantType')).toBe('A')
+    expect(body.get('orgUnitNumber')).toBe('12')
+    expect(body.get('productTypeCode')).toBe('H')
+    expect(body.get('jurisdictionCode')).toBe('P')
+    expect(body.get('growthTypeCode')).toBe('O')
+    expect(body.get('agentContactName')).toBe('Agent Contact')
+    expect(body.get('ownerContactName')).toBe('Owner Contact')
+    expect(body.get('oicIndicator')).toBe('N')
+  })
+
+  it('loads editable application summary snapshot fields', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        applicationNumber: 321,
+        federalApplicationNumber: 654,
+        applicationDate: '2026-01-01',
+        termDays: 45,
+        receivedDate: '2026-01-02',
+        applicationVolume: 125.5,
+        averageLogVolume: 2.1,
+        productLocation: 'BC',
+        exportScheduleId: 987,
+        agentClientNumber: '00033344',
+        agentClientLocationCode: '01',
+        ownerClientNumber: '00011122',
+        ownerClientLocationCode: '00',
+        exemptionNumber: 'EX-555',
+        exemptionReasonCode: 'U',
+        applicationStatusCode: 'NEW',
+        applicantTypeCode: 'A',
+        orgUnitNumber: 12,
+        productTypeCode: 'H',
+        jurisdictionCode: 'P',
+        growthTypeCode: 'O',
+        agentContactName: 'Agent Contact',
+        ownerContactName: 'Owner Contact',
+        oicIndicator: 'N',
+      },
+    })
+
+    const result = await fetchApplicationSummarySnapshot('321')
+
+    expect(result).toMatchObject({
+      applicationNumber: '321',
+      federalApplicationNumber: '654',
+      productLocation: 'BC',
+      ownerClientLocationCode: '00',
+      agentContactName: 'Agent Contact',
+    })
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/rpc/application-details/application-summary',
+      {
+        params: { applicationNumber: '321' },
+      },
+      { ttlMs: 30000 },
+    )
   })
 
   it('deletes scales through the modern item endpoint', async () => {

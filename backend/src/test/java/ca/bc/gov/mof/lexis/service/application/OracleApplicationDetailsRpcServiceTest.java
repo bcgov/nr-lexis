@@ -999,7 +999,7 @@ class OracleApplicationDetailsRpcServiceTest {
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.updateApplicationSummary(
-            new ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest(
+            applicationSummaryUpdateRequest(
                 1000456L,
                 LocalDate.of(2026, 4, 1),
                 45L,
@@ -1007,6 +1007,21 @@ class OracleApplicationDetailsRpcServiceTest {
                 125.5d,
                 2.1d,
                 "U",
+                "Camp 2",
+                12L,
+                "00033333",
+                "01",
+                "00022222",
+                "02",
+                "APP",
+                "A",
+                12L,
+                "S",
+                "P",
+                "S",
+                "Agent Contact",
+                "Owner Two",
+                "N",
                 true),
             "idir\\jsmith");
 
@@ -1023,10 +1038,36 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(record.applicationVolume()).isEqualTo(125.5d);
     assertThat(record.averageLogVolume()).isEqualTo(2.1d);
     assertThat(record.exemptionReasonCode()).isEqualTo("U");
-    assertThat(record.applicationStatusCode()).isEqualTo("NEW");
-    assertThat(record.ownerClientNumber()).isEqualTo("00011111");
-    assertThat(record.productLocation()).isEqualTo("Camp 1");
+    assertThat(record.applicationStatusCode()).isEqualTo("APP");
+    assertThat(record.ownerClientNumber()).isEqualTo("00022222");
+    assertThat(record.ownerClientLocationCode()).isEqualTo("02");
+    assertThat(record.agentClientNumber()).isEqualTo("00033333");
+    assertThat(record.agentClientLocationCode()).isEqualTo("01");
+    assertThat(record.productLocation()).isEqualTo("Camp 2");
+    assertThat(record.exportScheduleId()).isEqualTo(12L);
+    assertThat(record.applicantTypeCode()).isEqualTo("A");
+    assertThat(record.orgUnitNumber()).isEqualTo(12L);
+    assertThat(record.productTypeCode()).isEqualTo("S");
+    assertThat(record.growthTypeCode()).isEqualTo("S");
+    assertThat(record.agentContactName()).isEqualTo("Agent Contact");
+    assertThat(record.ownerContactName()).isEqualTo("Owner Two");
     assertThat(record.updateUserId()).isEqualTo("idir\\jsmith");
+  }
+
+  @Test
+  void getApplicationSummarySnapshotShouldExposeEditableLegacyFields() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+
+    Optional<ApplicationDetailsRpcService.ApplicationSummarySnapshot> response =
+        service.getApplicationSummarySnapshot(1000456L);
+
+    assertThat(response).isPresent();
+    assertThat(response.get().applicationNumber()).isEqualTo(1000456L);
+    assertThat(response.get().productLocation()).isEqualTo("Camp 1");
+    assertThat(response.get().ownerClientLocationCode()).isEqualTo("00");
+    assertThat(response.get().ownerContactName()).isEqualTo("Owner Contact");
+    assertThat(response.get().orgUnitNumber()).isEqualTo(11L);
+    verify(repository).findApplicationUpdateRecord(1000456L);
   }
 
   @Test
@@ -1035,7 +1076,7 @@ class OracleApplicationDetailsRpcServiceTest {
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.updateApplicationSummary(
-            new ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest(
+            applicationSummaryUpdateRequest(
                 1000456L,
                 LocalDate.of(2026, 4, 1),
                 0L,
@@ -1043,6 +1084,21 @@ class OracleApplicationDetailsRpcServiceTest {
                 125.5d,
                 2.1d,
                 "ALL",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 true),
             "idir\\jsmith");
 
@@ -1052,6 +1108,56 @@ class OracleApplicationDetailsRpcServiceTest {
             "The application term days must be greater than or equal to 0",
             "The application exemption reason code must be 1 character or fewer.");
     verify(repository).findApplicationUpdateRecord(1000456L);
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest applicationSummaryUpdateRequest(
+      Long applicationNumber,
+      LocalDate applicationDate,
+      Long termDays,
+      LocalDate receivedDate,
+      Double applicationVolume,
+      Double averageLogVolume,
+      String exemptionReasonCode,
+      String productLocation,
+      Long exportScheduleId,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String applicationStatusCode,
+      String applicantTypeCode,
+      Long orgUnitNumber,
+      String productTypeCode,
+      String jurisdictionCode,
+      String growthTypeCode,
+      String agentContactName,
+      String ownerContactName,
+      String oicIndicator,
+      boolean validationEnabled) {
+    return new ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest(
+        applicationNumber,
+        applicationDate,
+        termDays,
+        receivedDate,
+        applicationVolume,
+        averageLogVolume,
+        exemptionReasonCode,
+        productLocation,
+        exportScheduleId,
+        agentClientNumber,
+        agentClientLocationCode,
+        ownerClientNumber,
+        ownerClientLocationCode,
+        applicationStatusCode,
+        applicantTypeCode,
+        orgUnitNumber,
+        productTypeCode,
+        jurisdictionCode,
+        growthTypeCode,
+        agentContactName,
+        ownerContactName,
+        oicIndicator,
+        validationEnabled);
   }
 
   private ApplicationDetailsRpcRepository.ApplicationUpdateRecord applicationUpdateRecord() {

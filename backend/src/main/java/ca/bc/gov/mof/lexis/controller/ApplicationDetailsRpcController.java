@@ -306,6 +306,26 @@ public class ApplicationDetailsRpcController {
     return updateApplicationSummary(parameters, authentication);
   }
 
+  @GetMapping("/rpc/application-details/application-summary")
+  public ResponseEntity<ApplicationSummaryResponseDto> getApplicationSummary(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for application summary");
+      return ResponseEntity.noContent().build();
+    }
+
+    return service
+        .getApplicationSummarySnapshot(parsePositiveLong(applicationNumber))
+        .map(snapshot -> ResponseEntity.ok(toApplicationSummaryResponse(snapshot)))
+        .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
   @GetMapping("/rpc/application-details/client-data")
   public ResponseEntity<ApplicationClientDataResponseDto> getClientData(
       @RequestParam(name = "clientNumber", required = false) String clientNumber,
@@ -897,6 +917,21 @@ public class ApplicationDetailsRpcController {
         parseDouble(first(parameters, "exemptionApplicationVolume", "applicationVolume")),
         parseDouble(first(parameters, "averageLogVolume")),
         first(parameters, "exemptionReason", "exemptionReasonCode", "exportExemptionReasonCode"),
+        first(parameters, "logLocation", "productLocation"),
+        parsePositiveLong(first(parameters, "exportScheduleId", "legacyExportScheduleId")),
+        first(parameters, "agentClientNumber", "applicantClientNumber"),
+        first(parameters, "agentClientLocation", "agentClientLocationCode", "applicantClientLocationCode"),
+        first(parameters, "ownerClientNumber"),
+        first(parameters, "ownerClientLocation", "ownerClientLocationCode"),
+        first(parameters, "exportApplicationStatusCode", "applicationStatusCode"),
+        first(parameters, "ownerApplicantType", "applicantType"),
+        parsePositiveLong(first(parameters, "region", "orgUnitNumber")),
+        first(parameters, "productType", "productTypeCode"),
+        first(parameters, "exportJurisdictionCode", "jurisdictionCode"),
+        first(parameters, "ageClass", "growthTypeCode"),
+        first(parameters, "agentContactName"),
+        first(parameters, "ownerContactName"),
+        first(parameters, "oicIndicator"),
         !"false".equalsIgnoreCase(first(parameters, "validation")));
   }
 
@@ -1182,6 +1217,35 @@ public class ApplicationDetailsRpcController {
         item.productTypeDescription());
   }
 
+  private ApplicationSummaryResponseDto toApplicationSummaryResponse(
+      ApplicationDetailsRpcService.ApplicationSummarySnapshot item) {
+    return new ApplicationSummaryResponseDto(
+        item.applicationNumber(),
+        item.federalApplicationNumber(),
+        item.applicationDate(),
+        item.termDays(),
+        item.receivedDate(),
+        item.applicationVolume(),
+        item.averageLogVolume(),
+        item.productLocation(),
+        item.exportScheduleId(),
+        item.agentClientNumber(),
+        item.agentClientLocationCode(),
+        item.ownerClientNumber(),
+        item.ownerClientLocationCode(),
+        item.exemptionNumber(),
+        item.exemptionReasonCode(),
+        item.applicationStatusCode(),
+        item.applicantTypeCode(),
+        item.orgUnitNumber(),
+        item.productTypeCode(),
+        item.jurisdictionCode(),
+        item.growthTypeCode(),
+        item.agentContactName(),
+        item.ownerContactName(),
+        item.oicIndicator());
+  }
+
   private PackageValidityResponseDto toPackageValidityResponse(
       ApplicationDetailsRpcService.PackageValidityItem item) {
     return new PackageValidityResponseDto(item.valid(), item.message());
@@ -1239,6 +1303,32 @@ public class ApplicationDetailsRpcController {
       Long applicationNumber,
       List<String> errors,
       List<String> warnings) {}
+
+  public record ApplicationSummaryResponseDto(
+      Long applicationNumber,
+      Long federalApplicationNumber,
+      LocalDate applicationDate,
+      Long termDays,
+      LocalDate receivedDate,
+      Double applicationVolume,
+      Double averageLogVolume,
+      String productLocation,
+      Long exportScheduleId,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String exemptionNumber,
+      String exemptionReasonCode,
+      String applicationStatusCode,
+      String applicantTypeCode,
+      Long orgUnitNumber,
+      String productTypeCode,
+      String jurisdictionCode,
+      String growthTypeCode,
+      String agentContactName,
+      String ownerContactName,
+      String oicIndicator) {}
 
   public record ApplicationClientDataResponseDto(
       String clientNumber,

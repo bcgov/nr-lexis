@@ -22,6 +22,8 @@ public interface ApplicationDetailsRpcService {
 
   CreateApplicationResult updateApplicationSummary(ApplicationSummaryUpdateRequest request, String userId);
 
+  Optional<ApplicationSummarySnapshot> getApplicationSummarySnapshot(Long applicationNumber);
+
   Optional<ApplicationClientSnapshot> getApplicationClientSnapshot(Long applicationNumber);
 
   List<CodeItem> getSpeciesCodes();
@@ -165,6 +167,32 @@ public interface ApplicationDetailsRpcService {
       String ownerClientLocationCode,
       String ownerContactName) {}
 
+  record ApplicationSummarySnapshot(
+      Long applicationNumber,
+      Long federalApplicationNumber,
+      LocalDate applicationDate,
+      Long termDays,
+      LocalDate receivedDate,
+      Double applicationVolume,
+      Double averageLogVolume,
+      String productLocation,
+      Long exportScheduleId,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String exemptionNumber,
+      String exemptionReasonCode,
+      String applicationStatusCode,
+      String applicantTypeCode,
+      Long orgUnitNumber,
+      String productTypeCode,
+      String jurisdictionCode,
+      String growthTypeCode,
+      String agentContactName,
+      String ownerContactName,
+      String oicIndicator) {}
+
   record CreateApplicationRequest(
       Long federalApplicationNumber,
       LocalDate applicationDate,
@@ -198,6 +226,21 @@ public interface ApplicationDetailsRpcService {
       Double applicationVolume,
       Double averageLogVolume,
       String exemptionReasonCode,
+      String productLocation,
+      Long exportScheduleId,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String applicationStatusCode,
+      String applicantTypeCode,
+      Long orgUnitNumber,
+      String productTypeCode,
+      String jurisdictionCode,
+      String growthTypeCode,
+      String agentContactName,
+      String ownerContactName,
+      String oicIndicator,
       boolean validationEnabled) {}
 
   record CreateApplicationResult(

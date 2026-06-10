@@ -29,8 +29,10 @@ import {
   type ProvincialApplicationDocumentRow,
 } from '@/service/provincial-application-documents-service'
 import {
+  fetchApplicationSummarySnapshot,
   saveApplicationRemark,
   updateApplicationSummary,
+  type ApplicationSummarySnapshot,
 } from '@/service/provincial-application-items-service'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
@@ -73,6 +75,21 @@ type ApplicationSummaryFormState = {
   applicationVolume: string
   averageLogVolume: string
   exemptionReasonCode: string
+  productLocation: string
+  exportScheduleId: string
+  agentClientNumber: string
+  agentClientLocationCode: string
+  ownerClientNumber: string
+  ownerClientLocationCode: string
+  applicationStatusCode: string
+  applicantTypeCode: string
+  orgUnitNumber: string
+  productTypeCode: string
+  jurisdictionCode: string
+  growthTypeCode: string
+  agentContactName: string
+  ownerContactName: string
+  oicIndicator: string
 }
 
 const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSummaryFormState => ({
@@ -82,6 +99,47 @@ const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSum
   applicationVolume: detail.applicationVolume === null ? '' : String(detail.applicationVolume),
   averageLogVolume: detail.averageLogVolume === null ? '' : String(detail.averageLogVolume),
   exemptionReasonCode: detail.exemptionReasonCode ?? '',
+  productLocation: '',
+  exportScheduleId: '',
+  agentClientNumber: detail.agentClientNumber ?? '',
+  agentClientLocationCode: '',
+  ownerClientNumber: detail.ownerClientNumber ?? '',
+  ownerClientLocationCode: '',
+  applicationStatusCode: detail.applicationStatusCode ?? '',
+  applicantTypeCode: detail.agentClientNumber ? 'A' : 'O',
+  orgUnitNumber: detail.orgUnitNumber === null ? '' : String(detail.orgUnitNumber),
+  productTypeCode: detail.productTypeCode ?? '',
+  jurisdictionCode: 'P',
+  growthTypeCode: '',
+  agentContactName: '',
+  ownerContactName: '',
+  oicIndicator: 'N',
+})
+
+const toSummarySnapshotFormState = (
+  snapshot: ApplicationSummarySnapshot,
+): ApplicationSummaryFormState => ({
+  applicationDate: snapshot.applicationDate,
+  receivedDate: snapshot.receivedDate,
+  termDays: snapshot.termDays,
+  applicationVolume: snapshot.applicationVolume,
+  averageLogVolume: snapshot.averageLogVolume,
+  exemptionReasonCode: snapshot.exemptionReasonCode,
+  productLocation: snapshot.productLocation,
+  exportScheduleId: snapshot.exportScheduleId,
+  agentClientNumber: snapshot.agentClientNumber,
+  agentClientLocationCode: snapshot.agentClientLocationCode,
+  ownerClientNumber: snapshot.ownerClientNumber,
+  ownerClientLocationCode: snapshot.ownerClientLocationCode,
+  applicationStatusCode: snapshot.applicationStatusCode,
+  applicantTypeCode: snapshot.applicantTypeCode,
+  orgUnitNumber: snapshot.orgUnitNumber,
+  productTypeCode: snapshot.productTypeCode,
+  jurisdictionCode: snapshot.jurisdictionCode,
+  growthTypeCode: snapshot.growthTypeCode,
+  agentContactName: snapshot.agentContactName,
+  ownerContactName: snapshot.ownerContactName,
+  oicIndicator: snapshot.oicIndicator,
 })
 
 const ProvincialApplicationDetailsPage: FC = () => {
@@ -163,6 +221,20 @@ const ProvincialApplicationDetailsPage: FC = () => {
         return
       }
 
+      if (canPerform('createApplication') && !response.readOnly && !response.locked) {
+        try {
+          const summarySnapshot = await fetchApplicationSummarySnapshot(applicationNumber)
+          if (isLatestRequest() && summarySnapshot) {
+            setSummaryForm(toSummarySnapshotFormState(summarySnapshot))
+          }
+        } catch (error) {
+          if (isLatestRequest()) {
+            console.error(error)
+            setActionErrorMessage('Unable to retrieve editable application summary fields.')
+          }
+        }
+      }
+
       try {
         const documentsResult = await fetchApplicationDocuments(applicationNumber)
         if (isLatestRequest()) {
@@ -189,7 +261,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setLoading(false)
       }
     }
-  }, [applicationNumber, beginDetailRequest])
+  }, [applicationNumber, beginDetailRequest, canPerform])
 
   useEffect(() => {
     void loadApplicationDetail()
@@ -392,6 +464,21 @@ const ProvincialApplicationDetailsPage: FC = () => {
         applicationVolume: summaryForm.applicationVolume,
         averageLogVolume: summaryForm.averageLogVolume,
         exemptionReasonCode: summaryForm.exemptionReasonCode,
+        productLocation: summaryForm.productLocation,
+        exportScheduleId: summaryForm.exportScheduleId,
+        agentClientNumber: summaryForm.agentClientNumber,
+        agentClientLocationCode: summaryForm.agentClientLocationCode,
+        ownerClientNumber: summaryForm.ownerClientNumber,
+        ownerClientLocationCode: summaryForm.ownerClientLocationCode,
+        applicationStatusCode: summaryForm.applicationStatusCode,
+        applicantTypeCode: summaryForm.applicantTypeCode,
+        orgUnitNumber: summaryForm.orgUnitNumber,
+        productTypeCode: summaryForm.productTypeCode,
+        jurisdictionCode: summaryForm.jurisdictionCode,
+        growthTypeCode: summaryForm.growthTypeCode,
+        agentContactName: summaryForm.agentContactName,
+        ownerContactName: summaryForm.ownerContactName,
+        oicIndicator: summaryForm.oicIndicator,
       })
       if (!result.valid) {
         setActionErrorMessage(
@@ -616,6 +703,144 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       value={summaryForm.averageLogVolume}
                       onChange={(event) =>
                         onSummaryFormChange('averageLogVolume', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryOwnerClientNumber"
+                      labelText="Owner Client Number"
+                      value={summaryForm.ownerClientNumber}
+                      onChange={(event) =>
+                        onSummaryFormChange('ownerClientNumber', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryOwnerClientLocationCode"
+                      labelText="Owner Client Location"
+                      maxLength={2}
+                      value={summaryForm.ownerClientLocationCode}
+                      onChange={(event) =>
+                        onSummaryFormChange(
+                          'ownerClientLocationCode',
+                          event.target.value.toUpperCase(),
+                        )
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryOwnerContactName"
+                      labelText="Owner Contact Name"
+                      value={summaryForm.ownerContactName}
+                      onChange={(event) =>
+                        onSummaryFormChange('ownerContactName', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryApplicantTypeCode"
+                      labelText="Applicant Type"
+                      maxLength={1}
+                      value={summaryForm.applicantTypeCode}
+                      onChange={(event) =>
+                        onSummaryFormChange('applicantTypeCode', event.target.value.toUpperCase())
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryAgentClientNumber"
+                      labelText="Agent Client Number"
+                      value={summaryForm.agentClientNumber}
+                      onChange={(event) =>
+                        onSummaryFormChange('agentClientNumber', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryAgentClientLocationCode"
+                      labelText="Agent Client Location"
+                      maxLength={2}
+                      value={summaryForm.agentClientLocationCode}
+                      onChange={(event) =>
+                        onSummaryFormChange(
+                          'agentClientLocationCode',
+                          event.target.value.toUpperCase(),
+                        )
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryAgentContactName"
+                      labelText="Agent Contact Name"
+                      value={summaryForm.agentContactName}
+                      onChange={(event) =>
+                        onSummaryFormChange('agentContactName', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryRegion"
+                      labelText="Region"
+                      type="number"
+                      min={1}
+                      value={summaryForm.orgUnitNumber}
+                      onChange={(event) => onSummaryFormChange('orgUnitNumber', event.target.value)}
+                    />
+                    <TextInput
+                      id="applicationSummaryProductType"
+                      labelText="Product Type"
+                      value={summaryForm.productTypeCode}
+                      onChange={(event) =>
+                        onSummaryFormChange('productTypeCode', event.target.value.toUpperCase())
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryGrowthType"
+                      labelText="Growth Type"
+                      value={summaryForm.growthTypeCode}
+                      onChange={(event) =>
+                        onSummaryFormChange('growthTypeCode', event.target.value.toUpperCase())
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryStatus"
+                      labelText="Application Status"
+                      value={summaryForm.applicationStatusCode}
+                      onChange={(event) =>
+                        onSummaryFormChange(
+                          'applicationStatusCode',
+                          event.target.value.toUpperCase(),
+                        )
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryJurisdiction"
+                      labelText="Jurisdiction"
+                      maxLength={1}
+                      value={summaryForm.jurisdictionCode}
+                      onChange={(event) =>
+                        onSummaryFormChange('jurisdictionCode', event.target.value.toUpperCase())
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummarySchedule"
+                      labelText="Schedule ID"
+                      type="number"
+                      min={1}
+                      value={summaryForm.exportScheduleId}
+                      onChange={(event) =>
+                        onSummaryFormChange('exportScheduleId', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="applicationSummaryOicIndicator"
+                      labelText="OIC Indicator"
+                      maxLength={1}
+                      value={summaryForm.oicIndicator}
+                      onChange={(event) =>
+                        onSummaryFormChange('oicIndicator', event.target.value.toUpperCase())
+                      }
+                    />
+                  </div>
+                  <div className="legacy-search-grid">
+                    <TextArea
+                      id="applicationSummaryProductLocation"
+                      labelText="Location of Logs"
+                      value={summaryForm.productLocation}
+                      onChange={(event) =>
+                        onSummaryFormChange('productLocation', event.target.value)
                       }
                     />
                   </div>

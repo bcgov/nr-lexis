@@ -108,6 +108,21 @@ export type ApplicationSummaryMutation = {
   applicationVolume: string
   averageLogVolume: string
   exemptionReasonCode: string
+  productLocation: string
+  exportScheduleId: string
+  agentClientNumber: string
+  agentClientLocationCode: string
+  ownerClientNumber: string
+  ownerClientLocationCode: string
+  applicationStatusCode: string
+  applicantTypeCode: string
+  orgUnitNumber: string
+  productTypeCode: string
+  jurisdictionCode: string
+  growthTypeCode: string
+  agentContactName: string
+  ownerContactName: string
+  oicIndicator: string
 }
 
 export type ApplicationRemarkMutationResult = {
@@ -125,6 +140,11 @@ export type ApplicationSummaryMutationResult = {
   applicationNumber: string
   errors: string[]
   warnings: string[]
+}
+
+export type ApplicationSummarySnapshot = ApplicationSummaryMutation & {
+  federalApplicationNumber: string
+  exemptionNumber: string
 }
 
 const ITEMS_CACHE_TTL_MS = 30_000
@@ -327,6 +347,53 @@ const normalizeApplicationSummaryMutationResult = (
     applicationNumber: asString(source.applicationNumber),
     errors: asStringArray(source.errors),
     warnings: asStringArray(source.warnings),
+  }
+}
+
+const normalizeApplicationSummarySnapshot = (payload: unknown): ApplicationSummarySnapshot => {
+  const source = (payload ?? {}) as Record<string, unknown>
+  return {
+    applicationNumber: asString(source.applicationNumber),
+    federalApplicationNumber: asString(source.federalApplicationNumber),
+    applicationDate: asString(source.applicationDate),
+    termDays: asString(source.termDays),
+    receivedDate: asString(source.receivedDate),
+    applicationVolume: asString(source.applicationVolume),
+    averageLogVolume: asString(source.averageLogVolume),
+    productLocation: asString(source.productLocation),
+    exportScheduleId: asString(source.exportScheduleId),
+    agentClientNumber: asString(source.agentClientNumber),
+    agentClientLocationCode: asString(source.agentClientLocationCode),
+    ownerClientNumber: asString(source.ownerClientNumber),
+    ownerClientLocationCode: asString(source.ownerClientLocationCode),
+    exemptionNumber: asString(source.exemptionNumber),
+    exemptionReasonCode: asString(source.exemptionReasonCode),
+    applicationStatusCode: asString(source.applicationStatusCode),
+    applicantTypeCode: asString(source.applicantTypeCode),
+    orgUnitNumber: asString(source.orgUnitNumber),
+    productTypeCode: asString(source.productTypeCode),
+    jurisdictionCode: asString(source.jurisdictionCode),
+    growthTypeCode: asString(source.growthTypeCode),
+    agentContactName: asString(source.agentContactName),
+    ownerContactName: asString(source.ownerContactName),
+    oicIndicator: asString(source.oicIndicator),
+  }
+}
+
+export const fetchApplicationSummarySnapshot = async (
+  applicationNumber: string,
+): Promise<ApplicationSummarySnapshot | null> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/application-summary',
+      {
+        params: { applicationNumber },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return normalizeApplicationSummarySnapshot(response.data)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application summary fields.', error)
   }
 }
 
@@ -573,6 +640,21 @@ export const updateApplicationSummary = async (
         applicationVolume: request.applicationVolume,
         averageLogVolume: request.averageLogVolume,
         exemptionReasonCode: request.exemptionReasonCode,
+        productLocation: request.productLocation,
+        exportScheduleId: request.exportScheduleId,
+        agentClientNumber: request.agentClientNumber,
+        agentClientLocationCode: request.agentClientLocationCode,
+        ownerClientNumber: request.ownerClientNumber,
+        ownerClientLocationCode: request.ownerClientLocationCode,
+        applicationStatusCode: request.applicationStatusCode,
+        applicantType: request.applicantTypeCode,
+        orgUnitNumber: request.orgUnitNumber,
+        productTypeCode: request.productTypeCode,
+        jurisdictionCode: request.jurisdictionCode,
+        growthTypeCode: request.growthTypeCode,
+        agentContactName: request.agentContactName,
+        ownerContactName: request.ownerContactName,
+        oicIndicator: request.oicIndicator,
       },
     )
     return normalizeApplicationSummaryMutationResult(payload)
