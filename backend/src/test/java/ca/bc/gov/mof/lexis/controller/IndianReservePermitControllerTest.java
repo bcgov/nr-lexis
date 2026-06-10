@@ -213,6 +213,8 @@ class IndianReservePermitControllerTest {
     parameters.add("permitNumber", "111");
     parameters.add("packageNumber", "PKG-1");
     parameters.add("clientNumber", "00012345");
+    parameters.add("clientLocation", "00");
+    parameters.add("region", "1833");
     parameters.add("applicationDate", "2026-04-04");
     parameters.add("permitIssueDate", "2026-04-05");
     parameters.add("estShippingDate", "2026-04-06");
@@ -220,6 +222,7 @@ class IndianReservePermitControllerTest {
     parameters.add("transportTypeCode", "TRK");
     parameters.add("transportName", "Truck");
     parameters.add("portOfExport", "VAN");
+    parameters.add("otherPortOfExport", "Other port");
     parameters.add("permitRemarks", "Ready");
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
@@ -235,7 +238,10 @@ class IndianReservePermitControllerTest {
     assertThat(request.permitNumber()).isEqualTo("111");
     assertThat(request.packageNumber()).isEqualTo("PKG-1");
     assertThat(request.clientNumber()).isEqualTo("00012345");
+    assertThat(request.clientLocation()).isEqualTo("00");
+    assertThat(request.region()).isEqualTo("1833");
     assertThat(request.estimatedShippingDate()).isEqualTo("2026-04-06");
+    assertThat(request.otherPortOfExport()).isEqualTo("Other port");
     assertThat(request.remarks()).isEqualTo("Ready");
   }
 

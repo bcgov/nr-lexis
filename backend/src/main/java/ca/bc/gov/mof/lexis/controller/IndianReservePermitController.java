@@ -209,6 +209,8 @@ public class IndianReservePermitController {
         firstValue(parameters, "permitNumber"),
         firstValue(parameters, "packageNumber"),
         firstValue(parameters, "clientNumber"),
+        firstValue(parameters, "clientLocation"),
+        firstValue(parameters, "region", "orgUnitNumber", "orgUnitNo"),
         firstValue(parameters, "applicationDate"),
         firstValue(parameters, "permitIssueDate"),
         firstValue(parameters, "estimatedShippingDate", "estShippingDate"),
@@ -216,6 +218,7 @@ public class IndianReservePermitController {
         firstValue(parameters, "transportTypeCode"),
         firstValue(parameters, "transportName"),
         firstValue(parameters, "portOfExport"),
+        firstValue(parameters, "otherPortOfExport"),
         firstValue(parameters, "permitRemarks", "remarks"));
   }
 

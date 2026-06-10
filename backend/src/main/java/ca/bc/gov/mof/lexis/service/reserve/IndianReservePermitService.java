@@ -23,6 +23,8 @@ public interface IndianReservePermitService {
       String permitNumber,
       String packageNumber,
       String clientNumber,
+      String clientLocation,
+      String region,
       String applicationDate,
       String permitIssueDate,
       String estimatedShippingDate,
@@ -30,5 +32,6 @@ public interface IndianReservePermitService {
       String transportTypeCode,
       String transportName,
       String portOfExport,
+      String otherPortOfExport,
       String remarks) {}
 }

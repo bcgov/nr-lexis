@@ -9,7 +9,8 @@ import {
   submitProvincialPermitCreate,
   type CreateSubmissionResult,
 } from '@/service/create-submit-service'
-import { fetchProvincialPermitOptions } from '@/service/search-options-service'
+import { fetchApplicationClientLocations } from '@/service/application-client-lookup-service'
+import { fetchProvincialPermitOptions, fetchReportOptions } from '@/service/search-options-service'
 
 const mockNavigate = vi.fn()
 
@@ -23,6 +24,11 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@/service/search-options-service', () => ({
   fetchProvincialPermitOptions: vi.fn(),
+  fetchReportOptions: vi.fn(),
+}))
+
+vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientLocations: vi.fn(),
 }))
 
 vi.mock('@/service/create-submit-service', () => ({
@@ -31,6 +37,8 @@ vi.mock('@/service/create-submit-service', () => ({
 }))
 
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
+const mockedFetchReportOptions = vi.mocked(fetchReportOptions)
+const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedSubmitProvincialPermitCreate = vi.mocked(submitProvincialPermitCreate)
 const mockedSubmitIndianReservePermitCreate = vi.mocked(submitIndianReservePermitCreate)
 
@@ -48,7 +56,16 @@ describe('Create Page Action State Smoke', () => {
     localStorage.clear()
     mockedFetchProvincialPermitOptions.mockResolvedValue({
       permitStatuses: [{ value: 'Active', label: 'Active' }],
+      regions: [{ value: '1833', label: 'Northern Interior' }],
     } as any)
+    mockedFetchReportOptions.mockResolvedValue({
+      regions: [{ value: '1833', label: 'Northern Interior' }],
+      allDestinationCountries: [{ value: 'CA', label: 'Canada' }],
+      portsOfExport: [{ value: 'VAN', label: 'Vancouver' }],
+    } as any)
+    mockedFetchApplicationClientLocations.mockResolvedValue([
+      { locationCode: '00', locationName: 'Main Location', selected: true },
+    ])
   })
 
   it('shows provincial permit field validation when required fields are empty', async () => {
@@ -76,7 +93,7 @@ describe('Create Page Action State Smoke', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/permit/create?permitNumber=100&applicationNumber=200&packageNumber=PKG-9&exemptionNumber=EX-1&permitStatus=Active&applicantClientNumber=300&ownerClientNumber=400&issueDate=2026-01-10&estimatedShippingDate=2026-01-11&permitVolume=12&remarks=Note',
+          '/provincial/permit/create?permitNumber=100&applicationNumber=200&packageNumber=PKG-9&exemptionNumber=EX-1&region=1833&permitStatus=Active&applicantClientNumber=300&ownerClientNumber=400&submitDate=2026-01-09&issueDate=2026-01-10&estimatedShippingDate=2026-01-11&permitVolume=12&remarks=Note',
         ]}
       >
         <Routes>
@@ -86,7 +103,7 @@ describe('Create Page Action State Smoke', () => {
     )
 
     const submitButton = await screen.findByRole('button', { name: 'Submit' })
-    expect(submitButton).toBeEnabled()
+    await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
     expect(mockedSubmitProvincialPermitCreate).toHaveBeenCalledWith({
@@ -94,9 +111,11 @@ describe('Create Page Action State Smoke', () => {
       applicationNumber: '200',
       packageNumber: 'PKG-9',
       exemptionNumber: 'EX-1',
+      region: '1833',
       permitStatus: 'Active',
       applicantClientNumber: '300',
       ownerClientNumber: '400',
+      submitDate: '2026-01-09',
       issueDate: '2026-01-10',
       estimatedShippingDate: '2026-01-11',
       permitVolume: '12',
@@ -130,7 +149,7 @@ describe('Create Page Action State Smoke', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/indian-reserve/permit/create?permitNumber=900&packageNumber=PKG-1&clientNumber=12345678&applicationDate=2026-03-01&permitIssueDate=2026-03-02&estimatedShippingDate=2026-03-03&destinationCountry=CA&transportTypeCode=TRK&transportName=Truck&portOfExport=VAN&remarks=Ready',
+          '/indian-reserve/permit/create?permitNumber=900&packageNumber=PKG-1&clientNumber=12345678&clientLocation=00&region=1833&applicationDate=2026-03-01&permitIssueDate=2026-03-02&estimatedShippingDate=2026-03-03&destinationCountry=CA&transportTypeCode=TRK&transportName=Truck&portOfExport=VAN&otherPortOfExport=Other&remarks=Ready',
         ]}
       >
         <Routes>
@@ -147,6 +166,8 @@ describe('Create Page Action State Smoke', () => {
       permitNumber: '900',
       packageNumber: 'PKG-1',
       clientNumber: '12345678',
+      clientLocation: '00',
+      region: '1833',
       applicationDate: '2026-03-01',
       permitIssueDate: '2026-03-02',
       estimatedShippingDate: '2026-03-03',
@@ -154,6 +175,7 @@ describe('Create Page Action State Smoke', () => {
       transportTypeCode: 'TRK',
       transportName: 'Truck',
       portOfExport: 'VAN',
+      otherPortOfExport: 'Other',
       remarks: 'Ready',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/indian-reserve/permit/IRP-88')

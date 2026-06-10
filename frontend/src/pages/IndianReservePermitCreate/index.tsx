@@ -1,8 +1,19 @@
-import { useMemo, useState, type FC } from 'react'
+import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import {
+  Button,
+  Column,
+  Grid,
+  InlineNotification,
+  Select,
+  SelectItem,
+  TextArea,
+  TextInput,
+  Tile,
+} from '@carbon/react'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
+  firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
   requiredFieldError,
@@ -15,12 +26,19 @@ import {
   saveCreateDraft,
   type CreateDraftRecord,
 } from '@/service/create-draft-service'
+import {
+  fetchApplicationClientLocations,
+  type ApplicationClientLocation,
+} from '@/service/application-client-lookup-service'
 import { submitIndianReservePermitCreate } from '@/service/create-submit-service'
+import { fetchReportOptions, type SearchOption } from '@/service/search-options-service'
 
 type IndianReservePermitCreateForm = {
   permitNumber: string
   packageNumber: string
   clientNumber: string
+  clientLocation: string
+  region: string
   applicationDate: string
   permitIssueDate: string
   estimatedShippingDate: string
@@ -28,6 +46,7 @@ type IndianReservePermitCreateForm = {
   transportTypeCode: string
   transportName: string
   portOfExport: string
+  otherPortOfExport: string
   remarks: string
 }
 
@@ -39,6 +58,8 @@ const INITIAL_FORM: IndianReservePermitCreateForm = {
   permitNumber: '',
   packageNumber: '',
   clientNumber: '',
+  clientLocation: '',
+  region: '',
   applicationDate: '',
   permitIssueDate: '',
   estimatedShippingDate: '',
@@ -46,6 +67,7 @@ const INITIAL_FORM: IndianReservePermitCreateForm = {
   transportTypeCode: '',
   transportName: '',
   portOfExport: '',
+  otherPortOfExport: '',
   remarks: '',
 }
 
@@ -66,6 +88,8 @@ const buildInitialFormFromQuery = (query: URLSearchParams): IndianReservePermitC
     permitNumber: query.get('permitNumber') ?? '',
     packageNumber: query.get('packageNumber') ?? '',
     clientNumber: query.get('clientNumber') ?? '',
+    clientLocation: query.get('clientLocation') ?? '',
+    region: query.get('region') ?? query.get('orgUnitNumber') ?? '',
     applicationDate: query.get('applicationDate') ?? '',
     permitIssueDate: query.get('permitIssueDate') ?? '',
     estimatedShippingDate: query.get('estimatedShippingDate') ?? query.get('estShippingDate') ?? '',
@@ -73,8 +97,37 @@ const buildInitialFormFromQuery = (query: URLSearchParams): IndianReservePermitC
     transportTypeCode: query.get('transportTypeCode') ?? '',
     transportName: query.get('transportName') ?? '',
     portOfExport: query.get('portOfExport') ?? '',
+    otherPortOfExport: query.get('otherPortOfExport') ?? '',
     remarks: query.get('remarks') ?? '',
   }
+}
+
+const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
+  location.locationCode !== '0'
+
+const resolveClientLocationCode = (
+  locations: ApplicationClientLocation[],
+  currentCode: string,
+): string => {
+  const normalizedCurrentCode = currentCode.trim()
+  if (
+    normalizedCurrentCode &&
+    locations.some(
+      (location) =>
+        isSelectableClientLocation(location) && location.locationCode === normalizedCurrentCode,
+    )
+  ) {
+    return normalizedCurrentCode
+  }
+
+  const selectedLocation = locations.find(
+    (location) => isSelectableClientLocation(location) && location.selected,
+  )
+  if (selectedLocation) {
+    return selectedLocation.locationCode
+  }
+
+  return locations.find(isSelectableClientLocation)?.locationCode ?? ''
 }
 
 type PageStatus = {
@@ -88,6 +141,11 @@ const IndianReservePermitCreatePage: FC = () => {
   const [searchParams] = useSearchParams()
   const initialForm = useMemo(() => buildInitialFormFromQuery(searchParams), [searchParams])
   const [form, setForm] = useState<IndianReservePermitCreateForm>(() => initialForm)
+  const [clientLocations, setClientLocations] = useState<ApplicationClientLocation[]>([])
+  const [isLoadingClientLocations, setIsLoadingClientLocations] = useState(false)
+  const [regions, setRegions] = useState<SearchOption[]>([])
+  const [destinationCountries, setDestinationCountries] = useState<SearchOption[]>([])
+  const [portsOfExport, setPortsOfExport] = useState<SearchOption[]>([])
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -98,14 +156,94 @@ const IndianReservePermitCreatePage: FC = () => {
   )
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
 
+  useEffect(() => {
+    const loadOptions = async () => {
+      const options = await fetchReportOptions()
+      setRegions(options.regions.filter((option) => option.value.trim()))
+      setDestinationCountries(
+        options.allDestinationCountries.filter((option) => option.value.trim()),
+      )
+      setPortsOfExport(options.portsOfExport.filter((option) => option.value.trim()))
+    }
+
+    void loadOptions()
+  }, [])
+
+  useEffect(() => {
+    const clientNumber = form.clientNumber.trim()
+    let isActive = true
+
+    if (!clientNumber) {
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+
+        setClientLocations([])
+        setForm((current) =>
+          current.clientLocation === '' ? current : { ...current, clientLocation: '' },
+        )
+        setIsLoadingClientLocations(false)
+      })
+
+      return () => {
+        isActive = false
+      }
+    }
+
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingClientLocations(true)
+      }
+    })
+
+    void fetchApplicationClientLocations(clientNumber)
+      .then((locations) => {
+        if (!isActive) {
+          return
+        }
+
+        setClientLocations(locations)
+        setForm((current) => {
+          if (current.clientNumber.trim() !== clientNumber) {
+            return current
+          }
+
+          const nextClientLocation = resolveClientLocationCode(locations, current.clientLocation)
+          return current.clientLocation === nextClientLocation
+            ? current
+            : { ...current, clientLocation: nextClientLocation }
+        })
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingClientLocations(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.clientNumber])
+
   const fieldErrors = useMemo<FieldErrors<IndianReservePermitCreateField>>(
     () => ({
       permitNumber: requiredFieldError(form.permitNumber, 'Permit number') ?? undefined,
       packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
       clientNumber: requiredFieldError(form.clientNumber, 'Client number') ?? undefined,
-      applicationDate: isoDateFieldError(form.applicationDate) ?? undefined,
-      permitIssueDate: isoDateFieldError(form.permitIssueDate) ?? undefined,
-      estimatedShippingDate: isoDateFieldError(form.estimatedShippingDate) ?? undefined,
+      clientLocation: requiredFieldError(form.clientLocation, 'Client location') ?? undefined,
+      applicationDate: firstValidationError(
+        () => requiredFieldError(form.applicationDate, 'Application date'),
+        () => isoDateFieldError(form.applicationDate),
+      ),
+      permitIssueDate: firstValidationError(
+        () => requiredFieldError(form.permitIssueDate, 'Permit issue date'),
+        () => isoDateFieldError(form.permitIssueDate),
+      ),
+      estimatedShippingDate: firstValidationError(
+        () => requiredFieldError(form.estimatedShippingDate, 'Estimated shipping date'),
+        () => isoDateFieldError(form.estimatedShippingDate),
+      ),
     }),
     [form],
   )
@@ -120,6 +258,13 @@ const IndianReservePermitCreatePage: FC = () => {
 
   const fieldError = (field: IndianReservePermitCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
+
+  const hasSelectableClientLocations = clientLocations.some(isSelectableClientLocation)
+  const clientLocationPlaceholder = isLoadingClientLocations
+    ? 'Loading locations'
+    : form.clientNumber.trim() && !hasSelectableClientLocations
+      ? 'No locations found'
+      : 'Select client location'
 
   const onSaveDraft = () => {
     setStatus(null)
@@ -258,9 +403,43 @@ const IndianReservePermitCreatePage: FC = () => {
                 setForm((current) => ({ ...current, clientNumber: event.target.value }))
               }
             />
+            <Select
+              id="clientLocation"
+              labelText="Client Location (required)"
+              value={form.clientLocation}
+              disabled={!form.clientNumber.trim() || isLoadingClientLocations}
+              invalid={!!fieldError('clientLocation')}
+              invalidText={fieldError('clientLocation')}
+              onBlur={() => markFieldTouched('clientLocation')}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, clientLocation: event.target.value }))
+              }
+            >
+              <SelectItem value="" text={clientLocationPlaceholder} />
+              {clientLocations.filter(isSelectableClientLocation).map((location) => (
+                <SelectItem
+                  key={location.locationCode}
+                  value={location.locationCode}
+                  text={location.locationName}
+                />
+              ))}
+            </Select>
+            <Select
+              id="reserveRegion"
+              labelText="Region"
+              value={form.region}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, region: event.target.value }))
+              }
+            >
+              <SelectItem value="" text="Select region" />
+              {regions.map((option) => (
+                <SelectItem key={option.value} value={option.value} text={option.label} />
+              ))}
+            </Select>
             <TextInput
               id="applicationDate"
-              labelText="Application Date (YYYY-MM-DD)"
+              labelText="Application Date (YYYY-MM-DD) (required)"
               value={form.applicationDate}
               invalid={!!fieldError('applicationDate')}
               invalidText={fieldError('applicationDate')}
@@ -271,7 +450,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <TextInput
               id="permitIssueDate"
-              labelText="Permit Issue Date (YYYY-MM-DD)"
+              labelText="Permit Issue Date (YYYY-MM-DD) (required)"
               value={form.permitIssueDate}
               invalid={!!fieldError('permitIssueDate')}
               invalidText={fieldError('permitIssueDate')}
@@ -282,7 +461,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <TextInput
               id="estimatedShippingDate"
-              labelText="Estimated Shipping Date (YYYY-MM-DD)"
+              labelText="Estimated Shipping Date (YYYY-MM-DD) (required)"
               value={form.estimatedShippingDate}
               invalid={!!fieldError('estimatedShippingDate')}
               invalidText={fieldError('estimatedShippingDate')}
@@ -294,14 +473,19 @@ const IndianReservePermitCreatePage: FC = () => {
                 }))
               }
             />
-            <TextInput
+            <Select
               id="destinationCountry"
               labelText="Destination Country"
               value={form.destinationCountry}
               onChange={(event) =>
                 setForm((current) => ({ ...current, destinationCountry: event.target.value }))
               }
-            />
+            >
+              <SelectItem value="" text="Select country" />
+              {destinationCountries.map((option) => (
+                <SelectItem key={option.value} value={option.value} text={option.label} />
+              ))}
+            </Select>
             <TextInput
               id="transportTypeCode"
               labelText="Transport Type Code"
@@ -318,12 +502,25 @@ const IndianReservePermitCreatePage: FC = () => {
                 setForm((current) => ({ ...current, transportName: event.target.value }))
               }
             />
-            <TextInput
+            <Select
               id="portOfExport"
               labelText="Port Of Export"
               value={form.portOfExport}
               onChange={(event) =>
                 setForm((current) => ({ ...current, portOfExport: event.target.value }))
+              }
+            >
+              <SelectItem value="" text="Select port" />
+              {portsOfExport.map((option) => (
+                <SelectItem key={option.value} value={option.value} text={option.label} />
+              ))}
+            </Select>
+            <TextInput
+              id="otherPortOfExport"
+              labelText="Other Port Of Export"
+              value={form.otherPortOfExport}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, otherPortOfExport: event.target.value }))
               }
             />
           </div>

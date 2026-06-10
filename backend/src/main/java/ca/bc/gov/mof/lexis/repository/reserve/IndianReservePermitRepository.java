@@ -4,13 +4,16 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
-import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -28,6 +31,8 @@ public class IndianReservePermitRepository extends OracleRepositorySupport {
       LEXIS_GROUP_3_PACKAGE + "COUNT_IR_PERMIT_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_3_PACKAGE + "FIND_IR_PERM_DET_BY_ID(?,?)";
+  private static final String INSERT_RESERVE_PERMIT =
+      LEXIS_GROUP_3_PACKAGE + "INSERT_RESERVE_PERMIT(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
   public IndianReservePermitRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -109,4 +114,68 @@ public class IndianReservePermitRepository extends OracleRepositorySupport {
                 getString(rs, "OTHER_PORT_OF_EXPORT"),
                 List.of()));
   }
+
+  public Optional<ReservePermitInsertRow> insertReservePermit(
+      ReservePermitInsertRecord row, String entryUserId) {
+    String normalizedEntryUserId = trim(entryUserId);
+    if (row == null || normalizedEntryUserId == null) {
+      return Optional.empty();
+    }
+
+    Timestamp now = new Timestamp(System.currentTimeMillis());
+    return queryCursorSingle(
+        INSERT_RESERVE_PERMIT,
+        cs -> {
+          cs.setString(1, trim(row.permitNumber()));
+          setDateOrNull(cs, 2, row.permitIssueDate());
+          setDateOrNull(cs, 3, row.estimatedShippingDate());
+          cs.setString(4, trim(row.otherPortOfExport()));
+          cs.setString(5, trim(row.transportName()));
+          cs.setString(6, auditUserOrDefault(normalizedEntryUserId));
+          cs.setTimestamp(7, now);
+          cs.setString(8, trim(row.transportTypeCode()));
+          cs.setString(9, trim(row.destinationCountry()));
+          cs.setString(10, trim(row.portOfExport()));
+          setDateOrNull(cs, 11, row.applicationDate());
+          setLongOrNull(cs, 12, row.regionNumber());
+          cs.setString(13, trim(row.clientLocation()));
+          cs.setString(14, trim(row.clientNumber()));
+        },
+        15,
+        rs -> new ReservePermitInsertRow(getString(rs, "EXPORT_INDIAN_RSRV_PRMT_DTL_ID")));
+  }
+
+  private void setDateOrNull(java.sql.CallableStatement cs, int index, LocalDate value)
+      throws java.sql.SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.DATE);
+      return;
+    }
+    cs.setDate(index, java.sql.Date.valueOf(value));
+  }
+
+  private void setLongOrNull(java.sql.CallableStatement cs, int index, Long value)
+      throws java.sql.SQLException {
+    if (value == null) {
+      cs.setNull(index, Types.NUMERIC);
+      return;
+    }
+    cs.setLong(index, value);
+  }
+
+  public record ReservePermitInsertRecord(
+      String permitNumber,
+      LocalDate permitIssueDate,
+      LocalDate estimatedShippingDate,
+      String otherPortOfExport,
+      String transportName,
+      String transportTypeCode,
+      String destinationCountry,
+      String portOfExport,
+      LocalDate applicationDate,
+      Long regionNumber,
+      String clientLocation,
+      String clientNumber) {}
+
+  public record ReservePermitInsertRow(String permitNumber) {}
 }

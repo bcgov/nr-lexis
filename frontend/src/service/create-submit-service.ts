@@ -357,9 +357,11 @@ export type ProvincialPermitCreateSubmission = {
   applicationNumber: string
   packageNumber: string
   exemptionNumber: string
+  region: string
   permitStatus: string
   applicantClientNumber: string
   ownerClientNumber: string
+  submitDate: string
   issueDate: string
   estimatedShippingDate: string
   permitVolume: string
@@ -378,6 +380,9 @@ export const submitProvincialPermitCreate = async (
         permitIssueDate: form.issueDate,
         estimatedShippingDate: form.estimatedShippingDate,
         exemptionNumber: form.exemptionNumber,
+        orgUnitNo: form.region,
+        region: form.region,
+        permitSubmitDate: form.submitDate,
         permitTotalVolume: form.permitVolume,
         ownerClientNumber: form.ownerClientNumber,
         agentClientNumber: form.applicantClientNumber,
@@ -396,6 +401,8 @@ export type IndianReservePermitCreateSubmission = {
   permitNumber: string
   packageNumber: string
   clientNumber: string
+  clientLocation: string
+  region: string
   applicationDate: string
   permitIssueDate: string
   estimatedShippingDate: string
@@ -403,6 +410,7 @@ export type IndianReservePermitCreateSubmission = {
   transportTypeCode: string
   transportName: string
   portOfExport: string
+  otherPortOfExport: string
   remarks: string
 }
 
@@ -415,7 +423,9 @@ export const submitIndianReservePermitCreate = async (
       withCreateActionMapping('saveReservePermit', {
         applicationNumber: '0',
         clientNumber: form.clientNumber,
+        clientLocation: form.clientLocation,
         permitNumber: form.permitNumber,
+        region: form.region,
         applicationDate: form.applicationDate,
         permitIssueDate: form.permitIssueDate,
         estShippingDate: form.estimatedShippingDate,
@@ -423,6 +433,7 @@ export const submitIndianReservePermitCreate = async (
         transportTypeCode: form.transportTypeCode,
         transportName: form.transportName,
         portOfExport: form.portOfExport,
+        otherPortOfExport: form.otherPortOfExport,
         permitRemarks: form.remarks,
         packageNumber: form.packageNumber,
       }),
