@@ -756,6 +756,29 @@ body {
   color: var(--cds-support-error);
 }
 
+.legacy-search-table-frame {
+  position: relative;
+  min-height: 12rem;
+}
+
+.legacy-search-table-content.is-loading {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.legacy-search-table-loader {
+  position: absolute;
+  z-index: 1;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  background: var(--cds-layer);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 15%);
+}
+
 .legacy-inline-notification {
   margin-top: 1rem;
 }

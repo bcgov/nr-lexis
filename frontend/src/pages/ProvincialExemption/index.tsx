@@ -5,7 +5,6 @@ import {
   Checkbox,
   Column,
   Grid,
-  InlineLoading,
   InlineNotification,
   MultiSelect,
   Pagination,
@@ -20,6 +19,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
 import type {
   ProvincialExemptionSearchFilters,
   ProvincialExemptionSearchItem,
@@ -537,105 +537,98 @@ const ProvincialExemptionPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <h2 className="dashboard-title">Search Results</h2>
-        {loading && <InlineLoading description="Loading exemption search results..." />}
         {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        {!loading && (
-          <>
-            <Table useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>
-                    <Checkbox
-                      id="selectAllCurrentPageRows"
-                      hideLabel
-                      labelText="Select all rows on this page"
-                      checked={allSelectableRowsAreSelected}
-                      disabled={selectableRows.length === 0}
-                      onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
-                    />
+        <SearchResultsTableFrame
+          loading={loading}
+          loadingDescription="Loading exemption search results..."
+        >
+          <Table useZebraStyles>
+            <TableHead>
+              <TableRow>
+                <TableHeader>
+                  <Checkbox
+                    id="selectAllCurrentPageRows"
+                    hideLabel
+                    labelText="Select all rows on this page"
+                    checked={allSelectableRowsAreSelected}
+                    disabled={selectableRows.length === 0}
+                    onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
+                  />
+                </TableHeader>
+                {SORT_COLUMNS.map((column) => (
+                  <TableHeader key={column.id}>
+                    <button
+                      type="button"
+                      className="legacy-sort-button"
+                      onClick={() => onHeaderClick(column.id)}
+                    >
+                      {column.label}
+                      {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                    </button>
                   </TableHeader>
-                  {SORT_COLUMNS.map((column) => (
-                    <TableHeader key={column.id}>
-                      <button
-                        type="button"
-                        className="legacy-sort-button"
-                        onClick={() => onHeaderClick(column.id)}
-                      >
-                        {column.label}
-                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                      </button>
-                    </TableHeader>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {results.content.map((row) => {
-                  const canSelectRow =
-                    canApproveExemption &&
-                    row.canApprove &&
-                    row.statusCode === 'NEW' &&
-                    !row.isLocked
-                  return (
-                    <TableRow key={row.exemptionNumber}>
-                      <TableCell>
-                        <Checkbox
-                          id={`selectRow-${row.exemptionNumber}`}
-                          hideLabel
-                          labelText={`Select ${row.exemptionNumber}`}
-                          checked={Boolean(selectedRowsById[row.exemptionNumber])}
-                          disabled={!canSelectRow}
-                          onChange={(_, payload) =>
-                            toggleRowSelection(row, Boolean(payload.checked))
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {row.canViewExemption ? (
-                          <Link
-                            className="cds--link"
-                            to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
-                          >
-                            {row.exemptionNumber}
-                          </Link>
-                        ) : (
-                          row.exemptionNumber
-                        )}
-                      </TableCell>
-                      <TableCell>{row.type}</TableCell>
-                      <TableCell>{row.status}</TableCell>
-                      <TableCell>{row.applicantClientNumber || '-'}</TableCell>
-                      <TableCell>{row.ownerClientNumber}</TableCell>
-                      <TableCell>{row.approvedVolume}</TableCell>
-                      <TableCell>{row.balanceRemaining}</TableCell>
-                      <TableCell>{row.listingDate}</TableCell>
-                      <TableCell>{row.expiryDate}</TableCell>
-                      <TableCell>{row.region}</TableCell>
-                    </TableRow>
-                  )
-                })}
-                {results.content.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={11}>
-                      No exemptions found for the selected criteria.
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {results.content.map((row) => {
+                const canSelectRow =
+                  canApproveExemption && row.canApprove && row.statusCode === 'NEW' && !row.isLocked
+                return (
+                  <TableRow key={row.exemptionNumber}>
+                    <TableCell>
+                      <Checkbox
+                        id={`selectRow-${row.exemptionNumber}`}
+                        hideLabel
+                        labelText={`Select ${row.exemptionNumber}`}
+                        checked={Boolean(selectedRowsById[row.exemptionNumber])}
+                        disabled={!canSelectRow}
+                        onChange={(_, payload) => toggleRowSelection(row, Boolean(payload.checked))}
+                      />
                     </TableCell>
+                    <TableCell>
+                      {row.canViewExemption ? (
+                        <Link
+                          className="cds--link"
+                          to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
+                        >
+                          {row.exemptionNumber}
+                        </Link>
+                      ) : (
+                        row.exemptionNumber
+                      )}
+                    </TableCell>
+                    <TableCell>{row.type}</TableCell>
+                    <TableCell>{row.status}</TableCell>
+                    <TableCell>{row.applicantClientNumber || '-'}</TableCell>
+                    <TableCell>{row.ownerClientNumber}</TableCell>
+                    <TableCell>{row.approvedVolume}</TableCell>
+                    <TableCell>{row.balanceRemaining}</TableCell>
+                    <TableCell>{row.listingDate}</TableCell>
+                    <TableCell>{row.expiryDate}</TableCell>
+                    <TableCell>{row.region}</TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            <Pagination
-              page={results.page.number + 1}
-              pageSize={results.page.size}
-              pageSizes={[10, 20, 30]}
-              totalItems={results.page.totalElements}
-              onChange={({ page, pageSize: nextPageSize }) => {
-                clearSelection()
-                setSearchParams(
-                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
                 )
-              }}
-            />
-          </>
-        )}
+              })}
+              {results.content.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={11}>No exemptions found for the selected criteria.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <Pagination
+            page={results.page.number + 1}
+            pageSize={results.page.size}
+            pageSizes={[10, 20, 30]}
+            totalItems={results.page.totalElements}
+            onChange={({ page, pageSize: nextPageSize }) => {
+              clearSelection()
+              setSearchParams(
+                buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+              )
+            }}
+          />
+        </SearchResultsTableFrame>
       </Column>
     </Grid>
   )

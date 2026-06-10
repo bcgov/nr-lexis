@@ -5,7 +5,6 @@ import {
   Checkbox,
   Column,
   Grid,
-  InlineLoading,
   InlineNotification,
   MultiSelect,
   Pagination,
@@ -21,6 +20,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
 import type {
   ApplicationReviewSearchFilters,
   ApplicationReviewSearchRequest,
@@ -814,96 +814,93 @@ const ProvincialReviewPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <h2 className="dashboard-title">Review Queue</h2>
-        {loading && <InlineLoading description="Loading review queue..." />}
         {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        {!loading && (
-          <>
-            <Table useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>
-                    <Checkbox
-                      id="selectAllCurrentPageRows"
-                      hideLabel
-                      labelText="Select all rows on this page"
-                      checked={allSelectableRowsAreSelected}
-                      disabled={selectableRows.length === 0 || !canApproveApplications}
-                      onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
-                    />
+        <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue...">
+          <Table useZebraStyles>
+            <TableHead>
+              <TableRow>
+                <TableHeader>
+                  <Checkbox
+                    id="selectAllCurrentPageRows"
+                    hideLabel
+                    labelText="Select all rows on this page"
+                    checked={allSelectableRowsAreSelected}
+                    disabled={selectableRows.length === 0 || !canApproveApplications}
+                    onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
+                  />
+                </TableHeader>
+                {SORT_COLUMNS.map((column) => (
+                  <TableHeader key={column.id}>
+                    <button
+                      type="button"
+                      className="legacy-sort-button"
+                      onClick={() => onHeaderClick(column.id)}
+                    >
+                      {column.label}
+                      {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                    </button>
                   </TableHeader>
-                  {SORT_COLUMNS.map((column) => (
-                    <TableHeader key={column.id}>
-                      <button
-                        type="button"
-                        className="legacy-sort-button"
-                        onClick={() => onHeaderClick(column.id)}
-                      >
-                        {column.label}
-                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                      </button>
-                    </TableHeader>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {results.content.map((row) => (
-                  <TableRow key={row.applicationNumber}>
-                    <TableCell>
-                      <Checkbox
-                        id={`selectRow-${row.applicationNumber}`}
-                        hideLabel
-                        labelText={`Select ${row.applicationNumber}`}
-                        checked={Boolean(selectedRowsById[row.applicationNumber])}
-                        disabled={
-                          !canApproveApplications || normalizeReviewStatus(row.status) !== 'NEW'
-                        }
-                        onChange={(_, payload) =>
-                          toggleRowSelection(row.applicationNumber, Boolean(payload.checked))
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {canOpenApplicationDetails ? (
-                        <Link
-                          className="cds--link"
-                          to={withCurrentSearch(`/provincial/application/${row.applicationNumber}`)}
-                        >
-                          {row.applicationNumber}
-                        </Link>
-                      ) : (
-                        row.applicationNumber
-                      )}
-                    </TableCell>
-                    <TableCell>{row.volume}</TableCell>
-                    <TableCell>{row.speciesEndUse}</TableCell>
-                    <TableCell>{row.listingDate}</TableCell>
-                    <TableCell>{row.status}</TableCell>
-                    <TableCell>{row.region}</TableCell>
-                  </TableRow>
                 ))}
-                {results.content.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7}>
-                      No review records found for the selected criteria.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            <Pagination
-              page={results.page.number + 1}
-              pageSize={results.page.size}
-              pageSizes={[10, 20, 30]}
-              totalItems={results.page.totalElements}
-              onChange={({ page, pageSize: nextPageSize }) => {
-                clearSelection()
-                setSearchParams(
-                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-                )
-              }}
-            />
-          </>
-        )}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {results.content.map((row) => (
+                <TableRow key={row.applicationNumber}>
+                  <TableCell>
+                    <Checkbox
+                      id={`selectRow-${row.applicationNumber}`}
+                      hideLabel
+                      labelText={`Select ${row.applicationNumber}`}
+                      checked={Boolean(selectedRowsById[row.applicationNumber])}
+                      disabled={
+                        !canApproveApplications || normalizeReviewStatus(row.status) !== 'NEW'
+                      }
+                      onChange={(_, payload) =>
+                        toggleRowSelection(row.applicationNumber, Boolean(payload.checked))
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {canOpenApplicationDetails ? (
+                      <Link
+                        className="cds--link"
+                        to={withCurrentSearch(`/provincial/application/${row.applicationNumber}`)}
+                      >
+                        {row.applicationNumber}
+                      </Link>
+                    ) : (
+                      row.applicationNumber
+                    )}
+                  </TableCell>
+                  <TableCell>{row.volume}</TableCell>
+                  <TableCell>{row.speciesEndUse}</TableCell>
+                  <TableCell>{row.listingDate}</TableCell>
+                  <TableCell>{row.status}</TableCell>
+                  <TableCell>{row.region}</TableCell>
+                </TableRow>
+              ))}
+              {results.content.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7}>
+                    No review records found for the selected criteria.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <Pagination
+            page={results.page.number + 1}
+            pageSize={results.page.size}
+            pageSizes={[10, 20, 30]}
+            totalItems={results.page.totalElements}
+            onChange={({ page, pageSize: nextPageSize }) => {
+              clearSelection()
+              setSearchParams(
+                buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+              )
+            }}
+          />
+        </SearchResultsTableFrame>
       </Column>
     </Grid>
   )

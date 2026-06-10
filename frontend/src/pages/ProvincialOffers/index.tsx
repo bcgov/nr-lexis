@@ -4,7 +4,6 @@ import {
   Button,
   Column,
   Grid,
-  InlineLoading,
   MultiSelect,
   Pagination,
   Table,
@@ -16,6 +15,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
 import type {
   ProvincialOfferSearchFilters,
   ProvincialOfferSearchRequest,
@@ -407,65 +407,65 @@ const ProvincialOffersPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <h2 className="dashboard-title">Search Results</h2>
-        {loading && <InlineLoading description="Loading offer search results..." />}
         {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        {!loading && (
-          <>
-            <Table useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  {SORT_COLUMNS.map((column) => (
-                    <TableHeader key={column.id}>
-                      <button
-                        type="button"
-                        className="legacy-sort-button"
-                        onClick={() => onHeaderClick(column.id)}
-                      >
-                        {column.label}
-                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                      </button>
-                    </TableHeader>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {results.content.map((row) => (
-                  <TableRow key={row.offerNumber}>
-                    <TableCell>
-                      <Link
-                        className="cds--link"
-                        to={withCurrentSearch(`/provincial/offers/${row.offerNumber}`)}
-                      >
-                        {row.offerNumber}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{row.applicationNumber}</TableCell>
-                    <TableCell>{row.packageNumber || 'No Packages'}</TableCell>
-                    <TableCell>{row.listingDate}</TableCell>
-                    <TableCell>{row.region}</TableCell>
-                    <TableCell>{row.offerWithdrawalDate || '-'}</TableCell>
-                  </TableRow>
+        <SearchResultsTableFrame
+          loading={loading}
+          loadingDescription="Loading offer search results..."
+        >
+          <Table useZebraStyles>
+            <TableHead>
+              <TableRow>
+                {SORT_COLUMNS.map((column) => (
+                  <TableHeader key={column.id}>
+                    <button
+                      type="button"
+                      className="legacy-sort-button"
+                      onClick={() => onHeaderClick(column.id)}
+                    >
+                      {column.label}
+                      {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                    </button>
+                  </TableHeader>
                 ))}
-                {results.content.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6}>No offers found for the selected criteria.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            <Pagination
-              page={results.page.number + 1}
-              pageSize={results.page.size}
-              pageSizes={[10, 20, 30]}
-              totalItems={results.page.totalElements}
-              onChange={({ page, pageSize: nextPageSize }) => {
-                setSearchParams(
-                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-                )
-              }}
-            />
-          </>
-        )}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {results.content.map((row) => (
+                <TableRow key={row.offerNumber}>
+                  <TableCell>
+                    <Link
+                      className="cds--link"
+                      to={withCurrentSearch(`/provincial/offers/${row.offerNumber}`)}
+                    >
+                      {row.offerNumber}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{row.applicationNumber}</TableCell>
+                  <TableCell>{row.packageNumber || 'No Packages'}</TableCell>
+                  <TableCell>{row.listingDate}</TableCell>
+                  <TableCell>{row.region}</TableCell>
+                  <TableCell>{row.offerWithdrawalDate || '-'}</TableCell>
+                </TableRow>
+              ))}
+              {results.content.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6}>No offers found for the selected criteria.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <Pagination
+            page={results.page.number + 1}
+            pageSize={results.page.size}
+            pageSizes={[10, 20, 30]}
+            totalItems={results.page.totalElements}
+            onChange={({ page, pageSize: nextPageSize }) => {
+              setSearchParams(
+                buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+              )
+            }}
+          />
+        </SearchResultsTableFrame>
       </Column>
     </Grid>
   )
