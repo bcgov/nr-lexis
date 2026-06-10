@@ -33,6 +33,10 @@ import {
   type SearchOption,
 } from '@/service/search-options-service'
 import { submitProvincialApplicationCreate } from '@/service/create-submit-service'
+import {
+  fetchApplicationClientLocations,
+  type ApplicationClientLocation,
+} from '@/service/application-client-lookup-service'
 
 type ProvincialApplicationCreateForm = {
   applicationNumber: string
@@ -116,6 +120,34 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
   }
 }
 
+const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
+  location.locationCode !== '0'
+
+const resolveOwnerClientLocationCode = (
+  locations: ApplicationClientLocation[],
+  currentCode: string,
+): string => {
+  const normalizedCurrentCode = currentCode.trim()
+  if (
+    normalizedCurrentCode &&
+    locations.some(
+      (location) =>
+        isSelectableClientLocation(location) && location.locationCode === normalizedCurrentCode,
+    )
+  ) {
+    return normalizedCurrentCode
+  }
+
+  const selectedLocation = locations.find(
+    (location) => isSelectableClientLocation(location) && location.selected,
+  )
+  if (selectedLocation) {
+    return selectedLocation.locationCode
+  }
+
+  return locations.find(isSelectableClientLocation)?.locationCode ?? ''
+}
+
 type PageStatus = {
   kind: 'success' | 'error'
   title: string
@@ -131,6 +163,8 @@ const ProvincialApplicationCreatePage: FC = () => {
   const [productTypes, setProductTypes] = useState<SearchOption[]>([])
   const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
   const [regions, setRegions] = useState<SearchOption[]>([])
+  const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
+  const [isLoadingOwnerClientLocations, setIsLoadingOwnerClientLocations] = useState(false)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -151,6 +185,66 @@ const ProvincialApplicationCreatePage: FC = () => {
 
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    const ownerClientNumber = form.ownerClientNumber.trim()
+    if (!ownerClientNumber) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+
+        setOwnerClientLocations([])
+        setIsLoadingOwnerClientLocations(false)
+        setForm((current) =>
+          current.ownerClientLocationCode ? { ...current, ownerClientLocationCode: '' } : current,
+        )
+      })
+
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingOwnerClientLocations(true)
+      }
+    })
+
+    void fetchApplicationClientLocations(ownerClientNumber)
+      .then((locations) => {
+        if (!isActive) {
+          return
+        }
+
+        setOwnerClientLocations(locations)
+        setForm((current) => {
+          if (current.ownerClientNumber.trim() !== ownerClientNumber) {
+            return current
+          }
+
+          const nextOwnerClientLocationCode = resolveOwnerClientLocationCode(
+            locations,
+            current.ownerClientLocationCode,
+          )
+          return current.ownerClientLocationCode === nextOwnerClientLocationCode
+            ? current
+            : { ...current, ownerClientLocationCode: nextOwnerClientLocationCode }
+        })
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingOwnerClientLocations(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.ownerClientNumber])
 
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
@@ -200,6 +294,14 @@ const ProvincialApplicationCreatePage: FC = () => {
     [fieldErrors],
   )
   const missingRequiredOptions = productTypes.length === 0
+  const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
+  const ownerClientLocationPlaceholder = !form.ownerClientNumber.trim()
+    ? 'Enter owner client number first'
+    : isLoadingOwnerClientLocations
+      ? 'Loading locations'
+      : hasSelectableOwnerClientLocations
+        ? 'Select owner client location'
+        : 'No locations on file'
 
   const markFieldTouched = (field: ProvincialApplicationCreateField): void => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
@@ -357,11 +459,11 @@ const ProvincialApplicationCreatePage: FC = () => {
                 setForm((current) => ({ ...current, ownerClientNumber: event.target.value }))
               }
             />
-            <TextInput
+            <Select
               id="ownerClientLocationCode"
-              labelText="Owner Client Location Code (required)"
-              maxLength={2}
+              labelText="Owner Client Location (required)"
               value={form.ownerClientLocationCode}
+              disabled={!form.ownerClientNumber.trim() || isLoadingOwnerClientLocations}
               invalid={!!fieldError('ownerClientLocationCode')}
               invalidText={fieldError('ownerClientLocationCode')}
               onBlur={() => markFieldTouched('ownerClientLocationCode')}
@@ -371,7 +473,16 @@ const ProvincialApplicationCreatePage: FC = () => {
                   ownerClientLocationCode: event.target.value,
                 }))
               }
-            />
+            >
+              <SelectItem value="" text={ownerClientLocationPlaceholder} />
+              {ownerClientLocations.filter(isSelectableClientLocation).map((location) => (
+                <SelectItem
+                  key={location.locationCode}
+                  value={location.locationCode}
+                  text={location.locationName}
+                />
+              ))}
+            </Select>
             <TextInput
               id="ownerContactName"
               labelText="Owner Name (required)"
@@ -517,7 +628,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             <Button
               kind="primary"
               onClick={() => void onSubmit()}
-              disabled={missingRequiredOptions || isSubmitting}
+              disabled={missingRequiredOptions || isSubmitting || isLoadingOwnerClientLocations}
             >
               Submit
             </Button>
