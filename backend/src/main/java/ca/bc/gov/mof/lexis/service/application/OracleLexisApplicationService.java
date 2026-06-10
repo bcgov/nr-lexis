@@ -27,6 +27,7 @@ public class OracleLexisApplicationService implements LexisApplicationService {
   public LexisApplicationSearchOptionsDto searchOptions() {
     return new LexisApplicationSearchOptionsDto(
         safeList(repository.loadExemptionTypeOptions()),
+        safeList(repository.loadExemptionReasonOptions()),
         safeList(repository.loadApplicationStatusOptions()),
         safeList(repository.loadProductTypeOptions()),
         safeList(repository.loadRegionOptions()));

@@ -28,6 +28,10 @@ describe('search-options-service', () => {
         { code: '   ', name: 'Bad Code' },
         { code: 'B', name: 'Type B' },
       ],
+      exemptionReasons: [
+        { code: 'U', name: 'Unadvertised' },
+        { code: ' ', name: 'Bad Reason' },
+      ],
       applicationStatuses: [{ code: 'NEW', name: 'New' }],
       productTypes: [{ code: 'LOG', name: 'Logs' }],
       regions: [{ code: '11', name: 'Cariboo' }, { code: '12' }],
@@ -48,6 +52,7 @@ describe('search-options-service', () => {
         { value: 'A', label: 'Type A' },
         { value: 'B', label: 'Type B' },
       ],
+      exemptionReasons: [{ value: 'U', label: 'Unadvertised' }],
       applicationStatuses: [{ value: 'NEW', label: 'New' }],
       productTypes: [{ value: 'LOG', label: 'Logs' }],
       regions: [{ value: '11', label: 'Cariboo' }],

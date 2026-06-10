@@ -199,6 +199,42 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void addApplicationShouldRejectOversizedExemptionReasonCodeBeforeOracleInsert() {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                2.4d,
+                "Camp 1",
+                null,
+                "00022222",
+                "01",
+                "00011111",
+                "02",
+                null,
+                "ALL",
+                "A",
+                11L,
+                "H",
+                null,
+                "O",
+                "Agent Contact",
+                "Owner Contact",
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains("The application exemption reason code must be 1 character or fewer.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
   void addApplicationShouldInsertWhenRequestIsValid() {
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));

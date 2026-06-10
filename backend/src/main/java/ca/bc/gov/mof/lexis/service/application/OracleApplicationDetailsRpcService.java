@@ -1123,6 +1123,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (trimToNull(request.ownerClientNumber()) == null) {
       errors.add(required("application owner number"));
     }
+
+    String exemptionReasonCode = trimToNull(request.exemptionReasonCode());
+    if (exemptionReasonCode == null) {
+      errors.add(required("application exemption reason code"));
+    } else if (exemptionReasonCode.length() > 1) {
+      errors.add(maxLength("application exemption reason code", 1));
+    }
+
     String ownerClientLocationCode = trimToNull(request.ownerClientLocationCode());
     if (ownerClientLocationCode == null) {
       errors.add(required("application owner location"));
@@ -1175,7 +1183,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private String maxLength(String fieldName, int maxLength) {
-    return "The " + fieldName + " must be " + maxLength + " characters or fewer.";
+    String unit = maxLength == 1 ? "character" : "characters";
+    return "The " + fieldName + " must be " + maxLength + " " + unit + " or fewer.";
   }
 
   private String firstNonBlank(String value, String fallback) {

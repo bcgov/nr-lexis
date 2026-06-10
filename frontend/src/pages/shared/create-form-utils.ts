@@ -37,9 +37,10 @@ export const maxLengthFieldError = (
   maxLength: number,
   label = 'This field',
 ): string | null => {
+  const unit = maxLength === 1 ? 'character' : 'characters'
   return normalizeText(value).length <= maxLength
     ? null
-    : `${label} must be ${maxLength} characters or fewer.`
+    : `${label} must be ${maxLength} ${unit} or fewer.`
 }
 
 export const positiveNumericFieldError = (value: string): string | null => {

@@ -49,6 +49,7 @@ const fetchOptions = async (path: string): Promise<Record<string, unknown> | nul
 
 export const fetchProvincialApplicationOptions = async (): Promise<{
   exemptionTypes: SearchOption[]
+  exemptionReasons: SearchOption[]
   applicationStatuses: SearchOption[]
   productTypes: SearchOption[]
   regions: SearchOption[]
@@ -57,6 +58,7 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
   if (!data) {
     return {
       exemptionTypes: [],
+      exemptionReasons: [],
       applicationStatuses: [],
       productTypes: [],
       regions: [],
@@ -65,6 +67,7 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
 
   return {
     exemptionTypes: parseOptions(data.exemptionTypes),
+    exemptionReasons: parseOptions(data.exemptionReasons),
     applicationStatuses: parseOptions(data.applicationStatuses),
     productTypes: parseOptions(data.productTypes),
     regions: parseOptions(data.regions),

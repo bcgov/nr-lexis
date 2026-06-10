@@ -39,6 +39,7 @@ class OracleLexisApplicationServiceTest {
   @Test
   void searchOptionsShouldReturnRepositoryValues() {
     when(repository.loadExemptionTypeOptions()).thenReturn(List.of(new CodeNameDto("ALL", "All")));
+    when(repository.loadExemptionReasonOptions()).thenReturn(List.of(new CodeNameDto("U", "Unadvertised")));
     when(repository.loadApplicationStatusOptions()).thenReturn(List.of(new CodeNameDto("APP", "Approved")));
     when(repository.loadProductTypeOptions()).thenReturn(List.of(new CodeNameDto("S", "Standing")));
     when(repository.loadRegionOptions()).thenReturn(List.of(new CodeNameDto("12", "Coast")));
@@ -46,6 +47,7 @@ class OracleLexisApplicationServiceTest {
     LexisApplicationSearchOptionsDto response = service.searchOptions();
 
     assertThat(response.exemptionTypes()).hasSize(1);
+    assertThat(response.exemptionReasons()).hasSize(1);
     assertThat(response.applicationStatuses()).hasSize(1);
     assertThat(response.productTypes()).hasSize(1);
     assertThat(response.regions()).hasSize(1);

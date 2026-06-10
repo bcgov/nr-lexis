@@ -98,7 +98,12 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     ownerContactName: query.get('ownerContactName') ?? query.get('ownerName') ?? '',
     applicantClientNumber: query.get('applicantClientNumber') ?? '',
     productTypeCode: query.get('productTypeCode') ?? '',
-    exemptionType: query.get('exemptionType') ?? query.get('exemptionTypeCode') ?? '',
+    exemptionType:
+      query.get('exemptionReason') ??
+      query.get('exemptionReasonCode') ??
+      query.get('exemptionType') ??
+      query.get('exemptionTypeCode') ??
+      '',
     region: query.get('region') ?? query.get('orgUnitNumber') ?? '',
     applicationDate: query.get('applicationDate') ?? '',
     applicationTermDays:
@@ -124,7 +129,7 @@ const ProvincialApplicationCreatePage: FC = () => {
     buildInitialFormFromQuery(searchParams),
   )
   const [productTypes, setProductTypes] = useState<SearchOption[]>([])
-  const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
+  const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
   const [regions, setRegions] = useState<SearchOption[]>([])
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
@@ -140,7 +145,7 @@ const ProvincialApplicationCreatePage: FC = () => {
     const loadOptions = async () => {
       const options = await fetchProvincialApplicationOptions()
       setProductTypes(options.productTypes)
-      setExemptionTypes(options.exemptionTypes)
+      setExemptionReasons(options.exemptionReasons)
       setRegions(options.regions)
     }
 
@@ -164,6 +169,10 @@ const ProvincialApplicationCreatePage: FC = () => {
       applicantClientNumber:
         requiredFieldError(form.applicantClientNumber, 'Applicant client number') ?? undefined,
       productTypeCode: requiredFieldError(form.productTypeCode, 'Product type') ?? undefined,
+      exemptionType: firstValidationError(
+        () => requiredFieldError(form.exemptionType, 'Exemption reason'),
+        () => maxLengthFieldError(form.exemptionType, 1, 'Exemption reason code'),
+      ),
       region: requiredFieldError(form.region, 'Region') ?? undefined,
       applicationDate: firstValidationError(
         () => requiredFieldError(form.applicationDate, 'Application date'),
@@ -403,14 +412,17 @@ const ProvincialApplicationCreatePage: FC = () => {
             </Select>
             <Select
               id="exemptionType"
-              labelText="Exemption Type"
+              labelText="Exemption Reason (required)"
               value={form.exemptionType}
+              invalid={!!fieldError('exemptionType')}
+              invalidText={fieldError('exemptionType')}
+              onBlur={() => markFieldTouched('exemptionType')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, exemptionType: event.target.value }))
               }
             >
-              <SelectItem value="" text="Select exemption type" />
-              {exemptionTypes.map((option) => (
+              <SelectItem value="" text="Select exemption reason" />
+              {exemptionReasons.map((option) => (
                 <SelectItem key={option.value} value={option.value} text={option.label} />
               ))}
             </Select>

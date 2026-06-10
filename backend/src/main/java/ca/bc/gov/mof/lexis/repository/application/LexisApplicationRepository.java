@@ -34,6 +34,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
 
   private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
+  private static final String FIND_ALL_EXEMPTION_REASON_CODES =
+      LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_REASON_CODES(?)";
   private static final String FIND_ALL_APPLICATION_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
   private static final String FIND_ALL_PRODUCT_TYPE_CODES =
@@ -69,6 +71,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             .filter(option -> option.code() == null || !JURISDICTION_FEDERAL.equalsIgnoreCase(option.code()))
             .toList());
     return options;
+  }
+
+  public List<CodeNameDto> loadExemptionReasonOptions() {
+    return loadCodeNameOptions(FIND_ALL_EXEMPTION_REASON_CODES);
   }
 
   public List<CodeNameDto> loadApplicationStatusOptions() {

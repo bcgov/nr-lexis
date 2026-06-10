@@ -236,6 +236,8 @@ export const submitProvincialApplicationCreate = async (
         applicantClientNumber: form.applicantClientNumber,
         agentClientNumber: form.applicantClientNumber,
         productTypeCode: form.productTypeCode,
+        exemptionReason: form.exemptionType,
+        exemptionReasonCode: form.exemptionType,
         exemptionType: form.exemptionType,
         exemptionTypeCode: form.exemptionType,
         region: form.region,
