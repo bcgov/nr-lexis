@@ -4,7 +4,6 @@ import {
   Button,
   Column,
   Grid,
-  InlineLoading,
   MultiSelect,
   Pagination,
   Select,
@@ -18,6 +17,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
 import type {
   ProvincialPermitSearchFilters,
   ProvincialPermitSearchRequest,
@@ -449,66 +449,66 @@ const ProvincialPermitPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <h2 className="dashboard-title">Search Results</h2>
-        {loading && <InlineLoading description="Loading permit search results..." />}
         {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        {!loading && (
-          <>
-            <Table useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  {SORT_COLUMNS.map((column) => (
-                    <TableHeader key={column.id}>
-                      <button
-                        type="button"
-                        className="legacy-sort-button"
-                        onClick={() => onHeaderClick(column.id)}
-                      >
-                        {column.label}
-                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                      </button>
-                    </TableHeader>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {results.content.map((row) => (
-                  <TableRow key={row.permitNumber}>
-                    <TableCell>
-                      <Link
-                        className="cds--link"
-                        to={withCurrentSearch(`/provincial/permit/${row.permitNumber}`)}
-                      >
-                        {row.permitNumber}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{row.status}</TableCell>
-                    <TableCell>{row.applicantClientNumber}</TableCell>
-                    <TableCell>{row.ownerClientNumber}</TableCell>
-                    <TableCell>{row.totalVolume}</TableCell>
-                    <TableCell>{row.issueDate}</TableCell>
-                    <TableCell>{row.region}</TableCell>
-                  </TableRow>
+        <SearchResultsTableFrame
+          loading={loading}
+          loadingDescription="Loading permit search results..."
+        >
+          <Table useZebraStyles>
+            <TableHead>
+              <TableRow>
+                {SORT_COLUMNS.map((column) => (
+                  <TableHeader key={column.id}>
+                    <button
+                      type="button"
+                      className="legacy-sort-button"
+                      onClick={() => onHeaderClick(column.id)}
+                    >
+                      {column.label}
+                      {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                    </button>
+                  </TableHeader>
                 ))}
-                {results.content.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7}>No permits found for the selected criteria.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            <Pagination
-              page={results.page.number + 1}
-              pageSize={results.page.size}
-              pageSizes={[10, 20, 30]}
-              totalItems={results.page.totalElements}
-              onChange={({ page, pageSize: nextPageSize }) => {
-                setSearchParams(
-                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-                )
-              }}
-            />
-          </>
-        )}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {results.content.map((row) => (
+                <TableRow key={row.permitNumber}>
+                  <TableCell>
+                    <Link
+                      className="cds--link"
+                      to={withCurrentSearch(`/provincial/permit/${row.permitNumber}`)}
+                    >
+                      {row.permitNumber}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{row.status}</TableCell>
+                  <TableCell>{row.applicantClientNumber}</TableCell>
+                  <TableCell>{row.ownerClientNumber}</TableCell>
+                  <TableCell>{row.totalVolume}</TableCell>
+                  <TableCell>{row.issueDate}</TableCell>
+                  <TableCell>{row.region}</TableCell>
+                </TableRow>
+              ))}
+              {results.content.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7}>No permits found for the selected criteria.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <Pagination
+            page={results.page.number + 1}
+            pageSize={results.page.size}
+            pageSizes={[10, 20, 30]}
+            totalItems={results.page.totalElements}
+            onChange={({ page, pageSize: nextPageSize }) => {
+              setSearchParams(
+                buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+              )
+            }}
+          />
+        </SearchResultsTableFrame>
       </Column>
     </Grid>
   )

@@ -15,6 +15,8 @@ import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.reserve.IndianReservePermitService;
 import ca.bc.gov.mof.lexis.service.reserve.IndianReservePermitService.CreatePermitRequest;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -28,7 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
@@ -38,6 +40,8 @@ class IndianReservePermitControllerTest {
 
   @Mock private ObjectProvider<IndianReservePermitService> serviceProvider;
   @Mock private IndianReservePermitService service;
+  @Mock private LexisSessionService sessionService;
+  @Mock private LexisAuthorizationService authorizationService;
 
   @InjectMocks private IndianReservePermitController controller;
 
@@ -176,10 +180,11 @@ class IndianReservePermitControllerTest {
 
   @Test
   void addPermitShouldReturnNoContentWhenServiceMissing() {
+    TestingAuthenticationToken authentication = authorizedSaveIndianReservePermit();
     when(serviceProvider.getIfAvailable()).thenReturn(null);
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
-        controller.addPermit(new LinkedMultiValueMap<>(), null);
+        controller.addPermit(new LinkedMultiValueMap<>(), authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(service);
@@ -187,9 +192,8 @@ class IndianReservePermitControllerTest {
 
   @Test
   void addPermitShouldMapLegacyParametersAndAuthentication() {
+    TestingAuthenticationToken authentication = authorizedSaveIndianReservePermit();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
-    when(authentication.getName()).thenReturn("idir\\jsmith");
     PermitMutationRpcResponseDto dto =
         new PermitMutationRpcResponseDto(
             true,
@@ -233,5 +237,33 @@ class IndianReservePermitControllerTest {
     assertThat(request.clientNumber()).isEqualTo("00012345");
     assertThat(request.estimatedShippingDate()).isEqualTo("2026-04-06");
     assertThat(request.remarks()).isEqualTo("Ready");
+  }
+
+  @Test
+  void addPermitShouldRejectWithoutSaveAndOicActions() {
+    TestingAuthenticationToken authentication = unauthorizedSaveIndianReservePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.addPermit(new LinkedMultiValueMap<>(), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  private TestingAuthenticationToken authorizedSaveIndianReservePermit() {
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(true);
+    when(authorizationService.canPerformAction(roles, "viewOICApplication")).thenReturn(true);
+    return authentication;
+  }
+
+  private TestingAuthenticationToken unauthorizedSaveIndianReservePermit() {
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\readonly", "n/a");
+    List<String> roles = List.of("LEXIS_READ_ONLY");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(false);
+    return authentication;
   }
 }

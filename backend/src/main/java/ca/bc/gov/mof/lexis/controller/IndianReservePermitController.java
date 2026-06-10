@@ -8,6 +8,8 @@ import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.service.reserve.IndianReservePermitService;
 import ca.bc.gov.mof.lexis.service.reserve.IndianReservePermitService.CreatePermitRequest;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -38,11 +40,20 @@ public class IndianReservePermitController {
   private static final Logger LOGGER = LoggerFactory.getLogger(IndianReservePermitController.class);
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
+  private static final String LEGACY_ACTION_SAVE_PERMIT = "savePermit";
+  private static final String LEGACY_ACTION_VIEW_OIC_APPLICATION = "viewOICApplication";
 
   private final ObjectProvider<IndianReservePermitService> serviceProvider;
+  private final LexisSessionService sessionService;
+  private final LexisAuthorizationService authorizationService;
 
-  public IndianReservePermitController(ObjectProvider<IndianReservePermitService> serviceProvider) {
+  public IndianReservePermitController(
+      ObjectProvider<IndianReservePermitService> serviceProvider,
+      LexisSessionService sessionService,
+      LexisAuthorizationService authorizationService) {
     this.serviceProvider = serviceProvider;
+    this.sessionService = sessionService;
+    this.authorizationService = authorizationService;
   }
 
   @GetMapping("/search/options")
@@ -129,6 +140,10 @@ public class IndianReservePermitController {
   public ResponseEntity<PermitMutationRpcResponseDto> addPermit(
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
+    if (!canSaveIndianReservePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     IndianReservePermitService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Indian reserve permit service unavailable - returning no content for add permit");
@@ -139,6 +154,12 @@ public class IndianReservePermitController {
         service.addPermit(
             toCreatePermitRequest(parameters),
             authentication == null ? null : authentication.getName()));
+  }
+
+  private boolean canSaveIndianReservePermit(Authentication authentication) {
+    var roles = sessionService.parseRolesFromPrincipal(authentication);
+    return authorizationService.canPerformAction(roles, LEGACY_ACTION_SAVE_PERMIT)
+        && authorizationService.canPerformAction(roles, LEGACY_ACTION_VIEW_OIC_APPLICATION);
   }
 
   private IndianReservePermitSearchCriteria buildCriteria(

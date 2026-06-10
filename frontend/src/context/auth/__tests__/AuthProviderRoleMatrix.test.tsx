@@ -72,7 +72,27 @@ describe('Auth Provider Role Matrix', () => {
     mockedPerformLogoff.mockResolvedValue({ invalidated: true })
   })
 
-  it('normalizes legacy concrete submitter roles to canonical forms', async () => {
+  it('normalizes modern submitter roles to canonical frontend forms', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\tester',
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345', 'LEXIS_FEDERAL_SUBMITTER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: [],
+    })
+
+    renderProbe(['/summary'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent(
+      'PROVINCIAL_SUBMITTER_00012345,FEDERAL_SUBMITTER',
+    )
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/summary')
+    expect(screen.getByTestId('action-/summary')).toHaveTextContent('false')
+  })
+
+  it('does not route legacy submitter aliases as modern submitter roles', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\tester',
@@ -86,9 +106,9 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent(
-      'PROVINCIAL_SUBMITTER_00012345,FEDERAL_SUBMITTER',
+      'LEXIS_INDUSTRY_00012345,LOG_EXPORT_INDUSTRY_00067890',
     )
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/summary')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/dashboard')
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('false')
   })
 
@@ -114,7 +134,7 @@ describe('Auth Provider Role Matrix', () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\approver',
-      roles: ['APPLICATION_APPROVER'],
+      roles: ['LEXIS_APPLICATION_APPROVER'],
       welcomeTarget: null,
       legacyPath: '/permitSearch.do?actionMapping=view',
       grantedActions: [],
@@ -124,6 +144,24 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
+    expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('false')
+  })
+
+  it('keeps delegated admin on the dashboard when no LEXIS actions are granted', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\delegated',
+      roles: ['LEXIS_DELEGATED_ADMIN'],
+      welcomeTarget: 'noAccess',
+      legacyPath: null,
+      grantedActions: [],
+    })
+
+    renderProbe(['/applicationsReview'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('DELEGATED_ADMIN')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/dashboard')
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('false')
   })
 

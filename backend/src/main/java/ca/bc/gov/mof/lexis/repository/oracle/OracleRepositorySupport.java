@@ -161,7 +161,11 @@ public abstract class OracleRepositorySupport {
             return results;
           });
     } catch (DataAccessException ex) {
-      logger.warn("Oracle procedure call failed [{}]: {}", procedureSignature, ex.getMessage());
+      logger.warn(
+          "Oracle procedure call failed [{}]: {}; root cause: {}",
+          procedureSignature,
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return List.of();
     }
   }
@@ -223,7 +227,11 @@ public abstract class OracleRepositorySupport {
             return results;
           });
     } catch (DataAccessException ex) {
-      logger.warn("Oracle dynamic call failed [{}]: {}", procedureSignature, ex.getMessage());
+      logger.warn(
+          "Oracle dynamic call failed [{}]: {}; root cause: {}",
+          procedureSignature,
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return List.of();
     }
   }
@@ -271,7 +279,11 @@ public abstract class OracleRepositorySupport {
               });
       return total == null ? 0 : total;
     } catch (DataAccessException ex) {
-      logger.warn("Oracle dynamic count call failed [{}]: {}", procedureSignature, ex.getMessage());
+      logger.warn(
+          "Oracle dynamic count call failed [{}]: {}; root cause: {}",
+          procedureSignature,
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return 0;
     }
   }
@@ -292,7 +304,11 @@ public abstract class OracleRepositorySupport {
                   });
       return Boolean.TRUE.equals(result);
     } catch (DataAccessException ex) {
-      logger.warn("Oracle procedure execution failed [{}]: {}", procedureSignature, ex.getMessage());
+      logger.warn(
+          "Oracle procedure execution failed [{}]: {}; root cause: {}",
+          procedureSignature,
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return false;
     }
   }
@@ -581,6 +597,15 @@ public abstract class OracleRepositorySupport {
 
   protected LocalDate toLocalDate(Timestamp value) {
     return value == null ? null : value.toLocalDateTime().toLocalDate();
+  }
+
+  private String rootCauseMessage(Throwable throwable) {
+    Throwable root = throwable;
+    while (root.getCause() != null && root.getCause() != root) {
+      root = root.getCause();
+    }
+    String message = root.getMessage();
+    return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
   }
 
   protected Long getLong(ResultSet rs, String column) {

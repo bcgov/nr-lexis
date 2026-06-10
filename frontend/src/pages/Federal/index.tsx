@@ -5,7 +5,6 @@ import {
   Checkbox,
   Column,
   Grid,
-  InlineLoading,
   InlineNotification,
   Pagination,
   Select,
@@ -19,6 +18,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
 import type {
   FederalApplicationSearchFilters,
   FederalApplicationSearchItem,
@@ -498,103 +498,103 @@ const FederalPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <h2 className="dashboard-title">Search Results</h2>
-        {loading && <InlineLoading description="Loading federal application search results..." />}
         {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        {!loading && (
-          <>
-            <Table useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>
-                    <Checkbox
-                      id="selectAllCurrentPageRows"
-                      hideLabel
-                      labelText="Select all rows on this page"
-                      checked={allSelectableRowsAreSelected}
-                      disabled={selectableRows.length === 0}
-                      onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
-                    />
+        <SearchResultsTableFrame
+          loading={loading}
+          loadingDescription="Loading federal application search results..."
+        >
+          <Table useZebraStyles>
+            <TableHead>
+              <TableRow>
+                <TableHeader>
+                  <Checkbox
+                    id="selectAllCurrentPageRows"
+                    hideLabel
+                    labelText="Select all rows on this page"
+                    checked={allSelectableRowsAreSelected}
+                    disabled={selectableRows.length === 0}
+                    onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
+                  />
+                </TableHeader>
+                {SORT_COLUMNS.map((column) => (
+                  <TableHeader key={column.id}>
+                    <button
+                      type="button"
+                      className="legacy-sort-button"
+                      onClick={() => onHeaderClick(column.id)}
+                    >
+                      {column.label}
+                      {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                    </button>
                   </TableHeader>
-                  {SORT_COLUMNS.map((column) => (
-                    <TableHeader key={column.id}>
-                      <button
-                        type="button"
-                        className="legacy-sort-button"
-                        onClick={() => onHeaderClick(column.id)}
-                      >
-                        {column.label}
-                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                      </button>
-                    </TableHeader>
-                  ))}
-                  <TableHeader>Exemption Type</TableHeader>
-                  <TableHeader>Exemption Number</TableHeader>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {results.content.map((row) => (
-                  <TableRow key={row.applicationNumber}>
-                    <TableCell>
-                      <Checkbox
-                        id={`selectRow-${row.applicationNumber}`}
-                        hideLabel
-                        labelText={`Select ${row.applicationNumber}`}
-                        checked={Boolean(selectedRowsById[row.applicationNumber])}
-                        disabled={!canCreateExemption || !row.allowCreateExemption}
-                        onChange={(_, payload) => toggleRowSelection(row, Boolean(payload.checked))}
-                      />
-                    </TableCell>
-                    <TableCell>
+                ))}
+                <TableHeader>Exemption Type</TableHeader>
+                <TableHeader>Exemption Number</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {results.content.map((row) => (
+                <TableRow key={row.applicationNumber}>
+                  <TableCell>
+                    <Checkbox
+                      id={`selectRow-${row.applicationNumber}`}
+                      hideLabel
+                      labelText={`Select ${row.applicationNumber}`}
+                      checked={Boolean(selectedRowsById[row.applicationNumber])}
+                      disabled={!canCreateExemption || !row.allowCreateExemption}
+                      onChange={(_, payload) => toggleRowSelection(row, Boolean(payload.checked))}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      className="cds--link"
+                      to={withCurrentSearch(`/federal/application/${row.applicationNumber}`)}
+                    >
+                      {row.federalApplicationNumber}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{row.status}</TableCell>
+                  <TableCell>{row.clientNumber}</TableCell>
+                  <TableCell>{row.reason}</TableCell>
+                  <TableCell>{row.exemptionType || '-'}</TableCell>
+                  <TableCell>
+                    {row.exemptionNumber ? (
                       <Link
                         className="cds--link"
-                        to={withCurrentSearch(`/federal/application/${row.applicationNumber}`)}
+                        to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
                       >
-                        {row.federalApplicationNumber}
+                        {row.exemptionNumber}
                       </Link>
-                    </TableCell>
-                    <TableCell>{row.status}</TableCell>
-                    <TableCell>{row.clientNumber}</TableCell>
-                    <TableCell>{row.reason}</TableCell>
-                    <TableCell>{row.exemptionType || '-'}</TableCell>
-                    <TableCell>
-                      {row.exemptionNumber ? (
-                        <Link
-                          className="cds--link"
-                          to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
-                        >
-                          {row.exemptionNumber}
-                        </Link>
-                      ) : (
-                        '-'
-                      )}
-                    </TableCell>
-                    <TableCell>{row.receivedDate}</TableCell>
-                    <TableCell>{row.listingDate}</TableCell>
-                  </TableRow>
-                ))}
-                {results.content.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={9}>
-                      No federal applications found for the selected criteria.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            <Pagination
-              page={results.page.number + 1}
-              pageSize={results.page.size}
-              pageSizes={[10, 20, 30]}
-              totalItems={results.page.totalElements}
-              onChange={({ page, pageSize: nextPageSize }) => {
-                clearSelection()
-                setSearchParams(
-                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-                )
-              }}
-            />
-          </>
-        )}
+                    ) : (
+                      '-'
+                    )}
+                  </TableCell>
+                  <TableCell>{row.receivedDate}</TableCell>
+                  <TableCell>{row.listingDate}</TableCell>
+                </TableRow>
+              ))}
+              {results.content.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={9}>
+                    No federal applications found for the selected criteria.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <Pagination
+            page={results.page.number + 1}
+            pageSize={results.page.size}
+            pageSizes={[10, 20, 30]}
+            totalItems={results.page.totalElements}
+            onChange={({ page, pageSize: nextPageSize }) => {
+              clearSelection()
+              setSearchParams(
+                buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+              )
+            }}
+          />
+        </SearchResultsTableFrame>
       </Column>
     </Grid>
   )

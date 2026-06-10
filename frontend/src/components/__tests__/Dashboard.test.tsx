@@ -123,15 +123,43 @@ describe('Dashboard', () => {
     )
 
     expect(await screen.findByText('Provincial Applications')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Open Provincial Summary' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open Provincial Hub' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Reports' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Open Provincial Summary' }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open Review Queue' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open Admin' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Provincial Summary' })).not.toBeInTheDocument()
     expect(screen.queryByText('Provincial Review')).not.toBeInTheDocument()
     expect(screen.queryByText('Federal Applications')).not.toBeInTheDocument()
     expect(screen.queryByText('Indigenous Reserve Permits')).not.toBeInTheDocument()
     expect(screen.queryByText('Admin')).not.toBeInTheDocument()
     expect(screen.queryByText(/Accessible modules:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
+  })
+
+  test('reserves dashboard cards for count-backed modules', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => true,
+    } as any)
+
+    render(
+      <MemoryRouter>
+        <Dashboard />
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'Provincial Applications' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Provincial Review' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Federal Applications' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Indigenous Reserve Permits' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Provincial Summary' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Reports' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Admin' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open Reports' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open Admin' })).toBeInTheDocument()
   })
 })

@@ -715,13 +715,13 @@ public class LegacyRouteController {
           permitNumber == null ? null : permitNumber.toString());
     }
     if (ACTION_REMOVE_PERMIT_DOCUMENT.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.removePermitDocument(documentId);
+      return permitDetailsRpcController.removePermitDocument(documentId, authentication);
     }
     if (ACTION_REMOVE_APPLICATION_DOCUMENT.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.removeApplicationDocument(documentId);
+      return permitDetailsRpcController.removeApplicationDocument(documentId, authentication);
     }
     if (ACTION_REMOVE_INVOICE_DOCUMENT.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.removeInvoiceDocument(documentId);
+      return permitDetailsRpcController.removeInvoiceDocument(documentId, authentication);
     }
     return ResponseEntity.noContent().build();
   }

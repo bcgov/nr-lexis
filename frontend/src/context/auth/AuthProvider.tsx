@@ -54,28 +54,22 @@ const LEGACY_TO_CANONICAL_ROLE_MAP: Record<string, string> = {
   LEXIS_READ_ONLY: 'READ_ONLY',
   LEXIS_APPLICATION_APPROVER: 'APPLICATION_APPROVER',
   LEXIS_EXEMPTION_APPROVER: 'EXEMPTION_APPROVER',
-  LEXIS_INDUSTRY: 'PROVINCIAL_SUBMITTER',
-  LEXIS_LOG_EXPORT_INDUSTRY: 'FEDERAL_SUBMITTER',
-  LOG_EXPORT_INDUSTRY: 'FEDERAL_SUBMITTER',
+  LEXIS_PROVINCIAL_SUBMITTER: 'PROVINCIAL_SUBMITTER',
+  LEXIS_FEDERAL_SUBMITTER: 'FEDERAL_SUBMITTER',
+  LEXIS_DELEGATED_ADMIN: 'DELEGATED_ADMIN',
 }
 
-const LEGACY_PROVINCIAL_CONCRETE_PREFIX = 'LEXIS_INDUSTRY_'
-const LEGACY_FEDERAL_CONCRETE_PREFIXES = ['LEXIS_LOG_EXPORT_INDUSTRY_', 'LOG_EXPORT_INDUSTRY_']
+const CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX = 'LEXIS_PROVINCIAL_SUBMITTER_'
 const CANONICAL_PROVINCIAL_CONCRETE_PREFIX = 'PROVINCIAL_SUBMITTER_'
 const CANONICAL_FEDERAL_CONCRETE_ROLE = 'FEDERAL_SUBMITTER'
 const ROLE_ADMIN = 'ADMIN'
 const ROLE_READ_ONLY = 'READ_ONLY'
+const ROLE_APPLICATION_APPROVER = 'APPLICATION_APPROVER'
 const ROLE_EXEMPTION_APPROVER = 'EXEMPTION_APPROVER'
 const ROLE_PROVINCIAL_SUBMITTER = 'PROVINCIAL_SUBMITTER'
 const ROLE_FEDERAL_SUBMITTER = 'FEDERAL_SUBMITTER'
 
-const INDUSTRY_ROLE_NAMES = new Set<string>([
-  ROLE_PROVINCIAL_SUBMITTER,
-  ROLE_FEDERAL_SUBMITTER,
-  'LEXIS_INDUSTRY',
-  'LEXIS_LOG_EXPORT_INDUSTRY',
-  'LOG_EXPORT_INDUSTRY',
-])
+const INDUSTRY_ROLE_NAMES = new Set<string>([ROLE_PROVINCIAL_SUBMITTER, ROLE_FEDERAL_SUBMITTER])
 
 const normalizeAction = (action: string): string => {
   return action.trim().toLowerCase().replace(/\.do$/i, '').replace(/^\//, '')
@@ -97,12 +91,8 @@ const clearOauthCallbackParams = (): void => {
 const canonicalizeRole = (role: string): string => {
   const normalizedRole = role.trim().toUpperCase()
 
-  if (normalizedRole.startsWith(LEGACY_PROVINCIAL_CONCRETE_PREFIX)) {
-    return `${CANONICAL_PROVINCIAL_CONCRETE_PREFIX}${normalizedRole.slice(LEGACY_PROVINCIAL_CONCRETE_PREFIX.length)}`
-  }
-
-  if (LEGACY_FEDERAL_CONCRETE_PREFIXES.some((prefix) => normalizedRole.startsWith(prefix))) {
-    return CANONICAL_FEDERAL_CONCRETE_ROLE
+  if (normalizedRole.startsWith(CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX)) {
+    return `${CANONICAL_PROVINCIAL_CONCRETE_PREFIX}${normalizedRole.slice(CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX.length)}`
   }
 
   if (normalizedRole.startsWith('FEDERAL_SUBMITTER_')) {
@@ -127,7 +117,7 @@ const isIndustryRole = (role: string): boolean => {
   if (INDUSTRY_ROLE_NAMES.has(role)) {
     return true
   }
-  return role.startsWith('PROVINCIAL_SUBMITTER_') || role.startsWith('LEXIS_INDUSTRY_')
+  return role.startsWith('PROVINCIAL_SUBMITTER_')
 }
 
 const sanitizeCapabilities = (
@@ -150,6 +140,8 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   const isReadOnlyUser = roleSet.has(ROLE_READ_ONLY) || roleSet.has('LEXIS_READ_ONLY')
   const isIndustryUser = capabilities.roles.some((role) => isIndustryRole(role))
   const isAdminOnly = roleSet.size === 1 && (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN'))
+  const isApplicationApproverUser =
+    roleSet.has(ROLE_APPLICATION_APPROVER) || roleSet.has('LEXIS_APPLICATION_APPROVER')
   const isExemptionApproverUser =
     roleSet.has(ROLE_EXEMPTION_APPROVER) || roleSet.has('LEXIS_EXEMPTION_APPROVER')
 
@@ -169,7 +161,7 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     return '/provincial/exemption'
   }
 
-  if (capabilities.roles.length > 0) {
+  if (isApplicationApproverUser) {
     return '/provincial/review'
   }
 

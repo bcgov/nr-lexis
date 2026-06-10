@@ -56,7 +56,7 @@ public class LexisUploadController {
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
         .map(ResponseEntity::ok)
-        .orElseGet(() -> ResponseEntity.noContent().build());
+        .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
   }
 
   @PostMapping(
@@ -86,7 +86,7 @@ public class LexisUploadController {
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
         .map(ResponseEntity::ok)
-        .orElseGet(() -> ResponseEntity.noContent().build());
+        .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
   }
 
   @PostMapping(
@@ -119,7 +119,7 @@ public class LexisUploadController {
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
         .map(ResponseEntity::ok)
-        .orElseGet(() -> ResponseEntity.noContent().build());
+        .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
   }
 
   @PostMapping(
@@ -167,7 +167,7 @@ public class LexisUploadController {
             firstNonNull(invoiceFeeInLieu, feeInLieuAlias),
             resolveEntryUserId(authentication))
         .map(ResponseEntity::ok)
-        .orElseGet(() -> ResponseEntity.noContent().build());
+        .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
   }
 
   private String resolveEntryUserId(Authentication authentication) {

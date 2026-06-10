@@ -512,7 +512,11 @@ public class OracleLegacyCsvReportService {
         }
       }
     } catch (SQLException ex) {
-      LOGGER.warn("CSV report procedure failed [{}]: {}", procedureCall, ex.getMessage());
+      LOGGER.warn(
+          "CSV report procedure failed [{}]: {}; root cause: {}",
+          procedureCall,
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return Optional.empty();
     }
   }
@@ -534,7 +538,11 @@ public class OracleLegacyCsvReportService {
         return Optional.of(readTabularData(rs));
       }
     } catch (SQLException ex) {
-      LOGGER.warn("CSV report procedure failed [{}]: {}", procedureCall, ex.getMessage());
+      LOGGER.warn(
+          "CSV report procedure failed [{}]: {}; root cause: {}",
+          procedureCall,
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return Optional.empty();
     }
   }
@@ -740,6 +748,15 @@ public class OracleLegacyCsvReportService {
     } catch (NumberFormatException ex) {
       return 0L;
     }
+  }
+
+  private static String rootCauseMessage(Throwable throwable) {
+    Throwable root = throwable;
+    while (root.getCause() != null && root.getCause() != root) {
+      root = root.getCause();
+    }
+    String message = root.getMessage();
+    return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
   }
 
   private void setNullableString(CallableStatement cs, int index, String value) throws SQLException {

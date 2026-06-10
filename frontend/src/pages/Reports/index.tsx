@@ -1256,7 +1256,6 @@ const ReportsPage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Reports</h1>
-        <p>Report generation is served through Spring report endpoints only.</p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>

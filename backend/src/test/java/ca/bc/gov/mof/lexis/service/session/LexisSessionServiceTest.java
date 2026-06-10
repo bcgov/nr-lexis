@@ -102,6 +102,16 @@ class LexisSessionServiceTest {
   }
 
   @Test
+  void shouldRecognizeDelegatedAdminWithoutRoutingToReviewerLanding() {
+    LexisSessionWelcomeDto response =
+        service.resolveWelcomeRoute("idir\\delegated", List.of("lexis_delegated_admin"));
+
+    assertThat(response.welcomeTarget()).isEqualTo("noAccess");
+    assertThat(response.legacyPath()).isNull();
+    assertThat(response.roles()).containsExactly("LEXIS_DELEGATED_ADMIN");
+  }
+
+  @Test
   void shouldParseRoleHeaderIntoCanonicalDistinctRoles() {
     List<String> roles = service.parseRoleHeader(" lexis_admin, lexis_read_only,LEXIS_ADMIN ,, ");
 
@@ -121,10 +131,11 @@ class LexisSessionServiceTest {
         service.parseAuthorities(
             List.of(
                 new SimpleGrantedAuthority("lexis_read_only"),
+                new SimpleGrantedAuthority("lexis_delegated_admin"),
                 new SimpleGrantedAuthority("LEXIS_ADMIN"),
                 new SimpleGrantedAuthority("lexis_admin")));
 
-    assertThat(roles).containsExactly("LEXIS_READ_ONLY", "LEXIS_ADMIN");
+    assertThat(roles).containsExactly("LEXIS_READ_ONLY", "LEXIS_DELEGATED_ADMIN", "LEXIS_ADMIN");
   }
 
   @Test

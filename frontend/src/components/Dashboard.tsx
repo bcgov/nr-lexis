@@ -38,13 +38,6 @@ type DashboardCounts = Record<DashboardCountKey, number>
 
 const DASHBOARD_MODULES: DashboardModule[] = [
   {
-    id: 'provincialSummary',
-    title: 'Provincial Summary',
-    description: 'Operational totals and review queue drilldown.',
-    path: '/provincial/summary',
-    requiredActions: ['/summary'],
-  },
-  {
     id: 'provincialReview',
     title: 'Provincial Review',
     description: 'Approval and triage queue for applications.',
@@ -99,31 +92,6 @@ const DASHBOARD_MODULES: DashboardModule[] = [
     path: '/indian-reserve',
     requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
     countKey: 'indianReservePermits',
-  },
-  {
-    id: 'reports',
-    title: 'Reports',
-    description: 'Generate report outputs and export packages.',
-    path: '/reports',
-    requiredActions: [
-      '/applicationReport',
-      '/offerReport',
-      '/teacReport',
-      '/exemptionReport',
-      '/permitLedgerReport',
-      '/transportReport',
-      '/speciesGradeReport',
-      '/feeReport',
-      '/tenureReport',
-      'mofrListing',
-    ],
-  },
-  {
-    id: 'admin',
-    title: 'Admin',
-    description: 'Policy and upload administration.',
-    path: '/admin',
-    requiredActions: ['/lexisAgentAdmin'],
   },
 ]
 
@@ -431,11 +399,6 @@ const Dashboard: FC = () => {
             >
               Refresh Dashboard
             </Button>
-            {canAccessModule(['/summary']) && (
-              <Button kind="ghost" onClick={() => navigate('/provincial/summary')}>
-                Open Provincial Summary
-              </Button>
-            )}
           </div>
         </Tile>
       </Column>

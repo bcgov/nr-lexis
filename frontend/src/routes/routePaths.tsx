@@ -312,7 +312,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     path: '/federal/application/:applicationNumber',
     id: 'Federal Application Details',
     requiredActions: ['/federalApplicationDetails', 'viewFederalApplication'],
-    requiredActionsMatch: 'any',
+    requiredActionsMatch: 'all',
     element: (
       <Layout>
         <FederalApplicationDetailsPage />
@@ -334,7 +334,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/indian-reserve/permit/create',
     id: 'Create Indigenous Reserve Permit',
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
+    requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
     requiredActionsMatch: 'all',
     element: (
       <Layout>
@@ -347,7 +347,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     path: '/indian-reserve/permit/:permitNumber',
     id: 'Indigenous Reserve Permit Details',
     requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
-    requiredActionsMatch: 'any',
+    requiredActionsMatch: 'all',
     element: (
       <Layout>
         <IndianReservePermitDetailsPage />

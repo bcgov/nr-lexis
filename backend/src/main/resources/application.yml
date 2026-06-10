@@ -152,3 +152,4 @@ lexis:
         - "/applicationDetails"
         - "/offersSearch"
         - "/offerDetails"
+      LEXIS_DELEGATED_ADMIN: []
