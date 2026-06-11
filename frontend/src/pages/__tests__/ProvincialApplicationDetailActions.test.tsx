@@ -1540,6 +1540,27 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
   })
 
+  it('prefills application review email from the applicant client data', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    const reviewTile = getApplicationReviewTile()
+    await waitFor(() => {
+      expect(within(reviewTile).getByLabelText('Client Email Address')).toHaveValue(
+        'agent@example.test',
+      )
+    })
+  })
+
   it('updates application review status and can send status email from detail', async () => {
     const detailAfterStatusUpdate: ProvincialApplicationDetail = {
       ...applicationDetail,
@@ -1563,11 +1584,12 @@ describe('Provincial Application Detail Document Actions', () => {
 
     expect(await screen.findByText('Application Review')).toBeInTheDocument()
     const reviewTile = getApplicationReviewTile()
+    await waitFor(() => {
+      expect(within(reviewTile).getByLabelText('Client Email Address')).toHaveValue(
+        'agent@example.test',
+      )
+    })
     await userEvent.selectOptions(within(reviewTile).getByLabelText('Application Status'), 'REJ')
-    await userEvent.type(
-      within(reviewTile).getByLabelText('Client Email Address'),
-      'client@example.com',
-    )
     await userEvent.type(within(reviewTile).getByLabelText('Review Remark'), 'Needs correction')
     await userEvent.click(
       within(reviewTile).getByRole('button', { name: 'Update Status and Send Email' }),
@@ -1577,12 +1599,12 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith('321', {
         statusCode: 'REJ',
         remark: 'Needs correction',
-        clientEmailAddress: 'client@example.com',
+        clientEmailAddress: 'agent@example.test',
       })
       expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith('321', {
         statusCode: 'REJ',
         remark: 'Needs correction',
-        clientEmailAddress: 'client@example.com',
+        clientEmailAddress: 'agent@example.test',
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })

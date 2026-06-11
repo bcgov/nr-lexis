@@ -337,6 +337,21 @@ const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
 
 const isAgentApplicant = (applicantTypeCode: string): boolean => applicantTypeCode === 'A'
 
+const reviewEmailCandidate = (
+  applicantTypeCode: string,
+  ownerClientData: ApplicationClientData | null,
+  agentClientData: ApplicationClientData | null,
+): string => {
+  const ownerEmail = normalizeEmail(ownerClientData?.email ?? '')
+  const agentEmail = normalizeEmail(agentClientData?.email ?? '')
+
+  if (isAgentApplicant(applicantTypeCode)) {
+    return agentEmail || ownerEmail
+  }
+
+  return ownerEmail || agentEmail
+}
+
 const ProvincialApplicationDetailsPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
@@ -856,6 +871,28 @@ const ProvincialApplicationDetailsPage: FC = () => {
       isActive = false
     }
   }, [hasSummaryForm, summaryAgentClientLocationCode, summaryAgentClientNumber])
+
+  useEffect(() => {
+    if (!summaryForm || reviewStatusEmailAddress.trim()) {
+      return
+    }
+
+    let isActive = true
+    const candidateEmail = reviewEmailCandidate(
+      summaryForm.applicantTypeCode,
+      ownerClientData,
+      agentClientData,
+    )
+    void Promise.resolve().then(() => {
+      if (isActive && candidateEmail) {
+        setReviewStatusEmailAddress(candidateEmail)
+      }
+    })
+
+    return () => {
+      isActive = false
+    }
+  }, [agentClientData, ownerClientData, reviewStatusEmailAddress, summaryForm])
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {
