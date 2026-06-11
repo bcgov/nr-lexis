@@ -58,6 +58,7 @@ type ProvincialApplicationCreateForm = {
   listingDate: string
   productLocation: string
   applicationVolume: string
+  averageLogVolume: string
   comments: string
 }
 
@@ -83,6 +84,7 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   listingDate: '',
   productLocation: '',
   applicationVolume: '',
+  averageLogVolume: '',
   comments: '',
 }
 
@@ -120,6 +122,7 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     listingDate: query.get('listingDate') ?? '',
     productLocation: query.get('productLocation') ?? query.get('logLocation') ?? '',
     applicationVolume: query.get('applicationVolume') ?? '',
+    averageLogVolume: query.get('averageLogVolume') ?? query.get('logVolume') ?? '',
     comments: query.get('comments') ?? '',
   }
 }
@@ -586,6 +589,10 @@ const ProvincialApplicationCreatePage: FC = () => {
       applicationVolume: firstValidationError(
         () => requiredFieldError(form.applicationVolume, 'Application volume'),
         () => positiveNumericFieldError(form.applicationVolume),
+      ),
+      averageLogVolume: firstValidationError(
+        () => requiredFieldError(form.averageLogVolume, 'Average log volume'),
+        () => positiveNumericFieldError(form.averageLogVolume),
       ),
     }),
     [form],
@@ -1069,6 +1076,17 @@ const ProvincialApplicationCreatePage: FC = () => {
               onBlur={() => markFieldTouched('applicationVolume')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicationVolume: event.target.value }))
+              }
+            />
+            <TextInput
+              id="averageLogVolume"
+              labelText="Average Log Volume (required)"
+              value={form.averageLogVolume}
+              invalid={!!fieldError('averageLogVolume')}
+              invalidText={fieldError('averageLogVolume')}
+              onBlur={() => markFieldTouched('averageLogVolume')}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, averageLogVolume: event.target.value }))
               }
             />
           </div>

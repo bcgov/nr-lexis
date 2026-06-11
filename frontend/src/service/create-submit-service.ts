@@ -219,6 +219,7 @@ export type ProvincialApplicationCreateSubmission = {
   listingDate: string
   productLocation: string
   applicationVolume: string
+  averageLogVolume: string
   comments: string
 }
 
@@ -257,6 +258,8 @@ export const submitProvincialApplicationCreate = async (
         productLocation: form.productLocation,
         logLocation: form.productLocation,
         applicationVolume: form.applicationVolume,
+        averageLogVolume: form.averageLogVolume,
+        logVolume: form.averageLogVolume,
         comments: form.comments,
         additionalRemarks: form.comments,
       }),

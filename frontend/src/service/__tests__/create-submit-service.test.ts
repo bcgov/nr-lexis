@@ -47,6 +47,7 @@ describe('create-submit-service', () => {
       listingDate: '2026-01-02',
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
+      averageLogVolume: '1.2',
       comments: 'ready',
     })
 
@@ -85,6 +86,8 @@ describe('create-submit-service', () => {
     expect(body.get('productLocation')).toBe('Camp 1')
     expect(body.get('logLocation')).toBe('Camp 1')
     expect(body.get('applicationVolume')).toBe('125.5')
+    expect(body.get('averageLogVolume')).toBe('1.2')
+    expect(body.get('logVolume')).toBe('1.2')
   })
 
   it('returns offer created id from exportPurchaseOfferNumber payload', async () => {
@@ -146,6 +149,7 @@ describe('create-submit-service', () => {
       listingDate: '2026-01-02',
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
+      averageLogVolume: '1.2',
       comments: 'ready',
     })
 
@@ -210,6 +214,7 @@ describe('create-submit-service', () => {
       listingDate: '2026-01-02',
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
+      averageLogVolume: '1.2',
       comments: 'ready',
     })
 
@@ -244,6 +249,7 @@ describe('create-submit-service', () => {
       listingDate: '2026-01-02',
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
+      averageLogVolume: '1.2',
       comments: 'ready',
     })
 
@@ -255,6 +261,8 @@ describe('create-submit-service', () => {
         exemptionReason: 'U',
         logLocation: 'Camp 1',
         productLocation: 'Camp 1',
+        averageLogVolume: '1.2',
+        logVolume: '1.2',
       }),
     )
     expect(body).not.toHaveProperty('applicationNumber')
