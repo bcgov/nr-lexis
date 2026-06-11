@@ -785,6 +785,17 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add("The package volume must have no more than one decimal place.");
     }
 
+    String effectiveProductType =
+        firstNonBlank(request.productType(), existing == null ? null : existing.productTypeCode());
+    String effectiveAgeClass =
+        firstNonBlank(request.ageClass(), existing == null ? null : existing.growthTypeCode());
+    if (effectiveProductType == null) {
+      errors.add(required("package product type code"));
+    }
+    if (requiresGrowthType(effectiveProductType) && effectiveAgeClass == null) {
+      errors.add(required("package growth type code"));
+    }
+
     if (request.status() == null) {
       errors.add(required("package status code"));
     }

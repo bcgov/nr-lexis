@@ -140,6 +140,7 @@ describe('Create Page Action State Smoke', () => {
     expect(screen.getByText('Permit number is required.')).toBeInTheDocument()
     expect(screen.getByText('Package number is required.')).toBeInTheDocument()
     expect(screen.getByText('Client number is required.')).toBeInTheDocument()
+    expect(screen.getByText('Region is required.')).toBeInTheDocument()
     expect(mockedSubmitIndianReservePermitCreate).not.toHaveBeenCalled()
   })
 

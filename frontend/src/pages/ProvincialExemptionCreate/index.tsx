@@ -228,6 +228,8 @@ const ProvincialExemptionCreatePage: FC = () => {
         () => positiveNumericFieldError(form.applicationNumber),
       ),
       exemptionTypeCode: requiredFieldError(form.exemptionTypeCode, 'Exemption type') ?? undefined,
+      exemptionStatusCode:
+        requiredFieldError(form.exemptionStatusCode, 'Exemption status') ?? undefined,
       ownerClientNumber:
         requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
       applicantClientNumber:
@@ -410,10 +412,13 @@ const ProvincialExemptionCreatePage: FC = () => {
             />
             <SearchableSelect
               id="exemptionStatusCode"
-              labelText="Exemption Status"
+              labelText="Exemption Status (required)"
               value={form.exemptionStatusCode}
+              invalid={!!fieldError('exemptionStatusCode')}
+              invalidText={fieldError('exemptionStatusCode')}
               placeholder="Select status"
               options={exemptionStatuses}
+              onBlur={() => markFieldTouched('exemptionStatusCode')}
               onChange={(value) =>
                 setForm((current) => ({ ...current, exemptionStatusCode: value }))
               }

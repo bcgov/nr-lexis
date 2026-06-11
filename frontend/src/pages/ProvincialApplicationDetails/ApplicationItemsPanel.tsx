@@ -109,6 +109,8 @@ type Props = {
   productTypeOptions: ApplicationCodeOption[]
   growthTypeOptions: ApplicationCodeOption[]
   onDetailChanged: () => Promise<void>
+  focusedPackageNumber?: string
+  focusedPackageRequestId?: number
 }
 
 const emptyPackageForm = (productTypeCode: string | null | undefined): PackageFormState => ({
@@ -311,6 +313,8 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   productTypeOptions,
   growthTypeOptions,
   onDetailChanged,
+  focusedPackageNumber,
+  focusedPackageRequestId,
 }) => {
   const applicationNumber = String(detail.applicationNumber)
   const productTypeCode = detail.productTypeCode ?? ''
@@ -482,6 +486,12 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   useEffect(() => {
     dispatchPackageSelection({ type: 'sync', packageNumbers: packageNumbersFromDetail })
   }, [packageNumbersFromDetail])
+
+  useEffect(() => {
+    if (focusedPackageNumber && packageNumbers.includes(focusedPackageNumber)) {
+      dispatchPackageSelection({ type: 'select', packageNumber: focusedPackageNumber })
+    }
+  }, [focusedPackageNumber, focusedPackageRequestId, packageNumbers])
 
   useEffect(() => {
     let cancelled = false

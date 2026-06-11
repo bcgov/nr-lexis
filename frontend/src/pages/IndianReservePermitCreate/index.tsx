@@ -232,6 +232,7 @@ const IndianReservePermitCreatePage: FC = () => {
       packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
       clientNumber: requiredFieldError(form.clientNumber, 'Client number') ?? undefined,
       clientLocation: requiredFieldError(form.clientLocation, 'Client location') ?? undefined,
+      region: requiredFieldError(form.region, 'Region') ?? undefined,
       applicationDate: firstValidationError(
         () => requiredFieldError(form.applicationDate, 'Application date'),
         () => isoDateFieldError(form.applicationDate),
@@ -417,8 +418,11 @@ const IndianReservePermitCreatePage: FC = () => {
             </Select>
             <Select
               id="reserveRegion"
-              labelText="Region"
+              labelText="Region (required)"
               value={form.region}
+              invalid={!!fieldError('region')}
+              invalidText={fieldError('region')}
+              onBlur={() => markFieldTouched('region')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, region: event.target.value }))
               }

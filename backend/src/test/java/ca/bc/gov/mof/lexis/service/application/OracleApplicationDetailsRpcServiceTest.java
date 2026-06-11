@@ -1041,8 +1041,8 @@ class OracleApplicationDetailsRpcServiceTest {
                 "A",
                 "Test",
                 "N",
-                null,
-                null,
+                "S",
+                "H",
                 "LU",
                 List.of("FI", "HE")),
             " idir\\jsmith ");
@@ -1084,8 +1084,8 @@ class OracleApplicationDetailsRpcServiceTest {
                 "A",
                 "Test",
                 "N",
-                null,
-                null,
+                "S",
+                "H",
                 null,
                 List.of()),
             "idir\\jsmith");
@@ -1093,6 +1093,64 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.valid()).isFalse();
     assertThat(response.errors())
         .containsExactly("The total package volume must not exceed the application volume (100.0).");
+    verify(repository, never()).insertPackage(any());
+  }
+
+  @Test
+  void addPackageShouldRejectMissingPackageProductAndGrowthTypeBeforeOracleInsert() {
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L)).thenReturn(List.of());
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.addPackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                25.0d,
+                12.0d,
+                24.0d,
+                "A",
+                "Test",
+                "N",
+                null,
+                null,
+                "LU",
+                List.of("FI")),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).containsExactly("A valid package product type code is required.");
+    verify(repository, never()).insertPackage(any());
+  }
+
+  @Test
+  void addPackageShouldRejectMissingPackageGrowthTypeForHarvestedProductBeforeOracleInsert() {
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L)).thenReturn(List.of());
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.addPackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                25.0d,
+                12.0d,
+                24.0d,
+                "A",
+                "Test",
+                "N",
+                null,
+                "H",
+                "LU",
+                List.of("FI")),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).containsExactly("A valid package growth type code is required.");
     verify(repository, never()).insertPackage(any());
   }
 

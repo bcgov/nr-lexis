@@ -435,6 +435,10 @@ describe('Create Page Core Flows', () => {
       screen.getByRole('combobox', { name: 'Exemption Type (required)' }),
       'Section 1',
     )
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Exemption Status (required)' }),
+      'New',
+    )
     await userEvent.type(screen.getByLabelText('Approval Date (YYYY-MM-DD)'), '2026-02-01')
     await userEvent.type(screen.getByLabelText('Expiry Date (YYYY-MM-DD)'), '2026-12-31')
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
@@ -448,7 +452,7 @@ describe('Create Page Core Flows', () => {
       applicationNumber: '321',
       linkedApplicationNumbers: ['321', '654'],
       exemptionTypeCode: 'SECTION_1',
-      exemptionStatusCode: '',
+      exemptionStatusCode: 'NEW',
       ownerClientNumber: '00033333',
       applicantClientNumber: '00044444',
       approvalDate: '2026-02-01',
@@ -457,6 +461,32 @@ describe('Create Page Core Flows', () => {
       otherConditions: 'Linked applications: 321, 654',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-777')
+  })
+
+  it('blocks provincial exemption submit when status is missing', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/exemption/create?applications=321&ownerClientNumber=00033333&applicantClientNumber=00044444',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Create Provincial Exemption')
+    await userEvent.type(screen.getByLabelText('Exemption Number (required)'), 'EX-778')
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Exemption Type (required)' }),
+      'Section 1',
+    )
+    await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+
+    expect(screen.getAllByText('Exemption status is required.').length).toBeGreaterThan(0)
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
   it('submits provincial offer form and navigates to details', async () => {

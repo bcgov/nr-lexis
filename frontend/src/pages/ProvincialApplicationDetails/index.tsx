@@ -488,6 +488,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [reviewStatusEmailAddress, setReviewStatusEmailAddress] = useState('')
   const [reviewValidationMessage, setReviewValidationMessage] = useState('')
   const [isSubmittingReviewAction, setIsSubmittingReviewAction] = useState(false)
+  const [focusedPackageNumber, setFocusedPackageNumber] = useState('')
+  const [focusedPackageRequestId, setFocusedPackageRequestId] = useState(0)
   const beginDetailRequest = useLatestRequestGuard()
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
@@ -515,6 +517,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
     },
     [searchParams, setSearchParams],
   )
+  const focusPackageInItems = useCallback((packageNumber: string) => {
+    setFocusedPackageNumber(packageNumber)
+    setFocusedPackageRequestId((current) => current + 1)
+  }, [])
 
   const loadApplicationDetail = useCallback(async () => {
     const isLatestRequest = beginDetailRequest()
@@ -2708,6 +2714,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     <TableHeader>Package</TableHeader>
                     <TableHeader>Volume (m3)</TableHeader>
                     <TableHeader>Pieces</TableHeader>
+                    <TableHeader>Action</TableHeader>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -2716,11 +2723,21 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       <TableCell>{item.packageNumber}</TableCell>
                       <TableCell>{item.volume.toLocaleString()}</TableCell>
                       <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          aria-label={`Edit package ${item.packageNumber} items`}
+                          onClick={() => focusPackageInItems(item.packageNumber)}
+                        >
+                          Edit Items
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {filteredPackages.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={3}>No package rows matched the current filter.</TableCell>
+                      <TableCell colSpan={4}>No package rows matched the current filter.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -2734,6 +2751,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
               productTypeOptions={packageProductTypeOptions}
               growthTypeOptions={packageGrowthTypeOptions}
               onDetailChanged={loadApplicationDetail}
+              focusedPackageNumber={focusedPackageNumber}
+              focusedPackageRequestId={focusedPackageRequestId}
             />
           </Column>
           <Column sm={4} md={8} lg={8}>

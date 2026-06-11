@@ -112,6 +112,9 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
     if (shippingDate == null) {
       errors.add("A valid estimated shipping date is required.");
     }
+    if (regionNumber == null) {
+      errors.add("A valid region is required.");
+    }
     if (!errors.isEmpty()) {
       return failure(errors, submittedPermitNumber);
     }

@@ -1064,6 +1064,42 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
   })
 
+  it('requires age class before creating a harvested product package', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createPackageSection = (
+      await screen.findByRole('heading', { name: 'Create Package' })
+    ).closest('section')
+    expect(createPackageSection).toBeTruthy()
+    const createPackageControls = within(createPackageSection as HTMLElement)
+
+    await userEvent.type(createPackageControls.getByLabelText('Package Number'), 'PKG-NEW')
+    await userEvent.type(createPackageControls.getByLabelText('Package Volume'), '25.0')
+    await userEvent.type(createPackageControls.getByLabelText('Average Length'), '12.0')
+    await userEvent.type(createPackageControls.getByLabelText('Average Diameter'), '24.0')
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Status Code' }),
+      'ACT - Active',
+    )
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Product Type' }),
+      'H - Harvested Timber',
+    )
+    await userEvent.click(createPackageControls.getByRole('button', { name: 'Create Package' }))
+
+    expect(screen.getAllByText('Age class is required.').length).toBeGreaterThan(0)
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+  })
+
   it('creates application packages with selected species and end use', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -1297,7 +1333,22 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
     })
 
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Selected package' }), 'PKG-2')
+    const packagesSection = (await screen.findByRole('heading', { name: 'Packages' })).closest(
+      '.cds--tile',
+    )
+    expect(packagesSection).toBeTruthy()
+    const secondPackageRow = within(packagesSection as HTMLElement)
+      .getByText('PKG-2')
+      .closest('tr')
+    expect(secondPackageRow).toBeTruthy()
+    expect(within(secondPackageRow as HTMLElement).getByText('200')).toBeInTheDocument()
+    expect(within(secondPackageRow as HTMLElement).getByText('8')).toBeInTheDocument()
+
+    await userEvent.click(
+      within(secondPackageRow as HTMLElement).getByRole('button', {
+        name: 'Edit package PKG-2 items',
+      }),
+    )
 
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
