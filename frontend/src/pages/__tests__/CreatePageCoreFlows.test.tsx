@@ -140,6 +140,8 @@ describe('Create Page Core Flows', () => {
       region: '11',
       applicationDate: '2026-01-09',
       applicationTermDays: '30',
+      applicationTermMonths: '',
+      applicationTermYears: '',
       receivedDate: '2026-01-10',
       listingDate: '2026-01-11',
       productLocation: 'Camp 1',
@@ -148,6 +150,37 @@ describe('Create Page Core Flows', () => {
       comments: 'Ready',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
+  })
+
+  it('converts provincial application term months and years to total days on submit', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=5&applicationTermMonths=2&applicationTermYears=1&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        applicationTermDays: '430',
+        applicationTermMonths: '2',
+        applicationTermYears: '1',
+      }),
+    )
   })
 
   it('submits provincial application with agent applicant fields', async () => {
@@ -193,6 +226,8 @@ describe('Create Page Core Flows', () => {
       region: '11',
       applicationDate: '2026-01-09',
       applicationTermDays: '30',
+      applicationTermMonths: '',
+      applicationTermYears: '',
       receivedDate: '2026-01-10',
       listingDate: '2026-01-11',
       productLocation: 'Camp 1',

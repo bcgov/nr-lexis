@@ -1234,7 +1234,7 @@ describe('Provincial Application Detail Document Actions', () => {
   it('saves application summary edits and refreshes detail', async () => {
     const detailAfterSummarySave: ProvincialApplicationDetail = {
       ...applicationDetail,
-      termDays: 45,
+      termDays: 430,
       applicationVolume: 125.5,
     }
     mockedFetchProvincialApplicationDetail
@@ -1254,7 +1254,9 @@ describe('Provincial Application Detail Document Actions', () => {
 
     const termInput = await screen.findByLabelText('Term (days)')
     await userEvent.clear(termInput)
-    await userEvent.type(termInput, '45')
+    await userEvent.type(termInput, '5')
+    await userEvent.type(screen.getByLabelText('Term (months)'), '2')
+    await userEvent.type(screen.getByLabelText('Term (years)'), '1')
 
     const volumeInput = screen.getByLabelText('Application Volume (m³)')
     await userEvent.clear(volumeInput)
@@ -1310,7 +1312,7 @@ describe('Provincial Application Detail Document Actions', () => {
         applicationNumber: '321',
         applicationDate: '2026-01-01',
         receivedDate: '2026-01-02',
-        termDays: '45',
+        termDays: '430',
         applicationVolume: '125.5',
         averageLogVolume: '2',
         exemptionReasonCode: 'S',

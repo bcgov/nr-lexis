@@ -13,6 +13,10 @@ import {
 } from '@carbon/react'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
+  calculateApplicationTermDays,
+  nonNegativeWholeNumberFieldError,
+} from '@/pages/shared/application-term-utils'
+import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
@@ -54,6 +58,8 @@ type ProvincialApplicationCreateForm = {
   region: string
   applicationDate: string
   applicationTermDays: string
+  applicationTermMonths: string
+  applicationTermYears: string
   receivedDate: string
   listingDate: string
   productLocation: string
@@ -80,6 +86,8 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   region: '',
   applicationDate: '',
   applicationTermDays: '',
+  applicationTermMonths: '',
+  applicationTermYears: '',
   receivedDate: '',
   listingDate: '',
   productLocation: '',
@@ -118,6 +126,8 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     applicationDate: query.get('applicationDate') ?? '',
     applicationTermDays:
       query.get('applicationTermDays') ?? query.get('exemptionTerm') ?? query.get('termDays') ?? '',
+    applicationTermMonths: query.get('applicationTermMonths') ?? query.get('termMonths') ?? '',
+    applicationTermYears: query.get('applicationTermYears') ?? query.get('termYears') ?? '',
     receivedDate: query.get('receivedDate') ?? '',
     listingDate: query.get('listingDate') ?? '',
     productLocation: query.get('productLocation') ?? query.get('logLocation') ?? '',
@@ -534,6 +544,16 @@ const ProvincialApplicationCreatePage: FC = () => {
     }
   }, [form.agentClientLocationCode, form.agentClientNumber, form.applicantTypeCode])
 
+  const calculatedApplicationTermDays = useMemo(
+    () =>
+      calculateApplicationTermDays(
+        form.applicationTermDays,
+        form.applicationTermMonths,
+        form.applicationTermYears,
+      ),
+    [form.applicationTermDays, form.applicationTermMonths, form.applicationTermYears],
+  )
+
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
       ownerClientNumber:
@@ -577,8 +597,16 @@ const ProvincialApplicationCreatePage: FC = () => {
         () => isoDateFieldError(form.applicationDate),
       ),
       applicationTermDays: firstValidationError(
-        () => requiredFieldError(form.applicationTermDays, 'Application term days'),
-        () => positiveNumericFieldError(form.applicationTermDays),
+        () => requiredFieldError(calculatedApplicationTermDays, 'Application term'),
+        () => nonNegativeWholeNumberFieldError(form.applicationTermDays, 'Application term days'),
+      ),
+      applicationTermMonths: nonNegativeWholeNumberFieldError(
+        form.applicationTermMonths,
+        'Application term months',
+      ),
+      applicationTermYears: nonNegativeWholeNumberFieldError(
+        form.applicationTermYears,
+        'Application term years',
       ),
       receivedDate: firstValidationError(
         () => requiredFieldError(form.receivedDate, 'Received date'),
@@ -595,7 +623,7 @@ const ProvincialApplicationCreatePage: FC = () => {
         () => positiveNumericFieldError(form.averageLogVolume),
       ),
     }),
-    [form],
+    [calculatedApplicationTermDays, form],
   )
   const hasValidationError = useMemo(
     () => Object.values(fieldErrors).some((error) => !!error),
@@ -673,7 +701,10 @@ const ProvincialApplicationCreatePage: FC = () => {
     setStatus(null)
     setIsSubmitting(true)
     try {
-      const result = await submitProvincialApplicationCreate(form)
+      const result = await submitProvincialApplicationCreate({
+        ...form,
+        applicationTermDays: calculatedApplicationTermDays,
+      })
       const responseMessage = [result.message, ...result.errors, ...result.warnings]
         .filter((value) => value.trim().length > 0)
         .join(' ')
@@ -1031,6 +1062,28 @@ const ProvincialApplicationCreatePage: FC = () => {
               onBlur={() => markFieldTouched('applicationTermDays')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicationTermDays: event.target.value }))
+              }
+            />
+            <TextInput
+              id="applicationTermMonths"
+              labelText="Application Term Months"
+              value={form.applicationTermMonths}
+              invalid={!!fieldError('applicationTermMonths')}
+              invalidText={fieldError('applicationTermMonths')}
+              onBlur={() => markFieldTouched('applicationTermMonths')}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, applicationTermMonths: event.target.value }))
+              }
+            />
+            <TextInput
+              id="applicationTermYears"
+              labelText="Application Term Years"
+              value={form.applicationTermYears}
+              invalid={!!fieldError('applicationTermYears')}
+              invalidText={fieldError('applicationTermYears')}
+              onBlur={() => markFieldTouched('applicationTermYears')}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, applicationTermYears: event.target.value }))
               }
             />
             <TextInput

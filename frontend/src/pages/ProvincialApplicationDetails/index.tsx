@@ -60,6 +60,7 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -228,6 +229,8 @@ type ApplicationSummaryFormState = {
   applicationDate: string
   receivedDate: string
   termDays: string
+  termMonths: string
+  termYears: string
   applicationVolume: string
   averageLogVolume: string
   exemptionReasonCode: string
@@ -254,6 +257,8 @@ const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSum
   applicationDate: detail.applicationDate ?? '',
   receivedDate: detail.receivedDate ?? '',
   termDays: detail.termDays === null ? '' : String(detail.termDays),
+  termMonths: '',
+  termYears: '',
   applicationVolume: detail.applicationVolume === null ? '' : String(detail.applicationVolume),
   averageLogVolume: detail.averageLogVolume === null ? '' : String(detail.averageLogVolume),
   exemptionReasonCode: detail.exemptionReasonCode ?? '',
@@ -282,6 +287,8 @@ const toSummarySnapshotFormState = (
   applicationDate: snapshot.applicationDate,
   receivedDate: snapshot.receivedDate,
   termDays: snapshot.termDays,
+  termMonths: '',
+  termYears: '',
   applicationVolume: snapshot.applicationVolume,
   averageLogVolume: snapshot.averageLogVolume,
   exemptionReasonCode: snapshot.exemptionReasonCode,
@@ -1394,11 +1401,16 @@ const ProvincialApplicationDetailsPage: FC = () => {
     setActionInfoMessage('')
     setIsSavingSummary(true)
     try {
+      const calculatedTermDays = calculateApplicationTermDays(
+        summaryForm.termDays,
+        summaryForm.termMonths,
+        summaryForm.termYears,
+      )
       const result = await updateApplicationSummary({
         applicationNumber: String(detail.applicationNumber),
         applicationDate: summaryForm.applicationDate,
         receivedDate: summaryForm.receivedDate,
-        termDays: summaryForm.termDays,
+        termDays: calculatedTermDays,
         applicationVolume: summaryForm.applicationVolume,
         averageLogVolume: summaryForm.averageLogVolume,
         exemptionReasonCode: summaryForm.exemptionReasonCode,
@@ -1796,6 +1808,22 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       min={1}
                       value={summaryForm.termDays}
                       onChange={(event) => onSummaryFormChange('termDays', event.target.value)}
+                    />
+                    <TextInput
+                      id="applicationSummaryTermMonths"
+                      labelText="Term (months)"
+                      type="number"
+                      min={0}
+                      value={summaryForm.termMonths}
+                      onChange={(event) => onSummaryFormChange('termMonths', event.target.value)}
+                    />
+                    <TextInput
+                      id="applicationSummaryTermYears"
+                      labelText="Term (years)"
+                      type="number"
+                      min={0}
+                      value={summaryForm.termYears}
+                      onChange={(event) => onSummaryFormChange('termYears', event.target.value)}
                     />
                     <TextInput
                       id="applicationSummaryVolume"
