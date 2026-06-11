@@ -2012,26 +2012,22 @@ const ProvincialApplicationDetailsPage: FC = () => {
               {canEditSummary && summaryForm ? (
                 <>
                   <div className="legacy-search-grid">
-                    <Select
+                    <SearchableSelect
                       id="applicationSummaryExemptionReason"
                       labelText="Exemption Reason"
                       value={summaryForm.exemptionReasonCode}
                       invalid={Boolean(visibleSummaryFieldError('exemptionReasonCode'))}
                       invalidText={visibleSummaryFieldError('exemptionReasonCode')}
                       disabled={isLoadingSummaryOptions && exemptionReasonOptions.length === 0}
-                      onChange={(event) =>
-                        onSummaryFormChange('exemptionReasonCode', event.target.value.toUpperCase())
+                      placeholder="Select exemption reason"
+                      options={optionsWithCurrentValue(
+                        exemptionReasonOptions,
+                        summaryForm.exemptionReasonCode,
+                      )}
+                      onChange={(value) =>
+                        onSummaryFormChange('exemptionReasonCode', value.toUpperCase())
                       }
-                    >
-                      <SelectItem value="" text="Select exemption reason" />
-                      {exemptionReasonOptions.map((option) => (
-                        <SelectItem
-                          key={option.value}
-                          value={option.value}
-                          text={optionLabel(option)}
-                        />
-                      ))}
-                    </Select>
+                    />
                     <TextInput
                       id="applicationSummaryApplicationDate"
                       labelText="Application Date"
@@ -2254,87 +2250,65 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         }
                       />
                     )}
-                    <Select
+                    <SearchableSelect
                       id="applicationSummaryRegion"
                       labelText="Region"
                       value={summaryForm.orgUnitNumber}
                       invalid={Boolean(visibleSummaryFieldError('orgUnitNumber'))}
                       invalidText={visibleSummaryFieldError('orgUnitNumber')}
                       disabled={isLoadingSummaryOptions && regionOptions.length === 0}
-                      onChange={(event) => onSummaryFormChange('orgUnitNumber', event.target.value)}
-                    >
-                      <SelectItem value="" text="Select region" />
-                      {regionOptions.map((option) => (
-                        <SelectItem
-                          key={option.value}
-                          value={option.value}
-                          text={optionLabel(option)}
-                        />
-                      ))}
-                    </Select>
-                    <Select
+                      placeholder="Select region"
+                      options={optionsWithCurrentValue(regionOptions, summaryForm.orgUnitNumber)}
+                      onChange={(value) => onSummaryFormChange('orgUnitNumber', value)}
+                    />
+                    <SearchableSelect
                       id="applicationSummaryProductType"
                       labelText="Product Type"
                       value={summaryForm.productTypeCode}
                       invalid={Boolean(visibleSummaryFieldError('productTypeCode'))}
                       invalidText={visibleSummaryFieldError('productTypeCode')}
                       disabled={isLoadingSummaryOptions && productTypeOptions.length === 0}
-                      onChange={(event) =>
-                        onSummaryFormChange('productTypeCode', event.target.value.toUpperCase())
+                      placeholder="Select product type"
+                      options={optionsWithCurrentValue(
+                        productTypeOptions,
+                        summaryForm.productTypeCode,
+                      )}
+                      onChange={(value) =>
+                        onSummaryFormChange('productTypeCode', value.toUpperCase())
                       }
-                    >
-                      <SelectItem value="" text="Select product type" />
-                      {productTypeOptions.map((option) => (
-                        <SelectItem
-                          key={option.value}
-                          value={option.value}
-                          text={optionLabel(option)}
-                        />
-                      ))}
-                    </Select>
-                    <Select
+                    />
+                    <SearchableSelect
                       id="applicationSummaryGrowthType"
                       labelText="Growth Type"
                       value={summaryForm.growthTypeCode}
                       invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
                       invalidText={visibleSummaryFieldError('growthTypeCode')}
                       disabled={isLoadingSummaryOptions && growthTypeOptions.length === 0}
-                      onChange={(event) =>
-                        onSummaryFormChange('growthTypeCode', event.target.value.toUpperCase())
+                      placeholder="Select growth type"
+                      options={optionsWithCurrentValue(
+                        growthTypeOptions,
+                        summaryForm.growthTypeCode,
+                      )}
+                      onChange={(value) =>
+                        onSummaryFormChange('growthTypeCode', value.toUpperCase())
                       }
-                    >
-                      <SelectItem value="" text="Select growth type" />
-                      {growthTypeOptions.map((option) => (
-                        <SelectItem
-                          key={option.value}
-                          value={option.value}
-                          text={optionLabel(option)}
-                        />
-                      ))}
-                    </Select>
-                    <Select
+                    />
+                    <SearchableSelect
                       id="applicationSummaryStatus"
                       labelText="Application Status"
                       value={summaryForm.applicationStatusCode}
                       invalid={Boolean(visibleSummaryFieldError('applicationStatusCode'))}
                       invalidText={visibleSummaryFieldError('applicationStatusCode')}
                       disabled={isLoadingSummaryOptions && applicationStatusOptions.length === 0}
-                      onChange={(event) =>
-                        onSummaryFormChange(
-                          'applicationStatusCode',
-                          event.target.value.toUpperCase(),
-                        )
+                      placeholder="Select application status"
+                      options={optionsWithCurrentValue(
+                        applicationStatusOptions,
+                        summaryForm.applicationStatusCode,
+                      )}
+                      onChange={(value) =>
+                        onSummaryFormChange('applicationStatusCode', value.toUpperCase())
                       }
-                    >
-                      <SelectItem value="" text="Select application status" />
-                      {applicationStatusOptions.map((option) => (
-                        <SelectItem
-                          key={option.value}
-                          value={option.value}
-                          text={optionLabel(option)}
-                        />
-                      ))}
-                    </Select>
+                    />
                     <Select
                       id="applicationSummaryJurisdiction"
                       labelText="Jurisdiction"

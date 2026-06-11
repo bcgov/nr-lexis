@@ -1379,19 +1379,16 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
     expect(screen.getByText('Agent Export Services')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
-    await waitFor(() => {
-      expect(
-        screen.getByLabelText('Exemption Reason').querySelector('option[value="S"]'),
-      ).not.toBeNull()
-      expect(screen.getByLabelText('Region').querySelector('option[value="13"]')).not.toBeNull()
-    })
     const summaryTile = getApplicationSummaryTile()
     const summaryControls = within(summaryTile)
-    await userEvent.selectOptions(summaryControls.getByLabelText('Exemption Reason'), 'S')
-    await userEvent.selectOptions(summaryControls.getByLabelText('Application Status'), 'APP')
-    await userEvent.selectOptions(summaryControls.getByLabelText('Region'), '13')
-    await userEvent.selectOptions(summaryControls.getByLabelText('Product Type'), 'TIMBER')
-    await userEvent.selectOptions(summaryControls.getByLabelText('Growth Type'), 'S')
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Exemption Reason'), 'Surplus')
+    await chooseComboBoxOption(
+      getSummaryComboBox(summaryControls, 'Application Status'),
+      'Approved',
+    )
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Region'), 'Interior')
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Product Type'), 'Timber')
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Growth Type'), 'Second Growth')
     await userEvent.selectOptions(summaryControls.getByLabelText('Jurisdiction'), 'F')
     await userEvent.selectOptions(summaryControls.getByLabelText('OIC Indicator'), 'Y')
     await chooseComboBoxOption(
@@ -1554,7 +1551,7 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(getSummaryComboBox(summaryControls, 'Owner Client Location')).toHaveValue(
         'Owner Main Location',
       )
-      expect(summaryControls.getByLabelText('Region')).toHaveValue('12')
+      expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue('Coast')
     })
 
     await userEvent.clear(productLocationInput)
@@ -1563,7 +1560,7 @@ describe('Provincial Application Detail Document Actions', () => {
       getSummaryComboBox(summaryControls, 'Owner Client Location'),
       'Owner Alternate Location',
     )
-    await userEvent.selectOptions(summaryControls.getByLabelText('Region'), '13')
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Region'), 'Interior')
     await userEvent.click(summaryControls.getByRole('button', { name: 'Reset Summary' }))
 
     await waitFor(() => {
@@ -1571,7 +1568,7 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(getSummaryComboBox(summaryControls, 'Owner Client Location')).toHaveValue(
         'Owner Main Location',
       )
-      expect(summaryControls.getByLabelText('Region')).toHaveValue('12')
+      expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue('Coast')
     })
   })
 
