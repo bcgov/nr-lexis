@@ -224,6 +224,32 @@ class IndianReservePermitOracleServiceTest {
     verify(repository, org.mockito.Mockito.never()).insertReservePermit(any(), any());
   }
 
+  @Test
+  void addPermitShouldRejectMissingTransportNameBeforeRepositoryCall() {
+    PermitMutationRpcResponseDto response =
+        service.addPermit(
+            new IndianReservePermitService.CreatePermitRequest(
+                "111",
+                "PKG-1",
+                "00012345",
+                "00",
+                "1833",
+                "2026-04-04",
+                "2026-04-05",
+                "2026-04-06",
+                "CA",
+                "TRK",
+                " ",
+                "VAN",
+                "",
+                "Ready"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).contains("A valid transport name is required.");
+    verify(repository, org.mockito.Mockito.never()).insertReservePermit(any(), any());
+  }
+
   private IndianReservePermitSearchResultDto row(String permitNumber, LocalDate issueDate) {
     return new IndianReservePermitSearchResultDto(
         permitNumber,

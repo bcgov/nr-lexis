@@ -81,7 +81,7 @@ describe('Create Page Action State Smoke', () => {
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
-    expect(screen.getByText('Permit number is required.')).toBeInTheDocument()
+    expect(screen.getAllByText('Permit number is required.')).not.toHaveLength(0)
     expect(screen.getByText('Application number is required.')).toBeInTheDocument()
     expect(screen.getByText('Permit status is required.')).toBeInTheDocument()
     expect(mockedSubmitProvincialPermitCreate).not.toHaveBeenCalled()
@@ -137,10 +137,11 @@ describe('Create Page Action State Smoke', () => {
     expect(submitButton).toBeEnabled()
     await userEvent.click(submitButton)
 
-    expect(screen.getByText('Permit number is required.')).toBeInTheDocument()
+    expect(screen.getAllByText('Permit number is required.')).not.toHaveLength(0)
     expect(screen.getByText('Package number is required.')).toBeInTheDocument()
     expect(screen.getByText('Client number is required.')).toBeInTheDocument()
     expect(screen.getByText('Region is required.')).toBeInTheDocument()
+    expect(screen.getByText('Transport name is required.')).toBeInTheDocument()
     expect(mockedSubmitIndianReservePermitCreate).not.toHaveBeenCalled()
   })
 

@@ -246,6 +246,7 @@ const IndianReservePermitCreatePage: FC = () => {
         () => requiredFieldError(form.estimatedShippingDate, 'Estimated shipping date'),
         () => isoDateFieldError(form.estimatedShippingDate),
       ),
+      transportName: requiredFieldError(form.transportName, 'Transport name') ?? undefined,
     }),
     [form],
   )
@@ -278,11 +279,14 @@ const IndianReservePermitCreatePage: FC = () => {
 
   const onSubmit = async () => {
     if (hasValidationError) {
+      const validationMessage =
+        Object.values(fieldErrors).find((error): error is string => !!error) ??
+        'Please fix validation errors before submitting.'
       setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
-        message: 'Please fix validation errors before submitting.',
+        message: validationMessage,
       })
       return
     }
@@ -485,8 +489,11 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <TextInput
               id="transportName"
-              labelText="Transport Name"
+              labelText="Transport Name (required)"
               value={form.transportName}
+              invalid={!!fieldError('transportName')}
+              invalidText={fieldError('transportName')}
+              onBlur={() => markFieldTouched('transportName')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, transportName: event.target.value }))
               }
