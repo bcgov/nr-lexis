@@ -60,6 +60,7 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import SearchableSelect from '@/components/SearchableSelect'
 import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
 import {
   firstValidationError,
@@ -2054,7 +2055,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         onSummaryFormChange('ownerClientNumber', event.target.value)
                       }
                     />
-                    <Select
+                    <SearchableSelect
                       id="applicationSummaryOwnerClientLocationCode"
                       labelText="Owner Client Location"
                       value={summaryForm.ownerClientLocationCode}
@@ -2063,21 +2064,17 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       disabled={
                         !summaryForm.ownerClientNumber.trim() || isLoadingOwnerClientLocations
                       }
-                      onChange={(event) =>
-                        onSummaryFormChange('ownerClientLocationCode', event.target.value)
-                      }
-                    >
-                      <SelectItem value="" text={ownerClientLocationPlaceholder} />
-                      {ownerClientLocations.filter(isSelectableClientLocation).map((location) => (
-                        <SelectItem
-                          key={location.locationCode}
-                          value={location.locationCode}
-                          text={location.locationName}
-                        />
-                      ))}
-                    </Select>
+                      placeholder={ownerClientLocationPlaceholder}
+                      options={ownerClientLocations
+                        .filter(isSelectableClientLocation)
+                        .map((location) => ({
+                          value: location.locationCode,
+                          label: location.locationName,
+                        }))}
+                      onChange={(value) => onSummaryFormChange('ownerClientLocationCode', value)}
+                    />
                     {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
-                      <Select
+                      <SearchableSelect
                         id="applicationSummaryOwnerContactName"
                         labelText="Owner Contact Name"
                         value={summaryForm.ownerContactName}
@@ -2087,19 +2084,15 @@ const ProvincialApplicationDetailsPage: FC = () => {
                           !summaryForm.ownerClientLocationCode.trim() ||
                           isLoadingOwnerClientContacts
                         }
-                        onChange={(event) =>
-                          onSummaryFormChange('ownerContactName', event.target.value)
-                        }
-                      >
-                        <SelectItem value="" text={ownerContactPlaceholder} />
-                        {ownerClientContacts.filter(isSelectableClientContact).map((contact) => (
-                          <SelectItem
-                            key={contact.contactId}
-                            value={contact.contactName}
-                            text={contact.contactName}
-                          />
-                        ))}
-                      </Select>
+                        placeholder={ownerContactPlaceholder}
+                        options={ownerClientContacts
+                          .filter(isSelectableClientContact)
+                          .map((contact) => ({
+                            value: contact.contactName,
+                            label: contact.contactName,
+                          }))}
+                        onChange={(value) => onSummaryFormChange('ownerContactName', value)}
+                      />
                     ) : (
                       <TextInput
                         id="applicationSummaryOwnerContactName"
@@ -2146,7 +2139,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         onSummaryFormChange('agentClientNumber', event.target.value)
                       }
                     />
-                    <Select
+                    <SearchableSelect
                       id="applicationSummaryAgentClientLocationCode"
                       labelText="Agent Client Location"
                       value={summaryForm.agentClientLocationCode}
@@ -2155,21 +2148,17 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       disabled={
                         !summaryForm.agentClientNumber.trim() || isLoadingAgentClientLocations
                       }
-                      onChange={(event) =>
-                        onSummaryFormChange('agentClientLocationCode', event.target.value)
-                      }
-                    >
-                      <SelectItem value="" text={agentClientLocationPlaceholder} />
-                      {agentClientLocations.filter(isSelectableClientLocation).map((location) => (
-                        <SelectItem
-                          key={location.locationCode}
-                          value={location.locationCode}
-                          text={location.locationName}
-                        />
-                      ))}
-                    </Select>
+                      placeholder={agentClientLocationPlaceholder}
+                      options={agentClientLocations
+                        .filter(isSelectableClientLocation)
+                        .map((location) => ({
+                          value: location.locationCode,
+                          label: location.locationName,
+                        }))}
+                      onChange={(value) => onSummaryFormChange('agentClientLocationCode', value)}
+                    />
                     {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
-                      <Select
+                      <SearchableSelect
                         id="applicationSummaryAgentContactName"
                         labelText="Agent Contact Name"
                         value={summaryForm.agentContactName}
@@ -2179,19 +2168,15 @@ const ProvincialApplicationDetailsPage: FC = () => {
                           !summaryForm.agentClientLocationCode.trim() ||
                           isLoadingAgentClientContacts
                         }
-                        onChange={(event) =>
-                          onSummaryFormChange('agentContactName', event.target.value)
-                        }
-                      >
-                        <SelectItem value="" text={agentContactPlaceholder} />
-                        {agentClientContacts.filter(isSelectableClientContact).map((contact) => (
-                          <SelectItem
-                            key={contact.contactId}
-                            value={contact.contactName}
-                            text={contact.contactName}
-                          />
-                        ))}
-                      </Select>
+                        placeholder={agentContactPlaceholder}
+                        options={agentClientContacts
+                          .filter(isSelectableClientContact)
+                          .map((contact) => ({
+                            value: contact.contactName,
+                            label: contact.contactName,
+                          }))}
+                        onChange={(value) => onSummaryFormChange('agentContactName', value)}
+                      />
                     ) : (
                       <TextInput
                         id="applicationSummaryAgentContactName"

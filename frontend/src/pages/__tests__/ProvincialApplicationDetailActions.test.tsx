@@ -211,6 +211,14 @@ const getApplicationSummaryTile = (): HTMLElement => {
   return summaryTile as HTMLElement
 }
 
+const getSummaryComboBox = (
+  summaryControls: ReturnType<typeof within>,
+  labelText: string,
+): HTMLElement =>
+  summaryControls
+    .getAllByLabelText(labelText)
+    .find((element) => element.getAttribute('role') === 'combobox') as HTMLElement
+
 describe('Provincial Application Detail Document Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -1378,9 +1386,12 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.selectOptions(summaryControls.getByLabelText('Growth Type'), 'S')
     await userEvent.selectOptions(summaryControls.getByLabelText('Jurisdiction'), 'F')
     await userEvent.selectOptions(summaryControls.getByLabelText('OIC Indicator'), 'Y')
-    await userEvent.selectOptions(summaryControls.getByLabelText('Owner Client Location'), '02')
-    await userEvent.selectOptions(
-      summaryControls.getByLabelText('Owner Contact Name'),
+    await chooseComboBoxOption(
+      getSummaryComboBox(summaryControls, 'Owner Client Location'),
+      'Owner Alternate Location',
+    )
+    await chooseComboBoxOption(
+      getSummaryComboBox(summaryControls, 'Owner Contact Name'),
       'Owner Alternate Contact',
     )
 
@@ -1463,19 +1474,26 @@ describe('Provincial Application Detail Document Actions', () => {
 
     await waitFor(() => {
       expect(productLocationInput).toHaveValue('BC')
-      expect(summaryControls.getByLabelText('Owner Client Location')).toHaveValue('00')
+      expect(getSummaryComboBox(summaryControls, 'Owner Client Location')).toHaveValue(
+        'Owner Main Location',
+      )
       expect(summaryControls.getByLabelText('Region')).toHaveValue('12')
     })
 
     await userEvent.clear(productLocationInput)
     await userEvent.type(productLocationInput, 'Changed location')
-    await userEvent.selectOptions(summaryControls.getByLabelText('Owner Client Location'), '02')
+    await chooseComboBoxOption(
+      getSummaryComboBox(summaryControls, 'Owner Client Location'),
+      'Owner Alternate Location',
+    )
     await userEvent.selectOptions(summaryControls.getByLabelText('Region'), '13')
     await userEvent.click(summaryControls.getByRole('button', { name: 'Reset Summary' }))
 
     await waitFor(() => {
       expect(summaryControls.getByLabelText('Location of Logs')).toHaveValue('BC')
-      expect(summaryControls.getByLabelText('Owner Client Location')).toHaveValue('00')
+      expect(getSummaryComboBox(summaryControls, 'Owner Client Location')).toHaveValue(
+        'Owner Main Location',
+      )
       expect(summaryControls.getByLabelText('Region')).toHaveValue('12')
     })
   })
