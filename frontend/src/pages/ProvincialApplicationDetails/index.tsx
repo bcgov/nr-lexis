@@ -267,6 +267,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
+  const [summaryBaselineForm, setSummaryBaselineForm] =
+    useState<ApplicationSummaryFormState | null>(null)
   const [isSavingSummary, setIsSavingSummary] = useState(false)
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
@@ -331,6 +333,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setActionInfoMessage('')
       setLoading(false)
       setSummaryForm(null)
+      setSummaryBaselineForm(null)
       return
     }
 
@@ -345,8 +348,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
       if (!isLatestRequest()) {
         return
       }
+      const fallbackSummaryForm = response ? toSummaryFormState(response) : null
       setDetail(response)
-      setSummaryForm(response ? toSummaryFormState(response) : null)
+      setSummaryForm(fallbackSummaryForm)
+      setSummaryBaselineForm(fallbackSummaryForm)
       setReviewStatusCode(response?.applicationStatusCode ?? '')
       setReviewStatusRemark('')
       setReviewStatusEmailAddress('')
@@ -363,7 +368,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
         try {
           const summarySnapshot = await fetchApplicationSummarySnapshot(applicationNumber)
           if (isLatestRequest() && summarySnapshot) {
-            setSummaryForm(toSummarySnapshotFormState(summarySnapshot))
+            const snapshotSummaryForm = toSummarySnapshotFormState(summarySnapshot)
+            setSummaryForm(snapshotSummaryForm)
+            setSummaryBaselineForm(snapshotSummaryForm)
           }
         } catch (error) {
           if (isLatestRequest()) {
@@ -391,6 +398,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setErrorMessage('Unable to retrieve provincial application detail.')
         setDetail(null)
         setSummaryForm(null)
+        setSummaryBaselineForm(null)
         setDocumentRows([])
         setDocumentsErrorMessage('')
       }
@@ -1766,7 +1774,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       kind="secondary"
                       size="sm"
                       disabled={isSavingSummary}
-                      onClick={() => setSummaryForm(toSummaryFormState(detail))}
+                      onClick={() =>
+                        setSummaryForm(summaryBaselineForm ?? toSummaryFormState(detail))
+                      }
                     >
                       Reset Summary
                     </Button>

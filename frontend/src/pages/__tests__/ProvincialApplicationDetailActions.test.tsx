@@ -1189,6 +1189,41 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
   })
 
+  it('resets application summary edits from the editable snapshot', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await waitFor(() => getApplicationSummaryTile())
+    const summaryControls = within(summaryTile)
+    const productLocationInput = await summaryControls.findByLabelText('Location of Logs')
+
+    await waitFor(() => {
+      expect(productLocationInput).toHaveValue('BC')
+      expect(summaryControls.getByLabelText('Owner Client Location')).toHaveValue('00')
+      expect(summaryControls.getByLabelText('Region')).toHaveValue('12')
+    })
+
+    await userEvent.clear(productLocationInput)
+    await userEvent.type(productLocationInput, 'Changed location')
+    await userEvent.selectOptions(summaryControls.getByLabelText('Owner Client Location'), '02')
+    await userEvent.selectOptions(summaryControls.getByLabelText('Region'), '13')
+    await userEvent.click(summaryControls.getByRole('button', { name: 'Reset Summary' }))
+
+    await waitFor(() => {
+      expect(summaryControls.getByLabelText('Location of Logs')).toHaveValue('BC')
+      expect(summaryControls.getByLabelText('Owner Client Location')).toHaveValue('00')
+      expect(summaryControls.getByLabelText('Region')).toHaveValue('12')
+    })
+  })
+
   it('allows manual summary contact entry when lookup has no contacts', async () => {
     mockedFetchApplicationClientContacts.mockResolvedValue([])
 
