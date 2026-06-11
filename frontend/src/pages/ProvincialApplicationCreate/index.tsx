@@ -789,7 +789,13 @@ const ProvincialApplicationCreatePage: FC = () => {
         : undefined,
       speciesCodes:
         form.speciesCodes.length === 0
-          ? 'At least one application species is required.'
+          ? !form.region.trim()
+            ? 'Select a region before adding application species.'
+            : !form.productTypeCode.trim()
+              ? 'Select a product type before adding application species.'
+              : !isLoadingApplicationSpecies && applicationSpeciesOptions.length === 0
+                ? 'At least one application species is required, but no species are available for the selected region and product type.'
+                : 'At least one application species is required.'
           : undefined,
       exemptionType: firstValidationError(
         () => requiredFieldError(form.exemptionType, 'Exemption reason'),
@@ -830,7 +836,12 @@ const ProvincialApplicationCreatePage: FC = () => {
         () => atMostOneDecimalFieldError(form.averageLogVolume, 'Average log volume'),
       ),
     }),
-    [calculatedApplicationTermDays, form],
+    [
+      applicationSpeciesOptions.length,
+      calculatedApplicationTermDays,
+      form,
+      isLoadingApplicationSpecies,
+    ],
   )
   const hasValidationError = useMemo(
     () => Object.values(fieldErrors).some((error) => !!error),
@@ -847,6 +858,11 @@ const ProvincialApplicationCreatePage: FC = () => {
   )
   const applicationSpeciesSelectOptions = availableApplicationSpeciesOptions.map(toSearchOption)
   const applicationEndUseSelectOptions = applicationEndUseOptions.map(toSearchOption)
+  const isApplicationSpeciesSelectDisabled =
+    !form.region.trim() ||
+    !form.productTypeCode.trim() ||
+    isLoadingApplicationSpecies ||
+    applicationSpeciesSelectOptions.length === 0
   const ownerClientLocationPlaceholder = !form.ownerClientNumber.trim()
     ? 'Enter owner client number first'
     : isLoadingOwnerClientLocations
@@ -926,6 +942,9 @@ const ProvincialApplicationCreatePage: FC = () => {
 
   const fieldError = (field: ProvincialApplicationCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
+  const firstSubmitValidationError = Object.values(fieldErrors).find(
+    (error): error is string => !!error,
+  )
 
   const onSaveDraft = () => {
     setStatus(null)
@@ -941,7 +960,7 @@ const ProvincialApplicationCreatePage: FC = () => {
       setStatus({
         kind: 'error',
         title: 'Validation Error',
-        message: 'Please fix validation errors before submitting.',
+        message: firstSubmitValidationError ?? 'Please fix validation errors before submitting.',
       })
       return
     }
@@ -1378,23 +1397,25 @@ const ProvincialApplicationCreatePage: FC = () => {
                 setForm((current) => ({ ...current, averageLogVolume: event.target.value }))
               }
             />
-            <SearchableSelect
-              id="applicationSpeciesCandidate"
-              labelText="Application Species (required)"
-              value={applicationSpeciesCandidate}
-              disabled={
-                !form.region.trim() ||
-                !form.productTypeCode.trim() ||
-                isLoadingApplicationSpecies ||
-                applicationSpeciesSelectOptions.length === 0
-              }
-              invalid={!!fieldError('speciesCodes')}
-              invalidText={fieldError('speciesCodes')}
-              placeholder={speciesPlaceholder}
-              options={applicationSpeciesSelectOptions}
-              onBlur={() => markFieldTouched('speciesCodes')}
-              onChange={setApplicationSpeciesCandidate}
-            />
+            <div className="legacy-field-stack">
+              <SearchableSelect
+                id="applicationSpeciesCandidate"
+                labelText="Application Species (required)"
+                value={applicationSpeciesCandidate}
+                disabled={isApplicationSpeciesSelectDisabled}
+                invalid={!!fieldError('speciesCodes')}
+                invalidText={fieldError('speciesCodes')}
+                placeholder={speciesPlaceholder}
+                options={applicationSpeciesSelectOptions}
+                onBlur={() => markFieldTouched('speciesCodes')}
+                onChange={setApplicationSpeciesCandidate}
+              />
+              {isApplicationSpeciesSelectDisabled && !!fieldError('speciesCodes') && (
+                <p className="legacy-search-error" role="alert">
+                  {fieldError('speciesCodes')}
+                </p>
+              )}
+            </div>
             <SearchableSelect
               id="applicationEndUse"
               labelText="Application End Use"

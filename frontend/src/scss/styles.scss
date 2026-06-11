@@ -752,6 +752,16 @@ body {
   max-inline-size: none;
 }
 
+.legacy-field-stack {
+  min-inline-size: 0;
+}
+
+.legacy-field-stack .legacy-search-error {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.333;
+}
+
 .legacy-search-actions {
   display: flex;
   align-items: center;
