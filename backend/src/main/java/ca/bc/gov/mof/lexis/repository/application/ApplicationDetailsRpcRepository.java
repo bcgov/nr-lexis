@@ -93,6 +93,10 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "INSERT_SCALE_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String UPDATE_SCALE =
       LEXIS_GROUP_9_PACKAGE + "UPDATE_SCALE(?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String INSERT_END_USE =
+      LEXIS_GROUP_14_PACKAGE + "INSERT_END_USE(?,?,?)";
+  private static final String DELETE_END_USE =
+      LEXIS_GROUP_14_PACKAGE + "DELETE_END_USE(?)";
   private static final String INSERT_END_USE_PACKAGE =
       LEXIS_GROUP_14_PACKAGE + "INSERT_END_USE_PACKAGE(?,?,?)";
   private static final String DELETE_END_USE_PACKAGE =
@@ -500,6 +504,25 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     return executeProcedure(UPDATE_EXEMPTION_APPLICATION, cs -> bindApplicationUpdate(cs, record));
   }
 
+  @Transactional
+  public boolean replaceApplicationEndUses(Long applicationNumber, List<EndUseMutationRecord> endUses) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+
+    if (!deleteApplicationEndUses(applicationNumber)) {
+      markRollbackOnly();
+      return false;
+    }
+
+    if (!insertApplicationEndUses(applicationNumber, endUses)) {
+      markRollbackOnly();
+      return false;
+    }
+
+    return true;
+  }
+
   public Optional<ApplicationClientSnapshotRow> findApplicationClientSnapshot(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
@@ -892,7 +915,42 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     cs.setTimestamp(index, Timestamp.from(Instant.now()));
   }
 
-  private boolean insertPackageEndUses(String packageNumber, List<PackageEndUseRecord> endUses) {
+  private boolean insertApplicationEndUses(Long applicationNumber, List<EndUseMutationRecord> endUses) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+    if (endUses == null || endUses.isEmpty()) {
+      return true;
+    }
+    for (EndUseMutationRecord endUse : endUses) {
+      String speciesCode = trim(endUse.speciesCode());
+      String endUseCode = trim(endUse.endUseCode());
+      if (speciesCode == null || endUseCode == null) {
+        continue;
+      }
+      boolean inserted =
+          executeProcedure(
+              INSERT_END_USE,
+              cs -> {
+                cs.setLong(1, applicationNumber);
+                cs.setString(2, speciesCode);
+                cs.setString(3, endUseCode);
+              });
+      if (!inserted) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private boolean deleteApplicationEndUses(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+    return executeProcedure(DELETE_END_USE, cs -> cs.setLong(1, applicationNumber));
+  }
+
+  private boolean insertPackageEndUses(String packageNumber, List<EndUseMutationRecord> endUses) {
     String normalizedPackageNumber = trim(packageNumber);
     if (normalizedPackageNumber == null) {
       return false;
@@ -900,7 +958,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (endUses == null || endUses.isEmpty()) {
       return true;
     }
-    for (PackageEndUseRecord endUse : endUses) {
+    for (EndUseMutationRecord endUse : endUses) {
       String speciesCode = trim(endUse.speciesCode());
       String endUseCode = trim(endUse.endUseCode());
       if (speciesCode == null || endUseCode == null) {
@@ -1178,7 +1236,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String packageNumber,
       String cascadeSplitCode) {}
 
-  public record PackageEndUseRecord(String speciesCode, String endUseCode) {}
+  public record EndUseMutationRecord(String speciesCode, String endUseCode) {}
 
   public record PackageMutationRecord(
       String packageNumber,
@@ -1197,7 +1255,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String entryUserId,
       Instant entryTimestamp,
       String updateUserId,
-      List<PackageEndUseRecord> endUses) {}
+      List<EndUseMutationRecord> endUses) {}
 
   public record PackageMutationRow(
       String packageNumber,

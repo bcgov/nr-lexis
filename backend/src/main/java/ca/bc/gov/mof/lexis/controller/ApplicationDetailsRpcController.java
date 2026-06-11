@@ -921,6 +921,8 @@ public class ApplicationDetailsRpcController {
         first(parameters, "agentContactName"),
         first(parameters, "ownerContactName"),
         first(parameters, "oicIndicator"),
+        first(parameters, "applicationEndUseCode", "endUseCode", "endUse"),
+        parseSpeciesSelection(parameters),
         !"false".equalsIgnoreCase(first(parameters, "validation")));
   }
 
@@ -949,6 +951,8 @@ public class ApplicationDetailsRpcController {
         first(parameters, "agentContactName"),
         first(parameters, "ownerContactName"),
         first(parameters, "oicIndicator"),
+        first(parameters, "applicationEndUseCode", "endUseCode", "endUse"),
+        parseSpeciesSelection(parameters),
         !"false".equalsIgnoreCase(first(parameters, "validation")));
   }
 
@@ -1161,6 +1165,20 @@ public class ApplicationDetailsRpcController {
       LOGGER.warn("Unable to parse legacy speciesJSON [{}]", speciesJson);
       return List.of();
     }
+  }
+
+  private List<String> parseSpeciesSelection(MultiValueMap<String, String> parameters) {
+    String speciesJson = first(parameters, "speciesJSON", "speciesJson");
+    if (trimToNull(speciesJson) != null) {
+      return parseSpeciesJson(speciesJson);
+    }
+    return parseCsv(
+        first(
+            parameters,
+            "applicationSelectedSpecies",
+            "speciesTableValues",
+            "selectedSpecies",
+            "speciesCodes"));
   }
 
   private List<String> parseCsv(String csv) {

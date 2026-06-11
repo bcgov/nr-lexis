@@ -123,6 +123,8 @@ export type ApplicationSummaryMutation = {
   agentContactName: string
   ownerContactName: string
   oicIndicator: string
+  endUseCode: string
+  speciesCodes: string[]
 }
 
 export type ApplicationRemarkMutationResult = {
@@ -377,6 +379,8 @@ const normalizeApplicationSummarySnapshot = (payload: unknown): ApplicationSumma
     agentContactName: asString(source.agentContactName),
     ownerContactName: asString(source.ownerContactName),
     oicIndicator: asString(source.oicIndicator),
+    endUseCode: asString(source.endUseCode),
+    speciesCodes: asStringArray(source.speciesCodes),
   }
 }
 
@@ -428,6 +432,23 @@ export const fetchApplicationPackageSpecies = async (
     return parseArrayPayload(response.data).map(normalizePackageSpeciesRow)
   } catch (error) {
     throw toSearchServiceError('Unable to load package species.', error)
+  }
+}
+
+export const fetchApplicationSpecies = async (
+  applicationNumber: string,
+): Promise<ApplicationPackageSpeciesRow[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/species-for-application',
+      {
+        params: { applicationNumber },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizePackageSpeciesRow)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application species.', error)
   }
 }
 
@@ -668,6 +689,8 @@ export const updateApplicationSummary = async (
         agentContactName: request.agentContactName,
         ownerContactName: request.ownerContactName,
         oicIndicator: request.oicIndicator,
+        applicationEndUseCode: request.endUseCode,
+        applicationSelectedSpecies: request.speciesCodes.join(','),
       },
     )
     return normalizeApplicationSummaryMutationResult(payload)

@@ -852,8 +852,8 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
     assertThat(record.endUses())
         .extracting(
-            ApplicationDetailsRpcRepository.PackageEndUseRecord::speciesCode,
-            ApplicationDetailsRpcRepository.PackageEndUseRecord::endUseCode)
+            ApplicationDetailsRpcRepository.EndUseMutationRecord::speciesCode,
+            ApplicationDetailsRpcRepository.EndUseMutationRecord::endUseCode)
         .containsExactly(tuple("FI", "LU"), tuple("HE", "LU"));
   }
 

@@ -234,6 +234,8 @@ describe('provincial-application-items-service', () => {
       agentContactName: 'Agent Contact',
       ownerContactName: 'Owner Contact',
       oicIndicator: 'N',
+      endUseCode: 'LU',
+      speciesCodes: ['FI', 'CE'],
     })
 
     expect(result).toEqual({
@@ -273,6 +275,8 @@ describe('provincial-application-items-service', () => {
     expect(body.get('agentContactName')).toBe('Agent Contact')
     expect(body.get('ownerContactName')).toBe('Owner Contact')
     expect(body.get('oicIndicator')).toBe('N')
+    expect(body.get('applicationEndUseCode')).toBe('LU')
+    expect(body.get('applicationSelectedSpecies')).toBe('FI,CE')
   })
 
   it('loads editable application summary snapshot fields', async () => {
@@ -302,6 +306,8 @@ describe('provincial-application-items-service', () => {
         agentContactName: 'Agent Contact',
         ownerContactName: 'Owner Contact',
         oicIndicator: 'N',
+        endUseCode: 'LU',
+        speciesCodes: ['FI', 'CE'],
       },
     })
 
@@ -313,6 +319,8 @@ describe('provincial-application-items-service', () => {
       productLocation: 'BC',
       ownerClientLocationCode: '00',
       agentContactName: 'Agent Contact',
+      endUseCode: 'LU',
+      speciesCodes: ['FI', 'CE'],
     })
     expect(getCachedResponseMock).toHaveBeenCalledWith(
       '/lexis/rpc/application-details/application-summary',

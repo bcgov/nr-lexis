@@ -31,9 +31,14 @@ import {
   type ProvincialApplicationDocumentRow,
 } from '@/service/provincial-application-documents-service'
 import {
+  fetchApplicationEndUsesForSpeciesRegion,
   fetchApplicationSummarySnapshot,
+  fetchApplicationRemainingSpecies,
+  fetchApplicationSpecies,
   saveApplicationRemark,
   updateApplicationSummary,
+  type ApplicationCodeOption,
+  type ApplicationPackageSpeciesRow,
   type ApplicationSummarySnapshot,
 } from '@/service/provincial-application-items-service'
 import { submitAdminUpload } from '@/service/admin-upload-service'
@@ -190,6 +195,8 @@ type ApplicationSummaryFormState = {
   agentContactName: string
   ownerContactName: string
   oicIndicator: string
+  endUseCode: string
+  speciesCodes: string[]
 }
 
 const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSummaryFormState => ({
@@ -214,6 +221,8 @@ const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSum
   agentContactName: '',
   ownerContactName: '',
   oicIndicator: 'N',
+  endUseCode: '',
+  speciesCodes: [],
 })
 
 const toSummarySnapshotFormState = (
@@ -240,7 +249,20 @@ const toSummarySnapshotFormState = (
   agentContactName: snapshot.agentContactName,
   ownerContactName: snapshot.ownerContactName,
   oicIndicator: snapshot.oicIndicator,
+  endUseCode: snapshot.endUseCode ?? '',
+  speciesCodes: snapshot.speciesCodes ?? [],
 })
+
+const withApplicationSpecies = (
+  form: ApplicationSummaryFormState,
+  speciesRows: ApplicationPackageSpeciesRow[],
+): ApplicationSummaryFormState => {
+  const speciesCodes = Array.from(
+    new Set(speciesRows.map((row) => row.species.trim()).filter(Boolean)),
+  )
+  const endUseCode = speciesRows.map((row) => row.endUse.trim()).find(Boolean) ?? form.endUseCode
+  return { ...form, speciesCodes, endUseCode }
+}
 
 const ProvincialApplicationDetailsPage: FC = () => {
   const navigate = useNavigate()
@@ -287,6 +309,13 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [summaryProductTypeOptions, setSummaryProductTypeOptions] = useState<SearchOption[]>([])
   const [summaryGrowthTypeOptions, setSummaryGrowthTypeOptions] = useState<SearchOption[]>([])
   const [summaryRegionOptions, setSummaryRegionOptions] = useState<SearchOption[]>([])
+  const [applicationSpeciesOptions, setApplicationSpeciesOptions] = useState<
+    ApplicationCodeOption[]
+  >([])
+  const [applicationEndUseOptions, setApplicationEndUseOptions] = useState<ApplicationCodeOption[]>(
+    [],
+  )
+  const [applicationSpeciesCandidate, setApplicationSpeciesCandidate] = useState('')
   const [isLoadingSummaryOptions, setIsLoadingSummaryOptions] = useState(false)
   const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
   const [reviewStatusCode, setReviewStatusCode] = useState('')
@@ -348,10 +377,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
       if (!isLatestRequest()) {
         return
       }
-      const fallbackSummaryForm = response ? toSummaryFormState(response) : null
+      let editableSummaryForm = response ? toSummaryFormState(response) : null
       setDetail(response)
-      setSummaryForm(fallbackSummaryForm)
-      setSummaryBaselineForm(fallbackSummaryForm)
+      setSummaryForm(editableSummaryForm)
+      setSummaryBaselineForm(editableSummaryForm)
       setReviewStatusCode(response?.applicationStatusCode ?? '')
       setReviewStatusRemark('')
       setReviewStatusEmailAddress('')
@@ -368,15 +397,32 @@ const ProvincialApplicationDetailsPage: FC = () => {
         try {
           const summarySnapshot = await fetchApplicationSummarySnapshot(applicationNumber)
           if (isLatestRequest() && summarySnapshot) {
-            const snapshotSummaryForm = toSummarySnapshotFormState(summarySnapshot)
-            setSummaryForm(snapshotSummaryForm)
-            setSummaryBaselineForm(snapshotSummaryForm)
+            editableSummaryForm = toSummarySnapshotFormState(summarySnapshot)
+            setSummaryForm(editableSummaryForm)
+            setSummaryBaselineForm(editableSummaryForm)
           }
         } catch (error) {
           if (isLatestRequest()) {
             console.error(error)
             setActionErrorMessage('Unable to retrieve editable application summary fields.')
           }
+        }
+      }
+
+      try {
+        const applicationSpeciesRows = await fetchApplicationSpecies(applicationNumber)
+        if (isLatestRequest() && editableSummaryForm) {
+          const summaryFormWithSpecies = withApplicationSpecies(
+            editableSummaryForm,
+            applicationSpeciesRows,
+          )
+          setSummaryForm(summaryFormWithSpecies)
+          setSummaryBaselineForm(summaryFormWithSpecies)
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setActionErrorMessage('Unable to retrieve application species fields.')
         }
       }
 
@@ -525,6 +571,15 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const regionOptions = optionsWithCurrentValue(
     summaryRegionOptions,
     summaryForm?.orgUnitNumber ?? '',
+  )
+  const summarySpeciesCodes = useMemo(
+    () => summaryForm?.speciesCodes ?? [],
+    [summaryForm?.speciesCodes],
+  )
+  const summarySpeciesKey = summarySpeciesCodes.join(',')
+  const availableApplicationSpeciesOptions = useMemo(
+    () => applicationSpeciesOptions.filter((option) => !summarySpeciesCodes.includes(option.code)),
+    [applicationSpeciesOptions, summarySpeciesCodes],
   )
 
   useEffect(() => {
@@ -886,6 +941,101 @@ const ProvincialApplicationDetailsPage: FC = () => {
   }, [canEditSummary, hasSummaryForm])
 
   useEffect(() => {
+    if (!canEditSummary || !summaryForm?.orgUnitNumber || !summaryForm.productTypeCode) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setApplicationSpeciesOptions([])
+        setApplicationSpeciesCandidate('')
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void fetchApplicationRemainingSpecies(
+      summaryForm.orgUnitNumber,
+      summaryForm.productTypeCode,
+      summarySpeciesCodes,
+    )
+      .then((options) => {
+        if (!isActive) {
+          return
+        }
+        setApplicationSpeciesOptions(options)
+        setApplicationSpeciesCandidate((current) =>
+          current && options.some((option) => option.code === current)
+            ? current
+            : (options[0]?.code ?? ''),
+        )
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return
+        }
+        console.warn('Unable to load remaining application species.', error)
+        setApplicationSpeciesOptions([])
+        setApplicationSpeciesCandidate('')
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    canEditSummary,
+    summaryForm?.orgUnitNumber,
+    summaryForm?.productTypeCode,
+    summarySpeciesCodes,
+  ])
+
+  useEffect(() => {
+    if (!canEditSummary || !summaryForm?.orgUnitNumber || summarySpeciesCodes.length === 0) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setApplicationEndUseOptions([])
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void fetchApplicationEndUsesForSpeciesRegion(summaryForm.orgUnitNumber, summarySpeciesCodes)
+      .then((options) => {
+        if (!isActive) {
+          return
+        }
+        setApplicationEndUseOptions(options)
+        setSummaryForm((current) => {
+          if (!current || current.speciesCodes.join(',') !== summarySpeciesKey) {
+            return current
+          }
+          if (current.endUseCode && options.some((option) => option.code === current.endUseCode)) {
+            return current
+          }
+          return { ...current, endUseCode: options[0]?.code ?? current.endUseCode }
+        })
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return
+        }
+        console.warn('Unable to load application end-use options.', error)
+        setApplicationEndUseOptions([])
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [canEditSummary, summaryForm?.orgUnitNumber, summarySpeciesCodes, summarySpeciesKey])
+
+  useEffect(() => {
     if (!canReviewApplication) {
       return
     }
@@ -1072,6 +1222,32 @@ const ProvincialApplicationDetailsPage: FC = () => {
     [],
   )
 
+  const onAddApplicationSpecies = useCallback(() => {
+    const nextSpecies = applicationSpeciesCandidate.trim()
+    if (!nextSpecies) {
+      return
+    }
+
+    setSummaryForm((current) => {
+      if (!current || current.speciesCodes.includes(nextSpecies)) {
+        return current
+      }
+      return { ...current, speciesCodes: [...current.speciesCodes, nextSpecies] }
+    })
+  }, [applicationSpeciesCandidate])
+
+  const onRemoveApplicationSpecies = useCallback((speciesCode: string) => {
+    setSummaryForm((current) => {
+      if (!current) {
+        return current
+      }
+      return {
+        ...current,
+        speciesCodes: current.speciesCodes.filter((code) => code !== speciesCode),
+      }
+    })
+  }, [])
+
   const onSaveSummary = useCallback(async () => {
     if (!applicationNumber || !detail || !summaryForm) {
       return
@@ -1104,6 +1280,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
         agentContactName: summaryForm.agentContactName,
         ownerContactName: summaryForm.ownerContactName,
         oicIndicator: summaryForm.oicIndicator,
+        endUseCode: summaryForm.endUseCode,
+        speciesCodes: summaryForm.speciesCodes,
       })
       if (!result.valid) {
         setActionErrorMessage(
@@ -1760,6 +1938,78 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         onSummaryFormChange('productLocation', event.target.value)
                       }
                     />
+                  </div>
+                  <div className="legacy-search-grid">
+                    <Select
+                      id="applicationSummarySpeciesCandidate"
+                      labelText="Application Species"
+                      value={applicationSpeciesCandidate}
+                      disabled={availableApplicationSpeciesOptions.length === 0}
+                      onChange={(event) => setApplicationSpeciesCandidate(event.target.value)}
+                    >
+                      <SelectItem value="" text="Select species" />
+                      {availableApplicationSpeciesOptions.map((option) => (
+                        <SelectItem
+                          key={option.code}
+                          value={option.code}
+                          text={
+                            option.description && option.description !== option.code
+                              ? `${option.code} - ${option.description}`
+                              : option.code
+                          }
+                        />
+                      ))}
+                    </Select>
+                    <Select
+                      id="applicationSummaryEndUse"
+                      labelText="Application End Use"
+                      value={summaryForm.endUseCode}
+                      disabled={
+                        (summaryForm.speciesCodes ?? []).length === 0 ||
+                        applicationEndUseOptions.length === 0
+                      }
+                      onChange={(event) => onSummaryFormChange('endUseCode', event.target.value)}
+                    >
+                      <SelectItem value="" text="Select end use" />
+                      {applicationEndUseOptions.map((option) => (
+                        <SelectItem
+                          key={option.code}
+                          value={option.code}
+                          text={
+                            option.description && option.description !== option.code
+                              ? `${option.code} - ${option.description}`
+                              : option.code
+                          }
+                        />
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="legacy-search-actions">
+                    <Button
+                      kind="secondary"
+                      size="sm"
+                      disabled={
+                        !applicationSpeciesCandidate ||
+                        !availableApplicationSpeciesOptions.some(
+                          (option) => option.code === applicationSpeciesCandidate,
+                        )
+                      }
+                      onClick={onAddApplicationSpecies}
+                    >
+                      Add Application Species
+                    </Button>
+                    {(summaryForm.speciesCodes ?? []).map((speciesCode) => (
+                      <span key={speciesCode} className="legacy-search-actions">
+                        <Tag type="blue">{speciesCode}</Tag>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          onClick={() => onRemoveApplicationSpecies(speciesCode)}
+                        >
+                          Remove
+                        </Button>
+                      </span>
+                    ))}
                   </div>
                   <div className="legacy-search-actions">
                     <Button

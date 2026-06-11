@@ -33,6 +33,7 @@ import {
   fetchApplicationPackageSpecies,
   fetchApplicationRemainingSpecies,
   fetchApplicationScaleDetails,
+  fetchApplicationSpecies,
   fetchApplicationSpeciesCodes,
   fetchApplicationSummarySnapshot,
   saveApplicationRemark,
@@ -86,6 +87,7 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationPackageSpecies: vi.fn(),
   fetchApplicationRemainingSpecies: vi.fn(),
   fetchApplicationScaleDetails: vi.fn(),
+  fetchApplicationSpecies: vi.fn(),
   fetchApplicationSpeciesCodes: vi.fn(),
   fetchApplicationSummarySnapshot: vi.fn(),
   saveApplicationRemark: vi.fn(),
@@ -122,6 +124,7 @@ const mockedFetchApplicationPackageStatusCodes = vi.mocked(fetchApplicationPacka
 const mockedFetchApplicationPackageSpecies = vi.mocked(fetchApplicationPackageSpecies)
 const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemainingSpecies)
 const mockedFetchApplicationScaleDetails = vi.mocked(fetchApplicationScaleDetails)
+const mockedFetchApplicationSpecies = vi.mocked(fetchApplicationSpecies)
 const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
 const mockedFetchApplicationSummarySnapshot = vi.mocked(fetchApplicationSummarySnapshot)
 const mockedSaveApplicationRemark = vi.mocked(saveApplicationRemark)
@@ -313,6 +316,13 @@ describe('Provincial Application Detail Document Actions', () => {
         endUseDescription: 'Lumber',
       },
     ])
+    mockedFetchApplicationSpecies.mockResolvedValue([
+      {
+        species: 'FI',
+        endUse: 'LU',
+        endUseDescription: 'Lumber',
+      },
+    ])
     mockedFetchApplicationPackageScales.mockResolvedValue([
       {
         permitted: false,
@@ -400,6 +410,8 @@ describe('Provincial Application Detail Document Actions', () => {
       agentContactName: 'Agent Contact',
       ownerContactName: 'Owner Contact',
       oicIndicator: 'N',
+      endUseCode: 'LU',
+      speciesCodes: ['FI'],
     })
     mockedUpdateApplicationSummary.mockResolvedValue({
       valid: true,
@@ -1190,6 +1202,8 @@ describe('Provincial Application Detail Document Actions', () => {
         agentContactName: 'Agent Contact',
         ownerContactName: 'Owner Alternate Contact',
         oicIndicator: 'Y',
+        endUseCode: 'LU',
+        speciesCodes: ['FI'],
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })

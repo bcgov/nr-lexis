@@ -117,6 +117,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
+  @Transactional
   public CreateApplicationResult addApplication(CreateApplicationRequest request, String userId) {
     CreateApplicationRequest normalized = normalizeCreateApplicationRequest(request);
     List<String> errors = validateCreateApplication(normalized);
@@ -141,11 +142,24 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
           warnings);
     }
 
+    if (normalized.speciesCodes() != null
+        && !repository.replaceApplicationEndUses(
+            applicationNumber, toEndUses(normalized.speciesCodes(), normalized.endUseCode()))) {
+      markRollbackOnly();
+      return new CreateApplicationResult(
+          false,
+          "We were unable to save this application. Please note the time this error occurred and report to someone.",
+          null,
+          List.of(),
+          warnings);
+    }
+
     return new CreateApplicationResult(
         true, SAVE_SUCCESS_MESSAGE, applicationNumber, List.of(), warnings);
   }
 
   @Override
+  @Transactional
   public CreateApplicationResult updateApplicationSummary(
       ApplicationSummaryUpdateRequest request, String userId) {
     ApplicationSummaryUpdateRequest normalized = normalizeApplicationSummaryUpdateRequest(request);
@@ -174,6 +188,18 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     if (!repository.updateApplication(updateRecord)) {
+      return new CreateApplicationResult(
+          false,
+          "We were unable to save this application. Please try again.",
+          normalized.applicationNumber(),
+          List.of(),
+          List.of());
+    }
+
+    if (normalized.speciesCodes() != null
+        && !repository.replaceApplicationEndUses(
+            normalized.applicationNumber(), toEndUses(normalized.speciesCodes(), normalized.endUseCode()))) {
+      markRollbackOnly();
       return new CreateApplicationResult(
           false,
           "We were unable to save this application. Please try again.",
@@ -733,10 +759,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         insert ? defaultMutationUser(userId) : existing == null ? defaultMutationUser(userId) : existing.entryUserId(),
         insert || existing == null ? Instant.now() : existing.entryTimestamp(),
         insert ? null : defaultMutationUser(userId),
-        toPackageEndUses(request.speciesCodes(), request.endUseCode()));
+        toEndUses(request.speciesCodes(), request.endUseCode()));
   }
 
-  private List<ApplicationDetailsRpcRepository.PackageEndUseRecord> toPackageEndUses(
+  private List<ApplicationDetailsRpcRepository.EndUseMutationRecord> toEndUses(
       List<String> speciesCodes, String endUseCode) {
     List<String> normalizedSpeciesCodes = normalizeCodes(speciesCodes);
     if (normalizedSpeciesCodes.isEmpty()) {
@@ -745,7 +771,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     String normalizedEndUseCode = firstNonBlank(endUseCode, EXPORT_SPECIES_ENDUSE_OTHER);
     return normalizedSpeciesCodes.stream()
-        .map(code -> new ApplicationDetailsRpcRepository.PackageEndUseRecord(code, normalizedEndUseCode))
+        .map(code -> new ApplicationDetailsRpcRepository.EndUseMutationRecord(code, normalizedEndUseCode))
         .toList();
   }
 
@@ -1126,7 +1152,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (input == null) {
       return new CreateApplicationRequest(
           null, null, null, null, null, null, null, null, null, null, null, null, null,
-          null, APPLICANT_TYPE_OWNER, null, null, JURISDICTION_PROVINCIAL, null, null, null, OIC_INDICATOR_NO, true);
+          null, APPLICANT_TYPE_OWNER, null, null, JURISDICTION_PROVINCIAL, null, null, null,
+          OIC_INDICATOR_NO, null, null, true);
     }
 
     String applicantTypeCode =
@@ -1156,6 +1183,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         ownerApplicant ? null : trimToNull(input.agentContactName()),
         trimToNull(input.ownerContactName()),
         firstNonBlank(input.oicIndicator(), OIC_INDICATOR_NO),
+        trimToNull(input.endUseCode()),
+        input.speciesCodes() == null ? null : normalizeCodes(input.speciesCodes()),
         input.validationEnabled());
   }
 
@@ -1164,7 +1193,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (input == null) {
       return new ApplicationSummaryUpdateRequest(
           null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-          null, null, null, null, null, null, null, null, true);
+          null, null, null, null, null, null, null, null, null, null, true);
     }
     return new ApplicationSummaryUpdateRequest(
         input.applicationNumber(),
@@ -1189,6 +1218,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         trimToNull(input.agentContactName()),
         trimToNull(input.ownerContactName()),
         trimToNull(input.oicIndicator()),
+        trimToNull(input.endUseCode()),
+        input.speciesCodes() == null ? null : normalizeCodes(input.speciesCodes()),
         input.validationEnabled());
   }
 
