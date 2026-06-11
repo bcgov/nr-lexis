@@ -7,6 +7,7 @@ import {
   InlineNotification,
   Select,
   SelectItem,
+  Tag,
   TextArea,
   TextInput,
   Tile,
@@ -44,6 +45,11 @@ import {
   type ApplicationClientContact,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
+import {
+  fetchApplicationEndUsesForSpeciesRegion,
+  fetchApplicationRemainingSpecies,
+  type ApplicationCodeOption,
+} from '@/service/provincial-application-items-service'
 
 type ProvincialApplicationCreateForm = {
   ownerClientNumber: string
@@ -66,6 +72,8 @@ type ProvincialApplicationCreateForm = {
   productLocation: string
   applicationVolume: string
   averageLogVolume: string
+  speciesCodes: string[]
+  endUseCode: string
   comments: string
 }
 
@@ -94,6 +102,8 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   productLocation: '',
   applicationVolume: '',
   averageLogVolume: '',
+  speciesCodes: [],
+  endUseCode: '',
   comments: '',
 }
 
@@ -134,6 +144,12 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     productLocation: query.get('productLocation') ?? query.get('logLocation') ?? '',
     applicationVolume: query.get('applicationVolume') ?? '',
     averageLogVolume: query.get('averageLogVolume') ?? query.get('logVolume') ?? '',
+    speciesCodes: (query.get('speciesCodes') ?? query.get('speciesTableValues') ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0),
+    endUseCode:
+      query.get('applicationEndUseCode') ?? query.get('endUseCode') ?? query.get('endUse') ?? '',
     comments: query.get('comments') ?? '',
   }
 }
@@ -192,6 +208,16 @@ const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
 
 const isAgentApplicant = (applicantTypeCode: string): boolean => applicantTypeCode === 'A'
 
+const codeOptionLabel = (option: ApplicationCodeOption): string =>
+  option.description && option.description !== option.code
+    ? `${option.code} - ${option.description}`
+    : option.code
+
+const toSearchOption = (option: ApplicationCodeOption): SearchOption => ({
+  value: option.code,
+  label: codeOptionLabel(option),
+})
+
 type PageStatus = {
   kind: 'success' | 'error'
   title: string
@@ -212,10 +238,19 @@ const ProvincialApplicationCreatePage: FC = () => {
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
   const [ownerClientContacts, setOwnerClientContacts] = useState<ApplicationClientContact[]>([])
   const [agentClientContacts, setAgentClientContacts] = useState<ApplicationClientContact[]>([])
+  const [applicationSpeciesOptions, setApplicationSpeciesOptions] = useState<
+    ApplicationCodeOption[]
+  >([])
+  const [applicationSpeciesCandidate, setApplicationSpeciesCandidate] = useState('')
+  const [applicationEndUseOptions, setApplicationEndUseOptions] = useState<ApplicationCodeOption[]>(
+    [],
+  )
   const [isLoadingOwnerClientLocations, setIsLoadingOwnerClientLocations] = useState(false)
   const [isLoadingAgentClientLocations, setIsLoadingAgentClientLocations] = useState(false)
   const [isLoadingOwnerClientContacts, setIsLoadingOwnerClientContacts] = useState(false)
   const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
+  const [isLoadingApplicationSpecies, setIsLoadingApplicationSpecies] = useState(false)
+  const [isLoadingApplicationEndUses, setIsLoadingApplicationEndUses] = useState(false)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -545,6 +580,130 @@ const ProvincialApplicationCreatePage: FC = () => {
     }
   }, [form.agentClientLocationCode, form.agentClientNumber, form.applicantTypeCode])
 
+  useEffect(() => {
+    const region = form.region.trim()
+    const productTypeCode = form.productTypeCode.trim()
+    if (!region || !productTypeCode) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+
+        setApplicationSpeciesOptions([])
+        setApplicationSpeciesCandidate('')
+        setIsLoadingApplicationSpecies(false)
+      })
+
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingApplicationSpecies(true)
+      }
+    })
+
+    void fetchApplicationRemainingSpecies(region, productTypeCode, form.speciesCodes)
+      .then((options) => {
+        if (!isActive) {
+          return
+        }
+
+        setApplicationSpeciesOptions(options)
+        setApplicationSpeciesCandidate((current) =>
+          current && options.some((option) => option.code === current)
+            ? current
+            : (options[0]?.code ?? ''),
+        )
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return
+        }
+
+        console.warn('Unable to load remaining application species.', error)
+        setApplicationSpeciesOptions([])
+        setApplicationSpeciesCandidate('')
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingApplicationSpecies(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.productTypeCode, form.region, form.speciesCodes])
+
+  useEffect(() => {
+    const region = form.region.trim()
+    if (!region || form.speciesCodes.length === 0) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+
+        setApplicationEndUseOptions([])
+        setIsLoadingApplicationEndUses(false)
+        setForm((current) => (current.endUseCode ? { ...current, endUseCode: '' } : current))
+      })
+
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingApplicationEndUses(true)
+      }
+    })
+
+    void fetchApplicationEndUsesForSpeciesRegion(region, form.speciesCodes)
+      .then((options) => {
+        if (!isActive) {
+          return
+        }
+
+        setApplicationEndUseOptions(options)
+        setForm((current) => {
+          const currentSpeciesKey = current.speciesCodes.join(',')
+          const requestedSpeciesKey = form.speciesCodes.join(',')
+          if (current.region.trim() !== region || currentSpeciesKey !== requestedSpeciesKey) {
+            return current
+          }
+          if (current.endUseCode && options.some((option) => option.code === current.endUseCode)) {
+            return current
+          }
+          return { ...current, endUseCode: options[0]?.code ?? '' }
+        })
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return
+        }
+
+        console.warn('Unable to load application end-use options.', error)
+        setApplicationEndUseOptions([])
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingApplicationEndUses(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.region, form.speciesCodes])
+
   const calculatedApplicationTermDays = useMemo(
     () =>
       calculateApplicationTermDays(
@@ -588,6 +747,10 @@ const ProvincialApplicationCreatePage: FC = () => {
       ageClass: productTypeRequiresGrowthType(form.productTypeCode)
         ? (requiredFieldError(form.ageClass, 'Age class') ?? undefined)
         : undefined,
+      speciesCodes:
+        form.speciesCodes.length === 0
+          ? 'At least one application species is required.'
+          : undefined,
       exemptionType: firstValidationError(
         () => requiredFieldError(form.exemptionType, 'Exemption reason'),
         () => maxLengthFieldError(form.exemptionType, 1, 'Exemption reason code'),
@@ -635,6 +798,12 @@ const ProvincialApplicationCreatePage: FC = () => {
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
   const hasSelectableAgentClientContacts = agentClientContacts.some(isSelectableClientContact)
+  const availableApplicationSpeciesOptions = useMemo(
+    () => applicationSpeciesOptions.filter((option) => !form.speciesCodes.includes(option.code)),
+    [applicationSpeciesOptions, form.speciesCodes],
+  )
+  const applicationSpeciesSelectOptions = availableApplicationSpeciesOptions.map(toSearchOption)
+  const applicationEndUseSelectOptions = applicationEndUseOptions.map(toSearchOption)
   const ownerClientLocationPlaceholder = !form.ownerClientNumber.trim()
     ? 'Enter owner client number first'
     : isLoadingOwnerClientLocations
@@ -663,9 +832,53 @@ const ProvincialApplicationCreatePage: FC = () => {
       : hasSelectableAgentClientContacts
         ? 'Select agent contact'
         : 'No contacts on file'
+  const speciesPlaceholder = !form.region.trim()
+    ? 'Select region first'
+    : !form.productTypeCode.trim()
+      ? 'Select product type first'
+      : isLoadingApplicationSpecies
+        ? 'Loading species'
+        : applicationSpeciesSelectOptions.length > 0
+          ? 'Select species'
+          : 'No remaining species'
+  const endUsePlaceholder =
+    form.speciesCodes.length === 0
+      ? 'Add species first'
+      : isLoadingApplicationEndUses
+        ? 'Loading end uses'
+        : applicationEndUseSelectOptions.length > 0
+          ? 'Select end use'
+          : 'No end uses on file'
 
   const markFieldTouched = (field: ProvincialApplicationCreateField): void => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
+  }
+
+  const onAddApplicationSpecies = (): void => {
+    const speciesCode = applicationSpeciesCandidate.trim()
+    if (
+      !speciesCode ||
+      form.speciesCodes.includes(speciesCode) ||
+      !availableApplicationSpeciesOptions.some((option) => option.code === speciesCode)
+    ) {
+      return
+    }
+
+    setForm((current) => ({
+      ...current,
+      speciesCodes: [...current.speciesCodes, speciesCode],
+      endUseCode: '',
+    }))
+    markFieldTouched('speciesCodes')
+  }
+
+  const onRemoveApplicationSpecies = (speciesCode: string): void => {
+    setForm((current) => ({
+      ...current,
+      speciesCodes: current.speciesCodes.filter((code) => code !== speciesCode),
+      endUseCode: '',
+    }))
+    markFieldTouched('speciesCodes')
   }
 
   const fieldError = (field: ProvincialApplicationCreateField): string | undefined =>
@@ -966,11 +1179,18 @@ const ProvincialApplicationCreatePage: FC = () => {
               options={productTypes}
               onBlur={() => markFieldTouched('productTypeCode')}
               onChange={(value) =>
-                setForm((current) => ({
-                  ...current,
-                  productTypeCode: value,
-                  ageClass: productTypeRequiresGrowthType(value) ? current.ageClass : '',
-                }))
+                setForm((current) => {
+                  if (current.productTypeCode === value) {
+                    return current
+                  }
+                  return {
+                    ...current,
+                    productTypeCode: value,
+                    ageClass: productTypeRequiresGrowthType(value) ? current.ageClass : '',
+                    speciesCodes: [],
+                    endUseCode: '',
+                  }
+                })
               }
             />
             <SearchableSelect
@@ -1009,7 +1229,19 @@ const ProvincialApplicationCreatePage: FC = () => {
               placeholder="Select region"
               options={regions}
               onBlur={() => markFieldTouched('region')}
-              onChange={(value) => setForm((current) => ({ ...current, region: value }))}
+              onChange={(value) =>
+                setForm((current) => {
+                  if (current.region === value) {
+                    return current
+                  }
+                  return {
+                    ...current,
+                    region: value,
+                    speciesCodes: [],
+                    endUseCode: '',
+                  }
+                })
+              }
             />
             <TextInput
               id="applicationDate"
@@ -1111,6 +1343,63 @@ const ProvincialApplicationCreatePage: FC = () => {
                 setForm((current) => ({ ...current, averageLogVolume: event.target.value }))
               }
             />
+            <SearchableSelect
+              id="applicationSpeciesCandidate"
+              labelText="Application Species (required)"
+              value={applicationSpeciesCandidate}
+              disabled={
+                !form.region.trim() ||
+                !form.productTypeCode.trim() ||
+                isLoadingApplicationSpecies ||
+                applicationSpeciesSelectOptions.length === 0
+              }
+              invalid={!!fieldError('speciesCodes')}
+              invalidText={fieldError('speciesCodes')}
+              placeholder={speciesPlaceholder}
+              options={applicationSpeciesSelectOptions}
+              onBlur={() => markFieldTouched('speciesCodes')}
+              onChange={setApplicationSpeciesCandidate}
+            />
+            <SearchableSelect
+              id="applicationEndUse"
+              labelText="Application End Use"
+              value={form.endUseCode}
+              disabled={
+                form.speciesCodes.length === 0 ||
+                isLoadingApplicationEndUses ||
+                applicationEndUseSelectOptions.length === 0
+              }
+              placeholder={endUsePlaceholder}
+              options={applicationEndUseSelectOptions}
+              onChange={(value) => setForm((current) => ({ ...current, endUseCode: value }))}
+            />
+          </div>
+          <div className="legacy-search-actions">
+            <Button
+              kind="secondary"
+              size="sm"
+              disabled={
+                !applicationSpeciesCandidate ||
+                !availableApplicationSpeciesOptions.some(
+                  (option) => option.code === applicationSpeciesCandidate,
+                )
+              }
+              onClick={onAddApplicationSpecies}
+            >
+              Add Application Species
+            </Button>
+            {form.speciesCodes.map((speciesCode) => (
+              <span key={speciesCode} className="legacy-search-actions">
+                <Tag type="blue">{speciesCode}</Tag>
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  onClick={() => onRemoveApplicationSpecies(speciesCode)}
+                >
+                  Remove
+                </Button>
+              </span>
+            ))}
           </div>
           <div className="legacy-search-actions">
             <Button kind="primary" onClick={onSaveDraft}>

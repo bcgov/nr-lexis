@@ -20,6 +20,10 @@ import {
   fetchApplicationClientContacts,
   fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
+import {
+  fetchApplicationEndUsesForSpeciesRegion,
+  fetchApplicationRemainingSpecies,
+} from '@/service/provincial-application-items-service'
 
 const mockNavigate = vi.fn()
 
@@ -48,6 +52,11 @@ vi.mock('@/service/application-client-lookup-service', () => ({
   fetchApplicationClientLocations: vi.fn(),
 }))
 
+vi.mock('@/service/provincial-application-items-service', () => ({
+  fetchApplicationEndUsesForSpeciesRegion: vi.fn(),
+  fetchApplicationRemainingSpecies: vi.fn(),
+}))
+
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 const mockedFetchProvincialOfferOptions = vi.mocked(fetchProvincialOfferOptions)
@@ -56,6 +65,10 @@ const mockedSubmitProvincialExemptionCreate = vi.mocked(submitProvincialExemptio
 const mockedSubmitProvincialOfferCreate = vi.mocked(submitProvincialOfferCreate)
 const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
+const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemainingSpecies)
+const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
+  fetchApplicationEndUsesForSpeciesRegion,
+)
 
 const successfulCreate = (createdId: string): CreateSubmissionResult => ({
   success: true,
@@ -101,6 +114,13 @@ describe('Create Page Core Flows', () => {
               { contactName: 'Owner Alternate Contact', contactId: '11' },
             ],
     )
+    mockedFetchApplicationRemainingSpecies.mockResolvedValue([
+      { code: 'HE', description: 'Hemlock' },
+      { code: 'BA', description: 'Balsam' },
+    ])
+    mockedFetchApplicationEndUsesForSpeciesRegion.mockResolvedValue([
+      { code: 'SA', description: 'Sawlog' },
+    ])
   })
 
   it('submits provincial application prefilled form and navigates to details', async () => {
@@ -109,7 +129,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -147,6 +167,8 @@ describe('Create Page Core Flows', () => {
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
       averageLogVolume: '1.2',
+      speciesCodes: ['HE'],
+      endUseCode: 'SA',
       comments: 'Ready',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
@@ -158,7 +180,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=5&applicationTermMonths=2&applicationTermYears=1&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=5&applicationTermMonths=2&applicationTermYears=1&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA',
         ]}
       >
         <Routes>
@@ -194,7 +216,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=00033333&agentClientLocationCode=01&agentContactName=Agent%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=00033333&agentClientLocationCode=01&agentContactName=Agent%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -233,6 +255,8 @@ describe('Create Page Core Flows', () => {
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
       averageLogVolume: '1.2',
+      speciesCodes: ['HE'],
+      endUseCode: 'SA',
       comments: 'Ready',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/902')
@@ -246,7 +270,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -273,7 +297,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -300,7 +324,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionType=ALL&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionType=ALL&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>

@@ -48,6 +48,8 @@ describe('create-submit-service', () => {
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
       averageLogVolume: '1.2',
+      speciesCodes: ['HE', 'BA'],
+      endUseCode: 'SA',
       comments: 'ready',
     })
 
@@ -88,6 +90,12 @@ describe('create-submit-service', () => {
     expect(body.get('applicationVolume')).toBe('125.5')
     expect(body.get('averageLogVolume')).toBe('1.2')
     expect(body.get('logVolume')).toBe('1.2')
+    expect(body.get('applicationSelectedSpecies')).toBe('HE,BA')
+    expect(body.get('speciesTableValues')).toBe('HE,BA')
+    expect(body.get('speciesCodes')).toBe('HE,BA')
+    expect(body.get('applicationEndUseCode')).toBe('SA')
+    expect(body.get('endUseCode')).toBe('SA')
+    expect(body.get('endUse')).toBe('SA')
   })
 
   it('returns offer created id from exportPurchaseOfferNumber payload', async () => {
