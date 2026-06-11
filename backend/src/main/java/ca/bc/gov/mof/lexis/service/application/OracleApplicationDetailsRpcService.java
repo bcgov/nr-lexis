@@ -36,6 +36,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
   private static final String PACKAGE_EXISTS_MESSAGE_TEMPLATE = "Package %s already exists.";
+  private static final String PACKAGE_PERMITTED_SCALE_MESSAGE =
+      "Package changes are not allowed after a scale has been permitted.";
+  private static final String SCALE_PERMITTED_MESSAGE =
+      "Scale changes are not allowed after a permit has been completed.";
   private static final int REMARK_DISPLAY_LIMIT = 70;
   private static final double MAX_APPLICATION_VOLUME = 9_999_999.9d;
   private static final double MAX_AVERAGE_LOG_VOLUME = 99.9d;
@@ -667,6 +671,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (normalizedScaleDetailId == null) {
       return false;
     }
+    ApplicationDetailsRpcRepository.ApplicationScaleDetailRow scale =
+        repository.findScaleDetailById(normalizedScaleDetailId).orElse(null);
+    if (scale == null || isCompletedPermit(scale.exportPermitDetailNumber(), new LinkedHashMap<>())) {
+      return false;
+    }
     return repository.deleteScaleById(normalizedScaleDetailId, defaultMutationUser(userId));
   }
 
@@ -674,6 +683,15 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   public boolean deletePackageById(String packageNumber, String userId) {
     String normalizedPackageNumber = trimToNull(packageNumber);
     if (normalizedPackageNumber == null) {
+      return false;
+    }
+    List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows =
+        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber);
+    long scalePieces =
+        scaleRows.stream()
+            .mapToLong(ApplicationDetailsRpcRepository.ApplicationScaleDetailRow::piecesCount)
+            .sum();
+    if (hasPermittedScale(scaleRows) || scalePieces > 0) {
       return false;
     }
     return repository.deletePackageById(normalizedPackageNumber, defaultMutationUser(userId));
@@ -753,8 +771,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     if (update && packageNumber != null && request.volume() != null) {
+      List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows =
+          repository.findScaleDetailsByPackageNumber(packageNumber);
+      if (hasPermittedScale(scaleRows)) {
+        errors.add(PACKAGE_PERMITTED_SCALE_MESSAGE);
+      }
       double scaledVolume =
-          repository.findScaleDetailsByPackageNumber(packageNumber).stream()
+          scaleRows.stream()
               .mapToDouble(ApplicationDetailsRpcRepository.ApplicationScaleDetailRow::speciesGradeVolume)
               .sum();
       if (BigDecimal.valueOf(request.volume()).compareTo(BigDecimal.valueOf(scaledVolume)) < 0) {
@@ -1000,6 +1023,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (packageNumber != null) {
       List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows =
           repository.findScaleDetailsByPackageNumber(packageNumber);
+      if (hasPermittedScale(scaleRows)) {
+        errors.add(SCALE_PERMITTED_MESSAGE);
+      }
       boolean duplicate =
           scaleRows.stream()
               .anyMatch(
@@ -1032,6 +1058,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     return errors;
+  }
+
+  private boolean hasPermittedScale(List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows) {
+    Map<Long, Boolean> permittedByPermitNumber = new LinkedHashMap<>();
+    return scaleRows.stream()
+        .anyMatch(row -> isCompletedPermit(row.exportPermitDetailNumber(), permittedByPermitNumber));
   }
 
   private ApplicationPackageScaleItem toScalePersistenceItem(

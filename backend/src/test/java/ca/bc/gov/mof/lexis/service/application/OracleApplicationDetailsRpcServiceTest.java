@@ -1123,6 +1123,46 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePackageShouldRejectWhenPackageHasCompletedPermitScale() {
+    Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
+    when(repository.findPackageMutationByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-903", 1000456L, "N", 20.0d, 10.0d, 20.0d, "Old", null,
+                    null, null, "A", "O", "H", "idir\\old", entryTimestamp)));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetailsRow("55", "PKG-903", 0L, 5.0d, "7000123")));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L)).thenReturn(Optional.of("COM"));
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageDetailsRow("PKG-903", 20.0d)));
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.updatePackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                20.0d,
+                10.0d,
+                20.0d,
+                "A",
+                "Updated",
+                "N",
+                "O",
+                "H",
+                null,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains("Package changes are not allowed after a scale has been permitted.");
+    verify(repository, never()).updatePackage(any());
+  }
+
+  @Test
   void addScaleToPackageShouldInsertScaleAndReturnLegacyResult() {
     when(repository.packageExists("PKG-903")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
@@ -1159,6 +1199,30 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository).insertScaleDetail(recordCaptor.capture());
     assertThat(recordCaptor.getValue().entryUserId()).isEqualTo("idir\\jsmith");
     assertThat(recordCaptor.getValue().speciesGradeVolume()).isEqualTo(12.5d);
+  }
+
+  @Test
+  void addScaleToPackageShouldRejectWhenPackageHasCompletedPermitScale() {
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetailsRow("55", "PKG-903", 1L, 12.5d, "7000123")));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L)).thenReturn(Optional.of("COM"));
+    when(repository.findPackageDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageDetailsRow(
+                    "PKG-903", 100.0d, 10.0d, 20.0d, "A", "", "N", "O", "H")));
+
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addScaleToPackage(
+            new ApplicationDetailsRpcService.ScaleMutationRequest(
+                "TM002", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains("Scale changes are not allowed after a permit has been completed.");
+    verify(repository, never()).insertScaleDetail(any());
   }
 
   @Test
@@ -1201,22 +1265,62 @@ class OracleApplicationDetailsRpcServiceTest {
 
   @Test
   void deleteScaleByIdShouldDelegateToOracleRepository() {
+    when(repository.findScaleDetailById("55"))
+        .thenReturn(Optional.of(scaleDetailsRow("55", "PKG-903", 0L, 12.5d, null)));
     when(repository.deleteScaleById("55", "idir\\jsmith")).thenReturn(true);
 
     boolean response = service.deleteScaleById(" 55 ", " idir\\jsmith ");
 
     assertThat(response).isTrue();
+    verify(repository).findScaleDetailById("55");
     verify(repository).deleteScaleById("55", "idir\\jsmith");
   }
 
   @Test
+  void deleteScaleByIdShouldRejectCompletedPermitScale() {
+    when(repository.findScaleDetailById("55"))
+        .thenReturn(Optional.of(scaleDetailsRow("55", "PKG-903", 0L, 12.5d, "7000123")));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L)).thenReturn(Optional.of("COM"));
+
+    boolean response = service.deleteScaleById("55", "idir\\jsmith");
+
+    assertThat(response).isFalse();
+    verify(repository, never()).deleteScaleById(any(), any());
+  }
+
+  @Test
   void deletePackageByIdShouldDelegateToOracleRepository() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
     when(repository.deletePackageById("PKG-903", "idir\\jsmith")).thenReturn(true);
 
     boolean response = service.deletePackageById(" PKG-903 ", " idir\\jsmith ");
 
     assertThat(response).isTrue();
+    verify(repository).findScaleDetailsByPackageNumber("PKG-903");
     verify(repository).deletePackageById("PKG-903", "idir\\jsmith");
+  }
+
+  @Test
+  void deletePackageByIdShouldRejectPackageWithScalePieces() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetailsRow("55", "PKG-903", 3L, 12.5d, null)));
+
+    boolean response = service.deletePackageById("PKG-903", "idir\\jsmith");
+
+    assertThat(response).isFalse();
+    verify(repository, never()).deletePackageById(any(), any());
+  }
+
+  @Test
+  void deletePackageByIdShouldRejectPackageWithCompletedPermitScale() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetailsRow("55", "PKG-903", 0L, 12.5d, "7000123")));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L)).thenReturn(Optional.of("COM"));
+
+    boolean response = service.deletePackageById("PKG-903", "idir\\jsmith");
+
+    assertThat(response).isFalse();
+    verify(repository, never()).deletePackageById(any(), any());
   }
 
   @Test
@@ -1501,5 +1605,24 @@ class OracleApplicationDetailsRpcServiceTest {
       String packageNumber, double packageVolume) {
     return new ApplicationDetailsRpcRepository.PackageDetailsRow(
         packageNumber, packageVolume, 0.0d, 0.0d, "ACT", null, "N", "S", "H");
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationScaleDetailRow scaleDetailsRow(
+      String scaleDetailId,
+      String packageNumber,
+      long pieces,
+      double volume,
+      String exportPermitDetailNumber) {
+    return new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+        scaleDetailId,
+        "TM001",
+        "FI",
+        "1",
+        volume,
+        pieces,
+        1000456L,
+        exportPermitDetailNumber,
+        packageNumber,
+        "");
   }
 }
