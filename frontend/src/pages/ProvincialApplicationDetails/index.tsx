@@ -42,6 +42,10 @@ import {
   sendApplicationReviewStatusEmail,
   updateApplicationReviewStatus,
 } from '@/service/application-review-search-service'
+import {
+  fetchApplicationClientLocations,
+  type ApplicationClientLocation,
+} from '@/service/application-client-lookup-service'
 import { fetchApplicationReviewOptions, type SearchOption } from '@/service/search-options-service'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
@@ -58,6 +62,34 @@ const normalizeEmail = (email: string): string => email.trim()
 const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
 const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['REJ', 'WDN'])
+
+const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
+  location.locationCode !== '0'
+
+const resolveClientLocationCode = (
+  locations: ApplicationClientLocation[],
+  currentCode: string,
+): string => {
+  const normalizedCurrentCode = currentCode.trim()
+  if (
+    normalizedCurrentCode &&
+    locations.some(
+      (location) =>
+        isSelectableClientLocation(location) && location.locationCode === normalizedCurrentCode,
+    )
+  ) {
+    return normalizedCurrentCode
+  }
+
+  const selectedLocation = locations.find(
+    (location) => isSelectableClientLocation(location) && location.selected,
+  )
+  if (selectedLocation) {
+    return selectedLocation.locationCode
+  }
+
+  return locations.find(isSelectableClientLocation)?.locationCode ?? ''
+}
 
 const triggerBrowserDownload = (blob: Blob, filename: string): void => {
   const objectUrl = URL.createObjectURL(blob)
@@ -182,6 +214,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
   const [isSavingSummary, setIsSavingSummary] = useState(false)
+  const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
+  const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
+  const [isLoadingOwnerClientLocations, setIsLoadingOwnerClientLocations] = useState(false)
+  const [isLoadingAgentClientLocations, setIsLoadingAgentClientLocations] = useState(false)
   const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
   const [reviewStatusCode, setReviewStatusCode] = useState('')
   const [reviewStatusRemark, setReviewStatusRemark] = useState('')
@@ -357,6 +393,167 @@ const ProvincialApplicationDetailsPage: FC = () => {
     [reviewStatusCode],
   )
   const canSendReviewStatusEmail = EMAIL_SUPPORTED_STATUS_CODES.has(normalizedReviewStatusCode)
+  const hasSummaryForm = summaryForm !== null
+  const summaryOwnerClientNumber = summaryForm?.ownerClientNumber.trim() ?? ''
+  const summaryAgentClientNumber = summaryForm?.agentClientNumber.trim() ?? ''
+  const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
+  const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
+  const ownerClientLocationPlaceholder = !summaryOwnerClientNumber
+    ? 'Enter owner client number first'
+    : isLoadingOwnerClientLocations
+      ? 'Loading locations'
+      : hasSelectableOwnerClientLocations
+        ? 'Select owner client location'
+        : 'No locations on file'
+  const agentClientLocationPlaceholder = !summaryAgentClientNumber
+    ? 'Enter agent client number first'
+    : isLoadingAgentClientLocations
+      ? 'Loading locations'
+      : hasSelectableAgentClientLocations
+        ? 'Select agent client location'
+        : 'No locations on file'
+
+  useEffect(() => {
+    if (!canEditSummary || !hasSummaryForm) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setOwnerClientLocations([])
+        setIsLoadingOwnerClientLocations(false)
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    if (!summaryOwnerClientNumber) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setOwnerClientLocations([])
+        setIsLoadingOwnerClientLocations(false)
+        setSummaryForm((current) =>
+          current?.ownerClientLocationCode ? { ...current, ownerClientLocationCode: '' } : current,
+        )
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingOwnerClientLocations(true)
+      }
+    })
+
+    void fetchApplicationClientLocations(summaryOwnerClientNumber, 'owner')
+      .then((locations) => {
+        if (!isActive) {
+          return
+        }
+
+        setOwnerClientLocations(locations)
+        setSummaryForm((current) => {
+          if (!current || current.ownerClientNumber.trim() !== summaryOwnerClientNumber) {
+            return current
+          }
+
+          const nextOwnerClientLocationCode = resolveClientLocationCode(
+            locations,
+            current.ownerClientLocationCode,
+          )
+          return current.ownerClientLocationCode === nextOwnerClientLocationCode
+            ? current
+            : { ...current, ownerClientLocationCode: nextOwnerClientLocationCode }
+        })
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingOwnerClientLocations(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [canEditSummary, hasSummaryForm, summaryOwnerClientNumber])
+
+  useEffect(() => {
+    if (!canEditSummary || !hasSummaryForm) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setAgentClientLocations([])
+        setIsLoadingAgentClientLocations(false)
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    if (!summaryAgentClientNumber) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setAgentClientLocations([])
+        setIsLoadingAgentClientLocations(false)
+        setSummaryForm((current) =>
+          current?.agentClientLocationCode ? { ...current, agentClientLocationCode: '' } : current,
+        )
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingAgentClientLocations(true)
+      }
+    })
+
+    void fetchApplicationClientLocations(summaryAgentClientNumber, 'agent')
+      .then((locations) => {
+        if (!isActive) {
+          return
+        }
+
+        setAgentClientLocations(locations)
+        setSummaryForm((current) => {
+          if (!current || current.agentClientNumber.trim() !== summaryAgentClientNumber) {
+            return current
+          }
+
+          const nextAgentClientLocationCode = resolveClientLocationCode(
+            locations,
+            current.agentClientLocationCode,
+          )
+          return current.agentClientLocationCode === nextAgentClientLocationCode
+            ? current
+            : { ...current, agentClientLocationCode: nextAgentClientLocationCode }
+        })
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingAgentClientLocations(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [canEditSummary, hasSummaryForm, summaryAgentClientNumber])
 
   useEffect(() => {
     if (!canReviewApplication) {
@@ -956,18 +1153,26 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         onSummaryFormChange('ownerClientNumber', event.target.value)
                       }
                     />
-                    <TextInput
+                    <Select
                       id="applicationSummaryOwnerClientLocationCode"
                       labelText="Owner Client Location"
-                      maxLength={2}
                       value={summaryForm.ownerClientLocationCode}
-                      onChange={(event) =>
-                        onSummaryFormChange(
-                          'ownerClientLocationCode',
-                          event.target.value.toUpperCase(),
-                        )
+                      disabled={
+                        !summaryForm.ownerClientNumber.trim() || isLoadingOwnerClientLocations
                       }
-                    />
+                      onChange={(event) =>
+                        onSummaryFormChange('ownerClientLocationCode', event.target.value)
+                      }
+                    >
+                      <SelectItem value="" text={ownerClientLocationPlaceholder} />
+                      {ownerClientLocations.filter(isSelectableClientLocation).map((location) => (
+                        <SelectItem
+                          key={location.locationCode}
+                          value={location.locationCode}
+                          text={location.locationName}
+                        />
+                      ))}
+                    </Select>
                     <TextInput
                       id="applicationSummaryOwnerContactName"
                       labelText="Owner Contact Name"
@@ -993,18 +1198,26 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         onSummaryFormChange('agentClientNumber', event.target.value)
                       }
                     />
-                    <TextInput
+                    <Select
                       id="applicationSummaryAgentClientLocationCode"
                       labelText="Agent Client Location"
-                      maxLength={2}
                       value={summaryForm.agentClientLocationCode}
-                      onChange={(event) =>
-                        onSummaryFormChange(
-                          'agentClientLocationCode',
-                          event.target.value.toUpperCase(),
-                        )
+                      disabled={
+                        !summaryForm.agentClientNumber.trim() || isLoadingAgentClientLocations
                       }
-                    />
+                      onChange={(event) =>
+                        onSummaryFormChange('agentClientLocationCode', event.target.value)
+                      }
+                    >
+                      <SelectItem value="" text={agentClientLocationPlaceholder} />
+                      {agentClientLocations.filter(isSelectableClientLocation).map((location) => (
+                        <SelectItem
+                          key={location.locationCode}
+                          value={location.locationCode}
+                          text={location.locationName}
+                        />
+                      ))}
+                    </Select>
                     <TextInput
                       id="applicationSummaryAgentContactName"
                       labelText="Agent Contact Name"

@@ -11,6 +11,7 @@ import {
   sendApplicationReviewStatusEmail,
   updateApplicationReviewStatus,
 } from '@/service/application-review-search-service'
+import { fetchApplicationClientLocations } from '@/service/application-client-lookup-service'
 import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
@@ -54,6 +55,10 @@ vi.mock('@/service/application-review-search-service', () => ({
   updateApplicationReviewStatus: vi.fn(),
 }))
 
+vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientLocations: vi.fn(),
+}))
+
 vi.mock('@/service/provincial-application-documents-service', () => ({
   fetchApplicationDocuments: vi.fn(),
   openApplicationDocument: vi.fn(),
@@ -88,6 +93,7 @@ const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
 const mockedSendApplicationReviewStatusEmail = vi.mocked(sendApplicationReviewStatusEmail)
 const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewStatus)
+const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
 const mockedFetchApplicationDocuments = vi.mocked(fetchApplicationDocuments)
 const mockedOpenApplicationDocument = vi.mocked(openApplicationDocument)
@@ -204,6 +210,21 @@ describe('Provincial Application Detail Document Actions', () => {
       clientEmail: '',
       remark: 'Needs correction',
       message: 'Application status updated.',
+    })
+    mockedFetchApplicationClientLocations.mockImplementation((clientNumber, applicantType) => {
+      if (applicantType === 'agent') {
+        return Promise.resolve([
+          { locationCode: '0', locationName: 'Do not use', selected: false },
+          { locationCode: '01', locationName: 'Agent Main Location', selected: true },
+          { locationCode: '02', locationName: 'Agent Alternate Location', selected: false },
+        ])
+      }
+
+      return Promise.resolve([
+        { locationCode: '0', locationName: 'Do not use', selected: false },
+        { locationCode: '00', locationName: 'Owner Main Location', selected: true },
+        { locationCode: '02', locationName: 'Owner Alternate Location', selected: false },
+      ])
     })
     mockedSendApplicationReviewStatusEmail.mockResolvedValue({
       success: true,
@@ -981,6 +1002,12 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.clear(volumeInput)
     await userEvent.type(volumeInput, '125.5')
 
+    await waitFor(() => {
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner')
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033344', 'agent')
+    })
+    await userEvent.selectOptions(screen.getByLabelText('Owner Client Location'), '02')
+
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
     await waitFor(() => {
@@ -997,7 +1024,7 @@ describe('Provincial Application Detail Document Actions', () => {
         agentClientNumber: '00033344',
         agentClientLocationCode: '01',
         ownerClientNumber: '00011122',
-        ownerClientLocationCode: '00',
+        ownerClientLocationCode: '02',
         applicationStatusCode: 'ACTIVE',
         applicantTypeCode: 'A',
         orgUnitNumber: '12',
