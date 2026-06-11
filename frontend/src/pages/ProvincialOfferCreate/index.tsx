@@ -157,18 +157,9 @@ const ProvincialOfferCreatePage: FC = () => {
 
   const onSaveDraft = () => {
     setStatus(null)
-    if (hasValidationError) {
-      setShowAllValidationErrors(true)
-      setStatus({
-        kind: 'error',
-        title: 'Validation Error',
-        message: 'Please fix validation errors before saving the draft.',
-      })
-      return
-    }
-
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
+    setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
   }
 

@@ -303,6 +303,34 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
+  it('saves incomplete provincial application drafts without submit validation', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Save Draft' }))
+
+    expect(await screen.findByText('Draft Saved')).toBeInTheDocument()
+    expect(screen.queryByText('Owner client number is required.')).not.toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+    const drafts = JSON.parse(
+      localStorage.getItem('lexis.create-drafts.provincial-application') ?? '[]',
+    )
+    expect(drafts).toHaveLength(1)
+    expect(drafts[0].payload).toMatchObject({
+      ownerClientNumber: '',
+      productLocation: '',
+      applicantTypeCode: 'O',
+    })
+  })
+
   it('allows manual owner contact entry when lookup has no contacts', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('903'))
     mockedFetchApplicationClientContacts.mockResolvedValue([])
