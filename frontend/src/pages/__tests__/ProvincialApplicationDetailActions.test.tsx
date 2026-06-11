@@ -1136,6 +1136,34 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
   })
 
+  it('allows manual summary contact entry when lookup has no contacts', async () => {
+    mockedFetchApplicationClientContacts.mockResolvedValue([])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const ownerContactInput = await screen.findByLabelText('Owner Contact Name')
+    await userEvent.clear(ownerContactInput)
+    await userEvent.type(ownerContactInput, 'Typed Owner')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerContactName: 'Typed Owner',
+        }),
+      )
+    })
+  })
+
   it('approves an application from the detail review section and refreshes detail', async () => {
     const detailAfterApproval: ProvincialApplicationDetail = {
       ...applicationDetail,

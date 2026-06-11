@@ -1378,26 +1378,40 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         />
                       ))}
                     </Select>
-                    <Select
-                      id="applicationSummaryOwnerContactName"
-                      labelText="Owner Contact Name"
-                      value={summaryForm.ownerContactName}
-                      disabled={
-                        !summaryForm.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts
-                      }
-                      onChange={(event) =>
-                        onSummaryFormChange('ownerContactName', event.target.value)
-                      }
-                    >
-                      <SelectItem value="" text={ownerContactPlaceholder} />
-                      {ownerClientContacts.filter(isSelectableClientContact).map((contact) => (
-                        <SelectItem
-                          key={contact.contactId}
-                          value={contact.contactName}
-                          text={contact.contactName}
-                        />
-                      ))}
-                    </Select>
+                    {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
+                      <Select
+                        id="applicationSummaryOwnerContactName"
+                        labelText="Owner Contact Name"
+                        value={summaryForm.ownerContactName}
+                        disabled={
+                          !summaryForm.ownerClientLocationCode.trim() ||
+                          isLoadingOwnerClientContacts
+                        }
+                        onChange={(event) =>
+                          onSummaryFormChange('ownerContactName', event.target.value)
+                        }
+                      >
+                        <SelectItem value="" text={ownerContactPlaceholder} />
+                        {ownerClientContacts.filter(isSelectableClientContact).map((contact) => (
+                          <SelectItem
+                            key={contact.contactId}
+                            value={contact.contactName}
+                            text={contact.contactName}
+                          />
+                        ))}
+                      </Select>
+                    ) : (
+                      <TextInput
+                        id="applicationSummaryOwnerContactName"
+                        labelText="Owner Contact Name"
+                        value={summaryForm.ownerContactName}
+                        disabled={!summaryForm.ownerClientLocationCode.trim()}
+                        placeholder="Enter owner contact name"
+                        onChange={(event) =>
+                          onSummaryFormChange('ownerContactName', event.target.value)
+                        }
+                      />
+                    )}
                     <TextInput
                       id="applicationSummaryApplicantTypeCode"
                       labelText="Applicant Type"
@@ -1435,26 +1449,40 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         />
                       ))}
                     </Select>
-                    <Select
-                      id="applicationSummaryAgentContactName"
-                      labelText="Agent Contact Name"
-                      value={summaryForm.agentContactName}
-                      disabled={
-                        !summaryForm.agentClientLocationCode.trim() || isLoadingAgentClientContacts
-                      }
-                      onChange={(event) =>
-                        onSummaryFormChange('agentContactName', event.target.value)
-                      }
-                    >
-                      <SelectItem value="" text={agentContactPlaceholder} />
-                      {agentClientContacts.filter(isSelectableClientContact).map((contact) => (
-                        <SelectItem
-                          key={contact.contactId}
-                          value={contact.contactName}
-                          text={contact.contactName}
-                        />
-                      ))}
-                    </Select>
+                    {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
+                      <Select
+                        id="applicationSummaryAgentContactName"
+                        labelText="Agent Contact Name"
+                        value={summaryForm.agentContactName}
+                        disabled={
+                          !summaryForm.agentClientLocationCode.trim() ||
+                          isLoadingAgentClientContacts
+                        }
+                        onChange={(event) =>
+                          onSummaryFormChange('agentContactName', event.target.value)
+                        }
+                      >
+                        <SelectItem value="" text={agentContactPlaceholder} />
+                        {agentClientContacts.filter(isSelectableClientContact).map((contact) => (
+                          <SelectItem
+                            key={contact.contactId}
+                            value={contact.contactName}
+                            text={contact.contactName}
+                          />
+                        ))}
+                      </Select>
+                    ) : (
+                      <TextInput
+                        id="applicationSummaryAgentContactName"
+                        labelText="Agent Contact Name"
+                        value={summaryForm.agentContactName}
+                        disabled={!summaryForm.agentClientLocationCode.trim()}
+                        placeholder="Enter agent contact name"
+                        onChange={(event) =>
+                          onSummaryFormChange('agentContactName', event.target.value)
+                        }
+                      />
+                    )}
                     <TextInput
                       id="applicationSummaryRegion"
                       labelText="Region"

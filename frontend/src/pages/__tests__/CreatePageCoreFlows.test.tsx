@@ -229,6 +229,36 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
+  it('allows manual owner contact entry when lookup has no contacts', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('903'))
+    mockedFetchApplicationClientContacts.mockResolvedValue([])
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const ownerNameInput = await screen.findByLabelText('Owner Name (required)')
+    await userEvent.type(ownerNameInput, 'Typed Owner')
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerContactName: 'Typed Owner',
+      }),
+    )
+  })
+
   it('does not use search exemption type as create exemption reason', async () => {
     render(
       <MemoryRouter

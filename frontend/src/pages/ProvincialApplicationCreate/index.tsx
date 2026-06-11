@@ -786,27 +786,43 @@ const ProvincialApplicationCreatePage: FC = () => {
                 />
               ))}
             </Select>
-            <Select
-              id="ownerContactName"
-              labelText="Owner Name (required)"
-              value={form.ownerContactName}
-              disabled={!form.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts}
-              invalid={!!fieldError('ownerContactName')}
-              invalidText={fieldError('ownerContactName')}
-              onBlur={() => markFieldTouched('ownerContactName')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, ownerContactName: event.target.value }))
-              }
-            >
-              <SelectItem value="" text={ownerContactPlaceholder} />
-              {ownerClientContacts.filter(isSelectableClientContact).map((contact) => (
-                <SelectItem
-                  key={contact.contactId}
-                  value={contact.contactName}
-                  text={contact.contactName}
-                />
-              ))}
-            </Select>
+            {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
+              <Select
+                id="ownerContactName"
+                labelText="Owner Name (required)"
+                value={form.ownerContactName}
+                disabled={!form.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts}
+                invalid={!!fieldError('ownerContactName')}
+                invalidText={fieldError('ownerContactName')}
+                onBlur={() => markFieldTouched('ownerContactName')}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, ownerContactName: event.target.value }))
+                }
+              >
+                <SelectItem value="" text={ownerContactPlaceholder} />
+                {ownerClientContacts.filter(isSelectableClientContact).map((contact) => (
+                  <SelectItem
+                    key={contact.contactId}
+                    value={contact.contactName}
+                    text={contact.contactName}
+                  />
+                ))}
+              </Select>
+            ) : (
+              <TextInput
+                id="ownerContactName"
+                labelText="Owner Name (required)"
+                value={form.ownerContactName}
+                disabled={!form.ownerClientLocationCode.trim()}
+                placeholder="Enter owner contact name"
+                invalid={!!fieldError('ownerContactName')}
+                invalidText={fieldError('ownerContactName')}
+                onBlur={() => markFieldTouched('ownerContactName')}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, ownerContactName: event.target.value }))
+                }
+              />
+            )}
             <Select
               id="applicantTypeCode"
               labelText="Applicant Type (required)"
@@ -874,27 +890,43 @@ const ProvincialApplicationCreatePage: FC = () => {
                     />
                   ))}
                 </Select>
-                <Select
-                  id="agentContactName"
-                  labelText="Agent Contact Name (required)"
-                  value={form.agentContactName}
-                  disabled={!form.agentClientLocationCode.trim() || isLoadingAgentClientContacts}
-                  invalid={!!fieldError('agentContactName')}
-                  invalidText={fieldError('agentContactName')}
-                  onBlur={() => markFieldTouched('agentContactName')}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, agentContactName: event.target.value }))
-                  }
-                >
-                  <SelectItem value="" text={agentContactPlaceholder} />
-                  {agentClientContacts.filter(isSelectableClientContact).map((contact) => (
-                    <SelectItem
-                      key={contact.contactId}
-                      value={contact.contactName}
-                      text={contact.contactName}
-                    />
-                  ))}
-                </Select>
+                {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
+                  <Select
+                    id="agentContactName"
+                    labelText="Agent Contact Name (required)"
+                    value={form.agentContactName}
+                    disabled={!form.agentClientLocationCode.trim() || isLoadingAgentClientContacts}
+                    invalid={!!fieldError('agentContactName')}
+                    invalidText={fieldError('agentContactName')}
+                    onBlur={() => markFieldTouched('agentContactName')}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, agentContactName: event.target.value }))
+                    }
+                  >
+                    <SelectItem value="" text={agentContactPlaceholder} />
+                    {agentClientContacts.filter(isSelectableClientContact).map((contact) => (
+                      <SelectItem
+                        key={contact.contactId}
+                        value={contact.contactName}
+                        text={contact.contactName}
+                      />
+                    ))}
+                  </Select>
+                ) : (
+                  <TextInput
+                    id="agentContactName"
+                    labelText="Agent Contact Name (required)"
+                    value={form.agentContactName}
+                    disabled={!form.agentClientLocationCode.trim()}
+                    placeholder="Enter agent contact name"
+                    invalid={!!fieldError('agentContactName')}
+                    invalidText={fieldError('agentContactName')}
+                    onBlur={() => markFieldTouched('agentContactName')}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, agentContactName: event.target.value }))
+                    }
+                  />
+                )}
               </>
             )}
             <Select
