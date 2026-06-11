@@ -391,14 +391,14 @@ const canDeleteApplicationDocuments = (
     return false
   }
 
-  const status = detail.applicationStatusCode.trim().toUpperCase()
+  const status = detail.applicationStatusCode?.trim().toUpperCase() ?? ''
   const normalizedRoles = roles.map((role) => role.trim().toUpperCase())
   const approverOrAdmin = normalizedRoles.some((role) =>
     APPLICATION_DOCUMENT_DELETE_ROLES.has(role),
   )
 
   if (approverOrAdmin) {
-    return status !== APPLICATION_STATUS_EXPIRED
+    return status.length > 0 && status !== APPLICATION_STATUS_EXPIRED
   }
 
   const industryUser = detail.industryUser || normalizedRoles.some(isIndustryApplicationRole)

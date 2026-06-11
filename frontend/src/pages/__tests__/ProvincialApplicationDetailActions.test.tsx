@@ -2002,6 +2002,43 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
   })
 
+  it('disables application document delete when status is unavailable', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: null,
+    })
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '102',
+          name: 'unknown-status-doc.pdf',
+          description: 'unknown status',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const documentName = await screen.findByText('unknown-status-doc.pdf')
+    const documentRow = documentName.closest('tr')
+    expect(documentRow).toBeTruthy()
+    expect(
+      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+    ).toBeDisabled()
+    expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
+  })
+
   it('shows detail error contract when application detail endpoint fails', async () => {
     mockedFetchProvincialApplicationDetail.mockRejectedValue(new Error('backend down'))
 
