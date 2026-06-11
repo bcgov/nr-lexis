@@ -157,6 +157,18 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
           warnings);
     }
 
+    String remarkBody = trimToNull(normalized.remarkBody());
+    if (remarkBody != null
+        && repository.insertRemark(applicationNumber, remarkBody, entryUserId, Instant.now()).isEmpty()) {
+      markRollbackOnly();
+      return new CreateApplicationResult(
+          false,
+          "We were unable to save this application. Please note the time this error occurred and report to someone.",
+          null,
+          List.of(),
+          warnings);
+    }
+
     return new CreateApplicationResult(
         true, SAVE_SUCCESS_MESSAGE, applicationNumber, List.of(), warnings);
   }
@@ -1263,7 +1275,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return new CreateApplicationRequest(
           null, null, null, null, null, null, null, null, null, null, null, null, null,
           null, APPLICANT_TYPE_OWNER, null, null, JURISDICTION_PROVINCIAL, null, null, null,
-          OIC_INDICATOR_NO, null, null, true);
+          OIC_INDICATOR_NO, null, null, null, true);
     }
 
     String applicantTypeCode =
@@ -1295,6 +1307,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         firstNonBlank(input.oicIndicator(), OIC_INDICATOR_NO),
         trimToNull(input.endUseCode()),
         input.speciesCodes() == null ? null : normalizeCodes(input.speciesCodes()),
+        trimToNull(input.remarkBody()),
         input.validationEnabled());
   }
 

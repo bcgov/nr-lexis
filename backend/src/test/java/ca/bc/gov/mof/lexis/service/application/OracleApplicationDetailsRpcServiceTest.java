@@ -366,6 +366,66 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void addApplicationShouldPersistCreateCommentsAsRemark() {
+    Instant now = Instant.parse("2026-05-27T17:30:00Z");
+    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+    when(repository.replaceApplicationEndUses(
+            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
+        .thenReturn(true);
+    when(repository.insertRemark(
+            org.mockito.ArgumentMatchers.eq(1000456L),
+            org.mockito.ArgumentMatchers.eq("Ready for review"),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith"),
+            any(Instant.class)))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.RemarkRow(
+                    12L, "Ready for review", "idir\\jsmith", now)));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                2.4d,
+                "Camp 1",
+                null,
+                null,
+                null,
+                "00011111",
+                "02",
+                null,
+                "U",
+                "O",
+                11L,
+                "T",
+                null,
+                null,
+                null,
+                "Owner Contact",
+                null,
+                "SA",
+                List.of("HE"),
+                " Ready for review ",
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.applicationNumber()).isEqualTo(1000456L);
+    verify(repository).replaceApplicationEndUses(
+        org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList());
+    verify(repository).insertRemark(
+        org.mockito.ArgumentMatchers.eq(1000456L),
+        org.mockito.ArgumentMatchers.eq("Ready for review"),
+        org.mockito.ArgumentMatchers.eq("idir\\jsmith"),
+        any(Instant.class));
+  }
+
+  @Test
   void addApplicationShouldDefaultMissingApplicantTypeToOwnerBeforeOracleInsert() {
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));

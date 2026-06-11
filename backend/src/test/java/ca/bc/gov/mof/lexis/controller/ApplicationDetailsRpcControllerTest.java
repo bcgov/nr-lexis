@@ -358,6 +358,7 @@ class ApplicationDetailsRpcControllerTest {
     params.add("productTypeCode", "H");
     params.add("growthTypeCode", "O");
     params.add("ownerContactName", "Owner Contact");
+    params.add("comments", "Ready for review");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
         controller.addApplicationLegacy(params, authentication);
@@ -376,6 +377,7 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(request.agentClientNumber()).isEqualTo("00022222");
     assertThat(request.exemptionReasonCode()).isEqualTo("U");
     assertThat(request.productTypeCode()).isEqualTo("H");
+    assertThat(request.remarkBody()).isEqualTo("Ready for review");
   }
 
   @Test

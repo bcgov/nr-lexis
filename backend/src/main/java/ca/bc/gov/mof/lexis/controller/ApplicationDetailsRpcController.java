@@ -1014,6 +1014,7 @@ public class ApplicationDetailsRpcController {
         first(parameters, "oicIndicator"),
         first(parameters, "applicationEndUseCode", "endUseCode", "endUse"),
         parseSpeciesSelection(parameters),
+        first(parameters, "additionalRemarks", "comments", "remarkBody", "remark"),
         !"false".equalsIgnoreCase(first(parameters, "validation")));
   }
 
