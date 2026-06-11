@@ -148,7 +148,7 @@ class ApplicationDetailsRpcControllerTest {
 
   @Test
   void persistRemarkShouldReturnOkStatus() {
-    TestingAuthenticationToken authentication = authorized("createApplication");
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     Instant now = Instant.parse("2026-05-27T17:00:00Z");
     when(service.persistRemark("new", 1000456L, "Long remark", "idir\\jsmith"))
@@ -169,8 +169,8 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void persistRemarkShouldRejectWithoutCreateApplicationAction() {
-    TestingAuthenticationToken authentication = unauthorized("createApplication");
+  void persistRemarkShouldRejectWithoutApplicationRemarksAction() {
+    TestingAuthenticationToken authentication = unauthorized("/applicationRemarks");
 
     ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
         controller.persistRemark("new", "1000456", "Long remark", authentication);

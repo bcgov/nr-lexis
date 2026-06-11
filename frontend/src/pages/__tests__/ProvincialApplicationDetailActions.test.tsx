@@ -1439,6 +1439,40 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
   })
 
+  it('hides application remark editing without application remarks action', async () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'idir\\reviewer',
+        roles: ['APPLICATION_APPROVER'],
+        welcomeTarget: null,
+        legacyPath: null,
+        grantedActions: [],
+      },
+      canPerform: (action: string) => action !== '/applicationRemarks',
+    } as any)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Remarks')).toBeInTheDocument()
+    const remarksTile = screen.getByText('Remarks').closest('.cds--tile')
+    expect(remarksTile).toBeTruthy()
+
+    const remarksControls = within(remarksTile as HTMLElement)
+    expect(remarksControls.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(remarksControls.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
+    expect(remarksControls.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+  })
+
   it('updates existing application remarks and refreshes detail', async () => {
     const detailAfterRemarkUpdate: ProvincialApplicationDetail = {
       ...applicationDetail,

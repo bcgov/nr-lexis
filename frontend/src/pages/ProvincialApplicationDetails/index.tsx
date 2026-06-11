@@ -695,7 +695,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const canUploadApplicationDocuments = canPerform('/fileApplicationUpload')
   const canDeleteDocuments = canDeleteApplicationDocuments(detail, capabilities?.roles ?? [])
   const canManageItems = canPerform('createApplication') && !detail?.readOnly && !detail?.locked
-  const canManageRemarks = canManageItems
+  const canManageRemarks = canPerform('/applicationRemarks') && !detail?.readOnly && !detail?.locked
   const canEditSummary = canManageItems
   const canReviewApplication = canPerform('/applicationsReview')
   const normalizedReviewStatusCode = useMemo(

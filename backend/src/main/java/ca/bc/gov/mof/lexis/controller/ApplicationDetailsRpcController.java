@@ -79,6 +79,7 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_DELETE_SCALE_BY_ID = "deleteScaleById";
   private static final String ACTION_DELETE_PACKAGE_BY_ID = "deletePackageById";
   private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
+  private static final String LEGACY_ACTION_APPLICATION_REMARKS = "/applicationRemarks";
   private static final String LEGACY_ACTION_FILE_APPLICATION_UPLOAD = "/fileApplicationUpload";
   private static final String LEGACY_APPLICATION_LOCK_SESSION_KEY = "exemptionApplication";
   private static final String LEGACY_APPLICATION_NUMBER_SESSION_KEY = "applicationNumber";
@@ -218,7 +219,7 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       @RequestParam(name = "remarkBody", required = false) String remarkBody,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+    if (!canPerform(authentication, LEGACY_ACTION_APPLICATION_REMARKS)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
