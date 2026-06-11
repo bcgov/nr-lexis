@@ -1,16 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import {
-  Button,
-  Column,
-  Grid,
-  InlineNotification,
-  Select,
-  SelectItem,
-  TextArea,
-  TextInput,
-  Tile,
-} from '@carbon/react'
+import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
   firstValidationError,
@@ -415,35 +406,27 @@ const ProvincialExemptionCreatePage: FC = () => {
                 setForm((current) => ({ ...current, applicationNumber: event.target.value }))
               }
             />
-            <Select
+            <SearchableSelect
               id="exemptionTypeCode"
               labelText="Exemption Type (required)"
               value={form.exemptionTypeCode}
               invalid={!!fieldError('exemptionTypeCode')}
               invalidText={fieldError('exemptionTypeCode')}
+              placeholder="Select type"
+              options={exemptionTypes}
               onBlur={() => markFieldTouched('exemptionTypeCode')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, exemptionTypeCode: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select type" />
-              {exemptionTypes.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
-            <Select
+              onChange={(value) => setForm((current) => ({ ...current, exemptionTypeCode: value }))}
+            />
+            <SearchableSelect
               id="exemptionStatusCode"
               labelText="Exemption Status"
               value={form.exemptionStatusCode}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, exemptionStatusCode: event.target.value }))
+              placeholder="Select status"
+              options={exemptionStatuses}
+              onChange={(value) =>
+                setForm((current) => ({ ...current, exemptionStatusCode: value }))
               }
-            >
-              <SelectItem value="" text="Select status" />
-              {exemptionStatuses.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
+            />
             <TextInput
               id="ownerClientNumber"
               labelText="Owner Client Number (required)"

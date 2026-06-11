@@ -1,16 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import {
-  Button,
-  Column,
-  Grid,
-  InlineNotification,
-  Select,
-  SelectItem,
-  TextArea,
-  TextInput,
-  Tile,
-} from '@carbon/react'
+import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
   firstValidationError,
@@ -334,19 +325,14 @@ const ProvincialOfferCreatePage: FC = () => {
                 setForm((current) => ({ ...current, contactName: event.target.value }))
               }
             />
-            <Select
+            <SearchableSelect
               id="region"
               labelText="Region"
               value={form.region}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, region: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select region" />
-              {regions.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
+              placeholder="Select region"
+              options={regions}
+              onChange={(value) => setForm((current) => ({ ...current, region: value }))}
+            />
             <TextInput
               id="purchaseOfferAmount"
               labelText="Offer Amount (required)"

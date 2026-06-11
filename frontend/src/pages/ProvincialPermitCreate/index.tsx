@@ -1,16 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import {
-  Button,
-  Column,
-  Grid,
-  InlineNotification,
-  Select,
-  SelectItem,
-  TextArea,
-  TextInput,
-  Tile,
-} from '@carbon/react'
+import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
   firstValidationError,
@@ -332,38 +323,28 @@ const ProvincialPermitCreatePage: FC = () => {
                 setForm((current) => ({ ...current, exemptionNumber: event.target.value }))
               }
             />
-            <Select
+            <SearchableSelect
               id="permitRegion"
               labelText="Region (required)"
               value={form.region}
               invalid={!!fieldError('region')}
               invalidText={fieldError('region')}
+              placeholder="Select region"
+              options={regions}
               onBlur={() => markFieldTouched('region')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, region: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select region" />
-              {regions.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
-            <Select
+              onChange={(value) => setForm((current) => ({ ...current, region: value }))}
+            />
+            <SearchableSelect
               id="permitStatus"
               labelText="Permit Status (required)"
               value={form.permitStatus}
               invalid={!!fieldError('permitStatus')}
               invalidText={fieldError('permitStatus')}
+              placeholder="Select permit status"
+              options={permitStatuses}
               onBlur={() => markFieldTouched('permitStatus')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, permitStatus: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select permit status" />
-              {permitStatuses.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
+              onChange={(value) => setForm((current) => ({ ...current, permitStatus: value }))}
+            />
             <TextInput
               id="applicantClientNumber"
               labelText="Applicant Client Number (required)"

@@ -57,6 +57,8 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationRemainingSpecies: vi.fn(),
 }))
 
+Element.prototype.scrollIntoView = vi.fn()
+
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 const mockedFetchProvincialOfferOptions = vi.mocked(fetchProvincialOfferOptions)
@@ -77,6 +79,14 @@ const successfulCreate = (createdId: string): CreateSubmissionResult => ({
   errors: [],
   warnings: [],
 })
+
+const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) => {
+  await userEvent.click(combobox)
+  await userEvent.clear(combobox)
+  await userEvent.type(combobox, optionName)
+  const options = await screen.findAllByRole('option', { name: optionName })
+  await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
+}
 
 describe('Create Page Core Flows', () => {
   beforeEach(() => {
@@ -393,7 +403,10 @@ describe('Create Page Core Flows', () => {
 
     await screen.findByText('Create Provincial Exemption')
     await userEvent.type(screen.getByLabelText('Exemption Number (required)'), 'EX-777')
-    await userEvent.selectOptions(screen.getByLabelText('Exemption Type (required)'), 'SECTION_1')
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Exemption Type (required)' }),
+      'Section 1',
+    )
     await userEvent.type(screen.getByLabelText('Approval Date (YYYY-MM-DD)'), '2026-02-01')
     await userEvent.type(screen.getByLabelText('Expiry Date (YYYY-MM-DD)'), '2026-12-31')
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
