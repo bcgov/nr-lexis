@@ -355,6 +355,53 @@ const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
   productTypeCode === 'H' || productTypeCode === 'S'
 
 const isAgentApplicant = (applicantTypeCode: string): boolean => applicantTypeCode === 'A'
+const APPLICATION_STATUS_EXPIRED = 'EXP'
+const APPLICATION_STATUS_PERMITTED = 'PMT'
+const APPLICATION_DOCUMENT_DELETE_ROLES = new Set([
+  'ADMIN',
+  'LEXIS_ADMIN',
+  'APPLICATION_APPROVER',
+  'LEXIS_APPLICATION_APPROVER',
+])
+const APPLICATION_DOCUMENT_INDUSTRY_ROLES = new Set([
+  'PROVINCIAL_SUBMITTER',
+  'LEXIS_PROVINCIAL_SUBMITTER',
+  'FEDERAL_SUBMITTER',
+  'LEXIS_FEDERAL_SUBMITTER',
+])
+
+const isIndustryApplicationRole = (role: string): boolean => {
+  const normalizedRole = role.trim().toUpperCase()
+  return (
+    APPLICATION_DOCUMENT_INDUSTRY_ROLES.has(normalizedRole) ||
+    normalizedRole.startsWith('PROVINCIAL_SUBMITTER_') ||
+    normalizedRole.startsWith('LEXIS_PROVINCIAL_SUBMITTER_') ||
+    normalizedRole.startsWith('FEDERAL_SUBMITTER_') ||
+    normalizedRole.startsWith('LEXIS_FEDERAL_SUBMITTER_')
+  )
+}
+
+const canDeleteApplicationDocuments = (
+  detail: ProvincialApplicationDetail | null,
+  roles: string[],
+): boolean => {
+  if (!detail) {
+    return false
+  }
+
+  const status = detail.applicationStatusCode.trim().toUpperCase()
+  const normalizedRoles = roles.map((role) => role.trim().toUpperCase())
+  const approverOrAdmin = normalizedRoles.some((role) =>
+    APPLICATION_DOCUMENT_DELETE_ROLES.has(role),
+  )
+
+  if (approverOrAdmin) {
+    return status !== APPLICATION_STATUS_EXPIRED
+  }
+
+  const industryUser = detail.industryUser || normalizedRoles.some(isIndustryApplicationRole)
+  return industryUser && [APPLICATION_STATUS_PERMITTED, APPLICATION_STATUS_EXPIRED].includes(status)
+}
 
 const reviewEmailCandidate = (
   applicantTypeCode: string,
@@ -373,7 +420,7 @@ const reviewEmailCandidate = (
 
 const ProvincialApplicationDetailsPage: FC = () => {
   const navigate = useNavigate()
-  const { canPerform } = useAuth()
+  const { canPerform, capabilities } = useAuth()
   const { applicationNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
@@ -627,7 +674,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
     )
   }, [documentRows, documentsFilter])
 
-  const canManageDocuments = canPerform('/fileApplicationUpload')
+  const canUploadApplicationDocuments = canPerform('/fileApplicationUpload')
+  const canDeleteDocuments = canDeleteApplicationDocuments(detail, capabilities?.roles ?? [])
   const canManageItems = canPerform('createApplication') && !detail?.readOnly && !detail?.locked
   const canManageRemarks = canManageItems
   const canEditSummary = canManageItems
@@ -1976,7 +2024,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 <Button
                   kind="secondary"
                   size="sm"
-                  disabled={!canManageDocuments || !detail.applicationNumber}
+                  disabled={!canUploadApplicationDocuments || !detail.applicationNumber}
                   onClick={onOpenApplicationUpload}
                 >
                   Upload Application Document
@@ -2718,7 +2766,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Documents <Tag type="green">API</Tag>
               </h2>
-              {canManageDocuments && (
+              {canUploadApplicationDocuments && (
                 <div className="legacy-search-grid">
                   <TextInput
                     key={applicationDocumentUploadInputKey}
@@ -2796,7 +2844,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                           <Button
                             kind="danger--ghost"
                             size="sm"
-                            disabled={!canManageDocuments || isRemovingDocumentId === row.id}
+                            disabled={!canDeleteDocuments || isRemovingDocumentId === row.id}
                             onClick={() => void onRemoveDocument(row)}
                           >
                             {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}

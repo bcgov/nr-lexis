@@ -226,6 +226,14 @@ describe('Provincial Application Detail Document Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'idir\\reviewer',
+        roles: ['APPLICATION_APPROVER'],
+        welcomeTarget: null,
+        legacyPath: null,
+        grantedActions: [],
+      },
       canPerform: () => true,
     } as any)
     mockedFetchProvincialApplicationDetail.mockResolvedValue(applicationDetail)
@@ -739,6 +747,47 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
       expect(screen.queryByText('app-doc.pdf')).not.toBeInTheDocument()
     })
+  })
+
+  it('keeps application document delete disabled for approvers when the application is expired', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'EXP',
+      statusDescription: 'Expired',
+    })
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '100',
+          name: 'expired-doc.pdf',
+          description: 'expired application',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('button', { name: 'Upload Application Document' })).toBeEnabled()
+
+    const documentName = await screen.findByText('expired-doc.pdf')
+    const documentRow = documentName.closest('tr')
+    expect(documentRow).toBeTruthy()
+    const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
+      name: 'Delete',
+    })
+    expect(deleteButton).toBeDisabled()
+    expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
   })
 
   it('ignores stale document refreshes after navigating to another application', async () => {
