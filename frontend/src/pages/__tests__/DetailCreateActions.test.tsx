@@ -148,6 +148,48 @@ describe('Detail Create Action Smoke', () => {
     expect(createOfferButton).toBeDisabled()
   })
 
+  it('disables Create Offer until the application has at least one package', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createOfferButton = await screen.findByRole('button', { name: 'Create Offer' })
+    expect(createOfferButton).toBeDisabled()
+  })
+
+  it('disables Create Offer for industry users', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      industryUser: true,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createOfferButton = await screen.findByRole('button', { name: 'Create Offer' })
+    expect(createOfferButton).toBeDisabled()
+  })
+
   it('enables Create Permit and navigates with prefill from provincial exemption detail', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue(exemptionDetail)
 
