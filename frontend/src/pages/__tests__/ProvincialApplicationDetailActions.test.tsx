@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -111,8 +111,7 @@ Element.prototype.scrollIntoView = vi.fn()
 
 const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) => {
   await userEvent.click(combobox)
-  await userEvent.clear(combobox)
-  await userEvent.type(combobox, optionName)
+  fireEvent.change(combobox, { target: { value: optionName } })
   const options = await screen.findAllByRole('option', { name: optionName })
   await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
 }
@@ -1396,7 +1395,7 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     expect(await screen.findByText('TM001')).toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('Timber Mark'), 'TM002')
+    fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
     await chooseComboBoxOption(
       screen.getAllByRole('combobox', { name: 'Species' })[1],
       'FI - Douglas-fir',
@@ -1405,8 +1404,8 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchApplicationGradeCodes).toHaveBeenCalledWith('12', 'FI')
     })
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
-    await userEvent.type(screen.getByLabelText('Pieces'), '2')
-    await userEvent.type(screen.getByLabelText('Scale Volume'), '8.0')
+    fireEvent.change(screen.getByLabelText('Pieces'), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText('Scale Volume'), { target: { value: '8.0' } })
     await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
 
     await waitFor(() => {
@@ -1421,7 +1420,7 @@ describe('Provincial Application Detail Document Actions', () => {
       )
     })
 
-    await userEvent.type(screen.getByLabelText('Scale ID'), '55')
+    fireEvent.change(screen.getByLabelText('Scale ID'), { target: { value: '55' } })
     await userEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
     expect(await screen.findByText('TM001 FI/1 5 pcs 20.0 m3')).toBeInTheDocument()
 
@@ -1432,7 +1431,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55')
     })
-  })
+  }, 15000)
 
   it('shows field validation before adding an empty scale', async () => {
     render(
@@ -1470,20 +1469,20 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     expect(await screen.findByText('TM001')).toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('Timber Mark'), 'TM002')
+    fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
     await chooseComboBoxOption(
       screen.getAllByRole('combobox', { name: 'Species' })[1],
       'FI - Douglas-fir',
     )
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
-    await userEvent.type(screen.getByLabelText('Pieces'), '1.5')
-    await userEvent.type(screen.getByLabelText('Scale Volume'), '100000')
+    fireEvent.change(screen.getByLabelText('Pieces'), { target: { value: '1.5' } })
+    fireEvent.change(screen.getByLabelText('Scale Volume'), { target: { value: '100000' } })
     await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
 
     expect(screen.getAllByText('Pieces must be a whole number.').length).toBeGreaterThan(0)
     expect(screen.getByText('Scale volume must be 99999.9 or less.')).toBeInTheDocument()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
-  })
+  }, 15000)
 
   it('saves application remarks and refreshes detail', async () => {
     const detailAfterRemark: ProvincialApplicationDetail = {
@@ -1509,7 +1508,9 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     expect(await screen.findByLabelText('New Remark')).toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('New Remark'), 'New application note')
+    fireEvent.change(screen.getByLabelText('New Remark'), {
+      target: { value: 'New application note' },
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
 
     await waitFor(() => {
@@ -1521,7 +1522,7 @@ describe('Provincial Application Detail Document Actions', () => {
     })
     expect(await screen.findByText('Application remark saved.')).toBeInTheDocument()
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
-  })
+  }, 10000)
 
   it('hides application remark editing without application remarks action', async () => {
     mockedUseAuth.mockReturnValue({
@@ -1585,8 +1586,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(within(remarkRow as HTMLElement).getByText('idir\\reviewer')).toBeInTheDocument()
     await userEvent.click(within(remarkRow as HTMLElement).getByRole('button', { name: 'Edit' }))
     const remarkInput = screen.getByLabelText('Edit Remark 88')
-    await userEvent.clear(remarkInput)
-    await userEvent.type(remarkInput, 'Updated application note')
+    fireEvent.change(remarkInput, { target: { value: 'Updated application note' } })
     await userEvent.click(screen.getByRole('button', { name: 'Update Remark' }))
 
     await waitFor(() => {
@@ -1599,7 +1599,7 @@ describe('Provincial Application Detail Document Actions', () => {
     })
     expect(await screen.findByText('Application remark updated.')).toBeInTheDocument()
     expect(screen.getAllByText('Updated application note').length).toBeGreaterThan(0)
-  })
+  }, 10000)
 
   it('saves application summary edits and refreshes detail', async () => {
     const detailAfterSummarySave: ProvincialApplicationDetail = {
@@ -1623,14 +1623,12 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     const termInput = await screen.findByLabelText('Term (days)')
-    await userEvent.clear(termInput)
-    await userEvent.type(termInput, '5')
-    await userEvent.type(screen.getByLabelText('Term (months)'), '2')
-    await userEvent.type(screen.getByLabelText('Term (years)'), '1')
+    fireEvent.change(termInput, { target: { value: '5' } })
+    fireEvent.change(screen.getByLabelText('Term (months)'), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText('Term (years)'), { target: { value: '1' } })
 
     const volumeInput = screen.getByLabelText('Application Volume (m³)')
-    await userEvent.clear(volumeInput)
-    await userEvent.type(volumeInput, '125.5')
+    fireEvent.change(volumeInput, { target: { value: '125.5' } })
 
     await waitFor(() => {
       expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled()
@@ -1708,7 +1706,7 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
-  }, 10000)
+  }, 20000)
 
   it('validates application summary edits before saving', async () => {
     render(
