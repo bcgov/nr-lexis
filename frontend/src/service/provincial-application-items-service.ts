@@ -50,6 +50,11 @@ export type ApplicationScaleDetails = {
   id: string
 }
 
+export type ApplicationPermitRow = {
+  permitNumber: string
+  permitStatusDescription: string
+}
+
 export type ApplicationPackageMutation = {
   packageNumber: string
   newPackageNumber?: string
@@ -310,6 +315,16 @@ const normalizeScaleDetails = (payload: unknown): ApplicationScaleDetails => {
   }
 }
 
+const normalizeApplicationPermitRow = (row: unknown): ApplicationPermitRow => {
+  const source = (row ?? {}) as Record<string, unknown>
+  return {
+    permitNumber: asString(source.permitNumber),
+    permitStatusDescription: asString(
+      source.permitStatusDescription || source.statusDescription || source.status,
+    ),
+  }
+}
+
 const normalizePackageMutationResult = (payload: unknown): ApplicationPackageMutationResult => {
   const source = (payload ?? {}) as Record<string, unknown>
   return {
@@ -470,6 +485,23 @@ export const fetchApplicationPackageScales = async (
     return parseArrayPayload(response.data).map(normalizePackageScaleRow)
   } catch (error) {
     throw toSearchServiceError('Unable to load package scales.', error)
+  }
+}
+
+export const fetchApplicationPermits = async (
+  applicationNumber: string,
+): Promise<ApplicationPermitRow[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/permits',
+      {
+        params: { applicationNumber },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizeApplicationPermitRow)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application permits.', error)
   }
 }
 

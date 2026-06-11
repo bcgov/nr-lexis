@@ -33,12 +33,14 @@ import {
 import {
   checkApplicationVolumeUsage,
   fetchApplicationEndUsesForSpeciesRegion,
+  fetchApplicationPermits,
   fetchApplicationSummarySnapshot,
   fetchApplicationRemainingSpecies,
   fetchApplicationSpecies,
   saveApplicationRemark,
   updateApplicationSummary,
   type ApplicationCodeOption,
+  type ApplicationPermitRow,
   type ApplicationPackageSpeciesRow,
   type ApplicationSummarySnapshot,
 } from '@/service/provincial-application-items-service'
@@ -425,6 +427,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
   const [documentRows, setDocumentRows] = useState<ProvincialApplicationDocumentRow[]>([])
+  const [permitRows, setPermitRows] = useState<ApplicationPermitRow[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
@@ -519,6 +522,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setErrorMessage('Application number is missing from the route.')
       setDetail(null)
       setDocumentRows([])
+      setPermitRows([])
       setDocumentsErrorMessage('')
       setActionErrorMessage('')
       setActionInfoMessage('')
@@ -555,6 +559,19 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setErrorMessage(`No provincial application found for ${applicationNumber}.`)
         setDocumentRows([])
         return
+      }
+
+      try {
+        const permitsResult = await fetchApplicationPermits(applicationNumber)
+        if (isLatestRequest()) {
+          setPermitRows(permitsResult)
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setPermitRows([])
+          setActionErrorMessage('Unable to retrieve application permits.')
+        }
       }
 
       if (canPerform('createApplication') && !response.readOnly && !response.locked) {
@@ -611,6 +628,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setSummaryBaselineForm(null)
         setShowSummaryValidationErrors(false)
         setDocumentRows([])
+        setPermitRows([])
         setDocumentsErrorMessage('')
       }
     } finally {
@@ -2708,6 +2726,45 @@ const ProvincialApplicationDetailsPage: FC = () => {
               growthTypeOptions={packageGrowthTypeOptions}
               onDetailChanged={loadApplicationDetail}
             />
+          </Column>
+          <Column sm={4} md={8} lg={8}>
+            <Tile>
+              <h2 className="detail-tile-title">Permits</h2>
+              <Table useZebraStyles>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Permit</TableHeader>
+                    <TableHeader>Status</TableHeader>
+                    <TableHeader>Open</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {permitRows.map((item) => (
+                    <TableRow key={item.permitNumber}>
+                      <TableCell>{item.permitNumber}</TableCell>
+                      <TableCell>{item.permitStatusDescription || '-'}</TableCell>
+                      <TableCell>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          disabled={!canPerform('/permitDetails')}
+                          onClick={() =>
+                            navigate(withCurrentSearch(`/provincial/permit/${item.permitNumber}`))
+                          }
+                        >
+                          Open
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {permitRows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3}>No permits found for this application.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Tile>
           </Column>
           <Column sm={4} md={8} lg={8}>
             <Tile>

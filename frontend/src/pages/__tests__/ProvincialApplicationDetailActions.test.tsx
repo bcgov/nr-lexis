@@ -34,6 +34,7 @@ import {
   fetchApplicationPackageScales,
   fetchApplicationPackageStatusCodes,
   fetchApplicationPackageSpecies,
+  fetchApplicationPermits,
   fetchApplicationRemainingSpecies,
   fetchApplicationScaleDetails,
   fetchApplicationSpecies,
@@ -90,6 +91,7 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationPackageScales: vi.fn(),
   fetchApplicationPackageStatusCodes: vi.fn(),
   fetchApplicationPackageSpecies: vi.fn(),
+  fetchApplicationPermits: vi.fn(),
   fetchApplicationRemainingSpecies: vi.fn(),
   fetchApplicationScaleDetails: vi.fn(),
   fetchApplicationSpecies: vi.fn(),
@@ -140,6 +142,7 @@ const mockedFetchApplicationPackageDetails = vi.mocked(fetchApplicationPackageDe
 const mockedFetchApplicationPackageScales = vi.mocked(fetchApplicationPackageScales)
 const mockedFetchApplicationPackageStatusCodes = vi.mocked(fetchApplicationPackageStatusCodes)
 const mockedFetchApplicationPackageSpecies = vi.mocked(fetchApplicationPackageSpecies)
+const mockedFetchApplicationPermits = vi.mocked(fetchApplicationPermits)
 const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemainingSpecies)
 const mockedFetchApplicationScaleDetails = vi.mocked(fetchApplicationScaleDetails)
 const mockedFetchApplicationSpecies = vi.mocked(fetchApplicationSpecies)
@@ -241,6 +244,7 @@ describe('Provincial Application Detail Document Actions', () => {
       rows: [],
       source: 'api',
     })
+    mockedFetchApplicationPermits.mockResolvedValue([])
     mockedOpenApplicationDocument.mockResolvedValue({
       source: 'api',
       blob: new Blob(['test']),
@@ -538,6 +542,37 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('Example Lumber')).toBeInTheDocument()
     expect(screen.getByText('2026-04-05')).toBeInTheDocument()
     expect(screen.getByText('OFF-77')).toBeInTheDocument()
+  })
+
+  it('renders application permits and opens permit details', async () => {
+    mockedFetchApplicationPermits.mockResolvedValue([
+      { permitNumber: '900100', permitStatusDescription: 'Active' },
+      { permitNumber: '900101', permitStatusDescription: 'Complete' },
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321?packageFilter=PKG-1']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+          <Route path="/provincial/permit/:permitNumber" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationPermits).toHaveBeenCalledWith('321')
+    })
+    const permitRow = (await screen.findByText('900101')).closest('tr')
+    expect(permitRow).toBeTruthy()
+    expect(within(permitRow as HTMLElement).getByText('Complete')).toBeInTheDocument()
+
+    await userEvent.click(within(permitRow as HTMLElement).getByRole('button', { name: 'Open' }))
+
+    const location = await screen.findByTestId('location')
+    expect(location.textContent).toBe('/provincial/permit/900101?packageFilter=PKG-1')
   })
 
   it('navigates to upload center with application context', async () => {
