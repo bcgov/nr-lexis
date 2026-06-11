@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
@@ -358,27 +359,23 @@ const ProvincialPermitCreatePage: FC = () => {
                 setForm((current) => ({ ...current, ownerClientNumber: event.target.value }))
               }
             />
-            <TextInput
+            <IsoDatePicker
               id="submitDate"
               labelText="Submit Date (YYYY-MM-DD) (required)"
               value={form.submitDate}
               invalid={!!fieldError('submitDate')}
               invalidText={fieldError('submitDate')}
               onBlur={() => markFieldTouched('submitDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, submitDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, submitDate: value }))}
             />
-            <TextInput
+            <IsoDatePicker
               id="issueDate"
               labelText="Issue Date (YYYY-MM-DD) (required)"
               value={form.issueDate}
               invalid={!!fieldError('issueDate')}
               invalidText={fieldError('issueDate')}
               onBlur={() => markFieldTouched('issueDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, issueDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, issueDate: value }))}
             />
             <TextInput
               id="estimatedShippingDate"

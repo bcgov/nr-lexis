@@ -52,6 +52,7 @@ import {
   fetchApplicationRemainingSpecies,
   type ApplicationCodeOption,
 } from '@/service/provincial-application-items-service'
+import IsoDatePicker from '@/components/IsoDatePicker'
 
 type ProvincialApplicationCreateForm = {
   ownerClientNumber: string
@@ -1276,16 +1277,14 @@ const ProvincialApplicationCreatePage: FC = () => {
                 })
               }
             />
-            <TextInput
+            <IsoDatePicker
               id="applicationDate"
               labelText="Application Date (YYYY-MM-DD) (required)"
               value={form.applicationDate}
               invalid={!!fieldError('applicationDate')}
               invalidText={fieldError('applicationDate')}
               onBlur={() => markFieldTouched('applicationDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, applicationDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, applicationDate: value }))}
             />
             <TextInput
               id="applicationTermDays"
@@ -1320,16 +1319,14 @@ const ProvincialApplicationCreatePage: FC = () => {
                 setForm((current) => ({ ...current, applicationTermYears: event.target.value }))
               }
             />
-            <TextInput
+            <IsoDatePicker
               id="receivedDate"
               labelText="Received Date (YYYY-MM-DD) (required)"
               value={form.receivedDate}
               invalid={!!fieldError('receivedDate')}
               invalidText={fieldError('receivedDate')}
               onBlur={() => markFieldTouched('receivedDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, receivedDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, receivedDate: value }))}
             />
             <SearchableSelect
               id="exportScheduleId"

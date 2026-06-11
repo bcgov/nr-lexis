@@ -744,6 +744,14 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.legacy-search-grid .cds--date-picker,
+.legacy-search-grid .cds--date-picker-container,
+.legacy-search-grid .cds--date-picker-input__wrapper,
+.legacy-search-grid .cds--date-picker-input__wrapper input {
+  inline-size: 100%;
+  max-inline-size: none;
+}
+
 .legacy-search-actions {
   display: flex;
   align-items: center;

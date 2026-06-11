@@ -63,6 +63,7 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import SearchableSelect from '@/components/SearchableSelect'
 import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
 import {
@@ -2122,25 +2123,21 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         onSummaryFormChange('exemptionReasonCode', value.toUpperCase())
                       }
                     />
-                    <TextInput
+                    <IsoDatePicker
                       id="applicationSummaryApplicationDate"
                       labelText="Application Date"
-                      type="date"
                       value={summaryForm.applicationDate}
                       invalid={Boolean(visibleSummaryFieldError('applicationDate'))}
                       invalidText={visibleSummaryFieldError('applicationDate')}
-                      onChange={(event) =>
-                        onSummaryFormChange('applicationDate', event.target.value)
-                      }
+                      onChange={(value) => onSummaryFormChange('applicationDate', value)}
                     />
-                    <TextInput
+                    <IsoDatePicker
                       id="applicationSummaryReceivedDate"
                       labelText="Received Date"
-                      type="date"
                       value={summaryForm.receivedDate}
                       invalid={Boolean(visibleSummaryFieldError('receivedDate'))}
                       invalidText={visibleSummaryFieldError('receivedDate')}
-                      onChange={(event) => onSummaryFormChange('receivedDate', event.target.value)}
+                      onChange={(value) => onSummaryFormChange('receivedDate', value)}
                     />
                     <TextInput
                       id="applicationSummaryTermDays"

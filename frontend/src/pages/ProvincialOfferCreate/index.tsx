@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
@@ -335,16 +336,14 @@ const ProvincialOfferCreatePage: FC = () => {
                 setForm((current) => ({ ...current, purchaseOfferAmount: event.target.value }))
               }
             />
-            <TextInput
+            <IsoDatePicker
               id="purchaseOfferDate"
               labelText="Offer Date (YYYY-MM-DD) (required)"
               value={form.purchaseOfferDate}
               invalid={!!fieldError('purchaseOfferDate')}
               invalidText={fieldError('purchaseOfferDate')}
               onBlur={() => markFieldTouched('purchaseOfferDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, purchaseOfferDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, purchaseOfferDate: value }))}
             />
             <TextInput
               id="offerEndDate"

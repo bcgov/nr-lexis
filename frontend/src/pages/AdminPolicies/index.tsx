@@ -34,6 +34,7 @@ import {
   upsertFeePolicy as upsertFeePolicyRequest,
   upsertFilPolicy as upsertFilPolicyRequest,
 } from '@/service/admin-policy-service'
+import IsoDatePicker from '@/components/IsoDatePicker'
 
 type PolicyField =
   | 'feeEffectiveDate'
@@ -344,15 +345,14 @@ const AdminPoliciesPage: FC = () => {
             Records: <strong>{feePolicyCount}</strong>
           </p>
           <div className="legacy-search-grid">
-            <TextInput
+            <IsoDatePicker
               id="feeEffectiveDate"
-              type="date"
               labelText="Policy Effective Date"
               value={feeEffectiveDate}
               invalid={!!feeFieldError('feeEffectiveDate')}
               invalidText={feeFieldError('feeEffectiveDate')}
               onBlur={() => markFieldTouched('feeEffectiveDate')}
-              onChange={(event) => setFeeEffectiveDate(event.target.value)}
+              onChange={setFeeEffectiveDate}
             />
             <TextInput
               id="feeOrgUnitCode"
@@ -456,15 +456,14 @@ const AdminPoliciesPage: FC = () => {
             Records: <strong>{filPolicyCount}</strong>
           </p>
           <div className="legacy-search-grid">
-            <TextInput
+            <IsoDatePicker
               id="filEffectiveDate"
-              type="date"
               labelText="Policy Effective Date"
               value={filEffectiveDate}
               invalid={!!filFieldError('filEffectiveDate')}
               invalidText={filFieldError('filEffectiveDate')}
               onBlur={() => markFieldTouched('filEffectiveDate')}
-              onChange={(event) => setFilEffectiveDate(event.target.value)}
+              onChange={setFilEffectiveDate}
             />
             <TextInput
               id="filPolicyPercentage"

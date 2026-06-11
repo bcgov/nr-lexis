@@ -30,6 +30,7 @@ import {
   fetchApplicationClientLocations,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import { submitIndianReservePermitCreate } from '@/service/create-submit-service'
 import { fetchReportOptions, type SearchOption } from '@/service/search-options-service'
 
@@ -432,40 +433,33 @@ const IndianReservePermitCreatePage: FC = () => {
                 <SelectItem key={option.value} value={option.value} text={option.label} />
               ))}
             </Select>
-            <TextInput
+            <IsoDatePicker
               id="applicationDate"
               labelText="Application Date (YYYY-MM-DD) (required)"
               value={form.applicationDate}
               invalid={!!fieldError('applicationDate')}
               invalidText={fieldError('applicationDate')}
               onBlur={() => markFieldTouched('applicationDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, applicationDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, applicationDate: value }))}
             />
-            <TextInput
+            <IsoDatePicker
               id="permitIssueDate"
               labelText="Permit Issue Date (YYYY-MM-DD) (required)"
               value={form.permitIssueDate}
               invalid={!!fieldError('permitIssueDate')}
               invalidText={fieldError('permitIssueDate')}
               onBlur={() => markFieldTouched('permitIssueDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, permitIssueDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, permitIssueDate: value }))}
             />
-            <TextInput
+            <IsoDatePicker
               id="estimatedShippingDate"
               labelText="Estimated Shipping Date (YYYY-MM-DD) (required)"
               value={form.estimatedShippingDate}
               invalid={!!fieldError('estimatedShippingDate')}
               invalidText={fieldError('estimatedShippingDate')}
               onBlur={() => markFieldTouched('estimatedShippingDate')}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  estimatedShippingDate: event.target.value,
-                }))
+              onChange={(value) =>
+                setForm((current) => ({ ...current, estimatedShippingDate: value }))
               }
             />
             <Select
