@@ -47,6 +47,25 @@ export const positiveNumericFieldError = (value: string): string | null => {
   return isPositiveNumeric(value) ? null : 'Use a positive numeric value.'
 }
 
+export const maxNumericValueFieldError = (
+  value: string,
+  maxValue: number,
+  label = 'Value',
+): string | null => {
+  if (!value.trim()) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed <= maxValue
+    ? null
+    : `${label} must be ${maxValue} or less.`
+}
+
+export const atMostOneDecimalFieldError = (value: string, label = 'Value'): string | null => {
+  if (!value.trim()) return null
+  return /^\d+(\.\d)?$/.test(value.trim())
+    ? null
+    : `${label} must have no more than one decimal place.`
+}
+
 export const numericFieldError = (value: string, label = 'Value'): string | null => {
   if (!value.trim()) return null
   return /^\d+(\.\d+)?$/.test(value.trim()) ? null : `${label} must be numeric.`

@@ -64,8 +64,10 @@ import {
 import SearchableSelect from '@/components/SearchableSelect'
 import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
 import {
+  atMostOneDecimalFieldError,
   firstValidationError,
   isoDateFieldError,
+  maxNumericValueFieldError,
   maxLengthFieldError,
   positiveNumericFieldError,
   requiredFieldError,
@@ -777,10 +779,15 @@ const ProvincialApplicationDetailsPage: FC = () => {
       applicationVolume: firstValidationError(
         () => requiredFieldError(summaryForm.applicationVolume, 'Application volume'),
         () => positiveNumericFieldError(summaryForm.applicationVolume),
+        () =>
+          maxNumericValueFieldError(summaryForm.applicationVolume, 9999999.9, 'Application volume'),
+        () => atMostOneDecimalFieldError(summaryForm.applicationVolume, 'Application volume'),
       ),
       averageLogVolume: firstValidationError(
         () => requiredFieldError(summaryForm.averageLogVolume, 'Average log volume'),
         () => positiveNumericFieldError(summaryForm.averageLogVolume),
+        () => maxNumericValueFieldError(summaryForm.averageLogVolume, 99.9, 'Average log volume'),
+        () => atMostOneDecimalFieldError(summaryForm.averageLogVolume, 'Average log volume'),
       ),
       applicationStatusCode:
         requiredFieldError(summaryForm.applicationStatusCode, 'Application status') ?? undefined,

@@ -236,6 +236,86 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void addApplicationShouldRejectLegacyVolumeRangeBeforeOracleInsert() {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                10_000_000.0d,
+                100.0d,
+                "Camp 1",
+                null,
+                "00022222",
+                "01",
+                "00011111",
+                "02",
+                null,
+                "U",
+                "A",
+                11L,
+                "H",
+                null,
+                "O",
+                "Agent Contact",
+                "Owner Contact",
+                null,
+                null,
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "The application volume must be less than or equal to 9999999.9.",
+            "The average log volume must be less than or equal to 99.9.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addApplicationShouldRejectLegacyVolumePrecisionBeforeOracleInsert() {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.55d,
+                2.44d,
+                "Camp 1",
+                null,
+                "00022222",
+                "01",
+                "00011111",
+                "02",
+                null,
+                "U",
+                "A",
+                11L,
+                "H",
+                null,
+                "O",
+                "Agent Contact",
+                "Owner Contact",
+                null,
+                null,
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "The application volume must have no more than one decimal place.",
+            "The average log volume must have no more than one decimal place.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
   void addApplicationShouldInsertWhenRequestIsValid() {
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
@@ -1233,6 +1313,46 @@ class OracleApplicationDetailsRpcServiceTest {
             "The application term days must be greater than or equal to 0",
             "The application exemption reason code must be 1 character or fewer.");
     verify(repository).findApplicationUpdateRecord(1000456L);
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRejectLegacyVolumeRangeBeforeOracleUpdate() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                LocalDate.of(2026, 4, 1),
+                30L,
+                LocalDate.of(2026, 4, 2),
+                10_000_000.0d,
+                100.0d,
+                "U",
+                "Camp 2",
+                null,
+                null,
+                null,
+                "00022222",
+                "02",
+                "NEW",
+                "O",
+                12L,
+                "H",
+                "P",
+                "O",
+                null,
+                "Owner Two",
+                "N",
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "The application volume must be less than or equal to 9999999.9.",
+            "The average log volume must be less than or equal to 99.9.");
+    verify(repository, never()).updateApplication(any());
   }
 
   private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest applicationSummaryUpdateRequest(

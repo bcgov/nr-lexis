@@ -37,6 +37,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
   private static final String PACKAGE_EXISTS_MESSAGE_TEMPLATE = "Package %s already exists.";
   private static final int REMARK_DISPLAY_LIMIT = 70;
+  private static final double MAX_APPLICATION_VOLUME = 9_999_999.9d;
+  private static final double MAX_AVERAGE_LOG_VOLUME = 99.9d;
 
   private final ApplicationDetailsRpcRepository repository;
 
@@ -810,6 +812,34 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return BigDecimal.valueOf(value).stripTrailingZeros().scale() <= 1;
   }
 
+  private void validateOptionalVolumeRange(
+      Double value,
+      String label,
+      double maxValue,
+      List<String> errors) {
+    if (value == null) {
+      return;
+    }
+    validateVolumeRange(value, label, maxValue, errors);
+  }
+
+  private void validateVolumeRange(
+      Double value,
+      String label,
+      double maxValue,
+      List<String> errors) {
+    if (value < 0.0d) {
+      errors.add("The " + label + " must be greater than or equal to 0.");
+      return;
+    }
+    if (value > maxValue) {
+      errors.add("The " + label + " must be less than or equal to " + formatOneDecimal(maxValue) + ".");
+    }
+    if (!hasAtMostOneDecimal(value)) {
+      errors.add("The " + label + " must have no more than one decimal place.");
+    }
+  }
+
   private ApplicationDetailsRpcRepository.PackageMutationRecord toPackageMutationRecord(
       PackageMutationRequest request,
       ApplicationDetailsRpcRepository.PackageMutationRow existing,
@@ -1315,8 +1345,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("application received date"));
     }
     if (request.applicationVolume() == null || request.applicationVolume() <= 0.0d) {
-      errors.add("The application volume must be greater than or equal to 0");
+      errors.add("The application volume must be greater than 0.");
+    } else {
+      validateVolumeRange(
+          request.applicationVolume(), "application volume", MAX_APPLICATION_VOLUME, errors);
     }
+    validateOptionalVolumeRange(
+        request.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
     if (trimToNull(request.productLocation()) == null) {
       errors.add(required("location of logs"));
     }
@@ -1391,8 +1426,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("application received date"));
     }
     if (record.applicationVolume() == null || record.applicationVolume() <= 0.0d) {
-      errors.add("The application volume must be greater than or equal to 0");
+      errors.add("The application volume must be greater than 0.");
+    } else {
+      validateVolumeRange(
+          record.applicationVolume(), "application volume", MAX_APPLICATION_VOLUME, errors);
     }
+    validateOptionalVolumeRange(
+        record.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
     String exemptionReasonCode = trimToNull(record.exemptionReasonCode());
     if (exemptionReasonCode == null) {
       errors.add(required("application exemption reason code"));

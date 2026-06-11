@@ -1460,6 +1460,42 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
+  it('validates application summary volume ranges before saving', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await waitFor(() => getApplicationSummaryTile())
+    const summaryControls = within(summaryTile)
+    const applicationVolumeInput = await summaryControls.findByLabelText('Application Volume (m³)')
+    const averageLogVolumeInput = await summaryControls.findByLabelText('Average Log Volume')
+
+    await waitFor(() => {
+      expect(applicationVolumeInput).toHaveValue(100)
+    })
+
+    await userEvent.clear(applicationVolumeInput)
+    await userEvent.type(applicationVolumeInput, '10000000')
+    await userEvent.clear(averageLogVolumeInput)
+    await userEvent.type(averageLogVolumeInput, '100')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    expect(
+      screen.getAllByText('Application volume must be 9999999.9 or less.').length,
+    ).toBeGreaterThan(0)
+    expect(screen.getAllByText('Average log volume must be 99.9 or less.').length).toBeGreaterThan(
+      0,
+    )
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
   it('warns once before saving summary when package volumes do not consume application volume', async () => {
     mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
 

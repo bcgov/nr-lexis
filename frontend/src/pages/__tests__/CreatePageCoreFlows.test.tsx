@@ -320,6 +320,35 @@ describe('Create Page Core Flows', () => {
     )
   })
 
+  it('blocks provincial application submit when volume precision is invalid', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.55&averageLogVolume=1.23&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(
+      await screen.findByText('Application volume must have no more than one decimal place.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Average log volume must have no more than one decimal place.'),
+    ).toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
   it('does not use search exemption type as create exemption reason', async () => {
     render(
       <MemoryRouter

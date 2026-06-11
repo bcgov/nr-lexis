@@ -19,9 +19,11 @@ import {
   nonNegativeWholeNumberFieldError,
 } from '@/pages/shared/application-term-utils'
 import {
+  atMostOneDecimalFieldError,
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  maxNumericValueFieldError,
   maxLengthFieldError,
   positiveNumericFieldError,
   requiredFieldError,
@@ -781,10 +783,14 @@ const ProvincialApplicationCreatePage: FC = () => {
       applicationVolume: firstValidationError(
         () => requiredFieldError(form.applicationVolume, 'Application volume'),
         () => positiveNumericFieldError(form.applicationVolume),
+        () => maxNumericValueFieldError(form.applicationVolume, 9999999.9, 'Application volume'),
+        () => atMostOneDecimalFieldError(form.applicationVolume, 'Application volume'),
       ),
       averageLogVolume: firstValidationError(
         () => requiredFieldError(form.averageLogVolume, 'Average log volume'),
         () => positiveNumericFieldError(form.averageLogVolume),
+        () => maxNumericValueFieldError(form.averageLogVolume, 99.9, 'Average log volume'),
+        () => atMostOneDecimalFieldError(form.averageLogVolume, 'Average log volume'),
       ),
     }),
     [calculatedApplicationTermDays, form],
