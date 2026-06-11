@@ -50,6 +50,7 @@ type PackageFormState = {
   packageNumber: string
   newPackageNumber: string
   volume: string
+  scaledVolume: string
   averageLength: string
   averageDiameter: string
   status: string
@@ -105,6 +106,7 @@ const emptyPackageForm = (productTypeCode: string | null | undefined): PackageFo
   packageNumber: '',
   newPackageNumber: '',
   volume: '',
+  scaledVolume: '',
   averageLength: '',
   averageDiameter: '',
   status: '',
@@ -206,6 +208,7 @@ const toPackageForm = (
   packageNumber: packageDetails.packageNumber,
   newPackageNumber: packageDetails.packageNumber,
   volume: packageDetails.volume,
+  scaledVolume: String(packageDetails.scaledVolume),
   averageLength: packageDetails.length,
   averageDiameter: packageDetails.diameter,
   status: packageDetails.status,
@@ -888,6 +891,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     packageStatusOptions,
     createPackageForm.status,
   )
+  const selectedPackageTotalPieces = scales.reduce((total, row) => total + row.pieces, 0)
 
   return (
     <Tile>
@@ -926,6 +930,18 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               <SelectItem key={packageNumber} value={packageNumber} text={packageNumber} />
             ))}
           </Select>
+          <dl className="detail-field-grid application-items-summary">
+            {[
+              ['Package Volume', packageForm.volume || 'Not provided'],
+              ['Total Scale Volume', packageForm.scaledVolume || 'Not provided'],
+              ['Total Pieces', selectedPackageTotalPieces.toLocaleString()],
+            ].map(([label, value]) => (
+              <div key={label} className="detail-field-item">
+                <dt className="detail-field-label">{label}</dt>
+                <dd className="detail-field-value">{value}</dd>
+              </div>
+            ))}
+          </dl>
           <div className="application-items-form">
             <TextInput
               id="applicationItemsPackageNumber"

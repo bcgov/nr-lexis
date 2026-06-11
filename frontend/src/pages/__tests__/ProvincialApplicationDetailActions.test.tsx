@@ -812,6 +812,16 @@ describe('Provincial Application Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
     })
+    const packageDetailsSection = screen.getByText('Package Details').closest('section')
+    expect(packageDetailsSection).toBeTruthy()
+    expect(
+      within(packageDetailsSection as HTMLElement).getByText('Total Scale Volume'),
+    ).toBeInTheDocument()
+    expect(within(packageDetailsSection as HTMLElement).getByText('20')).toBeInTheDocument()
+    expect(
+      within(packageDetailsSection as HTMLElement).getByText('Total Pieces'),
+    ).toBeInTheDocument()
+    expect(within(packageDetailsSection as HTMLElement).getByText('5')).toBeInTheDocument()
 
     await userEvent.selectOptions(screen.getAllByLabelText('Species')[0], 'CE')
     await userEvent.click(screen.getByRole('button', { name: 'Add Species' }))
