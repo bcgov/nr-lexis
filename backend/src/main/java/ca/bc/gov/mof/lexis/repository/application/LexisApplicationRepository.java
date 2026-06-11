@@ -40,6 +40,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
   private static final String FIND_ALL_PRODUCT_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_PRODUCT_TYPE_CODES(?)";
+  private static final String FIND_ALL_GROWTH_TYPE_CODES =
+      LEXIS_CODES_PACKAGE + "FIND_ALL_GROWTH_TYPE_CODES(?)";
   private static final String FIND_APPLICATIONS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATIONS_BY_CRITERIA(?,?,?,?,?)";
   private static final String COUNT_APPLICATIONS_BY_CRITERIA =
@@ -89,6 +91,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     options.add(new CodeNameDto("", "All"));
     options.addAll(loadCodeNameOptions(FIND_ALL_PRODUCT_TYPE_CODES));
     return options;
+  }
+
+  public List<CodeNameDto> loadGrowthTypeOptions() {
+    return loadCodeNameOptions(FIND_ALL_GROWTH_TYPE_CODES);
   }
 
   public List<CodeNameDto> loadRegionOptions() {
@@ -425,7 +431,12 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         2,
         rs -> {
           String remark = getString(rs, "REMARK");
-          return new LexisApplicationDetailDto.LexisRemarkDto(remark, remark);
+          return new LexisApplicationDetailDto.LexisRemarkDto(
+              getLong(rs, "EXEMPTION_APPL_REMARK_NUMBER"),
+              remark,
+              remark,
+              getString(rs, "ENTRY_USERID"),
+              getLocalDate(rs, "ENTRY_TIMESTAMP"));
         });
   }
 
@@ -437,6 +448,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         rs ->
             new LexisApplicationDetailDto.LexisOfferDto(
                 offerNumberAsString(rs),
+                getString(rs, "COMPANY_NAME"),
+                getLocalDate(rs, "ENTRY_TIMESTAMP"),
                 INDICATOR_YES.equalsIgnoreCase(getString(rs, "VALID_OFFER_INDICATOR")),
                 getLocalDate(rs, "OFFER_WITHDRAWAL_DATE")));
   }

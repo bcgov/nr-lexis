@@ -6,10 +6,9 @@ import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
-import org.springframework.data.domain.Page;
-import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
-import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository;
+import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository.ReservePermitInsertRecord;
+import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository.ReservePermitInsertRow;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -17,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -25,16 +25,11 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
 
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
-  private static final String EXPORT_PERMIT_STATUS_ACTIVE = "ACT";
-  private static final String EXPORT_SCALE_METHOD_WEIGHT = "W";
 
   private final IndianReservePermitRepository repository;
-  private final PermitRpcRepository permitRpcRepository;
 
-  public IndianReservePermitOracleService(
-      IndianReservePermitRepository repository, PermitRpcRepository permitRpcRepository) {
+  public IndianReservePermitOracleService(IndianReservePermitRepository repository) {
     this.repository = repository;
-    this.permitRpcRepository = permitRpcRepository;
   }
 
   @Override
@@ -99,10 +94,15 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
     if (clientNumber == null) {
       errors.add("A valid client number is required.");
     }
+    String clientLocation = trimToNull(request.clientLocation());
+    if (clientLocation == null) {
+      errors.add("A valid client location is required.");
+    }
 
     LocalDate applicationDate = parseDate(request.applicationDate());
     LocalDate issueDate = parseDate(request.permitIssueDate());
     LocalDate shippingDate = parseDate(request.estimatedShippingDate());
+    Long regionNumber = parsePositiveLong(request.region());
     if (applicationDate == null) {
       errors.add("A valid application date is required.");
     }
@@ -112,63 +112,44 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
     if (shippingDate == null) {
       errors.add("A valid estimated shipping date is required.");
     }
+    if (regionNumber == null) {
+      errors.add("A valid region is required.");
+    }
     if (!errors.isEmpty()) {
       return failure(errors, submittedPermitNumber);
     }
 
-    PermitMutationRow insertRow =
-        new PermitMutationRow(
-            null,
-            null,
-            trimToNull(request.transportName()),
-            shippingDate,
-            null,
-            applicationDate,
-            applicationDate,
+    ReservePermitInsertRecord insertRow =
+        new ReservePermitInsertRecord(
+            submittedPermitNumber.toString(),
             issueDate,
-            null,
-            null,
-            0.0d,
-            0L,
-            0L,
-            null,
-            trimToNull(request.remarks()),
-            normalizedUserId,
-            null,
+            shippingDate,
+            trimToNull(request.otherPortOfExport()),
+            trimToNull(request.transportName()),
             trimToNull(request.transportTypeCode()),
-            EXPORT_SCALE_METHOD_WEIGHT,
-            clientNumber,
-            null,
-            clientNumber,
-            null,
-            null,
-            null,
-            trimToNull(request.portOfExport()),
-            EXPORT_PERMIT_STATUS_ACTIVE,
-            null,
             trimToNull(request.destinationCountry()),
-            null,
-            null,
-            null,
-            null,
-            null,
-            null);
+            trimToNull(request.portOfExport()),
+            applicationDate,
+            regionNumber,
+            clientLocation,
+            clientNumber);
 
-    Optional<PermitMutationRow> inserted =
-        permitRpcRepository.insertPermitDetail(insertRow, normalizedUserId);
-    if (inserted.isEmpty() || inserted.get().permitNumber() == null) {
+    Optional<ReservePermitInsertRow> inserted =
+        repository.insertReservePermit(insertRow, normalizedUserId);
+    Long insertedPermitNumber =
+        inserted.map(ReservePermitInsertRow::permitNumber).map(this::parsePositiveLong).orElse(null);
+    if (insertedPermitNumber == null) {
       return failure(List.of("Unable to save indigenous reserve permit."), submittedPermitNumber);
     }
 
-    PermitMutationRow permit = inserted.get();
     return new PermitMutationRpcResponseDto(
         true,
         "The indigenous reserve permit was saved successfully.",
         List.of(),
         List.of(),
-        permit.permitNumber(),
-        permit.permitStatusCode(),
-        permit.receiptNumber(),
+        insertedPermitNumber,
+        null,
+        null,
         false,
         false,
         null);

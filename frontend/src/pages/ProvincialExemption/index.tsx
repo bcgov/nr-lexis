@@ -6,7 +6,7 @@ import {
   Column,
   Grid,
   InlineNotification,
-  MultiSelect,
+  FilterableMultiSelect,
   Pagination,
   Select,
   SelectItem,
@@ -430,7 +430,7 @@ const ProvincialExemptionPage: FC = () => {
               value={filters.exemptionNumber}
               onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
             />
-            <MultiSelect
+            <FilterableMultiSelect
               id="region"
               titleText="Region"
               items={regionOptions}

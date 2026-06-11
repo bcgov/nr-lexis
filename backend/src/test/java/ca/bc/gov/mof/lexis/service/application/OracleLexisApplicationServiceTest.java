@@ -14,6 +14,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
+import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -34,6 +35,7 @@ import org.springframework.data.domain.PageRequest;
 class OracleLexisApplicationServiceTest {
 
   @Mock private LexisApplicationRepository repository;
+  @Mock private LexisReportScheduleRepository scheduleRepository;
   @InjectMocks private OracleLexisApplicationService service;
 
   @Test
@@ -42,7 +44,13 @@ class OracleLexisApplicationServiceTest {
     when(repository.loadExemptionReasonOptions()).thenReturn(List.of(new CodeNameDto("U", "Unadvertised")));
     when(repository.loadApplicationStatusOptions()).thenReturn(List.of(new CodeNameDto("APP", "Approved")));
     when(repository.loadProductTypeOptions()).thenReturn(List.of(new CodeNameDto("S", "Standing")));
+    when(repository.loadGrowthTypeOptions()).thenReturn(List.of(new CodeNameDto("O", "Old Growth")));
     when(repository.loadRegionOptions()).thenReturn(List.of(new CodeNameDto("12", "Coast")));
+    when(scheduleRepository.findCurrentSchedules())
+        .thenReturn(
+            List.of(
+                new LexisReportScheduleRepository.CurrentScheduleRow(
+                    987L, LocalDate.of(2026, 1, 11))));
 
     LexisApplicationSearchOptionsDto response = service.searchOptions();
 
@@ -50,7 +58,10 @@ class OracleLexisApplicationServiceTest {
     assertThat(response.exemptionReasons()).hasSize(1);
     assertThat(response.applicationStatuses()).hasSize(1);
     assertThat(response.productTypes()).hasSize(1);
+    assertThat(response.growthTypes()).hasSize(1);
     assertThat(response.regions()).hasSize(1);
+    assertThat(response.currentSchedules())
+        .containsExactly(new CodeNameDto("987", "2026-01-11"));
   }
 
   @Test

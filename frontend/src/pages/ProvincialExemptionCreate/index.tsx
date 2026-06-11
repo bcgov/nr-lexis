@@ -1,16 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import {
-  Button,
-  Column,
-  Grid,
-  InlineNotification,
-  Select,
-  SelectItem,
-  TextArea,
-  TextInput,
-  Tile,
-} from '@carbon/react'
+import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
   firstValidationError,
@@ -237,6 +228,8 @@ const ProvincialExemptionCreatePage: FC = () => {
         () => positiveNumericFieldError(form.applicationNumber),
       ),
       exemptionTypeCode: requiredFieldError(form.exemptionTypeCode, 'Exemption type') ?? undefined,
+      exemptionStatusCode:
+        requiredFieldError(form.exemptionStatusCode, 'Exemption status') ?? undefined,
       ownerClientNumber:
         requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
       applicantClientNumber:
@@ -262,18 +255,9 @@ const ProvincialExemptionCreatePage: FC = () => {
 
   const onSaveDraft = () => {
     setStatus(null)
-    if (hasValidationError) {
-      setShowAllValidationErrors(true)
-      setStatus({
-        kind: 'error',
-        title: 'Validation Error',
-        message: 'Please fix validation errors before saving the draft.',
-      })
-      return
-    }
-
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
+    setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
   }
 
@@ -415,35 +399,30 @@ const ProvincialExemptionCreatePage: FC = () => {
                 setForm((current) => ({ ...current, applicationNumber: event.target.value }))
               }
             />
-            <Select
+            <SearchableSelect
               id="exemptionTypeCode"
               labelText="Exemption Type (required)"
               value={form.exemptionTypeCode}
               invalid={!!fieldError('exemptionTypeCode')}
               invalidText={fieldError('exemptionTypeCode')}
+              placeholder="Select type"
+              options={exemptionTypes}
               onBlur={() => markFieldTouched('exemptionTypeCode')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, exemptionTypeCode: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select type" />
-              {exemptionTypes.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
-            <Select
+              onChange={(value) => setForm((current) => ({ ...current, exemptionTypeCode: value }))}
+            />
+            <SearchableSelect
               id="exemptionStatusCode"
-              labelText="Exemption Status"
+              labelText="Exemption Status (required)"
               value={form.exemptionStatusCode}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, exemptionStatusCode: event.target.value }))
+              invalid={!!fieldError('exemptionStatusCode')}
+              invalidText={fieldError('exemptionStatusCode')}
+              placeholder="Select status"
+              options={exemptionStatuses}
+              onBlur={() => markFieldTouched('exemptionStatusCode')}
+              onChange={(value) =>
+                setForm((current) => ({ ...current, exemptionStatusCode: value }))
               }
-            >
-              <SelectItem value="" text="Select status" />
-              {exemptionStatuses.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
+            />
             <TextInput
               id="ownerClientNumber"
               labelText="Owner Client Number (required)"

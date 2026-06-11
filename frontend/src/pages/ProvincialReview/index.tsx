@@ -6,7 +6,7 @@ import {
   Column,
   Grid,
   InlineNotification,
-  MultiSelect,
+  FilterableMultiSelect,
   Pagination,
   Select,
   SelectItem,
@@ -656,7 +656,7 @@ const ProvincialReviewPage: FC = () => {
                 <SelectItem key={option.value} value={option.value} text={option.label} />
               ))}
             </Select>
-            <MultiSelect
+            <FilterableMultiSelect
               id="region"
               titleText="Region"
               items={regionOptions}

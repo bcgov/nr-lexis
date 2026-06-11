@@ -13,12 +13,9 @@ import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
-import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository;
+import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository.ReservePermitInsertRecord;
+import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository.ReservePermitInsertRow;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -29,13 +26,15 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | IndianReservePermitOracleService")
 class IndianReservePermitOracleServiceTest {
 
   @Mock private IndianReservePermitRepository repository;
-  @Mock private PermitRpcRepository permitRpcRepository;
   @InjectMocks private IndianReservePermitOracleService service;
 
   @Test
@@ -130,45 +129,8 @@ class IndianReservePermitOracleServiceTest {
 
   @Test
   void addPermitShouldPersistReservePermitRow() {
-    when(permitRpcRepository.insertPermitDetail(any(PermitMutationRow.class), org.mockito.Mockito.eq("idir\\jsmith")))
-        .thenReturn(
-            Optional.of(
-                new PermitMutationRow(
-                    900L,
-                    null,
-                    "Truck",
-                    LocalDate.of(2026, 4, 6),
-                    null,
-                    LocalDate.of(2026, 4, 4),
-                    LocalDate.of(2026, 4, 4),
-                    LocalDate.of(2026, 4, 5),
-                    null,
-                    null,
-                    0.0d,
-                    0L,
-                    0L,
-                    null,
-                    "Ready",
-                    "idir\\jsmith",
-                    null,
-                    "TRK",
-                    "W",
-                    "00012345",
-                    null,
-                    "00012345",
-                    null,
-                    null,
-                    null,
-                    "VAN",
-                    "ACT",
-                    null,
-                    "CA",
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null)));
+    when(repository.insertReservePermit(any(ReservePermitInsertRecord.class), org.mockito.Mockito.eq("idir\\jsmith")))
+        .thenReturn(Optional.of(new ReservePermitInsertRow("900")));
 
     PermitMutationRpcResponseDto response =
         service.addPermit(
@@ -176,6 +138,8 @@ class IndianReservePermitOracleServiceTest {
                 "111",
                 "PKG-1",
                 "00012345",
+                "00",
+                "1833",
                 "2026-04-04",
                 "2026-04-05",
                 "2026-04-06",
@@ -183,27 +147,29 @@ class IndianReservePermitOracleServiceTest {
                 "TRK",
                 "Truck",
                 "VAN",
+                "Other port",
                 "Ready"),
             "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
     assertThat(response.permitNumber()).isEqualTo(900L);
 
-    ArgumentCaptor<PermitMutationRow> rowCaptor = ArgumentCaptor.forClass(PermitMutationRow.class);
-    verify(permitRpcRepository).insertPermitDetail(rowCaptor.capture(), org.mockito.Mockito.eq("idir\\jsmith"));
-    PermitMutationRow row = rowCaptor.getValue();
+    ArgumentCaptor<ReservePermitInsertRecord> rowCaptor =
+        ArgumentCaptor.forClass(ReservePermitInsertRecord.class);
+    verify(repository).insertReservePermit(rowCaptor.capture(), org.mockito.Mockito.eq("idir\\jsmith"));
+    ReservePermitInsertRecord row = rowCaptor.getValue();
+    assertThat(row.permitNumber()).isEqualTo("111");
     assertThat(row.applicationDate()).isEqualTo(LocalDate.of(2026, 4, 4));
     assertThat(row.permitIssueDate()).isEqualTo(LocalDate.of(2026, 4, 5));
     assertThat(row.estimatedShippingDate()).isEqualTo(LocalDate.of(2026, 4, 6));
     assertThat(row.clientNumber()).isEqualTo("00012345");
-    assertThat(row.agentNumber()).isEqualTo("00012345");
+    assertThat(row.clientLocation()).isEqualTo("00");
+    assertThat(row.regionNumber()).isEqualTo(1833L);
     assertThat(row.transportTypeCode()).isEqualTo("TRK");
     assertThat(row.transportName()).isEqualTo("Truck");
-    assertThat(row.portOfExportCode()).isEqualTo("VAN");
-    assertThat(row.countryCode()).isEqualTo("CA");
-    assertThat(row.permitStatusCode()).isEqualTo("ACT");
-    assertThat(row.scaleMethodCode()).isEqualTo("W");
-    assertThat(row.remarks()).isEqualTo("Ready");
+    assertThat(row.portOfExport()).isEqualTo("VAN");
+    assertThat(row.otherPortOfExport()).isEqualTo("Other port");
+    assertThat(row.destinationCountry()).isEqualTo("CA");
   }
 
   @Test
@@ -214,6 +180,8 @@ class IndianReservePermitOracleServiceTest {
                 "111",
                 "PKG-1",
                 "00012345",
+                "00",
+                "1833",
                 "bad-date",
                 "2026-04-05",
                 "2026-04-06",
@@ -221,12 +189,39 @@ class IndianReservePermitOracleServiceTest {
                 "TRK",
                 "Truck",
                 "VAN",
+                "",
                 "Ready"),
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors()).contains("A valid application date is required.");
-    verifyNoInteractions(permitRpcRepository);
+    verify(repository, org.mockito.Mockito.never()).insertReservePermit(any(), any());
+  }
+
+  @Test
+  void addPermitShouldRejectMissingRegionBeforeRepositoryCall() {
+    PermitMutationRpcResponseDto response =
+        service.addPermit(
+            new IndianReservePermitService.CreatePermitRequest(
+                "111",
+                "PKG-1",
+                "00012345",
+                "00",
+                "",
+                "2026-04-04",
+                "2026-04-05",
+                "2026-04-06",
+                "CA",
+                "TRK",
+                "Truck",
+                "VAN",
+                "",
+                "Ready"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).contains("A valid region is required.");
+    verify(repository, org.mockito.Mockito.never()).insertReservePermit(any(), any());
   }
 
   private IndianReservePermitSearchResultDto row(String permitNumber, LocalDate issueDate) {

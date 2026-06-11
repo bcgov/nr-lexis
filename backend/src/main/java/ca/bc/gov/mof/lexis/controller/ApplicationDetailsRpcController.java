@@ -1,7 +1,10 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
+import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -9,12 +12,15 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -44,11 +50,18 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_REMOVE_DOCUMENT = "removeDocument";
   private static final String ACTION_GET_REMARK = "getRemark";
   private static final String ACTION_PERSIST_REMARK = "persistRemark";
+  private static final String ACTION_CHECK_FORM_CHANGES = "checkFormChanges";
+  private static final String ACTION_CHECK_UNUSED_VOLUME = "checkUnusedVolume";
+  private static final String ACTION_RELEASE_LOCK = "releaseLock";
+  private static final String ACTION_SEND_APPLICATION_REJECT_EMAIL = "sendApplRejectEmail";
+  private static final String ACTION_SEND_APPLICATION_WITHDRAWN_EMAIL = "sendApplWithdrawnEmail";
   private static final String ACTION_ADD_APPLICATION = "addApplication";
+  private static final String ACTION_UPDATE_APPLICATION = "updateApplication";
   private static final String ACTION_GET_CLIENT_DATA = "getClientData";
   private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
   private static final String ACTION_GET_CONTACTS_FOR_LOCATION = "getContactsForLocation";
   private static final String ACTION_GET_SPECIES_CODES = "getSpeciesCodes";
+  private static final String ACTION_GET_PACKAGE_STATUS_CODES = "getPackageStatusCodes";
   private static final String ACTION_GET_GRADE_CODES = "getGradeCodes";
   private static final String ACTION_GET_END_USE_FOR_SPECIES_REGION = "getEndUseForSpeciesRegion";
   private static final String ACTION_GET_REMAINING_SPECIES = "getRemainingSpecies";
@@ -68,7 +81,16 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_DELETE_SCALE_BY_ID = "deleteScaleById";
   private static final String ACTION_DELETE_PACKAGE_BY_ID = "deletePackageById";
   private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
+  private static final String LEGACY_ACTION_APPLICATION_REMARKS = "/applicationRemarks";
   private static final String LEGACY_ACTION_FILE_APPLICATION_UPLOAD = "/fileApplicationUpload";
+  private static final String LEGACY_APPLICATION_LOCK_SESSION_KEY = "exemptionApplication";
+  private static final String LEGACY_APPLICATION_NUMBER_SESSION_KEY = "applicationNumber";
+  private static final String APPLICATION_STATUS_EXPIRED = "EXP";
+  private static final String APPLICATION_STATUS_PERMITTED = "PMT";
+  private static final Set<String> APPLICATION_DOCUMENT_DELETE_ROLES =
+      Set.of("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER");
+  private static final Set<String> APPLICATION_DOCUMENT_INDUSTRY_ROLES =
+      Set.of("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_FEDERAL_SUBMITTER");
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -76,16 +98,19 @@ public class ApplicationDetailsRpcController {
 
   private final ObjectProvider<ApplicationDetailsRpcService> serviceProvider;
   private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
+  private final ObjectProvider<ApplicationReviewService> applicationReviewServiceProvider;
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
 
   public ApplicationDetailsRpcController(
       ObjectProvider<ApplicationDetailsRpcService> serviceProvider,
       ObjectProvider<ClientLookupService> clientLookupServiceProvider,
+      ObjectProvider<ApplicationReviewService> applicationReviewServiceProvider,
       LexisSessionService sessionService,
       LexisAuthorizationService authorizationService) {
     this.serviceProvider = serviceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
+    this.applicationReviewServiceProvider = applicationReviewServiceProvider;
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
   }
@@ -153,8 +178,10 @@ public class ApplicationDetailsRpcController {
   @DeleteMapping("/rpc/application-details/document")
   public ResponseEntity<RemoveDocumentResponseDto> removeDocument(
       @RequestParam(name = "documentId", required = false) String documentId,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_FILE_APPLICATION_UPLOAD)) {
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    if (!canPerform(roles, LEGACY_ACTION_FILE_APPLICATION_UPLOAD)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -163,15 +190,22 @@ public class ApplicationDetailsRpcController {
       LOGGER.warn("Application details RPC service unavailable - returning no content for remove document");
       return ResponseEntity.noContent().build();
     }
-    boolean removed = service.removeDocument(parsePositiveLong(documentId));
+    Long parsedDocumentId = parsePositiveLong(documentId);
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    if (!canRemoveApplicationDocument(service, parsedDocumentId, parsedApplicationNumber, roles)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    boolean removed = service.removeDocument(parsedDocumentId);
     return ResponseEntity.ok(new RemoveDocumentResponseDto(Boolean.toString(removed)));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_REMOVE_DOCUMENT)
   public ResponseEntity<RemoveDocumentResponseDto> removeDocumentLegacy(
       @RequestParam(name = "documentId", required = false) String documentId,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
-    return removeDocument(documentId, authentication);
+    return removeDocument(documentId, applicationNumber, authentication);
   }
 
   @GetMapping("/rpc/application-details/remark")
@@ -201,7 +235,7 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       @RequestParam(name = "remarkBody", required = false) String remarkBody,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+    if (!canPerform(authentication, LEGACY_ACTION_APPLICATION_REMARKS)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -239,6 +273,82 @@ public class ApplicationDetailsRpcController {
     return persistRemark(remarkId, applicationNumber, remarkBody, authentication);
   }
 
+  @GetMapping("/rpc/application-details/check-form-changes")
+  public ResponseEntity<CheckFormChangesResponseDto> checkFormChanges(
+      @RequestParam MultiValueMap<String, String> parameters) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning default check-form-changes payload");
+      return ResponseEntity.ok(new CheckFormChangesResponseDto(false));
+    }
+
+    Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    boolean applicationChanged =
+        service
+            .getApplicationSummarySnapshot(applicationNumber)
+            .map(snapshot -> hasApplicationFormChanges(parameters, snapshot))
+            .orElse(false);
+    return ResponseEntity.ok(new CheckFormChangesResponseDto(applicationChanged));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_CHECK_FORM_CHANGES)
+  public ResponseEntity<CheckFormChangesResponseDto> checkFormChangesLegacy(
+      @RequestParam MultiValueMap<String, String> parameters) {
+    return checkFormChanges(parameters);
+  }
+
+  @GetMapping("/rpc/application-details/check-unused-volume")
+  public ResponseEntity<CheckUnusedVolumeResponseDto> checkUnusedVolume(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning default check-unused-volume payload");
+      return ResponseEntity.ok(new CheckUnusedVolumeResponseDto(true));
+    }
+
+    boolean volumeUsedInd = service.isApplicationVolumeUsed(parsePositiveLong(applicationNumber));
+    return ResponseEntity.ok(new CheckUnusedVolumeResponseDto(volumeUsedInd));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_CHECK_UNUSED_VOLUME)
+  public ResponseEntity<CheckUnusedVolumeResponseDto> checkUnusedVolumeLegacy(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    return checkUnusedVolume(applicationNumber);
+  }
+
+  @PostMapping("/rpc/application-details/release-lock")
+  public ResponseEntity<ReleaseLockResponseDto> releaseLock(HttpServletRequest request) {
+    if (request != null) {
+      var session = request.getSession(false);
+      if (session != null) {
+        session.removeAttribute(LEGACY_APPLICATION_LOCK_SESSION_KEY);
+        session.removeAttribute(LEGACY_APPLICATION_NUMBER_SESSION_KEY);
+      }
+    }
+    return ResponseEntity.ok(new ReleaseLockResponseDto("ok"));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_RELEASE_LOCK)
+  public ResponseEntity<ReleaseLockResponseDto> releaseLockLegacy(HttpServletRequest request) {
+    return releaseLock(request);
+  }
+
+  @PostMapping(
+      value = "/applicationDetailsRPC",
+      params = "actionMapping=" + ACTION_SEND_APPLICATION_REJECT_EMAIL)
+  public ResponseEntity<ApplicationStatusEmailResponseDto> sendApplicationRejectEmailLegacy(
+      @RequestParam MultiValueMap<String, String> parameters) {
+    return sendApplicationStatusEmail(parameters, "REJ");
+  }
+
+  @PostMapping(
+      value = "/applicationDetailsRPC",
+      params = "actionMapping=" + ACTION_SEND_APPLICATION_WITHDRAWN_EMAIL)
+  public ResponseEntity<ApplicationStatusEmailResponseDto> sendApplicationWithdrawnEmailLegacy(
+      @RequestParam MultiValueMap<String, String> parameters) {
+    return sendApplicationStatusEmail(parameters, "WDN");
+  }
+
   @PostMapping("/rpc/application-details/application")
   public ResponseEntity<ApplicationPersistenceResponseDto> addApplication(
       @RequestParam MultiValueMap<String, String> parameters,
@@ -270,6 +380,59 @@ public class ApplicationDetailsRpcController {
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
     return addApplication(parameters, authentication);
+  }
+
+  @PostMapping("/rpc/application-details/application-summary")
+  public ResponseEntity<ApplicationPersistenceResponseDto> updateApplicationSummary(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for update application");
+      return ResponseEntity.noContent().build();
+    }
+
+    String userId = authentication == null ? null : authentication.getName();
+    ApplicationDetailsRpcService.CreateApplicationResult result =
+        service.updateApplicationSummary(toApplicationSummaryUpdateRequest(parameters), userId);
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            result.valid(),
+            result.message(),
+            result.applicationNumber(),
+            result.errors(),
+            result.warnings()));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_UPDATE_APPLICATION)
+  public ResponseEntity<ApplicationPersistenceResponseDto> updateApplicationLegacy(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return updateApplicationSummary(parameters, authentication);
+  }
+
+  @GetMapping("/rpc/application-details/application-summary")
+  public ResponseEntity<ApplicationSummaryResponseDto> getApplicationSummary(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for application summary");
+      return ResponseEntity.noContent().build();
+    }
+
+    return service
+        .getApplicationSummarySnapshot(parsePositiveLong(applicationNumber))
+        .map(snapshot -> ResponseEntity.ok(toApplicationSummaryResponse(snapshot)))
+        .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
   @GetMapping("/rpc/application-details/client-data")
@@ -383,6 +546,22 @@ public class ApplicationDetailsRpcController {
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SPECIES_CODES)
   public ResponseEntity<List<ApplicationCodeResponseDto>> getSpeciesCodesLegacy() {
     return getSpeciesCodes();
+  }
+
+  @GetMapping("/rpc/application-details/package-status-codes")
+  public ResponseEntity<List<ApplicationCodeResponseDto>> getPackageStatusCodes() {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for package status codes");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getPackageStatusCodes().stream().map(this::toCodeResponse).toList());
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_PACKAGE_STATUS_CODES)
+  public ResponseEntity<List<ApplicationCodeResponseDto>> getPackageStatusCodesLegacy() {
+    return getPackageStatusCodes();
   }
 
   @GetMapping("/rpc/application-details/grade-codes")
@@ -813,6 +992,54 @@ public class ApplicationDetailsRpcController {
         sessionService.parseRolesFromPrincipal(authentication), action);
   }
 
+  private boolean canPerform(List<String> roles, String action) {
+    return authorizationService.canPerformAction(roles, action);
+  }
+
+  private boolean canRemoveApplicationDocument(
+      ApplicationDetailsRpcService service,
+      Long documentId,
+      Long applicationNumber,
+      List<String> roles) {
+    if (documentId == null || documentId < 1 || applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+
+    boolean documentBelongsToApplication =
+        service.getDocumentDetails(applicationNumber).stream().anyMatch(item -> item.id() == documentId);
+    if (!documentBelongsToApplication) {
+      return false;
+    }
+
+    return service
+        .getApplicationSummarySnapshot(applicationNumber)
+        .map(snapshot -> canRemoveApplicationDocumentWithStatus(snapshot.applicationStatusCode(), roles))
+        .orElse(false);
+  }
+
+  private boolean canRemoveApplicationDocumentWithStatus(String applicationStatusCode, List<String> roles) {
+    String status = applicationStatusCode == null ? "" : applicationStatusCode.trim().toUpperCase(Locale.ROOT);
+    if (status.isBlank()) {
+      return false;
+    }
+
+    List<String> normalizedRoles =
+        roles.stream().map(role -> role.trim().toUpperCase(Locale.ROOT)).toList();
+    if (normalizedRoles.stream().anyMatch(APPLICATION_DOCUMENT_DELETE_ROLES::contains)) {
+      return !APPLICATION_STATUS_EXPIRED.equals(status);
+    }
+
+    boolean industryUser =
+        normalizedRoles.stream()
+            .anyMatch(
+                role ->
+                    APPLICATION_DOCUMENT_INDUSTRY_ROLES.contains(role)
+                        || role.startsWith("LEXIS_PROVINCIAL_SUBMITTER_")
+                        || role.startsWith("LEXIS_FEDERAL_SUBMITTER_"));
+    return industryUser
+        && (APPLICATION_STATUS_PERMITTED.equals(status) || APPLICATION_STATUS_EXPIRED.equals(status));
+  }
+
   private Long parsePositiveLong(String rawValue) {
     if (rawValue == null || rawValue.isBlank()) {
       return null;
@@ -850,6 +1077,39 @@ public class ApplicationDetailsRpcController {
         first(parameters, "agentContactName"),
         first(parameters, "ownerContactName"),
         first(parameters, "oicIndicator"),
+        first(parameters, "applicationEndUseCode", "endUseCode", "endUse"),
+        parseSpeciesSelection(parameters),
+        first(parameters, "additionalRemarks", "comments", "remarkBody", "remark"),
+        !"false".equalsIgnoreCase(first(parameters, "validation")));
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest toApplicationSummaryUpdateRequest(
+      MultiValueMap<String, String> parameters) {
+    return new ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest(
+        parsePositiveLong(first(parameters, "applicationNumber")),
+        parseDate(first(parameters, "applicationDate")),
+        parsePositiveLong(first(parameters, "exemptionTerm", "termDays")),
+        parseDate(first(parameters, "dateReceived", "receivedDate")),
+        parseDouble(first(parameters, "exemptionApplicationVolume", "applicationVolume")),
+        parseDouble(first(parameters, "averageLogVolume")),
+        first(parameters, "exemptionReason", "exemptionReasonCode", "exportExemptionReasonCode"),
+        first(parameters, "logLocation", "productLocation"),
+        parsePositiveLong(first(parameters, "exportScheduleId", "legacyExportScheduleId")),
+        first(parameters, "agentClientNumber", "applicantClientNumber"),
+        first(parameters, "agentClientLocation", "agentClientLocationCode", "applicantClientLocationCode"),
+        first(parameters, "ownerClientNumber"),
+        first(parameters, "ownerClientLocation", "ownerClientLocationCode"),
+        first(parameters, "exportApplicationStatusCode", "applicationStatusCode"),
+        first(parameters, "ownerApplicantType", "applicantType"),
+        parsePositiveLong(first(parameters, "region", "orgUnitNumber")),
+        first(parameters, "productType", "productTypeCode"),
+        first(parameters, "exportJurisdictionCode", "jurisdictionCode"),
+        first(parameters, "ageClass", "growthTypeCode"),
+        first(parameters, "agentContactName"),
+        first(parameters, "ownerContactName"),
+        first(parameters, "oicIndicator"),
+        first(parameters, "applicationEndUseCode", "endUseCode", "endUse"),
+        parseSpeciesSelection(parameters),
         !"false".equalsIgnoreCase(first(parameters, "validation")));
   }
 
@@ -894,6 +1154,77 @@ public class ApplicationDetailsRpcController {
       }
     }
     return null;
+  }
+
+  private boolean hasApplicationFormChanges(
+      MultiValueMap<String, String> parameters,
+      ApplicationDetailsRpcService.ApplicationSummarySnapshot snapshot) {
+    if (snapshot == null || APPLICATION_STATUS_EXPIRED.equalsIgnoreCase(snapshot.applicationStatusCode())) {
+      return false;
+    }
+
+    String additionalRemarks = first(parameters, "additionalRemarks", "remarks");
+    if (additionalRemarks != null) {
+      return true;
+    }
+    if (isBlank(snapshot.ownerContactName())) {
+      return true;
+    }
+
+    return fieldChanged(snapshot.ownerClientNumber(), first(parameters, "ownerClientNumber"))
+        || fieldChanged(
+            snapshot.ownerClientLocationCode(),
+            first(parameters, "ownerClientLocation", "ownerClientLocationCode"))
+        || fieldChanged(snapshot.orgUnitNumber(), parsePositiveLong(first(parameters, "region", "orgUnitNumber")))
+        || fieldChanged(snapshot.productTypeCode(), first(parameters, "productType", "productTypeCode"))
+        || fieldChanged(
+            snapshot.exemptionReasonCode(),
+            first(parameters, "exemptionReason", "exemptionReasonCode", "exportExemptionReasonCode"))
+        || fieldChanged(snapshot.applicationDate(), parseDate(first(parameters, "applicationDate")))
+        || fieldChanged(snapshot.receivedDate(), parseDate(first(parameters, "dateReceived", "receivedDate")))
+        || fieldChanged(
+            snapshot.exportScheduleId(),
+            parsePositiveLong(first(parameters, "exportScheduleId", "legacyExportScheduleId")))
+        || fieldChanged(snapshot.termDays(), parsePositiveLong(first(parameters, "exemptionTerm", "termDays")))
+        || fieldChanged(snapshot.productLocation(), first(parameters, "logLocation", "productLocation"))
+        || fieldChanged(snapshot.averageLogVolume(), parseDouble(first(parameters, "averageLogVolume")))
+        || fieldChanged(snapshot.ownerContactName(), first(parameters, "ownerContactName"))
+        || agentChanged(parameters, snapshot);
+  }
+
+  private boolean agentChanged(
+      MultiValueMap<String, String> parameters,
+      ApplicationDetailsRpcService.ApplicationSummarySnapshot snapshot) {
+    String agentNumber = first(parameters, "agentClientNumber", "applicantClientNumber");
+    if (agentNumber == null && snapshot.agentClientNumber() == null) {
+      return false;
+    }
+    if (snapshot.agentClientNumber() != null && isBlank(snapshot.agentContactName())) {
+      return true;
+    }
+    return fieldChanged(snapshot.agentClientNumber(), agentNumber)
+        || fieldChanged(
+            snapshot.agentClientLocationCode(),
+            first(parameters, "agentClientLocation", "agentClientLocationCode", "applicantClientLocationCode"))
+        || fieldChanged(snapshot.agentContactName(), first(parameters, "agentContactName"));
+  }
+
+  private boolean fieldChanged(Object currentValue, Object submittedValue) {
+    return !normalizeComparable(currentValue).equals(normalizeComparable(submittedValue));
+  }
+
+  private boolean isBlank(String value) {
+    return value == null || value.isBlank();
+  }
+
+  private String normalizeComparable(Object value) {
+    if (value == null) {
+      return "";
+    }
+    if (value instanceof Double doubleValue) {
+      return Double.toString(doubleValue);
+    }
+    return value.toString().trim();
   }
 
   private LocalDate parseDate(String rawValue) {
@@ -1064,6 +1395,20 @@ public class ApplicationDetailsRpcController {
     }
   }
 
+  private List<String> parseSpeciesSelection(MultiValueMap<String, String> parameters) {
+    String speciesJson = first(parameters, "speciesJSON", "speciesJson");
+    if (trimToNull(speciesJson) != null) {
+      return parseSpeciesJson(speciesJson);
+    }
+    return parseCsv(
+        first(
+            parameters,
+            "applicationSelectedSpecies",
+            "speciesTableValues",
+            "selectedSpecies",
+            "speciesCodes"));
+  }
+
   private List<String> parseCsv(String csv) {
     String normalized = trimToNull(csv);
     if (normalized == null) {
@@ -1135,6 +1480,35 @@ public class ApplicationDetailsRpcController {
         item.productTypeDescription());
   }
 
+  private ApplicationSummaryResponseDto toApplicationSummaryResponse(
+      ApplicationDetailsRpcService.ApplicationSummarySnapshot item) {
+    return new ApplicationSummaryResponseDto(
+        item.applicationNumber(),
+        item.federalApplicationNumber(),
+        item.applicationDate(),
+        item.termDays(),
+        item.receivedDate(),
+        item.applicationVolume(),
+        item.averageLogVolume(),
+        item.productLocation(),
+        item.exportScheduleId(),
+        item.agentClientNumber(),
+        item.agentClientLocationCode(),
+        item.ownerClientNumber(),
+        item.ownerClientLocationCode(),
+        item.exemptionNumber(),
+        item.exemptionReasonCode(),
+        item.applicationStatusCode(),
+        item.applicantTypeCode(),
+        item.orgUnitNumber(),
+        item.productTypeCode(),
+        item.jurisdictionCode(),
+        item.growthTypeCode(),
+        item.agentContactName(),
+        item.ownerContactName(),
+        item.oicIndicator());
+  }
+
   private PackageValidityResponseDto toPackageValidityResponse(
       ApplicationDetailsRpcService.PackageValidityItem item) {
     return new PackageValidityResponseDto(item.valid(), item.message());
@@ -1176,6 +1550,28 @@ public class ApplicationDetailsRpcController {
     return authentication == null ? null : authentication.getName();
   }
 
+  private ResponseEntity<ApplicationStatusEmailResponseDto> sendApplicationStatusEmail(
+      MultiValueMap<String, String> parameters, String statusCode) {
+    ApplicationReviewService service = applicationReviewServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application review service unavailable - returning no content for application status email");
+      return ResponseEntity.noContent().build();
+    }
+
+    Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    ApplicationReviewStatusEmailResultDto result =
+        applicationNumber == null
+            ? new ApplicationReviewStatusEmailResultDto(
+                false, "Application number must be a positive value.")
+            : service.sendStatusEmail(
+                applicationNumber,
+                new ApplicationReviewStatusEmailRequestDto(
+                    statusCode,
+                    first(parameters, "toEmailAddress", "clientEmailAddress"),
+                    first(parameters, "additionalRemarks", "remark", "remarkBody")));
+    return ResponseEntity.ok(new ApplicationStatusEmailResponseDto(result.success(), result.message()));
+  }
+
   public record DocumentDetailsResponseDto(
       String name, String description, String type, long id) {}
 
@@ -1186,12 +1582,46 @@ public class ApplicationDetailsRpcController {
   public record PersistRemarkResponseDto(
       String status, Instant date, String user, String remark, String title, Long remarkId) {}
 
+  public record CheckFormChangesResponseDto(boolean applicationChanged) {}
+
+  public record CheckUnusedVolumeResponseDto(boolean volumeUsedInd) {}
+
+  public record ReleaseLockResponseDto(String release) {}
+
+  public record ApplicationStatusEmailResponseDto(boolean success, String message) {}
+
   public record ApplicationPersistenceResponseDto(
       boolean valid,
       String message,
       Long applicationNumber,
       List<String> errors,
       List<String> warnings) {}
+
+  public record ApplicationSummaryResponseDto(
+      Long applicationNumber,
+      Long federalApplicationNumber,
+      LocalDate applicationDate,
+      Long termDays,
+      LocalDate receivedDate,
+      Double applicationVolume,
+      Double averageLogVolume,
+      String productLocation,
+      Long exportScheduleId,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String exemptionNumber,
+      String exemptionReasonCode,
+      String applicationStatusCode,
+      String applicantTypeCode,
+      Long orgUnitNumber,
+      String productTypeCode,
+      String jurisdictionCode,
+      String growthTypeCode,
+      String agentContactName,
+      String ownerContactName,
+      String oicIndicator) {}
 
   public record ApplicationClientDataResponseDto(
       String clientNumber,

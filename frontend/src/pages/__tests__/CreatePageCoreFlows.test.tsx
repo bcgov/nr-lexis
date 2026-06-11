@@ -16,7 +16,14 @@ import {
   fetchProvincialExemptionOptions,
   fetchProvincialOfferOptions,
 } from '@/service/search-options-service'
-import { fetchApplicationClientLocations } from '@/service/application-client-lookup-service'
+import {
+  fetchApplicationClientContacts,
+  fetchApplicationClientLocations,
+} from '@/service/application-client-lookup-service'
+import {
+  fetchApplicationEndUsesForSpeciesRegion,
+  fetchApplicationRemainingSpecies,
+} from '@/service/provincial-application-items-service'
 
 const mockNavigate = vi.fn()
 
@@ -41,8 +48,16 @@ vi.mock('@/service/create-submit-service', () => ({
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientContacts: vi.fn(),
   fetchApplicationClientLocations: vi.fn(),
 }))
+
+vi.mock('@/service/provincial-application-items-service', () => ({
+  fetchApplicationEndUsesForSpeciesRegion: vi.fn(),
+  fetchApplicationRemainingSpecies: vi.fn(),
+}))
+
+Element.prototype.scrollIntoView = vi.fn()
 
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
@@ -50,7 +65,12 @@ const mockedFetchProvincialOfferOptions = vi.mocked(fetchProvincialOfferOptions)
 const mockedSubmitProvincialApplicationCreate = vi.mocked(submitProvincialApplicationCreate)
 const mockedSubmitProvincialExemptionCreate = vi.mocked(submitProvincialExemptionCreate)
 const mockedSubmitProvincialOfferCreate = vi.mocked(submitProvincialOfferCreate)
+const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
+const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemainingSpecies)
+const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
+  fetchApplicationEndUsesForSpeciesRegion,
+)
 
 const successfulCreate = (createdId: string): CreateSubmissionResult => ({
   success: true,
@@ -59,6 +79,14 @@ const successfulCreate = (createdId: string): CreateSubmissionResult => ({
   errors: [],
   warnings: [],
 })
+
+const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) => {
+  await userEvent.click(combobox)
+  await userEvent.clear(combobox)
+  await userEvent.type(combobox, optionName)
+  const options = await screen.findAllByRole('option', { name: optionName })
+  await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
+}
 
 describe('Create Page Core Flows', () => {
   beforeEach(() => {
@@ -69,7 +97,9 @@ describe('Create Page Core Flows', () => {
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
       exemptionReasons: [{ value: 'U', label: 'Unadvertised' }],
       applicationStatuses: [],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '11', label: 'Cariboo' }],
+      currentSchedules: [{ value: '987', label: '2026-01-11' }],
     } as any)
     mockedFetchProvincialExemptionOptions.mockResolvedValue({
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
@@ -83,6 +113,25 @@ describe('Create Page Core Flows', () => {
       { locationCode: '00', locationName: '00', selected: false },
       { locationCode: '01', locationName: '01 - MAIN LOCATION', selected: false },
     ])
+    mockedFetchApplicationClientContacts.mockImplementation(
+      async (clientNumber, clientLocationCode, applicantType) =>
+        applicantType === 'agent'
+          ? [
+              { contactName: 'Agent Contact', contactId: '-1' },
+              { contactName: 'Agent Alternate Contact', contactId: '22' },
+            ]
+          : [
+              { contactName: 'Owner Contact', contactId: '-1' },
+              { contactName: 'Owner Alternate Contact', contactId: '11' },
+            ],
+    )
+    mockedFetchApplicationRemainingSpecies.mockResolvedValue([
+      { code: 'HE', description: 'Hemlock' },
+      { code: 'BA', description: 'Balsam' },
+    ])
+    mockedFetchApplicationEndUsesForSpeciesRegion.mockResolvedValue([
+      { code: 'SA', description: 'Sawlog' },
+    ])
   })
 
   it('submits provincial application prefilled form and navigates to details', async () => {
@@ -91,7 +140,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -107,26 +156,123 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
-    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111')
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner')
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith({
-      applicationNumber: '1001',
-      packageNumber: 'PKG-55',
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
-      applicantClientNumber: '00022222',
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      agentContactName: '',
+      applicantTypeCode: 'O',
       productTypeCode: 'LOG',
+      ageClass: '',
       exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-09',
       applicationTermDays: '30',
+      applicationTermMonths: '',
+      applicationTermYears: '',
       receivedDate: '2026-01-10',
+      exportScheduleId: '987',
       listingDate: '2026-01-11',
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
+      averageLogVolume: '1.2',
+      speciesCodes: ['HE'],
+      endUseCode: 'SA',
       comments: 'Ready',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901')
+  })
+
+  it('converts provincial application term months and years to total days on submit', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=5&applicationTermMonths=2&applicationTermYears=1&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        applicationTermDays: '430',
+        applicationTermMonths: '2',
+        applicationTermYears: '1',
+      }),
+    )
+  })
+
+  it('submits provincial application with agent applicant fields', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('902'))
+    mockedFetchApplicationClientLocations.mockImplementation(async (clientNumber, applicantType) =>
+      applicantType === 'agent'
+        ? [{ locationCode: '01', locationName: '01 - AGENT LOCATION', selected: false }]
+        : [{ locationCode: '00', locationName: '00 - OWNER LOCATION', selected: false }],
+    )
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=00033333&agentClientLocationCode=01&agentContactName=Agent%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner')
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033333', 'agent')
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith({
+      ownerClientNumber: '00011111',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      agentClientNumber: '00033333',
+      agentClientLocationCode: '01',
+      agentContactName: 'Agent Contact',
+      applicantTypeCode: 'A',
+      productTypeCode: 'LOG',
+      ageClass: '',
+      exemptionType: 'U',
+      region: '11',
+      applicationDate: '2026-01-09',
+      applicationTermDays: '30',
+      applicationTermMonths: '',
+      applicationTermYears: '',
+      receivedDate: '2026-01-10',
+      exportScheduleId: '987',
+      listingDate: '2026-01-11',
+      productLocation: 'Camp 1',
+      applicationVolume: '125.5',
+      averageLogVolume: '1.2',
+      speciesCodes: ['HE'],
+      endUseCode: 'SA',
+      comments: 'Ready',
+    })
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/902')
   })
 
   it('blocks provincial application submit when owner has no selectable locations', async () => {
@@ -137,7 +283,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -157,11 +303,98 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
+  it('saves incomplete provincial application drafts without submit validation', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Save Draft' }))
+
+    expect(await screen.findByText('Draft Saved')).toBeInTheDocument()
+    expect(screen.queryByText('Owner client number is required.')).not.toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+    const drafts = JSON.parse(
+      localStorage.getItem('lexis.create-drafts.provincial-application') ?? '[]',
+    )
+    expect(drafts).toHaveLength(1)
+    expect(drafts[0].payload).toMatchObject({
+      ownerClientNumber: '',
+      productLocation: '',
+      applicantTypeCode: 'O',
+    })
+  })
+
+  it('allows manual owner contact entry when lookup has no contacts', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('903'))
+    mockedFetchApplicationClientContacts.mockResolvedValue([])
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const ownerNameInput = await screen.findByLabelText('Owner Name (required)')
+    await userEvent.type(ownerNameInput, 'Typed Owner')
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerContactName: 'Typed Owner',
+      }),
+    )
+  })
+
+  it('blocks provincial application submit when volume precision is invalid', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.55&averageLogVolume=1.23&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(
+      await screen.findByText('Application volume must have no more than one decimal place.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Average log volume must have no more than one decimal place.'),
+    ).toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
   it('does not use search exemption type as create exemption reason', async () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?applicationNumber=1001&packageNumber=PKG-55&ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&applicantClientNumber=00022222&productTypeCode=LOG&exemptionType=ALL&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionType=ALL&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -198,7 +431,14 @@ describe('Create Page Core Flows', () => {
 
     await screen.findByText('Create Provincial Exemption')
     await userEvent.type(screen.getByLabelText('Exemption Number (required)'), 'EX-777')
-    await userEvent.selectOptions(screen.getByLabelText('Exemption Type (required)'), 'SECTION_1')
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Exemption Type (required)' }),
+      'Section 1',
+    )
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Exemption Status (required)' }),
+      'New',
+    )
     await userEvent.type(screen.getByLabelText('Approval Date (YYYY-MM-DD)'), '2026-02-01')
     await userEvent.type(screen.getByLabelText('Expiry Date (YYYY-MM-DD)'), '2026-12-31')
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
@@ -212,7 +452,7 @@ describe('Create Page Core Flows', () => {
       applicationNumber: '321',
       linkedApplicationNumbers: ['321', '654'],
       exemptionTypeCode: 'SECTION_1',
-      exemptionStatusCode: '',
+      exemptionStatusCode: 'NEW',
       ownerClientNumber: '00033333',
       applicantClientNumber: '00044444',
       approvalDate: '2026-02-01',
@@ -221,6 +461,32 @@ describe('Create Page Core Flows', () => {
       otherConditions: 'Linked applications: 321, 654',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-777')
+  })
+
+  it('blocks provincial exemption submit when status is missing', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/exemption/create?applications=321&ownerClientNumber=00033333&applicantClientNumber=00044444',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Create Provincial Exemption')
+    await userEvent.type(screen.getByLabelText('Exemption Number (required)'), 'EX-778')
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Exemption Type (required)' }),
+      'Section 1',
+    )
+    await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+
+    expect(screen.getAllByText('Exemption status is required.').length).toBeGreaterThan(0)
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
   it('submits provincial offer form and navigates to details', async () => {

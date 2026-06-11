@@ -6,14 +6,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
+import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,10 +39,14 @@ class ApplicationDetailsRpcControllerTest {
 
   @Mock private ObjectProvider<ApplicationDetailsRpcService> serviceProvider;
   @Mock private ObjectProvider<ClientLookupService> clientLookupServiceProvider;
+  @Mock private ObjectProvider<ApplicationReviewService> applicationReviewServiceProvider;
   @Mock private ApplicationDetailsRpcService service;
   @Mock private ClientLookupService clientLookupService;
+  @Mock private ApplicationReviewService applicationReviewService;
   @Mock private LexisSessionService sessionService;
   @Mock private LexisAuthorizationService authorizationService;
+  @Mock private HttpServletRequest servletRequest;
+  @Mock private HttpSession session;
 
   private ApplicationDetailsRpcController controller;
 
@@ -45,7 +54,11 @@ class ApplicationDetailsRpcControllerTest {
   void setup() {
     controller =
         new ApplicationDetailsRpcController(
-            serviceProvider, clientLookupServiceProvider, sessionService, authorizationService);
+            serviceProvider,
+            clientLookupServiceProvider,
+            applicationReviewServiceProvider,
+            sessionService,
+            authorizationService);
   }
 
   @Test
@@ -97,14 +110,19 @@ class ApplicationDetailsRpcControllerTest {
   void removeDocumentShouldReturnSuccessFlag() {
     TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(55L, "test.pdf", "Not on file", "Uploaded")));
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
     when(service.removeDocument(55L)).thenReturn(true);
 
     ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeDocument("55", authentication);
+        controller.removeDocument("55", "1000456", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isEqualTo("true");
+    verify(service).getDocumentDetails(1000456L);
+    verify(service).getApplicationSummarySnapshot(1000456L);
     verify(service).removeDocument(55L);
   }
 
@@ -113,10 +131,46 @@ class ApplicationDetailsRpcControllerTest {
     TestingAuthenticationToken authentication = unauthorized("/fileApplicationUpload");
 
     ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeDocument("55", authentication);
+        controller.removeDocument("55", "1000456", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
+  }
+
+  @Test
+  void removeDocumentShouldRejectWhenDocumentDoesNotBelongToApplication() {
+    TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(77L, "other.pdf", "Not on file", "Uploaded")));
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service).getDocumentDetails(1000456L);
+    org.mockito.Mockito.verify(service, org.mockito.Mockito.never())
+        .getApplicationSummarySnapshot(org.mockito.ArgumentMatchers.anyLong());
+    org.mockito.Mockito.verify(service, org.mockito.Mockito.never())
+        .removeDocument(org.mockito.ArgumentMatchers.anyLong());
+  }
+
+  @Test
+  void removeDocumentShouldRejectExpiredApplicationsForApprovers() {
+    TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(55L, "test.pdf", "Not on file", "Uploaded")));
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithStatus("EXP")));
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service).getDocumentDetails(1000456L);
+    verify(service).getApplicationSummarySnapshot(1000456L);
+    org.mockito.Mockito.verify(service, org.mockito.Mockito.never()).removeDocument(org.mockito.ArgumentMatchers.anyLong());
   }
 
   @Test
@@ -135,7 +189,7 @@ class ApplicationDetailsRpcControllerTest {
 
   @Test
   void persistRemarkShouldReturnOkStatus() {
-    TestingAuthenticationToken authentication = authorized("createApplication");
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     Instant now = Instant.parse("2026-05-27T17:00:00Z");
     when(service.persistRemark("new", 1000456L, "Long remark", "idir\\jsmith"))
@@ -156,14 +210,167 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void persistRemarkShouldRejectWithoutCreateApplicationAction() {
-    TestingAuthenticationToken authentication = unauthorized("createApplication");
+  void persistRemarkShouldRejectWithoutApplicationRemarksAction() {
+    TestingAuthenticationToken authentication = unauthorized("/applicationRemarks");
 
     ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
         controller.persistRemark("new", "1000456", "Long remark", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
+  }
+
+  @Test
+  void checkFormChangesShouldReturnDefaultUnchangedWhenServiceMissing() {
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckFormChangesResponseDto> response =
+        controller.checkFormChanges(new LinkedMultiValueMap<>());
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().applicationChanged()).isFalse();
+  }
+
+  @Test
+  void checkFormChangesShouldCompareLegacyApplicationSummaryFields() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+
+    MultiValueMap<String, String> params = matchingSummaryParameters();
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckFormChangesResponseDto> response =
+        controller.checkFormChanges(params);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().applicationChanged()).isFalse();
+    verify(service).getApplicationSummarySnapshot(1000456L);
+  }
+
+  @Test
+  void checkFormChangesShouldReportChangedWhenLegacyAdditionalRemarksArePresent() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+
+    MultiValueMap<String, String> params = matchingSummaryParameters();
+    params.add("additionalRemarks", "Needs review");
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckFormChangesResponseDto> response =
+        controller.checkFormChangesLegacy(params);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().applicationChanged()).isTrue();
+  }
+
+  @Test
+  void checkFormChangesShouldForceChangedWhenStoredOwnerContactIsBlankLikeLegacy() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithBlankOwnerContact()));
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckFormChangesResponseDto> response =
+        controller.checkFormChanges(matchingSummaryParameters());
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().applicationChanged()).isTrue();
+  }
+
+  @Test
+  void checkUnusedVolumeShouldReturnDefaultUsedWhenServiceMissing() {
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckUnusedVolumeResponseDto> response =
+        controller.checkUnusedVolume("1000456");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().volumeUsedInd()).isTrue();
+  }
+
+  @Test
+  void checkUnusedVolumeShouldMapLegacyPayloadFromService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.isApplicationVolumeUsed(1000456L)).thenReturn(false);
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckUnusedVolumeResponseDto> response =
+        controller.checkUnusedVolumeLegacy("1000456");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().volumeUsedInd()).isFalse();
+    verify(service).isApplicationVolumeUsed(1000456L);
+  }
+
+  @Test
+  void releaseLockShouldReturnLegacyOkPayloadAndClearApplicationSessionState() {
+    when(servletRequest.getSession(false)).thenReturn(session);
+
+    ResponseEntity<ApplicationDetailsRpcController.ReleaseLockResponseDto> response =
+        controller.releaseLockLegacy(servletRequest);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().release()).isEqualTo("ok");
+    verify(session).removeAttribute("exemptionApplication");
+    verify(session).removeAttribute("applicationNumber");
+  }
+
+  @Test
+  void sendApplicationRejectEmailLegacyShouldDelegateToReviewEmailService() {
+    when(applicationReviewServiceProvider.getIfAvailable()).thenReturn(applicationReviewService);
+    when(applicationReviewService.sendStatusEmail(
+            org.mockito.ArgumentMatchers.eq(1000456L),
+            org.mockito.ArgumentMatchers.any(ApplicationReviewStatusEmailRequestDto.class)))
+        .thenReturn(new ApplicationReviewStatusEmailResultDto(true, "Status email sent."));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("toEmailAddress", "client@example.test");
+    params.add("additionalRemarks", "Rejected during review");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationStatusEmailResponseDto> response =
+        controller.sendApplicationRejectEmailLegacy(params);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().message()).isEqualTo("Status email sent.");
+
+    ArgumentCaptor<ApplicationReviewStatusEmailRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationReviewStatusEmailRequestDto.class);
+    verify(applicationReviewService).sendStatusEmail(org.mockito.ArgumentMatchers.eq(1000456L), requestCaptor.capture());
+    assertThat(requestCaptor.getValue().statusCode()).isEqualTo("REJ");
+    assertThat(requestCaptor.getValue().clientEmailAddress()).isEqualTo("client@example.test");
+    assertThat(requestCaptor.getValue().remark()).isEqualTo("Rejected during review");
+  }
+
+  @Test
+  void sendApplicationWithdrawnEmailLegacyShouldUseWithdrawnStatus() {
+    when(applicationReviewServiceProvider.getIfAvailable()).thenReturn(applicationReviewService);
+    when(applicationReviewService.sendStatusEmail(
+            org.mockito.ArgumentMatchers.eq(1000456L),
+            org.mockito.ArgumentMatchers.any(ApplicationReviewStatusEmailRequestDto.class)))
+        .thenReturn(new ApplicationReviewStatusEmailResultDto(false, "Status email could not be sent."));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("toEmailAddress", "client@example.test");
+    params.add("additionalRemarks", "Withdrawn");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationStatusEmailResponseDto> response =
+        controller.sendApplicationWithdrawnEmailLegacy(params);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+
+    ArgumentCaptor<ApplicationReviewStatusEmailRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationReviewStatusEmailRequestDto.class);
+    verify(applicationReviewService).sendStatusEmail(org.mockito.ArgumentMatchers.eq(1000456L), requestCaptor.capture());
+    assertThat(requestCaptor.getValue().statusCode()).isEqualTo("WDN");
   }
 
   @Test
@@ -192,6 +399,7 @@ class ApplicationDetailsRpcControllerTest {
     params.add("productTypeCode", "H");
     params.add("growthTypeCode", "O");
     params.add("ownerContactName", "Owner Contact");
+    params.add("comments", "Ready for review");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
         controller.addApplicationLegacy(params, authentication);
@@ -210,6 +418,7 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(request.agentClientNumber()).isEqualTo("00022222");
     assertThat(request.exemptionReasonCode()).isEqualTo("U");
     assertThat(request.productTypeCode()).isEqualTo("H");
+    assertThat(request.remarkBody()).isEqualTo("Ready for review");
   }
 
   @Test
@@ -371,6 +580,28 @@ class ApplicationDetailsRpcControllerTest {
             ApplicationDetailsRpcController.ApplicationCodeResponseDto::description)
         .containsExactly(tuple("FIR", "Douglas-fir"), tuple("HEM", "Hemlock"));
     verify(service).getSpeciesCodes();
+  }
+
+  @Test
+  void getPackageStatusCodesLegacyShouldReturnLegacyCodePayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getPackageStatusCodes())
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.CodeItem("ACT", "Active"),
+                new ApplicationDetailsRpcService.CodeItem("SHT", "Shutout")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationCodeResponseDto>> response =
+        controller.getPackageStatusCodesLegacy();
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody())
+        .extracting(
+            ApplicationDetailsRpcController.ApplicationCodeResponseDto::code,
+            ApplicationDetailsRpcController.ApplicationCodeResponseDto::description)
+        .containsExactly(tuple("ACT", "Active"), tuple("SHT", "Shutout"));
+    verify(service).getPackageStatusCodes();
   }
 
   @Test
@@ -879,5 +1110,111 @@ class ApplicationDetailsRpcControllerTest {
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
     when(authorizationService.canPerformAction(roles, action)).thenReturn(false);
     return authentication;
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshot() {
+    return new ApplicationDetailsRpcService.ApplicationSummarySnapshot(
+        1000456L,
+        null,
+        LocalDate.of(2026, 3, 1),
+        30L,
+        LocalDate.of(2026, 3, 2),
+        125.5d,
+        2.4d,
+        "Camp 1",
+        1234L,
+        "00022222",
+        "01",
+        "00011111",
+        "02",
+        null,
+        "U",
+        "NEW",
+        "A",
+        11L,
+        "H",
+        "P",
+        "O",
+        "Agent Contact",
+        "Owner Contact",
+        "N");
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshotWithBlankOwnerContact() {
+    return new ApplicationDetailsRpcService.ApplicationSummarySnapshot(
+        1000456L,
+        null,
+        LocalDate.of(2026, 3, 1),
+        30L,
+        LocalDate.of(2026, 3, 2),
+        125.5d,
+        2.4d,
+        "Camp 1",
+        1234L,
+        "00022222",
+        "01",
+        "00011111",
+        "02",
+        null,
+        "U",
+        "NEW",
+        "A",
+        11L,
+        "H",
+        "P",
+        "O",
+        "Agent Contact",
+        null,
+        "N");
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshotWithStatus(String status) {
+    ApplicationDetailsRpcService.ApplicationSummarySnapshot snapshot = summarySnapshot();
+    return new ApplicationDetailsRpcService.ApplicationSummarySnapshot(
+        snapshot.applicationNumber(),
+        snapshot.federalApplicationNumber(),
+        snapshot.applicationDate(),
+        snapshot.termDays(),
+        snapshot.receivedDate(),
+        snapshot.applicationVolume(),
+        snapshot.averageLogVolume(),
+        snapshot.productLocation(),
+        snapshot.exportScheduleId(),
+        snapshot.agentClientNumber(),
+        snapshot.agentClientLocationCode(),
+        snapshot.ownerClientNumber(),
+        snapshot.ownerClientLocationCode(),
+        snapshot.exemptionNumber(),
+        snapshot.exemptionReasonCode(),
+        status,
+        snapshot.applicantTypeCode(),
+        snapshot.orgUnitNumber(),
+        snapshot.productTypeCode(),
+        snapshot.jurisdictionCode(),
+        snapshot.growthTypeCode(),
+        snapshot.agentContactName(),
+        snapshot.ownerContactName(),
+        snapshot.oicIndicator());
+  }
+
+  private MultiValueMap<String, String> matchingSummaryParameters() {
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("applicationDate", "2026-03-01");
+    params.add("exemptionTerm", "30");
+    params.add("dateReceived", "2026-03-02");
+    params.add("averageLogVolume", "2.4");
+    params.add("logLocation", "Camp 1");
+    params.add("exportScheduleId", "1234");
+    params.add("agentClientNumber", "00022222");
+    params.add("agentClientLocationCode", "01");
+    params.add("agentContactName", "Agent Contact");
+    params.add("ownerClientNumber", "00011111");
+    params.add("ownerClientLocationCode", "02");
+    params.add("ownerContactName", "Owner Contact");
+    params.add("exemptionReason", "U");
+    params.add("region", "11");
+    params.add("productType", "H");
+    return params;
   }
 }

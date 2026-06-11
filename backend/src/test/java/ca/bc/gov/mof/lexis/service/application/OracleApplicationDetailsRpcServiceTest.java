@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -235,9 +236,94 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void addApplicationShouldRejectLegacyVolumeRangeBeforeOracleInsert() {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                10_000_000.0d,
+                100.0d,
+                "Camp 1",
+                null,
+                "00022222",
+                "01",
+                "00011111",
+                "02",
+                null,
+                "U",
+                "A",
+                11L,
+                "H",
+                null,
+                "O",
+                "Agent Contact",
+                "Owner Contact",
+                null,
+                null,
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "The application volume must be less than or equal to 9999999.9.",
+            "The average log volume must be less than or equal to 99.9.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addApplicationShouldRejectLegacyVolumePrecisionBeforeOracleInsert() {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.55d,
+                2.44d,
+                "Camp 1",
+                null,
+                "00022222",
+                "01",
+                "00011111",
+                "02",
+                null,
+                "U",
+                "A",
+                11L,
+                "H",
+                null,
+                "O",
+                "Agent Contact",
+                "Owner Contact",
+                null,
+                null,
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "The application volume must have no more than one decimal place.",
+            "The average log volume must have no more than one decimal place.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
   void addApplicationShouldInsertWhenRequestIsValid() {
+    when(repository.findCandidateExcolCombinations(2, "FI", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/FI/LU")));
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+    when(repository.replaceApplicationEndUses(
+            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
+        .thenReturn(true);
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.addApplication(
@@ -264,6 +350,8 @@ class OracleApplicationDetailsRpcServiceTest {
                 "Agent Contact",
                 "Owner Contact",
                 null,
+                "LU",
+                List.of("FI", "HE"),
                 true),
             "idir\\jsmith");
 
@@ -278,13 +366,18 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(record.applicationStatusCode()).isEqualTo("NEW");
     assertThat(record.jurisdictionCode()).isEqualTo("P");
     assertThat(record.oicIndicator()).isEqualTo("N");
+    assertThat(record.applicantTypeCode()).isEqualTo("A");
+    assertThat(record.agentClientNumber()).isEqualTo("00022222");
+    assertThat(record.agentClientLocationCode()).isEqualTo("01");
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
+    verify(repository).replaceApplicationEndUses(
+        org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList());
   }
 
   @Test
-  void addApplicationShouldDefaultEntryUserWhenPrincipalIsMissing() {
-    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
-        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+  void addApplicationShouldRejectInvalidSpeciesEndUseBeforeOracleInsert() {
+    when(repository.findCandidateExcolCombinations(2, "FI", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("FI/BA/LU")));
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.addApplication(
@@ -311,6 +404,242 @@ class OracleApplicationDetailsRpcServiceTest {
                 "Agent Contact",
                 "Owner Contact",
                 null,
+                "LU",
+                List.of("FI", "HE"),
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains("The application species/enduse sort is not valid for the selected region.");
+    verify(repository).findCandidateExcolCombinations(2, "FI", 11L);
+    verify(repository, never()).insertApplication(any());
+  }
+
+  @Test
+  void addApplicationShouldPersistCreateCommentsAsRemark() {
+    Instant now = Instant.parse("2026-05-27T17:30:00Z");
+    when(repository.findCandidateExcolCombinations(1, "HE", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE")));
+    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+    when(repository.replaceApplicationEndUses(
+            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
+        .thenReturn(true);
+    when(repository.insertRemark(
+            org.mockito.ArgumentMatchers.eq(1000456L),
+            org.mockito.ArgumentMatchers.eq("Ready for review"),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith"),
+            any(Instant.class)))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.RemarkRow(
+                    12L, "Ready for review", "idir\\jsmith", now)));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                2.4d,
+                "Camp 1",
+                null,
+                null,
+                null,
+                "00011111",
+                "02",
+                null,
+                "U",
+                "O",
+                11L,
+                "T",
+                null,
+                null,
+                null,
+                "Owner Contact",
+                null,
+                "SA",
+                List.of("HE"),
+                " Ready for review ",
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.applicationNumber()).isEqualTo(1000456L);
+    verify(repository).replaceApplicationEndUses(
+        org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList());
+    verify(repository).insertRemark(
+        org.mockito.ArgumentMatchers.eq(1000456L),
+        org.mockito.ArgumentMatchers.eq("Ready for review"),
+        org.mockito.ArgumentMatchers.eq("idir\\jsmith"),
+        any(Instant.class));
+  }
+
+  @Test
+  void addApplicationShouldDefaultMissingApplicantTypeToOwnerBeforeOracleInsert() {
+    when(repository.findCandidateExcolCombinations(1, "HE", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE")));
+    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+    when(repository.replaceApplicationEndUses(
+            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
+        .thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                null,
+                "Camp 1",
+                null,
+                "00022222",
+                "01",
+                "00011111",
+                "02",
+                null,
+                "U",
+                null,
+                11L,
+                "T",
+                null,
+                null,
+                "Agent Contact",
+                "Owner Contact",
+                null,
+                null,
+                List.of("HE"),
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class);
+    verify(repository).insertApplication(recordCaptor.capture());
+    ApplicationDetailsRpcRepository.ApplicationInsertRecord record = recordCaptor.getValue();
+    assertThat(record.applicantTypeCode()).isEqualTo("O");
+    assertThat(record.agentClientNumber()).isNull();
+    assertThat(record.agentClientLocationCode()).isNull();
+    assertThat(record.agentContactName()).isNull();
+    assertThat(record.averageLogVolume()).isZero();
+    assertThat(record.jurisdictionCode()).isEqualTo("P");
+    assertThat(record.oicIndicator()).isEqualTo("N");
+  }
+
+  @Test
+  void addApplicationShouldRejectHarvestedWithoutGrowthTypeBeforeOracleInsert() {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                2.4d,
+                "Camp 1",
+                null,
+                null,
+                null,
+                "00011111",
+                "02",
+                null,
+                "U",
+                "O",
+                11L,
+                "H",
+                null,
+                null,
+                null,
+                "Owner Contact",
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("A valid growth type code is required.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addApplicationShouldRejectInvalidApplicantTypeBeforeOracleInsert() {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                2.4d,
+                "Camp 1",
+                null,
+                null,
+                null,
+                "00011111",
+                "02",
+                null,
+                "U",
+                "X",
+                11L,
+                "H",
+                null,
+                null,
+                null,
+                "Owner Contact",
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("The applicant type code must be O or A.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addApplicationShouldDefaultEntryUserWhenPrincipalIsMissing() {
+    when(repository.findCandidateExcolCombinations(2, "FI", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/FI/LU")));
+    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+    when(repository.replaceApplicationEndUses(
+            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
+        .thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                2.4d,
+                "Camp 1",
+                null,
+                "00022222",
+                "01",
+                "00011111",
+                "02",
+                null,
+                "U",
+                "A",
+                11L,
+                "H",
+                null,
+                "O",
+                "Agent Contact",
+                "Owner Contact",
+                null,
+                "LU",
+                List.of("FI", "HE"),
                 true),
             null);
 
@@ -370,6 +699,24 @@ class OracleApplicationDetailsRpcServiceTest {
             ApplicationDetailsRpcService.CodeItem::description)
         .containsExactly(tuple("FIR", "Douglas-fir"), tuple("HEM", "Hemlock"));
     verify(repository).findAllSpeciesCodes();
+  }
+
+  @Test
+  void getPackageStatusCodesShouldMapOracleCodeRows() {
+    when(repository.findAllPackageStatusCodes())
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.CodeRow(" ACT ", " Active ", 1L, 1L),
+                new ApplicationDetailsRpcRepository.CodeRow(" SHT ", " Shutout ", 1L, 2L)));
+
+    List<ApplicationDetailsRpcService.CodeItem> response = service.getPackageStatusCodes();
+
+    assertThat(response)
+        .extracting(
+            ApplicationDetailsRpcService.CodeItem::code,
+            ApplicationDetailsRpcService.CodeItem::description)
+        .containsExactly(tuple("ACT", "Active"), tuple("SHT", "Shutout"));
+    verify(repository).findAllPackageStatusCodes();
   }
 
   @Test
@@ -694,8 +1041,8 @@ class OracleApplicationDetailsRpcServiceTest {
                 "A",
                 "Test",
                 "N",
-                null,
-                null,
+                "S",
+                "H",
                 "LU",
                 List.of("FI", "HE")),
             " idir\\jsmith ");
@@ -713,9 +1060,98 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
     assertThat(record.endUses())
         .extracting(
-            ApplicationDetailsRpcRepository.PackageEndUseRecord::speciesCode,
-            ApplicationDetailsRpcRepository.PackageEndUseRecord::endUseCode)
+            ApplicationDetailsRpcRepository.EndUseMutationRecord::speciesCode,
+            ApplicationDetailsRpcRepository.EndUseMutationRecord::endUseCode)
         .containsExactly(tuple("FI", "LU"), tuple("HE", "LU"));
+  }
+
+  @Test
+  void addPackageShouldRejectWhenTotalPackageVolumeExceedsApplicationVolume() {
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageDetailsRow("PKG-1", 75.0d)));
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.addPackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                25.1d,
+                12.0d,
+                24.0d,
+                "A",
+                "Test",
+                "N",
+                "S",
+                "H",
+                null,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The total package volume must not exceed the application volume (100.0).");
+    verify(repository, never()).insertPackage(any());
+  }
+
+  @Test
+  void addPackageShouldRejectMissingPackageProductAndGrowthTypeBeforeOracleInsert() {
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L)).thenReturn(List.of());
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.addPackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                25.0d,
+                12.0d,
+                24.0d,
+                "A",
+                "Test",
+                "N",
+                null,
+                null,
+                "LU",
+                List.of("FI")),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).containsExactly("A valid package product type code is required.");
+    verify(repository, never()).insertPackage(any());
+  }
+
+  @Test
+  void addPackageShouldRejectMissingPackageGrowthTypeForHarvestedProductBeforeOracleInsert() {
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L)).thenReturn(List.of());
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.addPackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                25.0d,
+                12.0d,
+                24.0d,
+                "A",
+                "Test",
+                "N",
+                null,
+                "H",
+                "LU",
+                List.of("FI")),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).containsExactly("A valid package growth type code is required.");
+    verify(repository, never()).insertPackage(any());
   }
 
   @Test
@@ -774,6 +1210,84 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePackageShouldRejectWhenTotalPackageVolumeExceedsApplicationVolume() {
+    Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
+    when(repository.findPackageMutationByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-903", 1000456L, "N", 20.0d, 10.0d, 20.0d, "Old", null,
+                    null, null, "A", "O", "H", "idir\\old", entryTimestamp)));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageDetailsRow("PKG-903", 20.0d), packageDetailsRow("PKG-904", 80.0d)));
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.updatePackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                20.1d,
+                10.0d,
+                20.0d,
+                "A",
+                "Updated",
+                "N",
+                "O",
+                "H",
+                null,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The total package volume must not exceed the application volume (100.0).");
+    verify(repository, never()).updatePackage(any());
+  }
+
+  @Test
+  void updatePackageShouldRejectWhenPackageHasCompletedPermitScale() {
+    Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
+    when(repository.findPackageMutationByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-903", 1000456L, "N", 20.0d, 10.0d, 20.0d, "Old", null,
+                    null, null, "A", "O", "H", "idir\\old", entryTimestamp)));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetailsRow("55", "PKG-903", 0L, 5.0d, "7000123")));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L)).thenReturn(Optional.of("COM"));
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageDetailsRow("PKG-903", 20.0d)));
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.updatePackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                20.0d,
+                10.0d,
+                20.0d,
+                "A",
+                "Updated",
+                "N",
+                "O",
+                "H",
+                null,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains("Package changes are not allowed after a scale has been permitted.");
+    verify(repository, never()).updatePackage(any());
+  }
+
+  @Test
   void addScaleToPackageShouldInsertScaleAndReturnLegacyResult() {
     when(repository.packageExists("PKG-903")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
@@ -810,6 +1324,30 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository).insertScaleDetail(recordCaptor.capture());
     assertThat(recordCaptor.getValue().entryUserId()).isEqualTo("idir\\jsmith");
     assertThat(recordCaptor.getValue().speciesGradeVolume()).isEqualTo(12.5d);
+  }
+
+  @Test
+  void addScaleToPackageShouldRejectWhenPackageHasCompletedPermitScale() {
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetailsRow("55", "PKG-903", 1L, 12.5d, "7000123")));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L)).thenReturn(Optional.of("COM"));
+    when(repository.findPackageDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageDetailsRow(
+                    "PKG-903", 100.0d, 10.0d, 20.0d, "A", "", "N", "O", "H")));
+
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addScaleToPackage(
+            new ApplicationDetailsRpcService.ScaleMutationRequest(
+                "TM002", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains("Scale changes are not allowed after a permit has been completed.");
+    verify(repository, never()).insertScaleDetail(any());
   }
 
   @Test
@@ -852,21 +1390,475 @@ class OracleApplicationDetailsRpcServiceTest {
 
   @Test
   void deleteScaleByIdShouldDelegateToOracleRepository() {
+    when(repository.findScaleDetailById("55"))
+        .thenReturn(Optional.of(scaleDetailsRow("55", "PKG-903", 0L, 12.5d, null)));
     when(repository.deleteScaleById("55", "idir\\jsmith")).thenReturn(true);
 
     boolean response = service.deleteScaleById(" 55 ", " idir\\jsmith ");
 
     assertThat(response).isTrue();
+    verify(repository).findScaleDetailById("55");
     verify(repository).deleteScaleById("55", "idir\\jsmith");
   }
 
   @Test
+  void deleteScaleByIdShouldRejectCompletedPermitScale() {
+    when(repository.findScaleDetailById("55"))
+        .thenReturn(Optional.of(scaleDetailsRow("55", "PKG-903", 0L, 12.5d, "7000123")));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L)).thenReturn(Optional.of("COM"));
+
+    boolean response = service.deleteScaleById("55", "idir\\jsmith");
+
+    assertThat(response).isFalse();
+    verify(repository, never()).deleteScaleById(any(), any());
+  }
+
+  @Test
   void deletePackageByIdShouldDelegateToOracleRepository() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
     when(repository.deletePackageById("PKG-903", "idir\\jsmith")).thenReturn(true);
 
     boolean response = service.deletePackageById(" PKG-903 ", " idir\\jsmith ");
 
     assertThat(response).isTrue();
+    verify(repository).findScaleDetailsByPackageNumber("PKG-903");
     verify(repository).deletePackageById("PKG-903", "idir\\jsmith");
+  }
+
+  @Test
+  void deletePackageByIdShouldRejectPackageWithScalePieces() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetailsRow("55", "PKG-903", 3L, 12.5d, null)));
+
+    boolean response = service.deletePackageById("PKG-903", "idir\\jsmith");
+
+    assertThat(response).isFalse();
+    verify(repository, never()).deletePackageById(any(), any());
+  }
+
+  @Test
+  void deletePackageByIdShouldRejectPackageWithCompletedPermitScale() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetailsRow("55", "PKG-903", 0L, 12.5d, "7000123")));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L)).thenReturn(Optional.of("COM"));
+
+    boolean response = service.deletePackageById("PKG-903", "idir\\jsmith");
+
+    assertThat(response).isFalse();
+    verify(repository, never()).deletePackageById(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldOverlayEditableFieldsAndPreserveExistingRecord() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.updateApplication(any(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class)))
+        .thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                LocalDate.of(2026, 4, 1),
+                45L,
+                LocalDate.of(2026, 4, 2),
+                125.5d,
+                2.1d,
+                "U",
+                "Camp 2",
+                12L,
+                "00033333",
+                "01",
+                "00022222",
+                "02",
+                "APP",
+                "A",
+                12L,
+                "S",
+                "P",
+                "S",
+                "Agent Contact",
+                "Owner Two",
+                "N",
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.applicationNumber()).isEqualTo(1000456L);
+
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository).updateApplication(recordCaptor.capture());
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord record = recordCaptor.getValue();
+    assertThat(record.applicationDate()).isEqualTo(LocalDate.of(2026, 4, 1));
+    assertThat(record.termDays()).isEqualTo(45L);
+    assertThat(record.receivedDate()).isEqualTo(LocalDate.of(2026, 4, 2));
+    assertThat(record.applicationVolume()).isEqualTo(125.5d);
+    assertThat(record.averageLogVolume()).isEqualTo(2.1d);
+    assertThat(record.exemptionReasonCode()).isEqualTo("U");
+    assertThat(record.applicationStatusCode()).isEqualTo("APP");
+    assertThat(record.ownerClientNumber()).isEqualTo("00022222");
+    assertThat(record.ownerClientLocationCode()).isEqualTo("02");
+    assertThat(record.agentClientNumber()).isEqualTo("00033333");
+    assertThat(record.agentClientLocationCode()).isEqualTo("01");
+    assertThat(record.productLocation()).isEqualTo("Camp 2");
+    assertThat(record.exportScheduleId()).isEqualTo(12L);
+    assertThat(record.applicantTypeCode()).isEqualTo("A");
+    assertThat(record.orgUnitNumber()).isEqualTo(12L);
+    assertThat(record.productTypeCode()).isEqualTo("S");
+    assertThat(record.growthTypeCode()).isEqualTo("S");
+    assertThat(record.agentContactName()).isEqualTo("Agent Contact");
+    assertThat(record.ownerContactName()).isEqualTo("Owner Two");
+    assertThat(record.updateUserId()).isEqualTo("idir\\jsmith");
+  }
+
+  @Test
+  void getApplicationSummarySnapshotShouldExposeEditableLegacyFields() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+
+    Optional<ApplicationDetailsRpcService.ApplicationSummarySnapshot> response =
+        service.getApplicationSummarySnapshot(1000456L);
+
+    assertThat(response).isPresent();
+    assertThat(response.get().applicationNumber()).isEqualTo(1000456L);
+    assertThat(response.get().productLocation()).isEqualTo("Camp 1");
+    assertThat(response.get().ownerClientLocationCode()).isEqualTo("00");
+    assertThat(response.get().ownerContactName()).isEqualTo("Owner Contact");
+    assertThat(response.get().orgUnitNumber()).isEqualTo(11L);
+    verify(repository).findApplicationUpdateRecord(1000456L);
+  }
+
+  @Test
+  void isApplicationVolumeUsedShouldReturnTrueWhenRoundedPackageVolumeMatchesApplicationVolume() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageDetailsRow("PKG-1", 49.95d), packageDetailsRow("PKG-2", 50.04d)));
+
+    assertThat(service.isApplicationVolumeUsed(1000456L)).isTrue();
+
+    verify(repository).findApplicationUpdateRecord(1000456L);
+    verify(repository).findPackagesByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void isApplicationVolumeUsedShouldReturnFalseWhenPackageVolumeDoesNotMeetApplicationVolume() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageDetailsRow("PKG-1", 40.0d), packageDetailsRow("PKG-2", 59.9d)));
+
+    assertThat(service.isApplicationVolumeUsed(1000456L)).isFalse();
+  }
+
+  @Test
+  void isApplicationVolumeUsedShouldDefaultTrueWhenApplicationIsMissing() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.empty());
+
+    assertThat(service.isApplicationVolumeUsed(1000456L)).isTrue();
+
+    verify(repository).findApplicationUpdateRecord(1000456L);
+  }
+
+  @Test
+  void isApplicationVolumeUsedShouldDefaultTrueForInvalidApplicationNumber() {
+    assertThat(service.isApplicationVolumeUsed(null)).isTrue();
+
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void updateApplicationSummaryShouldValidateBeforeOracleUpdate() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                LocalDate.of(2026, 4, 1),
+                0L,
+                LocalDate.of(2026, 4, 2),
+                125.5d,
+                2.1d,
+                "ALL",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "The application term days must be greater than or equal to 0",
+            "The application exemption reason code must be 1 character or fewer.");
+    verify(repository).findApplicationUpdateRecord(1000456L);
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRejectNonEditableStoredStatusBeforeOracleUpdate() {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithStatus("EXP")));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                LocalDate.of(2026, 4, 1),
+                30L,
+                LocalDate.of(2026, 4, 2),
+                125.5d,
+                2.1d,
+                "U",
+                "Camp 2",
+                null,
+                null,
+                null,
+                "00022222",
+                "02",
+                "NEW",
+                "O",
+                12L,
+                "H",
+                "P",
+                "O",
+                null,
+                "Owner Two",
+                "N",
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Application details can only be edited while the application is new or approved.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRejectNonEditableTargetStatusBeforeOracleUpdate() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                LocalDate.of(2026, 4, 1),
+                30L,
+                LocalDate.of(2026, 4, 2),
+                125.5d,
+                2.1d,
+                "U",
+                "Camp 2",
+                null,
+                null,
+                null,
+                "00022222",
+                "02",
+                "REJ",
+                "O",
+                12L,
+                "H",
+                "P",
+                "O",
+                null,
+                "Owner Two",
+                "N",
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains("Application details can only be edited while the application is new or approved.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRejectLegacyVolumeRangeBeforeOracleUpdate() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                LocalDate.of(2026, 4, 1),
+                30L,
+                LocalDate.of(2026, 4, 2),
+                10_000_000.0d,
+                100.0d,
+                "U",
+                "Camp 2",
+                null,
+                null,
+                null,
+                "00022222",
+                "02",
+                "NEW",
+                "O",
+                12L,
+                "H",
+                "P",
+                "O",
+                null,
+                "Owner Two",
+                "N",
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "The application volume must be less than or equal to 9999999.9.",
+            "The average log volume must be less than or equal to 99.9.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest applicationSummaryUpdateRequest(
+      Long applicationNumber,
+      LocalDate applicationDate,
+      Long termDays,
+      LocalDate receivedDate,
+      Double applicationVolume,
+      Double averageLogVolume,
+      String exemptionReasonCode,
+      String productLocation,
+      Long exportScheduleId,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String applicationStatusCode,
+      String applicantTypeCode,
+      Long orgUnitNumber,
+      String productTypeCode,
+      String jurisdictionCode,
+      String growthTypeCode,
+      String agentContactName,
+      String ownerContactName,
+      String oicIndicator,
+      boolean validationEnabled) {
+    return new ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest(
+        applicationNumber,
+        applicationDate,
+        termDays,
+        receivedDate,
+        applicationVolume,
+        averageLogVolume,
+        exemptionReasonCode,
+        productLocation,
+        exportScheduleId,
+        agentClientNumber,
+        agentClientLocationCode,
+        ownerClientNumber,
+        ownerClientLocationCode,
+        applicationStatusCode,
+        applicantTypeCode,
+        orgUnitNumber,
+        productTypeCode,
+        jurisdictionCode,
+        growthTypeCode,
+        agentContactName,
+        ownerContactName,
+        oicIndicator,
+        validationEnabled);
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationUpdateRecord applicationUpdateRecord() {
+    return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
+        1000456L,
+        null,
+        LocalDate.of(2026, 3, 1),
+        30L,
+        LocalDate.of(2026, 3, 2),
+        100.0d,
+        1.5d,
+        "Camp 1",
+        "idir\\creator",
+        Instant.parse("2026-03-01T18:00:00Z"),
+        null,
+        null,
+        99L,
+        null,
+        null,
+        "00011111",
+        "00",
+        "EX-100",
+        "S",
+        "NEW",
+        "O",
+        11L,
+        "H",
+        "P",
+        "O",
+        null,
+        "Owner Contact",
+        "N");
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationUpdateRecord applicationUpdateRecordWithStatus(
+      String applicationStatusCode) {
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord record = applicationUpdateRecord();
+    return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
+        record.applicationNumber(),
+        record.federalApplicationNumber(),
+        record.applicationDate(),
+        record.termDays(),
+        record.receivedDate(),
+        record.applicationVolume(),
+        record.averageLogVolume(),
+        record.productLocation(),
+        record.entryUserId(),
+        record.entryTimestamp(),
+        record.updateUserId(),
+        record.updateTimestamp(),
+        record.exportScheduleId(),
+        record.agentClientNumber(),
+        record.agentClientLocationCode(),
+        record.ownerClientNumber(),
+        record.ownerClientLocationCode(),
+        record.exemptionNumber(),
+        record.exemptionReasonCode(),
+        applicationStatusCode,
+        record.applicantTypeCode(),
+        record.orgUnitNumber(),
+        record.productTypeCode(),
+        record.jurisdictionCode(),
+        record.growthTypeCode(),
+        record.agentContactName(),
+        record.ownerContactName(),
+        record.oicIndicator());
+  }
+
+  private ApplicationDetailsRpcRepository.PackageDetailsRow packageDetailsRow(
+      String packageNumber, double packageVolume) {
+    return new ApplicationDetailsRpcRepository.PackageDetailsRow(
+        packageNumber, packageVolume, 0.0d, 0.0d, "ACT", null, "N", "S", "H");
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationScaleDetailRow scaleDetailsRow(
+      String scaleDetailId,
+      String packageNumber,
+      long pieces,
+      double volume,
+      String exportPermitDetailNumber) {
+    return new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+        scaleDetailId,
+        "TM001",
+        "FI",
+        "1",
+        volume,
+        pieces,
+        1000456L,
+        exportPermitDetailNumber,
+        packageNumber,
+        "");
   }
 }

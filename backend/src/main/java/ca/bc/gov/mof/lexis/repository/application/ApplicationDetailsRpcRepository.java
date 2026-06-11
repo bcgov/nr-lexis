@@ -44,6 +44,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
   private static final String FIND_PACKAGE_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
+  private static final String FIND_PACKAGES_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_END_USE_BY_APPLICATION =
@@ -54,6 +56,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
   private static final String FIND_ALL_SPECIES_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_SPECIES_CODES(?)";
+  private static final String FIND_ALL_PACKAGE_STATUS_CODES =
+      LEXIS_CODES_PACKAGE + "FIND_ALL_PACKAGE_STATUS_CODES(?)";
   private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
   private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
   private static final String FIND_END_USE_CODE = LEXIS_CODES_PACKAGE + "FIND_END_USE_CODE(?,?)";
@@ -91,6 +95,10 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "INSERT_SCALE_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String UPDATE_SCALE =
       LEXIS_GROUP_9_PACKAGE + "UPDATE_SCALE(?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String INSERT_END_USE =
+      LEXIS_GROUP_14_PACKAGE + "INSERT_END_USE(?,?,?)";
+  private static final String DELETE_END_USE =
+      LEXIS_GROUP_14_PACKAGE + "DELETE_END_USE(?)";
   private static final String INSERT_END_USE_PACKAGE =
       LEXIS_GROUP_14_PACKAGE + "INSERT_END_USE_PACKAGE(?,?,?)";
   private static final String DELETE_END_USE_PACKAGE =
@@ -98,6 +106,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   private static final String INSERT_EXEMPTION_APPLICATION =
       LEXIS_GROUP_13_PACKAGE
           + "INSERT_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String UPDATE_EXEMPTION_APPLICATION =
+      LEXIS_GROUP_14_PACKAGE + "UPDATE_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
   public ApplicationDetailsRpcRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -221,17 +231,18 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         FIND_PACKAGE_BY_NUMBER,
         cs -> cs.setString(1, normalized),
         2,
-        rs ->
-            new PackageDetailsRow(
-                getString(rs, "PACKAGE_NUMBER"),
-                zeroIfNull(getDouble(rs, "PACKAGE_VOLUME")),
-                zeroIfNull(getDouble(rs, "AVERAGE_LENGTH")),
-                zeroIfNull(getDouble(rs, "AVERAGE_DIAMETER")),
-                getString(rs, "EXPORT_PACKAGE_STATUS_CODE"),
-                getString(rs, "COMMENTS"),
-                getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
-                getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
-                getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));
+        this::mapPackageDetailsRow);
+  }
+
+  public List<PackageDetailsRow> findPackagesByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_PACKAGES_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        this::mapPackageDetailsRow);
   }
 
   public Optional<PackageMutationRow> findPackageMutationByPackageNumber(String packageNumber) {
@@ -478,6 +489,43 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         this::mapApplicationInsertRow);
   }
 
+  public Optional<ApplicationUpdateRecord> findApplicationUpdateRecord(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_APPLICATION_BY_NUMBER,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        this::mapApplicationUpdateRecord);
+  }
+
+  public boolean updateApplication(ApplicationUpdateRecord record) {
+    if (record == null || record.applicationNumber() == null || record.applicationNumber() < 1) {
+      return false;
+    }
+    return executeProcedure(UPDATE_EXEMPTION_APPLICATION, cs -> bindApplicationUpdate(cs, record));
+  }
+
+  @Transactional
+  public boolean replaceApplicationEndUses(Long applicationNumber, List<EndUseMutationRecord> endUses) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+
+    if (!deleteApplicationEndUses(applicationNumber)) {
+      markRollbackOnly();
+      return false;
+    }
+
+    if (!insertApplicationEndUses(applicationNumber, endUses)) {
+      markRollbackOnly();
+      return false;
+    }
+
+    return true;
+  }
+
   public Optional<ApplicationClientSnapshotRow> findApplicationClientSnapshot(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
@@ -522,6 +570,23 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   public List<CodeRow> findAllSpeciesCodes() {
     return queryCursorProcedure(
             FIND_ALL_SPECIES_CODES,
+            null,
+            1,
+            rs ->
+                new CodeRow(
+                    getString(rs, "CODE"),
+                    getString(rs, "DESCRIPTION"),
+                    zeroIfNull(getLong(rs, "GROUP_BY")),
+                    zeroIfNull(getLong(rs, "ORDER_BY"))))
+        .stream()
+        .filter(row -> trim(row.code()) != null && trim(row.description()) != null)
+        .sorted(Comparator.comparingLong(CodeRow::groupBy).thenComparingLong(CodeRow::orderBy))
+        .toList();
+  }
+
+  public List<CodeRow> findAllPackageStatusCodes() {
+    return queryCursorProcedure(
+            FIND_ALL_PACKAGE_STATUS_CODES,
             null,
             1,
             rs ->
@@ -742,6 +807,39 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index, record.oicIndicator());
   }
 
+  private void bindApplicationUpdate(CallableStatement cs, ApplicationUpdateRecord record)
+      throws SQLException {
+    int index = 1;
+    setLongOrNull(cs, index++, record.applicationNumber());
+    setLongOrNull(cs, index++, emptyToNull(record.federalApplicationNumber()));
+    setDateOrNull(cs, index++, record.applicationDate());
+    setLongOrNull(cs, index++, record.termDays());
+    setDateOrNull(cs, index++, record.receivedDate());
+    setDoubleOrNull(cs, index++, record.applicationVolume());
+    setDoubleOrNull(cs, index++, record.averageLogVolume());
+    setStringOrNull(cs, index++, record.productLocation());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
+    setTimestampOrNull(cs, index++, record.entryTimestamp());
+    cs.setString(index++, auditUserOrDefault(record.updateUserId()));
+    setTimestampOrNull(cs, index++, record.updateTimestamp());
+    setLongOrNull(cs, index++, record.exportScheduleId());
+    setStringOrNull(cs, index++, record.agentClientNumber());
+    setStringOrNull(cs, index++, record.agentClientLocationCode());
+    setStringOrNull(cs, index++, record.ownerClientNumber());
+    setStringOrNull(cs, index++, record.ownerClientLocationCode());
+    setStringOrNull(cs, index++, record.exemptionNumber());
+    setStringOrNull(cs, index++, record.exemptionReasonCode());
+    setStringOrNull(cs, index++, record.applicationStatusCode());
+    setStringOrNull(cs, index++, record.applicantTypeCode());
+    setLongOrNull(cs, index++, record.orgUnitNumber());
+    setStringOrNull(cs, index++, record.productTypeCode());
+    setStringOrNull(cs, index++, record.jurisdictionCode());
+    setStringOrNull(cs, index++, record.growthTypeCode());
+    setStringOrNull(cs, index++, record.agentContactName());
+    setStringOrNull(cs, index++, record.ownerContactName());
+    setStringOrNull(cs, index, record.oicIndicator());
+  }
+
   private void bindPackageInsert(CallableStatement cs, PackageMutationRecord record)
       throws SQLException {
     int index = 1;
@@ -820,7 +918,42 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     cs.setTimestamp(index, Timestamp.from(Instant.now()));
   }
 
-  private boolean insertPackageEndUses(String packageNumber, List<PackageEndUseRecord> endUses) {
+  private boolean insertApplicationEndUses(Long applicationNumber, List<EndUseMutationRecord> endUses) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+    if (endUses == null || endUses.isEmpty()) {
+      return true;
+    }
+    for (EndUseMutationRecord endUse : endUses) {
+      String speciesCode = trim(endUse.speciesCode());
+      String endUseCode = trim(endUse.endUseCode());
+      if (speciesCode == null || endUseCode == null) {
+        continue;
+      }
+      boolean inserted =
+          executeProcedure(
+              INSERT_END_USE,
+              cs -> {
+                cs.setLong(1, applicationNumber);
+                cs.setString(2, speciesCode);
+                cs.setString(3, endUseCode);
+              });
+      if (!inserted) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private boolean deleteApplicationEndUses(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+    return executeProcedure(DELETE_END_USE, cs -> cs.setLong(1, applicationNumber));
+  }
+
+  private boolean insertPackageEndUses(String packageNumber, List<EndUseMutationRecord> endUses) {
     String normalizedPackageNumber = trim(packageNumber);
     if (normalizedPackageNumber == null) {
       return false;
@@ -828,7 +961,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (endUses == null || endUses.isEmpty()) {
       return true;
     }
-    for (PackageEndUseRecord endUse : endUses) {
+    for (EndUseMutationRecord endUse : endUses) {
       String speciesCode = trim(endUse.speciesCode());
       String endUseCode = trim(endUse.endUseCode());
       if (speciesCode == null || endUseCode == null) {
@@ -879,6 +1012,38 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
   private ApplicationInsertRow mapApplicationInsertRow(ResultSet rs) {
     return new ApplicationInsertRow(getLong(rs, "APPLICATION_NUMBER"));
+  }
+
+  private ApplicationUpdateRecord mapApplicationUpdateRecord(ResultSet rs) {
+    return new ApplicationUpdateRecord(
+        getLong(rs, "APPLICATION_NUMBER"),
+        getLong(rs, "FED_APPLICATION_NUMBER"),
+        getLocalDate(rs, "APPLICATION_DATE"),
+        getLong(rs, "TERM_DAYS"),
+        getLocalDate(rs, "RECEIVED_DATE"),
+        getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
+        getDouble(rs, "AVERAGE_LOG_VOLUME"),
+        getString(rs, "PRODUCT_LOCATION"),
+        getString(rs, "ENTRY_USERID"),
+        getInstant(rs, "ENTRY_TIMESTAMP"),
+        getString(rs, "UPDATE_USERID"),
+        getInstant(rs, "UPDATE_TIMESTAMP"),
+        getLong(rs, "EXPORT_SCHEDULE_ID"),
+        getString(rs, "AGENT_CLIENT_NUMBER"),
+        getString(rs, "AGENT_CLIENT_LOCATION_CODE"),
+        getString(rs, "OWNER_CLIENT_NUMBER"),
+        getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
+        getString(rs, "EXEMPTION_NUMBER"),
+        getString(rs, "EXPORT_EXEMPTION_REASON_CODE"),
+        getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
+        getString(rs, "EXPORT_APPLICANT_TYPE_CODE"),
+        getLong(rs, "ORG_UNIT_NO"),
+        getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
+        getString(rs, "EXPORT_JURISDICTION_CODE"),
+        getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+        getString(rs, "AGENT_CONTACT_NAME"),
+        getString(rs, "OWNER_CONTACT_NAME"),
+        getString(rs, "OIC_INDICATOR"));
   }
 
   private ApplicationScaleDetailRow mapApplicationScaleDetailRow(ResultSet rs) {
@@ -1007,6 +1172,36 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
   public record ApplicationInsertRow(Long applicationNumber) {}
 
+  public record ApplicationUpdateRecord(
+      Long applicationNumber,
+      Long federalApplicationNumber,
+      LocalDate applicationDate,
+      Long termDays,
+      LocalDate receivedDate,
+      Double applicationVolume,
+      Double averageLogVolume,
+      String productLocation,
+      String entryUserId,
+      Instant entryTimestamp,
+      String updateUserId,
+      Instant updateTimestamp,
+      Long exportScheduleId,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String exemptionNumber,
+      String exemptionReasonCode,
+      String applicationStatusCode,
+      String applicantTypeCode,
+      Long orgUnitNumber,
+      String productTypeCode,
+      String jurisdictionCode,
+      String growthTypeCode,
+      String agentContactName,
+      String ownerContactName,
+      String oicIndicator) {}
+
   public record ApplicationClientSnapshotRow(
       String agentClientNumber,
       String agentClientLocationCode,
@@ -1044,7 +1239,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String packageNumber,
       String cascadeSplitCode) {}
 
-  public record PackageEndUseRecord(String speciesCode, String endUseCode) {}
+  public record EndUseMutationRecord(String speciesCode, String endUseCode) {}
 
   public record PackageMutationRecord(
       String packageNumber,
@@ -1063,7 +1258,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String entryUserId,
       Instant entryTimestamp,
       String updateUserId,
-      List<PackageEndUseRecord> endUses) {}
+      List<EndUseMutationRecord> endUses) {}
 
   public record PackageMutationRow(
       String packageNumber,
@@ -1120,6 +1315,19 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String reprocessedIndicator,
       String growthTypeCode,
       String productTypeCode) {}
+
+  private PackageDetailsRow mapPackageDetailsRow(ResultSet rs) throws SQLException {
+    return new PackageDetailsRow(
+        getString(rs, "PACKAGE_NUMBER"),
+        zeroIfNull(getDouble(rs, "PACKAGE_VOLUME")),
+        zeroIfNull(getDouble(rs, "AVERAGE_LENGTH")),
+        zeroIfNull(getDouble(rs, "AVERAGE_DIAMETER")),
+        getString(rs, "EXPORT_PACKAGE_STATUS_CODE"),
+        getString(rs, "COMMENTS"),
+        getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
+        getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+        getString(rs, "EXPORT_PRODUCT_TYPE_CODE"));
+  }
 
   private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
     String normalized = trim(value);

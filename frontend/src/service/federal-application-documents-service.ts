@@ -34,6 +34,7 @@ export const openFederalApplicationDocument = (
 
 export const removeFederalApplicationDocument = (
   documentId: string,
+  applicationNumber: string,
 ): Promise<RemoveFederalApplicationDocumentResult> => {
-  return removeApplicationDocument(documentId)
+  return removeApplicationDocument(documentId, applicationNumber)
 }

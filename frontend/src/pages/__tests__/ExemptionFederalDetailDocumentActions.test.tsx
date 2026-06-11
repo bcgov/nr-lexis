@@ -424,7 +424,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.click(deleteButton)
 
     await waitFor(() => {
-      expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('800')
+      expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('800', '888')
       expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledTimes(2)
       expect(screen.queryByText('federal-doc.pdf')).not.toBeInTheDocument()
     })

@@ -49,6 +49,11 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
           new CodeNameDto("LOG", "Logs"),
           new CodeNameDto("LUM", "Lumber"));
 
+  private static final List<CodeNameDto> GROWTH_TYPES =
+      List.of(
+          new CodeNameDto("O", "Old Growth"),
+          new CodeNameDto("S", "Second Growth"));
+
   private static final List<CodeNameDto> REGIONS =
       List.of(
           new CodeNameDto("11", "Cariboo"),
@@ -89,7 +94,11 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
                   new LexisApplicationDetailDto.LexisPackageDto("PKG-902", 90.2, 33)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      "Initial Review", "Submitted with complete scale package.")),
+                      1001L,
+                      "Initial Review",
+                      "Submitted with complete scale package.",
+                      "system",
+                      LocalDate.of(2026, 1, 15))),
               List.of()),
           new ApplicationRecord(
               1000456L,
@@ -121,11 +130,20 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
               List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", 95.0, 28)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      "Pending", "Awaiting agency confirmation for listing date.")),
+                      1002L,
+                      "Pending",
+                      "Awaiting agency confirmation for listing date.",
+                      "system",
+                      LocalDate.of(2026, 2, 21))),
               List.of(
-                  new LexisApplicationDetailDto.LexisOfferDto("OF-810", true, null),
                   new LexisApplicationDetailDto.LexisOfferDto(
-                      "OF-803", true, LocalDate.of(2026, 3, 20)))),
+                      "OF-810", "Example Timber Ltd.", LocalDate.of(2026, 3, 1), true, null),
+                  new LexisApplicationDetailDto.LexisOfferDto(
+                      "OF-803",
+                      "Interior Mill Co.",
+                      LocalDate.of(2026, 2, 28),
+                      true,
+                      LocalDate.of(2026, 3, 20)))),
           new ApplicationRecord(
               1000999L,
               "PER",
@@ -156,15 +174,29 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
               List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-950", 325.75, 88)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      "Completed", "Permit issued and application closed.")),
+                      1003L,
+                      "Completed",
+                      "Permit issued and application closed.",
+                      "system",
+                      LocalDate.of(2025, 12, 2))),
               List.of(
                   new LexisApplicationDetailDto.LexisOfferDto(
-                      "OF-990", true, LocalDate.of(2025, 12, 20)))));
+                      "OF-990",
+                      "North Coast Exports",
+                      LocalDate.of(2025, 12, 2),
+                      true,
+                      LocalDate.of(2025, 12, 20)))));
 
   @Override
   public LexisApplicationSearchOptionsDto searchOptions() {
     return new LexisApplicationSearchOptionsDto(
-        EXEMPTION_TYPES, EXEMPTION_REASONS, APPLICATION_STATUSES, PRODUCT_TYPES, REGIONS);
+        EXEMPTION_TYPES,
+        EXEMPTION_REASONS,
+        APPLICATION_STATUSES,
+        PRODUCT_TYPES,
+        GROWTH_TYPES,
+        REGIONS,
+        List.of());
   }
 
   @Override

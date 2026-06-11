@@ -26,11 +26,16 @@ export type ProvincialApplicationDetail = {
     pieceCount: number
   }[]
   remarks: {
+    remarkId: number | null
     title: string
     remark: string
+    user?: string | null
+    date?: string | null
   }[]
   offers: {
     offerNumber: string
+    companyName: string | null
+    receivedDate: string | null
     validOffer: boolean
     withdrawalDate: string | null
   }[]

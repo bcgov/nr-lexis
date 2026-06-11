@@ -783,6 +783,17 @@ body {
   margin-top: 1rem;
 }
 
+.application-client-summary-grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.application-client-summary__title {
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+}
+
 .legacy-sort-button {
   appearance: none;
   background: transparent;
@@ -851,6 +862,10 @@ body {
 
 .application-items-section {
   min-width: 0;
+}
+
+.application-items-summary {
+  margin-top: 1rem;
 }
 
 .application-items-section h3 {

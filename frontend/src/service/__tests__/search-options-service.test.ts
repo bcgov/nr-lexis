@@ -34,7 +34,12 @@ describe('search-options-service', () => {
       ],
       applicationStatuses: [{ code: 'NEW', name: 'New' }],
       productTypes: [{ code: 'LOG', name: 'Logs' }],
+      growthTypes: [{ code: 'O', name: 'Old Growth' }],
       regions: [{ code: '11', name: 'Cariboo' }, { code: '12' }],
+      currentSchedules: [
+        { code: '987', name: '2026-01-11' },
+        { code: '', name: 'Bad Schedule' },
+      ],
     })
 
     const result = await fetchProvincialApplicationOptions()
@@ -55,7 +60,9 @@ describe('search-options-service', () => {
       exemptionReasons: [{ value: 'U', label: 'Unadvertised' }],
       applicationStatuses: [{ value: 'NEW', label: 'New' }],
       productTypes: [{ value: 'LOG', label: 'Logs' }],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '11', label: 'Cariboo' }],
+      currentSchedules: [{ value: '987', label: '2026-01-11' }],
     })
   })
 

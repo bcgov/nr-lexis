@@ -50,6 +50,11 @@ export type ApplicationScaleDetails = {
   id: string
 }
 
+export type ApplicationPermitRow = {
+  permitNumber: string
+  permitStatusDescription: string
+}
+
 export type ApplicationPackageMutation = {
   packageNumber: string
   newPackageNumber?: string
@@ -92,6 +97,65 @@ export type ApplicationScaleMutationResult = {
 
 export type DeleteApplicationItemResult = {
   success: boolean
+}
+
+export type ApplicationRemarkMutation = {
+  applicationNumber: string
+  remarkBody: string
+  remarkId?: string
+}
+
+export type ApplicationSummaryMutation = {
+  applicationNumber: string
+  applicationDate: string
+  receivedDate: string
+  termDays: string
+  applicationVolume: string
+  averageLogVolume: string
+  exemptionReasonCode: string
+  productLocation: string
+  exportScheduleId: string
+  agentClientNumber: string
+  agentClientLocationCode: string
+  ownerClientNumber: string
+  ownerClientLocationCode: string
+  applicationStatusCode: string
+  applicantTypeCode: string
+  orgUnitNumber: string
+  productTypeCode: string
+  jurisdictionCode: string
+  growthTypeCode: string
+  agentContactName: string
+  ownerContactName: string
+  oicIndicator: string
+  endUseCode: string
+  speciesCodes: string[]
+}
+
+export type ApplicationRemarkMutationResult = {
+  success: boolean
+  remarkId: string
+  remark: string
+  title: string
+  user: string
+  status: string
+}
+
+export type ApplicationSummaryMutationResult = {
+  valid: boolean
+  message: string
+  applicationNumber: string
+  errors: string[]
+  warnings: string[]
+}
+
+export type ApplicationVolumeUsageResult = {
+  volumeUsed: boolean
+}
+
+export type ApplicationSummarySnapshot = ApplicationSummaryMutation & {
+  federalApplicationNumber: string
+  exemptionNumber: string
 }
 
 const ITEMS_CACHE_TTL_MS = 30_000
@@ -234,7 +298,7 @@ const normalizePackageScaleRow = (row: unknown): ApplicationPackageScaleRow => {
     grade: asString(source.grade),
     volume: asString(source.volume),
     id: asString(source.id || source.scaleId || source.scaleDetailId),
-    cascadeSplitCode: asString(source.cascadeSplitCode),
+    cascadeSplitCode: asString(source.cascadeSplitCode || source.scaleType || source.type),
   }
 }
 
@@ -248,6 +312,16 @@ const normalizeScaleDetails = (payload: unknown): ApplicationScaleDetails => {
     grade: asString(source.grade),
     volume: asString(source.volume),
     id: asString(source.id || source.scaleId || source.scaleDetailId),
+  }
+}
+
+const normalizeApplicationPermitRow = (row: unknown): ApplicationPermitRow => {
+  const source = (row ?? {}) as Record<string, unknown>
+  return {
+    permitNumber: asString(source.permitNumber),
+    permitStatusDescription: asString(
+      source.permitStatusDescription || source.statusDescription || source.status,
+    ),
   }
 }
 
@@ -268,6 +342,81 @@ const normalizeScaleMutationResult = (payload: unknown): ApplicationScaleMutatio
     result: source.result ? normalizePackageScaleRow(source.result) : null,
     errors: asStringArray(source.errors),
     warnings: asStringArray(source.warnings),
+  }
+}
+
+const normalizeRemarkMutationResult = (payload: unknown): ApplicationRemarkMutationResult => {
+  const source = (payload ?? {}) as Record<string, unknown>
+  const status = asString(source.status)
+  return {
+    success: status.toLowerCase() === 'ok',
+    status,
+    remarkId: asString(source.remarkId),
+    remark: asString(source.remark),
+    title: asString(source.title),
+    user: asString(source.user),
+  }
+}
+
+const normalizeApplicationSummaryMutationResult = (
+  payload: unknown,
+): ApplicationSummaryMutationResult => {
+  const source = (payload ?? {}) as Record<string, unknown>
+  return {
+    valid: asBoolean(source.valid),
+    message: asString(source.message),
+    applicationNumber: asString(source.applicationNumber),
+    errors: asStringArray(source.errors),
+    warnings: asStringArray(source.warnings),
+  }
+}
+
+const normalizeApplicationSummarySnapshot = (payload: unknown): ApplicationSummarySnapshot => {
+  const source = (payload ?? {}) as Record<string, unknown>
+  return {
+    applicationNumber: asString(source.applicationNumber),
+    federalApplicationNumber: asString(source.federalApplicationNumber),
+    applicationDate: asString(source.applicationDate),
+    termDays: asString(source.termDays),
+    receivedDate: asString(source.receivedDate),
+    applicationVolume: asString(source.applicationVolume),
+    averageLogVolume: asString(source.averageLogVolume),
+    productLocation: asString(source.productLocation),
+    exportScheduleId: asString(source.exportScheduleId),
+    agentClientNumber: asString(source.agentClientNumber),
+    agentClientLocationCode: asString(source.agentClientLocationCode),
+    ownerClientNumber: asString(source.ownerClientNumber),
+    ownerClientLocationCode: asString(source.ownerClientLocationCode),
+    exemptionNumber: asString(source.exemptionNumber),
+    exemptionReasonCode: asString(source.exemptionReasonCode),
+    applicationStatusCode: asString(source.applicationStatusCode),
+    applicantTypeCode: asString(source.applicantTypeCode),
+    orgUnitNumber: asString(source.orgUnitNumber),
+    productTypeCode: asString(source.productTypeCode),
+    jurisdictionCode: asString(source.jurisdictionCode),
+    growthTypeCode: asString(source.growthTypeCode),
+    agentContactName: asString(source.agentContactName),
+    ownerContactName: asString(source.ownerContactName),
+    oicIndicator: asString(source.oicIndicator),
+    endUseCode: asString(source.endUseCode),
+    speciesCodes: asStringArray(source.speciesCodes),
+  }
+}
+
+export const fetchApplicationSummarySnapshot = async (
+  applicationNumber: string,
+): Promise<ApplicationSummarySnapshot | null> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/application-summary',
+      {
+        params: { applicationNumber },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return normalizeApplicationSummarySnapshot(response.data)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application summary fields.', error)
   }
 }
 
@@ -305,6 +454,23 @@ export const fetchApplicationPackageSpecies = async (
   }
 }
 
+export const fetchApplicationSpecies = async (
+  applicationNumber: string,
+): Promise<ApplicationPackageSpeciesRow[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/species-for-application',
+      {
+        params: { applicationNumber },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizePackageSpeciesRow)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application species.', error)
+  }
+}
+
 export const fetchApplicationPackageScales = async (
   packageNumber: string,
 ): Promise<ApplicationPackageScaleRow[]> => {
@@ -322,6 +488,23 @@ export const fetchApplicationPackageScales = async (
   }
 }
 
+export const fetchApplicationPermits = async (
+  applicationNumber: string,
+): Promise<ApplicationPermitRow[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/permits',
+      {
+        params: { applicationNumber },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizeApplicationPermitRow)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application permits.', error)
+  }
+}
+
 export const fetchApplicationSpeciesCodes = async (): Promise<ApplicationCodeOption[]> => {
   try {
     const response = await apiService.getCachedResponse<unknown>(
@@ -332,6 +515,19 @@ export const fetchApplicationSpeciesCodes = async (): Promise<ApplicationCodeOpt
     return parseArrayPayload(response.data).map(normalizeCodeOption)
   } catch (error) {
     throw toSearchServiceError('Unable to load application species codes.', error)
+  }
+}
+
+export const fetchApplicationPackageStatusCodes = async (): Promise<ApplicationCodeOption[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/package-status-codes',
+      undefined,
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizeCodeOption)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application package status codes.', error)
   }
 }
 
@@ -482,6 +678,82 @@ export const addApplicationScaleToPackage = async (
     return normalizeScaleMutationResult(payload)
   } catch (error) {
     throw toSearchServiceError('Unable to add application scale.', error)
+  }
+}
+
+export const saveApplicationRemark = async (
+  request: ApplicationRemarkMutation,
+): Promise<ApplicationRemarkMutationResult> => {
+  try {
+    const payload = await postLegacyForm<unknown>('/lexis/rpc/application-details/remark', {
+      remarkId: request.remarkId || 'new',
+      applicationNumber: request.applicationNumber,
+      remarkBody: request.remarkBody,
+    })
+    return normalizeRemarkMutationResult(payload)
+  } catch (error) {
+    throw toSearchServiceError('Unable to save application remark.', error)
+  }
+}
+
+export const checkApplicationVolumeUsage = async (
+  applicationNumber: string,
+): Promise<ApplicationVolumeUsageResult> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/check-unused-volume',
+      {
+        params: {
+          applicationNumber,
+        },
+      },
+      { ttlMs: 0 },
+    )
+    const payload = (response.data ?? {}) as Record<string, unknown>
+    return {
+      volumeUsed: asBoolean(payload.volumeUsedInd),
+    }
+  } catch (error) {
+    throw toSearchServiceError('Unable to check application volume usage.', error)
+  }
+}
+
+export const updateApplicationSummary = async (
+  request: ApplicationSummaryMutation,
+): Promise<ApplicationSummaryMutationResult> => {
+  try {
+    const payload = await postLegacyForm<unknown>(
+      '/lexis/rpc/application-details/application-summary',
+      {
+        applicationNumber: request.applicationNumber,
+        applicationDate: request.applicationDate,
+        receivedDate: request.receivedDate,
+        termDays: request.termDays,
+        applicationVolume: request.applicationVolume,
+        averageLogVolume: request.averageLogVolume,
+        exemptionReasonCode: request.exemptionReasonCode,
+        productLocation: request.productLocation,
+        exportScheduleId: request.exportScheduleId,
+        agentClientNumber: request.agentClientNumber,
+        agentClientLocationCode: request.agentClientLocationCode,
+        ownerClientNumber: request.ownerClientNumber,
+        ownerClientLocationCode: request.ownerClientLocationCode,
+        applicationStatusCode: request.applicationStatusCode,
+        applicantType: request.applicantTypeCode,
+        orgUnitNumber: request.orgUnitNumber,
+        productTypeCode: request.productTypeCode,
+        jurisdictionCode: request.jurisdictionCode,
+        growthTypeCode: request.growthTypeCode,
+        agentContactName: request.agentContactName,
+        ownerContactName: request.ownerContactName,
+        oicIndicator: request.oicIndicator,
+        applicationEndUseCode: request.endUseCode,
+        applicationSelectedSpecies: request.speciesCodes.join(','),
+      },
+    )
+    return normalizeApplicationSummaryMutationResult(payload)
+  } catch (error) {
+    throw toSearchServiceError('Unable to update application summary.', error)
   }
 }
 

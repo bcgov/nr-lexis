@@ -1,16 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import {
-  Button,
-  Column,
-  Grid,
-  InlineNotification,
-  Select,
-  SelectItem,
-  TextArea,
-  TextInput,
-  Tile,
-} from '@carbon/react'
+import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
   firstValidationError,
@@ -35,9 +26,11 @@ type ProvincialPermitCreateForm = {
   applicationNumber: string
   packageNumber: string
   exemptionNumber: string
+  region: string
   permitStatus: string
   applicantClientNumber: string
   ownerClientNumber: string
+  submitDate: string
   issueDate: string
   estimatedShippingDate: string
   permitVolume: string
@@ -53,9 +46,11 @@ const INITIAL_FORM: ProvincialPermitCreateForm = {
   applicationNumber: '',
   packageNumber: '',
   exemptionNumber: '',
+  region: '',
   permitStatus: '',
   applicantClientNumber: '',
   ownerClientNumber: '',
+  submitDate: '',
   issueDate: '',
   estimatedShippingDate: '',
   permitVolume: '',
@@ -80,10 +75,12 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialPermitCrea
     applicationNumber: query.get('applicationNumber') ?? '',
     packageNumber: query.get('packageNumber') ?? '',
     exemptionNumber: query.get('exemptionNumber') ?? '',
+    region: query.get('region') ?? query.get('orgUnitNo') ?? '',
     permitStatus: query.get('permitStatus') ?? query.get('permitStatusCode') ?? '',
     applicantClientNumber:
       query.get('applicantClientNumber') ?? query.get('agentClientNumber') ?? '',
     ownerClientNumber: query.get('ownerClientNumber') ?? '',
+    submitDate: query.get('submitDate') ?? query.get('permitSubmitDate') ?? '',
     issueDate: query.get('issueDate') ?? '',
     estimatedShippingDate: query.get('estimatedShippingDate') ?? '',
     permitVolume: query.get('permitVolume') ?? '',
@@ -103,6 +100,7 @@ const ProvincialPermitCreatePage: FC = () => {
   const initialForm = useMemo(() => buildInitialFormFromQuery(searchParams), [searchParams])
   const [form, setForm] = useState<ProvincialPermitCreateForm>(() => initialForm)
   const [permitStatuses, setPermitStatuses] = useState<SearchOption[]>([])
+  const [regions, setRegions] = useState<SearchOption[]>([])
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -115,6 +113,7 @@ const ProvincialPermitCreatePage: FC = () => {
     const loadOptions = async () => {
       const options = await fetchProvincialPermitOptions()
       setPermitStatuses(options.permitStatuses)
+      setRegions(options.regions)
     }
 
     void loadOptions()
@@ -131,12 +130,21 @@ const ProvincialPermitCreatePage: FC = () => {
         () => positiveNumericFieldError(form.applicationNumber),
       ),
       packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
+      exemptionNumber: requiredFieldError(form.exemptionNumber, 'Exemption number') ?? undefined,
+      region: requiredFieldError(form.region, 'Region') ?? undefined,
       permitStatus: requiredFieldError(form.permitStatus, 'Permit status') ?? undefined,
       applicantClientNumber:
         requiredFieldError(form.applicantClientNumber, 'Applicant client number') ?? undefined,
       ownerClientNumber:
         requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
-      issueDate: isoDateFieldError(form.issueDate) ?? undefined,
+      submitDate: firstValidationError(
+        () => requiredFieldError(form.submitDate, 'Submit date'),
+        () => isoDateFieldError(form.submitDate),
+      ),
+      issueDate: firstValidationError(
+        () => requiredFieldError(form.issueDate, 'Issue date'),
+        () => isoDateFieldError(form.issueDate),
+      ),
       estimatedShippingDate: isoDateFieldError(form.estimatedShippingDate) ?? undefined,
       permitVolume: positiveNumericFieldError(form.permitVolume) ?? undefined,
     }),
@@ -146,7 +154,7 @@ const ProvincialPermitCreatePage: FC = () => {
     () => Object.values(fieldErrors).some((error) => !!error),
     [fieldErrors],
   )
-  const missingRequiredOptions = permitStatuses.length === 0
+  const missingRequiredOptions = permitStatuses.length === 0 || regions.length === 0
 
   const markFieldTouched = (field: ProvincialPermitCreateField): void => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
@@ -157,18 +165,9 @@ const ProvincialPermitCreatePage: FC = () => {
 
   const onSaveDraft = () => {
     setStatus(null)
-    if (hasValidationError) {
-      setShowAllValidationErrors(true)
-      setStatus({
-        kind: 'error',
-        title: 'Validation Error',
-        message: 'Please fix validation errors before saving the draft.',
-      })
-      return
-    }
-
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
+    setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
   }
 
@@ -249,7 +248,7 @@ const ProvincialPermitCreatePage: FC = () => {
           <InlineNotification
             kind="warning"
             title="Required options unavailable"
-            subtitle="Permit status values are unavailable. Submit remains disabled until a valid status is available."
+            subtitle="Permit status or region values are unavailable. Submit remains disabled until valid options are available."
             lowContrast
             hideCloseButton
           />
@@ -306,28 +305,37 @@ const ProvincialPermitCreatePage: FC = () => {
             />
             <TextInput
               id="exemptionNumber"
-              labelText="Exemption Number"
+              labelText="Exemption Number (required)"
               value={form.exemptionNumber}
+              invalid={!!fieldError('exemptionNumber')}
+              invalidText={fieldError('exemptionNumber')}
+              onBlur={() => markFieldTouched('exemptionNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, exemptionNumber: event.target.value }))
               }
             />
-            <Select
+            <SearchableSelect
+              id="permitRegion"
+              labelText="Region (required)"
+              value={form.region}
+              invalid={!!fieldError('region')}
+              invalidText={fieldError('region')}
+              placeholder="Select region"
+              options={regions}
+              onBlur={() => markFieldTouched('region')}
+              onChange={(value) => setForm((current) => ({ ...current, region: value }))}
+            />
+            <SearchableSelect
               id="permitStatus"
               labelText="Permit Status (required)"
               value={form.permitStatus}
               invalid={!!fieldError('permitStatus')}
               invalidText={fieldError('permitStatus')}
+              placeholder="Select permit status"
+              options={permitStatuses}
               onBlur={() => markFieldTouched('permitStatus')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, permitStatus: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select permit status" />
-              {permitStatuses.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
+              onChange={(value) => setForm((current) => ({ ...current, permitStatus: value }))}
+            />
             <TextInput
               id="applicantClientNumber"
               labelText="Applicant Client Number (required)"
@@ -351,8 +359,19 @@ const ProvincialPermitCreatePage: FC = () => {
               }
             />
             <TextInput
+              id="submitDate"
+              labelText="Submit Date (YYYY-MM-DD) (required)"
+              value={form.submitDate}
+              invalid={!!fieldError('submitDate')}
+              invalidText={fieldError('submitDate')}
+              onBlur={() => markFieldTouched('submitDate')}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, submitDate: event.target.value }))
+              }
+            />
+            <TextInput
               id="issueDate"
-              labelText="Issue Date (YYYY-MM-DD)"
+              labelText="Issue Date (YYYY-MM-DD) (required)"
               value={form.issueDate}
               invalid={!!fieldError('issueDate')}
               invalidText={fieldError('issueDate')}

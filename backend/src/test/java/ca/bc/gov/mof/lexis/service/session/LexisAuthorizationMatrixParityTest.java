@@ -37,4 +37,18 @@ class LexisAuthorizationMatrixParityTest {
             "LEXIS_PROVINCIAL_SUBMITTER",
             "LEXIS_FEDERAL_SUBMITTER");
   }
+
+  @Test
+  void applicationRemarksShouldMatchLegacyApplicationRemarkRoles() {
+    assertThat(authorizationService.resolveRolesForAction("/applicationRemarks"))
+        .contains(
+            "LEXIS_ADMIN",
+            "LEXIS_APPLICATION_APPROVER",
+            "LEXIS_PROVINCIAL_SUBMITTER")
+        .doesNotContain(
+            "LEXIS_READ_ONLY",
+            "LEXIS_EXEMPTION_APPROVER",
+            "LEXIS_FEDERAL_SUBMITTER",
+            "LEXIS_DELEGATED_ADMIN");
+  }
 }

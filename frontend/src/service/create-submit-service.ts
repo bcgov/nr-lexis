@@ -202,40 +202,51 @@ const postLegacyForm = async (
 }
 
 export type ProvincialApplicationCreateSubmission = {
-  applicationNumber: string
-  packageNumber: string
   ownerClientNumber: string
   ownerClientLocationCode: string
   ownerContactName: string
-  applicantClientNumber: string
+  agentClientNumber?: string
+  agentClientLocationCode?: string
+  agentContactName?: string
+  applicantTypeCode: string
   productTypeCode: string
+  ageClass: string
   exemptionType: string
   region: string
   applicationDate: string
   applicationTermDays: string
   receivedDate: string
+  exportScheduleId?: string
   listingDate: string
   productLocation: string
   applicationVolume: string
+  averageLogVolume: string
+  speciesCodes?: string[]
+  endUseCode?: string
   comments: string
 }
 
 export const submitProvincialApplicationCreate = async (
   form: ProvincialApplicationCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
+  const selectedSpecies = (form.speciesCodes ?? []).join(',')
   try {
     const payload = await postLegacyForm(
       getProvincialApplicationCreatePath(),
       withCreateActionMapping('addApplication', {
-        applicationNumber: form.applicationNumber,
-        packageNumber: form.packageNumber,
         ownerClientNumber: form.ownerClientNumber,
         ownerClientLocationCode: form.ownerClientLocationCode,
         ownerClientLocation: form.ownerClientLocationCode,
         ownerContactName: form.ownerContactName,
-        applicantClientNumber: form.applicantClientNumber,
-        agentClientNumber: form.applicantClientNumber,
+        agentClientNumber: form.agentClientNumber,
+        agentClientLocationCode: form.agentClientLocationCode,
+        agentClientLocation: form.agentClientLocationCode,
+        agentContactName: form.agentContactName,
+        ownerApplicantType: form.applicantTypeCode,
+        applicantType: form.applicantTypeCode,
         productTypeCode: form.productTypeCode,
+        ageClass: form.ageClass,
+        growthTypeCode: form.ageClass,
         exemptionReason: form.exemptionType,
         exemptionReasonCode: form.exemptionType,
         exemptionType: form.exemptionType,
@@ -247,10 +258,21 @@ export const submitProvincialApplicationCreate = async (
         termDays: form.applicationTermDays,
         receivedDate: form.receivedDate,
         dateReceived: form.receivedDate,
+        exportScheduleId: form.exportScheduleId,
+        legacyExportScheduleId: form.exportScheduleId,
         listingDate: form.listingDate,
         productLocation: form.productLocation,
         logLocation: form.productLocation,
         applicationVolume: form.applicationVolume,
+        averageLogVolume: form.averageLogVolume,
+        logVolume: form.averageLogVolume,
+        applicationSelectedSpecies: selectedSpecies,
+        selectedSpecies,
+        speciesTableValues: selectedSpecies,
+        speciesCodes: selectedSpecies,
+        applicationEndUseCode: form.endUseCode,
+        endUseCode: form.endUseCode,
+        endUse: form.endUseCode,
         comments: form.comments,
         additionalRemarks: form.comments,
       }),
@@ -354,9 +376,11 @@ export type ProvincialPermitCreateSubmission = {
   applicationNumber: string
   packageNumber: string
   exemptionNumber: string
+  region: string
   permitStatus: string
   applicantClientNumber: string
   ownerClientNumber: string
+  submitDate: string
   issueDate: string
   estimatedShippingDate: string
   permitVolume: string
@@ -375,6 +399,9 @@ export const submitProvincialPermitCreate = async (
         permitIssueDate: form.issueDate,
         estimatedShippingDate: form.estimatedShippingDate,
         exemptionNumber: form.exemptionNumber,
+        orgUnitNo: form.region,
+        region: form.region,
+        permitSubmitDate: form.submitDate,
         permitTotalVolume: form.permitVolume,
         ownerClientNumber: form.ownerClientNumber,
         agentClientNumber: form.applicantClientNumber,
@@ -393,6 +420,8 @@ export type IndianReservePermitCreateSubmission = {
   permitNumber: string
   packageNumber: string
   clientNumber: string
+  clientLocation: string
+  region: string
   applicationDate: string
   permitIssueDate: string
   estimatedShippingDate: string
@@ -400,6 +429,7 @@ export type IndianReservePermitCreateSubmission = {
   transportTypeCode: string
   transportName: string
   portOfExport: string
+  otherPortOfExport: string
   remarks: string
 }
 
@@ -412,7 +442,9 @@ export const submitIndianReservePermitCreate = async (
       withCreateActionMapping('saveReservePermit', {
         applicationNumber: '0',
         clientNumber: form.clientNumber,
+        clientLocation: form.clientLocation,
         permitNumber: form.permitNumber,
+        region: form.region,
         applicationDate: form.applicationDate,
         permitIssueDate: form.permitIssueDate,
         estShippingDate: form.estimatedShippingDate,
@@ -420,6 +452,7 @@ export const submitIndianReservePermitCreate = async (
         transportTypeCode: form.transportTypeCode,
         transportName: form.transportName,
         portOfExport: form.portOfExport,
+        otherPortOfExport: form.otherPortOfExport,
         permitRemarks: form.remarks,
         packageNumber: form.packageNumber,
       }),

@@ -67,6 +67,7 @@ lexis:
       LEXIS_APPLICATION_APPROVER:
         - "/applicationsReview"
         - "/createExemption"
+        - "/applicationRemarks"
         - "/applicationSearch"
         - "/applicationDetails"
         - "/federalApplicationSearch"
@@ -128,6 +129,7 @@ lexis:
         - "viewOICApplication"
       LEXIS_PROVINCIAL_SUBMITTER:
         - "/createExemption"
+        - "/applicationRemarks"
         - "createApplication"
         - "createOffer"
         - "createPermit"

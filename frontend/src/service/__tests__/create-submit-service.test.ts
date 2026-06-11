@@ -33,21 +33,24 @@ describe('create-submit-service', () => {
     })
 
     const result = await submitProvincialApplicationCreate({
-      applicationNumber: '1001',
-      packageNumber: 'PKG-1',
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
-      applicantClientNumber: '00022222',
+      applicantTypeCode: 'O',
       productTypeCode: 'LOG',
+      ageClass: '',
       exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-01',
       applicationTermDays: '30',
       receivedDate: '2026-01-01',
+      exportScheduleId: '987',
       listingDate: '2026-01-02',
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
+      averageLogVolume: '1.2',
+      speciesCodes: ['HE', 'BA'],
+      endUseCode: 'SA',
       comments: 'ready',
     })
 
@@ -69,18 +72,34 @@ describe('create-submit-service', () => {
     })
     expect(body).toBeInstanceOf(URLSearchParams)
     expect(body.get('actionMapping')).toBe('addApplication')
-    expect(body.get('applicationNumber')).toBe('1001')
-    expect(body.get('agentClientNumber')).toBe('00022222')
+    expect(body.get('applicationNumber')).toBeNull()
+    expect(body.get('packageNumber')).toBeNull()
+    expect(body.get('ownerApplicantType')).toBe('O')
+    expect(body.get('applicantType')).toBe('O')
+    expect(body.get('agentClientNumber')).toBeNull()
     expect(body.get('ownerClientLocationCode')).toBe('00')
     expect(body.get('ownerContactName')).toBe('Owner Contact')
+    expect(body.get('ageClass')).toBeNull()
+    expect(body.get('growthTypeCode')).toBeNull()
     expect(body.get('exemptionReason')).toBe('U')
     expect(body.get('exemptionReasonCode')).toBe('U')
     expect(body.get('applicationDate')).toBe('2026-01-01')
     expect(body.get('exemptionTerm')).toBe('30')
     expect(body.get('dateReceived')).toBe('2026-01-01')
+    expect(body.get('exportScheduleId')).toBe('987')
+    expect(body.get('legacyExportScheduleId')).toBe('987')
+    expect(body.get('listingDate')).toBe('2026-01-02')
     expect(body.get('productLocation')).toBe('Camp 1')
     expect(body.get('logLocation')).toBe('Camp 1')
     expect(body.get('applicationVolume')).toBe('125.5')
+    expect(body.get('averageLogVolume')).toBe('1.2')
+    expect(body.get('logVolume')).toBe('1.2')
+    expect(body.get('applicationSelectedSpecies')).toBe('HE,BA')
+    expect(body.get('speciesTableValues')).toBe('HE,BA')
+    expect(body.get('speciesCodes')).toBe('HE,BA')
+    expect(body.get('applicationEndUseCode')).toBe('SA')
+    expect(body.get('endUseCode')).toBe('SA')
+    expect(body.get('endUse')).toBe('SA')
   })
 
   it('returns offer created id from exportPurchaseOfferNumber payload', async () => {
@@ -113,6 +132,46 @@ describe('create-submit-service', () => {
     expect(body.get('companyName')).toBe('Example Lumber')
     expect(body.get('contactName')).toBe('Alex Example')
     expect(body.get('withdrawReason')).toBe('Withdrawn by buyer')
+  })
+
+  it('posts provincial application agent applicant fields when applicant type is agent', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        success: true,
+        message: 'saved',
+        applicationNumber: '1002',
+      },
+    })
+
+    await submitProvincialApplicationCreate({
+      ownerClientNumber: '00011111',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      agentClientNumber: '00033333',
+      agentClientLocationCode: '01',
+      agentContactName: 'Agent Contact',
+      applicantTypeCode: 'A',
+      productTypeCode: 'LOG',
+      ageClass: '',
+      exemptionType: 'U',
+      region: '11',
+      applicationDate: '2026-01-01',
+      applicationTermDays: '30',
+      receivedDate: '2026-01-01',
+      listingDate: '2026-01-02',
+      productLocation: 'Camp 1',
+      applicationVolume: '125.5',
+      averageLogVolume: '1.2',
+      comments: 'ready',
+    })
+
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('ownerApplicantType')).toBe('A')
+    expect(body.get('applicantType')).toBe('A')
+    expect(body.get('agentClientNumber')).toBe('00033333')
+    expect(body.get('agentClientLocationCode')).toBe('01')
+    expect(body.get('agentClientLocation')).toBe('01')
+    expect(body.get('agentContactName')).toBe('Agent Contact')
   })
 
   it('surfaces provincial exemption backend errors without a generic prefix', async () => {
@@ -153,13 +212,12 @@ describe('create-submit-service', () => {
     })
 
     await submitProvincialApplicationCreate({
-      applicationNumber: '1001',
-      packageNumber: 'PKG-1',
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
-      applicantClientNumber: '00022222',
+      applicantTypeCode: 'O',
       productTypeCode: 'LOG',
+      ageClass: '',
       exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-01',
@@ -168,6 +226,7 @@ describe('create-submit-service', () => {
       listingDate: '2026-01-02',
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
+      averageLogVolume: '1.2',
       comments: 'ready',
     })
 
@@ -191,8 +250,9 @@ describe('create-submit-service', () => {
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
-      applicantClientNumber: '00022222',
+      applicantTypeCode: 'O',
       productTypeCode: 'LOG',
+      ageClass: '',
       exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-01',
@@ -201,6 +261,7 @@ describe('create-submit-service', () => {
       listingDate: '2026-01-02',
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
+      averageLogVolume: '1.2',
       comments: 'ready',
     })
 
@@ -208,12 +269,16 @@ describe('create-submit-service', () => {
     expect(body).toEqual(
       expect.objectContaining({
         actionMapping: 'addApplication',
-        applicationNumber: '1001',
+        ownerApplicantType: 'O',
         exemptionReason: 'U',
         logLocation: 'Camp 1',
         productLocation: 'Camp 1',
+        averageLogVolume: '1.2',
+        logVolume: '1.2',
       }),
     )
+    expect(body).not.toHaveProperty('applicationNumber')
+    expect(body).not.toHaveProperty('packageNumber')
     expect(config).toEqual({
       headers: {
         'Content-Type': 'application/json',
@@ -237,9 +302,11 @@ describe('create-submit-service', () => {
       applicationNumber: '2',
       packageNumber: 'PKG',
       exemptionNumber: 'EX-1',
+      region: '1833',
       permitStatus: 'Issued',
       applicantClientNumber: '00011111',
       ownerClientNumber: '00022222',
+      submitDate: '2026-01-01',
       issueDate: '2026-01-01',
       estimatedShippingDate: '2026-01-02',
       permitVolume: '10',
@@ -270,9 +337,11 @@ describe('create-submit-service', () => {
       applicationNumber: '2',
       packageNumber: 'PKG',
       exemptionNumber: 'EX-1',
+      region: '1833',
       permitStatus: 'Issued',
       applicantClientNumber: '00011111',
       ownerClientNumber: '00022222',
+      submitDate: '2026-01-01',
       issueDate: '2026-01-01',
       estimatedShippingDate: '2026-01-02',
       permitVolume: '10',
@@ -301,6 +370,8 @@ describe('create-submit-service', () => {
       permitNumber: '900',
       packageNumber: 'PKG-1',
       clientNumber: '12345678',
+      clientLocation: '00',
+      region: '1833',
       applicationDate: '2026-03-01',
       permitIssueDate: '2026-03-02',
       estimatedShippingDate: '2026-03-03',
@@ -308,6 +379,7 @@ describe('create-submit-service', () => {
       transportTypeCode: 'TRK',
       transportName: 'Truck',
       portOfExport: 'VAN',
+      otherPortOfExport: '',
       remarks: '',
     })
 

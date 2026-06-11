@@ -20,6 +20,8 @@ import org.springframework.stereotype.Service;
 @Profile("oracle")
 public class ApplicationReviewOracleService implements ApplicationReviewService {
 
+  private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN");
+
   private final ApplicationReviewRepository repository;
 
   public ApplicationReviewOracleService(ApplicationReviewRepository repository) {
@@ -124,6 +126,16 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     }
 
     String remark = request == null ? null : trimToNull(request.remark());
+    if (STATUSES_REQUIRING_REMARK.contains(statusCode) && remark == null) {
+      return new ApplicationReviewStatusUpdateResultDto(
+          false,
+          false,
+          statusCode,
+          request == null ? null : trimToNull(request.clientEmailAddress()),
+          null,
+          "Remark is required when rejecting or withdrawing an application.");
+    }
+
     String clientEmail = request == null ? null : trimToNull(request.clientEmailAddress());
     boolean updated =
         repository.updateStatus(applicationNumber, statusCode, remark, defaultMutationUser(updateUserId));

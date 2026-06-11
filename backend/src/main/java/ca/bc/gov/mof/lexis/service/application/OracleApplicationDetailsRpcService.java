@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
@@ -23,15 +24,29 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private static final String DESCRIPTION_NOT_ON_FILE = "Not on file";
   private static final String APPLICATION_STATUS_NEW = "NEW";
+  private static final String APPLICATION_STATUS_APPROVED = "APP";
+  private static final String APPLICATION_STATUS_EXPIRED = "EXP";
+  private static final String APPLICATION_DETAILS_LOCKED_MESSAGE =
+      "Application details can only be edited while the application is new or approved.";
+  private static final String APPLICANT_TYPE_OWNER = "O";
+  private static final String APPLICANT_TYPE_AGENT = "A";
   private static final String JURISDICTION_PROVINCIAL = "P";
   private static final String OIC_INDICATOR_NO = "N";
+  private static final String EXPORT_PRODUCT_TYPE_HARVESTED = "H";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
+  private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
   private static final String SPECIES_TYPE_CEDAR = "CE";
   private static final String EXPORT_SPECIES_ENDUSE_OTHER = "OT";
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
   private static final String PACKAGE_EXISTS_MESSAGE_TEMPLATE = "Package %s already exists.";
+  private static final String PACKAGE_PERMITTED_SCALE_MESSAGE =
+      "Package changes are not allowed after a scale has been permitted.";
+  private static final String SCALE_PERMITTED_MESSAGE =
+      "Scale changes are not allowed after a permit has been completed.";
   private static final int REMARK_DISPLAY_LIMIT = 70;
+  private static final double MAX_APPLICATION_VOLUME = 9_999_999.9d;
+  private static final double MAX_AVERAGE_LOG_VOLUME = 99.9d;
 
   private final ApplicationDetailsRpcRepository repository;
 
@@ -113,6 +128,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
+  @Transactional
   public CreateApplicationResult addApplication(CreateApplicationRequest request, String userId) {
     CreateApplicationRequest normalized = normalizeCreateApplicationRequest(request);
     List<String> errors = validateCreateApplication(normalized);
@@ -137,8 +153,132 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
           warnings);
     }
 
+    if (normalized.speciesCodes() != null
+        && !repository.replaceApplicationEndUses(
+            applicationNumber, toEndUses(normalized.speciesCodes(), normalized.endUseCode()))) {
+      markRollbackOnly();
+      return new CreateApplicationResult(
+          false,
+          "We were unable to save this application. Please note the time this error occurred and report to someone.",
+          null,
+          List.of(),
+          warnings);
+    }
+
+    String remarkBody = trimToNull(normalized.remarkBody());
+    if (remarkBody != null
+        && repository.insertRemark(applicationNumber, remarkBody, entryUserId, Instant.now()).isEmpty()) {
+      markRollbackOnly();
+      return new CreateApplicationResult(
+          false,
+          "We were unable to save this application. Please note the time this error occurred and report to someone.",
+          null,
+          List.of(),
+          warnings);
+    }
+
     return new CreateApplicationResult(
         true, SAVE_SUCCESS_MESSAGE, applicationNumber, List.of(), warnings);
+  }
+
+  @Override
+  @Transactional
+  public CreateApplicationResult updateApplicationSummary(
+      ApplicationSummaryUpdateRequest request, String userId) {
+    ApplicationSummaryUpdateRequest normalized = normalizeApplicationSummaryUpdateRequest(request);
+    if (normalized.applicationNumber() == null || normalized.applicationNumber() < 1) {
+      return new CreateApplicationResult(
+          false, null, null, List.of(required("application number")), List.of());
+    }
+
+    Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> existing =
+        repository.findApplicationUpdateRecord(normalized.applicationNumber());
+    if (existing.isEmpty()) {
+      return new CreateApplicationResult(
+          false,
+          "No application was found for " + normalized.applicationNumber() + ".",
+          normalized.applicationNumber(),
+          List.of(),
+          List.of());
+    }
+    if (!isEditableApplicationDetailStatus(existing.get().applicationStatusCode())) {
+      return new CreateApplicationResult(
+          false,
+          null,
+          normalized.applicationNumber(),
+          List.of(APPLICATION_DETAILS_LOCKED_MESSAGE),
+          List.of());
+    }
+
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord updateRecord =
+        toApplicationUpdateRecord(existing.get(), normalized, defaultMutationUser(userId));
+    List<String> errors = validateApplicationUpdate(updateRecord);
+    validateApplicationSpeciesEndUse(
+        updateRecord.orgUnitNumber(),
+        updateRecord.productTypeCode(),
+        normalized.endUseCode(),
+        normalized.speciesCodes(),
+        false,
+        errors);
+    if (normalized.validationEnabled() && !errors.isEmpty()) {
+      return new CreateApplicationResult(
+          false, null, normalized.applicationNumber(), errors, List.of());
+    }
+
+    if (!repository.updateApplication(updateRecord)) {
+      return new CreateApplicationResult(
+          false,
+          "We were unable to save this application. Please try again.",
+          normalized.applicationNumber(),
+          List.of(),
+          List.of());
+    }
+
+    if (normalized.speciesCodes() != null
+        && !repository.replaceApplicationEndUses(
+            normalized.applicationNumber(), toEndUses(normalized.speciesCodes(), normalized.endUseCode()))) {
+      markRollbackOnly();
+      return new CreateApplicationResult(
+          false,
+          "We were unable to save this application. Please try again.",
+          normalized.applicationNumber(),
+          List.of(),
+          List.of());
+    }
+
+    return new CreateApplicationResult(
+        true, SAVE_SUCCESS_MESSAGE, normalized.applicationNumber(), List.of(), List.of());
+  }
+
+  @Override
+  public Optional<ApplicationSummarySnapshot> getApplicationSummarySnapshot(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return repository.findApplicationUpdateRecord(applicationNumber).map(this::toApplicationSummarySnapshot);
+  }
+
+  @Override
+  public boolean isApplicationVolumeUsed(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return true;
+    }
+
+    Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> application =
+        repository.findApplicationUpdateRecord(applicationNumber);
+    if (application.isEmpty()
+        || APPLICATION_STATUS_EXPIRED.equalsIgnoreCase(application.get().applicationStatusCode())) {
+      return true;
+    }
+
+    BigDecimal applicationVolume = roundOneDecimal(application.get().applicationVolume());
+    BigDecimal totalPackageVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+    for (ApplicationDetailsRpcRepository.PackageDetailsRow row :
+        repository.findPackagesByApplicationNumber(applicationNumber)) {
+      totalPackageVolume =
+          totalPackageVolume.add(roundOneDecimal(row.packageVolume())).setScale(1, RoundingMode.HALF_UP);
+    }
+    return applicationVolume.compareTo(totalPackageVolume) == 0;
   }
 
   @Override
@@ -161,6 +301,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   @Override
   public List<CodeItem> getSpeciesCodes() {
     return repository.findAllSpeciesCodes().stream().map(this::toCodeItem).toList();
+  }
+
+  @Override
+  public List<CodeItem> getPackageStatusCodes() {
+    return repository.findAllPackageStatusCodes().stream().map(this::toCodeItem).toList();
   }
 
   @Override
@@ -451,7 +596,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   @Override
   public PackagePersistenceResult addPackage(PackageMutationRequest request, String userId) {
     PackageMutationRequest normalized = normalizePackageMutationRequest(request);
-    List<String> errors = validatePackageMutation(normalized, false);
+    List<String> errors = validatePackageMutation(normalized, false, null);
     if (!errors.isEmpty()) {
       return invalidPackageResult(normalized.packageNumber(), errors);
     }
@@ -475,7 +620,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     String currentPackageNumber = trimToNull(normalized.packageNumber());
     ApplicationDetailsRpcRepository.PackageMutationRow existing =
         repository.findPackageMutationByPackageNumber(currentPackageNumber).orElse(null);
-    List<String> errors = validatePackageMutation(normalized, true);
+    List<String> errors = validatePackageMutation(normalized, true, existing);
     if (existing == null) {
       errors.add("Package number " + nonNull(currentPackageNumber) + " does not exist.");
     }
@@ -545,6 +690,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (normalizedScaleDetailId == null) {
       return false;
     }
+    ApplicationDetailsRpcRepository.ApplicationScaleDetailRow scale =
+        repository.findScaleDetailById(normalizedScaleDetailId).orElse(null);
+    if (scale == null || isCompletedPermit(scale.exportPermitDetailNumber(), new LinkedHashMap<>())) {
+      return false;
+    }
     return repository.deleteScaleById(normalizedScaleDetailId, defaultMutationUser(userId));
   }
 
@@ -552,6 +702,15 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   public boolean deletePackageById(String packageNumber, String userId) {
     String normalizedPackageNumber = trimToNull(packageNumber);
     if (normalizedPackageNumber == null) {
+      return false;
+    }
+    List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows =
+        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber);
+    long scalePieces =
+        scaleRows.stream()
+            .mapToLong(ApplicationDetailsRpcRepository.ApplicationScaleDetailRow::piecesCount)
+            .sum();
+    if (hasPermittedScale(scaleRows) || scalePieces > 0) {
       return false;
     }
     return repository.deletePackageById(normalizedPackageNumber, defaultMutationUser(userId));
@@ -578,7 +737,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         normalizeCodes(request.speciesCodes()));
   }
 
-  private List<String> validatePackageMutation(PackageMutationRequest request, boolean update) {
+  private List<String> validatePackageMutation(
+      PackageMutationRequest request,
+      boolean update,
+      ApplicationDetailsRpcRepository.PackageMutationRow existing) {
     List<String> errors = new ArrayList<>();
     String packageNumber = trimToNull(request.packageNumber());
     String newPackageNumber = trimToNull(request.newPackageNumber());
@@ -623,13 +785,29 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add("The package volume must have no more than one decimal place.");
     }
 
+    String effectiveProductType =
+        firstNonBlank(request.productType(), existing == null ? null : existing.productTypeCode());
+    String effectiveAgeClass =
+        firstNonBlank(request.ageClass(), existing == null ? null : existing.growthTypeCode());
+    if (effectiveProductType == null) {
+      errors.add(required("package product type code"));
+    }
+    if (requiresGrowthType(effectiveProductType) && effectiveAgeClass == null) {
+      errors.add(required("package growth type code"));
+    }
+
     if (request.status() == null) {
       errors.add(required("package status code"));
     }
 
     if (update && packageNumber != null && request.volume() != null) {
+      List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows =
+          repository.findScaleDetailsByPackageNumber(packageNumber);
+      if (hasPermittedScale(scaleRows)) {
+        errors.add(PACKAGE_PERMITTED_SCALE_MESSAGE);
+      }
       double scaledVolume =
-          repository.findScaleDetailsByPackageNumber(packageNumber).stream()
+          scaleRows.stream()
               .mapToDouble(ApplicationDetailsRpcRepository.ApplicationScaleDetailRow::speciesGradeVolume)
               .sum();
       if (BigDecimal.valueOf(request.volume()).compareTo(BigDecimal.valueOf(scaledVolume)) < 0) {
@@ -640,7 +818,56 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       }
     }
 
+    validatePackageApplicationVolume(request, update, existing, targetPackageNumber, errors);
+
     return errors;
+  }
+
+  private void validatePackageApplicationVolume(
+      PackageMutationRequest request,
+      boolean update,
+      ApplicationDetailsRpcRepository.PackageMutationRow existing,
+      String targetPackageNumber,
+      List<String> errors) {
+    Long applicationNumber =
+        request.applicationNumber() == null && existing != null
+            ? existing.applicationNumber()
+            : request.applicationNumber();
+    if (applicationNumber == null || applicationNumber < 1 || request.volume() == null) {
+      return;
+    }
+
+    Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> application =
+        repository.findApplicationUpdateRecord(applicationNumber);
+    if (application.isEmpty()
+        || APPLICATION_STATUS_EXPIRED.equalsIgnoreCase(application.get().applicationStatusCode())) {
+      return;
+    }
+
+    String currentPackageNumber =
+        existing == null ? null : trimToNull(existing.packageNumber());
+    BigDecimal totalPackageVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+    for (ApplicationDetailsRpcRepository.PackageDetailsRow row :
+        repository.findPackagesByApplicationNumber(applicationNumber)) {
+      String rowPackageNumber = trimToNull(row.packageNumber());
+      if (update
+          && (equalsNullable(rowPackageNumber, currentPackageNumber)
+              || equalsNullable(rowPackageNumber, targetPackageNumber))) {
+        continue;
+      }
+      totalPackageVolume =
+          totalPackageVolume.add(roundOneDecimal(row.packageVolume())).setScale(1, RoundingMode.HALF_UP);
+    }
+
+    BigDecimal requestedTotal =
+        totalPackageVolume.add(roundOneDecimal(request.volume())).setScale(1, RoundingMode.HALF_UP);
+    BigDecimal applicationVolume = roundOneDecimal(application.get().applicationVolume());
+    if (requestedTotal.compareTo(applicationVolume) > 0) {
+      errors.add(
+          "The total package volume must not exceed the application volume ("
+              + applicationVolume.toPlainString()
+              + ").");
+    }
   }
 
   private boolean hasAtMostOneDecimal(Double value) {
@@ -648,6 +875,34 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return false;
     }
     return BigDecimal.valueOf(value).stripTrailingZeros().scale() <= 1;
+  }
+
+  private void validateOptionalVolumeRange(
+      Double value,
+      String label,
+      double maxValue,
+      List<String> errors) {
+    if (value == null) {
+      return;
+    }
+    validateVolumeRange(value, label, maxValue, errors);
+  }
+
+  private void validateVolumeRange(
+      Double value,
+      String label,
+      double maxValue,
+      List<String> errors) {
+    if (value < 0.0d) {
+      errors.add("The " + label + " must be greater than or equal to 0.");
+      return;
+    }
+    if (value > maxValue) {
+      errors.add("The " + label + " must be less than or equal to " + formatOneDecimal(maxValue) + ".");
+    }
+    if (!hasAtMostOneDecimal(value)) {
+      errors.add("The " + label + " must have no more than one decimal place.");
+    }
   }
 
   private ApplicationDetailsRpcRepository.PackageMutationRecord toPackageMutationRecord(
@@ -675,10 +930,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         insert ? defaultMutationUser(userId) : existing == null ? defaultMutationUser(userId) : existing.entryUserId(),
         insert || existing == null ? Instant.now() : existing.entryTimestamp(),
         insert ? null : defaultMutationUser(userId),
-        toPackageEndUses(request.speciesCodes(), request.endUseCode()));
+        toEndUses(request.speciesCodes(), request.endUseCode()));
   }
 
-  private List<ApplicationDetailsRpcRepository.PackageEndUseRecord> toPackageEndUses(
+  private List<ApplicationDetailsRpcRepository.EndUseMutationRecord> toEndUses(
       List<String> speciesCodes, String endUseCode) {
     List<String> normalizedSpeciesCodes = normalizeCodes(speciesCodes);
     if (normalizedSpeciesCodes.isEmpty()) {
@@ -687,7 +942,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     String normalizedEndUseCode = firstNonBlank(endUseCode, EXPORT_SPECIES_ENDUSE_OTHER);
     return normalizedSpeciesCodes.stream()
-        .map(code -> new ApplicationDetailsRpcRepository.PackageEndUseRecord(code, normalizedEndUseCode))
+        .map(code -> new ApplicationDetailsRpcRepository.EndUseMutationRecord(code, normalizedEndUseCode))
         .toList();
   }
 
@@ -798,6 +1053,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (packageNumber != null) {
       List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows =
           repository.findScaleDetailsByPackageNumber(packageNumber);
+      if (hasPermittedScale(scaleRows)) {
+        errors.add(SCALE_PERMITTED_MESSAGE);
+      }
       boolean duplicate =
           scaleRows.stream()
               .anyMatch(
@@ -830,6 +1088,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     return errors;
+  }
+
+  private boolean hasPermittedScale(List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows) {
+    Map<Long, Boolean> permittedByPermitNumber = new LinkedHashMap<>();
+    return scaleRows.stream()
+        .anyMatch(row -> isCompletedPermit(row.exportPermitDetailNumber(), permittedByPermitNumber));
   }
 
   private ApplicationPackageScaleItem toScalePersistenceItem(
@@ -986,6 +1250,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
   }
 
+  private BigDecimal roundOneDecimal(Double value) {
+    return BigDecimal.valueOf(value == null ? 0.0d : value).setScale(1, RoundingMode.HALF_UP);
+  }
+
   private String nonNull(String value) {
     return value == null ? "" : value;
   }
@@ -1068,8 +1336,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (input == null) {
       return new CreateApplicationRequest(
           null, null, null, null, null, null, null, null, null, null, null, null, null,
-          null, null, null, null, JURISDICTION_PROVINCIAL, null, null, null, OIC_INDICATOR_NO, true);
+          null, APPLICANT_TYPE_OWNER, null, null, JURISDICTION_PROVINCIAL, null, null, null,
+          OIC_INDICATOR_NO, null, null, null, true);
     }
+
+    String applicantTypeCode =
+        firstNonBlank(input.applicantTypeCode(), APPLICANT_TYPE_OWNER).toUpperCase(Locale.ROOT);
+    boolean ownerApplicant = APPLICANT_TYPE_OWNER.equals(applicantTypeCode);
 
     return new CreateApplicationRequest(
         input.federalApplicationNumber(),
@@ -1080,20 +1353,58 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         input.averageLogVolume() == null ? 0.0d : input.averageLogVolume(),
         trimToNull(input.productLocation()),
         input.exportScheduleId(),
-        trimToNull(input.agentClientNumber()),
-        trimToNull(input.agentClientLocationCode()),
+        ownerApplicant ? null : trimToNull(input.agentClientNumber()),
+        ownerApplicant ? null : trimToNull(input.agentClientLocationCode()),
         trimToNull(input.ownerClientNumber()),
         trimToNull(input.ownerClientLocationCode()),
         trimToNull(input.exemptionNumber()),
         trimToNull(input.exemptionReasonCode()),
-        trimToNull(input.applicantTypeCode()),
+        applicantTypeCode,
         input.orgUnitNumber(),
         trimToNull(input.productTypeCode()),
         firstNonBlank(input.jurisdictionCode(), JURISDICTION_PROVINCIAL),
         trimToNull(input.growthTypeCode()),
-        trimToNull(input.agentContactName()),
+        ownerApplicant ? null : trimToNull(input.agentContactName()),
         trimToNull(input.ownerContactName()),
         firstNonBlank(input.oicIndicator(), OIC_INDICATOR_NO),
+        trimToNull(input.endUseCode()),
+        input.speciesCodes() == null ? null : normalizeCodes(input.speciesCodes()),
+        trimToNull(input.remarkBody()),
+        input.validationEnabled());
+  }
+
+  private ApplicationSummaryUpdateRequest normalizeApplicationSummaryUpdateRequest(
+      ApplicationSummaryUpdateRequest input) {
+    if (input == null) {
+      return new ApplicationSummaryUpdateRequest(
+          null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+          null, null, null, null, null, null, null, null, null, null, true);
+    }
+    return new ApplicationSummaryUpdateRequest(
+        input.applicationNumber(),
+        input.applicationDate(),
+        input.termDays(),
+        input.receivedDate(),
+        input.applicationVolume(),
+        input.averageLogVolume(),
+        trimToNull(input.exemptionReasonCode()),
+        trimToNull(input.productLocation()),
+        input.exportScheduleId(),
+        trimToNull(input.agentClientNumber()),
+        trimToNull(input.agentClientLocationCode()),
+        trimToNull(input.ownerClientNumber()),
+        trimToNull(input.ownerClientLocationCode()),
+        trimToNull(input.applicationStatusCode()),
+        trimToNull(input.applicantTypeCode()),
+        input.orgUnitNumber(),
+        trimToNull(input.productTypeCode()),
+        trimToNull(input.jurisdictionCode()),
+        trimToNull(input.growthTypeCode()),
+        trimToNull(input.agentContactName()),
+        trimToNull(input.ownerContactName()),
+        trimToNull(input.oicIndicator()),
+        trimToNull(input.endUseCode()),
+        input.speciesCodes() == null ? null : normalizeCodes(input.speciesCodes()),
         input.validationEnabled());
   }
 
@@ -1109,13 +1420,22 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("application received date"));
     }
     if (request.applicationVolume() == null || request.applicationVolume() <= 0.0d) {
-      errors.add("The application volume must be greater than or equal to 0");
+      errors.add("The application volume must be greater than 0.");
+    } else {
+      validateVolumeRange(
+          request.applicationVolume(), "application volume", MAX_APPLICATION_VOLUME, errors);
     }
+    validateOptionalVolumeRange(
+        request.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
     if (trimToNull(request.productLocation()) == null) {
       errors.add(required("location of logs"));
     }
     if (trimToNull(request.productTypeCode()) == null) {
       errors.add(required("product type code"));
+    }
+    if (requiresGrowthType(request.productTypeCode())
+        && trimToNull(request.growthTypeCode()) == null) {
+      errors.add(required("growth type code"));
     }
     if (request.orgUnitNumber() == null || request.orgUnitNumber() <= 0) {
       errors.add(required("application region"));
@@ -1146,7 +1466,188 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (trimToNull(request.ownerContactName()) == null) {
       errors.add(required("application owner name"));
     }
+
+    String applicantTypeCode = trimToNull(request.applicantTypeCode());
+    if (applicantTypeCode == null) {
+      errors.add(required("applicant type code"));
+    } else if (!APPLICANT_TYPE_OWNER.equals(applicantTypeCode)
+        && !APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
+      errors.add("The applicant type code must be O or A.");
+    }
+    if (APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
+      if (trimToNull(request.agentClientNumber()) == null) {
+        errors.add(required("application agent number"));
+      }
+      if (trimToNull(request.agentClientLocationCode()) == null) {
+        errors.add(required("application agent location"));
+      }
+      if (trimToNull(request.agentContactName()) == null) {
+        errors.add(required("application agent name"));
+      }
+    }
+    validateApplicationSpeciesEndUse(
+        request.orgUnitNumber(),
+        request.productTypeCode(),
+        request.endUseCode(),
+        request.speciesCodes(),
+        true,
+        errors);
     return errors;
+  }
+
+  private List<String> validateApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
+    List<String> errors = new ArrayList<>();
+    if (!isEditableApplicationDetailStatus(record.applicationStatusCode())) {
+      errors.add(APPLICATION_DETAILS_LOCKED_MESSAGE);
+    }
+    if (record.applicationDate() == null) {
+      errors.add(required("application date"));
+    }
+    if (record.termDays() == null || record.termDays() <= 0) {
+      errors.add("The application term days must be greater than or equal to 0");
+    }
+    if (record.receivedDate() == null) {
+      errors.add(required("application received date"));
+    }
+    if (record.applicationVolume() == null || record.applicationVolume() <= 0.0d) {
+      errors.add("The application volume must be greater than 0.");
+    } else {
+      validateVolumeRange(
+          record.applicationVolume(), "application volume", MAX_APPLICATION_VOLUME, errors);
+    }
+    validateOptionalVolumeRange(
+        record.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
+    String exemptionReasonCode = trimToNull(record.exemptionReasonCode());
+    if (exemptionReasonCode == null) {
+      errors.add(required("application exemption reason code"));
+    } else if (exemptionReasonCode.length() > 1) {
+      errors.add(maxLength("application exemption reason code", 1));
+    }
+    if (trimToNull(record.productLocation()) == null) {
+      errors.add(required("location of logs"));
+    }
+    if (trimToNull(record.productTypeCode()) == null) {
+      errors.add(required("product type code"));
+    }
+    if (requiresGrowthType(record.productTypeCode())
+        && trimToNull(record.growthTypeCode()) == null) {
+      errors.add(required("growth type code"));
+    }
+    if (record.orgUnitNumber() == null || record.orgUnitNumber() <= 0) {
+      errors.add(required("application region"));
+    }
+    if (trimToNull(record.ownerClientNumber()) == null) {
+      errors.add(required("application owner number"));
+    }
+    String ownerClientLocationCode = trimToNull(record.ownerClientLocationCode());
+    if (ownerClientLocationCode == null) {
+      errors.add(required("application owner location"));
+    } else if (ownerClientLocationCode.length() > 2) {
+      errors.add(maxLength("application owner location code", 2));
+    }
+    String agentClientLocationCode = trimToNull(record.agentClientLocationCode());
+    if (agentClientLocationCode != null && agentClientLocationCode.length() > 2) {
+      errors.add(maxLength("application agent location code", 2));
+    }
+    if (trimToNull(record.ownerContactName()) == null) {
+      errors.add(required("application owner name"));
+    }
+    String applicantTypeCode = trimToNull(record.applicantTypeCode());
+    if (applicantTypeCode == null) {
+      errors.add(required("applicant type code"));
+    } else if (!APPLICANT_TYPE_OWNER.equals(applicantTypeCode)
+        && !APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
+      errors.add("The applicant type code must be O or A.");
+    }
+    if (APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
+      if (trimToNull(record.agentClientNumber()) == null) {
+        errors.add(required("application agent number"));
+      }
+      if (trimToNull(record.agentClientLocationCode()) == null) {
+        errors.add(required("application agent location"));
+      }
+      if (trimToNull(record.agentContactName()) == null) {
+        errors.add(required("application agent name"));
+      }
+    }
+    return errors;
+  }
+
+  private void validateApplicationSpeciesEndUse(
+      Long orgUnitNumber,
+      String productTypeCode,
+      String endUseCode,
+      List<String> speciesCodes,
+      boolean required,
+      List<String> errors) {
+    List<String> normalizedSpeciesCodes = normalizeCodes(speciesCodes);
+    if (normalizedSpeciesCodes.isEmpty()) {
+      if (required) {
+        errors.add(required("application species/enduse sort"));
+      }
+      return;
+    }
+    if (orgUnitNumber == null || orgUnitNumber <= 0) {
+      return;
+    }
+
+    String normalizedEndUseCode = firstNonBlank(endUseCode, EXPORT_SPECIES_ENDUSE_OTHER);
+    String normalizedProductTypeCode = trimToNull(productTypeCode);
+    boolean matchesCandidate = false;
+    for (ApplicationDetailsRpcRepository.ExcolValidationRow row :
+        repository.findCandidateExcolCombinations(
+            normalizedSpeciesCodes.size(), normalizedSpeciesCodes.get(0), orgUnitNumber)) {
+      String excolCode = trimToNull(row.excolCode());
+      if (excolCode == null || !containsAllLegacy(excolCode, normalizedSpeciesCodes)) {
+        continue;
+      }
+      if (!EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(normalizedProductTypeCode)
+          && !excolCode.contains(normalizedEndUseCode)) {
+        continue;
+      }
+      matchesCandidate = true;
+      break;
+    }
+
+    if (!matchesCandidate) {
+      errors.add("The application species/enduse sort is not valid for the selected region.");
+    }
+  }
+
+  private boolean isEditableApplicationDetailStatus(String applicationStatusCode) {
+    String normalizedStatus = trimToNull(applicationStatusCode);
+    return APPLICATION_STATUS_NEW.equals(normalizedStatus)
+        || APPLICATION_STATUS_APPROVED.equals(normalizedStatus);
+  }
+
+  private ApplicationSummarySnapshot toApplicationSummarySnapshot(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
+    return new ApplicationSummarySnapshot(
+        record.applicationNumber(),
+        record.federalApplicationNumber(),
+        record.applicationDate(),
+        record.termDays(),
+        record.receivedDate(),
+        record.applicationVolume(),
+        record.averageLogVolume(),
+        record.productLocation(),
+        record.exportScheduleId(),
+        record.agentClientNumber(),
+        record.agentClientLocationCode(),
+        record.ownerClientNumber(),
+        record.ownerClientLocationCode(),
+        record.exemptionNumber(),
+        record.exemptionReasonCode(),
+        record.applicationStatusCode(),
+        record.applicantTypeCode(),
+        record.orgUnitNumber(),
+        record.productTypeCode(),
+        record.jurisdictionCode(),
+        record.growthTypeCode(),
+        record.agentContactName(),
+        record.ownerContactName(),
+        record.oicIndicator());
   }
 
   private ApplicationDetailsRpcRepository.ApplicationInsertRecord toInsertRecord(
@@ -1178,6 +1679,49 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.oicIndicator());
   }
 
+  private ApplicationDetailsRpcRepository.ApplicationUpdateRecord toApplicationUpdateRecord(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationSummaryUpdateRequest request,
+      String updateUserId) {
+    return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
+        existing.applicationNumber(),
+        existing.federalApplicationNumber(),
+        request.applicationDate() == null ? existing.applicationDate() : request.applicationDate(),
+        request.termDays() == null ? existing.termDays() : request.termDays(),
+        request.receivedDate() == null ? existing.receivedDate() : request.receivedDate(),
+        request.applicationVolume() == null ? existing.applicationVolume() : request.applicationVolume(),
+        request.averageLogVolume() == null ? existing.averageLogVolume() : request.averageLogVolume(),
+        request.productLocation() == null ? existing.productLocation() : request.productLocation(),
+        existing.entryUserId(),
+        existing.entryTimestamp(),
+        updateUserId,
+        Instant.now(),
+        request.exportScheduleId() == null ? existing.exportScheduleId() : request.exportScheduleId(),
+        request.agentClientNumber() == null ? existing.agentClientNumber() : request.agentClientNumber(),
+        request.agentClientLocationCode() == null
+            ? existing.agentClientLocationCode()
+            : request.agentClientLocationCode(),
+        request.ownerClientNumber() == null ? existing.ownerClientNumber() : request.ownerClientNumber(),
+        request.ownerClientLocationCode() == null
+            ? existing.ownerClientLocationCode()
+            : request.ownerClientLocationCode(),
+        existing.exemptionNumber(),
+        request.exemptionReasonCode() == null
+            ? existing.exemptionReasonCode()
+            : request.exemptionReasonCode(),
+        request.applicationStatusCode() == null
+            ? existing.applicationStatusCode()
+            : request.applicationStatusCode(),
+        request.applicantTypeCode() == null ? existing.applicantTypeCode() : request.applicantTypeCode(),
+        request.orgUnitNumber() == null ? existing.orgUnitNumber() : request.orgUnitNumber(),
+        request.productTypeCode() == null ? existing.productTypeCode() : request.productTypeCode(),
+        request.jurisdictionCode() == null ? existing.jurisdictionCode() : request.jurisdictionCode(),
+        request.growthTypeCode() == null ? existing.growthTypeCode() : request.growthTypeCode(),
+        request.agentContactName() == null ? existing.agentContactName() : request.agentContactName(),
+        request.ownerContactName() == null ? existing.ownerContactName() : request.ownerContactName(),
+        request.oicIndicator() == null ? existing.oicIndicator() : request.oicIndicator());
+  }
+
   private String required(String fieldName) {
     return "A valid " + fieldName + " is required.";
   }
@@ -1185,6 +1729,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private String maxLength(String fieldName, int maxLength) {
     String unit = maxLength == 1 ? "character" : "characters";
     return "The " + fieldName + " must be " + maxLength + " " + unit + " or fewer.";
+  }
+
+  private boolean requiresGrowthType(String productTypeCode) {
+    String normalized = trimToNull(productTypeCode);
+    return EXPORT_PRODUCT_TYPE_HARVESTED.equals(normalized)
+        || EXPORT_PRODUCT_TYPE_STANDING.equals(normalized);
   }
 
   private String firstNonBlank(String value, String fallback) {

@@ -62,8 +62,16 @@ const applicationDetail: ProvincialApplicationDetail = {
   exemptionApprover: false,
   locked: false,
   packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 5 }],
-  remarks: [{ title: 'Note', remark: 'ok' }],
-  offers: [{ offerNumber: 'OFF-1', validOffer: true, withdrawalDate: null }],
+  remarks: [{ remarkId: 88, title: 'Note', remark: 'ok' }],
+  offers: [
+    {
+      offerNumber: 'OFF-1',
+      companyName: 'Example Lumber',
+      receivedDate: '2026-01-04',
+      validOffer: true,
+      withdrawalDate: null,
+    },
+  ],
 }
 
 const exemptionDetail: ProvincialExemptionDetail = {
@@ -123,6 +131,48 @@ describe('Detail Create Action Smoke', () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       canCreateOffers: false,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createOfferButton = await screen.findByRole('button', { name: 'Create Offer' })
+    expect(createOfferButton).toBeDisabled()
+  })
+
+  it('disables Create Offer until the application has at least one package', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createOfferButton = await screen.findByRole('button', { name: 'Create Offer' })
+    expect(createOfferButton).toBeDisabled()
+  })
+
+  it('disables Create Offer for industry users', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      industryUser: true,
     })
 
     render(

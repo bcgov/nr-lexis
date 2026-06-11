@@ -372,6 +372,31 @@ class OracleLexisReportServiceFormatSupportTest {
   }
 
   @Test
+  void shouldNotGenerateUnboundedBiweeklyReportWhenScheduleDefaultsAreUnavailable() throws Exception {
+    DataSource dataSource = Mockito.mock(DataSource.class);
+    OracleLegacyCsvReportService legacyCsvReportService = Mockito.mock(OracleLegacyCsvReportService.class);
+    OracleLegacyJasperTableReportService legacyJasperTableReportService =
+        Mockito.mock(OracleLegacyJasperTableReportService.class);
+    LexisReportScheduleRepository scheduleRepository = Mockito.mock(LexisReportScheduleRepository.class);
+    Mockito.when(scheduleRepository.findCurrentSchedules()).thenReturn(List.of());
+    OracleLexisReportService service =
+        createService(
+            dataSource,
+            legacyCsvReportService,
+            legacyJasperTableReportService,
+            scheduleRepository,
+            Mockito.mock(PermitRpcRepository.class));
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("legacyActionMapping", "generate"), "PDF");
+
+    Optional<LexisGeneratedReport> result = service.generateReport("biweeklyListing", request);
+
+    assertThat(result).isEmpty();
+    Mockito.verify(scheduleRepository).findCurrentSchedules();
+    verifyNoInteractions(dataSource, legacyCsvReportService, legacyJasperTableReportService);
+  }
+
+  @Test
   void shouldApplyLegacySpeciesGradePermitStatusDefault() {
     OracleLexisReportService service = createService();
     LexisReportRequestDto request =
