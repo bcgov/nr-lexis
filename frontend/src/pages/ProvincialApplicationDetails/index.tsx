@@ -48,8 +48,10 @@ import {
   updateApplicationReviewStatus,
 } from '@/service/application-review-search-service'
 import {
+  fetchApplicationClientData,
   fetchApplicationClientContacts,
   fetchApplicationClientLocations,
+  type ApplicationClientData,
   type ApplicationClientContact,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
@@ -137,6 +139,55 @@ const resolveClientContactName = (
 
 const optionLabel = (option: SearchOption): string =>
   option.label === option.value ? option.label : `${option.value} - ${option.label}`
+
+type ClientDataSummaryProps = {
+  title: string
+  clientData: ApplicationClientData | null
+  isLoading: boolean
+}
+
+const ClientDataSummary: FC<ClientDataSummaryProps> = ({ title, clientData, isLoading }) => {
+  if (isLoading) {
+    return <InlineLoading description={`Loading ${title.toLowerCase()}...`} />
+  }
+
+  if (!clientData) {
+    return null
+  }
+
+  return (
+    <section className="application-client-summary" aria-label={title}>
+      <h3 className="application-client-summary__title">{title}</h3>
+      <dl className="detail-field-grid">
+        {[
+          ['Company Name', displayValue(clientData.companyName)],
+          ['Address', displayValue(clientData.address)],
+          ['City', displayValue(clientData.city)],
+          ['Province', displayValue(clientData.province)],
+          ['Postal Code', displayValue(clientData.postalCode)],
+          ['Country', displayValue(clientData.country)],
+          ['Phone', displayValue(clientData.phone)],
+          ['Fax', displayValue(clientData.fax)],
+          ['E-Mail', displayValue(clientData.email)],
+        ].map(([label, value]) => (
+          <div key={label} className="detail-field-item">
+            <dt className="detail-field-label">{label}</dt>
+            <dd className="detail-field-value">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {clientData.notfound && (
+        <InlineNotification
+          kind="warning"
+          title="Client Lookup"
+          subtitle={clientData.notfound}
+          lowContrast
+          hideCloseButton
+        />
+      )}
+    </section>
+  )
+}
 
 const optionsWithCurrentValue = (options: SearchOption[], currentValue: string): SearchOption[] => {
   const normalizedCurrentValue = currentValue.trim()
@@ -296,10 +347,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
   const [ownerClientContacts, setOwnerClientContacts] = useState<ApplicationClientContact[]>([])
   const [agentClientContacts, setAgentClientContacts] = useState<ApplicationClientContact[]>([])
+  const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
+  const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
   const [isLoadingOwnerClientLocations, setIsLoadingOwnerClientLocations] = useState(false)
   const [isLoadingAgentClientLocations, setIsLoadingAgentClientLocations] = useState(false)
   const [isLoadingOwnerClientContacts, setIsLoadingOwnerClientContacts] = useState(false)
   const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
+  const [isLoadingOwnerClientData, setIsLoadingOwnerClientData] = useState(false)
+  const [isLoadingAgentClientData, setIsLoadingAgentClientData] = useState(false)
   const [summaryExemptionReasonOptions, setSummaryExemptionReasonOptions] = useState<
     SearchOption[]
   >([])
@@ -583,6 +638,84 @@ const ProvincialApplicationDetailsPage: FC = () => {
     () => applicationSpeciesOptions.filter((option) => !summarySpeciesCodes.includes(option.code)),
     [applicationSpeciesOptions, summarySpeciesCodes],
   )
+
+  useEffect(() => {
+    if (!hasSummaryForm || !summaryOwnerClientNumber || !summaryOwnerClientLocationCode) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setOwnerClientData(null)
+        setIsLoadingOwnerClientData(false)
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingOwnerClientData(true)
+      }
+    })
+
+    void fetchApplicationClientData(summaryOwnerClientNumber, summaryOwnerClientLocationCode)
+      .then((clientData) => {
+        if (isActive) {
+          setOwnerClientData(clientData)
+        }
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingOwnerClientData(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [hasSummaryForm, summaryOwnerClientLocationCode, summaryOwnerClientNumber])
+
+  useEffect(() => {
+    if (!hasSummaryForm || !summaryAgentClientNumber || !summaryAgentClientLocationCode) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setAgentClientData(null)
+        setIsLoadingAgentClientData(false)
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingAgentClientData(true)
+      }
+    })
+
+    void fetchApplicationClientData(summaryAgentClientNumber, summaryAgentClientLocationCode)
+      .then((clientData) => {
+        if (isActive) {
+          setAgentClientData(clientData)
+        }
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingAgentClientData(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [hasSummaryForm, summaryAgentClientLocationCode, summaryAgentClientNumber])
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {
@@ -1449,6 +1582,26 @@ const ProvincialApplicationDetailsPage: FC = () => {
     [buildReviewStatusPayload, canReviewApplication, detail, loadApplicationDetail],
   )
 
+  const clientSummaryContent =
+    ownerClientData || agentClientData || isLoadingOwnerClientData || isLoadingAgentClientData ? (
+      <div className="application-client-summary-grid">
+        <ClientDataSummary
+          title="Owner Client Details"
+          clientData={ownerClientData}
+          isLoading={isLoadingOwnerClientData}
+        />
+        {(summaryForm?.applicantTypeCode === 'A' ||
+          agentClientData ||
+          isLoadingAgentClientData) && (
+          <ClientDataSummary
+            title="Agent Client Details"
+            clientData={agentClientData}
+            isLoading={isLoadingAgentClientData}
+          />
+        )}
+      </div>
+    ) : null
+
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
@@ -1931,6 +2084,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       )}
                     </Select>
                   </div>
+                  {clientSummaryContent}
                   <div className="legacy-search-grid">
                     <TextArea
                       id="applicationSummaryProductLocation"
@@ -2035,21 +2189,24 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   </div>
                 </>
               ) : (
-                <dl className="detail-field-grid">
-                  {[
-                    ['Exemption Reason', displayValue(detail.exemptionReasonCode)],
-                    ['Application Date', displayValue(detail.applicationDate)],
-                    ['Received Date', displayValue(detail.receivedDate)],
-                    ['Term (days)', displayValue(detail.termDays)],
-                    ['Application Volume (m³)', displayValue(detail.applicationVolume)],
-                    ['Average Log Volume', displayValue(detail.averageLogVolume)],
-                  ].map(([label, value]) => (
-                    <div key={label} className="detail-field-item">
-                      <dt className="detail-field-label">{label}</dt>
-                      <dd className="detail-field-value">{value}</dd>
-                    </div>
-                  ))}
-                </dl>
+                <>
+                  <dl className="detail-field-grid">
+                    {[
+                      ['Exemption Reason', displayValue(detail.exemptionReasonCode)],
+                      ['Application Date', displayValue(detail.applicationDate)],
+                      ['Received Date', displayValue(detail.receivedDate)],
+                      ['Term (days)', displayValue(detail.termDays)],
+                      ['Application Volume (m³)', displayValue(detail.applicationVolume)],
+                      ['Average Log Volume', displayValue(detail.averageLogVolume)],
+                    ].map(([label, value]) => (
+                      <div key={label} className="detail-field-item">
+                        <dt className="detail-field-label">{label}</dt>
+                        <dd className="detail-field-value">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {clientSummaryContent}
+                </>
               )}
             </Tile>
           </Column>

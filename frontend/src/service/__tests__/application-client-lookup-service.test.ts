@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  fetchApplicationClientData,
   fetchApplicationClientContacts,
   fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
@@ -71,6 +72,58 @@ describe('application-client-lookup-service', () => {
     expect(result).toEqual([
       { locationCode: '01', locationName: '01 - AGENT LOCATION', selected: true },
     ])
+  })
+
+  it('loads and parses client data for a selected location', async () => {
+    getCachedDataMock.mockResolvedValue({
+      clientNumber: ' 00011111 ',
+      companyName: ' Example Lumber ',
+      address: ' 123 Forest Road ',
+      city: ' Victoria ',
+      province: ' BC ',
+      postalCode: ' V8V 1A1 ',
+      country: ' Canada ',
+      phone: ' 250-555-0101 ',
+      fax: ' 250-555-0102 ',
+      email: ' contact@example.test ',
+      notfound: ' ',
+    })
+
+    const result = await fetchApplicationClientData(' 00011111 ', ' 01 ')
+
+    expect(getCachedDataMock).toHaveBeenCalledWith(
+      '/lexis/rpc/application-details/client-data',
+      {
+        params: {
+          clientLocationCode: '01',
+          clientNumber: '00011111',
+        },
+      },
+      {
+        cacheKey: 'application-client-data:00011111:01',
+        ttlMs: 300000,
+      },
+    )
+    expect(result).toEqual({
+      clientNumber: '00011111',
+      companyName: 'Example Lumber',
+      address: '123 Forest Road',
+      city: 'Victoria',
+      province: 'BC',
+      postalCode: 'V8V 1A1',
+      country: 'Canada',
+      phone: '250-555-0101',
+      fax: '250-555-0102',
+      email: 'contact@example.test',
+      notfound: '',
+    })
+  })
+
+  it('does not call the client data API without a client number and location code', async () => {
+    await expect(fetchApplicationClientData('', '01')).resolves.toBeNull()
+    await expect(fetchApplicationClientData('00011111', '')).resolves.toBeNull()
+
+    expect(getCachedDataMock).not.toHaveBeenCalled()
   })
 
   it('does not call the API when client number is blank', async () => {

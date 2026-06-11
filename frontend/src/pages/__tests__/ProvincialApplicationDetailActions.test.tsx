@@ -12,6 +12,7 @@ import {
   updateApplicationReviewStatus,
 } from '@/service/application-review-search-service'
 import {
+  fetchApplicationClientData,
   fetchApplicationClientContacts,
   fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
@@ -64,6 +65,7 @@ vi.mock('@/service/application-review-search-service', () => ({
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientData: vi.fn(),
   fetchApplicationClientContacts: vi.fn(),
   fetchApplicationClientLocations: vi.fn(),
 }))
@@ -105,6 +107,7 @@ const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
 const mockedSendApplicationReviewStatusEmail = vi.mocked(sendApplicationReviewStatusEmail)
 const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewStatus)
+const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
 const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
@@ -289,6 +292,37 @@ describe('Provincial Application Detail Document Actions', () => {
         ])
       },
     )
+    mockedFetchApplicationClientData.mockImplementation((clientNumber) => {
+      if (clientNumber === '00033344') {
+        return Promise.resolve({
+          clientNumber,
+          companyName: 'Agent Export Services',
+          address: '44 Agent Road',
+          city: 'Nanaimo',
+          province: 'BC',
+          postalCode: 'V9R 1A1',
+          country: 'Canada',
+          phone: '250-555-0102',
+          fax: '',
+          email: 'agent@example.test',
+          notfound: '',
+        })
+      }
+
+      return Promise.resolve({
+        clientNumber,
+        companyName: 'Owner Forestry Ltd.',
+        address: '22 Owner Road',
+        city: 'Victoria',
+        province: 'BC',
+        postalCode: 'V8V 1A1',
+        country: 'Canada',
+        phone: '250-555-0101',
+        fax: '',
+        email: 'owner@example.test',
+        notfound: '',
+      })
+    })
     mockedSendApplicationReviewStatusEmail.mockResolvedValue({
       success: true,
       message: 'Email sent.',
@@ -1184,7 +1218,12 @@ describe('Provincial Application Detail Document Actions', () => {
         'agent',
         '321',
       )
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00')
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01')
     })
+    expect(await screen.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
+    expect(screen.getByText('Agent Export Services')).toBeInTheDocument()
+    expect(screen.getByText('owner@example.test')).toBeInTheDocument()
     await waitFor(() => {
       expect(
         screen.getByLabelText('Exemption Reason').querySelector('option[value="S"]'),

@@ -11,7 +11,53 @@ export type ApplicationClientContact = {
   contactId: string
 }
 
+export type ApplicationClientData = {
+  clientNumber: string
+  companyName: string
+  address: string
+  city: string
+  province: string
+  postalCode: string
+  country: string
+  phone: string
+  fax: string
+  email: string
+  notfound: string
+}
+
 const CLIENT_LOCATION_CACHE_TTL_MS = 5 * 60_000
+
+const stringField = (item: Record<string, unknown>, field: string): string => {
+  const value = item[field]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+const parseClientData = (input: unknown): ApplicationClientData | null => {
+  if (!input || typeof input !== 'object') {
+    return null
+  }
+
+  const item = input as Record<string, unknown>
+  const clientNumber = stringField(item, 'clientNumber')
+
+  if (!clientNumber) {
+    return null
+  }
+
+  return {
+    clientNumber,
+    companyName: stringField(item, 'companyName'),
+    address: stringField(item, 'address'),
+    city: stringField(item, 'city'),
+    province: stringField(item, 'province'),
+    postalCode: stringField(item, 'postalCode'),
+    country: stringField(item, 'country'),
+    phone: stringField(item, 'phone'),
+    fax: stringField(item, 'fax'),
+    email: stringField(item, 'email'),
+    notfound: stringField(item, 'notfound'),
+  }
+}
 
 const parseClientLocations = (input: unknown): ApplicationClientLocation[] => {
   if (!Array.isArray(input)) {
@@ -84,6 +130,40 @@ const parseClientContacts = (input: unknown): ApplicationClientContact[] => {
       }
     })
     .filter((item): item is ApplicationClientContact => item !== null)
+}
+
+export const fetchApplicationClientData = async (
+  clientNumber: string,
+  clientLocationCode: string,
+): Promise<ApplicationClientData | null> => {
+  const normalizedClientNumber = clientNumber.trim()
+  const normalizedClientLocationCode = clientLocationCode.trim()
+  if (!normalizedClientNumber || !normalizedClientLocationCode) {
+    return null
+  }
+
+  try {
+    const data = await apiService.getCachedData<unknown>(
+      '/lexis/rpc/application-details/client-data',
+      {
+        params: {
+          clientLocationCode: normalizedClientLocationCode,
+          clientNumber: normalizedClientNumber,
+        },
+      },
+      {
+        cacheKey: `application-client-data:${normalizedClientNumber}:${normalizedClientLocationCode}`,
+        ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
+      },
+    )
+    return parseClientData(data)
+  } catch (error) {
+    console.warn(
+      `Unable to load client data for client ${normalizedClientNumber} location ${normalizedClientLocationCode}.`,
+      error,
+    )
+    return null
+  }
 }
 
 export const fetchApplicationClientLocations = async (
