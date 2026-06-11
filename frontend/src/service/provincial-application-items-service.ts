@@ -144,6 +144,10 @@ export type ApplicationSummaryMutationResult = {
   warnings: string[]
 }
 
+export type ApplicationVolumeUsageResult = {
+  volumeUsed: boolean
+}
+
 export type ApplicationSummarySnapshot = ApplicationSummaryMutation & {
   federalApplicationNumber: string
   exemptionNumber: string
@@ -657,6 +661,28 @@ export const saveApplicationRemark = async (
     return normalizeRemarkMutationResult(payload)
   } catch (error) {
     throw toSearchServiceError('Unable to save application remark.', error)
+  }
+}
+
+export const checkApplicationVolumeUsage = async (
+  applicationNumber: string,
+): Promise<ApplicationVolumeUsageResult> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/check-unused-volume',
+      {
+        params: {
+          applicationNumber,
+        },
+      },
+      { ttlMs: 0 },
+    )
+    const payload = (response.data ?? {}) as Record<string, unknown>
+    return {
+      volumeUsed: asBoolean(payload.volumeUsedInd),
+    }
+  } catch (error) {
+    throw toSearchServiceError('Unable to check application volume usage.', error)
   }
 }
 

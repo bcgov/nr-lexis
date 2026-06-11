@@ -25,6 +25,7 @@ import {
 import {
   addApplicationPackage,
   addApplicationScaleToPackage,
+  checkApplicationVolumeUsage,
   deleteApplicationPackage,
   deleteApplicationScale,
   fetchApplicationEndUsesForSpeciesRegion,
@@ -80,6 +81,7 @@ vi.mock('@/service/provincial-application-documents-service', () => ({
 vi.mock('@/service/provincial-application-items-service', () => ({
   addApplicationPackage: vi.fn(),
   addApplicationScaleToPackage: vi.fn(),
+  checkApplicationVolumeUsage: vi.fn(),
   deleteApplicationPackage: vi.fn(),
   deleteApplicationScale: vi.fn(),
   fetchApplicationEndUsesForSpeciesRegion: vi.fn(),
@@ -127,6 +129,7 @@ const mockedOpenApplicationDocument = vi.mocked(openApplicationDocument)
 const mockedRemoveApplicationDocument = vi.mocked(removeApplicationDocument)
 const mockedAddApplicationPackage = vi.mocked(addApplicationPackage)
 const mockedAddApplicationScaleToPackage = vi.mocked(addApplicationScaleToPackage)
+const mockedCheckApplicationVolumeUsage = vi.mocked(checkApplicationVolumeUsage)
 const mockedDeleteApplicationPackage = vi.mocked(deleteApplicationPackage)
 const mockedDeleteApplicationScale = vi.mocked(deleteApplicationScale)
 const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
@@ -448,6 +451,7 @@ describe('Provincial Application Detail Document Actions', () => {
     })
     mockedDeleteApplicationPackage.mockResolvedValue({ success: true })
     mockedDeleteApplicationScale.mockResolvedValue({ success: true })
+    mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: true })
     mockedFetchApplicationSummarySnapshot.mockResolvedValue({
       applicationNumber: '321',
       federalApplicationNumber: '',
@@ -1454,6 +1458,38 @@ describe('Provincial Application Detail Document Actions', () => {
 
     expect(screen.getAllByText('Location of logs is required.').length).toBeGreaterThan(0)
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
+  it('warns once before saving summary when package volumes do not consume application volume', async () => {
+    mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByLabelText('Application Volume (m³)')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    expect(
+      await screen.findByText(
+        'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('resets application summary edits from the editable snapshot', async () => {

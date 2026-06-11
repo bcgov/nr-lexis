@@ -31,6 +31,7 @@ import {
   type ProvincialApplicationDocumentRow,
 } from '@/service/provincial-application-documents-service'
 import {
+  checkApplicationVolumeUsage,
   fetchApplicationEndUsesForSpeciesRegion,
   fetchApplicationSummarySnapshot,
   fetchApplicationRemainingSpecies,
@@ -375,6 +376,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [actionWarningMessage, setActionWarningMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [selectedApplicationDocumentFile, setSelectedApplicationDocumentFile] =
     useState<File | null>(null)
@@ -390,6 +392,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
   const [summaryBaselineForm, setSummaryBaselineForm] =
     useState<ApplicationSummaryFormState | null>(null)
+  const [summaryVolumeWarningAccepted, setSummaryVolumeWarningAccepted] = useState(false)
   const [isSavingSummary, setIsSavingSummary] = useState(false)
   const [showSummaryValidationErrors, setShowSummaryValidationErrors] = useState(false)
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
@@ -1551,6 +1554,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const onSummaryFormChange = useCallback(
     (key: keyof ApplicationSummaryFormState, value: string) => {
       setSummaryForm((current) => (current ? { ...current, [key]: value } : current))
+      setSummaryVolumeWarningAccepted(false)
+      setActionWarningMessage('')
     },
     [],
   )
@@ -1567,6 +1572,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
       }
       return { ...current, speciesCodes: [...current.speciesCodes, nextSpecies] }
     })
+    setSummaryVolumeWarningAccepted(false)
+    setActionWarningMessage('')
   }, [applicationSpeciesCandidate])
 
   const onRemoveApplicationSpecies = useCallback((speciesCode: string) => {
@@ -1579,6 +1586,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
         speciesCodes: current.speciesCodes.filter((code) => code !== speciesCode),
       }
     })
+    setSummaryVolumeWarningAccepted(false)
+    setActionWarningMessage('')
   }, [])
 
   const onSaveSummary = useCallback(async () => {
@@ -1588,6 +1597,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
+    setActionWarningMessage('')
     if (hasSummaryValidationError) {
       setShowSummaryValidationErrors(true)
       setActionErrorMessage(
@@ -1599,6 +1609,17 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
     setIsSavingSummary(true)
     try {
+      if (!summaryVolumeWarningAccepted) {
+        const volumeUsage = await checkApplicationVolumeUsage(String(detail.applicationNumber))
+        if (!volumeUsage.volumeUsed) {
+          setSummaryVolumeWarningAccepted(true)
+          setActionWarningMessage(
+            'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
+          )
+          return
+        }
+      }
+
       const result = await updateApplicationSummary({
         applicationNumber: String(detail.applicationNumber),
         applicationDate: summaryForm.applicationDate,
@@ -1636,6 +1657,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
       await loadApplicationDetail()
       setShowSummaryValidationErrors(false)
+      setSummaryVolumeWarningAccepted(false)
       setActionInfoMessage(result.message || 'Application summary saved.')
     } catch (error) {
       console.error(error)
@@ -1651,6 +1673,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
     loadApplicationDetail,
     summaryFieldErrors,
     summaryForm,
+    summaryVolumeWarningAccepted,
   ])
 
   const buildReviewStatusPayload = useCallback(
@@ -1862,6 +1885,16 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 kind="error"
                 title="Action failed"
                 subtitle={actionErrorMessage}
+                lowContrast
+              />
+            </Column>
+          )}
+          {!!actionWarningMessage && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <InlineNotification
+                kind="warning"
+                title="Review package volumes"
+                subtitle={actionWarningMessage}
                 lowContrast
               />
             </Column>

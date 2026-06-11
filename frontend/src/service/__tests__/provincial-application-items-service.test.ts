@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addApplicationScaleToPackage,
+  checkApplicationVolumeUsage,
   deleteApplicationScale,
   fetchApplicationPackageStatusCodes,
   fetchApplicationSummarySnapshot,
@@ -64,6 +65,27 @@ describe('provincial-application-items-service', () => {
       '/lexis/rpc/application-details/package-status-codes',
       undefined,
       { ttlMs: 30000 },
+    )
+  })
+
+  it('checks application volume usage without cached GET data', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        volumeUsedInd: false,
+      },
+    })
+
+    const result = await checkApplicationVolumeUsage('321')
+
+    expect(result).toEqual({ volumeUsed: false })
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/rpc/application-details/check-unused-volume',
+      {
+        params: {
+          applicationNumber: '321',
+        },
+      },
+      { ttlMs: 0 },
     )
   })
 
