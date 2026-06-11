@@ -431,7 +431,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         2,
         rs -> {
           String remark = getString(rs, "REMARK");
-          return new LexisApplicationDetailDto.LexisRemarkDto(remark, remark);
+          return new LexisApplicationDetailDto.LexisRemarkDto(
+              getLong(rs, "EXEMPTION_APPL_REMARK_NUMBER"),
+              remark,
+              remark);
         });
   }
 

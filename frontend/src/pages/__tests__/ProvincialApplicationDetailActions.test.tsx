@@ -134,7 +134,7 @@ const applicationDetail: ProvincialApplicationDetail = {
   exemptionApprover: false,
   locked: false,
   packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 5 }],
-  remarks: [{ title: 'Note', remark: 'ok' }],
+  remarks: [{ remarkId: 88, title: 'Note', remark: 'ok' }],
   offers: [],
 }
 
@@ -877,7 +877,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ...applicationDetail,
       remarks: [
         ...applicationDetail.remarks,
-        { title: 'New application note', remark: 'New application note' },
+        { remarkId: 89, title: 'New application note', remark: 'New application note' },
       ],
     }
     mockedFetchProvincialApplicationDetail
@@ -908,6 +908,48 @@ describe('Provincial Application Detail Document Actions', () => {
     })
     expect(await screen.findByText('Application remark saved.')).toBeInTheDocument()
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
+  })
+
+  it('updates existing application remarks and refreshes detail', async () => {
+    const detailAfterRemarkUpdate: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      remarks: [
+        { remarkId: 88, title: 'Updated application note', remark: 'Updated application note' },
+      ],
+    }
+    mockedFetchProvincialApplicationDetail
+      .mockResolvedValueOnce(applicationDetail)
+      .mockResolvedValueOnce(detailAfterRemarkUpdate)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const remarkRow = (await screen.findByText('ok')).closest('tr')
+    expect(remarkRow).toBeTruthy()
+    await userEvent.click(within(remarkRow as HTMLElement).getByRole('button', { name: 'Edit' }))
+    const remarkInput = screen.getByLabelText('Edit Remark 88')
+    await userEvent.clear(remarkInput)
+    await userEvent.type(remarkInput, 'Updated application note')
+    await userEvent.click(screen.getByRole('button', { name: 'Update Remark' }))
+
+    await waitFor(() => {
+      expect(mockedSaveApplicationRemark).toHaveBeenCalledWith({
+        applicationNumber: '321',
+        remarkBody: 'Updated application note',
+        remarkId: '88',
+      })
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('Application remark updated.')).toBeInTheDocument()
+    expect(screen.getAllByText('Updated application note').length).toBeGreaterThan(0)
   })
 
   it('saves application summary edits and refreshes detail', async () => {

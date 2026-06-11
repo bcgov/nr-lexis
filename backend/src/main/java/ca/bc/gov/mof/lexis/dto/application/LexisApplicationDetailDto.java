@@ -31,7 +31,7 @@ public record LexisApplicationDetailDto(
 
   public record LexisPackageDto(String packageNumber, double volume, long pieceCount) {}
 
-  public record LexisRemarkDto(String title, String remark) {}
+  public record LexisRemarkDto(Long remarkId, String title, String remark) {}
 
   public record LexisOfferDto(String offerNumber, boolean validOffer, LocalDate withdrawalDate) {}
 }

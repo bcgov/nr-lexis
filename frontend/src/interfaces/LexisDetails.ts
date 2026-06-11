@@ -26,6 +26,7 @@ export type ProvincialApplicationDetail = {
     pieceCount: number
   }[]
   remarks: {
+    remarkId: number | null
     title: string
     remark: string
   }[]

@@ -62,7 +62,7 @@ const applicationDetail: ProvincialApplicationDetail = {
   exemptionApprover: false,
   locked: false,
   packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 5 }],
-  remarks: [{ title: 'Note', remark: 'ok' }],
+  remarks: [{ remarkId: 88, title: 'Note', remark: 'ok' }],
   offers: [{ offerNumber: 'OFF-1', validOffer: true, withdrawalDate: null }],
 }
 

@@ -94,7 +94,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
                   new LexisApplicationDetailDto.LexisPackageDto("PKG-902", 90.2, 33)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      "Initial Review", "Submitted with complete scale package.")),
+                      1001L, "Initial Review", "Submitted with complete scale package.")),
               List.of()),
           new ApplicationRecord(
               1000456L,
@@ -126,7 +126,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
               List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", 95.0, 28)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      "Pending", "Awaiting agency confirmation for listing date.")),
+                      1002L, "Pending", "Awaiting agency confirmation for listing date.")),
               List.of(
                   new LexisApplicationDetailDto.LexisOfferDto("OF-810", true, null),
                   new LexisApplicationDetailDto.LexisOfferDto(
@@ -161,7 +161,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
               List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-950", 325.75, 88)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      "Completed", "Permit issued and application closed.")),
+                      1003L, "Completed", "Permit issued and application closed.")),
               List.of(
                   new LexisApplicationDetailDto.LexisOfferDto(
                       "OF-990", true, LocalDate.of(2025, 12, 20)))));

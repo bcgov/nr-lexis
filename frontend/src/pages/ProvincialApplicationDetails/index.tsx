@@ -177,6 +177,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [isUploadingApplicationDocument, setIsUploadingApplicationDocument] = useState(false)
   const [applicationDocumentUploadInputKey, setApplicationDocumentUploadInputKey] = useState(0)
   const [remarkBody, setRemarkBody] = useState('')
+  const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null)
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
@@ -246,6 +247,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setReviewStatusRemark('')
       setReviewStatusEmailAddress('')
       setReviewValidationMessage('')
+      setRemarkBody('')
+      setEditingRemarkId(null)
       if (!response) {
         setErrorMessage(`No provincial application found for ${applicationNumber}.`)
         setDocumentRows([])
@@ -514,6 +517,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       const result = await saveApplicationRemark({
         applicationNumber: String(detail.applicationNumber),
         remarkBody: normalizedRemark,
+        remarkId: editingRemarkId ?? undefined,
       })
       if (!result.success) {
         setActionErrorMessage('Unable to save application remark.')
@@ -522,14 +526,17 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
       await loadApplicationDetail()
       setRemarkBody('')
-      setActionInfoMessage('Application remark saved.')
+      setEditingRemarkId(null)
+      setActionInfoMessage(
+        editingRemarkId ? 'Application remark updated.' : 'Application remark saved.',
+      )
     } catch (error) {
       console.error(error)
       setActionErrorMessage('Unable to save application remark.')
     } finally {
       setIsSavingRemark(false)
     }
-  }, [applicationNumber, detail, loadApplicationDetail, remarkBody])
+  }, [applicationNumber, detail, editingRemarkId, loadApplicationDetail, remarkBody])
 
   const onSummaryFormChange = useCallback(
     (key: keyof ApplicationSummaryFormState, value: string) => {
@@ -1451,7 +1458,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 <div className="legacy-search-actions">
                   <TextArea
                     id="applicationRemarkBody"
-                    labelText="New Remark"
+                    labelText={editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark'}
                     value={remarkBody}
                     invalid={!!remarkValidationMessage}
                     invalidText={remarkValidationMessage}
@@ -1468,8 +1475,26 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     disabled={isSavingRemark}
                     onClick={() => void onSaveRemark()}
                   >
-                    {isSavingRemark ? 'Saving...' : 'Save Remark'}
+                    {isSavingRemark
+                      ? 'Saving...'
+                      : editingRemarkId
+                        ? 'Update Remark'
+                        : 'Save Remark'}
                   </Button>
+                  {editingRemarkId && (
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      disabled={isSavingRemark}
+                      onClick={() => {
+                        setEditingRemarkId(null)
+                        setRemarkBody('')
+                        setRemarkValidationMessage('')
+                      }}
+                    >
+                      Cancel Edit
+                    </Button>
+                  )}
                 </div>
               )}
               <TextInput
@@ -1484,18 +1509,37 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   <TableRow>
                     <TableHeader>Title</TableHeader>
                     <TableHeader>Remark</TableHeader>
+                    {canManageRemarks && <TableHeader>Actions</TableHeader>}
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {filteredRemarks.map((item) => (
-                    <TableRow key={`${item.title}-${item.remark}`}>
+                    <TableRow key={`${item.remarkId ?? item.title}-${item.remark}`}>
                       <TableCell>{item.title}</TableCell>
                       <TableCell>{item.remark}</TableCell>
+                      {canManageRemarks && (
+                        <TableCell>
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            disabled={!item.remarkId}
+                            onClick={() => {
+                              setEditingRemarkId(item.remarkId ? String(item.remarkId) : null)
+                              setRemarkBody(item.remark)
+                              setRemarkValidationMessage('')
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                   {filteredRemarks.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={2}>No remarks matched the current filter.</TableCell>
+                      <TableCell colSpan={canManageRemarks ? 3 : 2}>
+                        No remarks matched the current filter.
+                      </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
