@@ -9,6 +9,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -44,6 +45,8 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_REMOVE_DOCUMENT = "removeDocument";
   private static final String ACTION_GET_REMARK = "getRemark";
   private static final String ACTION_PERSIST_REMARK = "persistRemark";
+  private static final String ACTION_CHECK_FORM_CHANGES = "checkFormChanges";
+  private static final String ACTION_RELEASE_LOCK = "releaseLock";
   private static final String ACTION_ADD_APPLICATION = "addApplication";
   private static final String ACTION_UPDATE_APPLICATION = "updateApplication";
   private static final String ACTION_GET_CLIENT_DATA = "getClientData";
@@ -71,6 +74,9 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_DELETE_PACKAGE_BY_ID = "deletePackageById";
   private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
   private static final String LEGACY_ACTION_FILE_APPLICATION_UPLOAD = "/fileApplicationUpload";
+  private static final String LEGACY_APPLICATION_LOCK_SESSION_KEY = "exemptionApplication";
+  private static final String LEGACY_APPLICATION_NUMBER_SESSION_KEY = "applicationNumber";
+  private static final String APPLICATION_STATUS_EXPIRED = "EXP";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -239,6 +245,47 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "remarkBody", required = false) String remarkBody,
       Authentication authentication) {
     return persistRemark(remarkId, applicationNumber, remarkBody, authentication);
+  }
+
+  @GetMapping("/rpc/application-details/check-form-changes")
+  public ResponseEntity<CheckFormChangesResponseDto> checkFormChanges(
+      @RequestParam MultiValueMap<String, String> parameters) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning default check-form-changes payload");
+      return ResponseEntity.ok(new CheckFormChangesResponseDto(false));
+    }
+
+    Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    boolean applicationChanged =
+        service
+            .getApplicationSummarySnapshot(applicationNumber)
+            .map(snapshot -> hasApplicationFormChanges(parameters, snapshot))
+            .orElse(false);
+    return ResponseEntity.ok(new CheckFormChangesResponseDto(applicationChanged));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_CHECK_FORM_CHANGES)
+  public ResponseEntity<CheckFormChangesResponseDto> checkFormChangesLegacy(
+      @RequestParam MultiValueMap<String, String> parameters) {
+    return checkFormChanges(parameters);
+  }
+
+  @PostMapping("/rpc/application-details/release-lock")
+  public ResponseEntity<ReleaseLockResponseDto> releaseLock(HttpServletRequest request) {
+    if (request != null) {
+      var session = request.getSession(false);
+      if (session != null) {
+        session.removeAttribute(LEGACY_APPLICATION_LOCK_SESSION_KEY);
+        session.removeAttribute(LEGACY_APPLICATION_NUMBER_SESSION_KEY);
+      }
+    }
+    return ResponseEntity.ok(new ReleaseLockResponseDto("ok"));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_RELEASE_LOCK)
+  public ResponseEntity<ReleaseLockResponseDto> releaseLockLegacy(HttpServletRequest request) {
+    return releaseLock(request);
   }
 
   @PostMapping("/rpc/application-details/application")
@@ -999,6 +1046,77 @@ public class ApplicationDetailsRpcController {
     return null;
   }
 
+  private boolean hasApplicationFormChanges(
+      MultiValueMap<String, String> parameters,
+      ApplicationDetailsRpcService.ApplicationSummarySnapshot snapshot) {
+    if (snapshot == null || APPLICATION_STATUS_EXPIRED.equalsIgnoreCase(snapshot.applicationStatusCode())) {
+      return false;
+    }
+
+    String additionalRemarks = first(parameters, "additionalRemarks", "remarks");
+    if (additionalRemarks != null) {
+      return true;
+    }
+    if (isBlank(snapshot.ownerContactName())) {
+      return true;
+    }
+
+    return fieldChanged(snapshot.ownerClientNumber(), first(parameters, "ownerClientNumber"))
+        || fieldChanged(
+            snapshot.ownerClientLocationCode(),
+            first(parameters, "ownerClientLocation", "ownerClientLocationCode"))
+        || fieldChanged(snapshot.orgUnitNumber(), parsePositiveLong(first(parameters, "region", "orgUnitNumber")))
+        || fieldChanged(snapshot.productTypeCode(), first(parameters, "productType", "productTypeCode"))
+        || fieldChanged(
+            snapshot.exemptionReasonCode(),
+            first(parameters, "exemptionReason", "exemptionReasonCode", "exportExemptionReasonCode"))
+        || fieldChanged(snapshot.applicationDate(), parseDate(first(parameters, "applicationDate")))
+        || fieldChanged(snapshot.receivedDate(), parseDate(first(parameters, "dateReceived", "receivedDate")))
+        || fieldChanged(
+            snapshot.exportScheduleId(),
+            parsePositiveLong(first(parameters, "exportScheduleId", "legacyExportScheduleId")))
+        || fieldChanged(snapshot.termDays(), parsePositiveLong(first(parameters, "exemptionTerm", "termDays")))
+        || fieldChanged(snapshot.productLocation(), first(parameters, "logLocation", "productLocation"))
+        || fieldChanged(snapshot.averageLogVolume(), parseDouble(first(parameters, "averageLogVolume")))
+        || fieldChanged(snapshot.ownerContactName(), first(parameters, "ownerContactName"))
+        || agentChanged(parameters, snapshot);
+  }
+
+  private boolean agentChanged(
+      MultiValueMap<String, String> parameters,
+      ApplicationDetailsRpcService.ApplicationSummarySnapshot snapshot) {
+    String agentNumber = first(parameters, "agentClientNumber", "applicantClientNumber");
+    if (agentNumber == null && snapshot.agentClientNumber() == null) {
+      return false;
+    }
+    if (snapshot.agentClientNumber() != null && isBlank(snapshot.agentContactName())) {
+      return true;
+    }
+    return fieldChanged(snapshot.agentClientNumber(), agentNumber)
+        || fieldChanged(
+            snapshot.agentClientLocationCode(),
+            first(parameters, "agentClientLocation", "agentClientLocationCode", "applicantClientLocationCode"))
+        || fieldChanged(snapshot.agentContactName(), first(parameters, "agentContactName"));
+  }
+
+  private boolean fieldChanged(Object currentValue, Object submittedValue) {
+    return !normalizeComparable(currentValue).equals(normalizeComparable(submittedValue));
+  }
+
+  private boolean isBlank(String value) {
+    return value == null || value.isBlank();
+  }
+
+  private String normalizeComparable(Object value) {
+    if (value == null) {
+      return "";
+    }
+    if (value instanceof Double doubleValue) {
+      return Double.toString(doubleValue);
+    }
+    return value.toString().trim();
+  }
+
   private LocalDate parseDate(String rawValue) {
     if (rawValue == null || rawValue.isBlank()) {
       return null;
@@ -1331,6 +1449,10 @@ public class ApplicationDetailsRpcController {
 
   public record PersistRemarkResponseDto(
       String status, Instant date, String user, String remark, String title, Long remarkId) {}
+
+  public record CheckFormChangesResponseDto(boolean applicationChanged) {}
+
+  public record ReleaseLockResponseDto(String release) {}
 
   public record ApplicationPersistenceResponseDto(
       boolean valid,

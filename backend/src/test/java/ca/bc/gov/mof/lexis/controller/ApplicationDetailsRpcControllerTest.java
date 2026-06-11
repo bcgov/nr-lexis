@@ -14,6 +14,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,6 +40,8 @@ class ApplicationDetailsRpcControllerTest {
   @Mock private ClientLookupService clientLookupService;
   @Mock private LexisSessionService sessionService;
   @Mock private LexisAuthorizationService authorizationService;
+  @Mock private HttpServletRequest servletRequest;
+  @Mock private HttpSession session;
 
   private ApplicationDetailsRpcController controller;
 
@@ -164,6 +168,78 @@ class ApplicationDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
+  }
+
+  @Test
+  void checkFormChangesShouldReturnDefaultUnchangedWhenServiceMissing() {
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckFormChangesResponseDto> response =
+        controller.checkFormChanges(new LinkedMultiValueMap<>());
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().applicationChanged()).isFalse();
+  }
+
+  @Test
+  void checkFormChangesShouldCompareLegacyApplicationSummaryFields() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+
+    MultiValueMap<String, String> params = matchingSummaryParameters();
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckFormChangesResponseDto> response =
+        controller.checkFormChanges(params);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().applicationChanged()).isFalse();
+    verify(service).getApplicationSummarySnapshot(1000456L);
+  }
+
+  @Test
+  void checkFormChangesShouldReportChangedWhenLegacyAdditionalRemarksArePresent() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+
+    MultiValueMap<String, String> params = matchingSummaryParameters();
+    params.add("additionalRemarks", "Needs review");
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckFormChangesResponseDto> response =
+        controller.checkFormChangesLegacy(params);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().applicationChanged()).isTrue();
+  }
+
+  @Test
+  void checkFormChangesShouldForceChangedWhenStoredOwnerContactIsBlankLikeLegacy() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithBlankOwnerContact()));
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckFormChangesResponseDto> response =
+        controller.checkFormChanges(matchingSummaryParameters());
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().applicationChanged()).isTrue();
+  }
+
+  @Test
+  void releaseLockShouldReturnLegacyOkPayloadAndClearApplicationSessionState() {
+    when(servletRequest.getSession(false)).thenReturn(session);
+
+    ResponseEntity<ApplicationDetailsRpcController.ReleaseLockResponseDto> response =
+        controller.releaseLockLegacy(servletRequest);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().release()).isEqualTo("ok");
+    verify(session).removeAttribute("exemptionApplication");
+    verify(session).removeAttribute("applicationNumber");
   }
 
   @Test
@@ -901,5 +977,82 @@ class ApplicationDetailsRpcControllerTest {
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
     when(authorizationService.canPerformAction(roles, action)).thenReturn(false);
     return authentication;
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshot() {
+    return new ApplicationDetailsRpcService.ApplicationSummarySnapshot(
+        1000456L,
+        null,
+        LocalDate.of(2026, 3, 1),
+        30L,
+        LocalDate.of(2026, 3, 2),
+        125.5d,
+        2.4d,
+        "Camp 1",
+        1234L,
+        "00022222",
+        "01",
+        "00011111",
+        "02",
+        null,
+        "U",
+        "NEW",
+        "A",
+        11L,
+        "H",
+        "P",
+        "O",
+        "Agent Contact",
+        "Owner Contact",
+        "N");
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshotWithBlankOwnerContact() {
+    return new ApplicationDetailsRpcService.ApplicationSummarySnapshot(
+        1000456L,
+        null,
+        LocalDate.of(2026, 3, 1),
+        30L,
+        LocalDate.of(2026, 3, 2),
+        125.5d,
+        2.4d,
+        "Camp 1",
+        1234L,
+        "00022222",
+        "01",
+        "00011111",
+        "02",
+        null,
+        "U",
+        "NEW",
+        "A",
+        11L,
+        "H",
+        "P",
+        "O",
+        "Agent Contact",
+        null,
+        "N");
+  }
+
+  private MultiValueMap<String, String> matchingSummaryParameters() {
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("applicationDate", "2026-03-01");
+    params.add("exemptionTerm", "30");
+    params.add("dateReceived", "2026-03-02");
+    params.add("averageLogVolume", "2.4");
+    params.add("logLocation", "Camp 1");
+    params.add("exportScheduleId", "1234");
+    params.add("agentClientNumber", "00022222");
+    params.add("agentClientLocationCode", "01");
+    params.add("agentContactName", "Agent Contact");
+    params.add("ownerClientNumber", "00011111");
+    params.add("ownerClientLocationCode", "02");
+    params.add("ownerContactName", "Owner Contact");
+    params.add("exemptionReason", "U");
+    params.add("region", "11");
+    params.add("productType", "H");
+    return params;
   }
 }
