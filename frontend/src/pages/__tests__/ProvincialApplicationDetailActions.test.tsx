@@ -109,6 +109,10 @@ vi.mock('@/service/search-options-service', () => ({
 
 Element.prototype.scrollIntoView = vi.fn()
 
+// This file renders the full provincial application detail page; several tests exercise
+// Carbon comboboxes and async child panels, which can exceed Vitest's 5s default in CI.
+vi.setConfig({ testTimeout: 20000 })
+
 const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) => {
   await userEvent.click(combobox)
   fireEvent.change(combobox, { target: { value: optionName } })
@@ -1380,7 +1384,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.queryByText('TM001')).not.toBeInTheDocument()
     expect(mockedFetchApplicationPackageSpecies).not.toHaveBeenCalledWith('PKG-1')
     expect(mockedFetchApplicationPackageScales).not.toHaveBeenCalledWith('PKG-1')
-  }, 15000)
+  })
 
   it('adds, looks up, and deletes package scales', async () => {
     render(
@@ -1431,7 +1435,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55')
     })
-  }, 15000)
+  })
 
   it('shows field validation before adding an empty scale', async () => {
     render(
@@ -1482,7 +1486,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getAllByText('Pieces must be a whole number.').length).toBeGreaterThan(0)
     expect(screen.getByText('Scale volume must be 99999.9 or less.')).toBeInTheDocument()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
-  }, 15000)
+  })
 
   it('saves application remarks and refreshes detail', async () => {
     const detailAfterRemark: ProvincialApplicationDetail = {
@@ -1522,7 +1526,7 @@ describe('Provincial Application Detail Document Actions', () => {
     })
     expect(await screen.findByText('Application remark saved.')).toBeInTheDocument()
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
-  }, 10000)
+  })
 
   it('hides application remark editing without application remarks action', async () => {
     mockedUseAuth.mockReturnValue({
@@ -1599,7 +1603,7 @@ describe('Provincial Application Detail Document Actions', () => {
     })
     expect(await screen.findByText('Application remark updated.')).toBeInTheDocument()
     expect(screen.getAllByText('Updated application note').length).toBeGreaterThan(0)
-  }, 10000)
+  })
 
   it('saves application summary edits and refreshes detail', async () => {
     const detailAfterSummarySave: ProvincialApplicationDetail = {
@@ -1706,7 +1710,7 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
-  }, 20000)
+  })
 
   it('validates application summary edits before saving', async () => {
     render(
