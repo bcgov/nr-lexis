@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchApplicationClientLocations } from '@/service/application-client-lookup-service'
+import {
+  fetchApplicationClientContacts,
+  fetchApplicationClientLocations,
+} from '@/service/application-client-lookup-service'
 
 const { getCachedDataMock } = vi.hoisted(() => ({
   getCachedDataMock: vi.fn(),
@@ -86,5 +89,43 @@ describe('application-client-lookup-service', () => {
     expect(result).toEqual([])
     expect(warnSpy).toHaveBeenCalledTimes(1)
     warnSpy.mockRestore()
+  })
+
+  it('loads and parses contacts for a client location', async () => {
+    getCachedDataMock.mockResolvedValue([
+      { contactName: 'Owner Contact', contactId: '-1' },
+      { contactName: 'Alternate Contact', contactId: '12' },
+      { contactName: 'No contacts on file for this location', contactId: '0' },
+      { contactName: ' ', contactId: '99' },
+    ])
+
+    const result = await fetchApplicationClientContacts(' 00011111 ', ' 01 ', 'owner', '321')
+
+    expect(getCachedDataMock).toHaveBeenCalledWith(
+      '/lexis/rpc/application-details/contacts-for-location',
+      {
+        params: {
+          applicantType: 'owner',
+          applicationNumber: '321',
+          clientLocationCode: '01',
+          clientNumber: '00011111',
+        },
+      },
+      {
+        cacheKey: 'application-client-contacts:owner:00011111:01:321',
+        ttlMs: 300000,
+      },
+    )
+    expect(result).toEqual([
+      { contactName: 'Owner Contact', contactId: '-1' },
+      { contactName: 'Alternate Contact', contactId: '12' },
+    ])
+  })
+
+  it('does not call the contacts API without a client number and location code', async () => {
+    await expect(fetchApplicationClientContacts('', '01')).resolves.toEqual([])
+    await expect(fetchApplicationClientContacts('00011111', '')).resolves.toEqual([])
+
+    expect(getCachedDataMock).not.toHaveBeenCalled()
   })
 })

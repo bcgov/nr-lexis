@@ -34,7 +34,9 @@ import {
 } from '@/service/search-options-service'
 import { submitProvincialApplicationCreate } from '@/service/create-submit-service'
 import {
+  fetchApplicationClientContacts,
   fetchApplicationClientLocations,
+  type ApplicationClientContact,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
 
@@ -125,6 +127,9 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
 const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
   location.locationCode !== '0'
 
+const isSelectableClientContact = (contact: ApplicationClientContact): boolean =>
+  contact.contactId !== '0'
+
 const resolveOwnerClientLocationCode = (
   locations: ApplicationClientLocation[],
   currentCode: string,
@@ -150,6 +155,24 @@ const resolveOwnerClientLocationCode = (
   return locations.find(isSelectableClientLocation)?.locationCode ?? ''
 }
 
+const resolveClientContactName = (
+  contacts: ApplicationClientContact[],
+  currentName: string,
+): string => {
+  const normalizedCurrentName = currentName.trim()
+  if (
+    normalizedCurrentName &&
+    contacts.some(
+      (contact) =>
+        isSelectableClientContact(contact) && contact.contactName === normalizedCurrentName,
+    )
+  ) {
+    return normalizedCurrentName
+  }
+
+  return contacts.find(isSelectableClientContact)?.contactName ?? normalizedCurrentName
+}
+
 const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
   productTypeCode === 'H' || productTypeCode === 'S'
 
@@ -173,8 +196,12 @@ const ProvincialApplicationCreatePage: FC = () => {
   const [regions, setRegions] = useState<SearchOption[]>([])
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
+  const [ownerClientContacts, setOwnerClientContacts] = useState<ApplicationClientContact[]>([])
+  const [agentClientContacts, setAgentClientContacts] = useState<ApplicationClientContact[]>([])
   const [isLoadingOwnerClientLocations, setIsLoadingOwnerClientLocations] = useState(false)
   const [isLoadingAgentClientLocations, setIsLoadingAgentClientLocations] = useState(false)
+  const [isLoadingOwnerClientContacts, setIsLoadingOwnerClientContacts] = useState(false)
+  const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -372,6 +399,138 @@ const ProvincialApplicationCreatePage: FC = () => {
     }
   }, [form.agentClientNumber, form.applicantTypeCode])
 
+  useEffect(() => {
+    const ownerClientNumber = form.ownerClientNumber.trim()
+    const ownerClientLocationCode = form.ownerClientLocationCode.trim()
+    if (!ownerClientNumber || !ownerClientLocationCode) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+
+        setOwnerClientContacts([])
+        setIsLoadingOwnerClientContacts(false)
+      })
+
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingOwnerClientContacts(true)
+      }
+    })
+
+    void fetchApplicationClientContacts(ownerClientNumber, ownerClientLocationCode, 'owner')
+      .then((contacts) => {
+        if (!isActive) {
+          return
+        }
+
+        setOwnerClientContacts(contacts)
+        setForm((current) => {
+          if (
+            current.ownerClientNumber.trim() !== ownerClientNumber ||
+            current.ownerClientLocationCode.trim() !== ownerClientLocationCode
+          ) {
+            return current
+          }
+
+          const nextOwnerContactName = resolveClientContactName(contacts, current.ownerContactName)
+          return current.ownerContactName === nextOwnerContactName
+            ? current
+            : { ...current, ownerContactName: nextOwnerContactName }
+        })
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingOwnerClientContacts(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.ownerClientLocationCode, form.ownerClientNumber])
+
+  useEffect(() => {
+    if (!isAgentApplicant(form.applicantTypeCode)) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+
+        setAgentClientContacts([])
+        setIsLoadingAgentClientContacts(false)
+      })
+
+      return () => {
+        isActive = false
+      }
+    }
+
+    const agentClientNumber = form.agentClientNumber.trim()
+    const agentClientLocationCode = form.agentClientLocationCode.trim()
+    if (!agentClientNumber || !agentClientLocationCode) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+
+        setAgentClientContacts([])
+        setIsLoadingAgentClientContacts(false)
+      })
+
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingAgentClientContacts(true)
+      }
+    })
+
+    void fetchApplicationClientContacts(agentClientNumber, agentClientLocationCode, 'agent')
+      .then((contacts) => {
+        if (!isActive) {
+          return
+        }
+
+        setAgentClientContacts(contacts)
+        setForm((current) => {
+          if (
+            current.agentClientNumber.trim() !== agentClientNumber ||
+            current.agentClientLocationCode.trim() !== agentClientLocationCode
+          ) {
+            return current
+          }
+
+          const nextAgentContactName = resolveClientContactName(contacts, current.agentContactName)
+          return current.agentContactName === nextAgentContactName
+            ? current
+            : { ...current, agentContactName: nextAgentContactName }
+        })
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingAgentClientContacts(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.agentClientLocationCode, form.agentClientNumber, form.applicantTypeCode])
+
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
       ownerClientNumber:
@@ -438,6 +597,8 @@ const ProvincialApplicationCreatePage: FC = () => {
   const missingRequiredOptions = productTypes.length === 0
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
+  const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
+  const hasSelectableAgentClientContacts = agentClientContacts.some(isSelectableClientContact)
   const ownerClientLocationPlaceholder = !form.ownerClientNumber.trim()
     ? 'Enter owner client number first'
     : isLoadingOwnerClientLocations
@@ -452,6 +613,20 @@ const ProvincialApplicationCreatePage: FC = () => {
       : hasSelectableAgentClientLocations
         ? 'Select agent client location'
         : 'No locations on file'
+  const ownerContactPlaceholder = !form.ownerClientLocationCode.trim()
+    ? 'Select owner location first'
+    : isLoadingOwnerClientContacts
+      ? 'Loading contacts'
+      : hasSelectableOwnerClientContacts
+        ? 'Select owner contact'
+        : 'No contacts on file'
+  const agentContactPlaceholder = !form.agentClientLocationCode.trim()
+    ? 'Select agent location first'
+    : isLoadingAgentClientContacts
+      ? 'Loading contacts'
+      : hasSelectableAgentClientContacts
+        ? 'Select agent contact'
+        : 'No contacts on file'
 
   const markFieldTouched = (field: ProvincialApplicationCreateField): void => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
@@ -611,17 +786,27 @@ const ProvincialApplicationCreatePage: FC = () => {
                 />
               ))}
             </Select>
-            <TextInput
+            <Select
               id="ownerContactName"
               labelText="Owner Name (required)"
               value={form.ownerContactName}
+              disabled={!form.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts}
               invalid={!!fieldError('ownerContactName')}
               invalidText={fieldError('ownerContactName')}
               onBlur={() => markFieldTouched('ownerContactName')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, ownerContactName: event.target.value }))
               }
-            />
+            >
+              <SelectItem value="" text={ownerContactPlaceholder} />
+              {ownerClientContacts.filter(isSelectableClientContact).map((contact) => (
+                <SelectItem
+                  key={contact.contactId}
+                  value={contact.contactName}
+                  text={contact.contactName}
+                />
+              ))}
+            </Select>
             <Select
               id="applicantTypeCode"
               labelText="Applicant Type (required)"
@@ -689,17 +874,27 @@ const ProvincialApplicationCreatePage: FC = () => {
                     />
                   ))}
                 </Select>
-                <TextInput
+                <Select
                   id="agentContactName"
                   labelText="Agent Contact Name (required)"
                   value={form.agentContactName}
+                  disabled={!form.agentClientLocationCode.trim() || isLoadingAgentClientContacts}
                   invalid={!!fieldError('agentContactName')}
                   invalidText={fieldError('agentContactName')}
                   onBlur={() => markFieldTouched('agentContactName')}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, agentContactName: event.target.value }))
                   }
-                />
+                >
+                  <SelectItem value="" text={agentContactPlaceholder} />
+                  {agentClientContacts.filter(isSelectableClientContact).map((contact) => (
+                    <SelectItem
+                      key={contact.contactId}
+                      value={contact.contactName}
+                      text={contact.contactName}
+                    />
+                  ))}
+                </Select>
               </>
             )}
             <Select

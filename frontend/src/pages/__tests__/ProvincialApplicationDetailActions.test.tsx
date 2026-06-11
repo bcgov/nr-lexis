@@ -11,7 +11,10 @@ import {
   sendApplicationReviewStatusEmail,
   updateApplicationReviewStatus,
 } from '@/service/application-review-search-service'
-import { fetchApplicationClientLocations } from '@/service/application-client-lookup-service'
+import {
+  fetchApplicationClientContacts,
+  fetchApplicationClientLocations,
+} from '@/service/application-client-lookup-service'
 import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
@@ -56,6 +59,7 @@ vi.mock('@/service/application-review-search-service', () => ({
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientContacts: vi.fn(),
   fetchApplicationClientLocations: vi.fn(),
 }))
 
@@ -93,6 +97,7 @@ const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
 const mockedSendApplicationReviewStatusEmail = vi.mocked(sendApplicationReviewStatusEmail)
 const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewStatus)
+const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
 const mockedFetchApplicationDocuments = vi.mocked(fetchApplicationDocuments)
@@ -226,6 +231,21 @@ describe('Provincial Application Detail Document Actions', () => {
         { locationCode: '02', locationName: 'Owner Alternate Location', selected: false },
       ])
     })
+    mockedFetchApplicationClientContacts.mockImplementation(
+      (clientNumber, clientLocationCode, applicantType) => {
+        if (applicantType === 'agent') {
+          return Promise.resolve([
+            { contactName: 'Agent Contact', contactId: '-1' },
+            { contactName: 'Agent Alternate Contact', contactId: '22' },
+          ])
+        }
+
+        return Promise.resolve([
+          { contactName: 'Owner Contact', contactId: '-1' },
+          { contactName: 'Owner Alternate Contact', contactId: '11' },
+        ])
+      },
+    )
     mockedSendApplicationReviewStatusEmail.mockResolvedValue({
       success: true,
       message: 'Email sent.',
@@ -1005,8 +1025,24 @@ describe('Provincial Application Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner')
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033344', 'agent')
+      expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
+        '00011122',
+        '00',
+        'owner',
+        '321',
+      )
+      expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
+        '00033344',
+        '01',
+        'agent',
+        '321',
+      )
     })
     await userEvent.selectOptions(screen.getByLabelText('Owner Client Location'), '02')
+    await userEvent.selectOptions(
+      screen.getByLabelText('Owner Contact Name'),
+      'Owner Alternate Contact',
+    )
 
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
@@ -1032,7 +1068,7 @@ describe('Provincial Application Detail Document Actions', () => {
         jurisdictionCode: 'P',
         growthTypeCode: 'O',
         agentContactName: 'Agent Contact',
-        ownerContactName: 'Owner Contact',
+        ownerContactName: 'Owner Alternate Contact',
         oicIndicator: 'N',
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)

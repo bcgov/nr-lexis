@@ -16,7 +16,10 @@ import {
   fetchProvincialExemptionOptions,
   fetchProvincialOfferOptions,
 } from '@/service/search-options-service'
-import { fetchApplicationClientLocations } from '@/service/application-client-lookup-service'
+import {
+  fetchApplicationClientContacts,
+  fetchApplicationClientLocations,
+} from '@/service/application-client-lookup-service'
 
 const mockNavigate = vi.fn()
 
@@ -41,6 +44,7 @@ vi.mock('@/service/create-submit-service', () => ({
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientContacts: vi.fn(),
   fetchApplicationClientLocations: vi.fn(),
 }))
 
@@ -50,6 +54,7 @@ const mockedFetchProvincialOfferOptions = vi.mocked(fetchProvincialOfferOptions)
 const mockedSubmitProvincialApplicationCreate = vi.mocked(submitProvincialApplicationCreate)
 const mockedSubmitProvincialExemptionCreate = vi.mocked(submitProvincialExemptionCreate)
 const mockedSubmitProvincialOfferCreate = vi.mocked(submitProvincialOfferCreate)
+const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 
 const successfulCreate = (createdId: string): CreateSubmissionResult => ({
@@ -84,6 +89,18 @@ describe('Create Page Core Flows', () => {
       { locationCode: '00', locationName: '00', selected: false },
       { locationCode: '01', locationName: '01 - MAIN LOCATION', selected: false },
     ])
+    mockedFetchApplicationClientContacts.mockImplementation(
+      async (clientNumber, clientLocationCode, applicantType) =>
+        applicantType === 'agent'
+          ? [
+              { contactName: 'Agent Contact', contactId: '-1' },
+              { contactName: 'Agent Alternate Contact', contactId: '22' },
+            ]
+          : [
+              { contactName: 'Owner Contact', contactId: '-1' },
+              { contactName: 'Owner Alternate Contact', contactId: '11' },
+            ],
+    )
   })
 
   it('submits provincial application prefilled form and navigates to details', async () => {

@@ -43,7 +43,9 @@ import {
   updateApplicationReviewStatus,
 } from '@/service/application-review-search-service'
 import {
+  fetchApplicationClientContacts,
   fetchApplicationClientLocations,
+  type ApplicationClientContact,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
 import { fetchApplicationReviewOptions, type SearchOption } from '@/service/search-options-service'
@@ -65,6 +67,9 @@ const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['REJ', 'WDN'])
 
 const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
   location.locationCode !== '0'
+
+const isSelectableClientContact = (contact: ApplicationClientContact): boolean =>
+  contact.contactId !== '0'
 
 const resolveClientLocationCode = (
   locations: ApplicationClientLocation[],
@@ -89,6 +94,24 @@ const resolveClientLocationCode = (
   }
 
   return locations.find(isSelectableClientLocation)?.locationCode ?? ''
+}
+
+const resolveClientContactName = (
+  contacts: ApplicationClientContact[],
+  currentName: string,
+): string => {
+  const normalizedCurrentName = currentName.trim()
+  if (
+    normalizedCurrentName &&
+    contacts.some(
+      (contact) =>
+        isSelectableClientContact(contact) && contact.contactName === normalizedCurrentName,
+    )
+  ) {
+    return normalizedCurrentName
+  }
+
+  return contacts.find(isSelectableClientContact)?.contactName ?? normalizedCurrentName
 }
 
 const triggerBrowserDownload = (blob: Blob, filename: string): void => {
@@ -216,8 +239,12 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [isSavingSummary, setIsSavingSummary] = useState(false)
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
+  const [ownerClientContacts, setOwnerClientContacts] = useState<ApplicationClientContact[]>([])
+  const [agentClientContacts, setAgentClientContacts] = useState<ApplicationClientContact[]>([])
   const [isLoadingOwnerClientLocations, setIsLoadingOwnerClientLocations] = useState(false)
   const [isLoadingAgentClientLocations, setIsLoadingAgentClientLocations] = useState(false)
+  const [isLoadingOwnerClientContacts, setIsLoadingOwnerClientContacts] = useState(false)
+  const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
   const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
   const [reviewStatusCode, setReviewStatusCode] = useState('')
   const [reviewStatusRemark, setReviewStatusRemark] = useState('')
@@ -396,8 +423,12 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const hasSummaryForm = summaryForm !== null
   const summaryOwnerClientNumber = summaryForm?.ownerClientNumber.trim() ?? ''
   const summaryAgentClientNumber = summaryForm?.agentClientNumber.trim() ?? ''
+  const summaryOwnerClientLocationCode = summaryForm?.ownerClientLocationCode.trim() ?? ''
+  const summaryAgentClientLocationCode = summaryForm?.agentClientLocationCode.trim() ?? ''
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
+  const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
+  const hasSelectableAgentClientContacts = agentClientContacts.some(isSelectableClientContact)
   const ownerClientLocationPlaceholder = !summaryOwnerClientNumber
     ? 'Enter owner client number first'
     : isLoadingOwnerClientLocations
@@ -412,6 +443,20 @@ const ProvincialApplicationDetailsPage: FC = () => {
       : hasSelectableAgentClientLocations
         ? 'Select agent client location'
         : 'No locations on file'
+  const ownerContactPlaceholder = !summaryOwnerClientLocationCode
+    ? 'Select owner location first'
+    : isLoadingOwnerClientContacts
+      ? 'Loading contacts'
+      : hasSelectableOwnerClientContacts
+        ? 'Select owner contact'
+        : 'No contacts on file'
+  const agentContactPlaceholder = !summaryAgentClientLocationCode
+    ? 'Select agent location first'
+    : isLoadingAgentClientContacts
+      ? 'Loading contacts'
+      : hasSelectableAgentClientContacts
+        ? 'Select agent contact'
+        : 'No contacts on file'
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {
@@ -554,6 +599,166 @@ const ProvincialApplicationDetailsPage: FC = () => {
       isActive = false
     }
   }, [canEditSummary, hasSummaryForm, summaryAgentClientNumber])
+
+  useEffect(() => {
+    if (!canEditSummary || !hasSummaryForm) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setOwnerClientContacts([])
+        setIsLoadingOwnerClientContacts(false)
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    if (!summaryOwnerClientNumber || !summaryOwnerClientLocationCode) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setOwnerClientContacts([])
+        setIsLoadingOwnerClientContacts(false)
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingOwnerClientContacts(true)
+      }
+    })
+
+    void fetchApplicationClientContacts(
+      summaryOwnerClientNumber,
+      summaryOwnerClientLocationCode,
+      'owner',
+      applicationNumber ?? '',
+    )
+      .then((contacts) => {
+        if (!isActive) {
+          return
+        }
+
+        setOwnerClientContacts(contacts)
+        setSummaryForm((current) => {
+          if (
+            !current ||
+            current.ownerClientNumber.trim() !== summaryOwnerClientNumber ||
+            current.ownerClientLocationCode.trim() !== summaryOwnerClientLocationCode
+          ) {
+            return current
+          }
+
+          const nextOwnerContactName = resolveClientContactName(contacts, current.ownerContactName)
+          return current.ownerContactName === nextOwnerContactName
+            ? current
+            : { ...current, ownerContactName: nextOwnerContactName }
+        })
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingOwnerClientContacts(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    applicationNumber,
+    canEditSummary,
+    hasSummaryForm,
+    summaryOwnerClientLocationCode,
+    summaryOwnerClientNumber,
+  ])
+
+  useEffect(() => {
+    if (!canEditSummary || !hasSummaryForm) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setAgentClientContacts([])
+        setIsLoadingAgentClientContacts(false)
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    if (!summaryAgentClientNumber || !summaryAgentClientLocationCode) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setAgentClientContacts([])
+        setIsLoadingAgentClientContacts(false)
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingAgentClientContacts(true)
+      }
+    })
+
+    void fetchApplicationClientContacts(
+      summaryAgentClientNumber,
+      summaryAgentClientLocationCode,
+      'agent',
+      applicationNumber ?? '',
+    )
+      .then((contacts) => {
+        if (!isActive) {
+          return
+        }
+
+        setAgentClientContacts(contacts)
+        setSummaryForm((current) => {
+          if (
+            !current ||
+            current.agentClientNumber.trim() !== summaryAgentClientNumber ||
+            current.agentClientLocationCode.trim() !== summaryAgentClientLocationCode
+          ) {
+            return current
+          }
+
+          const nextAgentContactName = resolveClientContactName(contacts, current.agentContactName)
+          return current.agentContactName === nextAgentContactName
+            ? current
+            : { ...current, agentContactName: nextAgentContactName }
+        })
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingAgentClientContacts(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    applicationNumber,
+    canEditSummary,
+    hasSummaryForm,
+    summaryAgentClientLocationCode,
+    summaryAgentClientNumber,
+  ])
 
   useEffect(() => {
     if (!canReviewApplication) {
@@ -1173,14 +1378,26 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         />
                       ))}
                     </Select>
-                    <TextInput
+                    <Select
                       id="applicationSummaryOwnerContactName"
                       labelText="Owner Contact Name"
                       value={summaryForm.ownerContactName}
+                      disabled={
+                        !summaryForm.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts
+                      }
                       onChange={(event) =>
                         onSummaryFormChange('ownerContactName', event.target.value)
                       }
-                    />
+                    >
+                      <SelectItem value="" text={ownerContactPlaceholder} />
+                      {ownerClientContacts.filter(isSelectableClientContact).map((contact) => (
+                        <SelectItem
+                          key={contact.contactId}
+                          value={contact.contactName}
+                          text={contact.contactName}
+                        />
+                      ))}
+                    </Select>
                     <TextInput
                       id="applicationSummaryApplicantTypeCode"
                       labelText="Applicant Type"
@@ -1218,14 +1435,26 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         />
                       ))}
                     </Select>
-                    <TextInput
+                    <Select
                       id="applicationSummaryAgentContactName"
                       labelText="Agent Contact Name"
                       value={summaryForm.agentContactName}
+                      disabled={
+                        !summaryForm.agentClientLocationCode.trim() || isLoadingAgentClientContacts
+                      }
                       onChange={(event) =>
                         onSummaryFormChange('agentContactName', event.target.value)
                       }
-                    />
+                    >
+                      <SelectItem value="" text={agentContactPlaceholder} />
+                      {agentClientContacts.filter(isSelectableClientContact).map((contact) => (
+                        <SelectItem
+                          key={contact.contactId}
+                          value={contact.contactName}
+                          text={contact.contactName}
+                        />
+                      ))}
+                    </Select>
                     <TextInput
                       id="applicationSummaryRegion"
                       labelText="Region"
