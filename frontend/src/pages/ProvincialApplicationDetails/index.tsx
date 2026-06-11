@@ -5,6 +5,8 @@ import {
   Grid,
   InlineLoading,
   InlineNotification,
+  Select,
+  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -35,6 +37,12 @@ import {
   type ApplicationSummarySnapshot,
 } from '@/service/provincial-application-items-service'
 import { submitAdminUpload } from '@/service/admin-upload-service'
+import {
+  approveApplicationReview,
+  sendApplicationReviewStatusEmail,
+  updateApplicationReviewStatus,
+} from '@/service/application-review-search-service'
+import { fetchApplicationReviewOptions, type SearchOption } from '@/service/search-options-service'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -45,6 +53,10 @@ const displayValue = (value: string | number | null | undefined): string => {
 }
 
 const normalizeText = (value: string): string => value.trim().toLowerCase()
+const normalizeReviewStatus = (status: string): string => status.trim().toUpperCase()
+const normalizeEmail = (email: string): string => email.trim()
+const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
 
 const triggerBrowserDownload = (blob: Blob, filename: string): void => {
   const objectUrl = URL.createObjectURL(blob)
@@ -168,6 +180,12 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
   const [isSavingSummary, setIsSavingSummary] = useState(false)
+  const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
+  const [reviewStatusCode, setReviewStatusCode] = useState('')
+  const [reviewStatusRemark, setReviewStatusRemark] = useState('')
+  const [reviewStatusEmailAddress, setReviewStatusEmailAddress] = useState('')
+  const [reviewValidationMessage, setReviewValidationMessage] = useState('')
+  const [isSubmittingReviewAction, setIsSubmittingReviewAction] = useState(false)
   const beginDetailRequest = useLatestRequestGuard()
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
@@ -223,6 +241,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
       }
       setDetail(response)
       setSummaryForm(response ? toSummaryFormState(response) : null)
+      setReviewStatusCode(response?.applicationStatusCode ?? '')
+      setReviewStatusRemark('')
+      setReviewStatusEmailAddress('')
+      setReviewValidationMessage('')
       if (!response) {
         setErrorMessage(`No provincial application found for ${applicationNumber}.`)
         setDocumentRows([])
@@ -325,6 +347,30 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const canManageItems = canPerform('createApplication') && !detail?.readOnly && !detail?.locked
   const canManageRemarks = canManageItems
   const canEditSummary = canManageItems
+  const canReviewApplication = canPerform('/applicationsReview')
+  const normalizedReviewStatusCode = useMemo(
+    () => normalizeReviewStatus(reviewStatusCode),
+    [reviewStatusCode],
+  )
+  const canSendReviewStatusEmail = EMAIL_SUPPORTED_STATUS_CODES.has(normalizedReviewStatusCode)
+
+  useEffect(() => {
+    if (!canReviewApplication) {
+      return
+    }
+
+    const loadReviewOptions = async () => {
+      try {
+        const options = await fetchApplicationReviewOptions()
+        setReviewStatusOptions(options.reviewStatuses)
+      } catch (error) {
+        console.warn('Unable to load application review status options.', error)
+        setReviewStatusOptions([])
+      }
+    }
+
+    void loadReviewOptions()
+  }, [canReviewApplication])
 
   const onCreateOffer = useCallback(() => {
     if (!detail) {
@@ -542,6 +588,142 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setIsSavingSummary(false)
     }
   }, [applicationNumber, detail, loadApplicationDetail, summaryForm])
+
+  const buildReviewStatusPayload = useCallback(
+    (requireEmail: boolean) => {
+      const statusCode = normalizedReviewStatusCode
+      const clientEmailAddress = normalizeEmail(reviewStatusEmailAddress)
+      if (!statusCode) {
+        return {
+          valid: false,
+          message: 'Choose an application status before updating review status.',
+          payload: null,
+        }
+      }
+
+      if (requireEmail) {
+        if (!canSendReviewStatusEmail) {
+          return {
+            valid: false,
+            message: 'Status email is only supported for rejected or withdrawn applications.',
+            payload: null,
+          }
+        }
+
+        if (!clientEmailAddress || !isValidEmail(clientEmailAddress)) {
+          return {
+            valid: false,
+            message: 'Enter a valid client email address before sending status email.',
+            payload: null,
+          }
+        }
+      } else if (clientEmailAddress && !isValidEmail(clientEmailAddress)) {
+        return {
+          valid: false,
+          message: 'Enter a valid client email address.',
+          payload: null,
+        }
+      }
+
+      return {
+        valid: true,
+        message: '',
+        payload: {
+          statusCode,
+          remark: reviewStatusRemark.trim(),
+          clientEmailAddress,
+        },
+      }
+    },
+    [
+      canSendReviewStatusEmail,
+      normalizedReviewStatusCode,
+      reviewStatusEmailAddress,
+      reviewStatusRemark,
+    ],
+  )
+
+  const onApproveApplication = useCallback(async () => {
+    if (!detail || !canReviewApplication) {
+      return
+    }
+
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setReviewValidationMessage('')
+    setIsSubmittingReviewAction(true)
+    try {
+      const result = await approveApplicationReview(String(detail.applicationNumber))
+      if (!result.valid || !result.updated) {
+        setActionErrorMessage(result.message || 'Unable to approve application.')
+        return
+      }
+
+      await loadApplicationDetail()
+      setActionInfoMessage(result.message || 'Application approved.')
+    } catch (error) {
+      console.error(error)
+      setActionErrorMessage('Unable to approve application.')
+    } finally {
+      setIsSubmittingReviewAction(false)
+    }
+  }, [canReviewApplication, detail, loadApplicationDetail])
+
+  const onUpdateReviewStatus = useCallback(
+    async (sendEmail: boolean) => {
+      if (!detail || !canReviewApplication) {
+        return
+      }
+
+      const payloadResult = buildReviewStatusPayload(sendEmail)
+      if (!payloadResult.valid || !payloadResult.payload) {
+        setReviewValidationMessage(payloadResult.message)
+        return
+      }
+
+      setActionErrorMessage('')
+      setActionInfoMessage('')
+      setReviewValidationMessage('')
+      setIsSubmittingReviewAction(true)
+      try {
+        const updateResult = await updateApplicationReviewStatus(
+          String(detail.applicationNumber),
+          payloadResult.payload,
+        )
+        if (!updateResult.valid || !updateResult.updated) {
+          setActionErrorMessage(updateResult.message || 'Unable to update application status.')
+          return
+        }
+
+        if (sendEmail) {
+          const emailResult = await sendApplicationReviewStatusEmail(
+            String(detail.applicationNumber),
+            payloadResult.payload,
+          )
+          if (!emailResult.success) {
+            setActionErrorMessage(
+              emailResult.message || 'Application status updated; email failed.',
+            )
+            await loadApplicationDetail()
+            return
+          }
+        }
+
+        await loadApplicationDetail()
+        setActionInfoMessage(
+          sendEmail
+            ? 'Application status updated and email sent.'
+            : updateResult.message || 'Application status updated.',
+        )
+      } catch (error) {
+        console.error(error)
+        setActionErrorMessage('Unable to update application status.')
+      } finally {
+        setIsSubmittingReviewAction(false)
+      }
+    },
+    [buildReviewStatusPayload, canReviewApplication, detail, loadApplicationDetail],
+  )
 
   return (
     <Grid fullWidth className="default-grid">
@@ -972,6 +1154,91 @@ const ProvincialApplicationDetailsPage: FC = () => {
               ]}
             />
           </Column>
+
+          {canReviewApplication && (
+            <Column sm={4} md={8} lg={16}>
+              <Tile>
+                <h2 className="detail-tile-title">Application Review</h2>
+                <div className="legacy-search-grid">
+                  <Select
+                    id="applicationDetailReviewStatus"
+                    labelText="Application Status"
+                    value={reviewStatusCode}
+                    invalid={!!reviewValidationMessage && !normalizedReviewStatusCode}
+                    invalidText={reviewValidationMessage}
+                    onChange={(event) => {
+                      setReviewStatusCode(event.target.value)
+                      setReviewValidationMessage('')
+                    }}
+                  >
+                    <SelectItem value="" text="Select status" />
+                    {reviewStatusOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value} text={option.label} />
+                    ))}
+                  </Select>
+                  <TextInput
+                    id="applicationDetailReviewEmail"
+                    labelText="Client Email Address"
+                    value={reviewStatusEmailAddress}
+                    invalid={
+                      !!reviewValidationMessage &&
+                      reviewValidationMessage.toLowerCase().includes('email')
+                    }
+                    invalidText={reviewValidationMessage}
+                    onChange={(event) => {
+                      setReviewStatusEmailAddress(event.target.value)
+                      setReviewValidationMessage('')
+                    }}
+                  />
+                </div>
+                <div className="legacy-search-grid">
+                  <TextArea
+                    id="applicationDetailReviewRemark"
+                    labelText="Review Remark"
+                    maxCount={250}
+                    value={reviewStatusRemark}
+                    onChange={(event) => setReviewStatusRemark(event.target.value.slice(0, 250))}
+                  />
+                </div>
+                {!!reviewValidationMessage && normalizedReviewStatusCode && (
+                  <InlineNotification
+                    className="legacy-inline-notification"
+                    kind="error"
+                    title="Review validation"
+                    subtitle={reviewValidationMessage}
+                    lowContrast
+                    onCloseButtonClick={() => setReviewValidationMessage('')}
+                  />
+                )}
+                <div className="legacy-search-actions">
+                  <Button
+                    kind="primary"
+                    size="sm"
+                    disabled={isSubmittingReviewAction}
+                    onClick={() => void onApproveApplication()}
+                  >
+                    Approve Application
+                  </Button>
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    disabled={isSubmittingReviewAction}
+                    onClick={() => void onUpdateReviewStatus(false)}
+                  >
+                    Update Review Status
+                  </Button>
+                  <Button
+                    kind="tertiary"
+                    size="sm"
+                    disabled={isSubmittingReviewAction || !canSendReviewStatusEmail}
+                    onClick={() => void onUpdateReviewStatus(true)}
+                  >
+                    Update Status and Send Email
+                  </Button>
+                </div>
+              </Tile>
+            </Column>
+          )}
 
           <Column sm={4} md={8} lg={8}>
             <Tile>

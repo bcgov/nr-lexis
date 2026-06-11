@@ -6,6 +6,11 @@ import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
 import { submitAdminUpload } from '@/service/admin-upload-service'
+import {
+  approveApplicationReview,
+  sendApplicationReviewStatusEmail,
+  updateApplicationReviewStatus,
+} from '@/service/application-review-search-service'
 import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
@@ -29,6 +34,7 @@ import {
   updateApplicationSummary,
   updateApplicationPackage,
 } from '@/service/provincial-application-items-service'
+import { fetchApplicationReviewOptions } from '@/service/search-options-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -40,6 +46,12 @@ vi.mock('@/service/lexis-detail-service', () => ({
 
 vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
+}))
+
+vi.mock('@/service/application-review-search-service', () => ({
+  approveApplicationReview: vi.fn(),
+  sendApplicationReviewStatusEmail: vi.fn(),
+  updateApplicationReviewStatus: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-application-documents-service', () => ({
@@ -67,8 +79,15 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   updateApplicationPackage: vi.fn(),
 }))
 
+vi.mock('@/service/search-options-service', () => ({
+  fetchApplicationReviewOptions: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
+const mockedSendApplicationReviewStatusEmail = vi.mocked(sendApplicationReviewStatusEmail)
+const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewStatus)
 const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
 const mockedFetchApplicationDocuments = vi.mocked(fetchApplicationDocuments)
 const mockedOpenApplicationDocument = vi.mocked(openApplicationDocument)
@@ -90,6 +109,7 @@ const mockedFetchApplicationSummarySnapshot = vi.mocked(fetchApplicationSummaryS
 const mockedSaveApplicationRemark = vi.mocked(saveApplicationRemark)
 const mockedUpdateApplicationSummary = vi.mocked(updateApplicationSummary)
 const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
+const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOptions)
 
 const applicationDetail: ProvincialApplicationDetail = {
   applicationNumber: 321,
@@ -132,6 +152,13 @@ const NavigateButton = ({ to }: { to: string }) => {
   )
 }
 
+const getApplicationReviewTile = (): HTMLElement => {
+  const reviewTitle = screen.getByText('Application Review')
+  const reviewTile = reviewTitle.closest('.cds--tile')
+  expect(reviewTile).toBeTruthy()
+  return reviewTile as HTMLElement
+}
+
 describe('Provincial Application Detail Document Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -153,6 +180,35 @@ describe('Provincial Application Detail Document Actions', () => {
       source: 'api',
     })
     mockedSubmitAdminUpload.mockResolvedValue(undefined)
+    mockedFetchApplicationReviewOptions.mockResolvedValue({
+      productTypes: [],
+      regions: [],
+      reviewStatuses: [
+        { value: 'APP', label: 'Approved' },
+        { value: 'REJ', label: 'Rejected' },
+        { value: 'WDN', label: 'Withdrawn' },
+      ],
+    })
+    mockedApproveApplicationReview.mockResolvedValue({
+      updated: true,
+      valid: true,
+      statusCode: 'APP',
+      clientEmail: '',
+      remark: '',
+      message: 'Application approved.',
+    })
+    mockedUpdateApplicationReviewStatus.mockResolvedValue({
+      updated: true,
+      valid: true,
+      statusCode: 'REJ',
+      clientEmail: '',
+      remark: 'Needs correction',
+      message: 'Application status updated.',
+    })
+    mockedSendApplicationReviewStatusEmail.mockResolvedValue({
+      success: true,
+      message: 'Email sent.',
+    })
     mockedFetchApplicationPackageDetails.mockResolvedValue({
       success: true,
       packageNumber: 'PKG-1',
@@ -913,6 +969,113 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
+  })
+
+  it('approves an application from the detail review section and refreshes detail', async () => {
+    const detailAfterApproval: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      applicationStatusCode: 'APP',
+      statusDescription: 'Approved',
+    }
+    mockedFetchProvincialApplicationDetail
+      .mockResolvedValueOnce(applicationDetail)
+      .mockResolvedValueOnce(detailAfterApproval)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Application' }))
+
+    await waitFor(() => {
+      expect(mockedApproveApplicationReview).toHaveBeenCalledWith('321')
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('Application approved.')).toBeInTheDocument()
+    expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
+  })
+
+  it('updates application review status and can send status email from detail', async () => {
+    const detailAfterStatusUpdate: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      applicationStatusCode: 'REJ',
+      statusDescription: 'Rejected',
+    }
+    mockedFetchProvincialApplicationDetail
+      .mockResolvedValueOnce(applicationDetail)
+      .mockResolvedValueOnce(detailAfterStatusUpdate)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    const reviewTile = getApplicationReviewTile()
+    await userEvent.selectOptions(within(reviewTile).getByLabelText('Application Status'), 'REJ')
+    await userEvent.type(
+      within(reviewTile).getByLabelText('Client Email Address'),
+      'client@example.com',
+    )
+    await userEvent.type(within(reviewTile).getByLabelText('Review Remark'), 'Needs correction')
+    await userEvent.click(
+      within(reviewTile).getByRole('button', { name: 'Update Status and Send Email' }),
+    )
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith('321', {
+        statusCode: 'REJ',
+        remark: 'Needs correction',
+        clientEmailAddress: 'client@example.com',
+      })
+      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith('321', {
+        statusCode: 'REJ',
+        remark: 'Needs correction',
+        clientEmailAddress: 'client@example.com',
+      })
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+    })
+    expect(
+      await screen.findByText('Application status updated and email sent.'),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0)
+  })
+
+  it('validates application review status before updating from detail', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    const reviewTile = getApplicationReviewTile()
+    await userEvent.selectOptions(within(reviewTile).getByLabelText('Application Status'), '')
+    await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update Review Status' }))
+
+    expect(
+      screen.getByText('Choose an application status before updating review status.'),
+    ).toBeInTheDocument()
+    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
   })
 
   it('validates application remark before saving', async () => {
