@@ -61,6 +61,14 @@ import {
   type SearchOption,
 } from '@/service/search-options-service'
 import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
+import {
+  firstValidationError,
+  isoDateFieldError,
+  maxLengthFieldError,
+  positiveNumericFieldError,
+  requiredFieldError,
+  type FieldErrors,
+} from '@/pages/shared/create-form-utils'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -253,6 +261,8 @@ type ApplicationSummaryFormState = {
   speciesCodes: string[]
 }
 
+type ApplicationSummaryField = keyof ApplicationSummaryFormState & string
+
 const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSummaryFormState => ({
   applicationDate: detail.applicationDate ?? '',
   receivedDate: detail.receivedDate ?? '',
@@ -322,6 +332,11 @@ const withApplicationSpecies = (
   return { ...form, speciesCodes, endUseCode }
 }
 
+const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
+  productTypeCode === 'H' || productTypeCode === 'S'
+
+const isAgentApplicant = (applicantTypeCode: string): boolean => applicantTypeCode === 'A'
+
 const ProvincialApplicationDetailsPage: FC = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
@@ -350,6 +365,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [summaryBaselineForm, setSummaryBaselineForm] =
     useState<ApplicationSummaryFormState | null>(null)
   const [isSavingSummary, setIsSavingSummary] = useState(false)
+  const [showSummaryValidationErrors, setShowSummaryValidationErrors] = useState(false)
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
   const [ownerClientContacts, setOwnerClientContacts] = useState<ApplicationClientContact[]>([])
@@ -425,6 +441,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setLoading(false)
       setSummaryForm(null)
       setSummaryBaselineForm(null)
+      setShowSummaryValidationErrors(false)
       return
     }
 
@@ -443,6 +460,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setDetail(response)
       setSummaryForm(editableSummaryForm)
       setSummaryBaselineForm(editableSummaryForm)
+      setShowSummaryValidationErrors(false)
       setReviewStatusCode(response?.applicationStatusCode ?? '')
       setReviewStatusRemark('')
       setReviewStatusEmailAddress('')
@@ -507,6 +525,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setDetail(null)
         setSummaryForm(null)
         setSummaryBaselineForm(null)
+        setShowSummaryValidationErrors(false)
         setDocumentRows([])
         setDocumentsErrorMessage('')
       }
@@ -643,6 +662,118 @@ const ProvincialApplicationDetailsPage: FC = () => {
     [summaryForm?.speciesCodes],
   )
   const summarySpeciesKey = summarySpeciesCodes.join(',')
+  const calculatedSummaryTermDays = useMemo(() => {
+    if (!summaryForm) {
+      return ''
+    }
+
+    return calculateApplicationTermDays(
+      summaryForm.termDays,
+      summaryForm.termMonths,
+      summaryForm.termYears,
+    )
+  }, [summaryForm])
+  const summaryFieldErrors = useMemo<FieldErrors<ApplicationSummaryField>>(() => {
+    if (!summaryForm) {
+      return {}
+    }
+
+    return {
+      ownerClientNumber:
+        requiredFieldError(summaryForm.ownerClientNumber, 'Owner client number') ?? undefined,
+      ownerClientLocationCode: firstValidationError(
+        () => requiredFieldError(summaryForm.ownerClientLocationCode, 'Owner client location code'),
+        () =>
+          maxLengthFieldError(summaryForm.ownerClientLocationCode, 2, 'Owner client location code'),
+      ),
+      ownerContactName:
+        requiredFieldError(summaryForm.ownerContactName, 'Owner contact name') ?? undefined,
+      agentClientNumber: isAgentApplicant(summaryForm.applicantTypeCode)
+        ? (requiredFieldError(summaryForm.agentClientNumber, 'Agent client number') ?? undefined)
+        : undefined,
+      agentClientLocationCode: isAgentApplicant(summaryForm.applicantTypeCode)
+        ? firstValidationError(
+            () =>
+              requiredFieldError(summaryForm.agentClientLocationCode, 'Agent client location code'),
+            () =>
+              maxLengthFieldError(
+                summaryForm.agentClientLocationCode,
+                2,
+                'Agent client location code',
+              ),
+          )
+        : undefined,
+      agentContactName: isAgentApplicant(summaryForm.applicantTypeCode)
+        ? (requiredFieldError(summaryForm.agentContactName, 'Agent contact name') ?? undefined)
+        : undefined,
+      applicantTypeCode: firstValidationError(
+        () => requiredFieldError(summaryForm.applicantTypeCode, 'Applicant type'),
+        () =>
+          summaryForm.applicantTypeCode === 'O' || summaryForm.applicantTypeCode === 'A'
+            ? null
+            : 'Applicant type must be Owner or Agent.',
+      ),
+      productTypeCode: requiredFieldError(summaryForm.productTypeCode, 'Product type') ?? undefined,
+      growthTypeCode: productTypeRequiresGrowthType(summaryForm.productTypeCode)
+        ? (requiredFieldError(summaryForm.growthTypeCode, 'Growth type') ?? undefined)
+        : undefined,
+      exemptionReasonCode: firstValidationError(
+        () => requiredFieldError(summaryForm.exemptionReasonCode, 'Exemption reason'),
+        () => maxLengthFieldError(summaryForm.exemptionReasonCode, 1, 'Exemption reason code'),
+      ),
+      orgUnitNumber: requiredFieldError(summaryForm.orgUnitNumber, 'Region') ?? undefined,
+      applicationDate: firstValidationError(
+        () => requiredFieldError(summaryForm.applicationDate, 'Application date'),
+        () => isoDateFieldError(summaryForm.applicationDate),
+      ),
+      termDays: firstValidationError(
+        () => requiredFieldError(calculatedSummaryTermDays, 'Application term'),
+        () =>
+          /^\d*$/.test(summaryForm.termDays.trim())
+            ? null
+            : 'Application term days must be zero or a positive whole number.',
+      ),
+      termMonths: /^\d*$/.test(summaryForm.termMonths.trim())
+        ? undefined
+        : 'Application term months must be zero or a positive whole number.',
+      termYears: /^\d*$/.test(summaryForm.termYears.trim())
+        ? undefined
+        : 'Application term years must be zero or a positive whole number.',
+      receivedDate: firstValidationError(
+        () => requiredFieldError(summaryForm.receivedDate, 'Received date'),
+        () => isoDateFieldError(summaryForm.receivedDate),
+      ),
+      productLocation:
+        requiredFieldError(summaryForm.productLocation, 'Location of logs') ?? undefined,
+      applicationVolume: firstValidationError(
+        () => requiredFieldError(summaryForm.applicationVolume, 'Application volume'),
+        () => positiveNumericFieldError(summaryForm.applicationVolume),
+      ),
+      averageLogVolume: firstValidationError(
+        () => requiredFieldError(summaryForm.averageLogVolume, 'Average log volume'),
+        () => positiveNumericFieldError(summaryForm.averageLogVolume),
+      ),
+      applicationStatusCode:
+        requiredFieldError(summaryForm.applicationStatusCode, 'Application status') ?? undefined,
+      jurisdictionCode: firstValidationError(
+        () => requiredFieldError(summaryForm.jurisdictionCode, 'Jurisdiction'),
+        () =>
+          summaryForm.jurisdictionCode === 'P' || summaryForm.jurisdictionCode === 'F'
+            ? null
+            : 'Jurisdiction must be Provincial or Federal.',
+      ),
+      oicIndicator: firstValidationError(
+        () => requiredFieldError(summaryForm.oicIndicator, 'OIC indicator'),
+        () =>
+          summaryForm.oicIndicator === 'Y' || summaryForm.oicIndicator === 'N'
+            ? null
+            : 'OIC indicator must be Yes or No.',
+      ),
+    }
+  }, [calculatedSummaryTermDays, summaryForm])
+  const hasSummaryValidationError = Object.values(summaryFieldErrors).some((error) => !!error)
+  const visibleSummaryFieldError = (field: ApplicationSummaryField): string | undefined =>
+    showSummaryValidationErrors ? summaryFieldErrors[field] : undefined
   const availableApplicationSpeciesOptions = useMemo(
     () => applicationSpeciesOptions.filter((option) => !summarySpeciesCodes.includes(option.code)),
     [applicationSpeciesOptions, summarySpeciesCodes],
@@ -1399,18 +1530,22 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
+    if (hasSummaryValidationError) {
+      setShowSummaryValidationErrors(true)
+      setActionErrorMessage(
+        Object.values(summaryFieldErrors).find((error): error is string => !!error) ??
+          'Please fix validation errors before saving the application summary.',
+      )
+      return
+    }
+
     setIsSavingSummary(true)
     try {
-      const calculatedTermDays = calculateApplicationTermDays(
-        summaryForm.termDays,
-        summaryForm.termMonths,
-        summaryForm.termYears,
-      )
       const result = await updateApplicationSummary({
         applicationNumber: String(detail.applicationNumber),
         applicationDate: summaryForm.applicationDate,
         receivedDate: summaryForm.receivedDate,
-        termDays: calculatedTermDays,
+        termDays: calculatedSummaryTermDays,
         applicationVolume: summaryForm.applicationVolume,
         averageLogVolume: summaryForm.averageLogVolume,
         exemptionReasonCode: summaryForm.exemptionReasonCode,
@@ -1442,6 +1577,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       }
 
       await loadApplicationDetail()
+      setShowSummaryValidationErrors(false)
       setActionInfoMessage(result.message || 'Application summary saved.')
     } catch (error) {
       console.error(error)
@@ -1449,7 +1585,15 @@ const ProvincialApplicationDetailsPage: FC = () => {
     } finally {
       setIsSavingSummary(false)
     }
-  }, [applicationNumber, detail, loadApplicationDetail, summaryForm])
+  }, [
+    applicationNumber,
+    calculatedSummaryTermDays,
+    detail,
+    hasSummaryValidationError,
+    loadApplicationDetail,
+    summaryFieldErrors,
+    summaryForm,
+  ])
 
   const buildReviewStatusPayload = useCallback(
     (requireEmail: boolean) => {
@@ -1771,6 +1915,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryExemptionReason"
                       labelText="Exemption Reason"
                       value={summaryForm.exemptionReasonCode}
+                      invalid={Boolean(visibleSummaryFieldError('exemptionReasonCode'))}
+                      invalidText={visibleSummaryFieldError('exemptionReasonCode')}
                       disabled={isLoadingSummaryOptions && exemptionReasonOptions.length === 0}
                       onChange={(event) =>
                         onSummaryFormChange('exemptionReasonCode', event.target.value.toUpperCase())
@@ -1790,6 +1936,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       labelText="Application Date"
                       type="date"
                       value={summaryForm.applicationDate}
+                      invalid={Boolean(visibleSummaryFieldError('applicationDate'))}
+                      invalidText={visibleSummaryFieldError('applicationDate')}
                       onChange={(event) =>
                         onSummaryFormChange('applicationDate', event.target.value)
                       }
@@ -1799,6 +1947,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       labelText="Received Date"
                       type="date"
                       value={summaryForm.receivedDate}
+                      invalid={Boolean(visibleSummaryFieldError('receivedDate'))}
+                      invalidText={visibleSummaryFieldError('receivedDate')}
                       onChange={(event) => onSummaryFormChange('receivedDate', event.target.value)}
                     />
                     <TextInput
@@ -1807,6 +1957,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       type="number"
                       min={1}
                       value={summaryForm.termDays}
+                      invalid={Boolean(visibleSummaryFieldError('termDays'))}
+                      invalidText={visibleSummaryFieldError('termDays')}
                       onChange={(event) => onSummaryFormChange('termDays', event.target.value)}
                     />
                     <TextInput
@@ -1815,6 +1967,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       type="number"
                       min={0}
                       value={summaryForm.termMonths}
+                      invalid={Boolean(visibleSummaryFieldError('termMonths'))}
+                      invalidText={visibleSummaryFieldError('termMonths')}
                       onChange={(event) => onSummaryFormChange('termMonths', event.target.value)}
                     />
                     <TextInput
@@ -1823,6 +1977,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       type="number"
                       min={0}
                       value={summaryForm.termYears}
+                      invalid={Boolean(visibleSummaryFieldError('termYears'))}
+                      invalidText={visibleSummaryFieldError('termYears')}
                       onChange={(event) => onSummaryFormChange('termYears', event.target.value)}
                     />
                     <TextInput
@@ -1832,6 +1988,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       min={0}
                       step="0.1"
                       value={summaryForm.applicationVolume}
+                      invalid={Boolean(visibleSummaryFieldError('applicationVolume'))}
+                      invalidText={visibleSummaryFieldError('applicationVolume')}
                       onChange={(event) =>
                         onSummaryFormChange('applicationVolume', event.target.value)
                       }
@@ -1843,6 +2001,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       min={0}
                       step="0.1"
                       value={summaryForm.averageLogVolume}
+                      invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
+                      invalidText={visibleSummaryFieldError('averageLogVolume')}
                       onChange={(event) =>
                         onSummaryFormChange('averageLogVolume', event.target.value)
                       }
@@ -1851,6 +2011,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryOwnerClientNumber"
                       labelText="Owner Client Number"
                       value={summaryForm.ownerClientNumber}
+                      invalid={Boolean(visibleSummaryFieldError('ownerClientNumber'))}
+                      invalidText={visibleSummaryFieldError('ownerClientNumber')}
                       onChange={(event) =>
                         onSummaryFormChange('ownerClientNumber', event.target.value)
                       }
@@ -1859,6 +2021,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryOwnerClientLocationCode"
                       labelText="Owner Client Location"
                       value={summaryForm.ownerClientLocationCode}
+                      invalid={Boolean(visibleSummaryFieldError('ownerClientLocationCode'))}
+                      invalidText={visibleSummaryFieldError('ownerClientLocationCode')}
                       disabled={
                         !summaryForm.ownerClientNumber.trim() || isLoadingOwnerClientLocations
                       }
@@ -1880,6 +2044,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         id="applicationSummaryOwnerContactName"
                         labelText="Owner Contact Name"
                         value={summaryForm.ownerContactName}
+                        invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
+                        invalidText={visibleSummaryFieldError('ownerContactName')}
                         disabled={
                           !summaryForm.ownerClientLocationCode.trim() ||
                           isLoadingOwnerClientContacts
@@ -1902,6 +2068,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         id="applicationSummaryOwnerContactName"
                         labelText="Owner Contact Name"
                         value={summaryForm.ownerContactName}
+                        invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
+                        invalidText={visibleSummaryFieldError('ownerContactName')}
                         disabled={!summaryForm.ownerClientLocationCode.trim()}
                         placeholder="Enter owner contact name"
                         onChange={(event) =>
@@ -1913,6 +2081,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryApplicantTypeCode"
                       labelText="Applicant Type"
                       value={summaryForm.applicantTypeCode}
+                      invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
+                      invalidText={visibleSummaryFieldError('applicantTypeCode')}
                       onChange={(event) =>
                         onSummaryFormChange('applicantTypeCode', event.target.value.toUpperCase())
                       }
@@ -1933,6 +2103,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryAgentClientNumber"
                       labelText="Agent Client Number"
                       value={summaryForm.agentClientNumber}
+                      invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
+                      invalidText={visibleSummaryFieldError('agentClientNumber')}
                       onChange={(event) =>
                         onSummaryFormChange('agentClientNumber', event.target.value)
                       }
@@ -1941,6 +2113,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryAgentClientLocationCode"
                       labelText="Agent Client Location"
                       value={summaryForm.agentClientLocationCode}
+                      invalid={Boolean(visibleSummaryFieldError('agentClientLocationCode'))}
+                      invalidText={visibleSummaryFieldError('agentClientLocationCode')}
                       disabled={
                         !summaryForm.agentClientNumber.trim() || isLoadingAgentClientLocations
                       }
@@ -1962,6 +2136,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         id="applicationSummaryAgentContactName"
                         labelText="Agent Contact Name"
                         value={summaryForm.agentContactName}
+                        invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
+                        invalidText={visibleSummaryFieldError('agentContactName')}
                         disabled={
                           !summaryForm.agentClientLocationCode.trim() ||
                           isLoadingAgentClientContacts
@@ -1984,6 +2160,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         id="applicationSummaryAgentContactName"
                         labelText="Agent Contact Name"
                         value={summaryForm.agentContactName}
+                        invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
+                        invalidText={visibleSummaryFieldError('agentContactName')}
                         disabled={!summaryForm.agentClientLocationCode.trim()}
                         placeholder="Enter agent contact name"
                         onChange={(event) =>
@@ -1995,6 +2173,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryRegion"
                       labelText="Region"
                       value={summaryForm.orgUnitNumber}
+                      invalid={Boolean(visibleSummaryFieldError('orgUnitNumber'))}
+                      invalidText={visibleSummaryFieldError('orgUnitNumber')}
                       disabled={isLoadingSummaryOptions && regionOptions.length === 0}
                       onChange={(event) => onSummaryFormChange('orgUnitNumber', event.target.value)}
                     >
@@ -2011,6 +2191,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryProductType"
                       labelText="Product Type"
                       value={summaryForm.productTypeCode}
+                      invalid={Boolean(visibleSummaryFieldError('productTypeCode'))}
+                      invalidText={visibleSummaryFieldError('productTypeCode')}
                       disabled={isLoadingSummaryOptions && productTypeOptions.length === 0}
                       onChange={(event) =>
                         onSummaryFormChange('productTypeCode', event.target.value.toUpperCase())
@@ -2029,6 +2211,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryGrowthType"
                       labelText="Growth Type"
                       value={summaryForm.growthTypeCode}
+                      invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
+                      invalidText={visibleSummaryFieldError('growthTypeCode')}
                       disabled={isLoadingSummaryOptions && growthTypeOptions.length === 0}
                       onChange={(event) =>
                         onSummaryFormChange('growthTypeCode', event.target.value.toUpperCase())
@@ -2047,6 +2231,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryStatus"
                       labelText="Application Status"
                       value={summaryForm.applicationStatusCode}
+                      invalid={Boolean(visibleSummaryFieldError('applicationStatusCode'))}
+                      invalidText={visibleSummaryFieldError('applicationStatusCode')}
                       disabled={isLoadingSummaryOptions && applicationStatusOptions.length === 0}
                       onChange={(event) =>
                         onSummaryFormChange(
@@ -2068,6 +2254,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryJurisdiction"
                       labelText="Jurisdiction"
                       value={summaryForm.jurisdictionCode}
+                      invalid={Boolean(visibleSummaryFieldError('jurisdictionCode'))}
+                      invalidText={visibleSummaryFieldError('jurisdictionCode')}
                       onChange={(event) =>
                         onSummaryFormChange('jurisdictionCode', event.target.value.toUpperCase())
                       }
@@ -2098,6 +2286,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryOicIndicator"
                       labelText="OIC Indicator"
                       value={summaryForm.oicIndicator}
+                      invalid={Boolean(visibleSummaryFieldError('oicIndicator'))}
+                      invalidText={visibleSummaryFieldError('oicIndicator')}
                       onChange={(event) =>
                         onSummaryFormChange('oicIndicator', event.target.value.toUpperCase())
                       }
@@ -2120,6 +2310,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       id="applicationSummaryProductLocation"
                       labelText="Location of Logs"
                       value={summaryForm.productLocation}
+                      invalid={Boolean(visibleSummaryFieldError('productLocation'))}
+                      invalidText={visibleSummaryFieldError('productLocation')}
                       onChange={(event) =>
                         onSummaryFormChange('productLocation', event.target.value)
                       }
@@ -2210,9 +2402,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       kind="secondary"
                       size="sm"
                       disabled={isSavingSummary}
-                      onClick={() =>
+                      onClick={() => {
                         setSummaryForm(summaryBaselineForm ?? toSummaryFormState(detail))
-                      }
+                        setShowSummaryValidationErrors(false)
+                      }}
                     >
                       Reset Summary
                     </Button>

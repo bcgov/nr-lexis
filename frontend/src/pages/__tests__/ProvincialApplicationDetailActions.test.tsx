@@ -1339,6 +1339,33 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
   })
 
+  it('validates application summary edits before saving', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await waitFor(() => getApplicationSummaryTile())
+    const summaryControls = within(summaryTile)
+    const productLocationInput = await summaryControls.findByLabelText('Location of Logs')
+
+    await waitFor(() => {
+      expect(productLocationInput).toHaveValue('BC')
+    })
+
+    await userEvent.clear(productLocationInput)
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    expect(screen.getAllByText('Location of logs is required.').length).toBeGreaterThan(0)
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
   it('resets application summary edits from the editable snapshot', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
