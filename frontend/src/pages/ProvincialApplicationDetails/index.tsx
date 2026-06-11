@@ -418,6 +418,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [summaryProductTypeOptions, setSummaryProductTypeOptions] = useState<SearchOption[]>([])
   const [summaryGrowthTypeOptions, setSummaryGrowthTypeOptions] = useState<SearchOption[]>([])
   const [summaryRegionOptions, setSummaryRegionOptions] = useState<SearchOption[]>([])
+  const [summaryScheduleOptions, setSummaryScheduleOptions] = useState<SearchOption[]>([])
   const [applicationSpeciesOptions, setApplicationSpeciesOptions] = useState<
     ApplicationCodeOption[]
   >([])
@@ -1259,6 +1260,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setSummaryProductTypeOptions(options.productTypes)
         setSummaryGrowthTypeOptions(options.growthTypes)
         setSummaryRegionOptions(options.regions)
+        setSummaryScheduleOptions(options.currentSchedules)
       })
       .catch((error) => {
         if (!isActive) {
@@ -1271,6 +1273,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setSummaryProductTypeOptions([])
         setSummaryGrowthTypeOptions([])
         setSummaryRegionOptions([])
+        setSummaryScheduleOptions([])
       })
       .finally(() => {
         if (isActive) {
@@ -2354,15 +2357,17 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         />
                       ))}
                     </Select>
-                    <TextInput
+                    <SearchableSelect
                       id="applicationSummarySchedule"
-                      labelText="Schedule ID"
-                      type="number"
-                      min={1}
+                      labelText="Listing Date"
                       value={summaryForm.exportScheduleId}
-                      onChange={(event) =>
-                        onSummaryFormChange('exportScheduleId', event.target.value)
-                      }
+                      disabled={isLoadingSummaryOptions && summaryScheduleOptions.length === 0}
+                      placeholder="Search listing date"
+                      options={optionsWithCurrentValue(
+                        summaryScheduleOptions,
+                        summaryForm.exportScheduleId,
+                      )}
+                      onChange={(value) => onSummaryFormChange('exportScheduleId', value)}
                     />
                     <Select
                       id="applicationSummaryOicIndicator"

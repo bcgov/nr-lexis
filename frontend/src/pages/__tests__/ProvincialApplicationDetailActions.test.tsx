@@ -276,6 +276,10 @@ describe('Provincial Application Detail Document Actions', () => {
         { value: '12', label: 'Coast' },
         { value: '13', label: 'Interior' },
       ],
+      currentSchedules: [
+        { value: '987', label: '2026-01-11' },
+        { value: '988', label: '2026-01-25' },
+      ],
     })
     mockedApproveApplicationReview.mockResolvedValue({
       updated: true,
@@ -1398,6 +1402,7 @@ describe('Provincial Application Detail Document Actions', () => {
       getSummaryComboBox(summaryControls, 'Owner Contact Name'),
       'Owner Alternate Contact',
     )
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Listing Date'), '2026-01-25')
 
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
@@ -1411,7 +1416,7 @@ describe('Provincial Application Detail Document Actions', () => {
         averageLogVolume: '2',
         exemptionReasonCode: 'S',
         productLocation: 'BC',
-        exportScheduleId: '987',
+        exportScheduleId: '988',
         agentClientNumber: '00033344',
         agentClientLocationCode: '01',
         ownerClientNumber: '00011122',
