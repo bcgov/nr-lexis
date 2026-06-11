@@ -897,6 +897,39 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
   })
 
+  it('shows legacy package validation before creating an invalid package', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createPackageSection = (
+      await screen.findByRole('heading', { name: 'Create Package' })
+    ).closest('section')
+    expect(createPackageSection).toBeTruthy()
+    const createPackageControls = within(createPackageSection as HTMLElement)
+
+    await userEvent.type(createPackageControls.getByLabelText('Package Number'), 'PKG-NEW')
+    await userEvent.type(createPackageControls.getByLabelText('Package Volume'), '25.55')
+    await userEvent.type(createPackageControls.getByLabelText('Average Length'), '100')
+    await userEvent.type(createPackageControls.getByLabelText('Average Diameter'), '100')
+    await userEvent.click(createPackageControls.getByRole('button', { name: 'Create Package' }))
+
+    expect(
+      screen.getAllByText('Package volume must have no more than one decimal place.').length,
+    ).toBeGreaterThan(0)
+    expect(screen.getByText('Average length must be 99 or less.')).toBeInTheDocument()
+    expect(screen.getByText('Average diameter must be 99.99 or less.')).toBeInTheDocument()
+    expect(screen.getByText('Package status code is required.')).toBeInTheDocument()
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+  })
+
   it('creates application packages with selected species and end use', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -1164,6 +1197,34 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getByText('Grade is required.')).toBeInTheDocument()
     expect(screen.getByText('Pieces is required.')).toBeInTheDocument()
     expect(screen.getByText('Scale volume is required.')).toBeInTheDocument()
+    expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+  })
+
+  it('shows legacy scale validation before adding invalid scale values', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('TM001')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Timber Mark'), 'TM002')
+    await chooseComboBoxOption(
+      screen.getAllByRole('combobox', { name: 'Species' })[1],
+      'FI - Douglas-fir',
+    )
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
+    await userEvent.type(screen.getByLabelText('Pieces'), '1.5')
+    await userEvent.type(screen.getByLabelText('Scale Volume'), '100000')
+    await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
+
+    expect(screen.getAllByText('Pieces must be a whole number.').length).toBeGreaterThan(0)
+    expect(screen.getByText('Scale volume must be 99999.9 or less.')).toBeInTheDocument()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 

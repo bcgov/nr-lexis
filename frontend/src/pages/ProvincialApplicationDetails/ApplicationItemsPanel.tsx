@@ -75,10 +75,12 @@ type ApplicationItemField =
   | 'packageVolume'
   | 'packageAverageLength'
   | 'packageAverageDiameter'
+  | 'packageStatus'
   | 'createPackageNumber'
   | 'createPackageVolume'
   | 'createPackageAverageLength'
   | 'createPackageAverageDiameter'
+  | 'createPackageStatus'
   | 'scaleTimberMark'
   | 'scaleSpeciesCode'
   | 'scaleGradeCode'
@@ -150,6 +152,75 @@ const optionsWithCurrentCode = (
 
 const uniqueCodes = (rows: ApplicationPackageSpeciesRow[]): string[] =>
   Array.from(new Set(rows.map((row) => row.species).filter(Boolean)))
+
+const numberValue = (value: string): number | null => {
+  const normalizedValue = value.trim()
+  if (!normalizedValue || !/^\d+(\.\d+)?$/.test(normalizedValue)) {
+    return null
+  }
+
+  const parsed = Number(normalizedValue)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const requiredNumericFieldError = (value: string, label: string): string | null =>
+  firstValidationError(
+    () => requiredFieldError(value, label),
+    () => numericFieldError(value, label),
+  ) ?? null
+
+const atMostOneDecimalFieldError = (value: string, label: string): string | null => {
+  if (!value.trim() || !/^\d+(\.\d+)?$/.test(value.trim())) {
+    return null
+  }
+
+  return /^\d+(\.\d{1})?$/.test(value.trim())
+    ? null
+    : `${label} must have no more than one decimal place.`
+}
+
+const greaterThanFieldError = (value: string, label: string, minimum: number): string | null => {
+  const parsed = numberValue(value)
+  if (parsed === null) {
+    return null
+  }
+
+  return parsed > minimum ? null : `${label} must be greater than ${minimum}.`
+}
+
+const greaterThanOrEqualFieldError = (
+  value: string,
+  label: string,
+  minimum: number,
+): string | null => {
+  const parsed = numberValue(value)
+  if (parsed === null) {
+    return null
+  }
+
+  return parsed >= minimum ? null : `${label} must be greater than or equal to ${minimum}.`
+}
+
+const lessThanOrEqualFieldError = (
+  value: string,
+  label: string,
+  maximum: number,
+): string | null => {
+  const parsed = numberValue(value)
+  if (parsed === null) {
+    return null
+  }
+
+  return parsed <= maximum ? null : `${label} must be ${maximum} or less.`
+}
+
+const integerFieldError = (value: string, label: string): string | null => {
+  if (!value.trim() || !/^\d+$/.test(value.trim())) {
+    return `${label} must be a whole number.`
+  }
+
+  return null
+}
 
 const buildPackageSelectionState = (packageNumbers: string[]): PackageSelectionState => ({
   packageNumbers,
@@ -285,29 +356,57 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     () => ({
       packageNewPackageNumber:
         requiredFieldError(packageForm.newPackageNumber, 'Package number') ?? undefined,
-      packageVolume: numericFieldError(packageForm.volume, 'Package volume') ?? undefined,
-      packageAverageLength:
-        numericFieldError(packageForm.averageLength, 'Average length') ?? undefined,
-      packageAverageDiameter:
-        numericFieldError(packageForm.averageDiameter, 'Average diameter') ?? undefined,
+      packageVolume: firstValidationError(
+        () => requiredNumericFieldError(packageForm.volume, 'Package volume'),
+        () => greaterThanOrEqualFieldError(packageForm.volume, 'Package volume', 0),
+        () => atMostOneDecimalFieldError(packageForm.volume, 'Package volume'),
+      ),
+      packageAverageLength: firstValidationError(
+        () => requiredNumericFieldError(packageForm.averageLength, 'Average length'),
+        () => greaterThanFieldError(packageForm.averageLength, 'Average length', 0),
+        () => lessThanOrEqualFieldError(packageForm.averageLength, 'Average length', 99),
+      ),
+      packageAverageDiameter: firstValidationError(
+        () => requiredNumericFieldError(packageForm.averageDiameter, 'Average diameter'),
+        () => greaterThanFieldError(packageForm.averageDiameter, 'Average diameter', 0),
+        () => lessThanOrEqualFieldError(packageForm.averageDiameter, 'Average diameter', 99.99),
+      ),
+      packageStatus: requiredFieldError(packageForm.status, 'Package status code') ?? undefined,
       createPackageNumber:
         requiredFieldError(createPackageForm.packageNumber, 'Package number') ?? undefined,
-      createPackageVolume:
-        numericFieldError(createPackageForm.volume, 'Package volume') ?? undefined,
-      createPackageAverageLength:
-        numericFieldError(createPackageForm.averageLength, 'Average length') ?? undefined,
-      createPackageAverageDiameter:
-        numericFieldError(createPackageForm.averageDiameter, 'Average diameter') ?? undefined,
+      createPackageVolume: firstValidationError(
+        () => requiredNumericFieldError(createPackageForm.volume, 'Package volume'),
+        () => greaterThanOrEqualFieldError(createPackageForm.volume, 'Package volume', 0),
+        () => atMostOneDecimalFieldError(createPackageForm.volume, 'Package volume'),
+      ),
+      createPackageAverageLength: firstValidationError(
+        () => requiredNumericFieldError(createPackageForm.averageLength, 'Average length'),
+        () => greaterThanFieldError(createPackageForm.averageLength, 'Average length', 0),
+        () => lessThanOrEqualFieldError(createPackageForm.averageLength, 'Average length', 99),
+      ),
+      createPackageAverageDiameter: firstValidationError(
+        () => requiredNumericFieldError(createPackageForm.averageDiameter, 'Average diameter'),
+        () => greaterThanFieldError(createPackageForm.averageDiameter, 'Average diameter', 0),
+        () =>
+          lessThanOrEqualFieldError(createPackageForm.averageDiameter, 'Average diameter', 99.99),
+      ),
+      createPackageStatus:
+        requiredFieldError(createPackageForm.status, 'Package status code') ?? undefined,
       scaleTimberMark: requiredFieldError(scaleForm.timberMark, 'Timber mark') ?? undefined,
       scaleSpeciesCode: requiredFieldError(scaleForm.speciesCode, 'Species') ?? undefined,
       scaleGradeCode: requiredFieldError(scaleForm.gradeCode, 'Grade') ?? undefined,
       scalePieces: firstValidationError(
         () => requiredFieldError(scaleForm.pieces, 'Pieces'),
         () => numericFieldError(scaleForm.pieces, 'Pieces'),
+        () => integerFieldError(scaleForm.pieces, 'Pieces'),
+        () => greaterThanOrEqualFieldError(scaleForm.pieces, 'Pieces', 0),
+        () => lessThanOrEqualFieldError(scaleForm.pieces, 'Pieces', 999999999),
       ),
       scaleVolume: firstValidationError(
         () => requiredFieldError(scaleForm.volume, 'Scale volume'),
         () => numericFieldError(scaleForm.volume, 'Scale volume'),
+        () => greaterThanOrEqualFieldError(scaleForm.volume, 'Scale volume', 0),
+        () => lessThanOrEqualFieldError(scaleForm.volume, 'Scale volume', 99999.9),
       ),
     }),
     [createPackageForm, packageForm, scaleForm],
@@ -317,13 +416,15 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     itemFieldErrors.packageNewPackageNumber ||
     itemFieldErrors.packageVolume ||
     itemFieldErrors.packageAverageLength ||
-    itemFieldErrors.packageAverageDiameter,
+    itemFieldErrors.packageAverageDiameter ||
+    itemFieldErrors.packageStatus,
   )
   const hasCreatePackageValidationError = Boolean(
     itemFieldErrors.createPackageNumber ||
     itemFieldErrors.createPackageVolume ||
     itemFieldErrors.createPackageAverageLength ||
-    itemFieldErrors.createPackageAverageDiameter,
+    itemFieldErrors.createPackageAverageDiameter ||
+    itemFieldErrors.createPackageStatus,
   )
   const hasScaleValidationError = Boolean(
     itemFieldErrors.scaleTimberMark ||
@@ -662,6 +763,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           'packageVolume',
           'packageAverageLength',
           'packageAverageDiameter',
+          'packageStatus',
         ) ?? 'Please fix validation errors before saving the package.',
       )
       return
@@ -706,6 +808,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           'createPackageVolume',
           'createPackageAverageLength',
           'createPackageAverageDiameter',
+          'createPackageStatus',
         ) ?? 'Please fix validation errors before creating the package.',
       )
       return
@@ -1006,8 +1109,11 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Status Code"
               value={packageForm.status}
               disabled={!canManageItems || !selectedPackageNumber}
+              invalid={!!packageFieldError('packageStatus')}
+              invalidText={packageFieldError('packageStatus')}
               placeholder="Select package status"
               options={selectedPackageStatusOptions.map(toSearchableOption)}
+              onBlur={() => markItemFieldTouched('packageStatus')}
               onChange={(value) => setPackageField('status', value)}
             />
             <Select
@@ -1176,8 +1282,11 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Status Code"
               value={createPackageForm.status}
               disabled={!canManageItems}
+              invalid={!!createPackageFieldError('createPackageStatus')}
+              invalidText={createPackageFieldError('createPackageStatus')}
               placeholder="Select package status"
               options={createPackageStatusOptions.map(toSearchableOption)}
+              onBlur={() => markItemFieldTouched('createPackageStatus')}
               onChange={(value) => setCreatePackageField('status', value)}
             />
             <TextInput
