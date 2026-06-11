@@ -71,6 +71,9 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   public CreateOfferResult addOffer(CreateOfferRequest request, String userId) {
     CreateOfferRequest normalized = normalizeCreateOfferRequest(request);
     List<String> errors = validateCreateOffer(normalized);
+    if (errors.isEmpty()) {
+      errors.addAll(validateCreateOfferReferences(normalized));
+    }
     List<String> warnings = List.of();
 
     if (!errors.isEmpty()) {
@@ -288,6 +291,26 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     if (trimToNull(request.fairOfferIndicator()) == null) {
       errors.add(required("fair offer indicator"));
     }
+    return errors;
+  }
+
+  private List<String> validateCreateOfferReferences(CreateOfferRequest request) {
+    List<String> errors = new ArrayList<>();
+    Long applicationNumber = request.applicationNumber();
+    if (applicationNumber != null && !repository.applicationExists(applicationNumber)) {
+      errors.add("Application " + applicationNumber + " does not exist.");
+    }
+
+    String packageNumber = trimToNull(request.packageNumber());
+    if (packageNumber != null) {
+      Optional<Long> packageApplicationNumber = repository.findPackageApplicationNumber(packageNumber);
+      if (packageApplicationNumber.isEmpty()) {
+        errors.add("Package " + packageNumber + " does not exist.");
+      } else if (applicationNumber != null && !packageApplicationNumber.get().equals(applicationNumber)) {
+        errors.add("Package " + packageNumber + " does not belong to application " + applicationNumber + ".");
+      }
+    }
+
     return errors;
   }
 

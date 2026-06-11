@@ -91,9 +91,8 @@ type PageStatus = {
 const ProvincialOfferCreatePage: FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [form, setForm] = useState<ProvincialOfferCreateForm>(() =>
-    buildInitialFormFromQuery(searchParams),
-  )
+  const initialForm = useMemo(() => buildInitialFormFromQuery(searchParams), [searchParams])
+  const [form, setForm] = useState<ProvincialOfferCreateForm>(() => initialForm)
   const [regions, setRegions] = useState<SearchOption[]>([])
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
@@ -166,11 +165,14 @@ const ProvincialOfferCreatePage: FC = () => {
 
   const onSubmit = async () => {
     if (hasValidationError) {
+      const validationMessage =
+        Object.values(fieldErrors).find((error): error is string => !!error) ??
+        'Please fix validation errors before submitting.'
       setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
-        message: 'Please fix validation errors before submitting.',
+        message: validationMessage,
       })
       return
     }
@@ -345,16 +347,14 @@ const ProvincialOfferCreatePage: FC = () => {
               onBlur={() => markFieldTouched('purchaseOfferDate')}
               onChange={(value) => setForm((current) => ({ ...current, purchaseOfferDate: value }))}
             />
-            <TextInput
+            <IsoDatePicker
               id="offerEndDate"
               labelText="Withdrawal Date (YYYY-MM-DD)"
               value={form.offerEndDate}
               invalid={!!fieldError('offerEndDate')}
               invalidText={fieldError('offerEndDate')}
               onBlur={() => markFieldTouched('offerEndDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, offerEndDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, offerEndDate: value }))}
             />
             <TextInput
               id="withdrawReason"
