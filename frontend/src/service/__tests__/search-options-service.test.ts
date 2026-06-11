@@ -36,6 +36,10 @@ describe('search-options-service', () => {
       productTypes: [{ code: 'LOG', name: 'Logs' }],
       growthTypes: [{ code: 'O', name: 'Old Growth' }],
       regions: [{ code: '11', name: 'Cariboo' }, { code: '12' }],
+      currentSchedules: [
+        { code: '987', name: '2026-01-11' },
+        { code: '', name: 'Bad Schedule' },
+      ],
     })
 
     const result = await fetchProvincialApplicationOptions()
@@ -58,6 +62,7 @@ describe('search-options-service', () => {
       productTypes: [{ value: 'LOG', label: 'Logs' }],
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '11', label: 'Cariboo' }],
+      currentSchedules: [{ value: '987', label: '2026-01-11' }],
     })
   })
 

@@ -54,6 +54,7 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
   productTypes: SearchOption[]
   growthTypes: SearchOption[]
   regions: SearchOption[]
+  currentSchedules: SearchOption[]
 }> => {
   const data = await fetchOptions('/lexis/applications/search/options')
   if (!data) {
@@ -64,6 +65,7 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
       productTypes: [],
       growthTypes: [],
       regions: [],
+      currentSchedules: [],
     }
   }
 
@@ -74,6 +76,7 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
     productTypes: parseOptions(data.productTypes),
     growthTypes: parseOptions(data.growthTypes),
     regions: parseOptions(data.regions),
+    currentSchedules: parseOptions(data.currentSchedules),
   }
 }
 

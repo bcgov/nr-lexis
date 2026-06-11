@@ -190,7 +190,13 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
   @Override
   public LexisApplicationSearchOptionsDto searchOptions() {
     return new LexisApplicationSearchOptionsDto(
-        EXEMPTION_TYPES, EXEMPTION_REASONS, APPLICATION_STATUSES, PRODUCT_TYPES, GROWTH_TYPES, REGIONS);
+        EXEMPTION_TYPES,
+        EXEMPTION_REASONS,
+        APPLICATION_STATUSES,
+        PRODUCT_TYPES,
+        GROWTH_TYPES,
+        REGIONS,
+        List.of());
   }
 
   @Override

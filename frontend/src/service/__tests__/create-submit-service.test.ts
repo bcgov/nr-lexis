@@ -44,6 +44,7 @@ describe('create-submit-service', () => {
       applicationDate: '2026-01-01',
       applicationTermDays: '30',
       receivedDate: '2026-01-01',
+      exportScheduleId: '987',
       listingDate: '2026-01-02',
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
@@ -85,6 +86,9 @@ describe('create-submit-service', () => {
     expect(body.get('applicationDate')).toBe('2026-01-01')
     expect(body.get('exemptionTerm')).toBe('30')
     expect(body.get('dateReceived')).toBe('2026-01-01')
+    expect(body.get('exportScheduleId')).toBe('987')
+    expect(body.get('legacyExportScheduleId')).toBe('987')
+    expect(body.get('listingDate')).toBe('2026-01-02')
     expect(body.get('productLocation')).toBe('Camp 1')
     expect(body.get('logLocation')).toBe('Camp 1')
     expect(body.get('applicationVolume')).toBe('125.5')

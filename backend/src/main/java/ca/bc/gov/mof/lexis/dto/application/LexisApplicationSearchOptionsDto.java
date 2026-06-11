@@ -9,4 +9,5 @@ public record LexisApplicationSearchOptionsDto(
     List<CodeNameDto> applicationStatuses,
     List<CodeNameDto> productTypes,
     List<CodeNameDto> growthTypes,
-    List<CodeNameDto> regions) {}
+    List<CodeNameDto> regions,
+    List<CodeNameDto> currentSchedules) {}

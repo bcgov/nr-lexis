@@ -70,6 +70,7 @@ type ProvincialApplicationCreateForm = {
   applicationTermMonths: string
   applicationTermYears: string
   receivedDate: string
+  exportScheduleId: string
   listingDate: string
   productLocation: string
   applicationVolume: string
@@ -100,6 +101,7 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   applicationTermMonths: '',
   applicationTermYears: '',
   receivedDate: '',
+  exportScheduleId: '',
   listingDate: '',
   productLocation: '',
   applicationVolume: '',
@@ -142,6 +144,7 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     applicationTermMonths: query.get('applicationTermMonths') ?? query.get('termMonths') ?? '',
     applicationTermYears: query.get('applicationTermYears') ?? query.get('termYears') ?? '',
     receivedDate: query.get('receivedDate') ?? '',
+    exportScheduleId: query.get('exportScheduleId') ?? query.get('legacyExportScheduleId') ?? '',
     listingDate: query.get('listingDate') ?? '',
     productLocation: query.get('productLocation') ?? query.get('logLocation') ?? '',
     applicationVolume: query.get('applicationVolume') ?? '',
@@ -236,6 +239,7 @@ const ProvincialApplicationCreatePage: FC = () => {
   const [growthTypes, setGrowthTypes] = useState<SearchOption[]>([])
   const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
   const [regions, setRegions] = useState<SearchOption[]>([])
+  const [currentSchedules, setCurrentSchedules] = useState<SearchOption[]>([])
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
   const [ownerClientContacts, setOwnerClientContacts] = useState<ApplicationClientContact[]>([])
@@ -270,6 +274,7 @@ const ProvincialApplicationCreatePage: FC = () => {
       setGrowthTypes(options.growthTypes)
       setExemptionReasons(options.exemptionReasons)
       setRegions(options.regions)
+      setCurrentSchedules(options.currentSchedules)
     }
 
     void loadOptions()
@@ -303,6 +308,38 @@ const ProvincialApplicationCreatePage: FC = () => {
       isActive = false
     }
   }, [exemptionReasons])
+
+  useEffect(() => {
+    if (currentSchedules.length === 0) {
+      return
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (!isActive) {
+        return
+      }
+
+      setForm((current) => {
+        if (
+          current.exportScheduleId ||
+          !current.listingDate ||
+          !currentSchedules.some((option) => option.label === current.listingDate)
+        ) {
+          return current
+        }
+
+        const matchingSchedule = currentSchedules.find(
+          (option) => option.label === current.listingDate,
+        )
+        return matchingSchedule ? { ...current, exportScheduleId: matchingSchedule.value } : current
+      })
+    })
+
+    return () => {
+      isActive = false
+    }
+  }, [currentSchedules])
 
   useEffect(() => {
     const ownerClientNumber = form.ownerClientNumber.trim()
@@ -778,7 +815,6 @@ const ProvincialApplicationCreatePage: FC = () => {
         () => requiredFieldError(form.receivedDate, 'Received date'),
         () => isoDateFieldError(form.receivedDate),
       ),
-      listingDate: isoDateFieldError(form.listingDate) ?? undefined,
       productLocation: requiredFieldError(form.productLocation, 'Location of logs') ?? undefined,
       applicationVolume: firstValidationError(
         () => requiredFieldError(form.applicationVolume, 'Application volume'),
@@ -1304,15 +1340,20 @@ const ProvincialApplicationCreatePage: FC = () => {
                 setForm((current) => ({ ...current, receivedDate: event.target.value }))
               }
             />
-            <TextInput
-              id="listingDate"
-              labelText="Listing Date (YYYY-MM-DD)"
-              value={form.listingDate}
-              invalid={!!fieldError('listingDate')}
-              invalidText={fieldError('listingDate')}
-              onBlur={() => markFieldTouched('listingDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, listingDate: event.target.value }))
+            <SearchableSelect
+              id="exportScheduleId"
+              labelText="Listing Date"
+              value={form.exportScheduleId}
+              options={currentSchedules}
+              placeholder="Search listing date"
+              onBlur={() => markFieldTouched('exportScheduleId')}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  exportScheduleId: value,
+                  listingDate:
+                    currentSchedules.find((option) => option.value === value)?.label ?? '',
+                }))
               }
             />
             <TextArea

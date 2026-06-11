@@ -1,26 +1,34 @@
 package ca.bc.gov.mof.lexis.service.application;
 
+import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
-import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
+import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
 @Profile("oracle")
 public class OracleLexisApplicationService implements LexisApplicationService {
 
-  private final LexisApplicationRepository repository;
+  private static final DateTimeFormatter DISPLAY_DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
 
-  public OracleLexisApplicationService(LexisApplicationRepository repository) {
+  private final LexisApplicationRepository repository;
+  private final LexisReportScheduleRepository scheduleRepository;
+
+  public OracleLexisApplicationService(
+      LexisApplicationRepository repository, LexisReportScheduleRepository scheduleRepository) {
     this.repository = repository;
+    this.scheduleRepository = scheduleRepository;
   }
 
   @Override
@@ -31,7 +39,8 @@ public class OracleLexisApplicationService implements LexisApplicationService {
         safeList(repository.loadApplicationStatusOptions()),
         safeList(repository.loadProductTypeOptions()),
         safeList(repository.loadGrowthTypeOptions()),
-        safeList(repository.loadRegionOptions()));
+        safeList(repository.loadRegionOptions()),
+        currentScheduleOptions());
   }
 
   @Override
@@ -139,5 +148,18 @@ public class OracleLexisApplicationService implements LexisApplicationService {
 
   private static <T> List<T> safeList(List<T> input) {
     return input == null ? List.of() : input;
+  }
+
+  private List<CodeNameDto> currentScheduleOptions() {
+    return safeList(scheduleRepository.findCurrentSchedules()).stream()
+        .filter(row -> row.exportScheduleId() != null)
+        .map(
+            row ->
+                new CodeNameDto(
+                    String.valueOf(row.exportScheduleId()),
+                    row.advertisingDate() == null
+                        ? String.valueOf(row.exportScheduleId())
+                        : row.advertisingDate().format(DISPLAY_DATE_FORMATTER)))
+        .toList();
   }
 }

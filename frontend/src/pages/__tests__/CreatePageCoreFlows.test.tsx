@@ -89,6 +89,7 @@ describe('Create Page Core Flows', () => {
       applicationStatuses: [],
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '11', label: 'Cariboo' }],
+      currentSchedules: [{ value: '987', label: '2026-01-11' }],
     } as any)
     mockedFetchProvincialExemptionOptions.mockResolvedValue({
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
@@ -163,6 +164,7 @@ describe('Create Page Core Flows', () => {
       applicationTermMonths: '',
       applicationTermYears: '',
       receivedDate: '2026-01-10',
+      exportScheduleId: '987',
       listingDate: '2026-01-11',
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
@@ -251,6 +253,7 @@ describe('Create Page Core Flows', () => {
       applicationTermMonths: '',
       applicationTermYears: '',
       receivedDate: '2026-01-10',
+      exportScheduleId: '987',
       listingDate: '2026-01-11',
       productLocation: 'Camp 1',
       applicationVolume: '125.5',
