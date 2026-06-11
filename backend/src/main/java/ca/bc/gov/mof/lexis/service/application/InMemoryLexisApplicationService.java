@@ -128,9 +128,14 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
                   new LexisApplicationDetailDto.LexisRemarkDto(
                       1002L, "Pending", "Awaiting agency confirmation for listing date.")),
               List.of(
-                  new LexisApplicationDetailDto.LexisOfferDto("OF-810", true, null),
                   new LexisApplicationDetailDto.LexisOfferDto(
-                      "OF-803", true, LocalDate.of(2026, 3, 20)))),
+                      "OF-810", "Example Timber Ltd.", LocalDate.of(2026, 3, 1), true, null),
+                  new LexisApplicationDetailDto.LexisOfferDto(
+                      "OF-803",
+                      "Interior Mill Co.",
+                      LocalDate.of(2026, 2, 28),
+                      true,
+                      LocalDate.of(2026, 3, 20)))),
           new ApplicationRecord(
               1000999L,
               "PER",
@@ -164,7 +169,11 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
                       1003L, "Completed", "Permit issued and application closed.")),
               List.of(
                   new LexisApplicationDetailDto.LexisOfferDto(
-                      "OF-990", true, LocalDate.of(2025, 12, 20)))));
+                      "OF-990",
+                      "North Coast Exports",
+                      LocalDate.of(2025, 12, 2),
+                      true,
+                      LocalDate.of(2025, 12, 20)))));
 
   @Override
   public LexisApplicationSearchOptionsDto searchOptions() {

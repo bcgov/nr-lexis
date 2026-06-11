@@ -446,6 +446,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         rs ->
             new LexisApplicationDetailDto.LexisOfferDto(
                 offerNumberAsString(rs),
+                getString(rs, "COMPANY_NAME"),
+                getLocalDate(rs, "ENTRY_TIMESTAMP"),
                 INDICATOR_YES.equalsIgnoreCase(getString(rs, "VALID_OFFER_INDICATOR")),
                 getLocalDate(rs, "OFFER_WITHDRAWAL_DATE")));
   }

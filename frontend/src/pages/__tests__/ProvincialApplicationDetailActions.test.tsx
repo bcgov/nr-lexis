@@ -430,6 +430,36 @@ describe('Provincial Application Detail Document Actions', () => {
     })
   })
 
+  it('shows offer company and received date from application detail', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      offers: [
+        {
+          offerNumber: 'OFF-77',
+          companyName: 'Example Lumber',
+          receivedDate: '2026-04-05',
+          validOffer: true,
+          withdrawalDate: null,
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Example Lumber')).toBeInTheDocument()
+    expect(screen.getByText('2026-04-05')).toBeInTheDocument()
+    expect(screen.getByText('OFF-77')).toBeInTheDocument()
+  })
+
   it('navigates to upload center with application context', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>

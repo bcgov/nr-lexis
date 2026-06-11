@@ -482,7 +482,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
     const normalizedFilter = normalizeText(offerFilter)
     return rows.filter((item) =>
       normalizeText(
-        `${item.offerNumber} ${item.validOffer ? 'valid' : 'invalid'} ${item.withdrawalDate ?? ''}`,
+        `${item.offerNumber} ${item.companyName ?? ''} ${item.receivedDate ?? ''} ${
+          item.validOffer ? 'valid' : 'invalid'
+        } ${item.withdrawalDate ?? ''}`,
       ).includes(normalizedFilter),
     )
   }, [detail?.offers, offerFilter])
@@ -2233,12 +2235,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 labelText="Filter offers"
                 value={offerFilter}
                 onChange={(event) => updateFilterParam('offerFilter', event.target.value)}
-                placeholder="Filter by offer number, validity, or withdrawal date"
+                placeholder="Filter by company, offer number, received date, validity, or withdrawal date"
               />
               <Table useZebraStyles>
                 <TableHead>
                   <TableRow>
                     <TableHeader>Offer</TableHeader>
+                    <TableHeader>Company</TableHeader>
+                    <TableHeader>Date Received</TableHeader>
                     <TableHeader>Valid</TableHeader>
                     <TableHeader>Withdrawal Date</TableHeader>
                     <TableHeader>Open</TableHeader>
@@ -2248,6 +2252,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   {filteredOffers.map((item) => (
                     <TableRow key={item.offerNumber}>
                       <TableCell>{item.offerNumber}</TableCell>
+                      <TableCell>{item.companyName ?? '-'}</TableCell>
+                      <TableCell>{item.receivedDate ?? '-'}</TableCell>
                       <TableCell>{item.validOffer ? 'Yes' : 'No'}</TableCell>
                       <TableCell>{item.withdrawalDate ?? '-'}</TableCell>
                       <TableCell>
@@ -2266,7 +2272,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   ))}
                   {filteredOffers.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4}>No offer rows matched the current filter.</TableCell>
+                      <TableCell colSpan={6}>No offer rows matched the current filter.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>

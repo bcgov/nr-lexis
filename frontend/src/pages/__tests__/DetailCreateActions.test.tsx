@@ -63,7 +63,15 @@ const applicationDetail: ProvincialApplicationDetail = {
   locked: false,
   packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 5 }],
   remarks: [{ remarkId: 88, title: 'Note', remark: 'ok' }],
-  offers: [{ offerNumber: 'OFF-1', validOffer: true, withdrawalDate: null }],
+  offers: [
+    {
+      offerNumber: 'OFF-1',
+      companyName: 'Example Lumber',
+      receivedDate: '2026-01-04',
+      validOffer: true,
+      withdrawalDate: null,
+    },
+  ],
 }
 
 const exemptionDetail: ProvincialExemptionDetail = {

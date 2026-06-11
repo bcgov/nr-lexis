@@ -33,5 +33,6 @@ public record LexisApplicationDetailDto(
 
   public record LexisRemarkDto(Long remarkId, String title, String remark) {}
 
-  public record LexisOfferDto(String offerNumber, boolean validOffer, LocalDate withdrawalDate) {}
+  public record LexisOfferDto(
+      String offerNumber, String companyName, LocalDate receivedDate, boolean validOffer, LocalDate withdrawalDate) {}
 }
