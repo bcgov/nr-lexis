@@ -1067,6 +1067,19 @@ describe('Provincial Application Detail Document Actions', () => {
   })
 
   it('deletes the selected application package', async () => {
+    mockedFetchApplicationPackageScales.mockResolvedValue([
+      {
+        permitted: false,
+        timberMark: 'TM001',
+        species: 'Douglas-fir',
+        grade: 'Sawlog',
+        pieces: 0,
+        volume: '0.0',
+        id: '55',
+        cascadeSplitCode: 'S',
+      },
+    ])
+
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -1093,6 +1106,57 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedDeleteApplicationPackage).toHaveBeenCalledWith('PKG-1')
     })
     expect(await screen.findByText('Package PKG-1 deleted.')).toBeInTheDocument()
+  })
+
+  it('prevents package save and delete when package scales are permitted', async () => {
+    mockedFetchApplicationPackageScales.mockResolvedValue([
+      {
+        permitted: true,
+        timberMark: 'TM001',
+        species: 'Douglas-fir',
+        grade: 'Sawlog',
+        pieces: 5,
+        volume: '20.0',
+        id: '55',
+        cascadeSplitCode: 'S',
+      },
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const packageDetailsSection = (
+      await screen.findByRole('heading', { name: 'Package Details' })
+    ).closest('section')
+    expect(packageDetailsSection).toBeTruthy()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Package Comments')).toBeDisabled()
+      expect(
+        within(packageDetailsSection as HTMLElement).getByRole('button', {
+          name: 'Save Package',
+        }),
+      ).toBeDisabled()
+      expect(
+        within(packageDetailsSection as HTMLElement).getByRole('button', {
+          name: 'Delete Package',
+        }),
+      ).toBeDisabled()
+    })
+    expect(screen.getByRole('button', { name: 'Add Species' })).toBeDisabled()
+    const packageSpeciesSection = screen.getByText('Package Species').closest('section')
+    expect(packageSpeciesSection).toBeTruthy()
+    expect(
+      within(packageSpeciesSection as HTMLElement).getByRole('button', { name: 'Remove' }),
+    ).toBeDisabled()
   })
 
   it('ignores stale package item responses after selecting another package', async () => {

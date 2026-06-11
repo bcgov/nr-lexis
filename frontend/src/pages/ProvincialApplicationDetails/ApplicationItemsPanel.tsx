@@ -758,6 +758,20 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     setCreateSpeciesDraft((current) => current.filter((item) => item !== species))
   }
 
+  const selectedPackageTotalPieces = scales.reduce((total, row) => total + row.pieces, 0)
+  const selectedPackageHasPermittedScale = scales.some((row) => row.permitted)
+  const canSaveSelectedPackage =
+    canManageItems &&
+    !!selectedPackageNumber &&
+    !isSavingPackage &&
+    !selectedPackageHasPermittedScale
+  const canDeleteSelectedPackage =
+    canManageItems &&
+    !!selectedPackageNumber &&
+    !isSavingPackage &&
+    !selectedPackageHasPermittedScale &&
+    selectedPackageTotalPieces === 0
+
   const buildPackageMutation = (form: PackageFormState, packageNumber: string) => ({
     packageNumber,
     newPackageNumber: form.newPackageNumber || packageNumber,
@@ -776,6 +790,11 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
 
   const onSaveSelectedPackage = async () => {
     if (!selectedPackageNumber) {
+      return
+    }
+
+    if (selectedPackageHasPermittedScale) {
+      setItemsErrorMessage('Package changes are not allowed after a scale has been permitted.')
       return
     }
 
@@ -884,6 +903,16 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
 
   const onDeleteSelectedPackage = async () => {
     if (!selectedPackageNumber) {
+      return
+    }
+
+    if (selectedPackageHasPermittedScale) {
+      setItemsErrorMessage('Package delete is not allowed after a scale has been permitted.')
+      return
+    }
+
+    if (selectedPackageTotalPieces > 0) {
+      setItemsErrorMessage('Package delete is not allowed after scale pieces have been added.')
       return
     }
 
@@ -1048,7 +1077,6 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     (total, packageItem) => total + packageItem.pieceCount,
     0,
   )
-  const selectedPackageTotalPieces = scales.reduce((total, row) => total + row.pieces, 0)
 
   return (
     <Tile>
@@ -1112,7 +1140,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               id="applicationItemsPackageNumber"
               labelText="Package Number"
               value={packageForm.newPackageNumber}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={!canSaveSelectedPackage}
               invalid={!!packageFieldError('packageNewPackageNumber')}
               invalidText={packageFieldError('packageNewPackageNumber')}
               onBlur={() => markItemFieldTouched('packageNewPackageNumber')}
@@ -1122,7 +1150,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               id="applicationItemsPackageVolume"
               labelText="Package Volume"
               value={packageForm.volume}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={!canSaveSelectedPackage}
               invalid={!!packageFieldError('packageVolume')}
               invalidText={packageFieldError('packageVolume')}
               onBlur={() => markItemFieldTouched('packageVolume')}
@@ -1132,7 +1160,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               id="applicationItemsPackageLength"
               labelText="Average Length"
               value={packageForm.averageLength}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={!canSaveSelectedPackage}
               invalid={!!packageFieldError('packageAverageLength')}
               invalidText={packageFieldError('packageAverageLength')}
               onBlur={() => markItemFieldTouched('packageAverageLength')}
@@ -1142,7 +1170,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               id="applicationItemsPackageDiameter"
               labelText="Average Diameter"
               value={packageForm.averageDiameter}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={!canSaveSelectedPackage}
               invalid={!!packageFieldError('packageAverageDiameter')}
               invalidText={packageFieldError('packageAverageDiameter')}
               onBlur={() => markItemFieldTouched('packageAverageDiameter')}
@@ -1152,7 +1180,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               id="applicationItemsPackageStatus"
               labelText="Status Code"
               value={packageForm.status}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={!canSaveSelectedPackage}
               invalid={!!packageFieldError('packageStatus')}
               invalidText={packageFieldError('packageStatus')}
               placeholder="Select package status"
@@ -1164,7 +1192,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               id="applicationItemsPackageProductType"
               labelText="Product Type"
               value={packageForm.productType}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={!canSaveSelectedPackage}
               invalid={!!packageFieldError('packageProductType')}
               invalidText={packageFieldError('packageProductType')}
               placeholder="Select product type"
@@ -1183,9 +1211,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               labelText="Age Class"
               value={packageForm.ageClass}
               disabled={
-                !canManageItems ||
-                !selectedPackageNumber ||
-                !packageRequiresAgeClass(packageForm.productType)
+                !canSaveSelectedPackage || !packageRequiresAgeClass(packageForm.productType)
               }
               invalid={!!packageFieldError('packageAgeClass')}
               invalidText={packageFieldError('packageAgeClass')}
@@ -1198,7 +1224,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               id="applicationItemsPackageReprocessed"
               labelText="Reprocessed"
               value={packageForm.reprocessed}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={!canSaveSelectedPackage}
               onChange={(event) => setPackageField('reprocessed', event.target.value)}
             >
               <SelectItem value="N" text="No" />
@@ -1208,7 +1234,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               id="applicationItemsPackageEndUse"
               labelText="End Use"
               value={packageForm.endUseCode}
-              disabled={!canManageItems || !selectedPackageNumber || endUseOptions.length > 0}
+              disabled={!canSaveSelectedPackage || endUseOptions.length > 0}
               onChange={(event) => setPackageField('endUseCode', event.target.value)}
             />
             {endUseOptions.length > 0 && (
@@ -1216,7 +1242,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 id="applicationItemsPackageEndUseSelect"
                 labelText="End Use Options"
                 value={packageForm.endUseCode}
-                disabled={!canManageItems || !selectedPackageNumber}
+                disabled={!canSaveSelectedPackage}
                 placeholder="Select end use"
                 options={endUseOptions.map(toSearchableOption)}
                 onChange={(value) => setPackageField('endUseCode', value)}
@@ -1227,14 +1253,14 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             id="applicationItemsPackageComments"
             labelText="Package Comments"
             value={packageForm.comments}
-            disabled={!canManageItems || !selectedPackageNumber}
+            disabled={!canSaveSelectedPackage}
             onChange={(event) => setPackageField('comments', event.target.value)}
           />
           <div className="legacy-search-actions">
             <Button
               kind="primary"
               size="sm"
-              disabled={!canManageItems || !selectedPackageNumber || isSavingPackage}
+              disabled={!canSaveSelectedPackage}
               onClick={() => void onSaveSelectedPackage()}
             >
               Save Package
@@ -1242,7 +1268,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             <Button
               kind="danger--ghost"
               size="sm"
-              disabled={!canManageItems || !selectedPackageNumber || isSavingPackage}
+              disabled={!canDeleteSelectedPackage}
               onClick={() => void onDeleteSelectedPackage()}
             >
               Delete Package
@@ -1257,7 +1283,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               id="applicationItemsSpeciesToAdd"
               labelText="Species"
               value={speciesToAdd}
-              disabled={!canManageItems || !selectedPackageNumber}
+              disabled={!canSaveSelectedPackage}
               placeholder="Select species"
               options={remainingSpeciesOptions
                 .filter((option) => !speciesDraft.includes(option.code))
@@ -1267,7 +1293,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             <Button
               kind="secondary"
               size="sm"
-              disabled={!canManageItems || !selectedPackageNumber || !speciesToAdd}
+              disabled={!canSaveSelectedPackage || !speciesToAdd}
               onClick={onAddSpecies}
             >
               Add Species
@@ -1294,7 +1320,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                       <Button
                         kind="ghost"
                         size="sm"
-                        disabled={!canManageItems}
+                        disabled={!canSaveSelectedPackage}
                         onClick={() => onRemoveSpecies(row.code)}
                       >
                         Remove
