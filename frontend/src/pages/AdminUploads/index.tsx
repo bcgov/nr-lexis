@@ -4,14 +4,13 @@ import {
   Column,
   Grid,
   InlineNotification,
-  Select,
-  SelectItem,
   Tag,
   TextArea,
   TextInput,
   Tile,
 } from '@carbon/react'
 import { useSearchParams } from 'react-router-dom'
+import SearchableSelect from '@/components/SearchableSelect'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   firstValidationError,
@@ -290,16 +289,16 @@ const AdminUploadsPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <div className="legacy-search-grid">
-            <Select
+            <SearchableSelect
               id="uploadWorkflowType"
               labelText="Upload Type"
               value={selectedWorkflowType}
-              onChange={(event) => setWorkflowType(event.target.value as UploadWorkflowType)}
-            >
-              {UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => (
-                <SelectItem key={workflow.type} value={workflow.type} text={workflow.label} />
-              ))}
-            </Select>
+              options={UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
+                value: workflow.type,
+                label: workflow.label,
+              }))}
+              onChange={(value) => setWorkflowType(getWorkflowFromQuery(value))}
+            />
 
             <div>
               <p>

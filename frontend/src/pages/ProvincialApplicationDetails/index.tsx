@@ -5,8 +5,6 @@ import {
   Grid,
   InlineLoading,
   InlineNotification,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -2257,28 +2255,21 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         }
                       />
                     )}
-                    <Select
+                    <SearchableSelect
                       id="applicationSummaryApplicantTypeCode"
                       labelText="Applicant Type"
                       value={summaryForm.applicantTypeCode}
-                      invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
-                      invalidText={visibleSummaryFieldError('applicantTypeCode')}
-                      onChange={(event) =>
-                        onSummaryFormChange('applicantTypeCode', event.target.value.toUpperCase())
-                      }
-                    >
-                      <SelectItem value="" text="Select applicant type" />
-                      {optionsWithCurrentValue(
+                      placeholder="Select applicant type"
+                      options={optionsWithCurrentValue(
                         APPLICANT_TYPE_OPTIONS,
                         summaryForm.applicantTypeCode,
-                      ).map((option) => (
-                        <SelectItem
-                          key={option.value}
-                          value={option.value}
-                          text={optionLabel(option)}
-                        />
-                      ))}
-                    </Select>
+                      ).map((option) => ({ value: option.value, label: optionLabel(option) }))}
+                      invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
+                      invalidText={visibleSummaryFieldError('applicantTypeCode')}
+                      onChange={(value) =>
+                        onSummaryFormChange('applicantTypeCode', value.toUpperCase())
+                      }
+                    />
                     <TextInput
                       id="applicationSummaryAgentClientNumber"
                       labelText="Agent Client Number"
@@ -2400,28 +2391,21 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         onSummaryFormChange('applicationStatusCode', value.toUpperCase())
                       }
                     />
-                    <Select
+                    <SearchableSelect
                       id="applicationSummaryJurisdiction"
                       labelText="Jurisdiction"
                       value={summaryForm.jurisdictionCode}
-                      invalid={Boolean(visibleSummaryFieldError('jurisdictionCode'))}
-                      invalidText={visibleSummaryFieldError('jurisdictionCode')}
-                      onChange={(event) =>
-                        onSummaryFormChange('jurisdictionCode', event.target.value.toUpperCase())
-                      }
-                    >
-                      <SelectItem value="" text="Select jurisdiction" />
-                      {optionsWithCurrentValue(
+                      placeholder="Select jurisdiction"
+                      options={optionsWithCurrentValue(
                         JURISDICTION_OPTIONS,
                         summaryForm.jurisdictionCode,
-                      ).map((option) => (
-                        <SelectItem
-                          key={option.value}
-                          value={option.value}
-                          text={optionLabel(option)}
-                        />
-                      ))}
-                    </Select>
+                      ).map((option) => ({ value: option.value, label: optionLabel(option) }))}
+                      invalid={Boolean(visibleSummaryFieldError('jurisdictionCode'))}
+                      invalidText={visibleSummaryFieldError('jurisdictionCode')}
+                      onChange={(value) =>
+                        onSummaryFormChange('jurisdictionCode', value.toUpperCase())
+                      }
+                    />
                     <SearchableSelect
                       id="applicationSummarySchedule"
                       labelText="Listing Date"
@@ -2434,27 +2418,19 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       )}
                       onChange={(value) => onSummaryFormChange('exportScheduleId', value)}
                     />
-                    <Select
+                    <SearchableSelect
                       id="applicationSummaryOicIndicator"
                       labelText="OIC Indicator"
                       value={summaryForm.oicIndicator}
+                      placeholder="Select OIC indicator"
+                      options={optionsWithCurrentValue(
+                        OIC_INDICATOR_OPTIONS,
+                        summaryForm.oicIndicator,
+                      ).map((option) => ({ value: option.value, label: optionLabel(option) }))}
                       invalid={Boolean(visibleSummaryFieldError('oicIndicator'))}
                       invalidText={visibleSummaryFieldError('oicIndicator')}
-                      onChange={(event) =>
-                        onSummaryFormChange('oicIndicator', event.target.value.toUpperCase())
-                      }
-                    >
-                      <SelectItem value="" text="Select OIC indicator" />
-                      {optionsWithCurrentValue(OIC_INDICATOR_OPTIONS, summaryForm.oicIndicator).map(
-                        (option) => (
-                          <SelectItem
-                            key={option.value}
-                            value={option.value}
-                            text={optionLabel(option)}
-                          />
-                        ),
-                      )}
-                    </Select>
+                      onChange={(value) => onSummaryFormChange('oicIndicator', value.toUpperCase())}
+                    />
                   </div>
                   {clientSummaryContent}
                   <div className="legacy-search-grid">
@@ -2615,22 +2591,19 @@ const ProvincialApplicationDetailsPage: FC = () => {
               <Tile>
                 <h2 className="detail-tile-title">Application Review</h2>
                 <div className="legacy-search-grid">
-                  <Select
+                  <SearchableSelect
                     id="applicationDetailReviewStatus"
                     labelText="Application Status"
                     value={reviewStatusCode}
+                    placeholder="Select status"
+                    options={reviewStatusOptions}
                     invalid={!!reviewValidationMessage && !normalizedReviewStatusCode}
                     invalidText={reviewValidationMessage}
-                    onChange={(event) => {
-                      setReviewStatusCode(event.target.value)
+                    onChange={(value) => {
+                      setReviewStatusCode(value)
                       setReviewValidationMessage('')
                     }}
-                  >
-                    <SelectItem value="" text="Select status" />
-                    {reviewStatusOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value} text={option.label} />
-                    ))}
-                  </Select>
+                  />
                   <TextInput
                     id="applicationDetailReviewEmail"
                     labelText="Client Email Address"

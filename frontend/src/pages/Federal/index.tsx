@@ -7,8 +7,6 @@ import {
   Grid,
   InlineNotification,
   Pagination,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -19,6 +17,7 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import SearchableSelect from '@/components/SearchableSelect'
 import type {
   FederalApplicationSearchFilters,
   FederalApplicationSearchItem,
@@ -411,17 +410,14 @@ const FederalPage: FC = () => {
               value={filters.packageNumber}
               onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
-            <Select
+            <SearchableSelect
               id="applicationStatus"
               labelText="Application Status"
               value={filters.applicationStatus}
-              onChange={(event) => updateFilter('applicationStatus', event.target.value)}
-            >
-              <SelectItem text="All statuses" value="" />
-              {applicationStatusOptions.map((option) => (
-                <SelectItem key={option.value} text={option.label} value={option.value} />
-              ))}
-            </Select>
+              placeholder="All statuses"
+              options={applicationStatusOptions}
+              onChange={(value) => updateFilter('applicationStatus', value)}
+            />
             <TextInput
               id="clientNumber"
               labelText="Client Number"

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -66,6 +66,19 @@ const legacyTenureDefaultDates = (): { fromDate: string; toDate: string } => {
     toDate: formatLocalDate(new Date(today.getFullYear(), today.getMonth(), 0)),
   }
 }
+
+const getComboBox = (labelText: string): HTMLElement =>
+  screen.getByRole('combobox', { name: labelText })
+
+const chooseComboBoxOption = async (labelText: string, optionName: string): Promise<void> => {
+  const combobox = getComboBox(labelText)
+  await userEvent.click(combobox)
+  fireEvent.change(combobox, { target: { value: optionName } })
+  const options = await screen.findAllByRole('option', { name: optionName })
+  await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
+}
+
+Element.prototype.scrollIntoView = vi.fn()
 
 describe('Reports Page Actions', () => {
   beforeEach(() => {
@@ -183,12 +196,11 @@ describe('Reports Page Actions', () => {
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
     )
 
-    await screen.findByRole('option', { name: 'Section 128' })
     expect(mockedFetchProvincialExemptionOptions).not.toHaveBeenCalled()
     expect(mockedFetchProvincialPermitOptions).not.toHaveBeenCalled()
     expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
-    await userEvent.selectOptions(screen.getByLabelText('Exemption Reason'), 'SEC128')
-    await userEvent.selectOptions(screen.getByLabelText('Growth Type'), 'O')
+    await chooseComboBoxOption('Exemption Reason', 'Section 128')
+    await chooseComboBoxOption('Growth Type', 'Old Growth')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -235,8 +247,8 @@ describe('Reports Page Actions', () => {
     })
     expect(screen.queryByRole('option', { name: 'Reserve' })).not.toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'All values' })).not.toBeInTheDocument()
-    await userEvent.selectOptions(screen.getByLabelText('Jurisdiction'), 'F')
-    await userEvent.selectOptions(screen.getByLabelText('Advertising Date'), '1002')
+    await chooseComboBoxOption('Jurisdiction', 'Federal Legacy')
+    await chooseComboBoxOption('Advertising Date', '2026-06-29')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -251,7 +263,7 @@ describe('Reports Page Actions', () => {
         },
       })
     })
-    expect(screen.getByRole('option', { name: '2026-06-29' })).toBeInTheDocument()
+    expect(getComboBox('Advertising Date')).toHaveValue('2026-06-29')
   })
 
   it('submits first TEAC select options when unchanged like legacy browser forms', async () => {
@@ -275,9 +287,10 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'TEAC Package Report' })
-    await screen.findByRole('option', { name: '2026-06-15' })
-    expect(screen.getByLabelText('Jurisdiction')).toHaveValue('P')
-    expect(screen.getByLabelText('Advertising Date')).toHaveValue('1001')
+    await waitFor(() => {
+      expect(getComboBox('Advertising Date')).toHaveValue('2026-06-15')
+    })
+    expect(getComboBox('Jurisdiction')).toHaveValue('Provincial')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -316,7 +329,9 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'TEAC Package Report' })
-    await screen.findByRole('option', { name: '2026-06-15' })
+    await waitFor(() => {
+      expect(getComboBox('Advertising Date')).toHaveValue('2026-06-15')
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -354,14 +369,16 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Application Report' })
-    await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' })
-    const regionSelect = screen.getByLabelText('Region') as HTMLSelectElement
-    expect(Array.from(regionSelect.options).map((option) => [option.value, option.text])).toEqual([
-      ['0', 'All'],
-      ['1903', 'Cariboo Natural Resource Region'],
-      ['1904', 'Kootenay-Boundary Natural Resource Region'],
-    ])
-    expect(regionSelect).toHaveValue('0')
+    const regionComboBox = getComboBox('Region')
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: '' } })
+    expect(await screen.findByRole('option', { name: 'All' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: 'Cariboo Natural Resource Region' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: 'Kootenay-Boundary Natural Resource Region' }),
+    ).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -435,8 +452,9 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Species and Grade Report' })
-    await screen.findByRole('option', { name: 'Complete' })
-    expect(screen.getByLabelText('Permit Status')).toHaveValue('COM')
+    await waitFor(() => {
+      expect(getComboBox('Permit Status')).toHaveValue('Complete')
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -476,7 +494,9 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Species and Grade Report' })
-    await screen.findByRole('option', { name: 'Complete' })
+    await waitFor(() => {
+      expect(getComboBox('Permit Status')).toHaveValue('Complete')
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -565,13 +585,14 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Transport Report' })
+    await userEvent.click(getComboBox('Final Destination Country'))
     expect(screen.queryByRole('option', { name: 'New Zealand' })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
     await userEvent.click(screen.getByRole('button', { name: 'More...' }))
-    expect(screen.getByRole('option', { name: 'New Zealand' })).toBeInTheDocument()
-    await userEvent.selectOptions(screen.getByLabelText('Jurisdiction'), 'F')
-    await userEvent.selectOptions(screen.getByLabelText('Final Destination Country'), 'NZ')
-    await userEvent.selectOptions(screen.getByLabelText('Customs Port of Export'), 'VAN')
-    await userEvent.selectOptions(screen.getByLabelText('Permit Status'), 'COM')
+    await chooseComboBoxOption('Jurisdiction', 'Federal Legacy')
+    await chooseComboBoxOption('Final Destination Country', 'New Zealand')
+    await chooseComboBoxOption('Customs Port of Export', 'Vancouver')
+    await chooseComboBoxOption('Permit Status', 'Complete')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -614,13 +635,14 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
-    await screen.findByRole('option', { name: 'Ministerial' })
-    await screen.findByRole('option', { name: 'XLS' })
+    await waitFor(() => {
+      expect(getComboBox('Exemption Type')).toHaveValue('Ministerial')
+    })
     expect(screen.getByLabelText('Issued From Date')).toHaveValue(defaultDates.fromDate)
     expect(screen.getByLabelText('Issued To Date')).toHaveValue(defaultDates.toDate)
-    expect(screen.getByLabelText('Client Type')).toHaveValue('P')
-    await userEvent.selectOptions(screen.getByLabelText('Exemption Type'), 'M')
-    await userEvent.selectOptions(screen.getByLabelText('Output Format'), 'CSV')
+    expect(getComboBox('Client Type')).toHaveValue('Permit Holder')
+    await chooseComboBoxOption('Exemption Type', 'Ministerial')
+    await chooseComboBoxOption('Output Format', 'XLS')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -696,7 +718,7 @@ describe('Reports Page Actions', () => {
     expect(screen.queryByLabelText('Tenure Types')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Timber Marks')).not.toBeInTheDocument()
 
-    await userEvent.selectOptions(screen.getByLabelText('Report Variant'), 'generateMarkReport')
+    await chooseComboBoxOption('Report Variant', 'Timber Marks Report')
     await userEvent.type(screen.getByLabelText('Timber Mark 1'), 'tm-a')
     await userEvent.type(screen.getByLabelText('Timber Mark 2'), 'tm-b')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
@@ -738,16 +760,14 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Application Report' })
-    const jurisdictionSelect = screen.getByLabelText('Jurisdiction') as HTMLSelectElement
-    expect(
-      Array.from(jurisdictionSelect.options).map((option) => [option.value, option.text]),
-    ).toEqual([
-      ['', 'All'],
-      ['P', 'Provincial'],
-      ['F', 'Federal Legacy'],
-    ])
+    const jurisdictionComboBox = getComboBox('Jurisdiction')
+    await userEvent.click(jurisdictionComboBox)
+    fireEvent.change(jurisdictionComboBox, { target: { value: '' } })
+    expect(await screen.findByRole('option', { name: 'All' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Provincial' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Federal Legacy' })).toBeInTheDocument()
 
-    await userEvent.selectOptions(jurisdictionSelect, 'F')
+    await chooseComboBoxOption('Jurisdiction', 'Federal Legacy')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -800,7 +820,7 @@ describe('Reports Page Actions', () => {
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
     )
 
-    await userEvent.selectOptions(screen.getByLabelText('Report Variant'), 'generateIndustryCSV')
+    await chooseComboBoxOption('Report Variant', 'Advertising List CSV')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -844,7 +864,7 @@ describe('Reports Page Actions', () => {
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
     )
 
-    await userEvent.selectOptions(screen.getByLabelText('Report Variant'), 'generateIndustryPDF')
+    await chooseComboBoxOption('Report Variant', 'Advertising List PDF')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -889,8 +909,8 @@ describe('Reports Page Actions', () => {
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
     )
 
-    expect(screen.getByLabelText('Report Variant')).toHaveValue('generate')
-    await userEvent.selectOptions(screen.getByLabelText('Jurisdiction'), 'F')
+    expect(getComboBox('Report Variant')).toHaveValue('Generate With Filters')
+    await chooseComboBoxOption('Jurisdiction', 'Federal')
     await userEvent.type(screen.getByLabelText('Listing From Date'), '2026-06-01')
     await userEvent.type(screen.getByLabelText('Listing To Date'), '2026-06-30')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
@@ -959,7 +979,7 @@ describe('Reports Page Actions', () => {
 
     await screen.findByRole('heading', { name: 'Reports' })
     await userEvent.type(screen.getByLabelText('Received From Date'), '2026-01-01')
-    await userEvent.selectOptions(screen.getByLabelText('Output Format'), 'CSV')
+    await chooseComboBoxOption('Output Format', 'CSV')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {

@@ -5,8 +5,6 @@ import {
   Column,
   Grid,
   InlineNotification,
-  Select,
-  SelectItem,
   Tag,
   TextArea,
   TextInput,
@@ -1120,15 +1118,19 @@ const ProvincialApplicationCreatePage: FC = () => {
                 }
               />
             )}
-            <Select
+            <SearchableSelect
               id="applicantTypeCode"
               labelText="Applicant Type (required)"
               value={form.applicantTypeCode}
+              placeholder="Select applicant type"
+              options={[
+                { value: 'O', label: 'Owner' },
+                { value: 'A', label: 'Agent' },
+              ]}
               invalid={!!fieldError('applicantTypeCode')}
               invalidText={fieldError('applicantTypeCode')}
               onBlur={() => markFieldTouched('applicantTypeCode')}
-              onChange={(event) => {
-                const applicantTypeCode = event.target.value
+              onChange={(applicantTypeCode) => {
                 setForm((current) => ({
                   ...current,
                   applicantTypeCode,
@@ -1143,10 +1145,7 @@ const ProvincialApplicationCreatePage: FC = () => {
                     : '',
                 }))
               }}
-            >
-              <SelectItem value="O" text="Owner" />
-              <SelectItem value="A" text="Agent" />
-            </Select>
+            />
             {isAgentApplicant(form.applicantTypeCode) && (
               <>
                 <TextInput

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -102,6 +102,16 @@ const renderPage = () => {
   )
 }
 
+const chooseComboBoxOption = async (labelText: string, optionName: string): Promise<void> => {
+  const combobox = screen.getByRole('combobox', { name: labelText })
+  await userEvent.click(combobox)
+  fireEvent.change(combobox, { target: { value: optionName } })
+  const options = await screen.findAllByRole('option', { name: optionName })
+  await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
+}
+
+Element.prototype.scrollIntoView = vi.fn()
+
 describe('Provincial Review Action State Smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -174,7 +184,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByText('Update status code is required.')).toBeInTheDocument()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
 
-    await userEvent.selectOptions(screen.getByLabelText('Update Status Code'), 'REJ')
+    await chooseComboBoxOption('Update Status Code', 'Rejected')
 
     expect(updateStatusButton).toBeEnabled()
     expect(updateAndEmailButton).toBeEnabled()
@@ -185,7 +195,7 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000123' }))
-    await userEvent.selectOptions(screen.getByLabelText('Update Status Code'), 'WDN')
+    await chooseComboBoxOption('Update Status Code', 'Withdrawn')
     await userEvent.click(screen.getByRole('button', { name: 'Update Status and Send Email' }))
 
     await waitFor(() => {
@@ -282,7 +292,7 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('2000001')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.selectOptions(screen.getByLabelText('Update Status Code'), 'REJ')
+    await chooseComboBoxOption('Update Status Code', 'Rejected')
     await userEvent.type(
       screen.getByLabelText('Client Email Address (required for status email)'),
       'client@example.com',
