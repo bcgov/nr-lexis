@@ -38,6 +38,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final String EXEMPTION_NUMBER_ASSIGNED_MESSAGE =
       "* - this exemption number has already been assigned";
   private static final String SAVE_SUCCESS_MESSAGE = "The exemption was saved successfully.";
+  private static final double MAX_APPROVED_VOLUME = 9_999_999.9d;
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ExemptionDetailsRpcRepository repository;
@@ -480,6 +481,13 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
   }
 
+  private boolean hasAtMostOneDecimal(Double value) {
+    if (value == null) {
+      return true;
+    }
+    return BigDecimal.valueOf(value).stripTrailingZeros().scale() <= 1;
+  }
+
   private String blankToNull(String value) {
     if (value == null) {
       return null;
@@ -696,9 +704,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     if (!canApproveExemption) {
       errors.add("Insufficient privileges to set this Exemption as Active.");
     }
-    if (record.approvedVolume() == null || record.approvedVolume() <= 0.0d) {
-      errors.add("The approved volume must be greater than 0");
-    }
+    validateApprovedVolume(record.approvedVolume(), errors);
     if (blankToNull(record.exemptionTypeCode()) == null) {
       errors.add(required("exemption type code"));
     }
@@ -866,9 +872,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     if (blankToNull(request.exemptionNumber()) == null) {
       errors.add(required("exemption number"));
     }
-    if (request.approvedVolume() == null || request.approvedVolume() <= 0.0d) {
-      errors.add("The approved volume must be greater than 0");
-    }
+    validateApprovedVolume(request.approvedVolume(), errors);
     if (blankToNull(request.exemptionTypeCode()) == null) {
       errors.add(required("exemption type code"));
     }
@@ -941,9 +945,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     if (blankToNull(exemptionNumber) == null) {
       errors.add(required("exemption number"));
     }
-    if (approvedVolume == null || approvedVolume <= 0.0d) {
-      errors.add("The approved volume must be greater than 0");
-    }
+    validateApprovedVolume(approvedVolume, errors);
     if (blankToNull(exemptionTypeCode) == null) {
       errors.add(required("exemption type code"));
     }
@@ -961,6 +963,22 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       errors.add(required("region"));
     }
     return errors;
+  }
+
+  private void validateApprovedVolume(Double approvedVolume, List<String> errors) {
+    if (approvedVolume == null || approvedVolume <= 0.0d) {
+      errors.add("The approved volume must be greater than 0");
+      return;
+    }
+    if (approvedVolume > MAX_APPROVED_VOLUME) {
+      errors.add(
+          "The approved volume must be less than or equal to "
+              + formatVolume(MAX_APPROVED_VOLUME)
+              + ".");
+    }
+    if (!hasAtMostOneDecimal(approvedVolume)) {
+      errors.add("The approved volume must have no more than one decimal place.");
+    }
   }
 
   private ExemptionDetailsRpcRepository.ExemptionInsertRecord toInsertRecord(

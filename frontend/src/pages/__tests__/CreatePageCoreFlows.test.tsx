@@ -524,6 +524,38 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
+  it('blocks provincial exemption submit when approved volume exceeds Oracle precision', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/exemption/create?applications=321&ownerClientNumber=00033333&applicantClientNumber=00044444',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Create Provincial Exemption')
+    await userEvent.type(screen.getByLabelText('Exemption Number (required)'), 'EX-779')
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Exemption Type (required)' }),
+      'Section 1',
+    )
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Exemption Status (required)' }),
+      'New',
+    )
+    await userEvent.type(screen.getByLabelText(/Approved Volume/i), '121212122')
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+
+    expect(
+      await screen.findAllByText('Approved volume must be 9999999.9 or less.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+  })
+
   it('submits provincial offer form and navigates to details', async () => {
     mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8080'))
 

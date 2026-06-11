@@ -132,6 +132,58 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
+  void addExemptionShouldRejectLegacyApprovedVolumeRangeBeforeOracleInsert() {
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                "EX-205",
+                12_121_212.0d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of(),
+                false,
+                false,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .contains("The approved volume must be less than or equal to 9999999.9.");
+    verify(repository, never()).insertExemption(any());
+  }
+
+  @Test
+  void addExemptionShouldRejectLegacyApprovedVolumePrecisionBeforeOracleInsert() {
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                "EX-205",
+                250.55d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of(),
+                false,
+                false,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .contains("The approved volume must have no more than one decimal place.");
+    verify(repository, never()).insertExemption(any());
+  }
+
+  @Test
   void addExemptionShouldInsertWhenRequestIsValid() {
     when(repository.insertExemption(any(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class)))
         .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-205")));
