@@ -25,6 +25,7 @@ import {
 import {
   addApplicationPackage,
   addApplicationScaleToPackage,
+  deleteApplicationPackage,
   deleteApplicationScale,
   fetchApplicationEndUsesForSpeciesRegion,
   fetchApplicationGradeCodes,
@@ -116,6 +117,7 @@ const mockedOpenApplicationDocument = vi.mocked(openApplicationDocument)
 const mockedRemoveApplicationDocument = vi.mocked(removeApplicationDocument)
 const mockedAddApplicationPackage = vi.mocked(addApplicationPackage)
 const mockedAddApplicationScaleToPackage = vi.mocked(addApplicationScaleToPackage)
+const mockedDeleteApplicationPackage = vi.mocked(deleteApplicationPackage)
 const mockedDeleteApplicationScale = vi.mocked(deleteApplicationScale)
 const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
   fetchApplicationEndUsesForSpeciesRegion,
@@ -418,6 +420,7 @@ describe('Provincial Application Detail Document Actions', () => {
       errors: [],
       warnings: [],
     })
+    mockedDeleteApplicationPackage.mockResolvedValue({ success: true })
     mockedDeleteApplicationScale.mockResolvedValue({ success: true })
     mockedFetchApplicationSummarySnapshot.mockResolvedValue({
       applicationNumber: '321',
@@ -931,6 +934,35 @@ describe('Provincial Application Detail Document Actions', () => {
       })
     })
     expect(await screen.findByText('Package PKG-NEW created.')).toBeInTheDocument()
+  })
+
+  it('deletes the selected application package', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const packageDetailsSection = (
+      await screen.findByRole('heading', { name: 'Package Details' })
+    ).closest('section')
+    expect(packageDetailsSection).toBeTruthy()
+
+    await userEvent.click(
+      within(packageDetailsSection as HTMLElement).getByRole('button', {
+        name: 'Delete Package',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(mockedDeleteApplicationPackage).toHaveBeenCalledWith('PKG-1')
+    })
+    expect(await screen.findByText('Package PKG-1 deleted.')).toBeInTheDocument()
   })
 
   it('ignores stale package item responses after selecting another package', async () => {
