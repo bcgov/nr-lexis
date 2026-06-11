@@ -574,7 +574,12 @@ const ProvincialApplicationDetailsPage: FC = () => {
         }
       }
 
-      if (canPerform('createApplication') && !response.readOnly && !response.locked) {
+      if (
+        canPerform('createApplication') &&
+        !response.readOnly &&
+        !response.locked &&
+        !response.exemptionApprover
+      ) {
         try {
           const summarySnapshot = await fetchApplicationSummarySnapshot(applicationNumber)
           if (isLatestRequest() && summarySnapshot) {
@@ -694,7 +699,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
   const canUploadApplicationDocuments = canPerform('/fileApplicationUpload')
   const canDeleteDocuments = canDeleteApplicationDocuments(detail, capabilities?.roles ?? [])
-  const canManageItems = canPerform('createApplication') && !detail?.readOnly && !detail?.locked
+  const canManageItems =
+    canPerform('createApplication') &&
+    !detail?.readOnly &&
+    !detail?.locked &&
+    !detail?.exemptionApprover
   const canManageRemarks = canPerform('/applicationRemarks') && !detail?.readOnly && !detail?.locked
   const canEditSummary = canManageItems
   const canReviewApplication = canPerform('/applicationsReview')

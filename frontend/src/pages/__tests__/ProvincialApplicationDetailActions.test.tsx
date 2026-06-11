@@ -596,6 +596,39 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(location.textContent).toBe('/admin/uploads?type=application&applicationNumber=321')
   })
 
+  it('blocks application summary and package edits for exemption approvers', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      exemptionApprover: true,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Application Summary')).toBeInTheDocument()
+    expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
+    const summaryTile = getApplicationSummaryTile()
+    expect(within(summaryTile).queryByLabelText('Exemption Reason')).not.toBeInTheDocument()
+
+    expect(await screen.findByText('Package Details')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+    expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+  })
+
   it('uploads an application document inline and refreshes document rows', async () => {
     mockedFetchApplicationDocuments
       .mockResolvedValueOnce({
