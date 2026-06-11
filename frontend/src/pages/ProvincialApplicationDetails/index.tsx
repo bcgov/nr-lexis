@@ -48,7 +48,11 @@ import {
   type ApplicationClientContact,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
-import { fetchApplicationReviewOptions, type SearchOption } from '@/service/search-options-service'
+import {
+  fetchApplicationReviewOptions,
+  fetchProvincialApplicationOptions,
+  type SearchOption,
+} from '@/service/search-options-service'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const displayValue = (value: string | number | null | undefined): string => {
@@ -64,6 +68,18 @@ const normalizeEmail = (email: string): string => email.trim()
 const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
 const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['REJ', 'WDN'])
+const APPLICANT_TYPE_OPTIONS: SearchOption[] = [
+  { value: 'O', label: 'Owner' },
+  { value: 'A', label: 'Agent' },
+]
+const JURISDICTION_OPTIONS: SearchOption[] = [
+  { value: 'P', label: 'Provincial' },
+  { value: 'F', label: 'Federal' },
+]
+const OIC_INDICATOR_OPTIONS: SearchOption[] = [
+  { value: 'N', label: 'No' },
+  { value: 'Y', label: 'Yes' },
+]
 
 const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
   location.locationCode !== '0'
@@ -112,6 +128,21 @@ const resolveClientContactName = (
   }
 
   return contacts.find(isSelectableClientContact)?.contactName ?? normalizedCurrentName
+}
+
+const optionLabel = (option: SearchOption): string =>
+  option.label === option.value ? option.label : `${option.value} - ${option.label}`
+
+const optionsWithCurrentValue = (options: SearchOption[], currentValue: string): SearchOption[] => {
+  const normalizedCurrentValue = currentValue.trim()
+  if (
+    !normalizedCurrentValue ||
+    options.some((option) => option.value === normalizedCurrentValue)
+  ) {
+    return options
+  }
+
+  return [{ value: normalizedCurrentValue, label: normalizedCurrentValue }, ...options]
 }
 
 const triggerBrowserDownload = (blob: Blob, filename: string): void => {
@@ -245,6 +276,16 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [isLoadingAgentClientLocations, setIsLoadingAgentClientLocations] = useState(false)
   const [isLoadingOwnerClientContacts, setIsLoadingOwnerClientContacts] = useState(false)
   const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
+  const [summaryExemptionReasonOptions, setSummaryExemptionReasonOptions] = useState<
+    SearchOption[]
+  >([])
+  const [summaryApplicationStatusOptions, setSummaryApplicationStatusOptions] = useState<
+    SearchOption[]
+  >([])
+  const [summaryProductTypeOptions, setSummaryProductTypeOptions] = useState<SearchOption[]>([])
+  const [summaryGrowthTypeOptions, setSummaryGrowthTypeOptions] = useState<SearchOption[]>([])
+  const [summaryRegionOptions, setSummaryRegionOptions] = useState<SearchOption[]>([])
+  const [isLoadingSummaryOptions, setIsLoadingSummaryOptions] = useState(false)
   const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
   const [reviewStatusCode, setReviewStatusCode] = useState('')
   const [reviewStatusRemark, setReviewStatusRemark] = useState('')
@@ -457,6 +498,26 @@ const ProvincialApplicationDetailsPage: FC = () => {
       : hasSelectableAgentClientContacts
         ? 'Select agent contact'
         : 'No contacts on file'
+  const exemptionReasonOptions = optionsWithCurrentValue(
+    summaryExemptionReasonOptions,
+    summaryForm?.exemptionReasonCode ?? '',
+  )
+  const applicationStatusOptions = optionsWithCurrentValue(
+    summaryApplicationStatusOptions,
+    summaryForm?.applicationStatusCode ?? '',
+  )
+  const productTypeOptions = optionsWithCurrentValue(
+    summaryProductTypeOptions,
+    summaryForm?.productTypeCode ?? '',
+  )
+  const growthTypeOptions = optionsWithCurrentValue(
+    summaryGrowthTypeOptions,
+    summaryForm?.growthTypeCode ?? '',
+  )
+  const regionOptions = optionsWithCurrentValue(
+    summaryRegionOptions,
+    summaryForm?.orgUnitNumber ?? '',
+  )
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {
@@ -759,6 +820,62 @@ const ProvincialApplicationDetailsPage: FC = () => {
     summaryAgentClientLocationCode,
     summaryAgentClientNumber,
   ])
+
+  useEffect(() => {
+    if (!canEditSummary || !hasSummaryForm) {
+      let isActive = true
+      void Promise.resolve().then(() => {
+        if (!isActive) {
+          return
+        }
+        setIsLoadingSummaryOptions(false)
+      })
+      return () => {
+        isActive = false
+      }
+    }
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        setIsLoadingSummaryOptions(true)
+      }
+    })
+
+    void fetchProvincialApplicationOptions()
+      .then((options) => {
+        if (!isActive) {
+          return
+        }
+
+        setSummaryExemptionReasonOptions(options.exemptionReasons)
+        setSummaryApplicationStatusOptions(options.applicationStatuses)
+        setSummaryProductTypeOptions(options.productTypes)
+        setSummaryGrowthTypeOptions(options.growthTypes)
+        setSummaryRegionOptions(options.regions)
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return
+        }
+
+        console.warn('Unable to load application summary options.', error)
+        setSummaryExemptionReasonOptions([])
+        setSummaryApplicationStatusOptions([])
+        setSummaryProductTypeOptions([])
+        setSummaryGrowthTypeOptions([])
+        setSummaryRegionOptions([])
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingSummaryOptions(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [canEditSummary, hasSummaryForm])
 
   useEffect(() => {
     if (!canReviewApplication) {
@@ -1295,15 +1412,24 @@ const ProvincialApplicationDetailsPage: FC = () => {
               {canEditSummary && summaryForm ? (
                 <>
                   <div className="legacy-search-grid">
-                    <TextInput
+                    <Select
                       id="applicationSummaryExemptionReason"
                       labelText="Exemption Reason"
-                      maxLength={1}
                       value={summaryForm.exemptionReasonCode}
+                      disabled={isLoadingSummaryOptions && exemptionReasonOptions.length === 0}
                       onChange={(event) =>
                         onSummaryFormChange('exemptionReasonCode', event.target.value.toUpperCase())
                       }
-                    />
+                    >
+                      <SelectItem value="" text="Select exemption reason" />
+                      {exemptionReasonOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          text={optionLabel(option)}
+                        />
+                      ))}
+                    </Select>
                     <TextInput
                       id="applicationSummaryApplicationDate"
                       labelText="Application Date"
@@ -1412,15 +1538,26 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         }
                       />
                     )}
-                    <TextInput
+                    <Select
                       id="applicationSummaryApplicantTypeCode"
                       labelText="Applicant Type"
-                      maxLength={1}
                       value={summaryForm.applicantTypeCode}
                       onChange={(event) =>
                         onSummaryFormChange('applicantTypeCode', event.target.value.toUpperCase())
                       }
-                    />
+                    >
+                      <SelectItem value="" text="Select applicant type" />
+                      {optionsWithCurrentValue(
+                        APPLICANT_TYPE_OPTIONS,
+                        summaryForm.applicantTypeCode,
+                      ).map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          text={optionLabel(option)}
+                        />
+                      ))}
+                    </Select>
                     <TextInput
                       id="applicationSummaryAgentClientNumber"
                       labelText="Agent Client Number"
@@ -1483,50 +1620,99 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         }
                       />
                     )}
-                    <TextInput
+                    <Select
                       id="applicationSummaryRegion"
                       labelText="Region"
-                      type="number"
-                      min={1}
                       value={summaryForm.orgUnitNumber}
+                      disabled={isLoadingSummaryOptions && regionOptions.length === 0}
                       onChange={(event) => onSummaryFormChange('orgUnitNumber', event.target.value)}
-                    />
-                    <TextInput
+                    >
+                      <SelectItem value="" text="Select region" />
+                      {regionOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          text={optionLabel(option)}
+                        />
+                      ))}
+                    </Select>
+                    <Select
                       id="applicationSummaryProductType"
                       labelText="Product Type"
                       value={summaryForm.productTypeCode}
+                      disabled={isLoadingSummaryOptions && productTypeOptions.length === 0}
                       onChange={(event) =>
                         onSummaryFormChange('productTypeCode', event.target.value.toUpperCase())
                       }
-                    />
-                    <TextInput
+                    >
+                      <SelectItem value="" text="Select product type" />
+                      {productTypeOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          text={optionLabel(option)}
+                        />
+                      ))}
+                    </Select>
+                    <Select
                       id="applicationSummaryGrowthType"
                       labelText="Growth Type"
                       value={summaryForm.growthTypeCode}
+                      disabled={isLoadingSummaryOptions && growthTypeOptions.length === 0}
                       onChange={(event) =>
                         onSummaryFormChange('growthTypeCode', event.target.value.toUpperCase())
                       }
-                    />
-                    <TextInput
+                    >
+                      <SelectItem value="" text="Select growth type" />
+                      {growthTypeOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          text={optionLabel(option)}
+                        />
+                      ))}
+                    </Select>
+                    <Select
                       id="applicationSummaryStatus"
                       labelText="Application Status"
                       value={summaryForm.applicationStatusCode}
+                      disabled={isLoadingSummaryOptions && applicationStatusOptions.length === 0}
                       onChange={(event) =>
                         onSummaryFormChange(
                           'applicationStatusCode',
                           event.target.value.toUpperCase(),
                         )
                       }
-                    />
-                    <TextInput
+                    >
+                      <SelectItem value="" text="Select application status" />
+                      {applicationStatusOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          text={optionLabel(option)}
+                        />
+                      ))}
+                    </Select>
+                    <Select
                       id="applicationSummaryJurisdiction"
                       labelText="Jurisdiction"
-                      maxLength={1}
                       value={summaryForm.jurisdictionCode}
                       onChange={(event) =>
                         onSummaryFormChange('jurisdictionCode', event.target.value.toUpperCase())
                       }
-                    />
+                    >
+                      <SelectItem value="" text="Select jurisdiction" />
+                      {optionsWithCurrentValue(
+                        JURISDICTION_OPTIONS,
+                        summaryForm.jurisdictionCode,
+                      ).map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          text={optionLabel(option)}
+                        />
+                      ))}
+                    </Select>
                     <TextInput
                       id="applicationSummarySchedule"
                       labelText="Schedule ID"
@@ -1537,15 +1723,25 @@ const ProvincialApplicationDetailsPage: FC = () => {
                         onSummaryFormChange('exportScheduleId', event.target.value)
                       }
                     />
-                    <TextInput
+                    <Select
                       id="applicationSummaryOicIndicator"
                       labelText="OIC Indicator"
-                      maxLength={1}
                       value={summaryForm.oicIndicator}
                       onChange={(event) =>
                         onSummaryFormChange('oicIndicator', event.target.value.toUpperCase())
                       }
-                    />
+                    >
+                      <SelectItem value="" text="Select OIC indicator" />
+                      {optionsWithCurrentValue(OIC_INDICATOR_OPTIONS, summaryForm.oicIndicator).map(
+                        (option) => (
+                          <SelectItem
+                            key={option.value}
+                            value={option.value}
+                            text={optionLabel(option)}
+                          />
+                        ),
+                      )}
+                    </Select>
                   </div>
                   <div className="legacy-search-grid">
                     <TextArea

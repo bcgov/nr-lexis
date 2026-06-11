@@ -38,7 +38,10 @@ import {
   updateApplicationSummary,
   updateApplicationPackage,
 } from '@/service/provincial-application-items-service'
-import { fetchApplicationReviewOptions } from '@/service/search-options-service'
+import {
+  fetchApplicationReviewOptions,
+  fetchProvincialApplicationOptions,
+} from '@/service/search-options-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -90,6 +93,7 @@ vi.mock('@/service/provincial-application-items-service', () => ({
 
 vi.mock('@/service/search-options-service', () => ({
   fetchApplicationReviewOptions: vi.fn(),
+  fetchProvincialApplicationOptions: vi.fn(),
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
@@ -121,6 +125,7 @@ const mockedSaveApplicationRemark = vi.mocked(saveApplicationRemark)
 const mockedUpdateApplicationSummary = vi.mocked(updateApplicationSummary)
 const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
 const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOptions)
+const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 
 const applicationDetail: ProvincialApplicationDetail = {
   applicationNumber: 321,
@@ -170,6 +175,13 @@ const getApplicationReviewTile = (): HTMLElement => {
   return reviewTile as HTMLElement
 }
 
+const getApplicationSummaryTile = (): HTMLElement => {
+  const summaryTitle = screen.getByText('Application Summary')
+  const summaryTile = summaryTitle.closest('.cds--tile')
+  expect(summaryTile).toBeTruthy()
+  return summaryTile as HTMLElement
+}
+
 describe('Provincial Application Detail Document Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -198,6 +210,31 @@ describe('Provincial Application Detail Document Actions', () => {
         { value: 'APP', label: 'Approved' },
         { value: 'REJ', label: 'Rejected' },
         { value: 'WDN', label: 'Withdrawn' },
+      ],
+    })
+    mockedFetchProvincialApplicationOptions.mockResolvedValue({
+      exemptionTypes: [],
+      exemptionReasons: [
+        { value: 'E', label: 'Economic' },
+        { value: 'S', label: 'Surplus' },
+        { value: 'U', label: 'Utilization' },
+      ],
+      applicationStatuses: [
+        { value: 'ACTIVE', label: 'Active' },
+        { value: 'APP', label: 'Approved' },
+        { value: 'REJ', label: 'Rejected' },
+      ],
+      productTypes: [
+        { value: 'LOG', label: 'Logs' },
+        { value: 'TIMBER', label: 'Timber' },
+      ],
+      growthTypes: [
+        { value: 'O', label: 'Old Growth' },
+        { value: 'S', label: 'Second Growth' },
+      ],
+      regions: [
+        { value: '12', label: 'Coast' },
+        { value: '13', label: 'Interior' },
       ],
     })
     mockedApproveApplicationReview.mockResolvedValue({
@@ -1083,6 +1120,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.type(volumeInput, '125.5')
 
     await waitFor(() => {
+      expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled()
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner')
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033344', 'agent')
       expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
@@ -1098,9 +1136,24 @@ describe('Provincial Application Detail Document Actions', () => {
         '321',
       )
     })
-    await userEvent.selectOptions(screen.getByLabelText('Owner Client Location'), '02')
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText('Exemption Reason').querySelector('option[value="S"]'),
+      ).not.toBeNull()
+      expect(screen.getByLabelText('Region').querySelector('option[value="13"]')).not.toBeNull()
+    })
+    const summaryTile = getApplicationSummaryTile()
+    const summaryControls = within(summaryTile)
+    await userEvent.selectOptions(summaryControls.getByLabelText('Exemption Reason'), 'S')
+    await userEvent.selectOptions(summaryControls.getByLabelText('Application Status'), 'APP')
+    await userEvent.selectOptions(summaryControls.getByLabelText('Region'), '13')
+    await userEvent.selectOptions(summaryControls.getByLabelText('Product Type'), 'TIMBER')
+    await userEvent.selectOptions(summaryControls.getByLabelText('Growth Type'), 'S')
+    await userEvent.selectOptions(summaryControls.getByLabelText('Jurisdiction'), 'F')
+    await userEvent.selectOptions(summaryControls.getByLabelText('OIC Indicator'), 'Y')
+    await userEvent.selectOptions(summaryControls.getByLabelText('Owner Client Location'), '02')
     await userEvent.selectOptions(
-      screen.getByLabelText('Owner Contact Name'),
+      summaryControls.getByLabelText('Owner Contact Name'),
       'Owner Alternate Contact',
     )
 
@@ -1114,22 +1167,22 @@ describe('Provincial Application Detail Document Actions', () => {
         termDays: '45',
         applicationVolume: '125.5',
         averageLogVolume: '2',
-        exemptionReasonCode: 'U',
+        exemptionReasonCode: 'S',
         productLocation: 'BC',
         exportScheduleId: '987',
         agentClientNumber: '00033344',
         agentClientLocationCode: '01',
         ownerClientNumber: '00011122',
         ownerClientLocationCode: '02',
-        applicationStatusCode: 'ACTIVE',
+        applicationStatusCode: 'APP',
         applicantTypeCode: 'A',
-        orgUnitNumber: '12',
-        productTypeCode: 'LOG',
-        jurisdictionCode: 'P',
-        growthTypeCode: 'O',
+        orgUnitNumber: '13',
+        productTypeCode: 'TIMBER',
+        jurisdictionCode: 'F',
+        growthTypeCode: 'S',
         agentContactName: 'Agent Contact',
         ownerContactName: 'Owner Alternate Contact',
-        oicIndicator: 'N',
+        oicIndicator: 'Y',
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
