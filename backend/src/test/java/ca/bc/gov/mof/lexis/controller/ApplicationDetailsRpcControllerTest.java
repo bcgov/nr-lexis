@@ -6,8 +6,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
+import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.Instant;
@@ -36,8 +39,10 @@ class ApplicationDetailsRpcControllerTest {
 
   @Mock private ObjectProvider<ApplicationDetailsRpcService> serviceProvider;
   @Mock private ObjectProvider<ClientLookupService> clientLookupServiceProvider;
+  @Mock private ObjectProvider<ApplicationReviewService> applicationReviewServiceProvider;
   @Mock private ApplicationDetailsRpcService service;
   @Mock private ClientLookupService clientLookupService;
+  @Mock private ApplicationReviewService applicationReviewService;
   @Mock private LexisSessionService sessionService;
   @Mock private LexisAuthorizationService authorizationService;
   @Mock private HttpServletRequest servletRequest;
@@ -49,7 +54,11 @@ class ApplicationDetailsRpcControllerTest {
   void setup() {
     controller =
         new ApplicationDetailsRpcController(
-            serviceProvider, clientLookupServiceProvider, sessionService, authorizationService);
+            serviceProvider,
+            clientLookupServiceProvider,
+            applicationReviewServiceProvider,
+            sessionService,
+            authorizationService);
   }
 
   @Test
@@ -266,6 +275,61 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().release()).isEqualTo("ok");
     verify(session).removeAttribute("exemptionApplication");
     verify(session).removeAttribute("applicationNumber");
+  }
+
+  @Test
+  void sendApplicationRejectEmailLegacyShouldDelegateToReviewEmailService() {
+    when(applicationReviewServiceProvider.getIfAvailable()).thenReturn(applicationReviewService);
+    when(applicationReviewService.sendStatusEmail(
+            org.mockito.ArgumentMatchers.eq(1000456L),
+            org.mockito.ArgumentMatchers.any(ApplicationReviewStatusEmailRequestDto.class)))
+        .thenReturn(new ApplicationReviewStatusEmailResultDto(true, "Status email sent."));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("toEmailAddress", "client@example.test");
+    params.add("additionalRemarks", "Rejected during review");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationStatusEmailResponseDto> response =
+        controller.sendApplicationRejectEmailLegacy(params);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().message()).isEqualTo("Status email sent.");
+
+    ArgumentCaptor<ApplicationReviewStatusEmailRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationReviewStatusEmailRequestDto.class);
+    verify(applicationReviewService).sendStatusEmail(org.mockito.ArgumentMatchers.eq(1000456L), requestCaptor.capture());
+    assertThat(requestCaptor.getValue().statusCode()).isEqualTo("REJ");
+    assertThat(requestCaptor.getValue().clientEmailAddress()).isEqualTo("client@example.test");
+    assertThat(requestCaptor.getValue().remark()).isEqualTo("Rejected during review");
+  }
+
+  @Test
+  void sendApplicationWithdrawnEmailLegacyShouldUseWithdrawnStatus() {
+    when(applicationReviewServiceProvider.getIfAvailable()).thenReturn(applicationReviewService);
+    when(applicationReviewService.sendStatusEmail(
+            org.mockito.ArgumentMatchers.eq(1000456L),
+            org.mockito.ArgumentMatchers.any(ApplicationReviewStatusEmailRequestDto.class)))
+        .thenReturn(new ApplicationReviewStatusEmailResultDto(false, "Status email could not be sent."));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("toEmailAddress", "client@example.test");
+    params.add("additionalRemarks", "Withdrawn");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationStatusEmailResponseDto> response =
+        controller.sendApplicationWithdrawnEmailLegacy(params);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+
+    ArgumentCaptor<ApplicationReviewStatusEmailRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationReviewStatusEmailRequestDto.class);
+    verify(applicationReviewService).sendStatusEmail(org.mockito.ArgumentMatchers.eq(1000456L), requestCaptor.capture());
+    assertThat(requestCaptor.getValue().statusCode()).isEqualTo("WDN");
   }
 
   @Test

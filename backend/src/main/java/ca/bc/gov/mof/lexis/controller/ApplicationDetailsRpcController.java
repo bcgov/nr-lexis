@@ -1,7 +1,10 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
+import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -48,6 +51,8 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_CHECK_FORM_CHANGES = "checkFormChanges";
   private static final String ACTION_CHECK_UNUSED_VOLUME = "checkUnusedVolume";
   private static final String ACTION_RELEASE_LOCK = "releaseLock";
+  private static final String ACTION_SEND_APPLICATION_REJECT_EMAIL = "sendApplRejectEmail";
+  private static final String ACTION_SEND_APPLICATION_WITHDRAWN_EMAIL = "sendApplWithdrawnEmail";
   private static final String ACTION_ADD_APPLICATION = "addApplication";
   private static final String ACTION_UPDATE_APPLICATION = "updateApplication";
   private static final String ACTION_GET_CLIENT_DATA = "getClientData";
@@ -85,16 +90,19 @@ public class ApplicationDetailsRpcController {
 
   private final ObjectProvider<ApplicationDetailsRpcService> serviceProvider;
   private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
+  private final ObjectProvider<ApplicationReviewService> applicationReviewServiceProvider;
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
 
   public ApplicationDetailsRpcController(
       ObjectProvider<ApplicationDetailsRpcService> serviceProvider,
       ObjectProvider<ClientLookupService> clientLookupServiceProvider,
+      ObjectProvider<ApplicationReviewService> applicationReviewServiceProvider,
       LexisSessionService sessionService,
       LexisAuthorizationService authorizationService) {
     this.serviceProvider = serviceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
+    this.applicationReviewServiceProvider = applicationReviewServiceProvider;
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
   }
@@ -306,6 +314,22 @@ public class ApplicationDetailsRpcController {
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_RELEASE_LOCK)
   public ResponseEntity<ReleaseLockResponseDto> releaseLockLegacy(HttpServletRequest request) {
     return releaseLock(request);
+  }
+
+  @PostMapping(
+      value = "/applicationDetailsRPC",
+      params = "actionMapping=" + ACTION_SEND_APPLICATION_REJECT_EMAIL)
+  public ResponseEntity<ApplicationStatusEmailResponseDto> sendApplicationRejectEmailLegacy(
+      @RequestParam MultiValueMap<String, String> parameters) {
+    return sendApplicationStatusEmail(parameters, "REJ");
+  }
+
+  @PostMapping(
+      value = "/applicationDetailsRPC",
+      params = "actionMapping=" + ACTION_SEND_APPLICATION_WITHDRAWN_EMAIL)
+  public ResponseEntity<ApplicationStatusEmailResponseDto> sendApplicationWithdrawnEmailLegacy(
+      @RequestParam MultiValueMap<String, String> parameters) {
+    return sendApplicationStatusEmail(parameters, "WDN");
   }
 
   @PostMapping("/rpc/application-details/application")
@@ -1460,6 +1484,28 @@ public class ApplicationDetailsRpcController {
     return authentication == null ? null : authentication.getName();
   }
 
+  private ResponseEntity<ApplicationStatusEmailResponseDto> sendApplicationStatusEmail(
+      MultiValueMap<String, String> parameters, String statusCode) {
+    ApplicationReviewService service = applicationReviewServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application review service unavailable - returning no content for application status email");
+      return ResponseEntity.noContent().build();
+    }
+
+    Long applicationNumber = parsePositiveLong(first(parameters, "applicationNumber"));
+    ApplicationReviewStatusEmailResultDto result =
+        applicationNumber == null
+            ? new ApplicationReviewStatusEmailResultDto(
+                false, "Application number must be a positive value.")
+            : service.sendStatusEmail(
+                applicationNumber,
+                new ApplicationReviewStatusEmailRequestDto(
+                    statusCode,
+                    first(parameters, "toEmailAddress", "clientEmailAddress"),
+                    first(parameters, "additionalRemarks", "remark", "remarkBody")));
+    return ResponseEntity.ok(new ApplicationStatusEmailResponseDto(result.success(), result.message()));
+  }
+
   public record DocumentDetailsResponseDto(
       String name, String description, String type, long id) {}
 
@@ -1475,6 +1521,8 @@ public class ApplicationDetailsRpcController {
   public record CheckUnusedVolumeResponseDto(boolean volumeUsedInd) {}
 
   public record ReleaseLockResponseDto(String release) {}
+
+  public record ApplicationStatusEmailResponseDto(boolean success, String message) {}
 
   public record ApplicationPersistenceResponseDto(
       boolean valid,
