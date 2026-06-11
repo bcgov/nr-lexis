@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addApplicationScaleToPackage,
   deleteApplicationScale,
+  fetchApplicationPackageStatusCodes,
   fetchApplicationSummarySnapshot,
   fetchApplicationRemainingSpecies,
   saveApplicationRemark,
@@ -51,6 +52,21 @@ describe('provincial-application-items-service', () => {
     )
   })
 
+  it('loads package status code options from the application detail RPC endpoint', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: [{ code: 'ACT', description: 'Active' }],
+    })
+
+    const result = await fetchApplicationPackageStatusCodes()
+
+    expect(result).toEqual([{ code: 'ACT', description: 'Active' }])
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/rpc/application-details/package-status-codes',
+      undefined,
+      { ttlMs: 30000 },
+    )
+  })
+
   it('posts package updates as legacy url-encoded form fields', async () => {
     postMock.mockResolvedValue({
       data: {
@@ -68,7 +84,7 @@ describe('provincial-application-items-service', () => {
       volume: '100.0',
       averageLength: '12.0',
       averageDiameter: '24.0',
-      status: 'A',
+      status: 'ACT',
       comments: 'Ready',
       reprocessed: 'N',
       ageClass: 'O',
@@ -94,6 +110,7 @@ describe('provincial-application-items-service', () => {
     expect(body.get('packageNumber')).toBe('PKG-1')
     expect(body.get('newPackageNumber')).toBe('PKG-2')
     expect(body.get('packageDialogPackageVolume')).toBe('100.0')
+    expect(body.get('packageDialogPackageStatus')).toBe('ACT')
     expect(body.get('updatePackageEndUse')).toBe('LU')
     expect(body.get('updatePackageSpeciesTableValues')).toBe('FI,CE')
   })

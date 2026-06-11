@@ -374,6 +374,28 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void getPackageStatusCodesLegacyShouldReturnLegacyCodePayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getPackageStatusCodes())
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcService.CodeItem("ACT", "Active"),
+                new ApplicationDetailsRpcService.CodeItem("SHT", "Shutout")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationCodeResponseDto>> response =
+        controller.getPackageStatusCodesLegacy();
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody())
+        .extracting(
+            ApplicationDetailsRpcController.ApplicationCodeResponseDto::code,
+            ApplicationDetailsRpcController.ApplicationCodeResponseDto::description)
+        .containsExactly(tuple("ACT", "Active"), tuple("SHT", "Shutout"));
+    verify(service).getPackageStatusCodes();
+  }
+
+  @Test
   void getGradeCodesLegacyShouldUseLegacyAndModernParameterAliases() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getGradeCodes("11", "FIR"))

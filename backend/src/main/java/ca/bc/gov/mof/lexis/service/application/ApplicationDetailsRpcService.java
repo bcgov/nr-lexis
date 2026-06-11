@@ -28,6 +28,8 @@ public interface ApplicationDetailsRpcService {
 
   List<CodeItem> getSpeciesCodes();
 
+  List<CodeItem> getPackageStatusCodes();
+
   List<CodeItem> getGradeCodes(String orgUnitNumber, String speciesCode);
 
   List<CodeItem> getEndUsesForSpeciesRegion(String orgUnitNumber, List<String> speciesCodes);

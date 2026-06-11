@@ -494,6 +494,24 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void getPackageStatusCodesShouldMapOracleCodeRows() {
+    when(repository.findAllPackageStatusCodes())
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.CodeRow(" ACT ", " Active ", 1L, 1L),
+                new ApplicationDetailsRpcRepository.CodeRow(" SHT ", " Shutout ", 1L, 2L)));
+
+    List<ApplicationDetailsRpcService.CodeItem> response = service.getPackageStatusCodes();
+
+    assertThat(response)
+        .extracting(
+            ApplicationDetailsRpcService.CodeItem::code,
+            ApplicationDetailsRpcService.CodeItem::description)
+        .containsExactly(tuple("ACT", "Active"), tuple("SHT", "Shutout"));
+    verify(repository).findAllPackageStatusCodes();
+  }
+
+  @Test
   void getGradeCodesShouldDeduplicateSortAndResolveDescriptions() {
     when(repository.findSpeciesEndUsesByRegionSpecies("11", "FIR"))
         .thenReturn(

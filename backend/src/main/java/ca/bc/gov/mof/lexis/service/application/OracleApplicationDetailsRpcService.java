@@ -217,6 +217,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
+  public List<CodeItem> getPackageStatusCodes() {
+    return repository.findAllPackageStatusCodes().stream().map(this::toCodeItem).toList();
+  }
+
+  @Override
   public List<CodeItem> getGradeCodes(String orgUnitNumber, String speciesCode) {
     TreeSet<String> gradeCodes = new TreeSet<>();
     for (ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow row :

@@ -461,6 +461,19 @@ export const fetchApplicationSpeciesCodes = async (): Promise<ApplicationCodeOpt
   }
 }
 
+export const fetchApplicationPackageStatusCodes = async (): Promise<ApplicationCodeOption[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/package-status-codes',
+      undefined,
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parseArrayPayload(response.data).map(normalizeCodeOption)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application package status codes.', error)
+  }
+}
+
 export const fetchApplicationGradeCodes = async (
   region: string,
   speciesCode: string,

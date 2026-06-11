@@ -29,6 +29,7 @@ import {
   fetchApplicationGradeCodes,
   fetchApplicationPackageDetails,
   fetchApplicationPackageScales,
+  fetchApplicationPackageStatusCodes,
   fetchApplicationPackageSpecies,
   fetchApplicationRemainingSpecies,
   fetchApplicationScaleDetails,
@@ -81,6 +82,7 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationGradeCodes: vi.fn(),
   fetchApplicationPackageDetails: vi.fn(),
   fetchApplicationPackageScales: vi.fn(),
+  fetchApplicationPackageStatusCodes: vi.fn(),
   fetchApplicationPackageSpecies: vi.fn(),
   fetchApplicationRemainingSpecies: vi.fn(),
   fetchApplicationScaleDetails: vi.fn(),
@@ -116,6 +118,7 @@ const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
 const mockedFetchApplicationGradeCodes = vi.mocked(fetchApplicationGradeCodes)
 const mockedFetchApplicationPackageDetails = vi.mocked(fetchApplicationPackageDetails)
 const mockedFetchApplicationPackageScales = vi.mocked(fetchApplicationPackageScales)
+const mockedFetchApplicationPackageStatusCodes = vi.mocked(fetchApplicationPackageStatusCodes)
 const mockedFetchApplicationPackageSpecies = vi.mocked(fetchApplicationPackageSpecies)
 const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemainingSpecies)
 const mockedFetchApplicationScaleDetails = vi.mocked(fetchApplicationScaleDetails)
@@ -294,7 +297,7 @@ describe('Provincial Application Detail Document Actions', () => {
       scaledVolume: 20,
       length: '12.0',
       diameter: '24.0',
-      status: 'A',
+      status: 'ACT',
       comments: 'Ready',
       statusDescription: 'Active',
       reprocessed: 'N',
@@ -325,6 +328,10 @@ describe('Provincial Application Detail Document Actions', () => {
     mockedFetchApplicationSpeciesCodes.mockResolvedValue([
       { code: 'FI', description: 'Douglas-fir' },
       { code: 'CE', description: 'Cedar' },
+    ])
+    mockedFetchApplicationPackageStatusCodes.mockResolvedValue([
+      { code: 'ACT', description: 'Active' },
+      { code: 'SHT', description: 'Shutout' },
     ])
     mockedFetchApplicationRemainingSpecies.mockResolvedValue([{ code: 'CE', description: 'Cedar' }])
     mockedFetchApplicationEndUsesForSpeciesRegion.mockResolvedValue([
@@ -809,7 +816,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.type(createPackageControls.getByLabelText('Package Volume'), '25.0')
     await userEvent.type(createPackageControls.getByLabelText('Average Length'), '12.0')
     await userEvent.type(createPackageControls.getByLabelText('Average Diameter'), '24.0')
-    await userEvent.type(createPackageControls.getByLabelText('Status Code'), 'A')
+    await userEvent.selectOptions(createPackageControls.getByLabelText('Status Code'), 'ACT')
     await waitFor(() => {
       expect(createPackageControls.getByLabelText('End Use Options')).toHaveValue('LU')
     })
@@ -823,7 +830,7 @@ describe('Provincial Application Detail Document Actions', () => {
         volume: '25.0',
         averageLength: '12.0',
         averageDiameter: '24.0',
-        status: 'A',
+        status: 'ACT',
         comments: '',
         reprocessed: 'N',
         ageClass: '',
@@ -861,7 +868,7 @@ describe('Provincial Application Detail Document Actions', () => {
         scaledVolume: 40,
         length: '14.0',
         diameter: '26.0',
-        status: 'A',
+        status: 'ACT',
         comments: 'Second package',
         statusDescription: 'Active',
         reprocessed: 'N',
@@ -920,7 +927,7 @@ describe('Provincial Application Detail Document Actions', () => {
         scaledVolume: 20,
         length: '12.0',
         diameter: '24.0',
-        status: 'A',
+        status: 'ACT',
         comments: 'First package stale',
         statusDescription: 'Active',
         reprocessed: 'N',

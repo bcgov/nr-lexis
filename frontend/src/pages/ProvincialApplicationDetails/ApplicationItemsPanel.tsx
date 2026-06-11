@@ -34,6 +34,7 @@ import {
   fetchApplicationGradeCodes,
   fetchApplicationPackageDetails,
   fetchApplicationPackageScales,
+  fetchApplicationPackageStatusCodes,
   fetchApplicationPackageSpecies,
   fetchApplicationRemainingSpecies,
   fetchApplicationScaleDetails,
@@ -126,6 +127,18 @@ const asOptionText = (option: ApplicationCodeOption): string =>
   option.description && option.description !== option.code
     ? `${option.code} - ${option.description}`
     : option.code
+
+const optionsWithCurrentCode = (
+  options: ApplicationCodeOption[],
+  currentCode: string,
+): ApplicationCodeOption[] => {
+  const normalizedCurrentCode = currentCode.trim()
+  if (!normalizedCurrentCode || options.some((option) => option.code === normalizedCurrentCode)) {
+    return options
+  }
+
+  return [{ code: normalizedCurrentCode, description: normalizedCurrentCode }, ...options]
+}
 
 const uniqueCodes = (rows: ApplicationPackageSpeciesRow[]): string[] =>
   Array.from(new Set(rows.map((row) => row.species).filter(Boolean)))
@@ -230,6 +243,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   const [createSpeciesDraft, setCreateSpeciesDraft] = useState<string[]>([])
   const [scales, setScales] = useState<ApplicationPackageScaleRow[]>([])
   const [speciesOptions, setSpeciesOptions] = useState<ApplicationCodeOption[]>([])
+  const [packageStatusOptions, setPackageStatusOptions] = useState<ApplicationCodeOption[]>([])
   const [remainingSpeciesOptions, setRemainingSpeciesOptions] = useState<ApplicationCodeOption[]>(
     [],
   )
@@ -337,18 +351,22 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
 
   useEffect(() => {
     let cancelled = false
-    const loadSpeciesCodes = async () => {
+    const loadCodeOptions = async () => {
       try {
-        const options = await fetchApplicationSpeciesCodes()
+        const [species, packageStatuses] = await Promise.all([
+          fetchApplicationSpeciesCodes(),
+          fetchApplicationPackageStatusCodes(),
+        ])
         if (!cancelled) {
-          setSpeciesOptions(options)
+          setSpeciesOptions(species)
+          setPackageStatusOptions(packageStatuses)
         }
       } catch (error) {
         console.error(error)
       }
     }
 
-    void loadSpeciesCodes()
+    void loadCodeOptions()
     return () => {
       cancelled = true
     }
@@ -862,6 +880,14 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   })
   const scaleSpeciesOptions =
     selectedSpeciesOptions.length > 0 ? selectedSpeciesOptions : speciesOptions
+  const selectedPackageStatusOptions = optionsWithCurrentCode(
+    packageStatusOptions,
+    packageForm.status,
+  )
+  const createPackageStatusOptions = optionsWithCurrentCode(
+    packageStatusOptions,
+    createPackageForm.status,
+  )
 
   return (
     <Tile>
@@ -941,13 +967,18 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               onBlur={() => markItemFieldTouched('packageAverageDiameter')}
               onChange={(event) => setPackageField('averageDiameter', event.target.value)}
             />
-            <TextInput
+            <Select
               id="applicationItemsPackageStatus"
               labelText="Status Code"
               value={packageForm.status}
               disabled={!canManageItems || !selectedPackageNumber}
               onChange={(event) => setPackageField('status', event.target.value)}
-            />
+            >
+              <SelectItem value="" text="Select package status" />
+              {selectedPackageStatusOptions.map((option) => (
+                <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
+              ))}
+            </Select>
             <Select
               id="applicationItemsPackageReprocessed"
               labelText="Reprocessed"
@@ -1114,13 +1145,18 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               onBlur={() => markItemFieldTouched('createPackageAverageDiameter')}
               onChange={(event) => setCreatePackageField('averageDiameter', event.target.value)}
             />
-            <TextInput
+            <Select
               id="applicationItemsCreatePackageStatus"
               labelText="Status Code"
               value={createPackageForm.status}
               disabled={!canManageItems}
               onChange={(event) => setCreatePackageField('status', event.target.value)}
-            />
+            >
+              <SelectItem value="" text="Select package status" />
+              {createPackageStatusOptions.map((option) => (
+                <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
+              ))}
+            </Select>
             <TextInput
               id="applicationItemsCreatePackageEndUse"
               labelText="End Use"

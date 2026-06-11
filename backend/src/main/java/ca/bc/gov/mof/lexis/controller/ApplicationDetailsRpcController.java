@@ -50,6 +50,7 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
   private static final String ACTION_GET_CONTACTS_FOR_LOCATION = "getContactsForLocation";
   private static final String ACTION_GET_SPECIES_CODES = "getSpeciesCodes";
+  private static final String ACTION_GET_PACKAGE_STATUS_CODES = "getPackageStatusCodes";
   private static final String ACTION_GET_GRADE_CODES = "getGradeCodes";
   private static final String ACTION_GET_END_USE_FOR_SPECIES_REGION = "getEndUseForSpeciesRegion";
   private static final String ACTION_GET_REMAINING_SPECIES = "getRemainingSpecies";
@@ -437,6 +438,22 @@ public class ApplicationDetailsRpcController {
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SPECIES_CODES)
   public ResponseEntity<List<ApplicationCodeResponseDto>> getSpeciesCodesLegacy() {
     return getSpeciesCodes();
+  }
+
+  @GetMapping("/rpc/application-details/package-status-codes")
+  public ResponseEntity<List<ApplicationCodeResponseDto>> getPackageStatusCodes() {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning no content for package status codes");
+      return ResponseEntity.noContent().build();
+    }
+
+    return ResponseEntity.ok(service.getPackageStatusCodes().stream().map(this::toCodeResponse).toList());
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_PACKAGE_STATUS_CODES)
+  public ResponseEntity<List<ApplicationCodeResponseDto>> getPackageStatusCodesLegacy() {
+    return getPackageStatusCodes();
   }
 
   @GetMapping("/rpc/application-details/grade-codes")

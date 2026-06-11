@@ -54,6 +54,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
   private static final String FIND_ALL_SPECIES_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_SPECIES_CODES(?)";
+  private static final String FIND_ALL_PACKAGE_STATUS_CODES =
+      LEXIS_CODES_PACKAGE + "FIND_ALL_PACKAGE_STATUS_CODES(?)";
   private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
   private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
   private static final String FIND_END_USE_CODE = LEXIS_CODES_PACKAGE + "FIND_END_USE_CODE(?,?)";
@@ -542,6 +544,23 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   public List<CodeRow> findAllSpeciesCodes() {
     return queryCursorProcedure(
             FIND_ALL_SPECIES_CODES,
+            null,
+            1,
+            rs ->
+                new CodeRow(
+                    getString(rs, "CODE"),
+                    getString(rs, "DESCRIPTION"),
+                    zeroIfNull(getLong(rs, "GROUP_BY")),
+                    zeroIfNull(getLong(rs, "ORDER_BY"))))
+        .stream()
+        .filter(row -> trim(row.code()) != null && trim(row.description()) != null)
+        .sorted(Comparator.comparingLong(CodeRow::groupBy).thenComparingLong(CodeRow::orderBy))
+        .toList();
+  }
+
+  public List<CodeRow> findAllPackageStatusCodes() {
+    return queryCursorProcedure(
+            FIND_ALL_PACKAGE_STATUS_CODES,
             null,
             1,
             rs ->
