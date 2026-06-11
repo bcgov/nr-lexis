@@ -891,6 +891,10 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     packageStatusOptions,
     createPackageForm.status,
   )
+  const applicationTotalPieces = detail.packages.reduce(
+    (total, packageItem) => total + packageItem.pieceCount,
+    0,
+  )
   const selectedPackageTotalPieces = scales.reduce((total, row) => total + row.pieces, 0)
 
   return (
@@ -913,6 +917,16 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           lowContrast
         />
       )}
+
+      <dl
+        className="detail-field-grid application-items-summary"
+        aria-label="Application item summary"
+      >
+        <div className="detail-field-item">
+          <dt className="detail-field-label">Application Total Pieces</dt>
+          <dd className="detail-field-value">{applicationTotalPieces.toLocaleString()}</dd>
+        </div>
+      </dl>
 
       <div className="application-items-grid">
         <section className="application-items-section">

@@ -812,6 +812,11 @@ describe('Provincial Application Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
     })
+    const applicationItemSummary = screen.getByLabelText('Application item summary')
+    expect(
+      within(applicationItemSummary as HTMLElement).getByText('Application Total Pieces'),
+    ).toBeInTheDocument()
+    expect(within(applicationItemSummary as HTMLElement).getByText('5')).toBeInTheDocument()
     const packageDetailsSection = screen.getByText('Package Details').closest('section')
     expect(packageDetailsSection).toBeTruthy()
     expect(
