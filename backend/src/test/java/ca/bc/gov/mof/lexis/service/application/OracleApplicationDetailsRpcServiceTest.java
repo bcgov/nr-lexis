@@ -317,8 +317,13 @@ class OracleApplicationDetailsRpcServiceTest {
 
   @Test
   void addApplicationShouldInsertWhenRequestIsValid() {
+    when(repository.findCandidateExcolCombinations(2, "FI", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/FI/LU")));
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+    when(repository.replaceApplicationEndUses(
+            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
+        .thenReturn(true);
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.addApplication(
@@ -345,6 +350,8 @@ class OracleApplicationDetailsRpcServiceTest {
                 "Agent Contact",
                 "Owner Contact",
                 null,
+                "LU",
+                List.of("FI", "HE"),
                 true),
             "idir\\jsmith");
 
@@ -363,11 +370,57 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(record.agentClientNumber()).isEqualTo("00022222");
     assertThat(record.agentClientLocationCode()).isEqualTo("01");
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
+    verify(repository).replaceApplicationEndUses(
+        org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList());
+  }
+
+  @Test
+  void addApplicationShouldRejectInvalidSpeciesEndUseBeforeOracleInsert() {
+    when(repository.findCandidateExcolCombinations(2, "FI", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("FI/BA/LU")));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 3, 1),
+                30L,
+                LocalDate.of(2026, 3, 2),
+                125.5d,
+                2.4d,
+                "Camp 1",
+                null,
+                "00022222",
+                "01",
+                "00011111",
+                "02",
+                null,
+                "U",
+                "A",
+                11L,
+                "H",
+                null,
+                "O",
+                "Agent Contact",
+                "Owner Contact",
+                null,
+                "LU",
+                List.of("FI", "HE"),
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains("The application species/enduse sort is not valid for the selected region.");
+    verify(repository).findCandidateExcolCombinations(2, "FI", 11L);
+    verify(repository, never()).insertApplication(any());
   }
 
   @Test
   void addApplicationShouldPersistCreateCommentsAsRemark() {
     Instant now = Instant.parse("2026-05-27T17:30:00Z");
+    when(repository.findCandidateExcolCombinations(1, "HE", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE")));
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
     when(repository.replaceApplicationEndUses(
@@ -427,8 +480,13 @@ class OracleApplicationDetailsRpcServiceTest {
 
   @Test
   void addApplicationShouldDefaultMissingApplicantTypeToOwnerBeforeOracleInsert() {
+    when(repository.findCandidateExcolCombinations(1, "HE", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE")));
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+    when(repository.replaceApplicationEndUses(
+            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
+        .thenReturn(true);
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.addApplication(
@@ -455,6 +513,8 @@ class OracleApplicationDetailsRpcServiceTest {
                 "Agent Contact",
                 "Owner Contact",
                 null,
+                null,
+                List.of("HE"),
                 true),
             "idir\\jsmith");
 
@@ -545,8 +605,13 @@ class OracleApplicationDetailsRpcServiceTest {
 
   @Test
   void addApplicationShouldDefaultEntryUserWhenPrincipalIsMissing() {
+    when(repository.findCandidateExcolCombinations(2, "FI", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/FI/LU")));
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
+    when(repository.replaceApplicationEndUses(
+            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
+        .thenReturn(true);
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.addApplication(
@@ -573,6 +638,8 @@ class OracleApplicationDetailsRpcServiceTest {
                 "Agent Contact",
                 "Owner Contact",
                 null,
+                "LU",
+                List.of("FI", "HE"),
                 true),
             null);
 

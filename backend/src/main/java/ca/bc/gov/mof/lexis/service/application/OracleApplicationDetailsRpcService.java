@@ -34,6 +34,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String OIC_INDICATOR_NO = "N";
   private static final String EXPORT_PRODUCT_TYPE_HARVESTED = "H";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
+  private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
   private static final String SPECIES_TYPE_CEDAR = "CE";
   private static final String EXPORT_SPECIES_ENDUSE_OTHER = "OT";
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
@@ -212,6 +213,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     ApplicationDetailsRpcRepository.ApplicationUpdateRecord updateRecord =
         toApplicationUpdateRecord(existing.get(), normalized, defaultMutationUser(userId));
     List<String> errors = validateApplicationUpdate(updateRecord);
+    validateApplicationSpeciesEndUse(
+        updateRecord.orgUnitNumber(),
+        updateRecord.productTypeCode(),
+        normalized.endUseCode(),
+        normalized.speciesCodes(),
+        false,
+        errors);
     if (normalized.validationEnabled() && !errors.isEmpty()) {
       return new CreateApplicationResult(
           false, null, normalized.applicationNumber(), errors, List.of());
@@ -1466,6 +1474,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         errors.add(required("application agent name"));
       }
     }
+    validateApplicationSpeciesEndUse(
+        request.orgUnitNumber(),
+        request.productTypeCode(),
+        request.endUseCode(),
+        request.speciesCodes(),
+        true,
+        errors);
     return errors;
   }
 
@@ -1546,6 +1561,47 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       }
     }
     return errors;
+  }
+
+  private void validateApplicationSpeciesEndUse(
+      Long orgUnitNumber,
+      String productTypeCode,
+      String endUseCode,
+      List<String> speciesCodes,
+      boolean required,
+      List<String> errors) {
+    List<String> normalizedSpeciesCodes = normalizeCodes(speciesCodes);
+    if (normalizedSpeciesCodes.isEmpty()) {
+      if (required) {
+        errors.add(required("application species/enduse sort"));
+      }
+      return;
+    }
+    if (orgUnitNumber == null || orgUnitNumber <= 0) {
+      return;
+    }
+
+    String normalizedEndUseCode = firstNonBlank(endUseCode, EXPORT_SPECIES_ENDUSE_OTHER);
+    String normalizedProductTypeCode = trimToNull(productTypeCode);
+    boolean matchesCandidate = false;
+    for (ApplicationDetailsRpcRepository.ExcolValidationRow row :
+        repository.findCandidateExcolCombinations(
+            normalizedSpeciesCodes.size(), normalizedSpeciesCodes.get(0), orgUnitNumber)) {
+      String excolCode = trimToNull(row.excolCode());
+      if (excolCode == null || !containsAllLegacy(excolCode, normalizedSpeciesCodes)) {
+        continue;
+      }
+      if (!EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(normalizedProductTypeCode)
+          && !excolCode.contains(normalizedEndUseCode)) {
+        continue;
+      }
+      matchesCandidate = true;
+      break;
+    }
+
+    if (!matchesCandidate) {
+      errors.add("The application species/enduse sort is not valid for the selected region.");
+    }
   }
 
   private boolean isEditableApplicationDetailStatus(String applicationStatusCode) {
