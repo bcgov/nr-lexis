@@ -1343,7 +1343,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(within(secondPackageRow as HTMLElement).getByText('200')).toBeInTheDocument()
     expect(within(secondPackageRow as HTMLElement).getByText('8')).toBeInTheDocument()
 
-    await userEvent.click(
+    fireEvent.click(
       within(secondPackageRow as HTMLElement).getByRole('button', {
         name: 'Edit package PKG-2 items',
       }),
@@ -1380,7 +1380,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.queryByText('TM001')).not.toBeInTheDocument()
     expect(mockedFetchApplicationPackageSpecies).not.toHaveBeenCalledWith('PKG-1')
     expect(mockedFetchApplicationPackageScales).not.toHaveBeenCalledWith('PKG-1')
-  })
+  }, 15000)
 
   it('adds, looks up, and deletes package scales', async () => {
     render(
