@@ -559,7 +559,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   @Override
   public PackagePersistenceResult addPackage(PackageMutationRequest request, String userId) {
     PackageMutationRequest normalized = normalizePackageMutationRequest(request);
-    List<String> errors = validatePackageMutation(normalized, false);
+    List<String> errors = validatePackageMutation(normalized, false, null);
     if (!errors.isEmpty()) {
       return invalidPackageResult(normalized.packageNumber(), errors);
     }
@@ -583,7 +583,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     String currentPackageNumber = trimToNull(normalized.packageNumber());
     ApplicationDetailsRpcRepository.PackageMutationRow existing =
         repository.findPackageMutationByPackageNumber(currentPackageNumber).orElse(null);
-    List<String> errors = validatePackageMutation(normalized, true);
+    List<String> errors = validatePackageMutation(normalized, true, existing);
     if (existing == null) {
       errors.add("Package number " + nonNull(currentPackageNumber) + " does not exist.");
     }
@@ -686,7 +686,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         normalizeCodes(request.speciesCodes()));
   }
 
-  private List<String> validatePackageMutation(PackageMutationRequest request, boolean update) {
+  private List<String> validatePackageMutation(
+      PackageMutationRequest request,
+      boolean update,
+      ApplicationDetailsRpcRepository.PackageMutationRow existing) {
     List<String> errors = new ArrayList<>();
     String packageNumber = trimToNull(request.packageNumber());
     String newPackageNumber = trimToNull(request.newPackageNumber());
@@ -748,7 +751,56 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       }
     }
 
+    validatePackageApplicationVolume(request, update, existing, targetPackageNumber, errors);
+
     return errors;
+  }
+
+  private void validatePackageApplicationVolume(
+      PackageMutationRequest request,
+      boolean update,
+      ApplicationDetailsRpcRepository.PackageMutationRow existing,
+      String targetPackageNumber,
+      List<String> errors) {
+    Long applicationNumber =
+        request.applicationNumber() == null && existing != null
+            ? existing.applicationNumber()
+            : request.applicationNumber();
+    if (applicationNumber == null || applicationNumber < 1 || request.volume() == null) {
+      return;
+    }
+
+    Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> application =
+        repository.findApplicationUpdateRecord(applicationNumber);
+    if (application.isEmpty()
+        || APPLICATION_STATUS_EXPIRED.equalsIgnoreCase(application.get().applicationStatusCode())) {
+      return;
+    }
+
+    String currentPackageNumber =
+        existing == null ? null : trimToNull(existing.packageNumber());
+    BigDecimal totalPackageVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+    for (ApplicationDetailsRpcRepository.PackageDetailsRow row :
+        repository.findPackagesByApplicationNumber(applicationNumber)) {
+      String rowPackageNumber = trimToNull(row.packageNumber());
+      if (update
+          && (equalsNullable(rowPackageNumber, currentPackageNumber)
+              || equalsNullable(rowPackageNumber, targetPackageNumber))) {
+        continue;
+      }
+      totalPackageVolume =
+          totalPackageVolume.add(roundOneDecimal(row.packageVolume())).setScale(1, RoundingMode.HALF_UP);
+    }
+
+    BigDecimal requestedTotal =
+        totalPackageVolume.add(roundOneDecimal(request.volume())).setScale(1, RoundingMode.HALF_UP);
+    BigDecimal applicationVolume = roundOneDecimal(application.get().applicationVolume());
+    if (requestedTotal.compareTo(applicationVolume) > 0) {
+      errors.add(
+          "The total package volume must not exceed the application volume ("
+              + applicationVolume.toPlainString()
+              + ").");
+    }
   }
 
   private boolean hasAtMostOneDecimal(Double value) {

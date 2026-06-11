@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -858,6 +859,37 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void addPackageShouldRejectWhenTotalPackageVolumeExceedsApplicationVolume() {
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageDetailsRow("PKG-1", 75.0d)));
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.addPackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                25.1d,
+                12.0d,
+                24.0d,
+                "A",
+                "Test",
+                "N",
+                null,
+                null,
+                null,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The total package volume must not exceed the application volume (100.0).");
+    verify(repository, never()).insertPackage(any());
+  }
+
+  @Test
   void updatePackageShouldRenamePackageAndMoveScales() {
     Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
     when(repository.findPackageMutationByPackageNumber("PKG-903"))
@@ -910,6 +942,44 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(scaleCaptor.getValue().packageNumber()).isEqualTo("PKG-904");
     assertThat(scaleCaptor.getValue().updateUserId()).isEqualTo("idir\\jsmith");
     verify(repository).deletePackageById("PKG-903", "idir\\jsmith");
+  }
+
+  @Test
+  void updatePackageShouldRejectWhenTotalPackageVolumeExceedsApplicationVolume() {
+    Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
+    when(repository.findPackageMutationByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-903", 1000456L, "N", 20.0d, 10.0d, 20.0d, "Old", null,
+                    null, null, "A", "O", "H", "idir\\old", entryTimestamp)));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageDetailsRow("PKG-903", 20.0d), packageDetailsRow("PKG-904", 80.0d)));
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.updatePackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                20.1d,
+                10.0d,
+                20.0d,
+                "A",
+                "Updated",
+                "N",
+                "O",
+                "H",
+                null,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The total package volume must not exceed the application volume (100.0).");
+    verify(repository, never()).updatePackage(any());
   }
 
   @Test
