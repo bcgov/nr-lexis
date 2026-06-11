@@ -24,7 +24,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private static final String DESCRIPTION_NOT_ON_FILE = "Not on file";
   private static final String APPLICATION_STATUS_NEW = "NEW";
+  private static final String APPLICATION_STATUS_APPROVED = "APP";
   private static final String APPLICATION_STATUS_EXPIRED = "EXP";
+  private static final String APPLICATION_DETAILS_LOCKED_MESSAGE =
+      "Application details can only be edited while the application is new or approved.";
   private static final String APPLICANT_TYPE_OWNER = "O";
   private static final String APPLICANT_TYPE_AGENT = "A";
   private static final String JURISDICTION_PROVINCIAL = "P";
@@ -195,6 +198,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
           "No application was found for " + normalized.applicationNumber() + ".",
           normalized.applicationNumber(),
           List.of(),
+          List.of());
+    }
+    if (!isEditableApplicationDetailStatus(existing.get().applicationStatusCode())) {
+      return new CreateApplicationResult(
+          false,
+          null,
+          normalized.applicationNumber(),
+          List.of(APPLICATION_DETAILS_LOCKED_MESSAGE),
           List.of());
     }
 
@@ -1461,6 +1472,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private List<String> validateApplicationUpdate(
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
     List<String> errors = new ArrayList<>();
+    if (!isEditableApplicationDetailStatus(record.applicationStatusCode())) {
+      errors.add(APPLICATION_DETAILS_LOCKED_MESSAGE);
+    }
     if (record.applicationDate() == null) {
       errors.add(required("application date"));
     }
@@ -1532,6 +1546,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       }
     }
     return errors;
+  }
+
+  private boolean isEditableApplicationDetailStatus(String applicationStatusCode) {
+    String normalizedStatus = trimToNull(applicationStatusCode);
+    return APPLICATION_STATUS_NEW.equals(normalizedStatus)
+        || APPLICATION_STATUS_APPROVED.equals(normalizedStatus);
   }
 
   private ApplicationSummarySnapshot toApplicationSummarySnapshot(

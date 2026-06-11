@@ -1480,6 +1480,83 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void updateApplicationSummaryShouldRejectNonEditableStoredStatusBeforeOracleUpdate() {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithStatus("EXP")));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                LocalDate.of(2026, 4, 1),
+                30L,
+                LocalDate.of(2026, 4, 2),
+                125.5d,
+                2.1d,
+                "U",
+                "Camp 2",
+                null,
+                null,
+                null,
+                "00022222",
+                "02",
+                "NEW",
+                "O",
+                12L,
+                "H",
+                "P",
+                "O",
+                null,
+                "Owner Two",
+                "N",
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Application details can only be edited while the application is new or approved.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRejectNonEditableTargetStatusBeforeOracleUpdate() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                LocalDate.of(2026, 4, 1),
+                30L,
+                LocalDate.of(2026, 4, 2),
+                125.5d,
+                2.1d,
+                "U",
+                "Camp 2",
+                null,
+                null,
+                null,
+                "00022222",
+                "02",
+                "REJ",
+                "O",
+                12L,
+                "H",
+                "P",
+                "O",
+                null,
+                "Owner Two",
+                "N",
+                true),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains("Application details can only be edited while the application is new or approved.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
   void updateApplicationSummaryShouldRejectLegacyVolumeRangeBeforeOracleUpdate() {
     when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
 
@@ -1599,6 +1676,40 @@ class OracleApplicationDetailsRpcServiceTest {
         null,
         "Owner Contact",
         "N");
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationUpdateRecord applicationUpdateRecordWithStatus(
+      String applicationStatusCode) {
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord record = applicationUpdateRecord();
+    return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
+        record.applicationNumber(),
+        record.federalApplicationNumber(),
+        record.applicationDate(),
+        record.termDays(),
+        record.receivedDate(),
+        record.applicationVolume(),
+        record.averageLogVolume(),
+        record.productLocation(),
+        record.entryUserId(),
+        record.entryTimestamp(),
+        record.updateUserId(),
+        record.updateTimestamp(),
+        record.exportScheduleId(),
+        record.agentClientNumber(),
+        record.agentClientLocationCode(),
+        record.ownerClientNumber(),
+        record.ownerClientLocationCode(),
+        record.exemptionNumber(),
+        record.exemptionReasonCode(),
+        applicationStatusCode,
+        record.applicantTypeCode(),
+        record.orgUnitNumber(),
+        record.productTypeCode(),
+        record.jurisdictionCode(),
+        record.growthTypeCode(),
+        record.agentContactName(),
+        record.ownerContactName(),
+        record.oicIndicator());
   }
 
   private ApplicationDetailsRpcRepository.PackageDetailsRow packageDetailsRow(
