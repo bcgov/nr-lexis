@@ -4,7 +4,7 @@ import {
   Button,
   Column,
   Grid,
-  MultiSelect,
+  FilterableMultiSelect,
   Pagination,
   Select,
   SelectItem,
@@ -364,7 +364,7 @@ const ProvincialPermitPage: FC = () => {
               value={filters.packageNumber}
               onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
-            <MultiSelect
+            <FilterableMultiSelect
               id="region"
               titleText="Region"
               items={regionOptions}

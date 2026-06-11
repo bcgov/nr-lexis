@@ -5,7 +5,7 @@ import {
   Column,
   Grid,
   InlineNotification,
-  MultiSelect,
+  FilterableMultiSelect,
   Select,
   SelectItem,
   Table,
@@ -1394,7 +1394,7 @@ const ReportsPage: FC = () => {
                     )
 
                     return (
-                      <MultiSelect
+                      <FilterableMultiSelect
                         key={field.key}
                         id={`${selectedReport.id}-${field.key}`}
                         titleText={field.label}

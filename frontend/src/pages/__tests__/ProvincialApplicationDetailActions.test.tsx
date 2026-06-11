@@ -103,6 +103,16 @@ vi.mock('@/service/search-options-service', () => ({
   fetchProvincialApplicationOptions: vi.fn(),
 }))
 
+Element.prototype.scrollIntoView = vi.fn()
+
+const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) => {
+  await userEvent.click(combobox)
+  await userEvent.clear(combobox)
+  await userEvent.type(combobox, optionName)
+  const options = await screen.findAllByRole('option', { name: optionName })
+  await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
+}
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
@@ -839,7 +849,10 @@ describe('Provincial Application Detail Document Actions', () => {
     ).toBeInTheDocument()
     expect(within(packageDetailsSection as HTMLElement).getByText('5')).toBeInTheDocument()
 
-    await userEvent.selectOptions(screen.getAllByLabelText('Species')[0], 'CE')
+    await chooseComboBoxOption(
+      screen.getAllByRole('combobox', { name: 'Species' })[0],
+      'CE - Cedar',
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Add Species' }))
     await waitFor(() => {
       expect(screen.getAllByText('CE - Cedar').some((element) => element.tagName === 'TD')).toBe(
@@ -902,12 +915,9 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(createPackageSection).toBeTruthy()
     const createPackageControls = within(createPackageSection as HTMLElement)
 
-    await waitFor(() => {
-      expect(createPackageControls.getByRole('option', { name: 'CE - Cedar' })).toBeInTheDocument()
-    })
-    await userEvent.selectOptions(
-      createPackageControls.getByLabelText('Create Package Species'),
-      'CE',
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Create Package Species' }),
+      'CE - Cedar',
     )
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Add Create Species' }))
     await waitFor(() => {
@@ -918,9 +928,14 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.type(createPackageControls.getByLabelText('Package Volume'), '25.0')
     await userEvent.type(createPackageControls.getByLabelText('Average Length'), '12.0')
     await userEvent.type(createPackageControls.getByLabelText('Average Diameter'), '24.0')
-    await userEvent.selectOptions(createPackageControls.getByLabelText('Status Code'), 'ACT')
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Status Code' }),
+      'ACT - Active',
+    )
     await waitFor(() => {
-      expect(createPackageControls.getByLabelText('End Use Options')).toHaveValue('LU')
+      expect(createPackageControls.getByRole('combobox', { name: 'End Use Options' })).toHaveValue(
+        'LU - Lumber',
+      )
     })
 
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Create Package' }))
@@ -1043,7 +1058,7 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
     })
 
-    await userEvent.selectOptions(await screen.findByLabelText('Selected package'), 'PKG-2')
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Selected package' }), 'PKG-2')
 
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
@@ -1069,7 +1084,7 @@ describe('Provincial Application Detail Document Actions', () => {
       })
     })
 
-    expect(screen.getByLabelText('Selected package')).toHaveValue('PKG-2')
+    expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue('PKG-2')
     expect(screen.getByLabelText('Package Comments')).toHaveValue('Second package')
     expect(screen.queryByDisplayValue('First package stale')).not.toBeInTheDocument()
     expect(screen.getByText('TM002')).toBeInTheDocument()
@@ -1092,11 +1107,14 @@ describe('Provincial Application Detail Document Actions', () => {
 
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Timber Mark'), 'TM002')
-    await userEvent.selectOptions(screen.getAllByLabelText('Species')[1], 'FI')
+    await chooseComboBoxOption(
+      screen.getAllByRole('combobox', { name: 'Species' })[1],
+      'FI - Douglas-fir',
+    )
     await waitFor(() => {
       expect(mockedFetchApplicationGradeCodes).toHaveBeenCalledWith('12', 'FI')
     })
-    await userEvent.selectOptions(screen.getByLabelText('Grade'), '1')
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
     await userEvent.type(screen.getByLabelText('Pieces'), '2')
     await userEvent.type(screen.getByLabelText('Scale Volume'), '8.0')
     await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))

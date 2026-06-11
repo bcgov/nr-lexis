@@ -11,6 +11,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
   calculateApplicationTermDays,
@@ -800,52 +801,44 @@ const ProvincialApplicationCreatePage: FC = () => {
                 setForm((current) => ({ ...current, ownerClientNumber: event.target.value }))
               }
             />
-            <Select
+            <SearchableSelect
               id="ownerClientLocationCode"
               labelText="Owner Client Location (required)"
               value={form.ownerClientLocationCode}
               disabled={!form.ownerClientNumber.trim() || isLoadingOwnerClientLocations}
               invalid={!!fieldError('ownerClientLocationCode')}
               invalidText={fieldError('ownerClientLocationCode')}
+              placeholder={ownerClientLocationPlaceholder}
+              options={ownerClientLocations.filter(isSelectableClientLocation).map((location) => ({
+                value: location.locationCode,
+                label: location.locationName,
+              }))}
               onBlur={() => markFieldTouched('ownerClientLocationCode')}
-              onChange={(event) =>
+              onChange={(value) =>
                 setForm((current) => ({
                   ...current,
-                  ownerClientLocationCode: event.target.value,
+                  ownerClientLocationCode: value,
                 }))
               }
-            >
-              <SelectItem value="" text={ownerClientLocationPlaceholder} />
-              {ownerClientLocations.filter(isSelectableClientLocation).map((location) => (
-                <SelectItem
-                  key={location.locationCode}
-                  value={location.locationCode}
-                  text={location.locationName}
-                />
-              ))}
-            </Select>
+            />
             {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
-              <Select
+              <SearchableSelect
                 id="ownerContactName"
                 labelText="Owner Name (required)"
                 value={form.ownerContactName}
                 disabled={!form.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts}
                 invalid={!!fieldError('ownerContactName')}
                 invalidText={fieldError('ownerContactName')}
+                placeholder={ownerContactPlaceholder}
+                options={ownerClientContacts.filter(isSelectableClientContact).map((contact) => ({
+                  value: contact.contactName,
+                  label: contact.contactName,
+                }))}
                 onBlur={() => markFieldTouched('ownerContactName')}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, ownerContactName: event.target.value }))
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, ownerContactName: value }))
                 }
-              >
-                <SelectItem value="" text={ownerContactPlaceholder} />
-                {ownerClientContacts.filter(isSelectableClientContact).map((contact) => (
-                  <SelectItem
-                    key={contact.contactId}
-                    value={contact.contactName}
-                    text={contact.contactName}
-                  />
-                ))}
-              </Select>
+              />
             ) : (
               <TextInput
                 id="ownerContactName"
@@ -904,52 +897,48 @@ const ProvincialApplicationCreatePage: FC = () => {
                     }))
                   }
                 />
-                <Select
+                <SearchableSelect
                   id="agentClientLocationCode"
                   labelText="Agent Client Location (required)"
                   value={form.agentClientLocationCode}
                   disabled={!form.agentClientNumber.trim() || isLoadingAgentClientLocations}
                   invalid={!!fieldError('agentClientLocationCode')}
                   invalidText={fieldError('agentClientLocationCode')}
+                  placeholder={agentClientLocationPlaceholder}
+                  options={agentClientLocations
+                    .filter(isSelectableClientLocation)
+                    .map((location) => ({
+                      value: location.locationCode,
+                      label: location.locationName,
+                    }))}
                   onBlur={() => markFieldTouched('agentClientLocationCode')}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setForm((current) => ({
                       ...current,
-                      agentClientLocationCode: event.target.value,
+                      agentClientLocationCode: value,
                     }))
                   }
-                >
-                  <SelectItem value="" text={agentClientLocationPlaceholder} />
-                  {agentClientLocations.filter(isSelectableClientLocation).map((location) => (
-                    <SelectItem
-                      key={location.locationCode}
-                      value={location.locationCode}
-                      text={location.locationName}
-                    />
-                  ))}
-                </Select>
+                />
                 {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
-                  <Select
+                  <SearchableSelect
                     id="agentContactName"
                     labelText="Agent Contact Name (required)"
                     value={form.agentContactName}
                     disabled={!form.agentClientLocationCode.trim() || isLoadingAgentClientContacts}
                     invalid={!!fieldError('agentContactName')}
                     invalidText={fieldError('agentContactName')}
+                    placeholder={agentContactPlaceholder}
+                    options={agentClientContacts
+                      .filter(isSelectableClientContact)
+                      .map((contact) => ({
+                        value: contact.contactName,
+                        label: contact.contactName,
+                      }))}
                     onBlur={() => markFieldTouched('agentContactName')}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, agentContactName: event.target.value }))
+                    onChange={(value) =>
+                      setForm((current) => ({ ...current, agentContactName: value }))
                     }
-                  >
-                    <SelectItem value="" text={agentContactPlaceholder} />
-                    {agentClientContacts.filter(isSelectableClientContact).map((contact) => (
-                      <SelectItem
-                        key={contact.contactId}
-                        value={contact.contactName}
-                        text={contact.contactName}
-                      />
-                    ))}
-                  </Select>
+                  />
                 ) : (
                   <TextInput
                     id="agentContactName"
@@ -967,29 +956,24 @@ const ProvincialApplicationCreatePage: FC = () => {
                 )}
               </>
             )}
-            <Select
+            <SearchableSelect
               id="productTypeCode"
               labelText="Product Type (required)"
               value={form.productTypeCode}
               invalid={!!fieldError('productTypeCode')}
               invalidText={fieldError('productTypeCode')}
+              placeholder="Select product type"
+              options={productTypes}
               onBlur={() => markFieldTouched('productTypeCode')}
-              onChange={(event) =>
+              onChange={(value) =>
                 setForm((current) => ({
                   ...current,
-                  productTypeCode: event.target.value,
-                  ageClass: productTypeRequiresGrowthType(event.target.value)
-                    ? current.ageClass
-                    : '',
+                  productTypeCode: value,
+                  ageClass: productTypeRequiresGrowthType(value) ? current.ageClass : '',
                 }))
               }
-            >
-              <SelectItem value="" text="Select product type" />
-              {productTypes.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
-            <Select
+            />
+            <SearchableSelect
               id="ageClass"
               labelText={
                 productTypeRequiresGrowthType(form.productTypeCode)
@@ -1000,48 +984,33 @@ const ProvincialApplicationCreatePage: FC = () => {
               disabled={!productTypeRequiresGrowthType(form.productTypeCode)}
               invalid={!!fieldError('ageClass')}
               invalidText={fieldError('ageClass')}
+              placeholder="Select age class"
+              options={growthTypes}
               onBlur={() => markFieldTouched('ageClass')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, ageClass: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select age class" />
-              {growthTypes.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
-            <Select
+              onChange={(value) => setForm((current) => ({ ...current, ageClass: value }))}
+            />
+            <SearchableSelect
               id="exemptionType"
               labelText="Exemption Reason (required)"
               value={form.exemptionType}
               invalid={!!fieldError('exemptionType')}
               invalidText={fieldError('exemptionType')}
+              placeholder="Select exemption reason"
+              options={exemptionReasons}
               onBlur={() => markFieldTouched('exemptionType')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, exemptionType: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select exemption reason" />
-              {exemptionReasons.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
-            <Select
+              onChange={(value) => setForm((current) => ({ ...current, exemptionType: value }))}
+            />
+            <SearchableSelect
               id="region"
               labelText="Region (required)"
               value={form.region}
               invalid={!!fieldError('region')}
               invalidText={fieldError('region')}
+              placeholder="Select region"
+              options={regions}
               onBlur={() => markFieldTouched('region')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, region: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select region" />
-              {regions.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
+              onChange={(value) => setForm((current) => ({ ...current, region: value }))}
+            />
             <TextInput
               id="applicationDate"
               labelText="Application Date (YYYY-MM-DD) (required)"

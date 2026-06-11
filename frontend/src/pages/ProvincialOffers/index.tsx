@@ -4,7 +4,7 @@ import {
   Button,
   Column,
   Grid,
-  MultiSelect,
+  FilterableMultiSelect,
   Pagination,
   Table,
   TableBody,
@@ -351,7 +351,7 @@ const ProvincialOffersPage: FC = () => {
               invalidText="Date must be YYYY-MM-DD"
               onChange={(event) => updateFilter('listingToDate', event.target.value)}
             />
-            <MultiSelect
+            <FilterableMultiSelect
               id="region"
               titleText="Region"
               items={regionOptions}

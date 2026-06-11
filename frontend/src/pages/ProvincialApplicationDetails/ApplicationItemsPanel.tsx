@@ -15,6 +15,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import SearchableSelect from '@/components/SearchableSelect'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import {
   firstValidationError,
@@ -129,6 +130,11 @@ const asOptionText = (option: ApplicationCodeOption): string =>
   option.description && option.description !== option.code
     ? `${option.code} - ${option.description}`
     : option.code
+
+const toSearchableOption = (option: ApplicationCodeOption) => ({
+  value: option.code,
+  label: asOptionText(option),
+})
 
 const optionsWithCurrentCode = (
   options: ApplicationCodeOption[],
@@ -931,19 +937,17 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       <div className="application-items-grid">
         <section className="application-items-section">
           <h3>Package Details</h3>
-          <Select
+          <SearchableSelect
             id="applicationItemsPackageSelect"
             labelText="Selected package"
             value={selectedPackageNumber}
-            onChange={(event) =>
-              dispatchPackageSelection({ type: 'select', packageNumber: event.target.value })
-            }
-          >
-            <SelectItem value="" text="Select package" />
-            {packageNumbers.map((packageNumber) => (
-              <SelectItem key={packageNumber} value={packageNumber} text={packageNumber} />
-            ))}
-          </Select>
+            placeholder="Select package"
+            options={packageNumbers.map((packageNumber) => ({
+              value: packageNumber,
+              label: packageNumber,
+            }))}
+            onChange={(value) => dispatchPackageSelection({ type: 'select', packageNumber: value })}
+          />
           <dl className="detail-field-grid application-items-summary">
             {[
               ['Package Volume', packageForm.volume || 'Not provided'],
@@ -997,18 +1001,15 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               onBlur={() => markItemFieldTouched('packageAverageDiameter')}
               onChange={(event) => setPackageField('averageDiameter', event.target.value)}
             />
-            <Select
+            <SearchableSelect
               id="applicationItemsPackageStatus"
               labelText="Status Code"
               value={packageForm.status}
               disabled={!canManageItems || !selectedPackageNumber}
-              onChange={(event) => setPackageField('status', event.target.value)}
-            >
-              <SelectItem value="" text="Select package status" />
-              {selectedPackageStatusOptions.map((option) => (
-                <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
-              ))}
-            </Select>
+              placeholder="Select package status"
+              options={selectedPackageStatusOptions.map(toSearchableOption)}
+              onChange={(value) => setPackageField('status', value)}
+            />
             <Select
               id="applicationItemsPackageReprocessed"
               labelText="Reprocessed"
@@ -1027,17 +1028,15 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               onChange={(event) => setPackageField('endUseCode', event.target.value)}
             />
             {endUseOptions.length > 0 && (
-              <Select
+              <SearchableSelect
                 id="applicationItemsPackageEndUseSelect"
                 labelText="End Use Options"
                 value={packageForm.endUseCode}
                 disabled={!canManageItems || !selectedPackageNumber}
-                onChange={(event) => setPackageField('endUseCode', event.target.value)}
-              >
-                {endUseOptions.map((option) => (
-                  <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
-                ))}
-              </Select>
+                placeholder="Select end use"
+                options={endUseOptions.map(toSearchableOption)}
+                onChange={(value) => setPackageField('endUseCode', value)}
+              />
             )}
           </div>
           <TextArea
@@ -1070,20 +1069,17 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         <section className="application-items-section">
           <h3>Package Species</h3>
           <div className="application-items-inline-form">
-            <Select
+            <SearchableSelect
               id="applicationItemsSpeciesToAdd"
               labelText="Species"
               value={speciesToAdd}
               disabled={!canManageItems || !selectedPackageNumber}
-              onChange={(event) => setSpeciesToAdd(event.target.value)}
-            >
-              <SelectItem value="" text="Select species" />
-              {remainingSpeciesOptions
+              placeholder="Select species"
+              options={remainingSpeciesOptions
                 .filter((option) => !speciesDraft.includes(option.code))
-                .map((option) => (
-                  <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
-                ))}
-            </Select>
+                .map(toSearchableOption)}
+              onChange={setSpeciesToAdd}
+            />
             <Button
               kind="secondary"
               size="sm"
@@ -1175,18 +1171,15 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               onBlur={() => markItemFieldTouched('createPackageAverageDiameter')}
               onChange={(event) => setCreatePackageField('averageDiameter', event.target.value)}
             />
-            <Select
+            <SearchableSelect
               id="applicationItemsCreatePackageStatus"
               labelText="Status Code"
               value={createPackageForm.status}
               disabled={!canManageItems}
-              onChange={(event) => setCreatePackageField('status', event.target.value)}
-            >
-              <SelectItem value="" text="Select package status" />
-              {createPackageStatusOptions.map((option) => (
-                <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
-              ))}
-            </Select>
+              placeholder="Select package status"
+              options={createPackageStatusOptions.map(toSearchableOption)}
+              onChange={(value) => setCreatePackageField('status', value)}
+            />
             <TextInput
               id="applicationItemsCreatePackageEndUse"
               labelText="End Use"
@@ -1195,34 +1188,29 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               onChange={(event) => setCreatePackageField('endUseCode', event.target.value)}
             />
             {createEndUseOptions.length > 0 && (
-              <Select
+              <SearchableSelect
                 id="applicationItemsCreatePackageEndUseSelect"
                 labelText="End Use Options"
                 value={createPackageForm.endUseCode}
                 disabled={!canManageItems}
-                onChange={(event) => setCreatePackageField('endUseCode', event.target.value)}
-              >
-                {createEndUseOptions.map((option) => (
-                  <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
-                ))}
-              </Select>
+                placeholder="Select end use"
+                options={createEndUseOptions.map(toSearchableOption)}
+                onChange={(value) => setCreatePackageField('endUseCode', value)}
+              />
             )}
           </div>
           <div className="application-items-inline-form">
-            <Select
+            <SearchableSelect
               id="applicationItemsCreateSpeciesToAdd"
               labelText="Create Package Species"
               value={createSpeciesToAdd}
               disabled={!canManageItems}
-              onChange={(event) => setCreateSpeciesToAdd(event.target.value)}
-            >
-              <SelectItem value="" text="Select species" />
-              {createRemainingSpeciesOptions
+              placeholder="Select species"
+              options={createRemainingSpeciesOptions
                 .filter((option) => !createSpeciesDraft.includes(option.code))
-                .map((option) => (
-                  <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
-                ))}
-            </Select>
+                .map(toSearchableOption)}
+              onChange={setCreateSpeciesToAdd}
+            />
             <Button
               kind="secondary"
               size="sm"
@@ -1287,36 +1275,30 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               onBlur={() => markItemFieldTouched('scaleTimberMark')}
               onChange={(event) => setScaleField('timberMark', event.target.value)}
             />
-            <Select
+            <SearchableSelect
               id="applicationItemsScaleSpecies"
               labelText="Species"
               value={scaleForm.speciesCode}
               disabled={!canManageItems || !selectedPackageNumber}
               invalid={!!scaleFieldError('scaleSpeciesCode')}
               invalidText={scaleFieldError('scaleSpeciesCode')}
+              placeholder="Select species"
+              options={scaleSpeciesOptions.map(toSearchableOption)}
               onBlur={() => markItemFieldTouched('scaleSpeciesCode')}
-              onChange={(event) => setScaleField('speciesCode', event.target.value)}
-            >
-              <SelectItem value="" text="Select species" />
-              {scaleSpeciesOptions.map((option) => (
-                <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
-              ))}
-            </Select>
-            <Select
+              onChange={(value) => setScaleField('speciesCode', value)}
+            />
+            <SearchableSelect
               id="applicationItemsScaleGrade"
               labelText="Grade"
               value={scaleForm.gradeCode}
               disabled={!canManageItems || !selectedPackageNumber}
               invalid={!!scaleFieldError('scaleGradeCode')}
               invalidText={scaleFieldError('scaleGradeCode')}
+              placeholder="Select grade"
+              options={gradeOptions.map(toSearchableOption)}
               onBlur={() => markItemFieldTouched('scaleGradeCode')}
-              onChange={(event) => setScaleField('gradeCode', event.target.value)}
-            >
-              <SelectItem value="" text="Select grade" />
-              {gradeOptions.map((option) => (
-                <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
-              ))}
-            </Select>
+              onChange={(value) => setScaleField('gradeCode', value)}
+            />
             <TextInput
               id="applicationItemsScalePieces"
               labelText="Pieces"
