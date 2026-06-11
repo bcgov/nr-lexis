@@ -57,6 +57,7 @@ const normalizeReviewStatus = (status: string): string => status.trim().toUpperC
 const normalizeEmail = (email: string): string => email.trim()
 const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
+const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['REJ', 'WDN'])
 
 const triggerBrowserDownload = (blob: Blob, filename: string): void => {
   const objectUrl = URL.createObjectURL(blob)
@@ -593,10 +594,19 @@ const ProvincialApplicationDetailsPage: FC = () => {
     (requireEmail: boolean) => {
       const statusCode = normalizedReviewStatusCode
       const clientEmailAddress = normalizeEmail(reviewStatusEmailAddress)
+      const remark = reviewStatusRemark.trim()
       if (!statusCode) {
         return {
           valid: false,
           message: 'Choose an application status before updating review status.',
+          payload: null,
+        }
+      }
+
+      if (REVIEW_STATUSES_REQUIRING_REMARK.has(statusCode) && !remark) {
+        return {
+          valid: false,
+          message: 'Review remark is required when rejecting or withdrawing an application.',
           payload: null,
         }
       }
@@ -630,7 +640,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
         message: '',
         payload: {
           statusCode,
-          remark: reviewStatusRemark.trim(),
+          remark,
           clientEmailAddress,
         },
       }

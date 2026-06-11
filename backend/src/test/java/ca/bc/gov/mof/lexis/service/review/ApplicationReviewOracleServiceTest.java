@@ -148,6 +148,30 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void updateStatusShouldRequireRemarkForRejectedOrWithdrawnStatuses() {
+    ApplicationReviewStatusUpdateResultDto rejectedResult =
+        service.updateStatus(
+            1000456L,
+            new ApplicationReviewStatusUpdateRequestDto("REJ", " ", "client@gov.bc.ca"),
+            "idir\\jsmith");
+    ApplicationReviewStatusUpdateResultDto withdrawnResult =
+        service.updateStatus(
+            1000456L,
+            new ApplicationReviewStatusUpdateRequestDto("WDN", null, "client@gov.bc.ca"),
+            "idir\\jsmith");
+
+    assertThat(rejectedResult.valid()).isFalse();
+    assertThat(rejectedResult.updated()).isFalse();
+    assertThat(rejectedResult.message())
+        .isEqualTo("Remark is required when rejecting or withdrawing an application.");
+    assertThat(withdrawnResult.valid()).isFalse();
+    assertThat(withdrawnResult.updated()).isFalse();
+    assertThat(withdrawnResult.message())
+        .isEqualTo("Remark is required when rejecting or withdrawing an application.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
   void updateStatusShouldNormalizeValuesBeforeRepositoryCall() {
     ApplicationReviewStatusUpdateRequestDto request =
         new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");

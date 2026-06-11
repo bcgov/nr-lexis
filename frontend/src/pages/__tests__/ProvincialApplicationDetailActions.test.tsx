@@ -1078,6 +1078,29 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
   })
 
+  it('requires review remark before rejecting from application detail', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    const reviewTile = getApplicationReviewTile()
+    await userEvent.selectOptions(within(reviewTile).getByLabelText('Application Status'), 'REJ')
+    await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update Review Status' }))
+
+    expect(
+      screen.getByText('Review remark is required when rejecting or withdrawing an application.'),
+    ).toBeInTheDocument()
+    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+  })
+
   it('validates application remark before saving', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
