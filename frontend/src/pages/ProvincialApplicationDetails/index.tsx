@@ -150,6 +150,16 @@ const resolveClientContactName = (
 const optionLabel = (option: SearchOption): string =>
   option.label === option.value ? option.label : `${option.value} - ${option.label}`
 
+const codeOptionLabel = (option: ApplicationCodeOption): string =>
+  option.description && option.description !== option.code
+    ? `${option.code} - ${option.description}`
+    : option.code
+
+const toSearchOption = (option: ApplicationCodeOption): SearchOption => ({
+  value: option.code,
+  label: codeOptionLabel(option),
+})
+
 type ClientDataSummaryProps = {
   title: string
   clientData: ApplicationClientData | null
@@ -794,6 +804,16 @@ const ProvincialApplicationDetailsPage: FC = () => {
     () => applicationSpeciesOptions.filter((option) => !summarySpeciesCodes.includes(option.code)),
     [applicationSpeciesOptions, summarySpeciesCodes],
   )
+  const applicationSpeciesSelectOptions = availableApplicationSpeciesOptions.map(toSearchOption)
+  const applicationEndUseSelectOptions = applicationEndUseOptions.map(toSearchOption)
+  const speciesPlaceholder =
+    applicationSpeciesSelectOptions.length > 0 ? 'Select species' : 'No remaining species'
+  const endUsePlaceholder =
+    summarySpeciesCodes.length === 0
+      ? 'Add species first'
+      : applicationEndUseSelectOptions.length > 0
+        ? 'Select end use'
+        : 'No end uses on file'
 
   useEffect(() => {
     if (!hasSummaryForm || !summaryOwnerClientNumber || !summaryOwnerClientLocationCode) {
@@ -2340,49 +2360,27 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                   </div>
                   <div className="legacy-search-grid">
-                    <Select
+                    <SearchableSelect
                       id="applicationSummarySpeciesCandidate"
                       labelText="Application Species"
                       value={applicationSpeciesCandidate}
-                      disabled={availableApplicationSpeciesOptions.length === 0}
-                      onChange={(event) => setApplicationSpeciesCandidate(event.target.value)}
-                    >
-                      <SelectItem value="" text="Select species" />
-                      {availableApplicationSpeciesOptions.map((option) => (
-                        <SelectItem
-                          key={option.code}
-                          value={option.code}
-                          text={
-                            option.description && option.description !== option.code
-                              ? `${option.code} - ${option.description}`
-                              : option.code
-                          }
-                        />
-                      ))}
-                    </Select>
-                    <Select
+                      disabled={applicationSpeciesSelectOptions.length === 0}
+                      placeholder={speciesPlaceholder}
+                      options={applicationSpeciesSelectOptions}
+                      onChange={setApplicationSpeciesCandidate}
+                    />
+                    <SearchableSelect
                       id="applicationSummaryEndUse"
                       labelText="Application End Use"
                       value={summaryForm.endUseCode}
                       disabled={
                         (summaryForm.speciesCodes ?? []).length === 0 ||
-                        applicationEndUseOptions.length === 0
+                        applicationEndUseSelectOptions.length === 0
                       }
-                      onChange={(event) => onSummaryFormChange('endUseCode', event.target.value)}
-                    >
-                      <SelectItem value="" text="Select end use" />
-                      {applicationEndUseOptions.map((option) => (
-                        <SelectItem
-                          key={option.code}
-                          value={option.code}
-                          text={
-                            option.description && option.description !== option.code
-                              ? `${option.code} - ${option.description}`
-                              : option.code
-                          }
-                        />
-                      ))}
-                    </Select>
+                      placeholder={endUsePlaceholder}
+                      options={applicationEndUseSelectOptions}
+                      onChange={(value) => onSummaryFormChange('endUseCode', value)}
+                    />
                   </div>
                   <div className="legacy-search-actions">
                     <Button
