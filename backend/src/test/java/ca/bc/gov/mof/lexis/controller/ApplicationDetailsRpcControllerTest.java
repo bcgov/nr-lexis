@@ -110,14 +110,19 @@ class ApplicationDetailsRpcControllerTest {
   void removeDocumentShouldReturnSuccessFlag() {
     TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(55L, "test.pdf", "Not on file", "Uploaded")));
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
     when(service.removeDocument(55L)).thenReturn(true);
 
     ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeDocument("55", authentication);
+        controller.removeDocument("55", "1000456", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isEqualTo("true");
+    verify(service).getDocumentDetails(1000456L);
+    verify(service).getApplicationSummarySnapshot(1000456L);
     verify(service).removeDocument(55L);
   }
 
@@ -126,10 +131,46 @@ class ApplicationDetailsRpcControllerTest {
     TestingAuthenticationToken authentication = unauthorized("/fileApplicationUpload");
 
     ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeDocument("55", authentication);
+        controller.removeDocument("55", "1000456", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
+  }
+
+  @Test
+  void removeDocumentShouldRejectWhenDocumentDoesNotBelongToApplication() {
+    TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(77L, "other.pdf", "Not on file", "Uploaded")));
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service).getDocumentDetails(1000456L);
+    org.mockito.Mockito.verify(service, org.mockito.Mockito.never())
+        .getApplicationSummarySnapshot(org.mockito.ArgumentMatchers.anyLong());
+    org.mockito.Mockito.verify(service, org.mockito.Mockito.never())
+        .removeDocument(org.mockito.ArgumentMatchers.anyLong());
+  }
+
+  @Test
+  void removeDocumentShouldRejectExpiredApplicationsForApprovers() {
+    TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(55L, "test.pdf", "Not on file", "Uploaded")));
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithStatus("EXP")));
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service).getDocumentDetails(1000456L);
+    verify(service).getApplicationSummarySnapshot(1000456L);
+    org.mockito.Mockito.verify(service, org.mockito.Mockito.never()).removeDocument(org.mockito.ArgumentMatchers.anyLong());
   }
 
   @Test
@@ -1125,6 +1166,35 @@ class ApplicationDetailsRpcControllerTest {
         "Agent Contact",
         null,
         "N");
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshotWithStatus(String status) {
+    ApplicationDetailsRpcService.ApplicationSummarySnapshot snapshot = summarySnapshot();
+    return new ApplicationDetailsRpcService.ApplicationSummarySnapshot(
+        snapshot.applicationNumber(),
+        snapshot.federalApplicationNumber(),
+        snapshot.applicationDate(),
+        snapshot.termDays(),
+        snapshot.receivedDate(),
+        snapshot.applicationVolume(),
+        snapshot.averageLogVolume(),
+        snapshot.productLocation(),
+        snapshot.exportScheduleId(),
+        snapshot.agentClientNumber(),
+        snapshot.agentClientLocationCode(),
+        snapshot.ownerClientNumber(),
+        snapshot.ownerClientLocationCode(),
+        snapshot.exemptionNumber(),
+        snapshot.exemptionReasonCode(),
+        status,
+        snapshot.applicantTypeCode(),
+        snapshot.orgUnitNumber(),
+        snapshot.productTypeCode(),
+        snapshot.jurisdictionCode(),
+        snapshot.growthTypeCode(),
+        snapshot.agentContactName(),
+        snapshot.ownerContactName(),
+        snapshot.oicIndicator());
   }
 
   private MultiValueMap<String, String> matchingSummaryParameters() {

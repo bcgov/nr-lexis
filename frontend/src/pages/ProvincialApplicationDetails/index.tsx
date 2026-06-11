@@ -1546,7 +1546,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setActionInfoMessage('')
 
       try {
-        const removeResult = await removeApplicationDocument(row.id)
+        const removeResult = await removeApplicationDocument(row.id, applicationNumber)
         if (!isLatestRequest()) {
           return
         }

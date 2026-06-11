@@ -19,6 +19,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -84,6 +86,11 @@ public class ApplicationDetailsRpcController {
   private static final String LEGACY_APPLICATION_LOCK_SESSION_KEY = "exemptionApplication";
   private static final String LEGACY_APPLICATION_NUMBER_SESSION_KEY = "applicationNumber";
   private static final String APPLICATION_STATUS_EXPIRED = "EXP";
+  private static final String APPLICATION_STATUS_PERMITTED = "PMT";
+  private static final Set<String> APPLICATION_DOCUMENT_DELETE_ROLES =
+      Set.of("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER");
+  private static final Set<String> APPLICATION_DOCUMENT_INDUSTRY_ROLES =
+      Set.of("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_FEDERAL_SUBMITTER");
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -171,8 +178,10 @@ public class ApplicationDetailsRpcController {
   @DeleteMapping("/rpc/application-details/document")
   public ResponseEntity<RemoveDocumentResponseDto> removeDocument(
       @RequestParam(name = "documentId", required = false) String documentId,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_FILE_APPLICATION_UPLOAD)) {
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    if (!canPerform(roles, LEGACY_ACTION_FILE_APPLICATION_UPLOAD)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -181,15 +190,22 @@ public class ApplicationDetailsRpcController {
       LOGGER.warn("Application details RPC service unavailable - returning no content for remove document");
       return ResponseEntity.noContent().build();
     }
-    boolean removed = service.removeDocument(parsePositiveLong(documentId));
+    Long parsedDocumentId = parsePositiveLong(documentId);
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    if (!canRemoveApplicationDocument(service, parsedDocumentId, parsedApplicationNumber, roles)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    boolean removed = service.removeDocument(parsedDocumentId);
     return ResponseEntity.ok(new RemoveDocumentResponseDto(Boolean.toString(removed)));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_REMOVE_DOCUMENT)
   public ResponseEntity<RemoveDocumentResponseDto> removeDocumentLegacy(
       @RequestParam(name = "documentId", required = false) String documentId,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
-    return removeDocument(documentId, authentication);
+    return removeDocument(documentId, applicationNumber, authentication);
   }
 
   @GetMapping("/rpc/application-details/remark")
@@ -974,6 +990,54 @@ public class ApplicationDetailsRpcController {
   private boolean canPerform(Authentication authentication, String action) {
     return authorizationService.canPerformAction(
         sessionService.parseRolesFromPrincipal(authentication), action);
+  }
+
+  private boolean canPerform(List<String> roles, String action) {
+    return authorizationService.canPerformAction(roles, action);
+  }
+
+  private boolean canRemoveApplicationDocument(
+      ApplicationDetailsRpcService service,
+      Long documentId,
+      Long applicationNumber,
+      List<String> roles) {
+    if (documentId == null || documentId < 1 || applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+
+    boolean documentBelongsToApplication =
+        service.getDocumentDetails(applicationNumber).stream().anyMatch(item -> item.id() == documentId);
+    if (!documentBelongsToApplication) {
+      return false;
+    }
+
+    return service
+        .getApplicationSummarySnapshot(applicationNumber)
+        .map(snapshot -> canRemoveApplicationDocumentWithStatus(snapshot.applicationStatusCode(), roles))
+        .orElse(false);
+  }
+
+  private boolean canRemoveApplicationDocumentWithStatus(String applicationStatusCode, List<String> roles) {
+    String status = applicationStatusCode == null ? "" : applicationStatusCode.trim().toUpperCase(Locale.ROOT);
+    if (status.isBlank()) {
+      return false;
+    }
+
+    List<String> normalizedRoles =
+        roles.stream().map(role -> role.trim().toUpperCase(Locale.ROOT)).toList();
+    if (normalizedRoles.stream().anyMatch(APPLICATION_DOCUMENT_DELETE_ROLES::contains)) {
+      return !APPLICATION_STATUS_EXPIRED.equals(status);
+    }
+
+    boolean industryUser =
+        normalizedRoles.stream()
+            .anyMatch(
+                role ->
+                    APPLICATION_DOCUMENT_INDUSTRY_ROLES.contains(role)
+                        || role.startsWith("LEXIS_PROVINCIAL_SUBMITTER_")
+                        || role.startsWith("LEXIS_FEDERAL_SUBMITTER_"));
+    return industryUser
+        && (APPLICATION_STATUS_PERMITTED.equals(status) || APPLICATION_STATUS_EXPIRED.equals(status));
   }
 
   private Long parsePositiveLong(String rawValue) {

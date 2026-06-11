@@ -811,7 +811,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.click(deleteButton)
 
     await waitFor(() => {
-      expect(mockedRemoveApplicationDocument).toHaveBeenCalledWith('100')
+      expect(mockedRemoveApplicationDocument).toHaveBeenCalledWith('100', '321')
       expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
       expect(screen.queryByText('app-doc.pdf')).not.toBeInTheDocument()
     })

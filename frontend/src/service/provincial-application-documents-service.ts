@@ -209,13 +209,16 @@ export const openApplicationDocument = async (
 
 export const removeApplicationDocument = async (
   documentId: string,
+  applicationNumber: string,
 ): Promise<RemoveApplicationDocumentResult> => {
   const normalizedDocumentId = documentId.trim()
+  const normalizedApplicationNumber = applicationNumber.trim()
   const response = await apiService
     .getAxiosInstance()
     .delete<unknown>('/lexis/rpc/application-details/document', {
       params: {
         documentId: normalizedDocumentId,
+        applicationNumber: normalizedApplicationNumber,
       },
     })
 

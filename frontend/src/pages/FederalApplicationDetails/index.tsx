@@ -247,7 +247,7 @@ const FederalApplicationDetailsPage: FC = () => {
       setActionInfoMessage('')
 
       try {
-        const removeResult = await removeFederalApplicationDocument(row.id)
+        const removeResult = await removeFederalApplicationDocument(row.id, applicationNumber)
         if (!isLatestRequest()) {
           return
         }
