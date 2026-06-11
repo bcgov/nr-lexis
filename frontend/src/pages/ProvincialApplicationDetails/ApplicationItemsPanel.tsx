@@ -76,11 +76,15 @@ type ApplicationItemField =
   | 'packageAverageLength'
   | 'packageAverageDiameter'
   | 'packageStatus'
+  | 'packageProductType'
+  | 'packageAgeClass'
   | 'createPackageNumber'
   | 'createPackageVolume'
   | 'createPackageAverageLength'
   | 'createPackageAverageDiameter'
   | 'createPackageStatus'
+  | 'createPackageProductType'
+  | 'createPackageAgeClass'
   | 'scaleTimberMark'
   | 'scaleSpeciesCode'
   | 'scaleGradeCode'
@@ -102,6 +106,8 @@ type PackageSelectionAction =
 type Props = {
   detail: ProvincialApplicationDetail
   canManageItems: boolean
+  productTypeOptions: ApplicationCodeOption[]
+  growthTypeOptions: ApplicationCodeOption[]
   onDetailChanged: () => Promise<void>
 }
 
@@ -149,6 +155,9 @@ const optionsWithCurrentCode = (
 
   return [{ code: normalizedCurrentCode, description: normalizedCurrentCode }, ...options]
 }
+
+const packageRequiresAgeClass = (productTypeCode: string): boolean =>
+  ['H', 'S'].includes(productTypeCode.trim().toUpperCase())
 
 const uniqueCodes = (rows: ApplicationPackageSpeciesRow[]): string[] =>
   Array.from(new Set(rows.map((row) => row.species).filter(Boolean)))
@@ -299,6 +308,8 @@ const toPackageForm = (
 const ProvincialApplicationItemsPanel: FC<Props> = ({
   detail,
   canManageItems,
+  productTypeOptions,
+  growthTypeOptions,
   onDetailChanged,
 }) => {
   const applicationNumber = String(detail.applicationNumber)
@@ -372,6 +383,10 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         () => lessThanOrEqualFieldError(packageForm.averageDiameter, 'Average diameter', 99.99),
       ),
       packageStatus: requiredFieldError(packageForm.status, 'Package status code') ?? undefined,
+      packageProductType: requiredFieldError(packageForm.productType, 'Product type') ?? undefined,
+      packageAgeClass: packageRequiresAgeClass(packageForm.productType)
+        ? (requiredFieldError(packageForm.ageClass, 'Age class') ?? undefined)
+        : undefined,
       createPackageNumber:
         requiredFieldError(createPackageForm.packageNumber, 'Package number') ?? undefined,
       createPackageVolume: firstValidationError(
@@ -392,6 +407,11 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       ),
       createPackageStatus:
         requiredFieldError(createPackageForm.status, 'Package status code') ?? undefined,
+      createPackageProductType:
+        requiredFieldError(createPackageForm.productType, 'Product type') ?? undefined,
+      createPackageAgeClass: packageRequiresAgeClass(createPackageForm.productType)
+        ? (requiredFieldError(createPackageForm.ageClass, 'Age class') ?? undefined)
+        : undefined,
       scaleTimberMark: requiredFieldError(scaleForm.timberMark, 'Timber mark') ?? undefined,
       scaleSpeciesCode: requiredFieldError(scaleForm.speciesCode, 'Species') ?? undefined,
       scaleGradeCode: requiredFieldError(scaleForm.gradeCode, 'Grade') ?? undefined,
@@ -417,14 +437,18 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     itemFieldErrors.packageVolume ||
     itemFieldErrors.packageAverageLength ||
     itemFieldErrors.packageAverageDiameter ||
-    itemFieldErrors.packageStatus,
+    itemFieldErrors.packageStatus ||
+    itemFieldErrors.packageProductType ||
+    itemFieldErrors.packageAgeClass,
   )
   const hasCreatePackageValidationError = Boolean(
     itemFieldErrors.createPackageNumber ||
     itemFieldErrors.createPackageVolume ||
     itemFieldErrors.createPackageAverageLength ||
     itemFieldErrors.createPackageAverageDiameter ||
-    itemFieldErrors.createPackageStatus,
+    itemFieldErrors.createPackageStatus ||
+    itemFieldErrors.createPackageProductType ||
+    itemFieldErrors.createPackageAgeClass,
   )
   const hasScaleValidationError = Boolean(
     itemFieldErrors.scaleTimberMark ||
@@ -764,6 +788,8 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           'packageAverageLength',
           'packageAverageDiameter',
           'packageStatus',
+          'packageProductType',
+          'packageAgeClass',
         ) ?? 'Please fix validation errors before saving the package.',
       )
       return
@@ -809,6 +835,8 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           'createPackageAverageLength',
           'createPackageAverageDiameter',
           'createPackageStatus',
+          'createPackageProductType',
+          'createPackageAgeClass',
         ) ?? 'Please fix validation errors before creating the package.',
       )
       return
@@ -1000,6 +1028,22 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     packageStatusOptions,
     createPackageForm.status,
   )
+  const selectedPackageProductTypeOptions = optionsWithCurrentCode(
+    productTypeOptions,
+    packageForm.productType,
+  )
+  const selectedPackageGrowthTypeOptions = optionsWithCurrentCode(
+    growthTypeOptions,
+    packageForm.ageClass,
+  )
+  const createPackageProductTypeOptions = optionsWithCurrentCode(
+    productTypeOptions,
+    createPackageForm.productType,
+  )
+  const createPackageGrowthTypeOptions = optionsWithCurrentCode(
+    growthTypeOptions,
+    createPackageForm.ageClass,
+  )
   const applicationTotalPieces = detail.packages.reduce(
     (total, packageItem) => total + packageItem.pieceCount,
     0,
@@ -1115,6 +1159,40 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               options={selectedPackageStatusOptions.map(toSearchableOption)}
               onBlur={() => markItemFieldTouched('packageStatus')}
               onChange={(value) => setPackageField('status', value)}
+            />
+            <SearchableSelect
+              id="applicationItemsPackageProductType"
+              labelText="Product Type"
+              value={packageForm.productType}
+              disabled={!canManageItems || !selectedPackageNumber}
+              invalid={!!packageFieldError('packageProductType')}
+              invalidText={packageFieldError('packageProductType')}
+              placeholder="Select product type"
+              options={selectedPackageProductTypeOptions.map(toSearchableOption)}
+              onBlur={() => markItemFieldTouched('packageProductType')}
+              onChange={(value) => {
+                setPackageForm((current) => ({
+                  ...current,
+                  productType: value,
+                  ageClass: packageRequiresAgeClass(value) ? current.ageClass : '',
+                }))
+              }}
+            />
+            <SearchableSelect
+              id="applicationItemsPackageAgeClass"
+              labelText="Age Class"
+              value={packageForm.ageClass}
+              disabled={
+                !canManageItems ||
+                !selectedPackageNumber ||
+                !packageRequiresAgeClass(packageForm.productType)
+              }
+              invalid={!!packageFieldError('packageAgeClass')}
+              invalidText={packageFieldError('packageAgeClass')}
+              placeholder="Select age class"
+              options={selectedPackageGrowthTypeOptions.map(toSearchableOption)}
+              onBlur={() => markItemFieldTouched('packageAgeClass')}
+              onChange={(value) => setPackageField('ageClass', value)}
             />
             <Select
               id="applicationItemsPackageReprocessed"
@@ -1288,6 +1366,36 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               options={createPackageStatusOptions.map(toSearchableOption)}
               onBlur={() => markItemFieldTouched('createPackageStatus')}
               onChange={(value) => setCreatePackageField('status', value)}
+            />
+            <SearchableSelect
+              id="applicationItemsCreatePackageProductType"
+              labelText="Product Type"
+              value={createPackageForm.productType}
+              disabled={!canManageItems}
+              invalid={!!createPackageFieldError('createPackageProductType')}
+              invalidText={createPackageFieldError('createPackageProductType')}
+              placeholder="Select product type"
+              options={createPackageProductTypeOptions.map(toSearchableOption)}
+              onBlur={() => markItemFieldTouched('createPackageProductType')}
+              onChange={(value) => {
+                setCreatePackageForm((current) => ({
+                  ...current,
+                  productType: value,
+                  ageClass: packageRequiresAgeClass(value) ? current.ageClass : '',
+                }))
+              }}
+            />
+            <SearchableSelect
+              id="applicationItemsCreatePackageAgeClass"
+              labelText="Age Class"
+              value={createPackageForm.ageClass}
+              disabled={!canManageItems || !packageRequiresAgeClass(createPackageForm.productType)}
+              invalid={!!createPackageFieldError('createPackageAgeClass')}
+              invalidText={createPackageFieldError('createPackageAgeClass')}
+              placeholder="Select age class"
+              options={createPackageGrowthTypeOptions.map(toSearchableOption)}
+              onBlur={() => markItemFieldTouched('createPackageAgeClass')}
+              onChange={(value) => setCreatePackageField('ageClass', value)}
             />
             <TextInput
               id="applicationItemsCreatePackageEndUse"

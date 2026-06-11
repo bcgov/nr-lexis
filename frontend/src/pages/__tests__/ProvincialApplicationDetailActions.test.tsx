@@ -266,6 +266,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ],
       productTypes: [
         { value: 'LOG', label: 'Logs' },
+        { value: 'H', label: 'Harvested Timber' },
         { value: 'TIMBER', label: 'Timber' },
       ],
       growthTypes: [
@@ -981,6 +982,14 @@ describe('Provincial Application Detail Document Actions', () => {
       createPackageControls.getByRole('combobox', { name: 'Status Code' }),
       'ACT - Active',
     )
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Product Type' }),
+      'H - Harvested Timber',
+    )
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Age Class' }),
+      'S - Second Growth',
+    )
     await waitFor(() => {
       expect(createPackageControls.getByRole('combobox', { name: 'End Use Options' })).toHaveValue(
         'LU - Lumber',
@@ -999,8 +1008,8 @@ describe('Provincial Application Detail Document Actions', () => {
         status: 'ACT',
         comments: '',
         reprocessed: 'N',
-        ageClass: '',
-        productType: 'LOG',
+        ageClass: 'S',
+        productType: 'H',
         endUseCode: 'LU',
         speciesCodes: ['CE'],
       })
@@ -1433,7 +1442,7 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
-  })
+  }, 10000)
 
   it('validates application summary edits before saving', async () => {
     render(

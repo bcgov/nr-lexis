@@ -163,6 +163,11 @@ const toSearchOption = (option: ApplicationCodeOption): SearchOption => ({
   label: codeOptionLabel(option),
 })
 
+const toApplicationCodeOption = (option: SearchOption): ApplicationCodeOption => ({
+  code: option.value,
+  description: option.label,
+})
+
 type ClientDataSummaryProps = {
   title: string
   clientData: ApplicationClientData | null
@@ -684,6 +689,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const growthTypeOptions = optionsWithCurrentValue(
     summaryGrowthTypeOptions,
     summaryForm?.growthTypeCode ?? '',
+  )
+  const packageProductTypeOptions = useMemo(
+    () => productTypeOptions.map(toApplicationCodeOption),
+    [productTypeOptions],
+  )
+  const packageGrowthTypeOptions = useMemo(
+    () => growthTypeOptions.map(toApplicationCodeOption),
+    [growthTypeOptions],
   )
   const regionOptions = optionsWithCurrentValue(
     summaryRegionOptions,
@@ -2643,6 +2656,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
             <ProvincialApplicationItemsPanel
               detail={detail}
               canManageItems={canManageItems}
+              productTypeOptions={packageProductTypeOptions}
+              growthTypeOptions={packageGrowthTypeOptions}
               onDetailChanged={loadApplicationDetail}
             />
           </Column>
