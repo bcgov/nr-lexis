@@ -552,7 +552,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
     const normalizedFilter = normalizeText(remarkFilter)
     return rows.filter((item) =>
-      normalizeText(`${item.title} ${item.remark}`).includes(normalizedFilter),
+      normalizeText(`${item.date ?? ''} ${item.user ?? ''} ${item.title} ${item.remark}`).includes(
+        normalizedFilter,
+      ),
     )
   }, [detail?.remarks, remarkFilter])
 
@@ -2596,6 +2598,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
               <Table useZebraStyles>
                 <TableHead>
                   <TableRow>
+                    <TableHeader>Date</TableHeader>
+                    <TableHeader>User</TableHeader>
                     <TableHeader>Title</TableHeader>
                     <TableHeader>Remark</TableHeader>
                     {canManageRemarks && <TableHeader>Actions</TableHeader>}
@@ -2604,6 +2608,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 <TableBody>
                   {filteredRemarks.map((item) => (
                     <TableRow key={`${item.remarkId ?? item.title}-${item.remark}`}>
+                      <TableCell>{displayValue(item.date)}</TableCell>
+                      <TableCell>{displayValue(item.user)}</TableCell>
                       <TableCell>{item.title}</TableCell>
                       <TableCell>{item.remark}</TableCell>
                       {canManageRemarks && (
@@ -2626,7 +2632,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   ))}
                   {filteredRemarks.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={canManageRemarks ? 3 : 2}>
+                      <TableCell colSpan={canManageRemarks ? 5 : 4}>
                         No remarks matched the current filter.
                       </TableCell>
                     </TableRow>

@@ -94,7 +94,11 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
                   new LexisApplicationDetailDto.LexisPackageDto("PKG-902", 90.2, 33)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      1001L, "Initial Review", "Submitted with complete scale package.")),
+                      1001L,
+                      "Initial Review",
+                      "Submitted with complete scale package.",
+                      "system",
+                      LocalDate.of(2026, 1, 15))),
               List.of()),
           new ApplicationRecord(
               1000456L,
@@ -126,7 +130,11 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
               List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", 95.0, 28)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      1002L, "Pending", "Awaiting agency confirmation for listing date.")),
+                      1002L,
+                      "Pending",
+                      "Awaiting agency confirmation for listing date.",
+                      "system",
+                      LocalDate.of(2026, 2, 21))),
               List.of(
                   new LexisApplicationDetailDto.LexisOfferDto(
                       "OF-810", "Example Timber Ltd.", LocalDate.of(2026, 3, 1), true, null),
@@ -166,7 +174,11 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
               List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-950", 325.75, 88)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      1003L, "Completed", "Permit issued and application closed.")),
+                      1003L,
+                      "Completed",
+                      "Permit issued and application closed.",
+                      "system",
+                      LocalDate.of(2025, 12, 2))),
               List.of(
                   new LexisApplicationDetailDto.LexisOfferDto(
                       "OF-990",

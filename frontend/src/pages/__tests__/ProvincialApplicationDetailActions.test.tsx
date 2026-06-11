@@ -161,7 +161,15 @@ const applicationDetail: ProvincialApplicationDetail = {
   exemptionApprover: false,
   locked: false,
   packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 5 }],
-  remarks: [{ remarkId: 88, title: 'Note', remark: 'ok' }],
+  remarks: [
+    {
+      remarkId: 88,
+      title: 'Note',
+      remark: 'ok',
+      user: 'idir\\reviewer',
+      date: '2026-01-04',
+    },
+  ],
   offers: [],
 }
 
@@ -1203,6 +1211,8 @@ describe('Provincial Application Detail Document Actions', () => {
 
     const remarkRow = (await screen.findByText('ok')).closest('tr')
     expect(remarkRow).toBeTruthy()
+    expect(within(remarkRow as HTMLElement).getByText('2026-01-04')).toBeInTheDocument()
+    expect(within(remarkRow as HTMLElement).getByText('idir\\reviewer')).toBeInTheDocument()
     await userEvent.click(within(remarkRow as HTMLElement).getByRole('button', { name: 'Edit' }))
     const remarkInput = screen.getByLabelText('Edit Remark 88')
     await userEvent.clear(remarkInput)
