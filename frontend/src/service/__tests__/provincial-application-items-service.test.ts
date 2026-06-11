@@ -126,6 +126,7 @@ describe('provincial-application-items-service', () => {
           grade: 'Sawlog',
           volume: '20.0',
           id: '55',
+          cascadeSplitCode: 'S',
         },
         errors: [],
         warnings: [],
@@ -150,7 +151,7 @@ describe('provincial-application-items-service', () => {
       grade: 'Sawlog',
       volume: '20.0',
       id: '55',
-      cascadeSplitCode: '',
+      cascadeSplitCode: 'S',
     })
     const [path, body] = postMock.mock.calls[0]
     expect(path).toBe('/lexis/rpc/application-details/package-scale')

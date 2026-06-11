@@ -1334,6 +1334,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             <TableHead>
               <TableRow>
                 <TableHeader>Timber Mark</TableHeader>
+                <TableHeader>Scale Type</TableHeader>
                 <TableHeader>Species</TableHeader>
                 <TableHeader>Grade</TableHeader>
                 <TableHeader>Pieces</TableHeader>
@@ -1345,6 +1346,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               {scales.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell>{row.timberMark}</TableCell>
+                  <TableCell>{row.cascadeSplitCode || '-'}</TableCell>
                   <TableCell>{row.species}</TableCell>
                   <TableCell>{row.grade}</TableCell>
                   <TableCell>{row.pieces.toLocaleString()}</TableCell>
@@ -1363,7 +1365,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               ))}
               {scales.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6}>No scales assigned to this package.</TableCell>
+                  <TableCell colSpan={7}>No scales assigned to this package.</TableCell>
                 </TableRow>
               )}
             </TableBody>

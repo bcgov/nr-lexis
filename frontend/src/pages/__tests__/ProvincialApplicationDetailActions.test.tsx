@@ -366,7 +366,7 @@ describe('Provincial Application Detail Document Actions', () => {
         pieces: 5,
         volume: '20.0',
         id: '55',
-        cascadeSplitCode: '',
+        cascadeSplitCode: 'S',
       },
     ])
     mockedFetchApplicationSpeciesCodes.mockResolvedValue([
@@ -413,7 +413,7 @@ describe('Provincial Application Detail Document Actions', () => {
         pieces: 2,
         volume: '8.0',
         id: '56',
-        cascadeSplitCode: '',
+        cascadeSplitCode: 'S',
       },
       errors: [],
       warnings: [],
@@ -969,7 +969,7 @@ describe('Provincial Application Detail Document Actions', () => {
         pieces: 8,
         volume: '40.0',
         id: '56',
-        cascadeSplitCode: '',
+        cascadeSplitCode: 'S',
       },
     ])
 
@@ -1064,6 +1064,7 @@ describe('Provincial Application Detail Document Actions', () => {
 
     const scaleRow = screen.getByText('TM001').closest('tr')
     expect(scaleRow).toBeTruthy()
+    expect(within(scaleRow as HTMLElement).getByText('S')).toBeInTheDocument()
     await userEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
     await waitFor(() => {
       expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55')

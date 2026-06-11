@@ -289,7 +289,7 @@ const normalizePackageScaleRow = (row: unknown): ApplicationPackageScaleRow => {
     grade: asString(source.grade),
     volume: asString(source.volume),
     id: asString(source.id || source.scaleId || source.scaleDetailId),
-    cascadeSplitCode: asString(source.cascadeSplitCode),
+    cascadeSplitCode: asString(source.cascadeSplitCode || source.scaleType || source.type),
   }
 }
 
