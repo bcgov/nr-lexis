@@ -44,6 +44,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
   private static final String FIND_PACKAGE_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
+  private static final String FIND_PACKAGES_BY_APPLICATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_END_USE_BY_APPLICATION =
@@ -229,17 +231,18 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         FIND_PACKAGE_BY_NUMBER,
         cs -> cs.setString(1, normalized),
         2,
-        rs ->
-            new PackageDetailsRow(
-                getString(rs, "PACKAGE_NUMBER"),
-                zeroIfNull(getDouble(rs, "PACKAGE_VOLUME")),
-                zeroIfNull(getDouble(rs, "AVERAGE_LENGTH")),
-                zeroIfNull(getDouble(rs, "AVERAGE_DIAMETER")),
-                getString(rs, "EXPORT_PACKAGE_STATUS_CODE"),
-                getString(rs, "COMMENTS"),
-                getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
-                getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
-                getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));
+        this::mapPackageDetailsRow);
+  }
+
+  public List<PackageDetailsRow> findPackagesByApplicationNumber(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_PACKAGES_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        this::mapPackageDetailsRow);
   }
 
   public Optional<PackageMutationRow> findPackageMutationByPackageNumber(String packageNumber) {
@@ -1312,6 +1315,19 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       String reprocessedIndicator,
       String growthTypeCode,
       String productTypeCode) {}
+
+  private PackageDetailsRow mapPackageDetailsRow(ResultSet rs) throws SQLException {
+    return new PackageDetailsRow(
+        getString(rs, "PACKAGE_NUMBER"),
+        zeroIfNull(getDouble(rs, "PACKAGE_VOLUME")),
+        zeroIfNull(getDouble(rs, "AVERAGE_LENGTH")),
+        zeroIfNull(getDouble(rs, "AVERAGE_DIAMETER")),
+        getString(rs, "EXPORT_PACKAGE_STATUS_CODE"),
+        getString(rs, "COMMENTS"),
+        getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
+        getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+        getString(rs, "EXPORT_PRODUCT_TYPE_CODE"));
+  }
 
   private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
     String normalized = trim(value);

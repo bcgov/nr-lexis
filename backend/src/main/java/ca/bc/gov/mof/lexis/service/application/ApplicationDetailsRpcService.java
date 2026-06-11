@@ -24,6 +24,8 @@ public interface ApplicationDetailsRpcService {
 
   Optional<ApplicationSummarySnapshot> getApplicationSummarySnapshot(Long applicationNumber);
 
+  boolean isApplicationVolumeUsed(Long applicationNumber);
+
   Optional<ApplicationClientSnapshot> getApplicationClientSnapshot(Long applicationNumber);
 
   List<CodeItem> getSpeciesCodes();

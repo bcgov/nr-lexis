@@ -24,6 +24,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private static final String DESCRIPTION_NOT_ON_FILE = "Not on file";
   private static final String APPLICATION_STATUS_NEW = "NEW";
+  private static final String APPLICATION_STATUS_EXPIRED = "EXP";
   private static final String APPLICANT_TYPE_OWNER = "O";
   private static final String APPLICANT_TYPE_AGENT = "A";
   private static final String JURISDICTION_PROVINCIAL = "P";
@@ -218,6 +219,29 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return Optional.empty();
     }
     return repository.findApplicationUpdateRecord(applicationNumber).map(this::toApplicationSummarySnapshot);
+  }
+
+  @Override
+  public boolean isApplicationVolumeUsed(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return true;
+    }
+
+    Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> application =
+        repository.findApplicationUpdateRecord(applicationNumber);
+    if (application.isEmpty()
+        || APPLICATION_STATUS_EXPIRED.equalsIgnoreCase(application.get().applicationStatusCode())) {
+      return true;
+    }
+
+    BigDecimal applicationVolume = roundOneDecimal(application.get().applicationVolume());
+    BigDecimal totalPackageVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+    for (ApplicationDetailsRpcRepository.PackageDetailsRow row :
+        repository.findPackagesByApplicationNumber(applicationNumber)) {
+      totalPackageVolume =
+          totalPackageVolume.add(roundOneDecimal(row.packageVolume())).setScale(1, RoundingMode.HALF_UP);
+    }
+    return applicationVolume.compareTo(totalPackageVolume) == 0;
   }
 
   @Override
@@ -1068,6 +1092,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private String formatOneDecimal(double value) {
     return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
+  }
+
+  private BigDecimal roundOneDecimal(Double value) {
+    return BigDecimal.valueOf(value == null ? 0.0d : value).setScale(1, RoundingMode.HALF_UP);
   }
 
   private String nonNull(String value) {

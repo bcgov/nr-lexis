@@ -229,6 +229,32 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void checkUnusedVolumeShouldReturnDefaultUsedWhenServiceMissing() {
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckUnusedVolumeResponseDto> response =
+        controller.checkUnusedVolume("1000456");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().volumeUsedInd()).isTrue();
+  }
+
+  @Test
+  void checkUnusedVolumeShouldMapLegacyPayloadFromService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.isApplicationVolumeUsed(1000456L)).thenReturn(false);
+
+    ResponseEntity<ApplicationDetailsRpcController.CheckUnusedVolumeResponseDto> response =
+        controller.checkUnusedVolumeLegacy("1000456");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().volumeUsedInd()).isFalse();
+    verify(service).isApplicationVolumeUsed(1000456L);
+  }
+
+  @Test
   void releaseLockShouldReturnLegacyOkPayloadAndClearApplicationSessionState() {
     when(servletRequest.getSession(false)).thenReturn(session);
 

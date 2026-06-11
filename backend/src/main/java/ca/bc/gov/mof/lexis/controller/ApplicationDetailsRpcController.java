@@ -46,6 +46,7 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_REMARK = "getRemark";
   private static final String ACTION_PERSIST_REMARK = "persistRemark";
   private static final String ACTION_CHECK_FORM_CHANGES = "checkFormChanges";
+  private static final String ACTION_CHECK_UNUSED_VOLUME = "checkUnusedVolume";
   private static final String ACTION_RELEASE_LOCK = "releaseLock";
   private static final String ACTION_ADD_APPLICATION = "addApplication";
   private static final String ACTION_UPDATE_APPLICATION = "updateApplication";
@@ -269,6 +270,25 @@ public class ApplicationDetailsRpcController {
   public ResponseEntity<CheckFormChangesResponseDto> checkFormChangesLegacy(
       @RequestParam MultiValueMap<String, String> parameters) {
     return checkFormChanges(parameters);
+  }
+
+  @GetMapping("/rpc/application-details/check-unused-volume")
+  public ResponseEntity<CheckUnusedVolumeResponseDto> checkUnusedVolume(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Application details RPC service unavailable - returning default check-unused-volume payload");
+      return ResponseEntity.ok(new CheckUnusedVolumeResponseDto(true));
+    }
+
+    boolean volumeUsedInd = service.isApplicationVolumeUsed(parsePositiveLong(applicationNumber));
+    return ResponseEntity.ok(new CheckUnusedVolumeResponseDto(volumeUsedInd));
+  }
+
+  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_CHECK_UNUSED_VOLUME)
+  public ResponseEntity<CheckUnusedVolumeResponseDto> checkUnusedVolumeLegacy(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
+    return checkUnusedVolume(applicationNumber);
   }
 
   @PostMapping("/rpc/application-details/release-lock")
@@ -1451,6 +1471,8 @@ public class ApplicationDetailsRpcController {
       String status, Instant date, String user, String remark, String title, Long remarkId) {}
 
   public record CheckFormChangesResponseDto(boolean applicationChanged) {}
+
+  public record CheckUnusedVolumeResponseDto(boolean volumeUsedInd) {}
 
   public record ReleaseLockResponseDto(String release) {}
 

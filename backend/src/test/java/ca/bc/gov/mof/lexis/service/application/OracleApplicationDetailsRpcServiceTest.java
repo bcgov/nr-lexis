@@ -1089,6 +1089,43 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void isApplicationVolumeUsedShouldReturnTrueWhenRoundedPackageVolumeMatchesApplicationVolume() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageDetailsRow("PKG-1", 49.95d), packageDetailsRow("PKG-2", 50.04d)));
+
+    assertThat(service.isApplicationVolumeUsed(1000456L)).isTrue();
+
+    verify(repository).findApplicationUpdateRecord(1000456L);
+    verify(repository).findPackagesByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void isApplicationVolumeUsedShouldReturnFalseWhenPackageVolumeDoesNotMeetApplicationVolume() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageDetailsRow("PKG-1", 40.0d), packageDetailsRow("PKG-2", 59.9d)));
+
+    assertThat(service.isApplicationVolumeUsed(1000456L)).isFalse();
+  }
+
+  @Test
+  void isApplicationVolumeUsedShouldDefaultTrueWhenApplicationIsMissing() {
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.empty());
+
+    assertThat(service.isApplicationVolumeUsed(1000456L)).isTrue();
+
+    verify(repository).findApplicationUpdateRecord(1000456L);
+  }
+
+  @Test
+  void isApplicationVolumeUsedShouldDefaultTrueForInvalidApplicationNumber() {
+    assertThat(service.isApplicationVolumeUsed(null)).isTrue();
+
+    verifyNoInteractions(repository);
+  }
+
+  @Test
   void updateApplicationSummaryShouldValidateBeforeOracleUpdate() {
     when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
 
@@ -1208,5 +1245,11 @@ class OracleApplicationDetailsRpcServiceTest {
         null,
         "Owner Contact",
         "N");
+  }
+
+  private ApplicationDetailsRpcRepository.PackageDetailsRow packageDetailsRow(
+      String packageNumber, double packageVolume) {
+    return new ApplicationDetailsRpcRepository.PackageDetailsRow(
+        packageNumber, packageVolume, 0.0d, 0.0d, "ACT", null, "N", "S", "H");
   }
 }
