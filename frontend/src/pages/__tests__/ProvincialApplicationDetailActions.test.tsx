@@ -738,6 +738,66 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
   })
 
+  it('creates application packages with selected species and end use', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createPackageSection = (
+      await screen.findByRole('heading', { name: 'Create Package' })
+    ).closest('section')
+    expect(createPackageSection).toBeTruthy()
+    const createPackageControls = within(createPackageSection as HTMLElement)
+
+    await waitFor(() => {
+      expect(createPackageControls.getByRole('option', { name: 'CE - Cedar' })).toBeInTheDocument()
+    })
+    await userEvent.selectOptions(
+      createPackageControls.getByLabelText('Create Package Species'),
+      'CE',
+    )
+    await userEvent.click(createPackageControls.getByRole('button', { name: 'Add Create Species' }))
+    await waitFor(() => {
+      expect(createPackageControls.getByText('CE - Cedar')).toBeInTheDocument()
+    })
+
+    await userEvent.type(createPackageControls.getByLabelText('Package Number'), 'PKG-NEW')
+    await userEvent.type(createPackageControls.getByLabelText('Package Volume'), '25.0')
+    await userEvent.type(createPackageControls.getByLabelText('Average Length'), '12.0')
+    await userEvent.type(createPackageControls.getByLabelText('Average Diameter'), '24.0')
+    await userEvent.type(createPackageControls.getByLabelText('Status Code'), 'A')
+    await waitFor(() => {
+      expect(createPackageControls.getByLabelText('End Use Options')).toHaveValue('LU')
+    })
+
+    await userEvent.click(createPackageControls.getByRole('button', { name: 'Create Package' }))
+
+    await waitFor(() => {
+      expect(mockedAddApplicationPackage).toHaveBeenCalledWith({
+        packageNumber: 'PKG-NEW',
+        applicationNumber: '321',
+        volume: '25.0',
+        averageLength: '12.0',
+        averageDiameter: '24.0',
+        status: 'A',
+        comments: '',
+        reprocessed: 'N',
+        ageClass: '',
+        productType: 'LOG',
+        endUseCode: 'LU',
+        speciesCodes: ['CE'],
+      })
+    })
+    expect(await screen.findByText('Package PKG-NEW created.')).toBeInTheDocument()
+  })
+
   it('ignores stale package item responses after selecting another package', async () => {
     const detailWithTwoPackages: ProvincialApplicationDetail = {
       ...applicationDetail,

@@ -227,14 +227,20 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   )
   const [packageSpeciesRows, setPackageSpeciesRows] = useState<ApplicationPackageSpeciesRow[]>([])
   const [speciesDraft, setSpeciesDraft] = useState<string[]>([])
+  const [createSpeciesDraft, setCreateSpeciesDraft] = useState<string[]>([])
   const [scales, setScales] = useState<ApplicationPackageScaleRow[]>([])
   const [speciesOptions, setSpeciesOptions] = useState<ApplicationCodeOption[]>([])
   const [remainingSpeciesOptions, setRemainingSpeciesOptions] = useState<ApplicationCodeOption[]>(
     [],
   )
+  const [createRemainingSpeciesOptions, setCreateRemainingSpeciesOptions] = useState<
+    ApplicationCodeOption[]
+  >([])
   const [endUseOptions, setEndUseOptions] = useState<ApplicationCodeOption[]>([])
+  const [createEndUseOptions, setCreateEndUseOptions] = useState<ApplicationCodeOption[]>([])
   const [gradeOptions, setGradeOptions] = useState<ApplicationCodeOption[]>([])
   const [speciesToAdd, setSpeciesToAdd] = useState('')
+  const [createSpeciesToAdd, setCreateSpeciesToAdd] = useState('')
   const [scaleForm, setScaleForm] = useState<ScaleFormState>(emptyScaleForm)
   const [scaleLookupId, setScaleLookupId] = useState('')
   const [scaleLookupResult, setScaleLookupResult] = useState('')
@@ -432,6 +438,45 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   useEffect(() => {
     let cancelled = false
     const region = detail.orgUnitNumber ? String(detail.orgUnitNumber) : ''
+    const productType = createPackageForm.productType || productTypeCode
+
+    const loadCreateSpeciesOptions = async () => {
+      if (!region) {
+        setCreateRemainingSpeciesOptions(speciesOptions)
+        return
+      }
+      try {
+        const remaining = await fetchApplicationRemainingSpecies(
+          region,
+          productType,
+          createSpeciesDraft,
+        )
+        if (!cancelled) {
+          setCreateRemainingSpeciesOptions(remaining.length > 0 ? remaining : speciesOptions)
+        }
+      } catch (error) {
+        console.error(error)
+        if (!cancelled) {
+          setCreateRemainingSpeciesOptions(speciesOptions)
+        }
+      }
+    }
+
+    void loadCreateSpeciesOptions()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    createPackageForm.productType,
+    createSpeciesDraft,
+    detail.orgUnitNumber,
+    productTypeCode,
+    speciesOptions,
+  ])
+
+  useEffect(() => {
+    let cancelled = false
+    const region = detail.orgUnitNumber ? String(detail.orgUnitNumber) : ''
 
     const loadEndUseOptions = async () => {
       if (!region || speciesDraft.length === 0) {
@@ -460,6 +505,38 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       cancelled = true
     }
   }, [detail.orgUnitNumber, speciesDraft])
+
+  useEffect(() => {
+    let cancelled = false
+    const region = detail.orgUnitNumber ? String(detail.orgUnitNumber) : ''
+
+    const loadCreateEndUseOptions = async () => {
+      if (!region || createSpeciesDraft.length === 0) {
+        setCreateEndUseOptions([])
+        return
+      }
+      try {
+        const options = await fetchApplicationEndUsesForSpeciesRegion(region, createSpeciesDraft)
+        if (!cancelled) {
+          setCreateEndUseOptions(options)
+          setCreatePackageForm((current) => ({
+            ...current,
+            endUseCode:
+              current.endUseCode && options.some((option) => option.code === current.endUseCode)
+                ? current.endUseCode
+                : (options[0]?.code ?? current.endUseCode),
+          }))
+        }
+      } catch (error) {
+        console.error(error)
+      }
+    }
+
+    void loadCreateEndUseOptions()
+    return () => {
+      cancelled = true
+    }
+  }, [createSpeciesDraft, detail.orgUnitNumber])
 
   useEffect(() => {
     let cancelled = false
@@ -515,6 +592,18 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
 
   const onRemoveSpecies = (species: string) => {
     setSpeciesDraft((current) => current.filter((item) => item !== species))
+  }
+
+  const onAddCreateSpecies = () => {
+    if (!createSpeciesToAdd || createSpeciesDraft.includes(createSpeciesToAdd)) {
+      return
+    }
+    setCreateSpeciesDraft((current) => [...current, createSpeciesToAdd])
+    setCreateSpeciesToAdd('')
+  }
+
+  const onRemoveCreateSpecies = (species: string) => {
+    setCreateSpeciesDraft((current) => current.filter((item) => item !== species))
   }
 
   const buildPackageMutation = (form: PackageFormState, packageNumber: string) => ({
@@ -611,7 +700,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         ageClass: createPackageForm.ageClass,
         productType: createPackageForm.productType || productTypeCode,
         endUseCode: createPackageForm.endUseCode,
-        speciesCodes: [],
+        speciesCodes: createSpeciesDraft,
       })
       if (!result.valid) {
         setItemsErrorMessage(result.errors.join(' ') || 'Package creation failed.')
@@ -621,6 +710,8 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       const nextPackageNumber = result.packageNumber || createPackageForm.packageNumber
       dispatchPackageSelection({ type: 'add', packageNumber: nextPackageNumber })
       setCreatePackageForm(emptyPackageForm(productTypeCode))
+      setCreateSpeciesDraft([])
+      setCreateSpeciesToAdd('')
       setShowCreatePackageValidationErrors(false)
       setItemsInfoMessage(`Package ${nextPackageNumber} created.`)
       await onDetailChanged()
@@ -756,6 +847,13 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   }
 
   const selectedSpeciesOptions = speciesDraft.map((species) => {
+    const known = speciesOptions.find((option) => option.code === species)
+    return {
+      code: species,
+      description: known?.description ?? species,
+    }
+  })
+  const selectedCreateSpeciesOptions = createSpeciesDraft.map((species) => {
     const known = speciesOptions.find((option) => option.code === species)
     return {
       code: species,
@@ -1023,7 +1121,81 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               disabled={!canManageItems}
               onChange={(event) => setCreatePackageField('status', event.target.value)}
             />
+            <TextInput
+              id="applicationItemsCreatePackageEndUse"
+              labelText="End Use"
+              value={createPackageForm.endUseCode}
+              disabled={!canManageItems || createEndUseOptions.length > 0}
+              onChange={(event) => setCreatePackageField('endUseCode', event.target.value)}
+            />
+            {createEndUseOptions.length > 0 && (
+              <Select
+                id="applicationItemsCreatePackageEndUseSelect"
+                labelText="End Use Options"
+                value={createPackageForm.endUseCode}
+                disabled={!canManageItems}
+                onChange={(event) => setCreatePackageField('endUseCode', event.target.value)}
+              >
+                {createEndUseOptions.map((option) => (
+                  <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
+                ))}
+              </Select>
+            )}
           </div>
+          <div className="application-items-inline-form">
+            <Select
+              id="applicationItemsCreateSpeciesToAdd"
+              labelText="Create Package Species"
+              value={createSpeciesToAdd}
+              disabled={!canManageItems}
+              onChange={(event) => setCreateSpeciesToAdd(event.target.value)}
+            >
+              <SelectItem value="" text="Select species" />
+              {createRemainingSpeciesOptions
+                .filter((option) => !createSpeciesDraft.includes(option.code))
+                .map((option) => (
+                  <SelectItem key={option.code} value={option.code} text={asOptionText(option)} />
+                ))}
+            </Select>
+            <Button
+              kind="secondary"
+              size="sm"
+              disabled={!canManageItems || !createSpeciesToAdd}
+              onClick={onAddCreateSpecies}
+            >
+              Add Create Species
+            </Button>
+          </div>
+          <Table useZebraStyles>
+            <TableHead>
+              <TableRow>
+                <TableHeader>Species</TableHeader>
+                <TableHeader>Action</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {selectedCreateSpeciesOptions.map((row) => (
+                <TableRow key={row.code}>
+                  <TableCell>{asOptionText(row)}</TableCell>
+                  <TableCell>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      disabled={!canManageItems}
+                      onClick={() => onRemoveCreateSpecies(row.code)}
+                    >
+                      Remove
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {createSpeciesDraft.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={2}>No species selected for the new package.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
           <div className="legacy-search-actions">
             <Button
               kind="secondary"
