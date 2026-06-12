@@ -228,6 +228,16 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyOfferDetailsRpcShouldRejectOfferMutationWithoutCreateOfferGrant() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/offerDetailsRPC")
+                .param("actionMapping", "addOffer")
+                .param("applicationNumber", "1000456")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void legacyExemptionDetailsRpcShouldAllowClientLookupAction() throws Exception {
     mockMvc.perform(
             post("/api/lexis/exemptionDetailsRPC")
@@ -364,6 +374,94 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             post("/api/lexis/rpc/application-details/application")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void readOnlyRoleShouldRejectRepresentativeMutationRoutes() throws Exception {
+    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
+
+    mockMvc
+        .perform(
+            post("/api/lexis/rpc/application-details/application-summary")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/rpc/application-details/package")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/rpc/application-details/package-scale")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            delete("/api/lexis/rpc/application-details/scale")
+                .param("scaleId", "55")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/rpc/exemption-details/exemption")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/rpc/exemption-details/approve-exemptions")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            delete("/api/lexis/rpc/exemption-details/document")
+                .param("documentId", "55")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/rpc/offer-details/offer")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/rpc/permit-details/update-shipping")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/indian-reserve/permits")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/application-reviews/1000123/approve")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "sendApplRejectEmail")
+                .param("applicationNumber", "1000123")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            put("/api/lexis/admin/policies/fee/123")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
         .andExpect(status().isForbidden());
   }
 

@@ -24,9 +24,9 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -82,6 +82,7 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_DELETE_PACKAGE_BY_ID = "deletePackageById";
   private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
   private static final String LEGACY_ACTION_APPLICATION_REMARKS = "/applicationRemarks";
+  private static final String LEGACY_ACTION_APPLICATIONS_REVIEW = "/applicationsReview";
   private static final String LEGACY_ACTION_FILE_APPLICATION_UPLOAD = "/fileApplicationUpload";
   private static final String LEGACY_APPLICATION_LOCK_SESSION_KEY = "exemptionApplication";
   private static final String LEGACY_APPLICATION_NUMBER_SESSION_KEY = "applicationNumber";
@@ -337,16 +338,18 @@ public class ApplicationDetailsRpcController {
       value = "/applicationDetailsRPC",
       params = "actionMapping=" + ACTION_SEND_APPLICATION_REJECT_EMAIL)
   public ResponseEntity<ApplicationStatusEmailResponseDto> sendApplicationRejectEmailLegacy(
-      @RequestParam MultiValueMap<String, String> parameters) {
-    return sendApplicationStatusEmail(parameters, "REJ");
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return sendApplicationStatusEmail(parameters, "REJ", authentication);
   }
 
   @PostMapping(
       value = "/applicationDetailsRPC",
       params = "actionMapping=" + ACTION_SEND_APPLICATION_WITHDRAWN_EMAIL)
   public ResponseEntity<ApplicationStatusEmailResponseDto> sendApplicationWithdrawnEmailLegacy(
-      @RequestParam MultiValueMap<String, String> parameters) {
-    return sendApplicationStatusEmail(parameters, "WDN");
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return sendApplicationStatusEmail(parameters, "WDN", authentication);
   }
 
   @PostMapping("/rpc/application-details/application")
@@ -1551,7 +1554,11 @@ public class ApplicationDetailsRpcController {
   }
 
   private ResponseEntity<ApplicationStatusEmailResponseDto> sendApplicationStatusEmail(
-      MultiValueMap<String, String> parameters, String statusCode) {
+      MultiValueMap<String, String> parameters, String statusCode, Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_APPLICATIONS_REVIEW)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ApplicationReviewService service = applicationReviewServiceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application review service unavailable - returning no content for application status email");

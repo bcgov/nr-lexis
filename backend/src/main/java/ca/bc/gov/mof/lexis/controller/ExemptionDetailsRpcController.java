@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -55,6 +56,8 @@ public class ExemptionDetailsRpcController {
   private static final String ACTION_APPROVE_EXEMPTIONS = "approveExemptions";
   private static final String ACTION_SEND_EXEMPTION_APPROVAL_EMAIL = "sendExemptionApprovalEmail";
   private static final String ACTION_SEND_EXEMPTION_APPROVAL_EMAILS = "sendExemptionApprovalEmails";
+  private static final String LEGACY_ACTION_APPROVE_EXEMPTION = "approveExemption";
+  private static final String LEGACY_ACTION_SAVE_EXEMPTION = "saveExemption";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -228,7 +231,12 @@ public class ExemptionDetailsRpcController {
 
   @DeleteMapping("/rpc/exemption-details/document")
   public ResponseEntity<RemoveDocumentResponseDto> removeDocument(
-      @RequestParam(name = "documentId", required = false) String documentId) {
+      @RequestParam(name = "documentId", required = false) String documentId,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_SAVE_EXEMPTION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption details RPC service unavailable - returning no content for remove document");
@@ -241,8 +249,9 @@ public class ExemptionDetailsRpcController {
 
   @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_REMOVE_DOCUMENT)
   public ResponseEntity<RemoveDocumentResponseDto> removeDocumentLegacy(
-      @RequestParam(name = "documentId", required = false) String documentId) {
-    return removeDocument(documentId);
+      @RequestParam(name = "documentId", required = false) String documentId,
+      Authentication authentication) {
+    return removeDocument(documentId, authentication);
   }
 
   @GetMapping("/rpc/exemption-details/check-exemption-number")
@@ -271,6 +280,10 @@ public class ExemptionDetailsRpcController {
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
       Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_SAVE_EXEMPTION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption details RPC service unavailable - returning no content for add application to exemption");
@@ -300,6 +313,10 @@ public class ExemptionDetailsRpcController {
   public ResponseEntity<ApplicationExemptionLinkResponseDto> removeApplicationFromExemption(
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_SAVE_EXEMPTION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption details RPC service unavailable - returning no content for remove application from exemption");
@@ -324,6 +341,10 @@ public class ExemptionDetailsRpcController {
   public ResponseEntity<ExemptionPersistenceResponseDto> addExemption(
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_SAVE_EXEMPTION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption details RPC service unavailable - returning no content for add exemption");
@@ -356,6 +377,10 @@ public class ExemptionDetailsRpcController {
   public ResponseEntity<ExemptionPersistenceResponseDto> updateExemption(
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_SAVE_EXEMPTION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption details RPC service unavailable - returning no content for update exemption");
@@ -389,6 +414,10 @@ public class ExemptionDetailsRpcController {
   public ResponseEntity<ExemptionApprovalResponseDto> approveExemptions(
       @RequestParam(name = "exemptionNumbers", required = false) String exemptionNumbers,
       Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_APPROVE_EXEMPTION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption details RPC service unavailable - returning no content for approve exemptions");
@@ -415,7 +444,12 @@ public class ExemptionDetailsRpcController {
   public ResponseEntity<ExemptionApprovalEmailResponseDto> sendExemptionApprovalEmail(
       @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
       @RequestParam(name = "legacyExemptionNumber", required = false) String legacyExemptionNumber,
-      @RequestParam(name = "toEmailAddress", required = false) String toEmailAddress) {
+      @RequestParam(name = "toEmailAddress", required = false) String toEmailAddress,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_APPROVE_EXEMPTION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption details RPC service unavailable - returning no content for approval email");
@@ -432,13 +466,19 @@ public class ExemptionDetailsRpcController {
   public ResponseEntity<ExemptionApprovalEmailResponseDto> sendExemptionApprovalEmailLegacy(
       @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
       @RequestParam(name = "legacyExemptionNumber", required = false) String legacyExemptionNumber,
-      @RequestParam(name = "toEmailAddress", required = false) String toEmailAddress) {
-    return sendExemptionApprovalEmail(exemptionNumber, legacyExemptionNumber, toEmailAddress);
+      @RequestParam(name = "toEmailAddress", required = false) String toEmailAddress,
+      Authentication authentication) {
+    return sendExemptionApprovalEmail(exemptionNumber, legacyExemptionNumber, toEmailAddress, authentication);
   }
 
   @PostMapping("/rpc/exemption-details/approval-emails")
   public ResponseEntity<ExemptionApprovalEmailResponseDto> sendExemptionApprovalEmails(
-      @RequestParam(name = "sendGrid", required = false) String sendGrid) {
+      @RequestParam(name = "sendGrid", required = false) String sendGrid,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_APPROVE_EXEMPTION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption details RPC service unavailable - returning no content for approval emails");
@@ -452,8 +492,9 @@ public class ExemptionDetailsRpcController {
 
   @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_SEND_EXEMPTION_APPROVAL_EMAILS)
   public ResponseEntity<ExemptionApprovalEmailResponseDto> sendExemptionApprovalEmailsLegacy(
-      @RequestParam(name = "sendGrid", required = false) String sendGrid) {
-    return sendExemptionApprovalEmails(sendGrid);
+      @RequestParam(name = "sendGrid", required = false) String sendGrid,
+      Authentication authentication) {
+    return sendExemptionApprovalEmails(sendGrid, authentication);
   }
 
   @GetMapping("/rpc/exemption-details/client-data")
@@ -574,6 +615,11 @@ public class ExemptionDetailsRpcController {
         result.errorMessage(),
         result.warnings(),
         result.errors());
+  }
+
+  private boolean canPerform(Authentication authentication, String action) {
+    return authorizationService.canPerformAction(
+        sessionService.parseRolesFromPrincipal(authentication), action);
   }
 
   private Long parsePositiveLong(String rawValue) {

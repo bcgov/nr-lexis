@@ -330,9 +330,10 @@ class ApplicationDetailsRpcControllerTest {
     params.add("applicationNumber", "1000456");
     params.add("toEmailAddress", "client@example.test");
     params.add("additionalRemarks", "Rejected during review");
+    TestingAuthenticationToken authentication = authorized("/applicationsReview");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationStatusEmailResponseDto> response =
-        controller.sendApplicationRejectEmailLegacy(params);
+        controller.sendApplicationRejectEmailLegacy(params, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -359,9 +360,10 @@ class ApplicationDetailsRpcControllerTest {
     params.add("applicationNumber", "1000456");
     params.add("toEmailAddress", "client@example.test");
     params.add("additionalRemarks", "Withdrawn");
+    TestingAuthenticationToken authentication = authorized("/applicationsReview");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationStatusEmailResponseDto> response =
-        controller.sendApplicationWithdrawnEmailLegacy(params);
+        controller.sendApplicationWithdrawnEmailLegacy(params, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();

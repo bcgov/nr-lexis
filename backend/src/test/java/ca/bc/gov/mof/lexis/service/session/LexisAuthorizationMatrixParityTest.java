@@ -55,4 +55,26 @@ class LexisAuthorizationMatrixParityTest {
             "LEXIS_FEDERAL_SUBMITTER",
             "LEXIS_DELEGATED_ADMIN");
   }
+
+  @Test
+  void readOnlyRoleShouldNotHaveMutatingActions() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_READ_ONLY")))
+        .doesNotContain(
+            "/applicationRemarks",
+            "/applicationsReview",
+            "/createExemption",
+            "/fileApplicationUpload",
+            "/fileExemptionUpload",
+            "/fileInvoiceUpload",
+            "/filePermitUpload",
+            "/lexisAgentAdmin",
+            "/lexisFILAdmin",
+            "/lexisPolicyAdmin",
+            "approveExemption",
+            "createApplication",
+            "createOffer",
+            "createPermit",
+            "saveExemption",
+            "savePermit");
+  }
 }

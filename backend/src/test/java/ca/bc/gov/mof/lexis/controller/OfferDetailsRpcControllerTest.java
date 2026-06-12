@@ -12,6 +12,8 @@ import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -41,6 +43,8 @@ class OfferDetailsRpcControllerTest {
   @Mock private FederalApplicationService federalApplicationService;
   @Mock private ClientLookupService clientLookupService;
   @Mock private PurchaseOfferService purchaseOfferService;
+  @Mock private LexisSessionService sessionService;
+  @Mock private LexisAuthorizationService authorizationService;
   @Mock private Authentication authentication;
 
   private OfferDetailsRpcController controller;
@@ -52,7 +56,9 @@ class OfferDetailsRpcControllerTest {
             applicationServiceProvider,
             federalApplicationServiceProvider,
             clientLookupServiceProvider,
-            purchaseOfferServiceProvider);
+            purchaseOfferServiceProvider,
+            sessionService,
+            authorizationService);
   }
 
   @Test
@@ -217,6 +223,9 @@ class OfferDetailsRpcControllerTest {
   void addOfferLegacyShouldMapAliasesAndReturnPersistencePayload() {
     when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
     when(authentication.getName()).thenReturn("idir\\jsmith");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(true);
     when(purchaseOfferService.addOffer(
             org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
         .thenReturn(
@@ -273,6 +282,9 @@ class OfferDetailsRpcControllerTest {
   void updateOfferLegacyShouldMapAliasesAndReturnUpdatePayload() {
     when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
     when(authentication.getName()).thenReturn("idir\\jsmith");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(true);
     when(purchaseOfferService.updateOffer(
             org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
         .thenReturn(
