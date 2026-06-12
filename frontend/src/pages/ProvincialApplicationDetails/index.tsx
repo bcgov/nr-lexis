@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import axios from 'axios'
 import {
   Button,
   Column,
@@ -81,6 +82,37 @@ const displayValue = (value: string | number | null | undefined): string => {
     return 'Not provided'
   }
   return String(value)
+}
+
+const uploadFailureMessage = (error: unknown, fallbackMessage: string): string => {
+  if (!axios.isAxiosError(error)) {
+    return fallbackMessage
+  }
+
+  const payload = error.response?.data
+  if (typeof payload === 'string' && payload.trim()) {
+    return payload.trim()
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return fallbackMessage
+  }
+
+  const { message, errors } = payload as { message?: unknown; errors?: unknown }
+  if (typeof message === 'string' && message.trim()) {
+    return message.trim()
+  }
+
+  if (Array.isArray(errors)) {
+    const firstError = errors.find(
+      (entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()),
+    )
+    if (firstError) {
+      return firstError.trim()
+    }
+  }
+
+  return fallbackMessage
 }
 
 const normalizeText = (value: string): string => value.trim().toLowerCase()
@@ -1608,7 +1640,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setActionInfoMessage('Application document uploaded.')
     } catch (error) {
       console.error(error)
-      setActionErrorMessage('Unable to upload application document.')
+      setActionErrorMessage(uploadFailureMessage(error, 'Unable to upload application document.'))
     } finally {
       setIsUploadingApplicationDocument(false)
     }
