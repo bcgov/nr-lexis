@@ -689,6 +689,40 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getByText('Application document uploaded.')).toBeInTheDocument()
   })
 
+  it('shows the backend rejection message when an application document upload is refused', async () => {
+    mockedSubmitAdminUpload.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        data: {
+          message:
+            'Could not attach file to application 321. Confirm the application exists before uploading.',
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const file = new File(['uploaded document'], 'uploaded.pdf', { type: 'application/pdf' })
+    await userEvent.upload(await screen.findByLabelText('Application Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Upload Document' }))
+
+    expect(
+      await screen.findByText(
+        'Could not attach file to application 321. Confirm the application exists before uploading.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(1)
+  })
+
   it('ignores stale detail responses after navigating to another application', async () => {
     const secondApplicationDetail: ProvincialApplicationDetail = {
       ...applicationDetail,

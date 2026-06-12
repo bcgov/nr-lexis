@@ -28,6 +28,45 @@ class ApplicationReviewRepositoryTest {
   }
 
   @Test
+  void searchShouldUseApplicationViewAliasForReviewCriteria() {
+    TestApplicationReviewRepository repository = new TestApplicationReviewRepository();
+
+    repository.search(
+        new ApplicationReviewSearchCriteria(
+            "45963",
+            "H",
+            LocalDate.of(2026, 6, 1),
+            LocalDate.of(2026, 6, 30),
+            LocalDate.of(2026, 6, 10),
+            LocalDate.of(2026, 6, 12),
+            List.of(1818L, 1834L),
+            "region DESC",
+            0,
+            10));
+
+    assertThat(repository.whereSql())
+        .contains("v.APPLICATION_NUMBER")
+        .contains("v.EXPORT_PRODUCT_TYPE_CODE")
+        .contains("v.RECEIVED_DATE")
+        .contains("v.ADVERTISING_DATE")
+        .contains("v.EXPORT_APPLICATION_STATUS_CODE")
+        .contains("v.ORG_UNIT_NO")
+        .contains("ORDER BY v.ORG_UNIT_CODE DESC")
+        .doesNotContain("EEA.")
+        .doesNotContain(" AND ORG_UNIT_NO");
+    assertThat(repository.bindValues())
+        .containsExactly(
+            "45963",
+            "H",
+            "2026-06-01",
+            "2026-06-30",
+            "2026-06-10",
+            "2026-06-12",
+            "1818",
+            "1834");
+  }
+
+  @Test
   void searchShouldLoadRequestedLegacyPageWithCountTotal() {
     List<ApplicationReviewSearchResultDto> firstPage =
         java.util.stream.LongStream.rangeClosed(900101L, 900110L)

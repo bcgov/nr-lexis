@@ -66,4 +66,30 @@ class OracleLexisUploadServiceTest {
     assertThat(service.uploadApplication(file, 7000123L, "App file", "jsmith")).isEmpty();
     verifyNoInteractions(uploadRepository);
   }
+
+  @Test
+  void uploadApplicationShouldReturnRejectedResultWhenOracleDoesNotPersist() {
+    OracleLexisUploadService service = new OracleLexisUploadService(uploadRepository);
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "formFile", "application.pdf", "application/pdf", "pdf-bytes".getBytes(StandardCharsets.UTF_8));
+    when(
+            uploadRepository.insertApplicationFile(
+                eq(7000123L),
+                eq("application.pdf"),
+                eq("App file"),
+                eq("INS"),
+                eq("PDF"),
+                eq("jsmith"),
+                any(byte[].class)))
+        .thenReturn(false);
+
+    LexisUploadResultDto result =
+        service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.message())
+        .isEqualTo(
+            "Could not attach file to application 7000123. Confirm the application exists before uploading.");
+  }
 }

@@ -47,7 +47,13 @@ public class OracleLexisUploadService implements LexisUploadService {
 
     return persisted
         ? Optional.of(success("application", file, "Application upload persisted."))
-        : Optional.empty();
+        : Optional.of(
+            rejected(
+                "application",
+                file,
+                "Could not attach file to application "
+                    + applicationNumber
+                    + ". Confirm the application exists before uploading."));
   }
 
   @Override
@@ -73,7 +79,13 @@ public class OracleLexisUploadService implements LexisUploadService {
 
     return persisted
         ? Optional.of(success("permit", file, "Permit upload persisted."))
-        : Optional.empty();
+        : Optional.of(
+            rejected(
+                "permit",
+                file,
+                "Could not attach file to permit "
+                    + permitNumber
+                    + ". Confirm the permit exists before uploading."));
   }
 
   @Override
@@ -100,7 +112,13 @@ public class OracleLexisUploadService implements LexisUploadService {
 
     return persisted
         ? Optional.of(success("exemption", file, "Exemption upload persisted."))
-        : Optional.empty();
+        : Optional.of(
+            rejected(
+                "exemption",
+                file,
+                "Could not attach file to exemption "
+                    + normalizedExemptionNumber
+                    + ". Confirm the exemption exists before uploading."));
   }
 
   @Override
@@ -144,11 +162,21 @@ public class OracleLexisUploadService implements LexisUploadService {
 
     return persisted
         ? Optional.of(success("invoice", file, "Invoice upload persisted."))
-        : Optional.empty();
+        : Optional.of(
+            rejected(
+                "invoice",
+                file,
+                "Could not attach file to invoice "
+                    + normalizedSalesInvoiceNumber
+                    + ". Confirm the permit and invoice exist before uploading."));
   }
 
   private LexisUploadResultDto success(String uploadType, MultipartFile file, String message) {
     return new LexisUploadResultDto(uploadType, resolveFileName(file), file.getSize(), "accepted", message);
+  }
+
+  private LexisUploadResultDto rejected(String uploadType, MultipartFile file, String message) {
+    return new LexisUploadResultDto(uploadType, resolveFileName(file), file.getSize(), "rejected", message);
   }
 
   private boolean validFile(MultipartFile file) {

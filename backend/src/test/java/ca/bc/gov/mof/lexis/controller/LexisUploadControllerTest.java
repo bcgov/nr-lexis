@@ -113,6 +113,29 @@ class LexisUploadControllerTest {
   }
 
   @Test
+  void fileApplicationUploadShouldReturnRejectedPayloadWhenPersistenceFails() {
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
+    LexisUploadController controller = controller();
+    MultipartFile formFile = sampleFile("application.pdf");
+    LexisUploadResultDto payload =
+        new LexisUploadResultDto(
+            "application",
+            "application.pdf",
+            formFile.getSize(),
+            "rejected",
+            "Could not attach file to application 7000123. Confirm the application exists before uploading.");
+    when(uploadService.uploadApplication(formFile, 7000123L, "App file", null))
+        .thenReturn(Optional.of(payload));
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileApplicationUpload(null, formFile, 7000123L, "App file", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(response.getBody()).isEqualTo(payload);
+    verify(uploadService).uploadApplication(formFile, 7000123L, "App file", null);
+  }
+
+  @Test
   void filePermitUploadShouldDelegateToService() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = controller();
