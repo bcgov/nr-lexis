@@ -1087,7 +1087,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   )
 
   return (
-    <Tile>
+    <Tile id="application-items" className="application-detail-section application-items-panel">
       <h2 className="detail-tile-title">Items</h2>
       {itemsLoading && <InlineLoading description="Loading item data..." />}
       {!!itemsErrorMessage && (
@@ -1118,7 +1118,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       </dl>
 
       <div className="application-items-grid">
-        <section className="application-items-section">
+        <section className="application-items-section application-items-section--package-details">
           <h3>Package Details</h3>
           <SearchableSelect
             id="applicationItemsPackageSelect"
@@ -1286,7 +1286,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           </div>
         </section>
 
-        <section className="application-items-section">
+        <section className="application-items-section application-items-section--package-species">
           <h3>Package Species</h3>
           <div className="application-items-inline-form">
             <SearchableSelect
@@ -1348,7 +1348,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           </Table>
         </section>
 
-        <section className="application-items-section">
+        <section className="application-items-section application-items-section--create-package">
           <h3>Create Package</h3>
           <div className="application-items-form">
             <TextInput
@@ -1515,7 +1515,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           </div>
         </section>
 
-        <section className="application-items-section">
+        <section className="application-items-section application-items-section--scales">
           <h3>Scales</h3>
           <div className="application-items-form">
             <TextInput

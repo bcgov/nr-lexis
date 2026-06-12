@@ -16,10 +16,10 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { Add, ArrowLeft, Launch, Search, Upload } from '@carbon/icons-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
 import {
@@ -1945,12 +1945,28 @@ const ProvincialApplicationDetailsPage: FC = () => {
     ) : null
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid provincial-application-detail">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <h1>Provincial Application Details</h1>
-        <p>
-          Application <code>{applicationNumber}</code>
-        </p>
+        <div className="application-detail-title-row">
+          <div>
+            <h1>Provincial Application Details</h1>
+            <p>
+              Application <code>{applicationNumber}</code>
+            </p>
+          </div>
+          {detail && (
+            <dl className="application-detail-header-metrics" aria-label="Application highlights">
+              <div>
+                <dt>Package Count</dt>
+                <dd>{detail.packages.length.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt>File Count</dt>
+                <dd>{documentRows.length.toLocaleString()}</dd>
+              </div>
+            </dl>
+          )}
+        </div>
       </Column>
 
       {loading && (
@@ -2014,12 +2030,29 @@ const ProvincialApplicationDetailsPage: FC = () => {
           )}
 
           <Column sm={4} md={8} lg={16}>
-            <Tile>
+            <nav
+              className="application-detail-section-nav"
+              aria-label="Application detail sections"
+            >
+              <a href="#application-summary">Summary Fields</a>
+              {canReviewApplication && <a href="#application-review">Review Actions</a>}
+              <a href="#application-packages">Package List</a>
+              <a href="#application-items">Item Editor</a>
+              <a href="#application-documents">Document Files</a>
+              <a href="#application-offers">Offer Rows</a>
+              <a href="#application-permits">Permit Rows</a>
+              <a href="#application-remarks">Remark Log</a>
+            </nav>
+          </Column>
+
+          <Column sm={4} md={8} lg={16}>
+            <Tile className="application-detail-action-bar">
               <h2 className="detail-tile-title">Actions</h2>
               <div className="legacy-search-actions">
                 <Button
                   kind="secondary"
                   size="sm"
+                  renderIcon={ArrowLeft}
                   disabled={!canPerform('/applicationSearch')}
                   onClick={() => navigate(withCurrentSearch('/provincial/application'))}
                 >
@@ -2028,6 +2061,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 <Button
                   kind="secondary"
                   size="sm"
+                  renderIcon={Launch}
                   disabled={
                     !detail.exemptionNumber ||
                     !canPerform('/exemptionSearch') ||
@@ -2048,6 +2082,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 <Button
                   kind="secondary"
                   size="sm"
+                  renderIcon={Search}
                   disabled={!canPerform('/offersSearch')}
                   onClick={() => navigate(withCurrentSearch('/provincial/offers'))}
                 >
@@ -2056,6 +2091,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 <Button
                   kind="secondary"
                   size="sm"
+                  renderIcon={Upload}
                   disabled={!canUploadApplicationDocuments || !detail.applicationNumber}
                   onClick={onOpenApplicationUpload}
                 >
@@ -2064,6 +2100,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 <Button
                   kind="primary"
                   size="sm"
+                  renderIcon={Add}
                   disabled={
                     !canPerform('/offersSearch') ||
                     !canPerform('createOffer') ||
@@ -2080,7 +2117,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
           </Column>
 
           <Column sm={4} md={8} lg={16}>
-            <Tile>
+            <Tile
+              id="application-summary"
+              className="application-detail-section application-detail-summary"
+            >
               <h2 className="detail-tile-title">Application Summary</h2>
               <dl className="detail-field-grid">
                 {[
@@ -2541,54 +2581,34 @@ const ProvincialApplicationDetailsPage: FC = () => {
           </Column>
 
           <Column sm={4} md={8} lg={16}>
-            <DetailFieldTile
-              title="Access & Workflow Flags"
-              fields={[
-                {
-                  label: 'Can Create Offers',
-                  value: (
-                    <Tag type={detail.canCreateOffers ? 'green' : 'gray'}>
-                      {detail.canCreateOffers ? 'Yes' : 'No'}
-                    </Tag>
-                  ),
-                },
-                {
-                  label: 'Industry User',
-                  value: (
-                    <Tag type={detail.industryUser ? 'green' : 'gray'}>
-                      {detail.industryUser ? 'Yes' : 'No'}
-                    </Tag>
-                  ),
-                },
-                {
-                  label: 'Read Only',
-                  value: (
-                    <Tag type={detail.readOnly ? 'red' : 'gray'}>
-                      {detail.readOnly ? 'Yes' : 'No'}
-                    </Tag>
-                  ),
-                },
-                {
-                  label: 'Exemption Approver',
-                  value: (
-                    <Tag type={detail.exemptionApprover ? 'green' : 'gray'}>
-                      {detail.exemptionApprover ? 'Yes' : 'No'}
-                    </Tag>
-                  ),
-                },
-                {
-                  label: 'Locked',
-                  value: (
-                    <Tag type={detail.locked ? 'red' : 'green'}>{detail.locked ? 'Yes' : 'No'}</Tag>
-                  ),
-                },
-              ]}
-            />
+            <Tile className="application-detail-section application-detail-status-strip">
+              <h2 className="detail-tile-title">Access & Workflow Flags</h2>
+              <div className="application-detail-flag-row">
+                <Tag type={detail.canCreateOffers ? 'green' : 'gray'}>
+                  Create Offers: {detail.canCreateOffers ? 'Yes' : 'No'}
+                </Tag>
+                <Tag type={detail.industryUser ? 'green' : 'gray'}>
+                  Industry User: {detail.industryUser ? 'Yes' : 'No'}
+                </Tag>
+                <Tag type={detail.readOnly ? 'red' : 'gray'}>
+                  Read Only: {detail.readOnly ? 'Yes' : 'No'}
+                </Tag>
+                <Tag type={detail.exemptionApprover ? 'green' : 'gray'}>
+                  Exemption Approver: {detail.exemptionApprover ? 'Yes' : 'No'}
+                </Tag>
+                <Tag type={detail.locked ? 'red' : 'green'}>
+                  Locked: {detail.locked ? 'Yes' : 'No'}
+                </Tag>
+              </div>
+            </Tile>
           </Column>
 
           {canReviewApplication && (
             <Column sm={4} md={8} lg={16}>
-              <Tile>
+              <Tile
+                id="application-review"
+                className="application-detail-section application-detail-review"
+              >
                 <h2 className="detail-tile-title">Application Review</h2>
                 <div className="legacy-search-grid">
                   <SearchableSelect
@@ -2668,8 +2688,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
             </Column>
           )}
 
-          <Column sm={4} md={8} lg={8}>
-            <Tile>
+          <Column sm={4} md={8} lg={16}>
+            <Tile
+              id="application-packages"
+              className="application-detail-section application-detail-packages"
+            >
               <h2 className="detail-tile-title">Packages</h2>
               <TextInput
                 id="applicationDetailPackageFilter"
@@ -2726,7 +2749,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
             />
           </Column>
           <Column sm={4} md={8} lg={8}>
-            <Tile>
+            <Tile id="application-permits" className="application-detail-section">
               <h2 className="detail-tile-title">Permits</h2>
               <Table useZebraStyles>
                 <TableHead>
@@ -2765,7 +2788,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
             </Tile>
           </Column>
           <Column sm={4} md={8} lg={8}>
-            <Tile>
+            <Tile id="application-offers" className="application-detail-section">
               <h2 className="detail-tile-title">Offers</h2>
               <TextInput
                 id="applicationDetailOfferFilter"
@@ -2817,7 +2840,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
             </Tile>
           </Column>
           <Column sm={4} md={8} lg={16}>
-            <Tile>
+            <Tile
+              id="application-documents"
+              className="application-detail-section application-detail-documents"
+            >
               <h2 className="detail-tile-title">
                 Documents <Tag type="green">API</Tag>
               </h2>
@@ -2921,7 +2947,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
           </Column>
 
           <Column sm={4} md={8} lg={16}>
-            <Tile>
+            <Tile
+              id="application-remarks"
+              className="application-detail-section application-detail-remarks"
+            >
               <h2 className="detail-tile-title">Remarks</h2>
               {canManageRemarks && (
                 <div className="legacy-search-actions">
