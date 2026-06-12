@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.security;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -19,7 +20,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(
     properties = {
-      "lexis.auth.cognito.enforce-route-auth=true",
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito-idp.ca-central-1.amazonaws.com/test",
+      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json",
       "ALLOWED_ORIGINS=http://localhost:3000"
     })
 @AutoConfigureMockMvc
@@ -29,12 +31,12 @@ class LexisRouteAuthorizationIntegrationTest {
 
   @Test
   void applicationsSearchShouldRejectAnonymousRequests() throws Exception {
-    mockMvc.perform(get("/api/lexis/applications/search")).andExpect(status().isForbidden());
+    mockMvc.perform(get("/api/lexis/applications/search")).andExpect(status().isUnauthorized());
   }
 
   @Test
   void legacyShowWelcomeShouldRejectAnonymousRequests() throws Exception {
-    mockMvc.perform(get("/api/lexis/showWelcome.do")).andExpect(status().isForbidden());
+    mockMvc.perform(get("/api/lexis/showWelcome.do")).andExpect(status().isUnauthorized());
   }
 
   @Test
@@ -138,7 +140,7 @@ class LexisRouteAuthorizationIntegrationTest {
 
   @Test
   void applicationDetailsRpcShouldRejectAnonymousRequests() throws Exception {
-    mockMvc.perform(get("/api/lexis/rpc/application-details/document-details")).andExpect(status().isForbidden());
+    mockMvc.perform(get("/api/lexis/rpc/application-details/document-details")).andExpect(status().isUnauthorized());
   }
 
   @Test
@@ -151,7 +153,7 @@ class LexisRouteAuthorizationIntegrationTest {
 
   @Test
   void exemptionDetailsRpcShouldRejectAnonymousRequests() throws Exception {
-    mockMvc.perform(get("/api/lexis/rpc/exemption-details/applications")).andExpect(status().isForbidden());
+    mockMvc.perform(get("/api/lexis/rpc/exemption-details/applications")).andExpect(status().isUnauthorized());
   }
 
   @Test
@@ -166,7 +168,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void legacyOfferDetailsRpcShouldRequireAuthentication() throws Exception {
     mockMvc
         .perform(get("/api/lexis/offerDetailsRPC").param("actionMapping", "getApplicationVolume"))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isUnauthorized());
   }
 
   @Test
@@ -690,13 +692,14 @@ class LexisRouteAuthorizationIntegrationTest {
         .perform(
             post("/api/lexis/offerReport")
                 .param("actionMapping", "generate")
-                .param("outputFormat", "CSV"))
-        .andExpect(status().isForbidden());
+                .param("outputFormat", "CSV")
+                .with(csrf()))
+        .andExpect(status().isUnauthorized());
   }
 
   @Test
   void reportOptionsShouldRejectAnonymousRequests() throws Exception {
-    mockMvc.perform(get("/api/lexis/reports/options")).andExpect(status().isForbidden());
+    mockMvc.perform(get("/api/lexis/reports/options")).andExpect(status().isUnauthorized());
   }
 
   @Test

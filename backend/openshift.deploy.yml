@@ -36,8 +36,6 @@ parameters:
     value: INFO
   - name: SPRING_JPA_SHOW_SQL
     value: "false"
-  - name: LEXIS_COGNITO_ENABLED
-    value: "true"
   - name: AWS_COGNITO_ISSUER_URI
     required: true
   - name: COGNITO_USERINFO_URI
@@ -130,8 +128,6 @@ objects:
                   value: ${SPRING_PROFILES_ACTIVE}
                 - name: SERVER_PORT
                   value: "8080"
-                - name: LEXIS_COGNITO_ENABLED
-                  value: ${LEXIS_COGNITO_ENABLED}
                 - name: AWS_COGNITO_ISSUER_URI
                   value: ${AWS_COGNITO_ISSUER_URI}
                 - name: COGNITO_USERINFO_URI

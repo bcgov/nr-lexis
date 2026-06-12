@@ -10,7 +10,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest(
     classes = LexisApiApplication.class,
-    webEnvironment = SpringBootTest.WebEnvironment.NONE)
+    webEnvironment = SpringBootTest.WebEnvironment.NONE,
+    properties = {
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito-idp.ca-central-1.amazonaws.com/test",
+      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json"
+    })
 class LexisAuthorizationMatrixParityTest {
 
   @Autowired
