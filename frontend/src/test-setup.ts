@@ -33,6 +33,10 @@ if (!('ResizeObserver' in globalThis)) {
   ;(globalThis as any).ResizeObserver = ResizeObserverMock
 }
 
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {}
+}
+
 // Start server before all tests
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 
