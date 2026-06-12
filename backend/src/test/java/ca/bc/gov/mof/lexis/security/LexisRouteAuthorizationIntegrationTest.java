@@ -604,6 +604,30 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void lexisXmlUploadShouldAllowCreateApplicationRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/lexis-xml")
+                .file(file)
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isUnprocessableEntity());
+  }
+
+  @Test
+  void lexisXmlUploadShouldRejectReadOnlyRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/lexis-xml")
+                .file(file)
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void sessionWelcomeShouldUseTokenAuthoritiesForRoleResolution() throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/welcome")

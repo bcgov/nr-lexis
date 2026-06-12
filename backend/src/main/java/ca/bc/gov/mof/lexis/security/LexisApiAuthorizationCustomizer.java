@@ -358,6 +358,14 @@ public class LexisApiAuthorizationCustomizer
           "/api/lexis/admin/uploads/invoices"
         },
         "/fileInvoiceUpload");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {
+          "/api/lexis/uploads/lexis-xml",
+          "/api/lexis/admin/uploads/lexis-xml"
+        },
+        "createApplication");
 
     authorizeAction(
         authorize,

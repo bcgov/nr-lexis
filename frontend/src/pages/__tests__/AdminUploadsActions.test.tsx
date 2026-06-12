@@ -30,7 +30,7 @@ const renderPage = (path = '/admin/uploads?type=permit') => {
 describe('Admin upload workflow smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedSubmitAdminUpload.mockResolvedValue(undefined)
+    mockedSubmitAdminUpload.mockResolvedValue({})
   })
 
   it('submits permit upload with query-prefilled number', async () => {
@@ -86,5 +86,42 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('Permit number is required.')).toBeInTheDocument()
     expect(screen.getByText('Choose a file to upload.')).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('submits ESF LEXIS XML import without a target number', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+    mockedSubmitAdminUpload.mockResolvedValue({
+      message:
+        'LEXIS XML import created application 9001 with package TEST23-652-7D-2 and 3 scale rows.',
+      applicationNumber: 9001,
+      packageNumber: 'TEST23-652-7D-2',
+      scaleRows: 3,
+    })
+
+    renderPage('/admin/uploads?type=lexisXml')
+
+    expect(screen.getByText('Allowed')).toBeInTheDocument()
+    expect(screen.getByText('createApplication')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Application Number')).not.toBeInTheDocument()
+
+    const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
+    await userEvent.upload(screen.getByLabelText('LEXIS XML File'), file)
+    await userEvent.type(screen.getByLabelText('Document Description'), 'ESF XML')
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'lexisXml',
+        expect.objectContaining({
+          file,
+          fileDescription: 'ESF XML',
+        }),
+      )
+    })
+
+    expect(screen.getByText('Upload Submitted')).toBeInTheDocument()
+    expect(screen.getByText(/created application 9001/)).toBeInTheDocument()
   })
 })

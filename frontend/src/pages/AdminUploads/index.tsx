@@ -32,6 +32,13 @@ type UploadWorkflowDefinition = {
 
 const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   {
+    type: 'lexisXml',
+    label: 'ESF LEXIS XML Upload',
+    requiredAction: 'createApplication',
+    numberFieldLabel: '',
+    numberFieldPlaceholder: '',
+  },
+  {
     type: 'application',
     label: 'Application Upload',
     requiredAction: '/fileApplicationUpload',
@@ -90,7 +97,8 @@ const getWorkflowFromQuery = (value: string | null): UploadWorkflowType => {
     value === 'application' ||
     value === 'exemption' ||
     value === 'permit' ||
-    value === 'invoice'
+    value === 'invoice' ||
+    value === 'lexisXml'
   ) {
     return value
   }
@@ -146,7 +154,11 @@ const AdminUploadsPage: FC = () => {
 
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
-      uploadFile: selectedFile ? undefined : 'Choose a file to upload.',
+      uploadFile: selectedFile
+        ? undefined
+        : selectedWorkflowType === 'lexisXml'
+          ? 'Choose a LEXIS XML file to import.'
+          : 'Choose a file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
           ? (requiredFieldError(formState.applicationNumber, 'Application number') ?? undefined)
@@ -226,7 +238,16 @@ const AdminUploadsPage: FC = () => {
     setIsSubmitting(true)
 
     try {
-      if (selectedWorkflowType === 'application') {
+      if (selectedWorkflowType === 'lexisXml') {
+        const result = await submitAdminUpload('lexisXml', {
+          file: selectedFile,
+          fileDescription: formState.fileDescription.trim(),
+        })
+        setSuccessMessage(
+          result.message ??
+            'LEXIS XML import submitted. Verify the created application and package details.',
+        )
+      } else if (selectedWorkflowType === 'application') {
         await submitAdminUpload('application', {
           applicationNumber: formState.applicationNumber.trim(),
           file: selectedFile,
@@ -256,13 +277,21 @@ const AdminUploadsPage: FC = () => {
         })
       }
 
-      setSuccessMessage(
-        'Upload request submitted. Verify document and invoice updates in the target details view.',
-      )
+      if (selectedWorkflowType !== 'lexisXml') {
+        setSuccessMessage(
+          'Upload request submitted. Verify document and invoice updates in the target details view.',
+        )
+      }
       setSelectedFile(null)
     } catch (error) {
       const status = (error as any)?.response?.status
-      if (status) {
+      const responseErrors = (error as any)?.response?.data?.errors
+      const responseMessage = (error as any)?.response?.data?.message
+      if (Array.isArray(responseErrors) && responseErrors.length > 0) {
+        setErrorMessage(responseErrors.join(' '))
+      } else if (responseMessage) {
+        setErrorMessage(responseMessage)
+      } else if (status) {
         setErrorMessage(`Upload request failed with status ${status}.`)
       } else {
         setErrorMessage('Upload request failed. Please try again or contact support.')
@@ -427,7 +456,10 @@ const AdminUploadsPage: FC = () => {
             <TextInput
               id="uploadFile"
               type="file"
-              labelText="Document File"
+              labelText={selectedWorkflowType === 'lexisXml' ? 'LEXIS XML File' : 'Document File'}
+              accept={
+                selectedWorkflowType === 'lexisXml' ? '.xml,application/xml,text/xml' : undefined
+              }
               invalid={!!fieldError('uploadFile')}
               invalidText={fieldError('uploadFile')}
               onChange={(event) => {
