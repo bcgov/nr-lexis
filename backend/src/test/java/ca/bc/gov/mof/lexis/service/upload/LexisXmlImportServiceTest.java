@@ -148,6 +148,8 @@ class LexisXmlImportServiceTest {
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
         .contains("The LEXIS import file must be an XML file or a ZIP file containing one XML file.");
+    assertThat(result.message())
+        .contains("The LEXIS import file must be an XML file or a ZIP file containing one XML file.");
   }
 
   @Test

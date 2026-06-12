@@ -124,4 +124,28 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('Upload Submitted')).toBeInTheDocument()
     expect(screen.getByText(/created application 9001/)).toBeInTheDocument()
   })
+
+  it('shows LEXIS XML import rejection details from a 422 response', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+    mockedSubmitAdminUpload.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          message: 'LEXIS XML import rejected.',
+          errors: ['Package TEST23-652-7D-2 already exists.'],
+        },
+      },
+    })
+
+    renderPage('/admin/uploads?type=lexisXml')
+
+    const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
+    await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    expect(await screen.findByText('Upload Error')).toBeInTheDocument()
+    expect(screen.getByText('Package TEST23-652-7D-2 already exists.')).toBeInTheDocument()
+  })
 })

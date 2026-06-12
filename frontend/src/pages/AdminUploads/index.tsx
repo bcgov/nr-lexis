@@ -127,6 +127,29 @@ const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState
   }
 }
 
+const extractUploadErrorMessage = (error: unknown): string => {
+  const response = (error as any)?.response
+  const data = response?.data
+  const status = response?.status
+
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    return data.errors.join(' ')
+  }
+  if (typeof data?.errors === 'string' && data.errors.trim()) {
+    return data.errors
+  }
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message
+  }
+  if (typeof data === 'string' && data.trim()) {
+    return data
+  }
+  if (status) {
+    return `Upload request failed with status ${status}.`
+  }
+  return 'Upload request failed. Please try again or contact support.'
+}
+
 const AdminUploadsPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -284,18 +307,7 @@ const AdminUploadsPage: FC = () => {
       }
       setSelectedFile(null)
     } catch (error) {
-      const status = (error as any)?.response?.status
-      const responseErrors = (error as any)?.response?.data?.errors
-      const responseMessage = (error as any)?.response?.data?.message
-      if (Array.isArray(responseErrors) && responseErrors.length > 0) {
-        setErrorMessage(responseErrors.join(' '))
-      } else if (responseMessage) {
-        setErrorMessage(responseMessage)
-      } else if (status) {
-        setErrorMessage(`Upload request failed with status ${status}.`)
-      } else {
-        setErrorMessage('Upload request failed. Please try again or contact support.')
-      }
+      setErrorMessage(extractUploadErrorMessage(error))
     } finally {
       setIsSubmitting(false)
     }

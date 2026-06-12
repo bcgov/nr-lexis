@@ -23,6 +23,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -37,6 +39,8 @@ import org.w3c.dom.NodeList;
 
 @Service
 public class LexisXmlImportService {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(LexisXmlImportService.class);
 
   private static final String ESF_NAMESPACE = "http://www.for.gov.bc.ca/schema/esf";
   private static final String LEXIS_NAMESPACE = "http://www.for.gov.bc.ca/schema/lexis";
@@ -98,6 +102,7 @@ public class LexisXmlImportService {
     } catch (LexisXmlImportException ex) {
       return rejected(fileName, fileSize, ex.errors(), List.of());
     } catch (Exception ex) {
+      LOGGER.warn("LEXIS XML import failed while parsing [{}]: {}", fileName, ex.getMessage());
       return rejected(fileName, fileSize, List.of("The XML file could not be parsed."), List.of());
     }
 
@@ -677,17 +682,22 @@ public class LexisXmlImportService {
 
   private LexisXmlImportResultDto rejected(
       String fileName, long fileSize, List<String> errors, List<String> warnings) {
+    List<String> normalizedErrors = errors == null ? List.of() : errors;
+    List<String> normalizedWarnings = warnings == null ? List.of() : warnings;
+    String detail =
+        normalizedErrors.isEmpty() ? "No rejection reason was returned." : normalizedErrors.get(0);
+    LOGGER.warn("LEXIS XML import rejected for [{}]: {}", fileName, detail);
     return new LexisXmlImportResultDto(
         UPLOAD_TYPE,
         fileName,
         fileSize,
         REJECTED,
-        "LEXIS XML import rejected.",
+        "LEXIS XML import rejected: " + detail,
         null,
         null,
         0,
-        errors == null ? List.of() : errors,
-        warnings == null ? List.of() : warnings);
+        normalizedErrors,
+        normalizedWarnings);
   }
 
   private String resolveFileName(MultipartFile file) {
