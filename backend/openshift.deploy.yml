@@ -74,10 +74,6 @@ objects:
           labels:
             app: ${NAME}-backend-${ZONE}
             app.kubernetes.io/instance: ${ZONE}
-          annotations:
-            prometheus.io/path: /actuator/prometheus
-            prometheus.io/port: '8080'
-            prometheus.io/scrape: 'true'
         spec:
           automountServiceAccountToken: false
           securityContext:
@@ -173,8 +169,7 @@ objects:
                   memory: "800Mi"
                   ephemeral-storage: "500Mi"
               livenessProbe:
-                httpGet:
-                  path: /actuator/health
+                tcpSocket:
                   port: 8080
                 initialDelaySeconds: 300
                 periodSeconds: 30

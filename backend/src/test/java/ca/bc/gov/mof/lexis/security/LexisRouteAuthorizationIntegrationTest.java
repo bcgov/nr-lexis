@@ -2,10 +2,12 @@ package ca.bc.gov.mof.lexis.security;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -32,6 +34,31 @@ class LexisRouteAuthorizationIntegrationTest {
   @Test
   void applicationsSearchShouldRejectAnonymousRequests() throws Exception {
     mockMvc.perform(get("/api/lexis/applications/search")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void protectedRoutesShouldRejectAnonymousGetPostPutAndDeleteRequests() throws Exception {
+    mockMvc.perform(get("/api/lexis/applications/search")).andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(post("/api/lexis/rpc/application-details/application").with(csrf()))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(put("/api/lexis/admin/policies/fee/123").with(csrf()))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(delete("/api/lexis/rpc/application-details/package").with(csrf()))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void actuatorShouldRequireAuthenticationAndAdminAuthorization() throws Exception {
+    mockMvc.perform(get("/actuator/health")).andExpect(status().isUnauthorized());
+
+    mockMvc
+        .perform(
+            get("/actuator/health")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -63,11 +90,10 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyAccessDeniedForwardShouldRemainPublic() throws Exception {
+  void legacyAccessDeniedForwardShouldRejectAnonymousRequests() throws Exception {
     mockMvc
         .perform(get("/api/lexis/accessDenied.do"))
-        .andExpect(status().isForbidden())
-        .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        .andExpect(status().isUnauthorized());
   }
 
   @Test

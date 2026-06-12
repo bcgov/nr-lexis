@@ -64,11 +64,10 @@ cd backend
 mvn -DskipTests spring-boot:run -Dspring-boot.run.profiles=local,oracle
 ```
 
-Health checks:
+Port check:
 
 ```bash
-curl http://localhost:8080/actuator/health
-curl http://localhost:8080/actuator/prometheus
+nc -z localhost 8080
 ```
 
 **Frontend:**
@@ -116,10 +115,10 @@ That builds the real `frontend/Dockerfile` and serves it at `localhost:3005`.
 
 Regardless of option:
 
-- `curl http://localhost:8080/actuator/health` returns `{"status":"UP"}`.
+- `nc -z localhost 8080` succeeds once the backend port is listening.
 - Open `http://localhost:3000` and complete the Cognito login round trip.
 
-If `/actuator/health` returns `DOWN`, the most likely cause is Oracle connectivity. Check network access, `application-local.yml` credentials, and the truststore path.
+If the backend starts but authenticated API calls fail, check network access, `application-local.yml` credentials, Cognito config, and the truststore path.
 
 ## Component docs
 
