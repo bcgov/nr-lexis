@@ -99,26 +99,26 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   private SqlWhere buildSearchWhere(ApplicationReviewSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
-    where.addLike("APPLICATION_NUMBER", criteria.applicationNumber());
-    where.addEquals("EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
-    where.addDateGte("RECEIVED_DATE", criteria.receivedFromDate());
-    where.addDateLte("RECEIVED_DATE", criteria.receivedToDate());
-    where.addDateGte("ADVERTISING_DATE", criteria.listingFromDate());
-    where.addDateLte("ADVERTISING_DATE", criteria.listingToDate());
-    where.addRaw(" AND (EXPORT_APPLICATION_STATUS_CODE = 'NEW' OR EXPORT_APPLICATION_STATUS_CODE = 'PND')");
+    where.addLike("v.APPLICATION_NUMBER", criteria.applicationNumber());
+    where.addEquals("v.EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
+    where.addDateGte("v.RECEIVED_DATE", criteria.receivedFromDate());
+    where.addDateLte("v.RECEIVED_DATE", criteria.receivedToDate());
+    where.addDateGte("v.ADVERTISING_DATE", criteria.listingFromDate());
+    where.addDateLte("v.ADVERTISING_DATE", criteria.listingToDate());
+    where.addRaw(" AND (v.EXPORT_APPLICATION_STATUS_CODE = 'NEW' OR v.EXPORT_APPLICATION_STATUS_CODE = 'PND')");
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
-      where.addInEqualsNumberOrNoResults("ORG_UNIT_NO", criteria.regionNumbers());
+      where.addInEqualsNumberOrNoResults("v.ORG_UNIT_NO", criteria.regionNumbers());
     }
 
     String orderBy =
         sanitizedSort(
             criteria.sortField(),
             mapOf(
-                "applicationNumber", "APPLICATION_NUMBER",
-                "volume", "EXEMPTION_APPLICATION_VOLUME",
-                "listingDate", "ADVERTISING_DATE",
-                "status", "EXPORT_APPLICATION_STATUS_CODE",
-                "region", "ORG_UNIT_CODE"),
+                "applicationNumber", "v.APPLICATION_NUMBER",
+                "volume", "v.EXEMPTION_APPLICATION_VOLUME",
+                "listingDate", "v.ADVERTISING_DATE",
+                "status", "v.EXPORT_APPLICATION_STATUS_CODE",
+                "region", "v.ORG_UNIT_CODE"),
             "applicationNumber",
             "DESC");
 

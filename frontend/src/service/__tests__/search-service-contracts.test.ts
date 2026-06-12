@@ -208,6 +208,7 @@ describe('search-service contracts', () => {
     const params = readParams()
     expect(params.get('applicationNumber')).toBe('101')
     expect(params.get('agentClientNumber')).toBe('00012345')
+    expect(params.get('region')).toBe('12')
     expect(params.get('sortField')).toBe('applicationNumber DESC')
     expect(result.page.totalElements).toBe(12)
     expect(result.content[0]).toEqual(
@@ -517,6 +518,28 @@ describe('search-service contracts', () => {
         speciesEndUse: 'LOG',
       }),
     )
+  })
+
+  it('sends application review region filters as numeric backend org unit params', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [],
+        total: 0,
+        page: 0,
+        size: 10,
+      },
+    })
+
+    await searchApplicationReviews({
+      ...reviewRequest,
+      filters: {
+        ...reviewRequest.filters,
+        region: ['1818', 'not-a-region', '0', '1834'],
+      },
+    })
+
+    const params = readParams()
+    expect(params.getAll('region')).toEqual(['1818', '1834'])
   })
 
   it.each([
