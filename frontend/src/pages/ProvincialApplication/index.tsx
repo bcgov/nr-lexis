@@ -8,8 +8,6 @@ import {
   InlineNotification,
   FilterableMultiSelect,
   Pagination,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -20,6 +18,7 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import SearchableSelect from '@/components/SearchableSelect'
 import type {
   ProvincialApplicationSearchFilters,
   ProvincialApplicationSearchItem,
@@ -450,45 +449,36 @@ const ProvincialApplicationPage: FC = () => {
               value={filters.packageNumber}
               onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
-            <Select
+            <SearchableSelect
               id="exemptionType"
               labelText="Exemption Type"
               value={filters.exemptionType}
-              onChange={(event) => updateFilter('exemptionType', event.target.value)}
-            >
-              <SelectItem text="All types" value="" />
-              {exemptionTypeOptions.map((option) => (
-                <SelectItem key={option.value} text={option.label} value={option.value} />
-              ))}
-            </Select>
+              placeholder="All types"
+              options={exemptionTypeOptions}
+              onChange={(value) => updateFilter('exemptionType', value)}
+            />
             <TextInput
               id="exemptionNumber"
               labelText="Exemption Number"
               value={filters.exemptionNumber}
               onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
             />
-            <Select
+            <SearchableSelect
               id="applicationStatus"
               labelText="Application Status"
               value={filters.applicationStatus}
-              onChange={(event) => updateFilter('applicationStatus', event.target.value)}
-            >
-              <SelectItem text="All statuses" value="" />
-              {applicationStatusOptions.map((option) => (
-                <SelectItem key={option.value} text={option.label} value={option.value} />
-              ))}
-            </Select>
-            <Select
+              placeholder="All statuses"
+              options={applicationStatusOptions}
+              onChange={(value) => updateFilter('applicationStatus', value)}
+            />
+            <SearchableSelect
               id="productTypeCode"
               labelText="Product Type"
               value={filters.productTypeCode}
-              onChange={(event) => updateFilter('productTypeCode', event.target.value)}
-            >
-              <SelectItem text="All product types" value="" />
-              {productTypeOptions.map((option) => (
-                <SelectItem key={option.value} text={option.label} value={option.value} />
-              ))}
-            </Select>
+              placeholder="All product types"
+              options={productTypeOptions}
+              onChange={(value) => updateFilter('productTypeCode', value)}
+            />
             <FilterableMultiSelect
               id="region"
               titleText="Region"

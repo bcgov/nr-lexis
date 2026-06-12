@@ -4,9 +4,11 @@ import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } f
 import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
+  atMostOneDecimalFieldError,
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  maxNumericValueFieldError,
   positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
@@ -236,7 +238,12 @@ const ProvincialExemptionCreatePage: FC = () => {
         requiredFieldError(form.applicantClientNumber, 'Applicant client number') ?? undefined,
       approvalDate: isoDateFieldError(form.approvalDate) ?? undefined,
       expiryDate: isoDateFieldError(form.expiryDate) ?? undefined,
-      approvedVolume: positiveNumericFieldError(form.approvedVolume) ?? undefined,
+      approvedVolume: firstValidationError(
+        () => requiredFieldError(form.approvedVolume, 'Approved volume'),
+        () => positiveNumericFieldError(form.approvedVolume),
+        () => maxNumericValueFieldError(form.approvedVolume, 9999999.9, 'Approved volume'),
+        () => atMostOneDecimalFieldError(form.approvedVolume, 'Approved volume'),
+      ),
     }),
     [form],
   )
@@ -252,6 +259,9 @@ const ProvincialExemptionCreatePage: FC = () => {
 
   const fieldError = (field: ProvincialExemptionCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
+  const firstSubmitValidationError = Object.values(fieldErrors).find(
+    (error): error is string => !!error,
+  )
 
   const onSaveDraft = () => {
     setStatus(null)
@@ -267,7 +277,7 @@ const ProvincialExemptionCreatePage: FC = () => {
       setStatus({
         kind: 'error',
         title: 'Validation Error',
-        message: 'Please fix validation errors before submitting.',
+        message: firstSubmitValidationError ?? 'Please fix validation errors before submitting.',
       })
       return
     }
@@ -469,7 +479,7 @@ const ProvincialExemptionCreatePage: FC = () => {
             />
             <TextInput
               id="approvedVolume"
-              labelText="Approved Volume (m³)"
+              labelText="Approved Volume (m³) (required)"
               value={form.approvedVolume}
               invalid={!!fieldError('approvedVolume')}
               invalidText={fieldError('approvedVolume')}

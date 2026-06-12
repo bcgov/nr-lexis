@@ -1,6 +1,19 @@
 import apiService from '@/service/api-service'
 
-export type UploadWorkflowType = 'application' | 'exemption' | 'permit' | 'invoice'
+export type UploadWorkflowType = 'application' | 'exemption' | 'permit' | 'invoice' | 'lexisXml'
+
+export type AdminUploadResult = {
+  uploadType?: string
+  fileName?: string
+  fileSize?: number
+  status?: string
+  message?: string
+  applicationNumber?: number
+  packageNumber?: string
+  scaleRows?: number
+  errors?: string[]
+  warnings?: string[]
+}
 
 type UploadRequestBase = {
   file: File
@@ -27,11 +40,14 @@ export type InvoiceUploadRequest = UploadRequestBase & {
   invoiceFeeInLieu: string
 }
 
+export type LexisXmlUploadRequest = UploadRequestBase
+
 type UploadRequestByType = {
   application: ApplicationUploadRequest
   exemption: ExemptionUploadRequest
   permit: PermitUploadRequest
   invoice: InvoiceUploadRequest
+  lexisXml: LexisXmlUploadRequest
 }
 
 const MODERN_UPLOAD_ENDPOINTS: Record<UploadWorkflowType, string> = {
@@ -39,6 +55,7 @@ const MODERN_UPLOAD_ENDPOINTS: Record<UploadWorkflowType, string> = {
   exemption: '/lexis/admin/uploads/exemptions',
   permit: '/lexis/admin/uploads/permits',
   invoice: '/lexis/admin/uploads/invoices',
+  lexisXml: '/lexis/admin/uploads/lexis-xml',
 }
 
 const appendBaseFormData = (formData: FormData, request: UploadRequestBase): void => {
@@ -79,12 +96,15 @@ const buildModernPayload = <TType extends UploadWorkflowType>(
 export const submitAdminUpload = async <TType extends UploadWorkflowType>(
   workflowType: TType,
   request: UploadRequestByType[TType],
-): Promise<void> => {
+): Promise<AdminUploadResult> => {
   const modernEndpoint = MODERN_UPLOAD_ENDPOINTS[workflowType]
   const modernPayload = buildModernPayload(workflowType, request)
-  await apiService.getAxiosInstance().post(modernEndpoint, modernPayload, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  })
+  const response = await apiService
+    .getAxiosInstance()
+    .post<AdminUploadResult>(modernEndpoint, modernPayload, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  return response.data ?? {}
 }

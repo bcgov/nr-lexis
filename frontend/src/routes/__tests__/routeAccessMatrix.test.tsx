@@ -52,6 +52,7 @@ describe('Protected route access matrix', () => {
         '/fileExemptionUpload',
         '/filePermitUpload',
         '/fileInvoiceUpload',
+        'createApplication',
       ],
       requiredActionsMatch: 'any',
     },

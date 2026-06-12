@@ -3,8 +3,6 @@ import {
   Button,
   InlineLoading,
   InlineNotification,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -1230,16 +1228,18 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               onBlur={() => markItemFieldTouched('packageAgeClass')}
               onChange={(value) => setPackageField('ageClass', value)}
             />
-            <Select
+            <SearchableSelect
               id="applicationItemsPackageReprocessed"
               labelText="Reprocessed"
               value={packageForm.reprocessed}
               disabled={!canSaveSelectedPackage}
-              onChange={(event) => setPackageField('reprocessed', event.target.value)}
-            >
-              <SelectItem value="N" text="No" />
-              <SelectItem value="Y" text="Yes" />
-            </Select>
+              placeholder="Select reprocessed status"
+              options={[
+                { value: 'N', label: 'No' },
+                { value: 'Y', label: 'Yes' },
+              ]}
+              onChange={(value) => setPackageField('reprocessed', value)}
+            />
             <TextInput
               id="applicationItemsPackageEndUse"
               labelText="End Use"

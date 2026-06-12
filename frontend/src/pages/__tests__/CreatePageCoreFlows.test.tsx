@@ -299,7 +299,9 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
-    expect(await screen.findByText('Owner client location code is required.')).toBeInTheDocument()
+    expect(await screen.findAllByText('Owner client location code is required.')).not.toHaveLength(
+      0,
+    )
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
@@ -382,11 +384,44 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
 
     expect(
-      await screen.findByText('Application volume must have no more than one decimal place.'),
-    ).toBeInTheDocument()
+      await screen.findAllByText('Application volume must have no more than one decimal place.'),
+    ).not.toHaveLength(0)
     expect(
       screen.getByText('Average log volume must have no more than one decimal place.'),
     ).toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
+  it('shows provincial application species validation when no species are available', async () => {
+    mockedFetchApplicationRemainingSpecies.mockResolvedValue([])
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() =>
+      expect(mockedFetchApplicationRemainingSpecies).toHaveBeenCalledWith('11', 'LOG', []),
+    )
+    await waitFor(() => expect(screen.getByPlaceholderText('No remaining species')).toBeDisabled())
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await userEvent.click(submitButton)
+
+    const speciesErrors = await screen.findAllByText(
+      'At least one application species is required, but no species are available for the selected region and product type.',
+    )
+    expect(speciesErrors.length).toBeGreaterThan(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
@@ -410,7 +445,7 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
-    expect(await screen.findByText('Exemption reason is required.')).toBeInTheDocument()
+    expect(await screen.findAllByText('Exemption reason is required.')).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
@@ -486,6 +521,38 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
 
     expect(screen.getAllByText('Exemption status is required.').length).toBeGreaterThan(0)
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+  })
+
+  it('blocks provincial exemption submit when approved volume exceeds Oracle precision', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/exemption/create?applications=321&ownerClientNumber=00033333&applicantClientNumber=00044444',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Create Provincial Exemption')
+    await userEvent.type(screen.getByLabelText('Exemption Number (required)'), 'EX-779')
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Exemption Type (required)' }),
+      'Section 1',
+    )
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Exemption Status (required)' }),
+      'New',
+    )
+    await userEvent.type(screen.getByLabelText(/Approved Volume/i), '121212122')
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+
+    expect(
+      await screen.findAllByText('Approved volume must be 9999999.9 or less.'),
+    ).not.toHaveLength(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 

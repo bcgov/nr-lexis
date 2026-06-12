@@ -156,6 +156,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
           '/fileExemptionUpload',
           '/filePermitUpload',
           '/fileInvoiceUpload',
+          'createApplication',
         ],
       },
     ],

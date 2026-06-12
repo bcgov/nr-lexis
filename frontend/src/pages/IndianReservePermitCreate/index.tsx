@@ -1,16 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import {
-  Button,
-  Column,
-  Grid,
-  InlineNotification,
-  Select,
-  SelectItem,
-  TextArea,
-  TextInput,
-  Tile,
-} from '@carbon/react'
+import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
   firstValidationError,
@@ -30,6 +21,7 @@ import {
   fetchApplicationClientLocations,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import { submitIndianReservePermitCreate } from '@/service/create-submit-service'
 import { fetchReportOptions, type SearchOption } from '@/service/search-options-service'
 
@@ -245,6 +237,7 @@ const IndianReservePermitCreatePage: FC = () => {
         () => requiredFieldError(form.estimatedShippingDate, 'Estimated shipping date'),
         () => isoDateFieldError(form.estimatedShippingDate),
       ),
+      transportName: requiredFieldError(form.transportName, 'Transport name') ?? undefined,
     }),
     [form],
   )
@@ -277,11 +270,14 @@ const IndianReservePermitCreatePage: FC = () => {
 
   const onSubmit = async () => {
     if (hasValidationError) {
+      const validationMessage =
+        Object.values(fieldErrors).find((error): error is string => !!error) ??
+        'Please fix validation errors before submitting.'
       setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
-        message: 'Please fix validation errors before submitting.',
+        message: validationMessage,
       })
       return
     }
@@ -395,7 +391,7 @@ const IndianReservePermitCreatePage: FC = () => {
                 setForm((current) => ({ ...current, clientNumber: event.target.value }))
               }
             />
-            <Select
+            <SearchableSelect
               id="clientLocation"
               labelText="Client Location (required)"
               value={form.clientLocation}
@@ -403,84 +399,63 @@ const IndianReservePermitCreatePage: FC = () => {
               invalid={!!fieldError('clientLocation')}
               invalidText={fieldError('clientLocation')}
               onBlur={() => markFieldTouched('clientLocation')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, clientLocation: event.target.value }))
-              }
-            >
-              <SelectItem value="" text={clientLocationPlaceholder} />
-              {clientLocations.filter(isSelectableClientLocation).map((location) => (
-                <SelectItem
-                  key={location.locationCode}
-                  value={location.locationCode}
-                  text={location.locationName}
-                />
-              ))}
-            </Select>
-            <Select
+              placeholder={clientLocationPlaceholder}
+              options={clientLocations.filter(isSelectableClientLocation).map((location) => ({
+                value: location.locationCode,
+                label: location.locationName,
+              }))}
+              onChange={(value) => setForm((current) => ({ ...current, clientLocation: value }))}
+            />
+            <SearchableSelect
               id="reserveRegion"
               labelText="Region (required)"
               value={form.region}
+              placeholder="Select region"
+              options={regions}
               invalid={!!fieldError('region')}
               invalidText={fieldError('region')}
               onBlur={() => markFieldTouched('region')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, region: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select region" />
-              {regions.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
-            <TextInput
+              onChange={(value) => setForm((current) => ({ ...current, region: value }))}
+            />
+            <IsoDatePicker
               id="applicationDate"
               labelText="Application Date (YYYY-MM-DD) (required)"
               value={form.applicationDate}
               invalid={!!fieldError('applicationDate')}
               invalidText={fieldError('applicationDate')}
               onBlur={() => markFieldTouched('applicationDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, applicationDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, applicationDate: value }))}
             />
-            <TextInput
+            <IsoDatePicker
               id="permitIssueDate"
               labelText="Permit Issue Date (YYYY-MM-DD) (required)"
               value={form.permitIssueDate}
               invalid={!!fieldError('permitIssueDate')}
               invalidText={fieldError('permitIssueDate')}
               onBlur={() => markFieldTouched('permitIssueDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, permitIssueDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, permitIssueDate: value }))}
             />
-            <TextInput
+            <IsoDatePicker
               id="estimatedShippingDate"
               labelText="Estimated Shipping Date (YYYY-MM-DD) (required)"
               value={form.estimatedShippingDate}
               invalid={!!fieldError('estimatedShippingDate')}
               invalidText={fieldError('estimatedShippingDate')}
               onBlur={() => markFieldTouched('estimatedShippingDate')}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  estimatedShippingDate: event.target.value,
-                }))
+              onChange={(value) =>
+                setForm((current) => ({ ...current, estimatedShippingDate: value }))
               }
             />
-            <Select
+            <SearchableSelect
               id="destinationCountry"
               labelText="Destination Country"
               value={form.destinationCountry}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, destinationCountry: event.target.value }))
+              placeholder="Select country"
+              options={destinationCountries}
+              onChange={(value) =>
+                setForm((current) => ({ ...current, destinationCountry: value }))
               }
-            >
-              <SelectItem value="" text="Select country" />
-              {destinationCountries.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
+            />
             <TextInput
               id="transportTypeCode"
               labelText="Transport Type Code"
@@ -491,25 +466,23 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <TextInput
               id="transportName"
-              labelText="Transport Name"
+              labelText="Transport Name (required)"
               value={form.transportName}
+              invalid={!!fieldError('transportName')}
+              invalidText={fieldError('transportName')}
+              onBlur={() => markFieldTouched('transportName')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, transportName: event.target.value }))
               }
             />
-            <Select
+            <SearchableSelect
               id="portOfExport"
               labelText="Port Of Export"
               value={form.portOfExport}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, portOfExport: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select port" />
-              {portsOfExport.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
+              placeholder="Select port"
+              options={portsOfExport}
+              onChange={(value) => setForm((current) => ({ ...current, portOfExport: value }))}
+            />
             <TextInput
               id="otherPortOfExport"
               labelText="Other Port Of Export"

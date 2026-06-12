@@ -397,6 +397,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       '/fileExemptionUpload',
       '/filePermitUpload',
       '/fileInvoiceUpload',
+      'createApplication',
     ],
     element: (
       <Layout>

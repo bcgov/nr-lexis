@@ -32,6 +32,10 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "COUNT_POS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_PURCHASE_OFFER_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_NUM(?,?)";
+  private static final String FIND_APPLICATION_BY_NUMBER =
+      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
+  private static final String FIND_PACKAGE_BY_NUMBER =
+      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
   private static final String INSERT_PURCHASE_OFFER =
       LEXIS_GROUP_9_PACKAGE + "INSERT_PURCHASE_OFFER(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String UPDATE_PURCHASE_OFFER =
@@ -172,6 +176,30 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
         cs -> bindPurchaseOfferInsert(cs, record),
         24,
         this::mapPurchaseOfferInsertRow);
+  }
+
+  public boolean applicationExists(Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+    return queryCursorSingle(
+            FIND_APPLICATION_BY_NUMBER,
+            cs -> cs.setString(1, applicationNumber.toString()),
+            2,
+            rs -> getLong(rs, "APPLICATION_NUMBER"))
+        .isPresent();
+  }
+
+  public Optional<Long> findPackageApplicationNumber(String packageNumber) {
+    String normalized = trim(packageNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_PACKAGE_BY_NUMBER,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs -> getLong(rs, "APPLICATION_NUMBER"));
   }
 
   public Optional<PurchaseOfferUpdateSourceRow> findUpdateSourceByOfferNumber(Long offerNumber) {

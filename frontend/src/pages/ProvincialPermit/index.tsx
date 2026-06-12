@@ -6,8 +6,6 @@ import {
   Grid,
   FilterableMultiSelect,
   Pagination,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -18,6 +16,7 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import SearchableSelect from '@/components/SearchableSelect'
 import type {
   ProvincialPermitSearchFilters,
   ProvincialPermitSearchRequest,
@@ -396,17 +395,14 @@ const ProvincialPermitPage: FC = () => {
               invalidText="Date must be YYYY-MM-DD"
               onChange={(event) => updateFilter('issuedToDate', event.target.value)}
             />
-            <Select
+            <SearchableSelect
               id="permitStatus"
               labelText="Permit Status"
               value={filters.permitStatus}
-              onChange={(event) => updateFilter('permitStatus', event.target.value)}
-            >
-              <SelectItem text="All statuses" value="" />
-              {permitStatusOptions.map((option) => (
-                <SelectItem key={option.value} text={option.label} value={option.value} />
-              ))}
-            </Select>
+              placeholder="All statuses"
+              options={permitStatusOptions}
+              onChange={(value) => updateFilter('permitStatus', value)}
+            />
             <TextInput
               id="permitNumber"
               labelText="Permit Number"

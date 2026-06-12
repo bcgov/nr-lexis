@@ -115,6 +115,9 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
     if (regionNumber == null) {
       errors.add("A valid region is required.");
     }
+    if (trimToNull(request.transportName()) == null) {
+      errors.add("A valid transport name is required.");
+    }
     if (!errors.isEmpty()) {
       return failure(errors, submittedPermitNumber);
     }

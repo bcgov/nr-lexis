@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.offer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -180,6 +181,7 @@ class PurchaseOfferOracleServiceTest {
 
   @Test
   void addOfferShouldInsertWhenRequestIsValid() {
+    when(repository.applicationExists(1000456L)).thenReturn(true);
     when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
         .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
 
@@ -233,7 +235,47 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void addOfferShouldRejectMissingApplicationBeforeOracleInsert() {
+    when(repository.applicationExists(2L)).thenReturn(false);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(2L, null), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Application 2 does not exist.");
+    verify(repository, never()).insertOffer(any());
+  }
+
+  @Test
+  void addOfferShouldRejectUnknownPackageBeforeOracleInsert() {
+    when(repository.applicationExists(1000456L)).thenReturn(true);
+    when(repository.findPackageApplicationNumber("PKG-404")).thenReturn(Optional.empty());
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, "PKG-404"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Package PKG-404 does not exist.");
+    verify(repository, never()).insertOffer(any());
+  }
+
+  @Test
+  void addOfferShouldRejectPackageForDifferentApplicationBeforeOracleInsert() {
+    when(repository.applicationExists(1000456L)).thenReturn(true);
+    when(repository.findPackageApplicationNumber("PKG-903")).thenReturn(Optional.of(1000457L));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, "PKG-903"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Package PKG-903 does not belong to application 1000456.");
+    verify(repository, never()).insertOffer(any());
+  }
+
+  @Test
   void addOfferShouldDefaultEntryUserWhenPrincipalIsMissing() {
+    when(repository.applicationExists(1000456L)).thenReturn(true);
     when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
         .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
 
@@ -506,6 +548,31 @@ class PurchaseOfferOracleServiceTest {
         listingDate,
         "R2",
         LocalDate.of(2026, 3, 15));
+  }
+
+  private PurchaseOfferService.CreateOfferRequest validCreateRequest(
+      Long applicationNumber, String packageNumber) {
+    return new PurchaseOfferService.CreateOfferRequest(
+        applicationNumber,
+        null,
+        packageNumber,
+        "Example Lumber",
+        "Alex Example",
+        12500.25d,
+        LocalDate.of(2026, 3, 2),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "00077881",
+        "Port Moody",
+        null,
+        null);
   }
 
   private static <T> Page<T> page(List<T> content, long total) {

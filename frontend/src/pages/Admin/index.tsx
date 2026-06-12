@@ -22,7 +22,7 @@ type LegacyLaunchTool = {
   label: string
   requiredAction: string
   description: string
-  reactUploadType?: 'application' | 'exemption' | 'permit' | 'invoice'
+  reactUploadType?: 'application' | 'exemption' | 'permit' | 'invoice' | 'lexisXml'
   reactPath?: string
 }
 
@@ -51,6 +51,13 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
 ]
 
 const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
+  {
+    id: 'lexisXmlUpload',
+    label: 'ESF LEXIS XML Upload',
+    requiredAction: 'createApplication',
+    description: 'Import ESF LEXIS application XML.',
+    reactUploadType: 'lexisXml',
+  },
   {
     id: 'fileApplicationUpload',
     label: 'Application Upload',

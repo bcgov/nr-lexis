@@ -8,8 +8,6 @@ import {
   InlineNotification,
   FilterableMultiSelect,
   Pagination,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -20,6 +18,7 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import SearchableSelect from '@/components/SearchableSelect'
 import type {
   ProvincialExemptionSearchFilters,
   ProvincialExemptionSearchItem,
@@ -462,28 +461,22 @@ const ProvincialExemptionPage: FC = () => {
               invalidText="Date must be YYYY-MM-DD"
               onChange={(event) => updateFilter('listToDate', event.target.value)}
             />
-            <Select
+            <SearchableSelect
               id="exemptionTypeCode"
               labelText="Exemption Type"
               value={filters.exemptionTypeCode}
-              onChange={(event) => updateFilter('exemptionTypeCode', event.target.value)}
-            >
-              <SelectItem text="All types" value="" />
-              {exemptionTypeOptions.map((option) => (
-                <SelectItem key={option.value || 'all'} text={option.label} value={option.value} />
-              ))}
-            </Select>
-            <Select
+              placeholder="All types"
+              options={exemptionTypeOptions}
+              onChange={(value) => updateFilter('exemptionTypeCode', value)}
+            />
+            <SearchableSelect
               id="exemptionStatusCode"
               labelText="Exemption Status"
               value={filters.exemptionStatusCode}
-              onChange={(event) => updateFilter('exemptionStatusCode', event.target.value)}
-            >
-              <SelectItem text="All statuses" value="" />
-              {exemptionStatusOptions.map((option) => (
-                <SelectItem key={option.value || 'all'} text={option.label} value={option.value} />
-              ))}
-            </Select>
+              placeholder="All statuses"
+              options={exemptionStatusOptions}
+              onChange={(value) => updateFilter('exemptionStatusCode', value)}
+            />
             <TextInput
               id="applicantClientNumber"
               labelText="Applicant Client Number"

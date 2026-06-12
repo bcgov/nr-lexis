@@ -8,8 +8,6 @@ import {
   InlineNotification,
   FilterableMultiSelect,
   Pagination,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -21,6 +19,7 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import SearchableSelect from '@/components/SearchableSelect'
 import type {
   ApplicationReviewSearchFilters,
   ApplicationReviewSearchRequest,
@@ -645,17 +644,14 @@ const ProvincialReviewPage: FC = () => {
               value={filters.applicationNumber}
               onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
-            <Select
+            <SearchableSelect
               id="productTypeCode"
               labelText="Product Type"
               value={filters.productTypeCode}
-              onChange={(event) => updateFilter('productTypeCode', event.target.value)}
-            >
-              <SelectItem text="All product types" value="" />
-              {productTypeOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
+              placeholder="All product types"
+              options={productTypeOptions}
+              onChange={(value) => updateFilter('productTypeCode', value)}
+            />
             <FilterableMultiSelect
               id="region"
               titleText="Region"
@@ -727,24 +723,21 @@ const ProvincialReviewPage: FC = () => {
             </Button>
           </div>
           <div className="legacy-search-grid">
-            <Select
+            <SearchableSelect
               id="reviewStatusCode"
               labelText="Update Status Code"
               value={selectedStatusCode}
-              onChange={(event) => {
+              placeholder="Select status"
+              options={reviewStatusOptions}
+              onChange={(value) => {
                 setReviewActionStatus(null)
                 setShowStatusValidationErrors(false)
-                setSelectedStatusCode(event.target.value)
+                setSelectedStatusCode(value)
               }}
               invalid={!!statusFieldError('reviewStatusCode')}
               invalidText={statusFieldError('reviewStatusCode')}
               onBlur={() => markStatusFieldTouched('reviewStatusCode')}
-            >
-              <SelectItem value="" text="Select status" />
-              {reviewStatusOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
+            />
             <TextInput
               id="reviewStatusEmail"
               labelText="Client Email Address (required for status email)"

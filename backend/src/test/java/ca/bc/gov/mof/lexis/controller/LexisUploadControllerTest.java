@@ -6,9 +6,12 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
+import ca.bc.gov.mof.lexis.dto.upload.LexisXmlImportResultDto;
+import ca.bc.gov.mof.lexis.service.esf.LexisEsfXmlImportService;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,11 +30,13 @@ import org.springframework.web.multipart.MultipartFile;
 class LexisUploadControllerTest {
 
   @Mock private ObjectProvider<LexisUploadService> uploadServiceProvider;
+  @Mock private ObjectProvider<LexisEsfXmlImportService> esfXmlImportServiceProvider;
   @Mock private LexisUploadService uploadService;
+  @Mock private LexisEsfXmlImportService esfXmlImportService;
 
   @Test
   void uploadShouldReturnBadRequestForEmptyFile() {
-    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    LexisUploadController controller = controller();
     MultipartFile file = new MockMultipartFile("file", "empty.csv", "text/csv", new byte[0]);
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -44,7 +49,7 @@ class LexisUploadControllerTest {
   @Test
   void uploadShouldReturnNoContentWhenServiceMissing() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(null);
-    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    LexisUploadController controller = controller();
     MultipartFile file = sampleFile("application.csv");
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -57,7 +62,7 @@ class LexisUploadControllerTest {
   @Test
   void fileApplicationUploadShouldDelegateToService() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
-    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    LexisUploadController controller = controller();
     MultipartFile file = sampleFile("application.csv");
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
@@ -77,7 +82,7 @@ class LexisUploadControllerTest {
   @Test
   void fileApplicationUploadShouldAcceptReactFormFileField() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
-    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    LexisUploadController controller = controller();
     MultipartFile formFile = sampleFile("application.pdf");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("application", "application.pdf", formFile.getSize(), "accepted", "queued");
@@ -95,7 +100,7 @@ class LexisUploadControllerTest {
   @Test
   void fileApplicationUploadShouldReturnUnprocessableEntityWhenPersistenceFails() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
-    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    LexisUploadController controller = controller();
     MultipartFile formFile = sampleFile("application.pdf");
     when(uploadService.uploadApplication(formFile, 7000123L, "App file", null))
         .thenReturn(Optional.empty());
@@ -110,7 +115,7 @@ class LexisUploadControllerTest {
   @Test
   void filePermitUploadShouldDelegateToService() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
-    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    LexisUploadController controller = controller();
     MultipartFile file = sampleFile("permit.csv");
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
@@ -130,7 +135,7 @@ class LexisUploadControllerTest {
   @Test
   void fileExemptionUploadShouldDelegateToService() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
-    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    LexisUploadController controller = controller();
     MultipartFile file = sampleFile("exemption.csv");
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
@@ -150,7 +155,7 @@ class LexisUploadControllerTest {
   @Test
   void fileInvoiceUploadShouldDelegateToService() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
-    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    LexisUploadController controller = controller();
     MultipartFile file = sampleFile("invoice.csv");
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
@@ -200,7 +205,7 @@ class LexisUploadControllerTest {
 
   @Test
   void filePermitUploadShouldReturnBadRequestWhenPermitNumberMissing() {
-    LexisUploadController controller = new LexisUploadController(uploadServiceProvider);
+    LexisUploadController controller = controller();
     MultipartFile file = sampleFile("permit.csv");
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -210,11 +215,79 @@ class LexisUploadControllerTest {
     verifyNoInteractions(uploadService);
   }
 
+  @Test
+  void lexisXmlUploadShouldDelegateToImportService() {
+    when(esfXmlImportServiceProvider.getIfAvailable()).thenReturn(esfXmlImportService);
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    LexisXmlImportResultDto payload =
+        new LexisXmlImportResultDto(
+            "lexisXml",
+            "submission.xml",
+            file.getSize(),
+            "accepted",
+            "created",
+            9001L,
+            "PKG-1",
+            3,
+            List.of(),
+            List.of());
+    when(esfXmlImportService.importLexisXml(file, "jsmith")).thenReturn(payload);
+
+    ResponseEntity<LexisXmlImportResultDto> response =
+        controller.lexisXmlUpload(file, null, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(payload);
+    verify(esfXmlImportService).importLexisXml(file, "jsmith");
+  }
+
+  @Test
+  void lexisXmlUploadShouldReturnUnprocessableEntityForRejectedImport() {
+    when(esfXmlImportServiceProvider.getIfAvailable()).thenReturn(esfXmlImportService);
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+    LexisXmlImportResultDto payload =
+        new LexisXmlImportResultDto(
+            "lexisXml",
+            "submission.xml",
+            file.getSize(),
+            "rejected",
+            "rejected",
+            null,
+            null,
+            0,
+            List.of("Invalid XML"),
+            List.of());
+    when(esfXmlImportService.importLexisXml(file, null)).thenReturn(payload);
+
+    ResponseEntity<LexisXmlImportResultDto> response =
+        controller.lexisXmlUpload(file, null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(response.getBody()).isEqualTo(payload);
+  }
+
   private MultipartFile sampleFile(String fileName) {
     return new MockMultipartFile(
         "file",
         fileName,
         "text/csv",
         "col1,col2\nvalue1,value2\n".getBytes(StandardCharsets.UTF_8));
+  }
+
+  private MultipartFile sampleXmlFile() {
+    return new MockMultipartFile(
+        "formFile",
+        "submission.xml",
+        "application/xml",
+        "<esf:ESFSubmission xmlns:esf=\"http://www.for.gov.bc.ca/schema/esf\"/>"
+            .getBytes(StandardCharsets.UTF_8));
+  }
+
+  private LexisUploadController controller() {
+    return new LexisUploadController(uploadServiceProvider, esfXmlImportServiceProvider);
   }
 }

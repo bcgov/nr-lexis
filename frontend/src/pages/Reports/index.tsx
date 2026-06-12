@@ -6,8 +6,6 @@ import {
   Grid,
   InlineNotification,
   FilterableMultiSelect,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -18,6 +16,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import SearchableSelect from '@/components/SearchableSelect'
 import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import { runReport } from '@/service/report-service'
@@ -796,7 +795,7 @@ const buildEffectiveReportValues = (
     }
 
     const options = optionsByKey[field.optionKey ?? field.key] ?? field.options ?? []
-    if (options.length > 0 && !options.some((option) => option.value === '')) {
+    if (options.length > 0 && options[0].value !== '') {
       effectiveValues[field.key] = options[0].value
     }
   })
@@ -1267,19 +1266,19 @@ const ReportsPage: FC = () => {
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
             />
-            <Select
+            <SearchableSelect
               id="reportCategory"
               labelText="Category"
               value={selectedCategory}
-              onChange={(event) =>
-                setSelectedCategory(event.target.value as 'ALL' | ReportDefinition['category'])
-              }
-            >
-              <SelectItem value="ALL" text="All categories" />
-              <SelectItem value="Provincial" text="Provincial" />
-              <SelectItem value="Federal" text="Federal" />
-              <SelectItem value="Cross-Module" text="Cross-Module" />
-            </Select>
+              placeholder="All categories"
+              options={[
+                { value: 'ALL', label: 'All categories' },
+                { value: 'Provincial', label: 'Provincial' },
+                { value: 'Federal', label: 'Federal' },
+                { value: 'Cross-Module', label: 'Cross-Module' },
+              ]}
+              onChange={(value) => setSelectedCategory((value || 'ALL') as ReportCategoryFilter)}
+            />
           </div>
           <div className="legacy-search-actions">
             <Button kind="ghost" size="sm" onClick={onResetReportFilters}>
@@ -1343,25 +1342,18 @@ const ReportsPage: FC = () => {
               </p>
               <div className="legacy-search-grid">
                 {selectedReport.actionMappings.length > 1 && (
-                  <Select
+                  <SearchableSelect
                     id="reportActionMapping"
                     labelText="Report Variant"
                     value={selectedActionMapping}
-                    onChange={(event) =>
+                    options={selectedReport.actionMappings}
+                    onChange={(value) =>
                       setSelectedActionById((current) => ({
                         ...current,
-                        [selectedReport.id]: event.target.value,
+                        [selectedReport.id]: value || selectedReport.actionMappings[0].value,
                       }))
                     }
-                  >
-                    {selectedReport.actionMappings.map((actionMapping) => (
-                      <SelectItem
-                        key={actionMapping.value}
-                        value={actionMapping.value}
-                        text={actionMapping.label}
-                      />
-                    ))}
-                  </Select>
+                  />
                 )}
                 {selectedReport.fields.map((field) => {
                   const defaultMultiselectValue =
@@ -1373,13 +1365,15 @@ const ReportsPage: FC = () => {
                     field.defaultValue ??
                     (defaultMultiselectValue || (field.key === 'outputFormat' ? 'PDF' : ''))
                   const dynamicOptions = reportFieldOptionsByKey[field.optionKey ?? field.key] ?? []
+                  const selectOptions =
+                    dynamicOptions.length > 0 ? dynamicOptions : (field.options ?? [])
                   const resolvedCurrentValue =
                     field.type === 'select' &&
                     field.key !== 'outputFormat' &&
                     !currentValue &&
-                    dynamicOptions.length > 0 &&
-                    !dynamicOptions.some((option) => option.value === '')
-                      ? dynamicOptions[0].value
+                    selectOptions.length > 0 &&
+                    selectOptions[0].value !== ''
+                      ? selectOptions[0].value
                       : currentValue
 
                   if (field.type === 'multiselect' && dynamicOptions.length > 0) {
@@ -1422,9 +1416,9 @@ const ReportsPage: FC = () => {
                       Boolean(reportOptionSourcesByKey.report?.allDestinationCountries.length) &&
                       !expandedDestinationCountryReports[selectedReport.id]
                     const providedOptions =
-                      dynamicOptions.length > 0
-                        ? dynamicOptions
-                        : (field.options ?? [{ value: '', label: 'Select an option' }])
+                      selectOptions.length > 0
+                        ? selectOptions
+                        : [{ value: '', label: 'Select an option' }]
                     const hasCurrentValue = providedOptions.some(
                       (option) => option.value === resolvedCurrentValue,
                     )
@@ -1441,20 +1435,13 @@ const ReportsPage: FC = () => {
                         : providedOptions
                     return (
                       <div key={field.key}>
-                        <Select
+                        <SearchableSelect
                           id={`${selectedReport.id}-${field.key}`}
                           labelText={field.label}
                           value={resolvedCurrentValue}
-                          onChange={(event) => onUpdateField(field.key, event.target.value)}
-                        >
-                          {resolvedOptions.map((option) => (
-                            <SelectItem
-                              key={option.value}
-                              value={option.value}
-                              text={option.label}
-                            />
-                          ))}
-                        </Select>
+                          options={resolvedOptions}
+                          onChange={(value) => onUpdateField(field.key, value)}
+                        />
                         {canExpandDestinationCountries && (
                           <Button
                             kind="ghost"

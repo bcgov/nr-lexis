@@ -1,11 +1,14 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
+import ca.bc.gov.mof.lexis.dto.upload.LexisXmlImportResultDto;
+import ca.bc.gov.mof.lexis.service.esf.LexisEsfXmlImportService;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
 import java.math.BigDecimal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -24,9 +27,13 @@ public class LexisUploadController {
   private static final Logger LOGGER = LoggerFactory.getLogger(LexisUploadController.class);
 
   private final ObjectProvider<LexisUploadService> uploadServiceProvider;
+  private final ObjectProvider<LexisEsfXmlImportService> esfXmlImportServiceProvider;
 
-  public LexisUploadController(ObjectProvider<LexisUploadService> uploadServiceProvider) {
+  public LexisUploadController(
+      ObjectProvider<LexisUploadService> uploadServiceProvider,
+      ObjectProvider<LexisEsfXmlImportService> esfXmlImportServiceProvider) {
     this.uploadServiceProvider = uploadServiceProvider;
+    this.esfXmlImportServiceProvider = esfXmlImportServiceProvider;
   }
 
   @PostMapping(
@@ -168,6 +175,29 @@ public class LexisUploadController {
             resolveEntryUserId(authentication))
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
+  }
+
+  @PostMapping(
+      value = {"/uploads/lexis-xml", "/admin/uploads/lexis-xml"},
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity<LexisXmlImportResultDto> lexisXmlUpload(
+      @RequestParam(name = "file", required = false) MultipartFile file,
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
+      Authentication authentication) {
+    MultipartFile uploadFile = firstNonNull(file, formFile);
+    if (uploadFile == null || uploadFile.isEmpty()) {
+      return ResponseEntity.badRequest().build();
+    }
+
+    LexisEsfXmlImportService service = esfXmlImportServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("ESF XML import service unavailable - returning no content for lexisXmlUpload");
+      return ResponseEntity.noContent().build();
+    }
+
+    LexisXmlImportResultDto result = service.importLexisXml(uploadFile, resolveEntryUserId(authentication));
+    HttpStatus status = "accepted".equalsIgnoreCase(result.status()) ? HttpStatus.OK : HttpStatus.UNPROCESSABLE_ENTITY;
+    return ResponseEntity.status(status).body(result);
   }
 
   private String resolveEntryUserId(Authentication authentication) {

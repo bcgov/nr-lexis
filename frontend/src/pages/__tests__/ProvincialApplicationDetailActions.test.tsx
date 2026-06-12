@@ -120,6 +120,17 @@ const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) =
   await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
 }
 
+const clearComboBox = async (combobox: HTMLElement) => {
+  const clearButton = combobox
+    .closest('.cds--combo-box')
+    ?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear selected item"], button[title="Clear selected item"]',
+    )
+
+  expect(clearButton).toBeTruthy()
+  await userEvent.click(clearButton as HTMLButtonElement)
+}
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
@@ -1666,8 +1677,8 @@ describe('Provincial Application Detail Document Actions', () => {
     await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Region'), 'Interior')
     await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Product Type'), 'Timber')
     await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Growth Type'), 'Second Growth')
-    await userEvent.selectOptions(summaryControls.getByLabelText('Jurisdiction'), 'F')
-    await userEvent.selectOptions(summaryControls.getByLabelText('OIC Indicator'), 'Y')
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Jurisdiction'), 'F - Federal')
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'OIC Indicator'), 'Y - Yes')
     await chooseComboBoxOption(
       getSummaryComboBox(summaryControls, 'Owner Client Location'),
       'Owner Alternate Location',
@@ -1958,7 +1969,10 @@ describe('Provincial Application Detail Document Actions', () => {
         'agent@example.test',
       )
     })
-    await userEvent.selectOptions(within(reviewTile).getByLabelText('Application Status'), 'REJ')
+    await chooseComboBoxOption(
+      within(reviewTile).getByRole('combobox', { name: 'Application Status' }),
+      'Rejected',
+    )
     await userEvent.type(within(reviewTile).getByLabelText('Review Remark'), 'Needs correction')
     await userEvent.click(
       within(reviewTile).getByRole('button', { name: 'Update Status and Send Email' }),
@@ -1997,7 +2011,7 @@ describe('Provincial Application Detail Document Actions', () => {
 
     expect(await screen.findByText('Application Review')).toBeInTheDocument()
     const reviewTile = getApplicationReviewTile()
-    await userEvent.selectOptions(within(reviewTile).getByLabelText('Application Status'), '')
+    await clearComboBox(within(reviewTile).getByRole('combobox', { name: 'Application Status' }))
     await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update Review Status' }))
 
     expect(
@@ -2020,7 +2034,10 @@ describe('Provincial Application Detail Document Actions', () => {
 
     expect(await screen.findByText('Application Review')).toBeInTheDocument()
     const reviewTile = getApplicationReviewTile()
-    await userEvent.selectOptions(within(reviewTile).getByLabelText('Application Status'), 'REJ')
+    await chooseComboBoxOption(
+      within(reviewTile).getByRole('combobox', { name: 'Application Status' }),
+      'Rejected',
+    )
     await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update Review Status' }))
 
     expect(
