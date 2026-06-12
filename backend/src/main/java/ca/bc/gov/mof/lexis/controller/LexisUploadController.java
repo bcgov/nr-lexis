@@ -62,7 +62,7 @@ public class LexisUploadController {
             applicationNumber,
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
-        .map(ResponseEntity::ok)
+        .map(this::uploadResponse)
         .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
   }
 
@@ -92,7 +92,7 @@ public class LexisUploadController {
             permitNumber,
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
-        .map(ResponseEntity::ok)
+        .map(this::uploadResponse)
         .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
   }
 
@@ -125,7 +125,7 @@ public class LexisUploadController {
             exemptionNumber,
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
-        .map(ResponseEntity::ok)
+        .map(this::uploadResponse)
         .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
   }
 
@@ -173,7 +173,7 @@ public class LexisUploadController {
             firstNonNull(invoiceConversionRate, conversionRateAlias),
             firstNonNull(invoiceFeeInLieu, feeInLieuAlias),
             resolveEntryUserId(authentication))
-        .map(ResponseEntity::ok)
+        .map(this::uploadResponse)
         .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
   }
 
@@ -214,6 +214,12 @@ public class LexisUploadController {
       return principalName.substring(slash + 1);
     }
     return principalName;
+  }
+
+  private ResponseEntity<LexisUploadResultDto> uploadResponse(LexisUploadResultDto result) {
+    HttpStatus status =
+        "accepted".equalsIgnoreCase(result.status()) ? HttpStatus.OK : HttpStatus.UNPROCESSABLE_ENTITY;
+    return ResponseEntity.status(status).body(result);
   }
 
   private String firstNonBlank(String primary, String alias) {
