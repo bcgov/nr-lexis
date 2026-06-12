@@ -88,7 +88,7 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
-  it('submits ESF LEXIS XML import without a target number', async () => {
+  it('submits LEXIS XML import without a target number', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
     } as any)
@@ -107,8 +107,8 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.queryByLabelText('Application Number')).not.toBeInTheDocument()
 
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
-    await userEvent.upload(screen.getByLabelText('LEXIS XML File'), file)
-    await userEvent.type(screen.getByLabelText('Document Description'), 'ESF XML')
+    await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
+    await userEvent.type(screen.getByLabelText('Document Description'), 'LEXIS XML')
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
     await waitFor(() => {
@@ -116,7 +116,7 @@ describe('Admin upload workflow smoke', () => {
         'lexisXml',
         expect.objectContaining({
           file,
-          fileDescription: 'ESF XML',
+          fileDescription: 'LEXIS XML',
         }),
       )
     })

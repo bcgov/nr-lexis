@@ -33,7 +33,7 @@ type UploadWorkflowDefinition = {
 const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   {
     type: 'lexisXml',
-    label: 'ESF LEXIS XML Upload',
+    label: 'LEXIS XML Upload',
     requiredAction: 'createApplication',
     numberFieldLabel: '',
     numberFieldPlaceholder: '',
@@ -157,7 +157,7 @@ const AdminUploadsPage: FC = () => {
       uploadFile: selectedFile
         ? undefined
         : selectedWorkflowType === 'lexisXml'
-          ? 'Choose a LEXIS XML file to import.'
+          ? 'Choose a LEXIS XML or ZIP file to import.'
           : 'Choose a file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
@@ -456,9 +456,13 @@ const AdminUploadsPage: FC = () => {
             <TextInput
               id="uploadFile"
               type="file"
-              labelText={selectedWorkflowType === 'lexisXml' ? 'LEXIS XML File' : 'Document File'}
+              labelText={
+                selectedWorkflowType === 'lexisXml' ? 'LEXIS XML or ZIP File' : 'Document File'
+              }
               accept={
-                selectedWorkflowType === 'lexisXml' ? '.xml,application/xml,text/xml' : undefined
+                selectedWorkflowType === 'lexisXml'
+                  ? '.xml,.zip,application/xml,text/xml,application/zip'
+                  : undefined
               }
               invalid={!!fieldError('uploadFile')}
               invalidText={fieldError('uploadFile')}

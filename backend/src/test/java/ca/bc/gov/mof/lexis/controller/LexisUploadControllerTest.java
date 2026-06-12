@@ -7,8 +7,8 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.dto.upload.LexisXmlImportResultDto;
-import ca.bc.gov.mof.lexis.service.esf.LexisEsfXmlImportService;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
+import ca.bc.gov.mof.lexis.service.upload.LexisXmlImportService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -30,9 +30,9 @@ import org.springframework.web.multipart.MultipartFile;
 class LexisUploadControllerTest {
 
   @Mock private ObjectProvider<LexisUploadService> uploadServiceProvider;
-  @Mock private ObjectProvider<LexisEsfXmlImportService> esfXmlImportServiceProvider;
+  @Mock private ObjectProvider<LexisXmlImportService> xmlImportServiceProvider;
   @Mock private LexisUploadService uploadService;
-  @Mock private LexisEsfXmlImportService esfXmlImportService;
+  @Mock private LexisXmlImportService xmlImportService;
 
   @Test
   void uploadShouldReturnBadRequestForEmptyFile() {
@@ -217,7 +217,7 @@ class LexisUploadControllerTest {
 
   @Test
   void lexisXmlUploadShouldDelegateToImportService() {
-    when(esfXmlImportServiceProvider.getIfAvailable()).thenReturn(esfXmlImportService);
+    when(xmlImportServiceProvider.getIfAvailable()).thenReturn(xmlImportService);
     LexisUploadController controller = controller();
     MultipartFile file = sampleXmlFile();
     TestingAuthenticationToken authentication =
@@ -234,19 +234,19 @@ class LexisUploadControllerTest {
             3,
             List.of(),
             List.of());
-    when(esfXmlImportService.importLexisXml(file, "jsmith")).thenReturn(payload);
+    when(xmlImportService.importLexisXml(file, "jsmith")).thenReturn(payload);
 
     ResponseEntity<LexisXmlImportResultDto> response =
         controller.lexisXmlUpload(file, null, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(esfXmlImportService).importLexisXml(file, "jsmith");
+    verify(xmlImportService).importLexisXml(file, "jsmith");
   }
 
   @Test
   void lexisXmlUploadShouldReturnUnprocessableEntityForRejectedImport() {
-    when(esfXmlImportServiceProvider.getIfAvailable()).thenReturn(esfXmlImportService);
+    when(xmlImportServiceProvider.getIfAvailable()).thenReturn(xmlImportService);
     LexisUploadController controller = controller();
     MultipartFile file = sampleXmlFile();
     LexisXmlImportResultDto payload =
@@ -261,7 +261,7 @@ class LexisUploadControllerTest {
             0,
             List.of("Invalid XML"),
             List.of());
-    when(esfXmlImportService.importLexisXml(file, null)).thenReturn(payload);
+    when(xmlImportService.importLexisXml(file, null)).thenReturn(payload);
 
     ResponseEntity<LexisXmlImportResultDto> response =
         controller.lexisXmlUpload(file, null, null);
@@ -288,6 +288,6 @@ class LexisUploadControllerTest {
   }
 
   private LexisUploadController controller() {
-    return new LexisUploadController(uploadServiceProvider, esfXmlImportServiceProvider);
+    return new LexisUploadController(uploadServiceProvider, xmlImportServiceProvider);
   }
 }

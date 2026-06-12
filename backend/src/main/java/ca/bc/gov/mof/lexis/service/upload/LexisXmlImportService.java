@@ -1,4 +1,4 @@
-package ca.bc.gov.mof.lexis.service.esf;
+package ca.bc.gov.mof.lexis.service.upload;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisXmlImportResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
@@ -8,6 +8,8 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.Pack
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackagePersistenceResult;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScaleMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScalePersistenceResult;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -17,6 +19,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,13 +36,16 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 @Service
-public class LexisEsfXmlImportService {
+public class LexisXmlImportService {
 
   private static final String ESF_NAMESPACE = "http://www.for.gov.bc.ca/schema/esf";
   private static final String LEXIS_NAMESPACE = "http://www.for.gov.bc.ca/schema/lexis";
   private static final String UPLOAD_TYPE = "lexisXml";
   private static final String ACCEPTED = "accepted";
   private static final String REJECTED = "rejected";
+  private static final String XML_EXTENSION = ".xml";
+  private static final String ZIP_EXTENSION = ".zip";
+  private static final long MAX_XML_BYTES = 20L * 1024L * 1024L;
   private static final long DEFAULT_TERM_DAYS = 180L;
   private static final String DEFAULT_PACKAGE_STATUS = "ACT";
   private static final String DEFAULT_REPROCESSED_INDICATOR = "N";
@@ -64,12 +71,12 @@ public class LexisEsfXmlImportService {
   private final Clock clock;
 
   @Autowired
-  public LexisEsfXmlImportService(
+  public LexisXmlImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider) {
     this(applicationDetailsServiceProvider, Clock.systemDefaultZone());
   }
 
-  LexisEsfXmlImportService(
+  LexisXmlImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider, Clock clock) {
     this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
     this.clock = clock;
@@ -82,17 +89,12 @@ public class LexisEsfXmlImportService {
     if (file == null || file.isEmpty()) {
       return rejected(fileName, fileSize, List.of("Choose a LEXIS XML file to import."), List.of());
     }
-    if (!fileName.toLowerCase(Locale.ROOT).endsWith(".xml")) {
-      return rejected(
-          fileName,
-          fileSize,
-          List.of("The ESF LEXIS import file must be an XML file."),
-          List.of());
-    }
 
     ParsedSubmission submission;
+    UploadedLexisXml uploadedXml;
     try {
-      submission = parse(file);
+      uploadedXml = readUploadedLexisXml(file);
+      submission = parse(uploadedXml.xmlBytes());
     } catch (LexisXmlImportException ex) {
       return rejected(fileName, fileSize, ex.errors(), List.of());
     } catch (Exception ex) {
@@ -105,15 +107,15 @@ public class LexisEsfXmlImportService {
       return rejected(
           fileName,
           fileSize,
-          List.of("Application persistence is unavailable for ESF XML import."),
+          List.of("Application persistence is unavailable for LEXIS XML import."),
           List.of());
     }
 
     LocalDate importDate = LocalDate.now(clock);
-    List<String> warnings = new ArrayList<>();
+    List<String> warnings = new ArrayList<>(uploadedXml.warnings());
     if (submission.applicationStatusCode() != null) {
       warnings.add(
-          "ESF application status "
+          "Source application status "
               + submission.applicationStatusCode()
               + " was ignored; imported applications are created as new.");
     }
@@ -177,10 +179,97 @@ public class LexisEsfXmlImportService {
         warnings);
   }
 
-  private ParsedSubmission parse(MultipartFile file) throws Exception {
+  private UploadedLexisXml readUploadedLexisXml(MultipartFile file) throws Exception {
+    String fileName = resolveFileName(file);
+    String lowerFileName = fileName.toLowerCase(Locale.ROOT);
+    if (lowerFileName.endsWith(XML_EXTENSION)) {
+      try (InputStream inputStream = file.getInputStream()) {
+        return new UploadedLexisXml(readBounded(inputStream), List.of());
+      }
+    }
+    if (lowerFileName.endsWith(ZIP_EXTENSION)) {
+      return readZippedLexisXml(file, fileName);
+    }
+    throw new LexisXmlImportException(
+        List.of("The LEXIS import file must be an XML file or a ZIP file containing one XML file."));
+  }
+
+  private UploadedLexisXml readZippedLexisXml(MultipartFile file, String fileName) throws Exception {
+    List<String> xmlEntryNames = new ArrayList<>();
+    List<String> unexpectedEntryNames = new ArrayList<>();
+    byte[] xmlBytes = null;
+
+    try (ZipInputStream zipInputStream = new ZipInputStream(file.getInputStream())) {
+      ZipEntry entry;
+      while ((entry = zipInputStream.getNextEntry()) != null) {
+        String entryName = trim(entry.getName());
+        if (entry.isDirectory() || isIgnoredZipEntry(entryName)) {
+          zipInputStream.closeEntry();
+          continue;
+        }
+        if (entryName == null || !entryName.toLowerCase(Locale.ROOT).endsWith(XML_EXTENSION)) {
+          unexpectedEntryNames.add(entryName == null ? "(unnamed file)" : entryName);
+          zipInputStream.closeEntry();
+          continue;
+        }
+        xmlEntryNames.add(entryName);
+        if (xmlBytes == null) {
+          xmlBytes = readBounded(zipInputStream);
+        }
+        zipInputStream.closeEntry();
+      }
+    }
+
+    if (!unexpectedEntryNames.isEmpty()) {
+      throw new LexisXmlImportException(
+          List.of("The ZIP file must contain only one LEXIS XML file."));
+    }
+    if (xmlEntryNames.isEmpty() || xmlBytes == null) {
+      throw new LexisXmlImportException(
+          List.of("The ZIP file must contain one LEXIS XML file."));
+    }
+    if (xmlEntryNames.size() > 1) {
+      throw new LexisXmlImportException(
+          List.of("The ZIP file must contain exactly one LEXIS XML file."));
+    }
+
+    return new UploadedLexisXml(
+        xmlBytes,
+        List.of("Imported " + xmlEntryNames.get(0) + " from ZIP archive " + fileName + "."));
+  }
+
+  private boolean isIgnoredZipEntry(String entryName) {
+    if (entryName == null) {
+      return false;
+    }
+    String normalized = entryName.replace('\\', '/');
+    int lastSlash = normalized.lastIndexOf('/');
+    String baseName = lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
+    return normalized.startsWith("__MACOSX/") || ".DS_Store".equals(baseName);
+  }
+
+  private byte[] readBounded(InputStream inputStream) throws Exception {
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    byte[] buffer = new byte[8192];
+    long totalBytes = 0L;
+    int bytesRead;
+    while ((bytesRead = inputStream.read(buffer)) >= 0) {
+      totalBytes += bytesRead;
+      if (totalBytes > MAX_XML_BYTES) {
+        throw new LexisXmlImportException(List.of("The LEXIS XML file must be 20 MB or smaller."));
+      }
+      outputStream.write(buffer, 0, bytesRead);
+    }
+    if (totalBytes == 0L) {
+      throw new LexisXmlImportException(List.of("The LEXIS XML file is empty."));
+    }
+    return outputStream.toByteArray();
+  }
+
+  private ParsedSubmission parse(byte[] xmlBytes) throws Exception {
     DocumentBuilderFactory factory = secureDocumentBuilderFactory();
     Document document;
-    try (InputStream inputStream = file.getInputStream()) {
+    try (InputStream inputStream = new ByteArrayInputStream(xmlBytes)) {
       document = factory.newDocumentBuilder().parse(inputStream);
     }
     Element root = document.getDocumentElement();
@@ -188,12 +277,12 @@ public class LexisEsfXmlImportService {
     if (root == null
         || !"ESFSubmission".equals(root.getLocalName())
         || !ESF_NAMESPACE.equals(root.getNamespaceURI())) {
-      errors.add("The XML root must be an ESFSubmission document.");
+      errors.add("The XML root must be the expected LEXIS submission envelope.");
     }
 
     Element lexisSubmission = firstDescendant(root, LEXIS_NAMESPACE, "LexisSubmission");
     if (lexisSubmission == null) {
-      errors.add("The ESF submission must include a LEXIS submission payload.");
+      errors.add("The XML file must include a LEXIS submission payload.");
       throw new LexisXmlImportException(errors);
     }
 
@@ -371,7 +460,7 @@ public class LexisEsfXmlImportService {
         DEFAULT_OIC_INDICATOR,
         submission.endUseCode(),
         submission.speciesCodes(),
-        "Imported from ESF LEXIS XML.",
+        "Imported from LEXIS XML upload.",
         true);
   }
 
@@ -385,7 +474,7 @@ public class LexisEsfXmlImportService {
         submission.averageLength(),
         submission.averageDiameter(),
         DEFAULT_PACKAGE_STATUS,
-        "Imported from ESF LEXIS XML.",
+        "Imported from LEXIS XML upload.",
         DEFAULT_REPROCESSED_INDICATOR,
         submission.ageClass(),
         submission.productTypeCode(),
@@ -628,6 +717,8 @@ public class LexisEsfXmlImportService {
       String endUseCode,
       List<String> speciesCodes,
       List<ScaleLine> scaleLines) {}
+
+  private record UploadedLexisXml(byte[] xmlBytes, List<String> warnings) {}
 
   private record ScaleLine(
       String timberMark, Long pieces, String speciesCode, String gradeCode, Double volume) {}

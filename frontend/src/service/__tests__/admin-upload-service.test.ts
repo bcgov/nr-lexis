@@ -87,19 +87,19 @@ describe('admin-upload-service', () => {
     expect(formData.get('fileDescription')).toBe('Invoice attachment')
   })
 
-  it('posts ESF LEXIS XML imports to the XML import endpoint', async () => {
+  it('posts LEXIS XML imports to the XML import endpoint', async () => {
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
 
     await submitAdminUpload('lexisXml', {
       file,
-      fileDescription: 'ESF submission',
+      fileDescription: 'LEXIS XML submission',
     })
 
     const [path, payload] = postMock.mock.calls[0]
 
     expect(path).toBe('/lexis/admin/uploads/lexis-xml')
     const formData = payload as FormData
-    expect(formData.get('fileDescription')).toBe('ESF submission')
+    expect(formData.get('fileDescription')).toBe('LEXIS XML submission')
     const uploadedFile = formData.get('formFile') as File
     expect(uploadedFile.name).toBe('submission.xml')
   })
