@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
@@ -399,16 +400,14 @@ const ProvincialExemptionCreatePage: FC = () => {
                 setForm((current) => ({ ...current, exemptionNumber: event.target.value }))
               }
             />
-            <TextInput
+            <ApplicationNumberSelect
               id="applicationNumber"
               labelText="Application Number (required)"
               value={form.applicationNumber}
               invalid={!!fieldError('applicationNumber')}
               invalidText={fieldError('applicationNumber')}
               onBlur={() => markFieldTouched('applicationNumber')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, applicationNumber: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, applicationNumber: value }))}
             />
             <SearchableSelect
               id="exemptionTypeCode"

@@ -2,6 +2,8 @@ import { getCachedSearchResponse } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
+  ProvincialApplicationSearchFilters,
+  ProvincialApplicationSearchItem,
   ProvincialApplicationSearchRequest,
   ProvincialApplicationSearchResponse,
 } from '@/interfaces/ProvincialApplicationSearch'
@@ -24,6 +26,31 @@ type BackendProvincialApplicationSearchResponse = {
   total: number
   page: number
   size: number
+}
+
+export type ProvincialApplicationNumberOption = {
+  value: string
+  label: string
+  status: string
+  applicantClientNumber: string
+  ownerClientNumber: string
+  region: string
+  listingDate: string
+  exemptionNumber: string
+}
+
+const DEFAULT_APPLICATION_SEARCH_FILTERS: ProvincialApplicationSearchFilters = {
+  applicationNumber: '',
+  packageNumber: '',
+  exemptionType: '',
+  exemptionNumber: '',
+  applicationStatus: '',
+  productTypeCode: '',
+  region: [],
+  listingFromDate: '',
+  listingToDate: '',
+  applicantClientNumber: '',
+  ownerClientNumber: '',
 }
 
 const buildBackendParams = (request: ProvincialApplicationSearchRequest): URLSearchParams => {
@@ -127,3 +154,49 @@ export const countProvincialApplications = async (
     buildBackendParams(request),
     'Unable to count provincial application search results.',
   )
+
+const applicationNumberOptionLabel = (item: ProvincialApplicationSearchItem): string =>
+  [
+    item.applicationNumber,
+    item.status,
+    item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
+    item.region ? `Region ${item.region}` : '',
+    item.listingDate,
+  ]
+    .filter((value) => value.trim().length > 0)
+    .join(' - ')
+
+export const searchProvincialApplicationNumberOptions = async (
+  query: string,
+): Promise<ProvincialApplicationNumberOption[]> => {
+  const response = await searchProvincialApplications({
+    filters: {
+      ...DEFAULT_APPLICATION_SEARCH_FILTERS,
+      applicationNumber: query,
+    },
+    page: 0,
+    pageSize: 20,
+    sortField: 'applicationNumber',
+    sortDirection: 'desc',
+  })
+
+  const seen = new Set<string>()
+  return response.content
+    .filter((item) => {
+      if (!item.applicationNumber || seen.has(item.applicationNumber)) {
+        return false
+      }
+      seen.add(item.applicationNumber)
+      return true
+    })
+    .map((item) => ({
+      value: item.applicationNumber,
+      label: applicationNumberOptionLabel(item),
+      status: item.status,
+      applicantClientNumber: item.applicantClientNumber,
+      ownerClientNumber: item.ownerClientNumber,
+      region: item.region,
+      listingDate: item.listingDate,
+      exemptionNumber: item.exemptionNumber,
+    }))
+}

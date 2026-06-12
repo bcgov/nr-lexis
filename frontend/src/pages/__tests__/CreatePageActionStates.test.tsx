@@ -10,6 +10,7 @@ import {
   type CreateSubmissionResult,
 } from '@/service/create-submit-service'
 import { fetchApplicationClientLocations } from '@/service/application-client-lookup-service'
+import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 import { fetchProvincialPermitOptions, fetchReportOptions } from '@/service/search-options-service'
 
 const mockNavigate = vi.fn()
@@ -36,9 +37,16 @@ vi.mock('@/service/create-submit-service', () => ({
   submitIndianReservePermitCreate: vi.fn(),
 }))
 
+vi.mock('@/service/provincial-application-search-service', () => ({
+  searchProvincialApplicationNumberOptions: vi.fn(),
+}))
+
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
 const mockedFetchReportOptions = vi.mocked(fetchReportOptions)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
+const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
+  searchProvincialApplicationNumberOptions,
+)
 const mockedSubmitProvincialPermitCreate = vi.mocked(submitProvincialPermitCreate)
 const mockedSubmitIndianReservePermitCreate = vi.mocked(submitIndianReservePermitCreate)
 
@@ -65,6 +73,18 @@ describe('Create Page Action State Smoke', () => {
     } as any)
     mockedFetchApplicationClientLocations.mockResolvedValue([
       { locationCode: '00', locationName: 'Main Location', selected: true },
+    ])
+    mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([
+      {
+        value: '200',
+        label: '200 - Approved - Owner 400 - Region Northern Interior',
+        status: 'Approved',
+        applicantClientNumber: '300',
+        ownerClientNumber: '400',
+        region: 'Northern Interior',
+        listingDate: '2026-01-09',
+        exemptionNumber: 'EX-1',
+      },
     ])
   })
 

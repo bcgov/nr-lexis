@@ -24,6 +24,7 @@ import {
   fetchApplicationEndUsesForSpeciesRegion,
   fetchApplicationRemainingSpecies,
 } from '@/service/provincial-application-items-service'
+import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 
 const mockNavigate = vi.fn()
 
@@ -57,6 +58,10 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationRemainingSpecies: vi.fn(),
 }))
 
+vi.mock('@/service/provincial-application-search-service', () => ({
+  searchProvincialApplicationNumberOptions: vi.fn(),
+}))
+
 Element.prototype.scrollIntoView = vi.fn()
 
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
@@ -70,6 +75,9 @@ const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLo
 const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemainingSpecies)
 const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
   fetchApplicationEndUsesForSpeciesRegion,
+)
+const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
+  searchProvincialApplicationNumberOptions,
 )
 
 const successfulCreate = (createdId: string): CreateSubmissionResult => ({
@@ -131,6 +139,28 @@ describe('Create Page Core Flows', () => {
     ])
     mockedFetchApplicationEndUsesForSpeciesRegion.mockResolvedValue([
       { code: 'SA', description: 'Sawlog' },
+    ])
+    mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([
+      {
+        value: '321',
+        label: '321 - Approved - Owner 00033333 - Region RKB',
+        status: 'Approved',
+        applicantClientNumber: '00044444',
+        ownerClientNumber: '00033333',
+        region: 'RKB',
+        listingDate: '2026-01-10',
+        exemptionNumber: '',
+      },
+      {
+        value: '2001',
+        label: '2001 - Approved - Owner 00099999 - Region Cariboo',
+        status: 'Approved',
+        applicantClientNumber: '',
+        ownerClientNumber: '00099999',
+        region: 'Cariboo',
+        listingDate: '2026-03-01',
+        exemptionNumber: '',
+      },
     ])
   })
 
