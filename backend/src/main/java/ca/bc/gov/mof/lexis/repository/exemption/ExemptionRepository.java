@@ -78,7 +78,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   public Page<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
-    SqlWhere countSqlWhere = buildSearchWhere(criteria, true, false);
+    SqlWhere countSqlWhere = buildSearchWhere(criteria, false, false);
     SqlWhere pageSqlWhere = buildSearchWhere(criteria, true, true);
     int totalElements =
         queryLegacyDynamicCountProcedure(
@@ -105,7 +105,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   public int count(ExemptionSearchCriteria criteria) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria, true, false);
+    SqlWhere sqlWhere = buildSearchWhere(criteria, false, false);
     return queryLegacyDynamicCountProcedure(COUNT_EXEMPTIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
   }
 
