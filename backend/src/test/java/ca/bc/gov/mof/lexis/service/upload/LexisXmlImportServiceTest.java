@@ -181,6 +181,84 @@ class LexisXmlImportServiceTest {
     assertThat(result.errors()).contains("Forest region code BAD is not mapped to a LEXIS region.");
   }
 
+  @Test
+  void shouldRejectXmlWithoutSchemaLocation() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
+                + " xsi:schemaLocation=\""
+                + SAMPLE_SCHEMA_LOCATION
+                + "\"",
+            "");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("The XML file must include an xsi:schemaLocation attribute.");
+  }
+
+  @Test
+  void shouldRejectUnsupportedLexisSchemaVersion() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd",
+            "http://www.for.gov.bc.ca/schema/lexis/1/xsd/MOF/mof-lexis.xsd");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains(
+            "The XML schema location must use supported LEXIS schema version "
+                + "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd.");
+  }
+
+  @Test
+  void shouldRejectNonProvincialLexisSubmissions() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:jurisdictionCode>P</lexis:jurisdictionCode>",
+            "<lexis:jurisdictionCode>F</lexis:jurisdictionCode>");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Only provincial LEXIS XML submissions are supported.");
+  }
+
+  @Test
+  void shouldRejectPackageNumbersLongerThanTwentyCharacters() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>",
+            "<lexis:boomNumber>123456789012345678901</lexis:boomNumber>");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Boom/package number must be 20 characters or fewer.");
+  }
+
   private LexisXmlImportService service() {
     return new LexisXmlImportService(
         applicationDetailsServiceProvider,
@@ -216,10 +294,16 @@ class LexisXmlImportServiceTest {
         "formFile", "submission.zip", "application/zip", bytes.toByteArray());
   }
 
+  private static final String SAMPLE_SCHEMA_LOCATION =
+      "http://www.for.gov.bc.ca/schema/esf "
+          + "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd "
+          + "http://www.for.gov.bc.ca/schema/lexis "
+          + "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd";
+
   private static final String SAMPLE_XML =
       """
       <?xml version="1.0" encoding="UTF-8"?>
-      <esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf">
+      <esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="%s">
         <esf:submissionContent>
           <lexis:LexisSubmission>
             <lexis:applicant>
@@ -273,5 +357,6 @@ class LexisXmlImportServiceTest {
           </lexis:LexisSubmission>
         </esf:submissionContent>
       </esf:ESFSubmission>
-      """;
+      """
+          .formatted(SAMPLE_SCHEMA_LOCATION);
 }

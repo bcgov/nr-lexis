@@ -16,6 +16,7 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -44,17 +45,23 @@ public class LexisXmlImportService {
 
   private static final String ESF_NAMESPACE = "http://www.for.gov.bc.ca/schema/esf";
   private static final String LEXIS_NAMESPACE = "http://www.for.gov.bc.ca/schema/lexis";
+  private static final String XML_SCHEMA_INSTANCE_NAMESPACE = XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI;
+  private static final String EXPECTED_ESF_SCHEMA_LOCATION =
+      "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd";
+  private static final String EXPECTED_LEXIS_SCHEMA_LOCATION =
+      "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd";
   private static final String UPLOAD_TYPE = "lexisXml";
   private static final String ACCEPTED = "accepted";
   private static final String REJECTED = "rejected";
   private static final String XML_EXTENSION = ".xml";
   private static final String ZIP_EXTENSION = ".zip";
+  private static final int MAX_PACKAGE_NUMBER_LENGTH = 20;
   private static final long MAX_XML_BYTES = 20L * 1024L * 1024L;
   private static final long DEFAULT_TERM_DAYS = 180L;
   private static final String DEFAULT_PACKAGE_STATUS = "ACT";
   private static final String DEFAULT_REPROCESSED_INDICATOR = "N";
   private static final String DEFAULT_OIC_INDICATOR = "N";
-  private static final String DEFAULT_JURISDICTION = "P";
+  private static final String PROVINCIAL_JURISDICTION = "P";
   private static final String DEFAULT_END_USE = "OT";
 
   private static final Map<String, Long> ORG_UNIT_BY_REGION_CODE =
@@ -283,6 +290,8 @@ public class LexisXmlImportService {
         || !"ESFSubmission".equals(root.getLocalName())
         || !ESF_NAMESPACE.equals(root.getNamespaceURI())) {
       errors.add("The XML root must be the expected LEXIS submission envelope.");
+    } else {
+      validateSchemaLocation(root, errors);
     }
 
     Element lexisSubmission = firstDescendant(root, LEXIS_NAMESPACE, "LexisSubmission");
@@ -311,7 +320,7 @@ public class LexisXmlImportService {
     String ownerClientLocationCode = normalizeClientLocation(text(applicantDetails, "clientLocnCode"));
     String applicantName = text(applicantDetails, "name");
     String ownerContactName = contactName(applicantContact, applicantName);
-    String jurisdictionCode = upperOrDefault(text(applicationDetail, "jurisdictionCode"), DEFAULT_JURISDICTION);
+    String jurisdictionCode = upper(text(applicationDetail, "jurisdictionCode"));
     String regionCode = upper(text(applicationDetail, "bcForestRegionCode"));
     Long orgUnitNumber = resolveOrgUnitNumber(regionCode);
     String applicationStatusCode = upper(text(applicationDetail, "applStatusCode"));
@@ -337,6 +346,11 @@ public class LexisXmlImportService {
     if (orgUnitNumber == null) {
       errors.add("Forest region code " + nullToValue(regionCode) + " is not mapped to a LEXIS region.");
     }
+    if (jurisdictionCode == null) {
+      errors.add("Jurisdiction code is required.");
+    } else if (!PROVINCIAL_JURISDICTION.equals(jurisdictionCode)) {
+      errors.add("Only provincial LEXIS XML submissions are supported.");
+    }
     if (exemptionReasonCode == null) {
       errors.add("Exemption reason is required.");
     }
@@ -348,6 +362,8 @@ public class LexisXmlImportService {
     }
     if (packageNumber == null) {
       errors.add("Boom/package number is required.");
+    } else if (packageNumber.length() > MAX_PACKAGE_NUMBER_LENGTH) {
+      errors.add("Boom/package number must be 20 characters or fewer.");
     }
     if (productLocation == null) {
       errors.add("Product location is required.");
@@ -396,6 +412,58 @@ public class LexisXmlImportService {
         endUseCode,
         speciesCodes,
         scaleLines);
+  }
+
+  private void validateSchemaLocation(Element root, List<String> errors) {
+    String schemaLocation = trim(root.getAttributeNS(XML_SCHEMA_INSTANCE_NAMESPACE, "schemaLocation"));
+    if (schemaLocation == null) {
+      errors.add("The XML file must include an xsi:schemaLocation attribute.");
+      return;
+    }
+
+    String[] tokens = schemaLocation.split("\\s+");
+    if (tokens.length % 2 != 0) {
+      errors.add("The XML schema location must contain namespace and schema URL pairs.");
+      return;
+    }
+
+    Map<String, String> schemaLocationsByNamespace = new LinkedHashMap<>();
+    for (int index = 0; index < tokens.length; index += 2) {
+      schemaLocationsByNamespace.put(tokens[index], tokens[index + 1]);
+    }
+    validateExpectedSchemaLocation(
+        schemaLocationsByNamespace,
+        ESF_NAMESPACE,
+        EXPECTED_ESF_SCHEMA_LOCATION,
+        "ESF",
+        errors);
+    validateExpectedSchemaLocation(
+        schemaLocationsByNamespace,
+        LEXIS_NAMESPACE,
+        EXPECTED_LEXIS_SCHEMA_LOCATION,
+        "LEXIS",
+        errors);
+  }
+
+  private void validateExpectedSchemaLocation(
+      Map<String, String> schemaLocationsByNamespace,
+      String namespace,
+      String expectedSchemaLocation,
+      String label,
+      List<String> errors) {
+    String actualSchemaLocation = schemaLocationsByNamespace.get(namespace);
+    if (actualSchemaLocation == null) {
+      errors.add("The XML schema location must include the " + label + " schema namespace.");
+      return;
+    }
+    if (!expectedSchemaLocation.equals(actualSchemaLocation)) {
+      errors.add(
+          "The XML schema location must use supported "
+              + label
+              + " schema version "
+              + expectedSchemaLocation
+              + ".");
+    }
   }
 
   private DocumentBuilderFactory secureDocumentBuilderFactory() throws Exception {
@@ -645,11 +713,6 @@ public class LexisXmlImportService {
   private String upper(String value) {
     String normalized = trim(value);
     return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
-  }
-
-  private String upperOrDefault(String value, String fallback) {
-    String normalized = upper(value);
-    return normalized == null ? fallback : normalized;
   }
 
   private String trim(String value) {
