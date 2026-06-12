@@ -20,6 +20,7 @@ jobs:
       oc_namespace: ${{ secrets.oc_namespace }}
       oc_token: ${{ secrets.oc_token }}
     with:
+      environment: dev
       cleanup: label
       packages: backend frontend
       # Use explicit backend/frontend labels so PR cleanup removes both stacks.
@@ -30,6 +31,7 @@ jobs:
     needs: [cleanup]
     if: always()
     runs-on: ubuntu-24.04
+    environment: dev
     timeout-minutes: 10
     steps:
       - name: Delete PR OpenShift resources
