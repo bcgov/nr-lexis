@@ -33,7 +33,7 @@ type UploadWorkflowDefinition = {
 const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   {
     type: 'lexisXml',
-    label: 'ESF LEXIS XML Upload',
+    label: 'LEXIS XML Upload',
     requiredAction: 'createApplication',
     numberFieldLabel: '',
     numberFieldPlaceholder: '',
@@ -127,6 +127,29 @@ const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState
   }
 }
 
+const extractUploadErrorMessage = (error: unknown): string => {
+  const response = (error as any)?.response
+  const data = response?.data
+  const status = response?.status
+
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    return data.errors.join(' ')
+  }
+  if (typeof data?.errors === 'string' && data.errors.trim()) {
+    return data.errors
+  }
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message
+  }
+  if (typeof data === 'string' && data.trim()) {
+    return data
+  }
+  if (status) {
+    return `Upload request failed with status ${status}.`
+  }
+  return 'Upload request failed. Please try again or contact support.'
+}
+
 const AdminUploadsPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -157,7 +180,7 @@ const AdminUploadsPage: FC = () => {
       uploadFile: selectedFile
         ? undefined
         : selectedWorkflowType === 'lexisXml'
-          ? 'Choose a LEXIS XML file to import.'
+          ? 'Choose a LEXIS XML or ZIP file to import.'
           : 'Choose a file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
@@ -284,18 +307,7 @@ const AdminUploadsPage: FC = () => {
       }
       setSelectedFile(null)
     } catch (error) {
-      const status = (error as any)?.response?.status
-      const responseErrors = (error as any)?.response?.data?.errors
-      const responseMessage = (error as any)?.response?.data?.message
-      if (Array.isArray(responseErrors) && responseErrors.length > 0) {
-        setErrorMessage(responseErrors.join(' '))
-      } else if (responseMessage) {
-        setErrorMessage(responseMessage)
-      } else if (status) {
-        setErrorMessage(`Upload request failed with status ${status}.`)
-      } else {
-        setErrorMessage('Upload request failed. Please try again or contact support.')
-      }
+      setErrorMessage(extractUploadErrorMessage(error))
     } finally {
       setIsSubmitting(false)
     }
@@ -456,9 +468,13 @@ const AdminUploadsPage: FC = () => {
             <TextInput
               id="uploadFile"
               type="file"
-              labelText={selectedWorkflowType === 'lexisXml' ? 'LEXIS XML File' : 'Document File'}
+              labelText={
+                selectedWorkflowType === 'lexisXml' ? 'LEXIS XML or ZIP File' : 'Document File'
+              }
               accept={
-                selectedWorkflowType === 'lexisXml' ? '.xml,application/xml,text/xml' : undefined
+                selectedWorkflowType === 'lexisXml'
+                  ? '.xml,.zip,application/xml,text/xml,application/zip'
+                  : undefined
               }
               invalid={!!fieldError('uploadFile')}
               invalidText={fieldError('uploadFile')}

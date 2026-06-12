@@ -2,8 +2,8 @@ package ca.bc.gov.mof.lexis.controller;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.dto.upload.LexisXmlImportResultDto;
-import ca.bc.gov.mof.lexis.service.esf.LexisEsfXmlImportService;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
+import ca.bc.gov.mof.lexis.service.upload.LexisXmlImportService;
 import java.math.BigDecimal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,13 +27,13 @@ public class LexisUploadController {
   private static final Logger LOGGER = LoggerFactory.getLogger(LexisUploadController.class);
 
   private final ObjectProvider<LexisUploadService> uploadServiceProvider;
-  private final ObjectProvider<LexisEsfXmlImportService> esfXmlImportServiceProvider;
+  private final ObjectProvider<LexisXmlImportService> xmlImportServiceProvider;
 
   public LexisUploadController(
       ObjectProvider<LexisUploadService> uploadServiceProvider,
-      ObjectProvider<LexisEsfXmlImportService> esfXmlImportServiceProvider) {
+      ObjectProvider<LexisXmlImportService> xmlImportServiceProvider) {
     this.uploadServiceProvider = uploadServiceProvider;
-    this.esfXmlImportServiceProvider = esfXmlImportServiceProvider;
+    this.xmlImportServiceProvider = xmlImportServiceProvider;
   }
 
   @PostMapping(
@@ -189,14 +189,15 @@ public class LexisUploadController {
       return ResponseEntity.badRequest().build();
     }
 
-    LexisEsfXmlImportService service = esfXmlImportServiceProvider.getIfAvailable();
+    LexisXmlImportService service = xmlImportServiceProvider.getIfAvailable();
     if (service == null) {
-      LOGGER.warn("ESF XML import service unavailable - returning no content for lexisXmlUpload");
+      LOGGER.warn("LEXIS XML import service unavailable - returning no content for lexisXmlUpload");
       return ResponseEntity.noContent().build();
     }
 
     LexisXmlImportResultDto result = service.importLexisXml(uploadFile, resolveEntryUserId(authentication));
-    HttpStatus status = "accepted".equalsIgnoreCase(result.status()) ? HttpStatus.OK : HttpStatus.UNPROCESSABLE_ENTITY;
+    HttpStatus status =
+        "accepted".equalsIgnoreCase(result.status()) ? HttpStatus.OK : HttpStatus.UNPROCESSABLE_ENTITY;
     return ResponseEntity.status(status).body(result);
   }
 

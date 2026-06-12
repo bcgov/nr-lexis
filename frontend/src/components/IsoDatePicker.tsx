@@ -35,8 +35,12 @@ export default function IsoDatePicker({
     >
       <DatePickerInput
         id={id}
+        name={`${id}-lexis-date`}
         labelText={labelText}
         placeholder="YYYY-MM-DD"
+        autoComplete="off"
+        data-1p-ignore="true"
+        data-lpignore="true"
         invalid={invalid}
         invalidText={invalidText}
         disabled={disabled}

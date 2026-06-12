@@ -23,9 +23,8 @@ See the [root README's Local Development section](../README.md#local-development
 # Run backend with local + Oracle profiles
 mvn -DskipTests spring-boot:run -Dspring-boot.run.profiles=local,oracle
 
-# Health checks
-curl http://localhost:8080/actuator/health
-curl http://localhost:8080/actuator/prometheus
+# Port check
+nc -z localhost 8080
 ```
 
 ## Configuration
@@ -65,7 +64,7 @@ Grouped by area; see `controller/` for request and response contracts.
 
 | Area | Base path | Notes |
 |---|---|---|
-| Actuator | `/actuator/health`, `/actuator/prometheus` | Public health and metrics endpoints. |
+| Actuator | `/actuator/health`, `/actuator/prometheus` | Protected operational endpoints. Requires authentication and `LEXIS_ADMIN`. |
 | Session | `/api/lexis/session/*` | Session capabilities and logoff routes. |
 | Provincial workflows | `/api/lexis/applications`, `/api/lexis/exemptions`, `/api/lexis/permits`, `/api/lexis/purchase-offers` | Search, options, details, and workflow actions. |
 | Federal and reserve workflows | `/api/lexis/federal`, `/api/lexis/indian-reserve` | Federal application and reserve permit workflows. |

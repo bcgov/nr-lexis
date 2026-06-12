@@ -6,6 +6,8 @@ import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -18,6 +20,7 @@ import java.util.TreeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.util.MultiValueMap;
@@ -34,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class OfferDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OfferDetailsRpcController.class);
+  private static final String LEGACY_ACTION_CREATE_OFFER = "createOffer";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -41,16 +45,22 @@ public class OfferDetailsRpcController {
   private final ObjectProvider<FederalApplicationService> federalApplicationServiceProvider;
   private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
   private final ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider;
+  private final LexisSessionService sessionService;
+  private final LexisAuthorizationService authorizationService;
 
   public OfferDetailsRpcController(
       ObjectProvider<LexisApplicationService> applicationServiceProvider,
       ObjectProvider<FederalApplicationService> federalApplicationServiceProvider,
       ObjectProvider<ClientLookupService> clientLookupServiceProvider,
-      ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider) {
+      ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider,
+      LexisSessionService sessionService,
+      LexisAuthorizationService authorizationService) {
     this.applicationServiceProvider = applicationServiceProvider;
     this.federalApplicationServiceProvider = federalApplicationServiceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
     this.purchaseOfferServiceProvider = purchaseOfferServiceProvider;
+    this.sessionService = sessionService;
+    this.authorizationService = authorizationService;
   }
 
   @GetMapping("/validate-application-number")
@@ -268,6 +278,10 @@ public class OfferDetailsRpcController {
   public ResponseEntity<OfferPersistenceResponseDto> addOffer(
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_OFFER)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PurchaseOfferService service = purchaseOfferServiceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Purchase offer service unavailable - returning no content for add offer");
@@ -284,6 +298,10 @@ public class OfferDetailsRpcController {
   public ResponseEntity<OfferPersistenceResponseDto> updateOffer(
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_OFFER)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PurchaseOfferService service = purchaseOfferServiceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Purchase offer service unavailable - returning no content for update offer");
@@ -314,6 +332,11 @@ public class OfferDetailsRpcController {
       return false;
     }
     return federalService.findByApplicationNumber(applicationNumber).isPresent();
+  }
+
+  private boolean canPerform(Authentication authentication, String action) {
+    return authorizationService.canPerformAction(
+        sessionService.parseRolesFromPrincipal(authentication), action);
   }
 
   private Long parseApplicationNumber(String applicationNumber) {

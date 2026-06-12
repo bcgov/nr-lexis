@@ -14,6 +14,7 @@ import {
 } from '@/service/indian-reserve-permit-search-service'
 import {
   countProvincialApplications,
+  searchProvincialApplicationNumberOptions,
   searchProvincialApplications,
 } from '@/service/provincial-application-search-service'
 import {
@@ -216,6 +217,44 @@ describe('search-service contracts', () => {
         allowCreateExemption: true,
       }),
     )
+  })
+
+  it('loads provincial application number options from application search', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          {
+            application: 28077,
+            status: 'Approved',
+            client: '',
+            ownerClientNumber: '00016245',
+            exemptionNumber: '',
+            listingDate: '2012-05-11',
+            region: 'RKB',
+            applicationVolume: 228,
+            showCheckbox: true,
+            locked: false,
+          },
+        ],
+        total: 1,
+        page: 0,
+        size: 20,
+      },
+    })
+
+    const result = await searchProvincialApplicationNumberOptions('280')
+
+    const params = readParams()
+    expect(params.get('applicationNumber')).toBe('280')
+    expect(params.get('page')).toBe('0')
+    expect(params.get('size')).toBe('20')
+    expect(params.get('sortField')).toBe('applicationNumber DESC')
+    expect(result).toEqual([
+      expect.objectContaining({
+        value: '28077',
+        label: '28077 - Approved - Owner 00016245 - Region RKB - 2012-05-11',
+      }),
+    ])
   })
 
   it('maps provincial exemption status fields and approval gate', async () => {

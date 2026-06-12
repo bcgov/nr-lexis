@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
@@ -398,16 +400,14 @@ const ProvincialExemptionCreatePage: FC = () => {
                 setForm((current) => ({ ...current, exemptionNumber: event.target.value }))
               }
             />
-            <TextInput
+            <ApplicationNumberSelect
               id="applicationNumber"
               labelText="Application Number (required)"
               value={form.applicationNumber}
               invalid={!!fieldError('applicationNumber')}
               invalidText={fieldError('applicationNumber')}
               onBlur={() => markFieldTouched('applicationNumber')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, applicationNumber: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, applicationNumber: value }))}
             />
             <SearchableSelect
               id="exemptionTypeCode"
@@ -455,27 +455,23 @@ const ProvincialExemptionCreatePage: FC = () => {
                 setForm((current) => ({ ...current, applicantClientNumber: event.target.value }))
               }
             />
-            <TextInput
+            <IsoDatePicker
               id="approvalDate"
               labelText="Approval Date (YYYY-MM-DD)"
               value={form.approvalDate}
               invalid={!!fieldError('approvalDate')}
               invalidText={fieldError('approvalDate')}
               onBlur={() => markFieldTouched('approvalDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, approvalDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, approvalDate: value }))}
             />
-            <TextInput
+            <IsoDatePicker
               id="expiryDate"
               labelText="Expiry Date (YYYY-MM-DD)"
               value={form.expiryDate}
               invalid={!!fieldError('expiryDate')}
               invalidText={fieldError('expiryDate')}
               onBlur={() => markFieldTouched('expiryDate')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, expiryDate: event.target.value }))
-              }
+              onChange={(value) => setForm((current) => ({ ...current, expiryDate: value }))}
             />
             <TextInput
               id="approvedVolume"

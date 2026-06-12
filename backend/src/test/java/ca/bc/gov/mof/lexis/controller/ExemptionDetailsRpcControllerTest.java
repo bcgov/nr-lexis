@@ -148,9 +148,13 @@ class ExemptionDetailsRpcControllerTest {
   void removeDocumentShouldReturnSuccessFlag() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.removeDocument(55L)).thenReturn(true);
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "saveExemption"))
+        .thenReturn(true);
 
     ResponseEntity<ExemptionDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeDocument("55");
+        controller.removeDocument("55", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -183,6 +187,8 @@ class ExemptionDetailsRpcControllerTest {
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
     when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "saveExemption"))
+        .thenReturn(true);
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewFederalApplication"))
         .thenReturn(true);
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewOICApplication"))
@@ -205,6 +211,9 @@ class ExemptionDetailsRpcControllerTest {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
     when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "saveExemption"))
+        .thenReturn(true);
     when(service.removeApplicationFromExemption(1000456L, "IDIR\\JSMITH"))
         .thenReturn(new ExemptionDetailsRpcService.ApplicationExemptionLinkResult(true, List.of()));
 
@@ -242,6 +251,8 @@ class ExemptionDetailsRpcControllerTest {
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
     when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "saveExemption"))
+        .thenReturn(true);
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewFederalApplication"))
         .thenReturn(true);
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewOICApplication"))
@@ -276,6 +287,8 @@ class ExemptionDetailsRpcControllerTest {
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
     when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "saveExemption"))
+        .thenReturn(true);
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
         .thenReturn(true);
     when(service.updateExemption(
@@ -413,11 +426,15 @@ class ExemptionDetailsRpcControllerTest {
   @Test
   void sendExemptionApprovalEmailLegacyShouldMapLegacyExemptionNumber() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+        .thenReturn(true);
     when(service.sendExemptionApprovalEmail("EX-205", "client@example.com"))
         .thenReturn(new ExemptionDetailsRpcService.ExemptionApprovalEmailResult(true, "Email sent successfully."));
 
     ResponseEntity<ExemptionDetailsRpcController.ExemptionApprovalEmailResponseDto> response =
-        controller.sendExemptionApprovalEmailLegacy(null, "EX-205", "client@example.com");
+        controller.sendExemptionApprovalEmailLegacy(null, "EX-205", "client@example.com", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -429,11 +446,15 @@ class ExemptionDetailsRpcControllerTest {
   @Test
   void sendExemptionApprovalEmailsLegacyShouldReturnBatchEmailPayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+        .thenReturn(true);
     when(service.sendExemptionApprovalEmails("EX-205:client@example.com"))
         .thenReturn(new ExemptionDetailsRpcService.ExemptionApprovalEmailResult(true, "Emails sent successfully."));
 
     ResponseEntity<ExemptionDetailsRpcController.ExemptionApprovalEmailResponseDto> response =
-        controller.sendExemptionApprovalEmailsLegacy("EX-205:client@example.com");
+        controller.sendExemptionApprovalEmailsLegacy("EX-205:client@example.com", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();

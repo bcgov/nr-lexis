@@ -10,7 +10,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest(
     classes = LexisApiApplication.class,
-    webEnvironment = SpringBootTest.WebEnvironment.NONE)
+    webEnvironment = SpringBootTest.WebEnvironment.NONE,
+    properties = {
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito-idp.ca-central-1.amazonaws.com/test",
+      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito-idp.ca-central-1.amazonaws.com/test/.well-known/jwks.json"
+    })
 class LexisAuthorizationMatrixParityTest {
 
   @Autowired
@@ -50,5 +54,27 @@ class LexisAuthorizationMatrixParityTest {
             "LEXIS_EXEMPTION_APPROVER",
             "LEXIS_FEDERAL_SUBMITTER",
             "LEXIS_DELEGATED_ADMIN");
+  }
+
+  @Test
+  void readOnlyRoleShouldNotHaveMutatingActions() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_READ_ONLY")))
+        .doesNotContain(
+            "/applicationRemarks",
+            "/applicationsReview",
+            "/createExemption",
+            "/fileApplicationUpload",
+            "/fileExemptionUpload",
+            "/fileInvoiceUpload",
+            "/filePermitUpload",
+            "/lexisAgentAdmin",
+            "/lexisFILAdmin",
+            "/lexisPolicyAdmin",
+            "approveExemption",
+            "createApplication",
+            "createOffer",
+            "createPermit",
+            "saveExemption",
+            "savePermit");
   }
 }

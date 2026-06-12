@@ -1,9 +1,9 @@
 package ca.bc.gov.mof.lexis.security;
 
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import java.net.URI;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -21,9 +21,9 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 @Component
-@ConditionalOnProperty(name = "lexis.auth.cognito.enabled", havingValue = "true")
 public class Oauth2SecurityCustomizer
     implements Customizer<OAuth2ResourceServerConfigurer<HttpSecurity>> {
 
@@ -34,6 +34,9 @@ public class Oauth2SecurityCustomizer
       @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri,
       @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuerUri,
       LexisSessionService sessionService) {
+
+    requireAbsoluteUri(issuerUri, "spring.security.oauth2.resourceserver.jwt.issuer-uri");
+    requireAbsoluteUri(jwkSetUri, "spring.security.oauth2.resourceserver.jwt.jwk-set-uri");
 
     NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
     OAuth2TokenValidator<Jwt> tokenUseValidator =
@@ -77,5 +80,22 @@ public class Oauth2SecurityCustomizer
     return normalizedRoles.stream()
         .map(role -> (GrantedAuthority) new SimpleGrantedAuthority(role))
         .toList();
+  }
+
+  private static void requireAbsoluteUri(String value, String propertyName) {
+    if (!StringUtils.hasText(value)) {
+      throw new IllegalStateException(propertyName + " must be configured");
+    }
+
+    URI uri;
+    try {
+      uri = URI.create(value);
+    } catch (IllegalArgumentException exception) {
+      throw new IllegalStateException(propertyName + " must be a valid absolute URI", exception);
+    }
+
+    if (!uri.isAbsolute()) {
+      throw new IllegalStateException(propertyName + " must be an absolute URI");
+    }
   }
 }
