@@ -8,7 +8,6 @@ import {
   Tag,
   TextArea,
   TextInput,
-  Tile,
 } from '@carbon/react'
 import { Upload } from '@carbon/icons-react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -762,157 +761,178 @@ const AdminUploadsPage: FC = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile className="admin-upload-workflow">
-          <div className="admin-upload-workflow__header">
-            <div>
-              <h2>{selectedWorkflow.label}</h2>
-              <p>{workflowDescription(selectedWorkflowType)}</p>
+        <div className="admin-upload-workflow">
+          {successMessage && (
+            <InlineNotification
+              kind="success"
+              title="Upload Submitted"
+              subtitle={successMessage}
+              lowContrast
+              onCloseButtonClick={() => setSuccessMessage('')}
+            />
+          )}
+          {errorMessage && (
+            <InlineNotification
+              kind="error"
+              title="Upload Error"
+              subtitle={errorMessage}
+              lowContrast
+              onCloseButtonClick={() => setErrorMessage('')}
+            />
+          )}
+
+          <section className="admin-upload-panel" aria-labelledby="admin-upload-settings-title">
+            <div className="admin-upload-panel__header">
+              <div>
+                <h2 id="admin-upload-settings-title">{selectedWorkflow.label}</h2>
+                <p>{workflowDescription(selectedWorkflowType)}</p>
+              </div>
+              <Tag type={hasUploadAccess ? 'green' : 'red'}>
+                {hasUploadAccess ? 'Allowed' : 'Not Granted'}
+              </Tag>
             </div>
-            <Tag type={hasUploadAccess ? 'green' : 'red'}>
-              {hasUploadAccess ? 'Allowed' : 'Not Granted'}
-            </Tag>
-          </div>
 
-          <div className="legacy-search-grid">
-            <SearchableSelect
-              id="uploadWorkflowType"
-              labelText="Upload Type"
-              value={selectedWorkflowType}
-              options={UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
-                value: workflow.type,
-                label: workflow.label,
-              }))}
-              onChange={(value) => setWorkflowType(getWorkflowFromQuery(value))}
-            />
+            <div className="legacy-search-grid admin-upload-settings-grid">
+              <SearchableSelect
+                id="uploadWorkflowType"
+                labelText="Upload Type"
+                value={selectedWorkflowType}
+                options={UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
+                  value: workflow.type,
+                  label: workflow.label,
+                }))}
+                onChange={(value) => setWorkflowType(getWorkflowFromQuery(value))}
+              />
 
-            {selectedWorkflowType === 'application' && (
-              <ApplicationNumberSelect
-                id="applicationNumber"
-                labelText={selectedWorkflow.numberFieldLabel}
-                value={formState.applicationNumber}
-                invalid={!!fieldError('applicationNumber')}
-                invalidText={fieldError('applicationNumber')}
-                onBlur={() => markFieldTouched('applicationNumber')}
-                onChange={(value) =>
+              {selectedWorkflowType === 'application' && (
+                <ApplicationNumberSelect
+                  id="applicationNumber"
+                  labelText={selectedWorkflow.numberFieldLabel}
+                  value={formState.applicationNumber}
+                  invalid={!!fieldError('applicationNumber')}
+                  invalidText={fieldError('applicationNumber')}
+                  onBlur={() => markFieldTouched('applicationNumber')}
+                  onChange={(value) =>
+                    setFormState((current) => ({
+                      ...current,
+                      applicationNumber: value,
+                    }))
+                  }
+                />
+              )}
+
+              {selectedWorkflowType === 'exemption' && (
+                <UploadTargetNumberSelect
+                  id="exemptionNumber"
+                  labelText={selectedWorkflow.numberFieldLabel}
+                  value={formState.exemptionNumber}
+                  invalid={!!fieldError('exemptionNumber')}
+                  invalidText={fieldError('exemptionNumber')}
+                  searchOptions={searchProvincialExemptionNumberOptions}
+                  onBlur={() => markFieldTouched('exemptionNumber')}
+                  onChange={(value) =>
+                    setFormState((current) => ({
+                      ...current,
+                      exemptionNumber: value,
+                    }))
+                  }
+                />
+              )}
+
+              {(selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') && (
+                <UploadTargetNumberSelect
+                  id="permitNumber"
+                  labelText={selectedWorkflow.numberFieldLabel}
+                  value={formState.permitNumber}
+                  invalid={!!fieldError('permitNumber')}
+                  invalidText={fieldError('permitNumber')}
+                  searchOptions={searchProvincialPermitNumberOptions}
+                  normalizeInput={targetNumberFromNumericInput}
+                  onBlur={() => markFieldTouched('permitNumber')}
+                  onChange={(value) =>
+                    setFormState((current) => ({
+                      ...current,
+                      permitNumber: value,
+                    }))
+                  }
+                />
+              )}
+
+              {selectedWorkflowType === 'invoice' && (
+                <>
+                  <TextInput
+                    id="salesInvoiceNumber"
+                    labelText="Invoice Number"
+                    value={formState.salesInvoiceNumber}
+                    invalid={!!fieldError('salesInvoiceNumber')}
+                    invalidText={fieldError('salesInvoiceNumber')}
+                    onBlur={() => markFieldTouched('salesInvoiceNumber')}
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        salesInvoiceNumber: event.target.value,
+                      }))
+                    }
+                  />
+                  <TextInput
+                    id="invoiceExportValue"
+                    labelText="Export Value (CAD)"
+                    value={formState.invoiceExportValue}
+                    invalid={!!fieldError('invoiceExportValue')}
+                    invalidText={fieldError('invoiceExportValue')}
+                    onBlur={() => markFieldTouched('invoiceExportValue')}
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        invoiceExportValue: event.target.value,
+                      }))
+                    }
+                  />
+                  <TextInput
+                    id="invoiceConversionRate"
+                    labelText="Conversion Rate"
+                    value={formState.invoiceConversionRate}
+                    invalid={!!fieldError('invoiceConversionRate')}
+                    invalidText={fieldError('invoiceConversionRate')}
+                    onBlur={() => markFieldTouched('invoiceConversionRate')}
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        invoiceConversionRate: event.target.value,
+                      }))
+                    }
+                  />
+                  <TextInput
+                    id="invoiceFeeInLieu"
+                    labelText="Fee In Lieu"
+                    value={formState.invoiceFeeInLieu}
+                    invalid={!!fieldError('invoiceFeeInLieu')}
+                    invalidText={fieldError('invoiceFeeInLieu')}
+                    onBlur={() => markFieldTouched('invoiceFeeInLieu')}
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        invoiceFeeInLieu: event.target.value,
+                      }))
+                    }
+                  />
+                </>
+              )}
+
+              <TextArea
+                id="fileDescription"
+                labelText="Document Description"
+                value={formState.fileDescription}
+                onChange={(event) =>
                   setFormState((current) => ({
                     ...current,
-                    applicationNumber: value,
+                    fileDescription: event.target.value,
                   }))
                 }
+                rows={4}
               />
-            )}
-
-            {selectedWorkflowType === 'exemption' && (
-              <UploadTargetNumberSelect
-                id="exemptionNumber"
-                labelText={selectedWorkflow.numberFieldLabel}
-                value={formState.exemptionNumber}
-                invalid={!!fieldError('exemptionNumber')}
-                invalidText={fieldError('exemptionNumber')}
-                searchOptions={searchProvincialExemptionNumberOptions}
-                onBlur={() => markFieldTouched('exemptionNumber')}
-                onChange={(value) =>
-                  setFormState((current) => ({
-                    ...current,
-                    exemptionNumber: value,
-                  }))
-                }
-              />
-            )}
-
-            {(selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') && (
-              <UploadTargetNumberSelect
-                id="permitNumber"
-                labelText={selectedWorkflow.numberFieldLabel}
-                value={formState.permitNumber}
-                invalid={!!fieldError('permitNumber')}
-                invalidText={fieldError('permitNumber')}
-                searchOptions={searchProvincialPermitNumberOptions}
-                normalizeInput={targetNumberFromNumericInput}
-                onBlur={() => markFieldTouched('permitNumber')}
-                onChange={(value) =>
-                  setFormState((current) => ({
-                    ...current,
-                    permitNumber: value,
-                  }))
-                }
-              />
-            )}
-
-            {selectedWorkflowType === 'invoice' && (
-              <>
-                <TextInput
-                  id="salesInvoiceNumber"
-                  labelText="Invoice Number"
-                  value={formState.salesInvoiceNumber}
-                  invalid={!!fieldError('salesInvoiceNumber')}
-                  invalidText={fieldError('salesInvoiceNumber')}
-                  onBlur={() => markFieldTouched('salesInvoiceNumber')}
-                  onChange={(event) =>
-                    setFormState((current) => ({
-                      ...current,
-                      salesInvoiceNumber: event.target.value,
-                    }))
-                  }
-                />
-                <TextInput
-                  id="invoiceExportValue"
-                  labelText="Export Value (CAD)"
-                  value={formState.invoiceExportValue}
-                  invalid={!!fieldError('invoiceExportValue')}
-                  invalidText={fieldError('invoiceExportValue')}
-                  onBlur={() => markFieldTouched('invoiceExportValue')}
-                  onChange={(event) =>
-                    setFormState((current) => ({
-                      ...current,
-                      invoiceExportValue: event.target.value,
-                    }))
-                  }
-                />
-                <TextInput
-                  id="invoiceConversionRate"
-                  labelText="Conversion Rate"
-                  value={formState.invoiceConversionRate}
-                  invalid={!!fieldError('invoiceConversionRate')}
-                  invalidText={fieldError('invoiceConversionRate')}
-                  onBlur={() => markFieldTouched('invoiceConversionRate')}
-                  onChange={(event) =>
-                    setFormState((current) => ({
-                      ...current,
-                      invoiceConversionRate: event.target.value,
-                    }))
-                  }
-                />
-                <TextInput
-                  id="invoiceFeeInLieu"
-                  labelText="Fee In Lieu"
-                  value={formState.invoiceFeeInLieu}
-                  invalid={!!fieldError('invoiceFeeInLieu')}
-                  invalidText={fieldError('invoiceFeeInLieu')}
-                  onBlur={() => markFieldTouched('invoiceFeeInLieu')}
-                  onChange={(event) =>
-                    setFormState((current) => ({
-                      ...current,
-                      invoiceFeeInLieu: event.target.value,
-                    }))
-                  }
-                />
-              </>
-            )}
-
-            <TextArea
-              id="fileDescription"
-              labelText="Document Description"
-              value={formState.fileDescription}
-              onChange={(event) =>
-                setFormState((current) => ({
-                  ...current,
-                  fileDescription: event.target.value,
-                }))
-              }
-              rows={4}
-            />
-          </div>
+            </div>
+          </section>
 
           <section className="admin-upload-panel" aria-labelledby="admin-upload-panel-title">
             <div className="admin-upload-panel__header">
@@ -990,19 +1010,32 @@ const AdminUploadsPage: FC = () => {
                     : `Review ${uploadQueue.length} selected file${uploadQueue.length === 1 ? '' : 's'} before submitting.`}
                 </p>
               </div>
-              {uploadQueue.length > 0 && (
-                <>
+              <div className="admin-upload-preview-actions">
+                {uploadQueue.length > 0 && (
                   <div className="admin-upload-queue-summary" aria-label="Upload preview summary">
                     <Tag type="gray">Ready {readyUploadCount}</Tag>
                     <Tag type="red">Invalid {invalidUploadCount}</Tag>
                     <Tag type="green">Complete {completeUploadCount}</Tag>
                     <Tag type="red">Failed {failedUploadCount}</Tag>
                   </div>
+                )}
+                {uploadQueue.length > 0 && (
                   <Button kind="ghost" size="sm" onClick={clearQueuedFiles} disabled={isSubmitting}>
                     Clear
                   </Button>
-                </>
-              )}
+                )}
+                <Button
+                  kind="primary"
+                  size="sm"
+                  onClick={() => void onSubmitUpload()}
+                  disabled={isSubmitting || !hasUploadAccess}
+                >
+                  {isSubmitting ? 'Submitting...' : 'Submit Upload'}
+                </Button>
+                <Button kind="ghost" size="sm" onClick={onReset} disabled={isSubmitting}>
+                  Reset
+                </Button>
+              </div>
             </div>
 
             {uploadQueue.length === 0 ? (
@@ -1056,39 +1089,7 @@ const AdminUploadsPage: FC = () => {
               </table>
             )}
           </section>
-
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={() => void onSubmitUpload()}
-              disabled={isSubmitting || !hasUploadAccess}
-            >
-              {isSubmitting ? 'Submitting Upload...' : 'Submit Upload'}
-            </Button>
-            <Button kind="ghost" onClick={onReset} disabled={isSubmitting}>
-              Reset
-            </Button>
-          </div>
-
-          {successMessage && (
-            <InlineNotification
-              kind="success"
-              title="Upload Submitted"
-              subtitle={successMessage}
-              lowContrast
-              onCloseButtonClick={() => setSuccessMessage('')}
-            />
-          )}
-          {errorMessage && (
-            <InlineNotification
-              kind="error"
-              title="Upload Error"
-              subtitle={errorMessage}
-              lowContrast
-              onCloseButtonClick={() => setErrorMessage('')}
-            />
-          )}
-        </Tile>
+        </div>
       </Column>
     </Grid>
   )

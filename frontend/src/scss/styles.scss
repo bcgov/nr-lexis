@@ -816,14 +816,10 @@ body {
   gap: 1rem;
 }
 
-.admin-upload-workflow__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+.admin-upload-settings-grid {
+  padding: 1rem;
 }
 
-.admin-upload-workflow__header h2,
 .admin-upload-panel__header h2 {
   margin: 0 0 0.25rem;
 }
@@ -913,6 +909,14 @@ body {
   gap: 0.25rem;
 }
 
+.admin-upload-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .admin-upload-empty-state {
   display: grid;
   justify-items: center;
@@ -964,10 +968,13 @@ body {
 }
 
 @media (max-width: 671px) {
-  .admin-upload-workflow__header,
   .admin-upload-panel__header,
   .admin-upload-drop-zone {
     display: grid;
+  }
+
+  .admin-upload-preview-actions {
+    justify-content: flex-start;
   }
 
   .admin-upload-drop-zone {
