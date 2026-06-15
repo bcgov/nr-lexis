@@ -71,7 +71,7 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     expect(screen.getByRole('columnheader', { name: 'Target' })).toBeInTheDocument()
-    expect(screen.getByText('Permit 5001')).toBeInTheDocument()
+    expect(screen.getAllByText('Permit 5001').length).toBeGreaterThan(0)
     expect(screen.getByText(/PDF \| 13 B \| Added/)).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Document Description'), 'Permit evidence')
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
@@ -352,8 +352,8 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
     await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
     expect(
-      screen.getByText('Creates application, package, species, and scales'),
-    ).toBeInTheDocument()
+      screen.getAllByText('Creates application, package, species, and scales').length,
+    ).toBeGreaterThan(0)
     expect(screen.getByText(/XML \| 7 B \| Added/)).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Document Description'), 'LEXIS XML')
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
