@@ -491,6 +491,7 @@ const AdminUploadsPage: FC = () => {
   const [successMessage, setSuccessMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const [queueFilter, setQueueFilter] = useState('')
   const [touchedFields, setTouchedFields] = useState<TouchedFields<UploadField>>({})
   const [showValidationErrors, setShowValidationErrors] = useState(false)
 
@@ -530,6 +531,25 @@ const AdminUploadsPage: FC = () => {
       ? 'Supported formats: .xml and .zip'
       : 'Supported files: any document with a file extension'
   const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
+  const filteredUploadQueue = useMemo(() => {
+    const query = queueFilter.trim().toLowerCase()
+    if (!query) {
+      return uploadQueue
+    }
+
+    return uploadQueue.filter((item) =>
+      [
+        item.workflowLabel,
+        item.file.name,
+        item.targetSummary ?? currentUploadTargetSummary,
+        statusLabel(item.status),
+        item.message,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(query),
+    )
+  }, [currentUploadTargetSummary, queueFilter, uploadQueue])
 
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
@@ -604,6 +624,7 @@ const AdminUploadsPage: FC = () => {
     setSelectedWorkflowType(workflowType)
     setUploadQueue([])
     setFileInputKey((current) => current + 1)
+    setQueueFilter('')
     setErrorMessage('')
     setSuccessMessage('')
     setShowValidationErrors(false)
@@ -648,6 +669,7 @@ const AdminUploadsPage: FC = () => {
 
   const clearQueuedFiles = (): void => {
     setUploadQueue([])
+    setQueueFilter('')
     setFileInputKey((current) => current + 1)
   }
 
@@ -824,6 +846,7 @@ const AdminUploadsPage: FC = () => {
     setSuccessMessage('')
     setShowValidationErrors(false)
     setIsDraggingOver(false)
+    setQueueFilter('')
   }
 
   return (
@@ -1119,56 +1142,85 @@ const AdminUploadsPage: FC = () => {
                 <p>Upload files to see them here.</p>
               </div>
             ) : (
-              <table className="cds--data-table admin-upload-queue__table">
-                <thead>
-                  <tr>
-                    <th>Upload Type</th>
-                    <th>File</th>
-                    <th>Target</th>
-                    <th>Status</th>
-                    <th>Message</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {uploadQueue.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.workflowLabel}</td>
-                      <td>
-                        <div className="admin-upload-file-cell">
-                          <span>{item.file.name}</span>
-                          <span>
-                            {formatFileType(item.file)} | {formatFileSize(item.file.size)} | Added{' '}
-                            {formatQueuedAt(item.queuedAt)}
-                          </span>
-                        </div>
-                      </td>
-                      <td>{item.targetSummary ?? currentUploadTargetSummary}</td>
-                      <td>
-                        <Tag type={statusTagType(item.status)}>{statusLabel(item.status)}</Tag>
-                      </td>
-                      <td>{item.message || 'Not submitted yet.'}</td>
-                      <td>
-                        <div className="admin-upload-row-actions">
-                          {item.status === 'complete' && item.resultApplicationNumber && (
-                            <Link to={`/provincial/application/${item.resultApplicationNumber}`}>
-                              Open Application
-                            </Link>
-                          )}
-                          <Button
-                            kind="ghost"
-                            size="sm"
-                            onClick={() => removeQueuedFile(item.id)}
-                            disabled={isSubmitting && item.status === 'uploading'}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      </td>
+              <>
+                <div className="admin-upload-preview-filter">
+                  <TextInput
+                    id="adminUploadQueueFilter"
+                    labelText="Filter queued files"
+                    placeholder="Filter by upload type, file name, target, status, or message"
+                    value={queueFilter}
+                    onChange={(event) => setQueueFilter(event.target.value)}
+                  />
+                </div>
+                <table className="cds--data-table admin-upload-queue__table">
+                  <thead>
+                    <tr>
+                      <th>Upload Type</th>
+                      <th>File</th>
+                      <th>Target</th>
+                      <th>Status</th>
+                      <th>Message</th>
+                      <th>Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredUploadQueue.length === 0 ? (
+                      <tr>
+                        <td colSpan={6}>No queued files match the current filter.</td>
+                      </tr>
+                    ) : (
+                      filteredUploadQueue.map((item) => (
+                        <tr key={item.id}>
+                          <td>{item.workflowLabel}</td>
+                          <td>
+                            <div className="admin-upload-file-cell">
+                              <span>{item.file.name}</span>
+                              <span>
+                                {formatFileType(item.file)} | {formatFileSize(item.file.size)} |
+                                Added {formatQueuedAt(item.queuedAt)}
+                              </span>
+                            </div>
+                          </td>
+                          <td>{item.targetSummary ?? currentUploadTargetSummary}</td>
+                          <td>
+                            <Tag type={statusTagType(item.status)}>{statusLabel(item.status)}</Tag>
+                          </td>
+                          <td>{item.message || 'Not submitted yet.'}</td>
+                          <td>
+                            <div className="admin-upload-row-actions">
+                              {item.status === 'complete' && item.resultApplicationNumber && (
+                                <Link
+                                  to={`/provincial/application/${item.resultApplicationNumber}`}
+                                >
+                                  Open Application
+                                </Link>
+                              )}
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                onClick={() => removeQueuedFile(item.id)}
+                                disabled={isSubmitting && item.status === 'uploading'}
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                <div className="admin-upload-preview-footer">
+                  <span>
+                    Showing {filteredUploadQueue.length} of {uploadQueue.length} file
+                    {uploadQueue.length === 1 ? '' : 's'}
+                  </span>
+                  <span>
+                    Ready {readyUploadCount} | Invalid {invalidUploadCount} | Complete{' '}
+                    {completeUploadCount} | Failed {failedUploadCount}
+                  </span>
+                </div>
+              </>
             )}
           </section>
         </div>

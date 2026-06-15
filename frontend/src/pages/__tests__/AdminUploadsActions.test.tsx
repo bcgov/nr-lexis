@@ -266,6 +266,34 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.queryByRole('columnheader', { name: 'File' })).not.toBeInTheDocument()
   })
 
+  it('filters queued files in the data preview table', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === '/filePermitUpload',
+    } as any)
+
+    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+
+    const permitDocument = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
+    const scaleDocument = new File(['scale upload'], 'scale.csv', { type: 'text/csv' })
+    await userEvent.upload(screen.getByLabelText('Document File'), [permitDocument, scaleDocument])
+
+    expect(screen.getByText('permit.pdf')).toBeInTheDocument()
+    expect(screen.getByText('scale.csv')).toBeInTheDocument()
+    expect(screen.getByText('Showing 2 of 2 files')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Filter queued files'), 'scale')
+
+    expect(screen.queryByText('permit.pdf')).not.toBeInTheDocument()
+    expect(screen.getByText('scale.csv')).toBeInTheDocument()
+    expect(screen.getByText('Showing 1 of 2 files')).toBeInTheDocument()
+
+    await userEvent.clear(screen.getByLabelText('Filter queued files'))
+    await userEvent.type(screen.getByLabelText('Filter queued files'), 'missing')
+
+    expect(screen.getByText('No queued files match the current filter.')).toBeInTheDocument()
+    expect(screen.getByText('Showing 0 of 2 files')).toBeInTheDocument()
+  })
+
   it('shows field validation for missing permit upload inputs', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === '/filePermitUpload',

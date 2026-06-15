@@ -917,6 +917,10 @@ body {
   gap: 0.5rem;
 }
 
+.admin-upload-preview-filter {
+  padding: 1rem 1rem 0;
+}
+
 .admin-upload-empty-state {
   display: grid;
   justify-items: center;
@@ -970,6 +974,18 @@ body {
 .admin-upload-queue__table td:nth-child(5) {
   max-inline-size: 32rem;
   white-space: normal;
+}
+
+.admin-upload-preview-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: var(--cds-text-secondary);
+  background: var(--cds-layer);
+  border-top: 1px solid var(--cds-border-subtle);
+  font-size: 0.875rem;
 }
 
 .admin-upload-row-actions {
