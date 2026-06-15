@@ -74,6 +74,10 @@ const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   },
 ]
 
+const ESF_NAMESPACE = 'http://www.for.gov.bc.ca/schema/esf'
+const LEXIS_NAMESPACE = 'http://www.for.gov.bc.ca/schema/lexis'
+const XML_PREVIEW_UNAVAILABLE = 'XML preview unavailable; server validation will run on upload.'
+
 type UploadFormState = {
   applicationNumber: string
   exemptionNumber: string
@@ -357,6 +361,60 @@ const validateQueuedFile = (file: File, workflowType: UploadWorkflowType): strin
   }
 
   return ''
+}
+
+const firstXmlText = (xmlDocument: Document, namespace: string, localName: string): string => {
+  const value = xmlDocument.getElementsByTagNameNS(namespace, localName)[0]?.textContent?.trim()
+  return value || ''
+}
+
+const countXmlElements = (xmlDocument: Document, namespace: string, localName: string): number =>
+  xmlDocument.getElementsByTagNameNS(namespace, localName).length
+
+const buildLexisXmlPreviewMessage = async (file: File): Promise<string> => {
+  const extension = getFileExtension(file.name)
+  if (extension === '.zip') {
+    return 'ZIP archive will be unpacked and validated on upload.'
+  }
+  if (extension !== '.xml') {
+    return ''
+  }
+
+  try {
+    const xml = await file.text()
+    const xmlDocument = new DOMParser().parseFromString(xml, 'application/xml')
+    if (xmlDocument.querySelector('parsererror')) {
+      return XML_PREVIEW_UNAVAILABLE
+    }
+
+    const root = xmlDocument.documentElement
+    if (
+      root?.localName !== 'ESFSubmission' ||
+      root.namespaceURI !== ESF_NAMESPACE ||
+      countXmlElements(xmlDocument, LEXIS_NAMESPACE, 'LexisSubmission') === 0
+    ) {
+      return XML_PREVIEW_UNAVAILABLE
+    }
+
+    const packageNumber = firstXmlText(xmlDocument, LEXIS_NAMESPACE, 'boomNumber')
+    const regionCode = firstXmlText(xmlDocument, LEXIS_NAMESPACE, 'bcForestRegionCode')
+    const speciesEndUse = firstXmlText(xmlDocument, LEXIS_NAMESPACE, 'speciesEndUseSort')
+    const clientNumber = firstXmlText(xmlDocument, LEXIS_NAMESPACE, 'clientNumber')
+    const scaleRowCount = countXmlElements(xmlDocument, LEXIS_NAMESPACE, 'harvestedTimber')
+
+    const details = [
+      packageNumber ? `Package ${packageNumber}` : '',
+      regionCode ? `Region ${regionCode}` : '',
+      speciesEndUse ? `Species/end use ${speciesEndUse}` : '',
+      clientNumber ? `Client ${clientNumber}` : '',
+      scaleRowCount > 0 ? `${scaleRowCount} scale row${scaleRowCount === 1 ? '' : 's'}` : '',
+    ].filter(Boolean)
+
+    return details.length > 0 ? `Preview: ${details.join(', ')}.` : XML_PREVIEW_UNAVAILABLE
+  } catch (error) {
+    console.warn('Unable to build LEXIS XML upload preview.', error)
+    return XML_PREVIEW_UNAVAILABLE
+  }
 }
 
 const statusTagType = (status: UploadQueueStatus): 'gray' | 'blue' | 'green' | 'red' => {
@@ -651,6 +709,26 @@ const AdminUploadsPage: FC = () => {
     })
 
     setUploadQueue((current) => [...current, ...nextItems])
+    if (selectedWorkflowType === 'lexisXml') {
+      nextItems
+        .filter((item) => item.status === 'queued')
+        .forEach((item) => {
+          void buildLexisXmlPreviewMessage(item.file).then((message) => {
+            if (!message) {
+              return
+            }
+            setUploadQueue((current) =>
+              current.map((currentItem) =>
+                currentItem.id === item.id &&
+                currentItem.status === 'queued' &&
+                !currentItem.message
+                  ? { ...currentItem, message }
+                  : currentItem,
+              ),
+            )
+          })
+        })
+    }
     setErrorMessage('')
     setSuccessMessage('')
     markFieldTouched('uploadFile')

@@ -49,6 +49,28 @@ const renderPage = (path = '/admin/uploads?type=permit') => {
   )
 }
 
+const XML_PREVIEW_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
+<esf:ESFSubmission xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis">
+  <esf:submissionContent>
+    <lexis:LexisSubmission>
+      <lexis:applicant>
+        <lexis:applicantDetails>
+          <lexis:clientNumber>1074</lexis:clientNumber>
+        </lexis:applicantDetails>
+      </lexis:applicant>
+      <lexis:applicationDetail>
+        <lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>
+      </lexis:applicationDetail>
+      <lexis:productDetail>
+        <lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>
+        <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+        <lexis:harvestedTimber />
+        <lexis:harvestedTimber />
+      </lexis:productDetail>
+    </lexis:LexisSubmission>
+  </esf:submissionContent>
+</esf:ESFSubmission>`
+
 describe('Admin upload workflow smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -400,6 +422,23 @@ describe('Admin upload workflow smoke', () => {
     expect(
       screen.getAllByText(/Imported payload\/6-652-7.xml from ZIP archive submission.zip/).length,
     ).toBeGreaterThan(0)
+  })
+
+  it('previews useful fields from queued LEXIS XML files before submit', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+
+    renderPage('/admin/uploads?type=lexisXml')
+
+    const file = new File([XML_PREVIEW_FIXTURE], 'submission.xml', { type: 'application/xml' })
+    await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
+
+    expect(
+      await screen.findByText(
+        'Preview: Package TEST23-652-7D-2, Region RSC, Species/end use HE/PL, Client 1074, 2 scale rows.',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('submits queued XML files one at a time', async () => {
