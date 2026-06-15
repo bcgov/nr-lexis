@@ -25,6 +25,7 @@ public class UploadRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "INSERT_EXEMPT_FILE_ATTACHMENT(?,?,?,?,?,?,?,?,?,?,?)";
   private static final String INSERT_INVOICE_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "INSERT_INVOICE_FILE_ATTACHMENT(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String FIND_FILE_TYPE_CODE = LEXIS_CODES_PACKAGE + "FIND_FILE_TYPE_CODE(?,?)";
 
   public UploadRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -170,6 +171,20 @@ public class UploadRepository extends OracleRepositorySupport {
         },
         INSERT_INVOICE_FILE_ATTACHMENT,
         15);
+  }
+
+  public boolean isFileTypeCodeValid(String fileTypeCode) {
+    String normalized = trim(fileTypeCode);
+    if (normalized == null) {
+      return false;
+    }
+
+    return queryCursorSingle(
+            FIND_FILE_TYPE_CODE,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> trim(getString(rs, "CODE")))
+        .isPresent();
   }
 
   private boolean executeUpload(

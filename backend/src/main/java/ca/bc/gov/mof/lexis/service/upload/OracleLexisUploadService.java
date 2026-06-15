@@ -34,6 +34,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     if (fileTypeCode == null) {
       return Optional.empty();
     }
+    Optional<LexisUploadResultDto> fileTypeRejection = rejectUnsupportedFileType("application", file, fileTypeCode);
+    if (fileTypeRejection.isPresent()) {
+      return fileTypeRejection;
+    }
 
     boolean persisted =
         uploadRepository.insertApplicationFile(
@@ -65,6 +69,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     String fileTypeCode = fileExtension(file);
     if (fileTypeCode == null) {
       return Optional.empty();
+    }
+    Optional<LexisUploadResultDto> fileTypeRejection = rejectUnsupportedFileType("permit", file, fileTypeCode);
+    if (fileTypeRejection.isPresent()) {
+      return fileTypeRejection;
     }
 
     boolean persisted =
@@ -98,6 +106,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     String fileTypeCode = fileExtension(file);
     if (fileTypeCode == null) {
       return Optional.empty();
+    }
+    Optional<LexisUploadResultDto> fileTypeRejection = rejectUnsupportedFileType("exemption", file, fileTypeCode);
+    if (fileTypeRejection.isPresent()) {
+      return fileTypeRejection;
     }
 
     boolean persisted =
@@ -146,6 +158,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     if (fileTypeCode == null) {
       return Optional.empty();
     }
+    Optional<LexisUploadResultDto> fileTypeRejection = rejectUnsupportedFileType("invoice", file, fileTypeCode);
+    if (fileTypeRejection.isPresent()) {
+      return fileTypeRejection;
+    }
 
     String normalizedDescription =
         trim(description) == null ? "Invoice " + normalizedSalesInvoiceNumber : description.trim();
@@ -181,6 +197,21 @@ public class OracleLexisUploadService implements LexisUploadService {
 
   private LexisUploadResultDto rejected(String uploadType, MultipartFile file, String message) {
     return new LexisUploadResultDto(uploadType, resolveFileName(file), file.getSize(), "rejected", message);
+  }
+
+  private Optional<LexisUploadResultDto> rejectUnsupportedFileType(
+      String uploadType, MultipartFile file, String fileTypeCode) {
+    if (uploadRepository.isFileTypeCodeValid(fileTypeCode)) {
+      return Optional.empty();
+    }
+
+    return Optional.of(
+        rejected(
+            uploadType,
+            file,
+            "File type "
+                + fileTypeCode
+                + " is not configured in LEXIS. Use a supported file type before uploading."));
   }
 
   private boolean validFile(MultipartFile file) {

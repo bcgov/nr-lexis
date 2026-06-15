@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -30,6 +31,7 @@ class OracleLexisUploadServiceTest {
     MockMultipartFile file =
         new MockMultipartFile(
             "formFile", "application.pdf", "application/pdf", "pdf-bytes".getBytes(StandardCharsets.UTF_8));
+    when(uploadRepository.isFileTypeCodeValid("PDF")).thenReturn(true);
     when(
             uploadRepository.insertApplicationFile(
                 eq(7000123L),
@@ -58,6 +60,25 @@ class OracleLexisUploadServiceTest {
   }
 
   @Test
+  void uploadApplicationShouldReturnRejectedResultForUnsupportedFileTypeBeforeInsert() {
+    OracleLexisUploadService service = new OracleLexisUploadService(uploadRepository);
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "formFile", "application.xyz", "application/octet-stream", "bytes".getBytes(StandardCharsets.UTF_8));
+    when(uploadRepository.isFileTypeCodeValid("XYZ")).thenReturn(false);
+
+    LexisUploadResultDto result =
+        service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.message())
+        .isEqualTo(
+            "File type XYZ is not configured in LEXIS. Use a supported file type before uploading.");
+    verify(uploadRepository).isFileTypeCodeValid("XYZ");
+    verifyNoMoreInteractions(uploadRepository);
+  }
+
+  @Test
   void uploadApplicationShouldRejectFilesWithoutExtensionBeforeCallingOracle() {
     OracleLexisUploadService service = new OracleLexisUploadService(uploadRepository);
     MockMultipartFile file =
@@ -74,6 +95,7 @@ class OracleLexisUploadServiceTest {
     MockMultipartFile file =
         new MockMultipartFile(
             "formFile", "application.pdf", "application/pdf", "pdf-bytes".getBytes(StandardCharsets.UTF_8));
+    when(uploadRepository.isFileTypeCodeValid("PDF")).thenReturn(true);
     when(
             uploadRepository.insertApplicationFile(
                 eq(7000123L),
