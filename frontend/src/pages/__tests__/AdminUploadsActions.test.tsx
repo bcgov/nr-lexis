@@ -84,7 +84,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
     expect(screen.getByText('Permit number is required.')).toBeInTheDocument()
-    expect(screen.getByText('Choose a file to upload.')).toBeInTheDocument()
+    expect(screen.getByText('Choose at least one file to upload.')).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
@@ -122,7 +122,47 @@ describe('Admin upload workflow smoke', () => {
     })
 
     expect(screen.getByText('Upload Submitted')).toBeInTheDocument()
-    expect(screen.getByText(/created application 9001/)).toBeInTheDocument()
+    expect(screen.getAllByText(/created application 9001/).length).toBeGreaterThan(0)
+  })
+
+  it('submits queued XML files one at a time', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+    mockedSubmitAdminUpload
+      .mockResolvedValueOnce({
+        message: 'First XML import created application 9001.',
+      })
+      .mockResolvedValueOnce({
+        message: 'Second XML import created application 9002.',
+      })
+
+    renderPage('/admin/uploads?type=lexisXml')
+
+    const firstFile = new File(['<xml />'], 'first.xml', { type: 'application/xml' })
+    const secondFile = new File(['<xml />'], 'second.xml', { type: 'application/xml' })
+    await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), [firstFile, secondFile])
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
+    })
+
+    expect(mockedSubmitAdminUpload).toHaveBeenNthCalledWith(
+      1,
+      'lexisXml',
+      expect.objectContaining({ file: firstFile }),
+    )
+    expect(mockedSubmitAdminUpload).toHaveBeenNthCalledWith(
+      2,
+      'lexisXml',
+      expect.objectContaining({ file: secondFile }),
+    )
+    expect(
+      screen.getByText('2 files uploaded. Verify updates in the target details view.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('First XML import created application 9001.')).toBeInTheDocument()
+    expect(screen.getByText('Second XML import created application 9002.')).toBeInTheDocument()
   })
 
   it('shows LEXIS XML import rejection details from a 422 response', async () => {
