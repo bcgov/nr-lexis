@@ -12,24 +12,7 @@ permissions: {}
 
 jobs:
   cleanup:
-    name: Cleanup and Image Promotion
-    uses: bcgov/quickstart-openshift-helpers/.github/workflows/.pr-close.yml@ca6579bdadf383a2513397081f963889b92823a4 # v1.1.0
-    permissions:
-      packages: write
-    secrets:
-      oc_namespace: ${{ secrets.oc_namespace }}
-      oc_token: ${{ secrets.oc_token }}
-    with:
-      environment: dev
-      cleanup: label
-      packages: backend frontend
-      # Use explicit backend/frontend labels so PR cleanup removes both stacks.
-      cleanup_name: ${{ github.event.repository.name }}-backend-${{ github.event.number }} ${{ github.event.repository.name }}-frontend-${{ github.event.number }}
-
-  cleanup-preview-resources:
     name: Cleanup Preview Resources
-    needs: [cleanup]
-    if: always()
     runs-on: ubuntu-24.04
     environment: dev
     timeout-minutes: 10
