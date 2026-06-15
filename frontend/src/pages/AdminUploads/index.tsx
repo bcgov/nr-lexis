@@ -1,4 +1,4 @@
-import { useMemo, useState, type FC } from 'react'
+import { useMemo, useState, type DragEvent, type FC } from 'react'
 import {
   Button,
   Column,
@@ -9,6 +9,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { Upload } from '@carbon/icons-react'
 import { useSearchParams } from 'react-router-dom'
 import SearchableSelect from '@/components/SearchableSelect'
 import { useAuth } from '@/context/auth/useAuth'
@@ -236,6 +237,22 @@ const statusLabel = (status: UploadQueueStatus): string => {
   return 'Queued'
 }
 
+const workflowDescription = (workflowType: UploadWorkflowType): string => {
+  if (workflowType === 'lexisXml') {
+    return 'Import ESF LEXIS XML submissions and create the application, package, species, and scale rows in LEXIS.'
+  }
+  if (workflowType === 'invoice') {
+    return 'Attach an invoice file and invoice values to an existing permit.'
+  }
+  if (workflowType === 'application') {
+    return 'Attach one or more documents to an existing provincial application.'
+  }
+  if (workflowType === 'exemption') {
+    return 'Attach one or more documents to an existing exemption.'
+  }
+  return 'Attach one or more documents to an existing permit.'
+}
+
 const AdminUploadsPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -250,6 +267,7 @@ const AdminUploadsPage: FC = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<UploadField>>({})
   const [showValidationErrors, setShowValidationErrors] = useState(false)
 
@@ -266,6 +284,28 @@ const AdminUploadsPage: FC = () => {
     () => uploadQueue.filter((item) => item.status === 'invalid').length,
     [uploadQueue],
   )
+  const completeUploadCount = useMemo(
+    () => uploadQueue.filter((item) => item.status === 'complete').length,
+    [uploadQueue],
+  )
+  const failedUploadCount = useMemo(
+    () => uploadQueue.filter((item) => item.status === 'failed').length,
+    [uploadQueue],
+  )
+  const readyUploadCount = useMemo(
+    () => uploadQueue.filter((item) => item.status === 'queued').length,
+    [uploadQueue],
+  )
+  const uploadInputLabel =
+    selectedWorkflowType === 'lexisXml' ? 'LEXIS XML or ZIP File' : 'Document File'
+  const uploadAccept =
+    selectedWorkflowType === 'lexisXml'
+      ? '.xml,.zip,application/xml,text/xml,application/zip'
+      : undefined
+  const uploadFormatText =
+    selectedWorkflowType === 'lexisXml'
+      ? 'Supported formats: .xml and .zip'
+      : 'Supported files: any document with a file extension'
 
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
@@ -357,6 +397,12 @@ const AdminUploadsPage: FC = () => {
     setSuccessMessage('')
     markFieldTouched('uploadFile')
     setFileInputKey((current) => current + 1)
+  }
+
+  const onDropUploadFiles = (event: DragEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    setIsDraggingOver(false)
+    addFilesToQueue(event.dataTransfer.files)
   }
 
   const removeQueuedFile = (id: string): void => {
@@ -492,12 +538,13 @@ const AdminUploadsPage: FC = () => {
     setErrorMessage('')
     setSuccessMessage('')
     setShowValidationErrors(false)
+    setIsDraggingOver(false)
   }
 
   return (
     <Grid fullWidth className="default-grid admin-upload-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Upload Center</h1>
+        <h1>Data Upload</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -505,10 +552,7 @@ const AdminUploadsPage: FC = () => {
           <div className="admin-upload-workflow__header">
             <div>
               <h2>{selectedWorkflow.label}</h2>
-              <p>
-                Add one or more files, review the queue, then submit them to the selected upload
-                workflow.
-              </p>
+              <p>{workflowDescription(selectedWorkflowType)}</p>
             </div>
             <Tag type={hasUploadAccess ? 'green' : 'red'}>
               {hasUploadAccess ? 'Allowed' : 'Not Granted'}
@@ -526,12 +570,6 @@ const AdminUploadsPage: FC = () => {
               }))}
               onChange={(value) => setWorkflowType(getWorkflowFromQuery(value))}
             />
-
-            <div>
-              <p>
-                Required action: <code>{selectedWorkflow.requiredAction}</code>
-              </p>
-            </div>
 
             {selectedWorkflowType === 'application' && (
               <TextInput
@@ -662,55 +700,103 @@ const AdminUploadsPage: FC = () => {
             />
           </div>
 
-          <div className="admin-upload-drop-zone">
-            <div>
-              <h2>
-                {selectedWorkflowType === 'lexisXml'
-                  ? 'Upload LEXIS XML or ZIP Files'
-                  : 'Upload Document Files'}
-              </h2>
-              <p>
-                {selectedWorkflowType === 'lexisXml'
-                  ? 'Supported formats: .xml and .zip. Each file is submitted as its own import.'
-                  : 'Each selected file is uploaded to the target record using the fields above.'}
-              </p>
-            </div>
-            <TextInput
-              key={fileInputKey}
-              id="uploadFile"
-              type="file"
-              labelText={
-                selectedWorkflowType === 'lexisXml' ? 'LEXIS XML or ZIP File' : 'Document File'
-              }
-              accept={
-                selectedWorkflowType === 'lexisXml'
-                  ? '.xml,.zip,application/xml,text/xml,application/zip'
-                  : undefined
-              }
-              multiple
-              invalid={!!fieldError('uploadFile')}
-              invalidText={fieldError('uploadFile')}
-              onChange={(event) => {
-                const target = event.target as HTMLInputElement
-                addFilesToQueue(target.files)
-              }}
-            />
-          </div>
-
-          <div className="admin-upload-queue">
-            <div className="admin-upload-queue__header">
+          <section className="admin-upload-panel" aria-labelledby="admin-upload-panel-title">
+            <div className="admin-upload-panel__header">
               <div>
-                <h2>Upload Queue</h2>
+                <h2 id="admin-upload-panel-title">
+                  {selectedWorkflowType === 'lexisXml'
+                    ? 'Upload LEXIS XML Submissions'
+                    : 'Upload Documents'}
+                </h2>
+                <p>{uploadFormatText}. Multiple files can be queued and submitted together.</p>
+              </div>
+            </div>
+
+            <div
+              className={`admin-upload-drop-zone${isDraggingOver ? ' is-dragging' : ''}`}
+              onDragEnter={(event) => {
+                event.preventDefault()
+                setIsDraggingOver(true)
+              }}
+              onDragOver={(event) => {
+                event.preventDefault()
+                setIsDraggingOver(true)
+              }}
+              onDragLeave={() => setIsDraggingOver(false)}
+              onDrop={onDropUploadFiles}
+            >
+              <div className="admin-upload-drop-zone__icon" aria-hidden="true">
+                <Upload size={32} />
+              </div>
+              <div className="admin-upload-drop-zone__copy">
+                <p>Drag and drop files here, or browse for files.</p>
+                <p>{uploadFormatText}</p>
+              </div>
+              <input
+                key={fileInputKey}
+                id="uploadFile"
+                className="admin-upload-native-input"
+                type="file"
+                aria-label={uploadInputLabel}
+                aria-invalid={!!fieldError('uploadFile')}
+                aria-describedby={fieldError('uploadFile') ? 'uploadFile-error' : undefined}
+                accept={uploadAccept}
+                multiple
+                onChange={(event) => {
+                  const target = event.target as HTMLInputElement
+                  addFilesToQueue(target.files)
+                }}
+              />
+              <label
+                className="cds--btn cds--btn--primary admin-upload-browse-button"
+                htmlFor="uploadFile"
+              >
+                Browse files
+              </label>
+            </div>
+
+            {fieldError('uploadFile') && (
+              <p
+                className="legacy-search-error admin-upload-file-error"
+                id="uploadFile-error"
+                role="alert"
+              >
+                {fieldError('uploadFile')}
+              </p>
+            )}
+          </section>
+
+          <section className="admin-upload-panel" aria-labelledby="admin-upload-queue-title">
+            <div className="admin-upload-panel__header">
+              <div>
+                <h2 id="admin-upload-queue-title">Upload Queue</h2>
                 <p>
                   {uploadQueue.length === 0
-                    ? 'No files selected.'
-                    : `${uploadQueue.length} file${uploadQueue.length === 1 ? '' : 's'} ready.`}
+                    ? 'Select files to preview them before submitting.'
+                    : `${uploadQueue.length} file${uploadQueue.length === 1 ? '' : 's'} selected.`}
                 </p>
+              </div>
+              <div className="admin-upload-queue-summary" aria-label="Upload queue summary">
+                <Tag type="gray">Ready {readyUploadCount}</Tag>
+                <Tag type="red">Invalid {invalidUploadCount}</Tag>
+                <Tag type="green">Complete {completeUploadCount}</Tag>
+                <Tag type="red">Failed {failedUploadCount}</Tag>
               </div>
               {uploadQueue.length > 0 && (
                 <Button kind="ghost" size="sm" onClick={clearQueuedFiles} disabled={isSubmitting}>
                   Clear Queue
                 </Button>
+              )}
+            </div>
+
+            <div className="admin-upload-queue">
+              <h2>
+                {uploadQueue.length === 0
+                  ? 'No data uploaded yet'
+                  : `Preview ${uploadQueue.length} queued file${uploadQueue.length === 1 ? '' : 's'}`}
+              </h2>
+              {uploadQueue.length === 0 && (
+                <p className="admin-upload-empty-copy">Upload files to see them here.</p>
               )}
             </div>
 
@@ -753,7 +839,7 @@ const AdminUploadsPage: FC = () => {
                 )}
               </tbody>
             </table>
-          </div>
+          </section>
 
           <div className="legacy-search-actions">
             <Button

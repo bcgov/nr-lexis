@@ -70,7 +70,9 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=invoice')
 
     expect(screen.getByText('Not Granted')).toBeInTheDocument()
-    expect(screen.getByText('/fileInvoiceUpload')).toBeInTheDocument()
+    expect(
+      screen.getByText('Attach an invoice file and invoice values to an existing permit.'),
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit Upload' })).toBeDisabled()
   })
 
@@ -103,7 +105,7 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=lexisXml')
 
     expect(screen.getByText('Allowed')).toBeInTheDocument()
-    expect(screen.getByText('createApplication')).toBeInTheDocument()
+    expect(screen.getByText('Upload LEXIS XML Submissions')).toBeInTheDocument()
     expect(screen.queryByLabelText('Application Number')).not.toBeInTheDocument()
 
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
