@@ -174,6 +174,19 @@ class LexisXmlImportServiceTest {
   }
 
   @Test
+  void shouldRejectCorruptZipFiles() {
+    LexisXmlImportService service = service();
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "formFile", "submission.zip", "application/zip", "not a zip".getBytes(StandardCharsets.UTF_8));
+
+    LexisXmlImportResultDto result = service.importLexisXml(file, "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("The uploaded Zip file is corrupt, and cannot be read.");
+  }
+
+  @Test
   void shouldRejectUnmappedForestRegion() {
     LexisXmlImportService service = service();
     String xml =
@@ -210,6 +223,29 @@ class LexisXmlImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors()).contains("The XML file must include an xsi:schemaLocation attribute.");
+  }
+
+  @Test
+  void shouldRejectMalformedXmlWithLineAndColumnDetails() {
+    LexisXmlImportService service = service();
+    String xml = SAMPLE_XML.replace("</lexis:productDetail>", "");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .anySatisfy(
+            error -> {
+              assertThat(error).contains("Line:");
+              assertThat(error)
+                  .contains(
+                      "The tag '<lexis:productDetail>' must be terminated with a matching "
+                          + "'</lexis:productDetail>' tag.");
+            });
   }
 
   @Test

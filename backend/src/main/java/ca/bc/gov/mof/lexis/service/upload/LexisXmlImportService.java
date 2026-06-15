@@ -20,7 +20,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
 import java.util.zip.ZipInputStream;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -36,6 +39,9 @@ import org.springframework.web.multipart.MultipartFile;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
+import org.xml.sax.ErrorHandler;
+import org.xml.sax.SAXException;
+import org.xml.sax.SAXParseException;
 
 @Service
 public class LexisXmlImportService {
@@ -61,6 +67,12 @@ public class LexisXmlImportService {
   private static final String DEFAULT_REPROCESSED_INDICATOR = "N";
   private static final String DEFAULT_OIC_INDICATOR = "N";
   private static final String PROVINCIAL_JURISDICTION = "P";
+  private static final Pattern UNTERMINATED_XML_TAG_PATTERN =
+      Pattern.compile("The element type \"([^\"]+)\" must be terminated by the matching end-tag \"</([^\"]+)>\"\\.");
+  private static final Pattern INCOMPLETE_XML_TAG_PATTERN =
+      Pattern.compile("Element type \"([^\"]+)\" must be followed by either attribute specifications, \">\" or \"/>\"\\.");
+  private static final Pattern INVALID_XML_ATTRIBUTE_CHARACTER_PATTERN =
+      Pattern.compile("The value of attribute \"([^\"]+)\".* must not contain the '([^']+)' character\\.");
 
   private static final Map<String, Long> ORG_UNIT_BY_REGION_CODE =
       Map.ofEntries(
@@ -205,6 +217,10 @@ public class LexisXmlImportService {
   }
 
   private UploadedLexisXml readZippedLexisXml(MultipartFile file, String fileName) throws Exception {
+    if (!hasZipHeader(file)) {
+      throw new LexisXmlImportException(List.of("The uploaded Zip file is corrupt, and cannot be read."));
+    }
+
     List<String> xmlEntryNames = new ArrayList<>();
     List<String> unexpectedEntryNames = new ArrayList<>();
     byte[] xmlBytes = null;
@@ -228,6 +244,8 @@ public class LexisXmlImportService {
         }
         zipInputStream.closeEntry();
       }
+    } catch (ZipException ex) {
+      throw new LexisXmlImportException(List.of("The uploaded Zip file is corrupt, and cannot be read."));
     }
 
     if (!unexpectedEntryNames.isEmpty()) {
@@ -246,6 +264,14 @@ public class LexisXmlImportService {
     return new UploadedLexisXml(
         xmlBytes,
         List.of("Imported " + xmlEntryNames.get(0) + " from ZIP archive " + fileName + "."));
+  }
+
+  private boolean hasZipHeader(MultipartFile file) throws Exception {
+    try (InputStream inputStream = file.getInputStream()) {
+      int first = inputStream.read();
+      int second = inputStream.read();
+      return first == 'P' && second == 'K';
+    }
   }
 
   private boolean isIgnoredZipEntry(String entryName) {
@@ -280,7 +306,11 @@ public class LexisXmlImportService {
     DocumentBuilderFactory factory = secureDocumentBuilderFactory();
     Document document;
     try (InputStream inputStream = new ByteArrayInputStream(xmlBytes)) {
-      document = factory.newDocumentBuilder().parse(inputStream);
+      var builder = factory.newDocumentBuilder();
+      builder.setErrorHandler(new QuietXmlErrorHandler());
+      document = builder.parse(inputStream);
+    } catch (SAXParseException ex) {
+      throw new LexisXmlImportException(List.of(formatXmlParseError(ex)));
     }
     Element root = document.getDocumentElement();
     List<String> errors = new ArrayList<>();
@@ -534,6 +564,51 @@ public class LexisXmlImportService {
     factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
     factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
     return factory;
+  }
+
+  private String formatXmlParseError(SAXParseException exception) {
+    return formatXmlLocation(exception) + normalizeXmlParseMessage(exception.getMessage());
+  }
+
+  private String formatXmlLocation(SAXParseException exception) {
+    if (exception.getLineNumber() > 0) {
+      String column =
+          exception.getColumnNumber() > 0 ? " Column: " + exception.getColumnNumber() : "";
+      return "Line: " + exception.getLineNumber() + column + ": ";
+    }
+    return "Line UNKNOWN: ";
+  }
+
+  private String normalizeXmlParseMessage(String message) {
+    String normalized = trim(message);
+    if (normalized == null) {
+      return "The submission is not a well-formed XML document.";
+    }
+
+    Matcher unterminatedTag = UNTERMINATED_XML_TAG_PATTERN.matcher(normalized);
+    if (unterminatedTag.find()) {
+      return "The tag '<"
+          + unterminatedTag.group(1)
+          + ">' must be terminated with a matching '</"
+          + unterminatedTag.group(2)
+          + ">' tag.";
+    }
+
+    Matcher incompleteTag = INCOMPLETE_XML_TAG_PATTERN.matcher(normalized);
+    if (incompleteTag.find()) {
+      return "An XML tag named '<" + incompleteTag.group(1) + ">' is missing a closing '>' or '/>'.";
+    }
+
+    Matcher invalidAttributeCharacter = INVALID_XML_ATTRIBUTE_CHARACTER_PATTERN.matcher(normalized);
+    if (invalidAttributeCharacter.find()) {
+      return "An XML attribute named '"
+          + invalidAttributeCharacter.group(1)
+          + "' contains the prohibited character '"
+          + invalidAttributeCharacter.group(2)
+          + "'.";
+    }
+
+    return "The submission is not a well-formed XML document. " + normalized;
   }
 
   private List<ScaleLine> parseScaleLines(Element productDetail, List<String> errors) {
@@ -872,6 +947,22 @@ public class LexisXmlImportService {
 
   private record ScaleLine(
       String timberMark, Long pieces, String speciesCode, String gradeCode, Double volume) {}
+
+  private static class QuietXmlErrorHandler implements ErrorHandler {
+
+    @Override
+    public void warning(SAXParseException exception) {}
+
+    @Override
+    public void error(SAXParseException exception) throws SAXException {
+      throw exception;
+    }
+
+    @Override
+    public void fatalError(SAXParseException exception) throws SAXException {
+      throw exception;
+    }
+  }
 
   private static class LexisXmlImportException extends Exception {
     private final List<String> errors;
