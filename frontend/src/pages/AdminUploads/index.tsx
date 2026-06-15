@@ -16,7 +16,9 @@ import { useAuth } from '@/context/auth/useAuth'
 import {
   firstValidationError,
   getVisibleFieldError,
+  maxLengthFieldError,
   numericFieldError,
+  positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
   type TouchedFields,
@@ -376,23 +378,34 @@ const AdminUploadsPage: FC = () => {
           : undefined,
       salesInvoiceNumber:
         selectedWorkflowType === 'invoice'
-          ? (requiredFieldError(formState.salesInvoiceNumber, 'Invoice number') ?? undefined)
+          ? firstValidationError(
+              () => requiredFieldError(formState.salesInvoiceNumber, 'Invoice number'),
+              () => maxLengthFieldError(formState.salesInvoiceNumber, 9, 'Invoice number'),
+            )
           : undefined,
       invoiceExportValue:
         selectedWorkflowType === 'invoice'
           ? firstValidationError(
               () => requiredFieldError(formState.invoiceExportValue, 'Invoice export value'),
               () => numericFieldError(formState.invoiceExportValue, 'Invoice export value'),
+              () => positiveNumericFieldError(formState.invoiceExportValue),
             )
           : undefined,
       invoiceConversionRate:
         selectedWorkflowType === 'invoice'
-          ? (numericFieldError(formState.invoiceConversionRate, 'Invoice conversion rate') ??
-            undefined)
+          ? firstValidationError(
+              () => requiredFieldError(formState.invoiceConversionRate, 'Invoice conversion rate'),
+              () => numericFieldError(formState.invoiceConversionRate, 'Invoice conversion rate'),
+              () => positiveNumericFieldError(formState.invoiceConversionRate),
+            )
           : undefined,
       invoiceFeeInLieu:
         selectedWorkflowType === 'invoice'
-          ? (numericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu') ?? undefined)
+          ? firstValidationError(
+              () => requiredFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu'),
+              () => numericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu'),
+              () => positiveNumericFieldError(formState.invoiceFeeInLieu),
+            )
           : undefined,
     }),
     [formState, invalidUploadCount, uploadQueue.length, selectedWorkflowType],

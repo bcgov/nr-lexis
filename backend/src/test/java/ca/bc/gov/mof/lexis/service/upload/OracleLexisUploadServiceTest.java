@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.upload.UploadRepository;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -91,5 +92,26 @@ class OracleLexisUploadServiceTest {
     assertThat(result.message())
         .isEqualTo(
             "Could not attach file to application 7000123. Confirm the application exists before uploading.");
+  }
+
+  @Test
+  void uploadInvoiceShouldRejectInvalidLegacyInvoiceFieldsBeforeCallingOracle() {
+    OracleLexisUploadService service = new OracleLexisUploadService(uploadRepository);
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "formFile", "invoice.pdf", "application/pdf", "pdf-bytes".getBytes(StandardCharsets.UTF_8));
+
+    assertThat(
+            service.uploadInvoice(
+                file,
+                7000123L,
+                "1234567890",
+                "",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                "jsmith"))
+        .isEmpty();
+    verifyNoInteractions(uploadRepository);
   }
 }

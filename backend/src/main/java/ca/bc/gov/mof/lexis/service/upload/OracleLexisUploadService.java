@@ -135,7 +135,11 @@ public class OracleLexisUploadService implements LexisUploadService {
     if (!validFile(file)
         || permitNumber == null
         || permitNumber < 1
-        || normalizedSalesInvoiceNumber == null) {
+        || normalizedSalesInvoiceNumber == null
+        || normalizedSalesInvoiceNumber.length() > 9
+        || !positive(exportValue)
+        || !positive(currencyConversionRate)
+        || !positive(feeInLieu)) {
       return Optional.empty();
     }
     String fileTypeCode = fileExtension(file);
@@ -181,6 +185,10 @@ public class OracleLexisUploadService implements LexisUploadService {
 
   private boolean validFile(MultipartFile file) {
     return file != null && !file.isEmpty();
+  }
+
+  private boolean positive(BigDecimal value) {
+    return value != null && value.compareTo(BigDecimal.ZERO) > 0;
   }
 
   private byte[] fileBytes(MultipartFile file) {

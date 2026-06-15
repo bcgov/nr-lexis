@@ -102,6 +102,29 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
+  it('blocks invoice uploads that fail legacy invoice validation rules', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === '/fileInvoiceUpload',
+    } as any)
+
+    renderPage('/admin/uploads?type=invoice&permitNumber=5001')
+
+    const file = new File(['invoice upload'], 'invoice.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.type(screen.getByLabelText('Invoice Number'), '1234567890')
+    await userEvent.type(screen.getByLabelText('Export Value (CAD)'), '0')
+    await userEvent.clear(screen.getByLabelText('Conversion Rate'))
+    await userEvent.type(screen.getByLabelText('Conversion Rate'), '0')
+    await userEvent.clear(screen.getByLabelText('Fee In Lieu'))
+    await userEvent.type(screen.getByLabelText('Fee In Lieu'), '0')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    expect(screen.getByText('Invoice number must be 9 characters or fewer.')).toBeInTheDocument()
+    expect(screen.getAllByText('Use a positive numeric value.').length).toBeGreaterThanOrEqual(3)
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
   it('submits LEXIS XML import without a target number', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
