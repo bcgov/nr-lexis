@@ -51,7 +51,7 @@ describe('Layout shell', () => {
     renderLayout('/admin/uploads')
 
     const adminLink = screen.getByRole('link', { name: 'LEXIS Administration' })
-    const uploadsLink = screen.getByRole('link', { name: 'Upload Center' })
+    const uploadsLink = screen.getByRole('link', { name: 'Data Upload' })
     const activeLinks = document.querySelectorAll('.csp-side-nav__link.cds--side-nav__link--active')
 
     expect(document.querySelector('.page-header__eyebrow')).toHaveTextContent('Administration')
@@ -69,7 +69,7 @@ describe('Layout shell', () => {
 
     expect(screen.getByRole('link', { name: 'Dashboard' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'LEXIS Administration' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Upload Center' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Data Upload' })).toBeVisible()
     expect(document.querySelector('.csp-side-nav__icon')).not.toBeInTheDocument()
     expect(sideNav.querySelector('.csp-side-nav__link svg')).not.toBeInTheDocument()
   })
