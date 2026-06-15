@@ -72,6 +72,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     expect(screen.getByRole('columnheader', { name: 'Target' })).toBeInTheDocument()
     expect(screen.getByText('Permit 5001')).toBeInTheDocument()
+    expect(screen.getByText(/PDF \| 13 B \| Added/)).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Document Description'), 'Permit evidence')
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
@@ -325,6 +326,7 @@ describe('Admin upload workflow smoke', () => {
     expect(
       screen.getByText('Creates application, package, species, and scales'),
     ).toBeInTheDocument()
+    expect(screen.getByText(/XML \| 7 B \| Added/)).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Document Description'), 'LEXIS XML')
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 

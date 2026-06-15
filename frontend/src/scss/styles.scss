@@ -952,12 +952,22 @@ body {
   inline-size: 100%;
 }
 
-.admin-upload-queue__table td:nth-child(2) {
+.admin-upload-file-cell {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.admin-upload-file-cell span:first-child {
   font-weight: 600;
 }
 
+.admin-upload-file-cell span:last-child {
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+}
+
 .admin-upload-queue__table td:nth-child(3),
-.admin-upload-queue__table td:nth-child(6) {
+.admin-upload-queue__table td:nth-child(5) {
   max-inline-size: 32rem;
   white-space: normal;
 }

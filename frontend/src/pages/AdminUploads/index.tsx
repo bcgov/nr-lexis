@@ -93,6 +93,7 @@ type UploadQueueItem = {
   id: string
   file: File
   workflowLabel: string
+  queuedAt: number
   status: UploadQueueStatus
   message: string
   resultApplicationNumber?: number
@@ -209,6 +210,21 @@ const getFileExtension = (fileName: string): string => {
   }
 
   return normalizedName.slice(extensionStart)
+}
+
+const formatFileType = (file: File): string => {
+  const extension = getFileExtension(file.name)
+  if (extension) {
+    return extension.slice(1).toUpperCase()
+  }
+  return file.type || 'Unknown type'
+}
+
+const formatQueuedAt = (timestamp: number): string => {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(timestamp)
 }
 
 const trimTargetNumberInput = (input: string): string => input.trim()
@@ -607,6 +623,7 @@ const AdminUploadsPage: FC = () => {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
         file,
         workflowLabel: selectedWorkflow.label,
+        queuedAt,
         status: validationMessage ? ('invalid' as const) : ('queued' as const),
         message: validationMessage,
       }
@@ -1108,7 +1125,6 @@ const AdminUploadsPage: FC = () => {
                     <th>Upload Type</th>
                     <th>File</th>
                     <th>Target</th>
-                    <th>Size</th>
                     <th>Status</th>
                     <th>Message</th>
                     <th>Action</th>
@@ -1118,9 +1134,16 @@ const AdminUploadsPage: FC = () => {
                   {uploadQueue.map((item) => (
                     <tr key={item.id}>
                       <td>{item.workflowLabel}</td>
-                      <td>{item.file.name}</td>
+                      <td>
+                        <div className="admin-upload-file-cell">
+                          <span>{item.file.name}</span>
+                          <span>
+                            {formatFileType(item.file)} | {formatFileSize(item.file.size)} | Added{' '}
+                            {formatQueuedAt(item.queuedAt)}
+                          </span>
+                        </div>
+                      </td>
                       <td>{item.targetSummary ?? currentUploadTargetSummary}</td>
-                      <td>{formatFileSize(item.file.size)}</td>
                       <td>
                         <Tag type={statusTagType(item.status)}>{statusLabel(item.status)}</Tag>
                       </td>
