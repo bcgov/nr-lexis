@@ -92,9 +92,11 @@ type UploadQueueStatus = 'queued' | 'invalid' | 'uploading' | 'complete' | 'fail
 type UploadQueueItem = {
   id: string
   file: File
+  workflowLabel: string
   status: UploadQueueStatus
   message: string
   resultApplicationNumber?: number
+  targetSummary?: string
 }
 
 type QueuedUploadResult = {
@@ -389,6 +391,36 @@ const workflowDescription = (workflowType: UploadWorkflowType): string => {
   return 'Attach one or more documents to an existing permit.'
 }
 
+const uploadTargetSummary = (
+  workflowType: UploadWorkflowType,
+  formState: UploadFormState,
+): string => {
+  if (workflowType === 'lexisXml') {
+    return 'Creates application, package, species, and scales'
+  }
+  if (workflowType === 'application') {
+    return formState.applicationNumber
+      ? `Application ${formState.applicationNumber}`
+      : 'Application not selected'
+  }
+  if (workflowType === 'exemption') {
+    return formState.exemptionNumber
+      ? `Exemption ${formState.exemptionNumber}`
+      : 'Exemption not selected'
+  }
+  if (workflowType === 'permit') {
+    return formState.permitNumber ? `Permit ${formState.permitNumber}` : 'Permit not selected'
+  }
+
+  const permitTarget = formState.permitNumber
+    ? `Permit ${formState.permitNumber}`
+    : 'Permit not selected'
+  const invoiceTarget = formState.salesInvoiceNumber
+    ? `invoice ${formState.salesInvoiceNumber}`
+    : 'invoice not selected'
+  return `${permitTarget}; ${invoiceTarget}`
+}
+
 const buildUploadResultMessage = (
   workflowType: UploadWorkflowType,
   resultMessage: string,
@@ -481,6 +513,7 @@ const AdminUploadsPage: FC = () => {
     selectedWorkflowType === 'lexisXml'
       ? 'Supported formats: .xml and .zip'
       : 'Supported files: any document with a file extension'
+  const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
 
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
@@ -573,6 +606,7 @@ const AdminUploadsPage: FC = () => {
       return {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
         file,
+        workflowLabel: selectedWorkflow.label,
         status: validationMessage ? ('invalid' as const) : ('queued' as const),
         message: validationMessage,
       }
@@ -605,10 +639,19 @@ const AdminUploadsPage: FC = () => {
     status: UploadQueueStatus,
     message = '',
     resultApplicationNumber?: number,
+    targetSummary?: string,
   ): void => {
     setUploadQueue((current) =>
       current.map((item) =>
-        item.id === id ? { ...item, status, message, resultApplicationNumber } : item,
+        item.id === id
+          ? {
+              ...item,
+              status,
+              message,
+              resultApplicationNumber,
+              targetSummary: targetSummary ?? item.targetSummary,
+            }
+          : item,
       ),
     )
   }
@@ -715,16 +758,28 @@ const AdminUploadsPage: FC = () => {
         continue
       }
 
-      setQueueItemStatus(item.id, 'uploading')
+      setQueueItemStatus(item.id, 'uploading', '', undefined, currentUploadTargetSummary)
 
       try {
         const result = await submitQueuedFile(item.file)
         successCount += 1
         lastSuccessMessage = result.message
-        setQueueItemStatus(item.id, 'complete', result.message, result.applicationNumber)
+        setQueueItemStatus(
+          item.id,
+          'complete',
+          result.message,
+          result.applicationNumber,
+          currentUploadTargetSummary,
+        )
       } catch (error) {
         failureCount += 1
-        setQueueItemStatus(item.id, 'failed', extractUploadErrorMessage(error))
+        setQueueItemStatus(
+          item.id,
+          'failed',
+          extractUploadErrorMessage(error),
+          undefined,
+          currentUploadTargetSummary,
+        )
       }
     }
 
@@ -1050,7 +1105,9 @@ const AdminUploadsPage: FC = () => {
               <table className="cds--data-table admin-upload-queue__table">
                 <thead>
                   <tr>
+                    <th>Upload Type</th>
                     <th>File</th>
+                    <th>Target</th>
                     <th>Size</th>
                     <th>Status</th>
                     <th>Message</th>
@@ -1060,7 +1117,9 @@ const AdminUploadsPage: FC = () => {
                 <tbody>
                   {uploadQueue.map((item) => (
                     <tr key={item.id}>
+                      <td>{item.workflowLabel}</td>
                       <td>{item.file.name}</td>
+                      <td>{item.targetSummary ?? currentUploadTargetSummary}</td>
                       <td>{formatFileSize(item.file.size)}</td>
                       <td>
                         <Tag type={statusTagType(item.status)}>{statusLabel(item.status)}</Tag>

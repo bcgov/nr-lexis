@@ -952,11 +952,12 @@ body {
   inline-size: 100%;
 }
 
-.admin-upload-queue__table td:nth-child(1) {
+.admin-upload-queue__table td:nth-child(2) {
   font-weight: 600;
 }
 
-.admin-upload-queue__table td:nth-child(4) {
+.admin-upload-queue__table td:nth-child(3),
+.admin-upload-queue__table td:nth-child(6) {
   max-inline-size: 32rem;
   white-space: normal;
 }
