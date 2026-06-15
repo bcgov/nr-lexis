@@ -441,6 +441,21 @@ describe('Admin upload workflow smoke', () => {
     ).toBeInTheDocument()
   })
 
+  it('previews queued ZIP files as server-validated XML archives before submit', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+
+    renderPage('/admin/uploads?type=lexisXml')
+
+    const file = new File(['zip-data'], 'submission.zip', { type: 'application/zip' })
+    await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
+
+    expect(
+      await screen.findByText('ZIP archive will be unpacked and validated on upload.'),
+    ).toBeInTheDocument()
+  })
+
   it('submits queued XML files one at a time', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
