@@ -938,6 +938,12 @@ body {
   white-space: normal;
 }
 
+.admin-upload-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 @media (max-width: 671px) {
   .admin-upload-workflow__header,
   .admin-upload-panel__header,

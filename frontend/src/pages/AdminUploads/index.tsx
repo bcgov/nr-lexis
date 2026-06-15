@@ -10,7 +10,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { Upload } from '@carbon/icons-react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import SearchableSelect from '@/components/SearchableSelect'
 import { useAuth } from '@/context/auth/useAuth'
 import {
@@ -89,6 +89,12 @@ type UploadQueueItem = {
   file: File
   status: UploadQueueStatus
   message: string
+  resultApplicationNumber?: number
+}
+
+type QueuedUploadResult = {
+  message: string
+  applicationNumber?: number
 }
 
 const INITIAL_FORM_STATE: UploadFormState = {
@@ -453,23 +459,33 @@ const AdminUploadsPage: FC = () => {
     setFileInputKey((current) => current + 1)
   }
 
-  const setQueueItemStatus = (id: string, status: UploadQueueStatus, message = ''): void => {
+  const setQueueItemStatus = (
+    id: string,
+    status: UploadQueueStatus,
+    message = '',
+    resultApplicationNumber?: number,
+  ): void => {
     setUploadQueue((current) =>
-      current.map((item) => (item.id === id ? { ...item, status, message } : item)),
+      current.map((item) =>
+        item.id === id ? { ...item, status, message, resultApplicationNumber } : item,
+      ),
     )
   }
 
-  const submitQueuedFile = async (file: File): Promise<string> => {
+  const submitQueuedFile = async (file: File): Promise<QueuedUploadResult> => {
     if (selectedWorkflowType === 'lexisXml') {
       const result = await submitAdminUpload('lexisXml', {
         file,
         fileDescription: formState.fileDescription.trim(),
       })
-      return buildUploadResultMessage(
-        'lexisXml',
-        'LEXIS XML import submitted. Verify the created application and package details.',
-        result,
-      )
+      return {
+        message: buildUploadResultMessage(
+          'lexisXml',
+          'LEXIS XML import submitted. Verify the created application and package details.',
+          result,
+        ),
+        applicationNumber: result.applicationNumber,
+      }
     }
 
     if (selectedWorkflowType === 'application') {
@@ -478,11 +494,13 @@ const AdminUploadsPage: FC = () => {
         file,
         fileDescription: formState.fileDescription.trim(),
       })
-      return buildUploadResultMessage(
-        'application',
-        'Application document upload submitted.',
-        result,
-      )
+      return {
+        message: buildUploadResultMessage(
+          'application',
+          'Application document upload submitted.',
+          result,
+        ),
+      }
     }
 
     if (selectedWorkflowType === 'exemption') {
@@ -491,7 +509,13 @@ const AdminUploadsPage: FC = () => {
         file,
         fileDescription: formState.fileDescription.trim(),
       })
-      return buildUploadResultMessage('exemption', 'Exemption document upload submitted.', result)
+      return {
+        message: buildUploadResultMessage(
+          'exemption',
+          'Exemption document upload submitted.',
+          result,
+        ),
+      }
     }
 
     if (selectedWorkflowType === 'permit') {
@@ -500,7 +524,9 @@ const AdminUploadsPage: FC = () => {
         file,
         fileDescription: formState.fileDescription.trim(),
       })
-      return buildUploadResultMessage('permit', 'Permit document upload submitted.', result)
+      return {
+        message: buildUploadResultMessage('permit', 'Permit document upload submitted.', result),
+      }
     }
 
     const result = await submitAdminUpload('invoice', {
@@ -512,7 +538,9 @@ const AdminUploadsPage: FC = () => {
       file,
       fileDescription: formState.fileDescription.trim(),
     })
-    return buildUploadResultMessage('invoice', 'Invoice upload submitted.', result)
+    return {
+      message: buildUploadResultMessage('invoice', 'Invoice upload submitted.', result),
+    }
   }
 
   const onSubmitUpload = async (): Promise<void> => {
@@ -549,10 +577,10 @@ const AdminUploadsPage: FC = () => {
       setQueueItemStatus(item.id, 'uploading')
 
       try {
-        const message = await submitQueuedFile(item.file)
+        const result = await submitQueuedFile(item.file)
         successCount += 1
-        lastSuccessMessage = message
-        setQueueItemStatus(item.id, 'complete', message)
+        lastSuccessMessage = result.message
+        setQueueItemStatus(item.id, 'complete', result.message, result.applicationNumber)
       } catch (error) {
         failureCount += 1
         setQueueItemStatus(item.id, 'failed', extractUploadErrorMessage(error))
@@ -869,14 +897,21 @@ const AdminUploadsPage: FC = () => {
                       </td>
                       <td>{item.message || 'Not submitted yet.'}</td>
                       <td>
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          onClick={() => removeQueuedFile(item.id)}
-                          disabled={isSubmitting && item.status === 'uploading'}
-                        >
-                          Remove
-                        </Button>
+                        <div className="admin-upload-row-actions">
+                          {item.status === 'complete' && item.resultApplicationNumber && (
+                            <Link to={`/provincial/application/${item.resultApplicationNumber}`}>
+                              Open Application
+                            </Link>
+                          )}
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            onClick={() => removeQueuedFile(item.id)}
+                            disabled={isSubmitting && item.status === 'uploading'}
+                          >
+                            Remove
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))

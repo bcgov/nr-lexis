@@ -127,6 +127,10 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText(/Application 9001/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
+    expect(screen.getByRole('link', { name: 'Open Application' })).toHaveAttribute(
+      'href',
+      '/provincial/application/9001',
+    )
   })
 
   it('shows structured XML warning details in the upload queue', async () => {
