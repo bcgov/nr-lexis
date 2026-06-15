@@ -80,6 +80,7 @@ const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
 const ESF_NAMESPACE = 'http://www.for.gov.bc.ca/schema/esf'
 const LEXIS_NAMESPACE = 'http://www.for.gov.bc.ca/schema/lexis'
 const XML_PREVIEW_UNAVAILABLE = 'XML preview unavailable; server validation will run on upload.'
+const XML_QUALIFIED_NAME_PREFIX = String.raw`(?:[A-Za-z_][\w.-]*:)?`
 
 type UploadFormState = {
   applicationNumber: string
@@ -295,13 +296,31 @@ const validateQueuedFile = (file: File, workflowType: UploadWorkflowType): strin
   return ''
 }
 
-const firstXmlText = (xmlDocument: Document, namespace: string, localName: string): string => {
-  const value = xmlDocument.getElementsByTagNameNS(namespace, localName)[0]?.textContent?.trim()
-  return value || ''
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const hasNamespaceDeclaration = (xml: string, namespace: string): boolean =>
+  xml.includes(`"${namespace}"`) || xml.includes(`'${namespace}'`)
+
+const hasXmlRootElement = (xml: string, localName: string): boolean =>
+  new RegExp(
+    String.raw`^\s*(?:<\?xml\b[^>]*>\s*)?(?:<!--[\s\S]*?-->\s*)*<${XML_QUALIFIED_NAME_PREFIX}${escapeRegExp(localName)}\b`,
+  ).test(xml)
+
+const countXmlElements = (xml: string, localName: string): number => {
+  const elementPattern = new RegExp(
+    String.raw`<${XML_QUALIFIED_NAME_PREFIX}${escapeRegExp(localName)}(?:\s|>|/)`,
+    'g',
+  )
+  return xml.match(elementPattern)?.length ?? 0
 }
 
-const countXmlElements = (xmlDocument: Document, namespace: string, localName: string): number =>
-  xmlDocument.getElementsByTagNameNS(namespace, localName).length
+const firstXmlText = (xml: string, localName: string): string => {
+  const elementPattern = new RegExp(
+    String.raw`<${XML_QUALIFIED_NAME_PREFIX}${escapeRegExp(localName)}\b[^>]*>([\s\S]*?)</${XML_QUALIFIED_NAME_PREFIX}${escapeRegExp(localName)}>`,
+  )
+  const rawValue = elementPattern.exec(xml)?.[1]?.trim()
+  return rawValue?.replace(/<[^>]*>/g, '').trim() ?? ''
+}
 
 const buildLexisXmlPreviewMessage = async (file: File): Promise<string> => {
   const extension = getFileExtension(file.name)
@@ -314,25 +333,20 @@ const buildLexisXmlPreviewMessage = async (file: File): Promise<string> => {
 
   try {
     const xml = await file.text()
-    const xmlDocument = new DOMParser().parseFromString(xml, 'application/xml')
-    if (xmlDocument.querySelector('parsererror')) {
-      return XML_PREVIEW_UNAVAILABLE
-    }
-
-    const root = xmlDocument.documentElement
     if (
-      root?.localName !== 'ESFSubmission' ||
-      root.namespaceURI !== ESF_NAMESPACE ||
-      countXmlElements(xmlDocument, LEXIS_NAMESPACE, 'LexisSubmission') === 0
+      !hasXmlRootElement(xml, 'ESFSubmission') ||
+      !hasNamespaceDeclaration(xml, ESF_NAMESPACE) ||
+      !hasNamespaceDeclaration(xml, LEXIS_NAMESPACE) ||
+      countXmlElements(xml, 'LexisSubmission') === 0
     ) {
       return XML_PREVIEW_UNAVAILABLE
     }
 
-    const packageNumber = firstXmlText(xmlDocument, LEXIS_NAMESPACE, 'boomNumber')
-    const regionCode = firstXmlText(xmlDocument, LEXIS_NAMESPACE, 'bcForestRegionCode')
-    const speciesEndUse = firstXmlText(xmlDocument, LEXIS_NAMESPACE, 'speciesEndUseSort')
-    const clientNumber = firstXmlText(xmlDocument, LEXIS_NAMESPACE, 'clientNumber')
-    const scaleRowCount = countXmlElements(xmlDocument, LEXIS_NAMESPACE, 'harvestedTimber')
+    const packageNumber = firstXmlText(xml, 'boomNumber')
+    const regionCode = firstXmlText(xml, 'bcForestRegionCode')
+    const speciesEndUse = firstXmlText(xml, 'speciesEndUseSort')
+    const clientNumber = firstXmlText(xml, 'clientNumber')
+    const scaleRowCount = countXmlElements(xml, 'harvestedTimber')
 
     const details = [
       packageNumber ? `Package ${packageNumber}` : '',
