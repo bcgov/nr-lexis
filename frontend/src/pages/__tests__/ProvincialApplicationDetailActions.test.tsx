@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
-import { submitAdminUpload } from '@/service/admin-upload-service'
 import {
   approveApplicationReview,
   sendApplicationReviewStatusEmail,
@@ -55,10 +54,6 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchProvincialApplicationDetail: vi.fn(),
-}))
-
-vi.mock('@/service/admin-upload-service', () => ({
-  submitAdminUpload: vi.fn(),
 }))
 
 vi.mock('@/service/application-review-search-service', () => ({
@@ -132,7 +127,6 @@ const clearComboBox = async (combobox: HTMLElement) => {
 }
 
 const mockedUseAuth = vi.mocked(useAuth)
-const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
 const mockedSendApplicationReviewStatusEmail = vi.mocked(sendApplicationReviewStatusEmail)
 const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewStatus)
@@ -268,7 +262,6 @@ describe('Provincial Application Detail Document Actions', () => {
       success: true,
       source: 'api',
     })
-    mockedSubmitAdminUpload.mockResolvedValue(undefined)
     mockedFetchApplicationReviewOptions.mockResolvedValue({
       productTypes: [],
       regions: [],
@@ -602,7 +595,9 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Application Document' })
+    const [uploadButton] = await screen.findAllByRole('button', {
+      name: 'Upload Application Document',
+    })
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
@@ -643,24 +638,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
-  it('uploads an application document inline and refreshes document rows', async () => {
-    mockedFetchApplicationDocuments
-      .mockResolvedValueOnce({
-        rows: [],
-        source: 'api',
-      })
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: '200',
-            name: 'uploaded.pdf',
-            description: 'Uploaded from details',
-            type: 'Attachment',
-          },
-        ],
-        source: 'api',
-      })
-
+  it('uses upload center instead of an inline application document upload form', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -668,59 +646,20 @@ describe('Provincial Application Detail Document Actions', () => {
             path="/provincial/application/:applicationNumber"
             element={<ProvincialApplicationDetailsPage />}
           />
+          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
 
-    const file = new File(['uploaded document'], 'uploaded.pdf', { type: 'application/pdf' })
-    await userEvent.upload(await screen.findByLabelText('Application Document File'), file)
-    await userEvent.type(screen.getByLabelText('Document Description'), 'Uploaded from details')
-    await userEvent.click(screen.getByRole('button', { name: 'Upload Document' }))
+    expect(await screen.findByText('Documents')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Application Document File')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Upload Document' })).not.toBeInTheDocument()
 
-    await waitFor(() => {
-      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith('application', {
-        applicationNumber: '321',
-        file,
-        fileDescription: 'Uploaded from details',
-      })
-      expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
-    })
-    expect(await screen.findByText('uploaded.pdf')).toBeInTheDocument()
-    expect(screen.getByText('Application document uploaded.')).toBeInTheDocument()
-  })
+    const uploadButtons = screen.getAllByRole('button', { name: 'Upload Application Document' })
+    await userEvent.click(uploadButtons[uploadButtons.length - 1])
 
-  it('shows the backend rejection message when an application document upload is refused', async () => {
-    mockedSubmitAdminUpload.mockRejectedValueOnce({
-      isAxiosError: true,
-      response: {
-        data: {
-          message:
-            'Could not attach file to application 321. Confirm the application exists before uploading.',
-        },
-      },
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const file = new File(['uploaded document'], 'uploaded.pdf', { type: 'application/pdf' })
-    await userEvent.upload(await screen.findByLabelText('Application Document File'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Upload Document' }))
-
-    expect(
-      await screen.findByText(
-        'Could not attach file to application 321. Confirm the application exists before uploading.',
-      ),
-    ).toBeInTheDocument()
-    expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(1)
+    const location = await screen.findByTestId('location')
+    expect(location.textContent).toBe('/admin/uploads?type=application&applicationNumber=321')
   })
 
   it('ignores stale detail responses after navigating to another application', async () => {
@@ -894,7 +833,10 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('button', { name: 'Upload Application Document' })).toBeEnabled()
+    const uploadButtons = await screen.findAllByRole('button', {
+      name: 'Upload Application Document',
+    })
+    expect(uploadButtons[0]).toBeEnabled()
 
     const documentName = await screen.findByText('expired-doc.pdf')
     const documentRow = documentName.closest('tr')
