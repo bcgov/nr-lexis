@@ -164,6 +164,16 @@ class LexisXmlImportServiceTest {
   }
 
   @Test
+  void shouldRejectZipFilesWithoutXmlFiles() throws Exception {
+    LexisXmlImportService service = service();
+
+    LexisXmlImportResultDto result = service.importLexisXml(emptyZipFile(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("The ZIP file must contain one LEXIS XML file.");
+  }
+
+  @Test
   void shouldRejectUnmappedForestRegion() {
     LexisXmlImportService service = service();
     String xml =
@@ -203,6 +213,65 @@ class LexisXmlImportServiceTest {
   }
 
   @Test
+  void shouldRejectLexisPayloadOutsideSubmissionContent() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+                "<esf:submissionContent>",
+                "<esf:submissionContent />")
+            .replace("</esf:submissionContent>", "");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("The XML file must include a LEXIS submission payload.");
+  }
+
+  @Test
+  void shouldRejectDuplicateSingletonSections() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "</lexis:applicationDetail>",
+            "</lexis:applicationDetail>\n"
+                + "<lexis:applicationDetail>\n"
+                + "  <lexis:jurisdictionCode>P</lexis:jurisdictionCode>\n"
+                + "</lexis:applicationDetail>");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Application details must appear only once.");
+  }
+
+  @Test
+  void shouldRejectDuplicateSingletonFields() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:clientNumber>1074</lexis:clientNumber>",
+            "<lexis:clientNumber>1074</lexis:clientNumber>\n"
+                + "<lexis:clientNumber>9999</lexis:clientNumber>");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Applicant client number must appear only once.");
+  }
+
+  @Test
   void shouldRejectUnsupportedLexisSchemaVersion() {
     LexisXmlImportService service = service();
     String xml =
@@ -221,6 +290,48 @@ class LexisXmlImportServiceTest {
         .contains(
             "The XML schema location must use supported LEXIS schema version "
                 + "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd.");
+  }
+
+  @Test
+  void shouldRejectUnsupportedEsfSchemaVersion() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd",
+            "http://www.for.gov.bc.ca/schema/esf/0/xsd/MOF/esf-submission.xsd");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains(
+            "The XML schema location must use supported ESF schema version "
+                + "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd.");
+  }
+
+  @Test
+  void shouldRejectDuplicateSchemaLocationNamespaces() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            SAMPLE_SCHEMA_LOCATION,
+            SAMPLE_SCHEMA_LOCATION
+                + " http://www.for.gov.bc.ca/schema/lexis "
+                + "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains("The XML schema location must include each schema namespace only once.");
   }
 
   @Test
@@ -323,6 +434,15 @@ class LexisXmlImportServiceTest {
         zip.write(SAMPLE_XML.getBytes(StandardCharsets.UTF_8));
         zip.closeEntry();
       }
+    }
+    return new MockMultipartFile(
+        "formFile", "submission.zip", "application/zip", bytes.toByteArray());
+  }
+
+  private MockMultipartFile emptyZipFile() throws Exception {
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    try (ZipOutputStream ignored = new ZipOutputStream(bytes)) {
+      // Intentionally empty.
     }
     return new MockMultipartFile(
         "formFile", "submission.zip", "application/zip", bytes.toByteArray());

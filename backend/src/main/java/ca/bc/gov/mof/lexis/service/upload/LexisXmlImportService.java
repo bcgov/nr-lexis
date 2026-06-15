@@ -36,7 +36,6 @@ import org.springframework.web.multipart.MultipartFile;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 @Service
 public class LexisXmlImportService {
@@ -293,45 +292,100 @@ public class LexisXmlImportService {
       validateSchemaLocation(root, errors);
     }
 
-    Element lexisSubmission = firstDescendant(root, LEXIS_NAMESPACE, "LexisSubmission");
+    Element submissionContent =
+        root == null
+            ? null
+            : requiredChild(
+                root,
+                ESF_NAMESPACE,
+                "submissionContent",
+                "The XML file must include ESF submission content.",
+                "The XML file must include only one ESF submission content section.",
+                errors);
+    Element lexisSubmission =
+        submissionContent == null
+            ? null
+            : requiredChild(
+                submissionContent,
+                LEXIS_NAMESPACE,
+                "LexisSubmission",
+                "The XML file must include a LEXIS submission payload.",
+                "The XML file must include only one LEXIS submission payload.",
+                errors);
     if (lexisSubmission == null) {
-      errors.add("The XML file must include a LEXIS submission payload.");
       throw new LexisXmlImportException(errors);
     }
 
-    Element applicant = child(lexisSubmission, "applicant");
-    Element applicantDetails = applicant == null ? null : child(applicant, "applicantDetails");
-    Element applicantContact = applicant == null ? null : child(applicant, "applicantContact");
-    Element applicationDetail = child(lexisSubmission, "applicationDetail");
-    Element productDetail = child(lexisSubmission, "productDetail");
+    Element applicant =
+        requiredChild(
+            lexisSubmission,
+            LEXIS_NAMESPACE,
+            "applicant",
+            "Applicant section is required.",
+            "Applicant section must appear only once.",
+            errors);
+    Element applicantDetails =
+        applicant == null
+            ? null
+            : requiredChild(
+                applicant,
+                LEXIS_NAMESPACE,
+                "applicantDetails",
+                "Applicant details are required.",
+                "Applicant details must appear only once.",
+                errors);
+    Element applicantContact =
+        applicant == null
+            ? null
+            : optionalChild(
+                applicant,
+                LEXIS_NAMESPACE,
+                "applicantContact",
+                "Applicant contact must appear only once.",
+                errors);
+    Element applicationDetail =
+        requiredChild(
+            lexisSubmission,
+            LEXIS_NAMESPACE,
+            "applicationDetail",
+            "Application details are required.",
+            "Application details must appear only once.",
+            errors);
+    Element productDetail =
+        requiredChild(
+            lexisSubmission,
+            LEXIS_NAMESPACE,
+            "productDetail",
+            "Product details are required.",
+            "Product details must appear only once.",
+            errors);
 
-    if (applicantDetails == null) {
-      errors.add("Applicant details are required.");
-    }
-    if (applicationDetail == null) {
-      errors.add("Application details are required.");
-    }
-    if (productDetail == null) {
-      errors.add("Product details are required.");
-    }
-
-    String ownerClientNumber = text(applicantDetails, "clientNumber");
-    String ownerClientLocationCode = normalizeClientLocation(text(applicantDetails, "clientLocnCode"));
-    String applicantName = text(applicantDetails, "name");
-    String ownerContactName = contactName(applicantContact, applicantName);
-    String jurisdictionCode = upper(text(applicationDetail, "jurisdictionCode"));
-    String regionCode = upper(text(applicationDetail, "bcForestRegionCode"));
+    String ownerClientNumber = text(applicantDetails, "clientNumber", "Applicant client number", errors);
+    String ownerClientLocationCode =
+        normalizeClientLocation(
+            text(applicantDetails, "clientLocnCode", "Applicant client location", errors));
+    String applicantName = text(applicantDetails, "name", "Applicant name", errors);
+    String ownerContactName = contactName(applicantContact, applicantName, errors);
+    String jurisdictionCode = upper(text(applicationDetail, "jurisdictionCode", "Jurisdiction code", errors));
+    String regionCode = upper(text(applicationDetail, "bcForestRegionCode", "Forest region code", errors));
     Long orgUnitNumber = resolveOrgUnitNumber(regionCode);
-    String applicationStatusCode = upper(text(applicationDetail, "applStatusCode"));
-    String exemptionReasonCode = upper(text(applicationDetail, "exemptionRsnCde"));
-    String applicantTypeCode = upper(text(applicationDetail, "applicantTypeCode"));
-    String productTypeCode = upper(text(productDetail, "productTypeCode"));
-    String packageNumber = text(productDetail, "boomNumber");
-    String speciesEndUseSort = upper(text(productDetail, "speciesEndUseSort"));
-    String productLocation = text(productDetail, "productLocation");
-    String ageClass = upper(text(productDetail, "ageClass"));
-    Double averageLength = parsePositiveDouble(text(productDetail, "avgLength"), "average length", errors);
-    Double averageDiameter = parsePositiveDouble(text(productDetail, "avgDiameter"), "average diameter", errors);
+    String applicationStatusCode =
+        upper(text(applicationDetail, "applStatusCode", "Application status code", errors));
+    String exemptionReasonCode =
+        upper(text(applicationDetail, "exemptionRsnCde", "Exemption reason", errors));
+    String applicantTypeCode =
+        upper(text(applicationDetail, "applicantTypeCode", "Applicant type", errors));
+    String productTypeCode = upper(text(productDetail, "productTypeCode", "Product type", errors));
+    String packageNumber = text(productDetail, "boomNumber", "Boom/package number", errors);
+    String speciesEndUseSort =
+        upper(text(productDetail, "speciesEndUseSort", "Species/end-use sort", errors));
+    String productLocation = text(productDetail, "productLocation", "Product location", errors);
+    String ageClass = upper(text(productDetail, "ageClass", "Age class", errors));
+    Double averageLength =
+        parsePositiveDouble(text(productDetail, "avgLength", "Average length", errors), "average length", errors);
+    Double averageDiameter =
+        parsePositiveDouble(
+            text(productDetail, "avgDiameter", "Average diameter", errors), "average diameter", errors);
 
     if (ownerClientNumber == null) {
       errors.add("Applicant client number is required.");
@@ -428,7 +482,11 @@ public class LexisXmlImportService {
 
     Map<String, String> schemaLocationsByNamespace = new LinkedHashMap<>();
     for (int index = 0; index < tokens.length; index += 2) {
-      schemaLocationsByNamespace.put(tokens[index], tokens[index + 1]);
+      if (schemaLocationsByNamespace.containsKey(tokens[index])) {
+        errors.add("The XML schema location must include each schema namespace only once.");
+      } else {
+        schemaLocationsByNamespace.put(tokens[index], tokens[index + 1]);
+      }
     }
     validateExpectedSchemaLocation(
         schemaLocationsByNamespace,
@@ -484,11 +542,15 @@ public class LexisXmlImportService {
     }
     List<ScaleLine> rows = new ArrayList<>();
     for (Element harvestedTimber : children(productDetail, "harvestedTimber")) {
-      String timberMark = text(harvestedTimber, "timberMark");
-      Long pieces = parseNonNegativeLong(text(harvestedTimber, "numberOfPieces"), "pieces", errors);
-      String species = upper(text(harvestedTimber, "species"));
-      String grade = upper(text(harvestedTimber, "grade"));
-      Double volume = parseNonNegativeDouble(text(harvestedTimber, "quantityVolume"), "scale volume", errors);
+      String timberMark = text(harvestedTimber, "timberMark", "Scale timber mark", errors);
+      Long pieces =
+          parseNonNegativeLong(
+              text(harvestedTimber, "numberOfPieces", "Scale pieces", errors), "pieces", errors);
+      String species = upper(text(harvestedTimber, "species", "Scale species", errors));
+      String grade = upper(text(harvestedTimber, "grade", "Scale grade", errors));
+      Double volume =
+          parseNonNegativeDouble(
+              text(harvestedTimber, "quantityVolume", "Scale volume", errors), "scale volume", errors);
 
       if (timberMark == null) {
         errors.add("Scale timber mark is required.");
@@ -554,28 +616,45 @@ public class LexisXmlImportService {
         submission.speciesCodes());
   }
 
-  private Element child(Element parent, String localName) {
-    if (parent == null) {
+  private Element requiredChild(
+      Element parent,
+      String namespace,
+      String localName,
+      String missingMessage,
+      String duplicateMessage,
+      List<String> errors) {
+    List<Element> matches = children(parent, namespace, localName);
+    if (matches.isEmpty()) {
+      errors.add(missingMessage);
       return null;
     }
-    for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
-      if (child instanceof Element element
-          && LEXIS_NAMESPACE.equals(element.getNamespaceURI())
-          && localName.equals(element.getLocalName())) {
-        return element;
-      }
+    if (matches.size() > 1) {
+      errors.add(duplicateMessage);
     }
-    return null;
+    return matches.get(0);
+  }
+
+  private Element optionalChild(
+      Element parent, String namespace, String localName, String duplicateMessage, List<String> errors) {
+    List<Element> matches = children(parent, namespace, localName);
+    if (matches.size() > 1) {
+      errors.add(duplicateMessage);
+    }
+    return matches.isEmpty() ? null : matches.get(0);
   }
 
   private List<Element> children(Element parent, String localName) {
+    return children(parent, LEXIS_NAMESPACE, localName);
+  }
+
+  private List<Element> children(Element parent, String namespace, String localName) {
     if (parent == null) {
       return List.of();
     }
     List<Element> elements = new ArrayList<>();
     for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
       if (child instanceof Element element
-          && LEXIS_NAMESPACE.equals(element.getNamespaceURI())
+          && namespace.equals(element.getNamespaceURI())
           && localName.equals(element.getLocalName())) {
         elements.add(element);
       }
@@ -583,22 +662,15 @@ public class LexisXmlImportService {
     return elements;
   }
 
-  private Element firstDescendant(Element parent, String namespace, String localName) {
-    if (parent == null) {
+  private String text(Element parent, String localName, String label, List<String> errors) {
+    List<Element> matches = children(parent, localName);
+    if (matches.isEmpty()) {
       return null;
     }
-    NodeList nodes = parent.getElementsByTagNameNS(namespace, localName);
-    if (nodes.getLength() == 0 || !(nodes.item(0) instanceof Element element)) {
-      return null;
+    if (matches.size() > 1 && errors != null && label != null) {
+      errors.add(label + " must appear only once.");
     }
-    return element;
-  }
-
-  private String text(Element parent, String localName) {
-    Element child = child(parent, localName);
-    if (child == null) {
-      return null;
-    }
+    Element child = matches.get(0);
     String value = child.getTextContent();
     if (value == null) {
       return null;
@@ -619,9 +691,9 @@ public class LexisXmlImportService {
     }
   }
 
-  private String contactName(Element contact, String fallbackName) {
-    String firstName = text(contact, "contactFirstname");
-    String surname = text(contact, "contactSurname");
+  private String contactName(Element contact, String fallbackName, List<String> errors) {
+    String firstName = text(contact, "contactFirstname", "Applicant contact first name", errors);
+    String surname = text(contact, "contactSurname", "Applicant contact surname", errors);
     String fullName = join(firstName, surname);
     return fullName == null ? fallbackName : fullName;
   }
