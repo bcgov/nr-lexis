@@ -81,6 +81,7 @@ const ESF_NAMESPACE = 'http://www.for.gov.bc.ca/schema/esf'
 const LEXIS_NAMESPACE = 'http://www.for.gov.bc.ca/schema/lexis'
 const XML_PREVIEW_UNAVAILABLE = 'XML preview unavailable; server validation will run on upload.'
 const XML_QUALIFIED_NAME_PREFIX = String.raw`(?:[A-Za-z_][\w.-]*:)?`
+const XML_PREVIEW_TEXT_MAX_LENGTH = 80
 
 type UploadFormState = {
   applicationNumber: string
@@ -319,7 +320,10 @@ const firstXmlText = (xml: string, localName: string): string => {
     String.raw`<${XML_QUALIFIED_NAME_PREFIX}${escapeRegExp(localName)}\b[^>]*>([\s\S]*?)</${XML_QUALIFIED_NAME_PREFIX}${escapeRegExp(localName)}>`,
   )
   const rawValue = elementPattern.exec(xml)?.[1]?.trim()
-  return rawValue?.replace(/<[^>]*>/g, '').trim() ?? ''
+  if (!rawValue || rawValue.includes('<') || rawValue.includes('>')) {
+    return ''
+  }
+  return rawValue.slice(0, XML_PREVIEW_TEXT_MAX_LENGTH)
 }
 
 const buildLexisXmlPreviewMessage = async (file: File): Promise<string> => {

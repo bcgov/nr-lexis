@@ -443,6 +443,27 @@ describe('Admin upload workflow smoke', () => {
     ).toBeGreaterThan(0)
   })
 
+  it('omits XML preview fields that contain nested markup', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+
+    renderPage('/admin/uploads?type=lexisXml')
+
+    const xmlWithMarkupInPreviewField = XML_PREVIEW_FIXTURE.replace(
+      '<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>',
+      '<lexis:boomNumber><script>alert(1)</script></lexis:boomNumber>',
+    )
+    const file = new File([xmlWithMarkupInPreviewField], 'submission.xml', {
+      type: 'application/xml',
+    })
+    await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
+
+    expect((await screen.findAllByText(/Preview: Region RSC/)).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Package alert/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/alert\(1\)/)).not.toBeInTheDocument()
+  })
+
   it('previews queued ZIP files as server-validated XML archives before submit', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
