@@ -34,7 +34,7 @@ jobs:
     environment: dev
     timeout-minutes: 10
     steps:
-      - name: Delete PR OpenShift resources
+      - name: Delete and verify PR OpenShift resources
         uses: bcgov/action-oc-runner@d2fc921aaa9d70684c186dbb7754e6985d44d86f # v1.4.1
         with:
           oc_namespace: ${{ secrets.oc_namespace }}
@@ -55,6 +55,14 @@ jobs:
               echo "OpenShift token cannot delete deployments in the target namespace."
               exit 1
             fi
+            if [ "$(oc auth can-i delete persistentvolumeclaims -n "${NAMESPACE}")" != "yes" ]; then
+              echo "OpenShift token cannot delete persistent volume claims in the target namespace."
+              exit 1
+            fi
+            if [ "$(oc auth can-i delete networkpolicies -n "${NAMESPACE}")" != "yes" ]; then
+              echo "OpenShift token cannot delete network policies in the target namespace."
+              exit 1
+            fi
 
             echo "Deleting preview resources for PR ${PR}"
 
@@ -67,36 +75,25 @@ jobs:
             echo "Deleting generated backend serving cert secret, if present"
             oc delete secret "${APP}-backend-cert-${PR}" -n "${NAMESPACE}" --ignore-not-found
 
-      - name: Verify PR OpenShift resources were removed
-        run: |
-          set -euo pipefail
+            echo "Verifying PR ${PR} preview resources were removed"
+            remaining=0
 
-          APP="${{ github.event.repository.name }}"
-          PR="${{ github.event.number }}"
-          NAMESPACE="${{ secrets.oc_namespace }}"
-          RESOURCE_TYPES="deploy,rs,pod,svc,route,hpa,networkpolicy,secret,pvc,cm"
-          remaining=0
+            for component in backend frontend; do
+              label="${APP}-${component}-${PR}"
+              echo "Checking for remaining resources labelled app=${label}"
+              resources=$(oc get "${RESOURCE_TYPES}" -n "${NAMESPACE}" -l "app=${label}" --ignore-not-found -o name)
+              if [ -n "${resources}" ]; then
+                echo "Resources still exist for app=${label}:"
+                printf '%s\n' "${resources}"
+                remaining=1
+              fi
+            done
 
-          echo "Verifying OpenShift session and namespace access"
-          oc whoami >/dev/null
-          oc project "${NAMESPACE}" >/dev/null
-
-          for component in backend frontend; do
-            label="${APP}-${component}-${PR}"
-            echo "Checking for remaining resources labelled app=${label}"
-            resources=$(oc get "${RESOURCE_TYPES}" -n "${NAMESPACE}" -l "app=${label}" --ignore-not-found -o name)
-            if [ -n "${resources}" ]; then
-              echo "Resources still exist for app=${label}:"
-              printf '%s\n' "${resources}"
+            cert_secret=$(oc get secret "${APP}-backend-cert-${PR}" -n "${NAMESPACE}" --ignore-not-found -o name)
+            if [ -n "${cert_secret}" ]; then
+              echo "Generated backend serving cert secret still exists:"
+              printf '%s\n' "${cert_secret}"
               remaining=1
             fi
-          done
 
-          cert_secret=$(oc get secret "${APP}-backend-cert-${PR}" -n "${NAMESPACE}" --ignore-not-found -o name)
-          if [ -n "${cert_secret}" ]; then
-            echo "Generated backend serving cert secret still exists:"
-            printf '%s\n' "${cert_secret}"
-            remaining=1
-          fi
-
-          exit "${remaining}"
+            exit "${remaining}"
