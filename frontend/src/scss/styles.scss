@@ -1392,9 +1392,58 @@ body {
   margin-top: 1rem;
 }
 
+.application-items-metric-strip {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin: 0.5rem 0 1rem;
+}
+
+.application-items-metric {
+  border-left: 3px solid var(--cds-border-interactive);
+  margin: 0;
+  padding-left: 0.75rem;
+}
+
+.application-items-metric dt {
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+  margin-bottom: 0.125rem;
+}
+
+.application-items-metric dd {
+  font-weight: 700;
+  margin: 0;
+}
+
 .application-items-section h3 {
   font-size: 0.9rem;
   margin: 0 0 0.75rem;
+}
+
+.application-items-section-header {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.35fr);
+  margin-bottom: 1rem;
+}
+
+.application-items-package-workspace {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.6fr);
+}
+
+.application-items-species-panel {
+  min-width: 0;
+}
+
+.application-items-species-panel h4 {
+  border-bottom: 1px solid var(--csp-tile-border);
+  font-size: 0.875rem;
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.5rem;
 }
 
 .application-items-form {
@@ -1426,7 +1475,7 @@ body {
 
 .provincial-application-detail .application-items-grid {
   align-items: start;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
 }
 
 .provincial-application-detail .application-items-section h3 {
@@ -1437,20 +1486,17 @@ body {
 }
 
 .provincial-application-detail .application-items-section--package-details {
-  grid-column: 1;
-}
-
-.provincial-application-detail .application-items-section--package-species {
-  grid-column: 2;
+  grid-column: 1 / -1;
 }
 
 .provincial-application-detail .application-items-section--create-package {
-  grid-column: 1;
+  grid-column: 2;
+  grid-row: 2;
 }
 
 .provincial-application-detail .application-items-section--scales {
-  grid-column: 2;
-  grid-row: 2 / span 2;
+  grid-column: 1;
+  grid-row: 2;
 }
 
 .provincial-application-detail .application-items-section--scales .application-items-form {
@@ -1470,11 +1516,15 @@ body {
   }
 
   .provincial-application-detail .application-items-section--package-details,
-  .provincial-application-detail .application-items-section--package-species,
   .provincial-application-detail .application-items-section--create-package,
   .provincial-application-detail .application-items-section--scales {
     grid-column: 1;
     grid-row: auto;
+  }
+
+  .application-items-section-header,
+  .application-items-package-workspace {
+    grid-template-columns: 1fr;
   }
 
   .application-detail-documents .legacy-search-grid,
