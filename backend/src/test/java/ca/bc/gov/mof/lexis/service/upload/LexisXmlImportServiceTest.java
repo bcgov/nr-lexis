@@ -259,6 +259,40 @@ class LexisXmlImportServiceTest {
     assertThat(result.errors()).contains("Boom/package number must be 20 characters or fewer.");
   }
 
+  @Test
+  void shouldRejectMissingSpeciesEndUseSort() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace("<lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>", "");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Species/end-use sort is required.");
+  }
+
+  @Test
+  void shouldRejectMalformedSpeciesEndUseSort() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>",
+            "<lexis:speciesEndUseSort>HE</lexis:speciesEndUseSort>");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Species/end-use sort must be formatted as species/end use.");
+  }
+
   private LexisXmlImportService service() {
     return new LexisXmlImportService(
         applicationDetailsServiceProvider,

@@ -62,7 +62,6 @@ public class LexisXmlImportService {
   private static final String DEFAULT_REPROCESSED_INDICATOR = "N";
   private static final String DEFAULT_OIC_INDICATOR = "N";
   private static final String PROVINCIAL_JURISDICTION = "P";
-  private static final String DEFAULT_END_USE = "OT";
 
   private static final Map<String, Long> ORG_UNIT_BY_REGION_CODE =
       Map.ofEntries(
@@ -381,7 +380,7 @@ public class LexisXmlImportService {
     long totalPieces = scaleLines.stream().mapToLong(ScaleLine::pieces).sum();
     double averageLogVolume =
         totalPieces <= 0L ? 0.0d : roundOneDecimal(totalVolume / (double) totalPieces);
-    String endUseCode = endUseFromSpeciesEndUseSort(speciesEndUseSort);
+    String endUseCode = parseEndUseFromSpeciesEndUseSort(speciesEndUseSort, errors);
     List<String> speciesCodes =
         scaleLines.stream()
             .map(ScaleLine::speciesCode)
@@ -637,16 +636,22 @@ public class LexisXmlImportService {
     return left + " " + right;
   }
 
-  private String endUseFromSpeciesEndUseSort(String speciesEndUseSort) {
+  private String parseEndUseFromSpeciesEndUseSort(String speciesEndUseSort, List<String> errors) {
     if (speciesEndUseSort == null) {
-      return DEFAULT_END_USE;
+      errors.add("Species/end-use sort is required.");
+      return null;
     }
     int separator = speciesEndUseSort.lastIndexOf('/');
     if (separator < 0 || separator >= speciesEndUseSort.length() - 1) {
-      return DEFAULT_END_USE;
+      errors.add("Species/end-use sort must be formatted as species/end use.");
+      return null;
     }
     String endUse = speciesEndUseSort.substring(separator + 1).trim();
-    return endUse.isEmpty() ? DEFAULT_END_USE : endUse;
+    if (endUse.isEmpty()) {
+      errors.add("Species/end-use sort must include an end-use code.");
+      return null;
+    }
+    return endUse;
   }
 
   private Long parseNonNegativeLong(String value, String label, List<String> errors) {
