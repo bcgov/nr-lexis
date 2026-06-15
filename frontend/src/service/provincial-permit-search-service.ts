@@ -28,6 +28,29 @@ type ProvincialPermitSearchOptions = {
   knownTotal?: number
 }
 
+export type ProvincialPermitNumberOption = {
+  value: string
+  label: string
+  status: ProvincialPermitStatus
+  applicantClientNumber: string
+  ownerClientNumber: string
+  totalVolume: number
+  issueDate: string
+  region: string
+}
+
+const DEFAULT_PERMIT_SEARCH_FILTERS = {
+  applicationNumber: '',
+  packageNumber: '',
+  region: [],
+  issuedFromDate: '',
+  issuedToDate: '',
+  permitStatus: '',
+  permitNumber: '',
+  ownerClientNumber: '',
+  applicantClientNumber: '',
+}
+
 const buildBackendParams = (request: ProvincialPermitSearchRequest): URLSearchParams => {
   const params = new URLSearchParams()
 
@@ -127,3 +150,49 @@ export const countProvincialPermits = async (
     buildBackendParams(request),
     'Unable to count provincial permit search results.',
   )
+
+const permitNumberOptionLabel = (item: ProvincialPermitSearchResponse['content'][number]): string =>
+  [
+    item.permitNumber,
+    item.status,
+    item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
+    item.region ? `Region ${item.region}` : '',
+    item.issueDate,
+  ]
+    .filter((value) => value.trim().length > 0)
+    .join(' - ')
+
+export const searchProvincialPermitNumberOptions = async (
+  query: string,
+): Promise<ProvincialPermitNumberOption[]> => {
+  const response = await searchProvincialPermits({
+    filters: {
+      ...DEFAULT_PERMIT_SEARCH_FILTERS,
+      permitNumber: query,
+    },
+    page: 0,
+    pageSize: 20,
+    sortField: 'permitNumber',
+    sortDirection: 'desc',
+  })
+
+  const seen = new Set<string>()
+  return response.content
+    .filter((item) => {
+      if (!item.permitNumber || seen.has(item.permitNumber)) {
+        return false
+      }
+      seen.add(item.permitNumber)
+      return true
+    })
+    .map((item) => ({
+      value: item.permitNumber,
+      label: permitNumberOptionLabel(item),
+      status: item.status,
+      applicantClientNumber: item.applicantClientNumber,
+      ownerClientNumber: item.ownerClientNumber,
+      totalVolume: item.totalVolume,
+      issueDate: item.issueDate,
+      region: item.region,
+    }))
+}

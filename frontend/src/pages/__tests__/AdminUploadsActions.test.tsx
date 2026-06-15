@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminUploadsPage from '@/pages/AdminUploads'
 import { submitAdminUpload } from '@/service/admin-upload-service'
+import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
+import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -19,11 +21,23 @@ vi.mock('@/service/provincial-application-search-service', () => ({
   searchProvincialApplicationNumberOptions: vi.fn(),
 }))
 
+vi.mock('@/service/provincial-exemption-search-service', () => ({
+  searchProvincialExemptionNumberOptions: vi.fn(),
+}))
+
+vi.mock('@/service/provincial-permit-search-service', () => ({
+  searchProvincialPermitNumberOptions: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
   searchProvincialApplicationNumberOptions,
 )
+const mockedSearchProvincialExemptionNumberOptions = vi.mocked(
+  searchProvincialExemptionNumberOptions,
+)
+const mockedSearchProvincialPermitNumberOptions = vi.mocked(searchProvincialPermitNumberOptions)
 
 const renderPage = (path = '/admin/uploads?type=permit') => {
   render(
@@ -40,6 +54,8 @@ describe('Admin upload workflow smoke', () => {
     vi.clearAllMocks()
     mockedSubmitAdminUpload.mockResolvedValue({})
     mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([])
+    mockedSearchProvincialExemptionNumberOptions.mockResolvedValue([])
+    mockedSearchProvincialPermitNumberOptions.mockResolvedValue([])
   })
 
   it('submits permit upload with query-prefilled number', async () => {
@@ -49,7 +65,7 @@ describe('Admin upload workflow smoke', () => {
 
     renderPage('/admin/uploads?type=permit&permitNumber=5001')
 
-    expect(screen.getByLabelText('Permit Number')).toHaveValue('5001')
+    expect(screen.getByRole('combobox', { name: 'Permit Number' })).toHaveValue('5001')
     expect(screen.getByText('Allowed')).toBeInTheDocument()
 
     const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
@@ -114,6 +130,107 @@ describe('Admin upload workflow smoke', () => {
         'application',
         expect.objectContaining({
           applicationNumber: '45963',
+          file,
+        }),
+      )
+    })
+  })
+
+  it('searches exemption numbers for exemption document uploads', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === '/fileExemptionUpload',
+    } as any)
+    mockedSearchProvincialExemptionNumberOptions.mockResolvedValue([
+      {
+        value: 'EX-555',
+        label: 'EX-555 - Active - Owner 00001012 - Region RSC',
+        status: 'Active',
+        type: 'Ministerial',
+        ownerClientNumber: '00001012',
+        region: 'RSC',
+        listingDate: '2026-06-10',
+        applicationNumber: '45963',
+      },
+    ])
+
+    renderPage('/admin/uploads?type=exemption')
+
+    const exemptionNumberInput = screen.getByRole('combobox', {
+      name: 'Exemption Number',
+    })
+    await userEvent.type(exemptionNumberInput, 'EX-555')
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptionNumberOptions).toHaveBeenLastCalledWith('EX-555')
+    })
+
+    await userEvent.click(
+      await screen.findByRole('option', {
+        name: 'EX-555 - Active - Owner 00001012 - Region RSC',
+      }),
+    )
+
+    const file = new File(['exemption upload'], 'exemption.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'exemption',
+        expect.objectContaining({
+          exemptionNumber: 'EX-555',
+          file,
+        }),
+      )
+    })
+  })
+
+  it('searches permit numbers for invoice uploads', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === '/fileInvoiceUpload',
+    } as any)
+    mockedSearchProvincialPermitNumberOptions.mockResolvedValue([
+      {
+        value: '7000123',
+        label: '7000123 - Active - Owner 00001012 - Region RSC',
+        status: 'Active',
+        applicantClientNumber: '00001012',
+        ownerClientNumber: '00001012',
+        totalVolume: 25,
+        issueDate: '2026-06-10',
+        region: 'RSC',
+      },
+    ])
+
+    renderPage('/admin/uploads?type=invoice')
+
+    const permitNumberInput = screen.getByRole('combobox', {
+      name: 'Permit Number',
+    })
+    await userEvent.type(permitNumberInput, '7000123')
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialPermitNumberOptions).toHaveBeenLastCalledWith('7000123')
+    })
+
+    await userEvent.click(
+      await screen.findByRole('option', {
+        name: '7000123 - Active - Owner 00001012 - Region RSC',
+      }),
+    )
+
+    const file = new File(['invoice upload'], 'invoice.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.type(screen.getByLabelText('Invoice Number'), 'INV123')
+    await userEvent.type(screen.getByLabelText('Export Value (CAD)'), '1000')
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'invoice',
+        expect.objectContaining({
+          permitNumber: '7000123',
+          salesInvoiceNumber: 'INV123',
           file,
         }),
       )

@@ -25,6 +25,30 @@ type BackendProvincialExemptionSearchResponse = {
   size: number
 }
 
+export type ProvincialExemptionNumberOption = {
+  value: string
+  label: string
+  status: string
+  type: string
+  ownerClientNumber: string
+  region: string
+  listingDate: string
+  applicationNumber: string
+}
+
+const DEFAULT_EXEMPTION_SEARCH_FILTERS = {
+  applicationNumber: '',
+  packageNumber: '',
+  exemptionNumber: '',
+  region: [],
+  listFromDate: '',
+  listToDate: '',
+  exemptionTypeCode: '',
+  exemptionStatusCode: '',
+  applicantClientNumber: '',
+  ownerClientNumber: '',
+}
+
 const normalizeStatusCode = (status: string): string => {
   return status.trim().replaceAll(/\s+/g, '_').toUpperCase()
 }
@@ -133,3 +157,51 @@ export const countProvincialExemptions = async (
     buildBackendParams(request),
     'Unable to count provincial exemption search results.',
   )
+
+const exemptionNumberOptionLabel = (
+  item: ProvincialExemptionSearchResponse['content'][number],
+): string =>
+  [
+    item.exemptionNumber,
+    item.status,
+    item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
+    item.region ? `Region ${item.region}` : '',
+    item.listingDate,
+  ]
+    .filter((value) => value.trim().length > 0)
+    .join(' - ')
+
+export const searchProvincialExemptionNumberOptions = async (
+  query: string,
+): Promise<ProvincialExemptionNumberOption[]> => {
+  const response = await searchProvincialExemptions({
+    filters: {
+      ...DEFAULT_EXEMPTION_SEARCH_FILTERS,
+      exemptionNumber: query,
+    },
+    page: 0,
+    pageSize: 20,
+    sortField: 'exemptionNumber',
+    sortDirection: 'desc',
+  })
+
+  const seen = new Set<string>()
+  return response.content
+    .filter((item) => {
+      if (!item.exemptionNumber || seen.has(item.exemptionNumber)) {
+        return false
+      }
+      seen.add(item.exemptionNumber)
+      return true
+    })
+    .map((item) => ({
+      value: item.exemptionNumber,
+      label: exemptionNumberOptionLabel(item),
+      status: item.status,
+      type: item.type,
+      ownerClientNumber: item.ownerClientNumber,
+      region: item.region,
+      listingDate: item.listingDate,
+      applicationNumber: item.applicationNumber,
+    }))
+}

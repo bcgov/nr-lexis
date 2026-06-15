@@ -1,7 +1,8 @@
-import { useMemo, useState, type DragEvent, type FC } from 'react'
+import { useEffect, useMemo, useState, type DragEvent, type FC, type ReactNode } from 'react'
 import {
   Button,
   Column,
+  ComboBox,
   Grid,
   InlineNotification,
   Tag,
@@ -25,6 +26,8 @@ import {
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
 import { submitAdminUpload, type UploadWorkflowType } from '@/service/admin-upload-service'
+import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
+import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -98,6 +101,23 @@ type UploadQueueItem = {
 type QueuedUploadResult = {
   message: string
   applicationNumber?: number
+}
+
+type UploadTargetNumberOption = {
+  value: string
+  label: string
+}
+
+type UploadTargetNumberSelectProps = {
+  id: string
+  labelText: ReactNode
+  value: string
+  invalid?: boolean
+  invalidText?: ReactNode
+  searchOptions: (query: string) => Promise<UploadTargetNumberOption[]>
+  normalizeInput?: (input: string) => string
+  onBlur?: () => void
+  onChange: (value: string) => void
 }
 
 const INITIAL_FORM_STATE: UploadFormState = {
@@ -188,6 +208,114 @@ const getFileExtension = (fileName: string): string => {
   }
 
   return normalizedName.slice(extensionStart)
+}
+
+const trimTargetNumberInput = (input: string): string => input.trim()
+
+const targetNumberFromNumericInput = (input: string): string => input.match(/^\d+/)?.[0] ?? ''
+
+const uploadTargetItemToString = (
+  item: UploadTargetNumberOption | string | null | undefined,
+): string => {
+  if (typeof item === 'string') {
+    return item
+  }
+  return item?.label ?? ''
+}
+
+const shouldFilterUploadTargetItem = ({
+  item,
+  inputValue,
+}: {
+  item: UploadTargetNumberOption
+  inputValue: string | null
+}): boolean => {
+  const query = inputValue?.trim().toLowerCase()
+  if (!query) {
+    return true
+  }
+
+  return item.label.toLowerCase().includes(query) || item.value.toLowerCase().includes(query)
+}
+
+const UploadTargetNumberSelect: FC<UploadTargetNumberSelectProps> = ({
+  id,
+  labelText,
+  value,
+  invalid = false,
+  invalidText,
+  searchOptions,
+  normalizeInput = trimTargetNumberInput,
+  onBlur,
+  onChange,
+}) => {
+  const [options, setOptions] = useState<UploadTargetNumberOption[]>([])
+  const [inputText, setInputText] = useState(value)
+  const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    let ignore = false
+    const timeout = window.setTimeout(() => {
+      setIsLoading(true)
+      void searchOptions(normalizeInput(inputText))
+        .then((items) => {
+          if (!ignore) {
+            setOptions(items)
+          }
+        })
+        .catch((error) => {
+          console.warn('Unable to load upload target number options.', error)
+          if (!ignore) {
+            setOptions([])
+          }
+        })
+        .finally(() => {
+          if (!ignore) {
+            setIsLoading(false)
+          }
+        })
+    }, 250)
+
+    return () => {
+      ignore = true
+      window.clearTimeout(timeout)
+    }
+  }, [inputText, normalizeInput, searchOptions])
+
+  const selectedItem = useMemo<UploadTargetNumberOption | null>(() => {
+    const matchingOption = options.find((option) => option.value === value)
+    if (matchingOption) {
+      return matchingOption
+    }
+    return value ? { value, label: value } : null
+  }, [options, value])
+
+  return (
+    <ComboBox
+      id={id}
+      titleText={labelText}
+      items={options}
+      selectedItem={selectedItem}
+      itemToString={uploadTargetItemToString}
+      shouldFilterItem={shouldFilterUploadTargetItem}
+      placeholder={isLoading ? 'Loading matches...' : 'Search by number'}
+      allowCustomValue
+      invalid={invalid}
+      invalidText={invalidText}
+      onBlur={onBlur}
+      onInputChange={(inputValue) => {
+        setInputText(inputValue)
+        onChange(normalizeInput(inputValue))
+      }}
+      onChange={({ selectedItem, inputValue }) => {
+        if (typeof selectedItem === 'string') {
+          onChange(normalizeInput(selectedItem))
+          return
+        }
+        onChange(selectedItem?.value ?? normalizeInput(inputValue ?? ''))
+      }}
+    />
+  )
 }
 
 const validateQueuedFile = (file: File, workflowType: UploadWorkflowType): string => {
@@ -675,36 +803,37 @@ const AdminUploadsPage: FC = () => {
             )}
 
             {selectedWorkflowType === 'exemption' && (
-              <TextInput
+              <UploadTargetNumberSelect
                 id="exemptionNumber"
                 labelText={selectedWorkflow.numberFieldLabel}
                 value={formState.exemptionNumber}
-                placeholder={selectedWorkflow.numberFieldPlaceholder}
                 invalid={!!fieldError('exemptionNumber')}
                 invalidText={fieldError('exemptionNumber')}
+                searchOptions={searchProvincialExemptionNumberOptions}
                 onBlur={() => markFieldTouched('exemptionNumber')}
-                onChange={(event) =>
+                onChange={(value) =>
                   setFormState((current) => ({
                     ...current,
-                    exemptionNumber: event.target.value,
+                    exemptionNumber: value,
                   }))
                 }
               />
             )}
 
             {(selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') && (
-              <TextInput
+              <UploadTargetNumberSelect
                 id="permitNumber"
                 labelText={selectedWorkflow.numberFieldLabel}
                 value={formState.permitNumber}
-                placeholder={selectedWorkflow.numberFieldPlaceholder}
                 invalid={!!fieldError('permitNumber')}
                 invalidText={fieldError('permitNumber')}
+                searchOptions={searchProvincialPermitNumberOptions}
+                normalizeInput={targetNumberFromNumericInput}
                 onBlur={() => markFieldTouched('permitNumber')}
-                onChange={(event) =>
+                onChange={(value) =>
                   setFormState((current) => ({
                     ...current,
-                    permitNumber: event.target.value,
+                    permitNumber: value,
                   }))
                 }
               />
