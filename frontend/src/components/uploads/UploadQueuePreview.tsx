@@ -1,6 +1,7 @@
 import { useMemo, useState, type FC, type ReactNode } from 'react'
 import { Button, Tag, TextInput } from '@carbon/react'
 import { Upload } from '@carbon/icons-react'
+import UploadQueueReviewAccordion from './UploadQueueReviewAccordion'
 import type { UploadQueueItem, UploadQueueStatus } from './uploadQueueTypes'
 
 type UploadQueuePreviewProps = {
@@ -113,6 +114,12 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
         item.targetSummary ?? targetSummary,
         statusLabel(item.status),
         item.message,
+        item.details?.summary,
+        item.details?.errors?.join(' '),
+        item.details?.warnings?.join(' '),
+        item.details?.applicationNumber?.toString(),
+        item.details?.packageNumber,
+        item.details?.scaleRows?.toString(),
       ]
         .join(' ')
         .toLowerCase()
@@ -244,6 +251,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
               {failedCount}
             </span>
           </div>
+          <UploadQueueReviewAccordion items={filteredItems} targetSummary={targetSummary} />
         </>
       )}
     </section>

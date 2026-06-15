@@ -5,7 +5,11 @@ import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
 import SearchableSelect from '@/components/SearchableSelect'
 import MultiFileDropZone from '@/components/uploads/MultiFileDropZone'
 import UploadQueuePreview from '@/components/uploads/UploadQueuePreview'
-import type { UploadQueueItem, UploadQueueStatus } from '@/components/uploads/uploadQueueTypes'
+import type {
+  UploadQueueItem,
+  UploadQueueReviewDetails,
+  UploadQueueStatus,
+} from '@/components/uploads/uploadQueueTypes'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   firstValidationError,
@@ -17,7 +21,11 @@ import {
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
-import { submitAdminUpload, type UploadWorkflowType } from '@/service/admin-upload-service'
+import {
+  submitAdminUpload,
+  type AdminUploadResult,
+  type UploadWorkflowType,
+} from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
 
@@ -87,6 +95,7 @@ type UploadField = keyof UploadFormState | 'uploadFile'
 type QueuedUploadResult = {
   message: string
   applicationNumber?: number
+  details?: UploadQueueReviewDetails
 }
 
 type UploadTargetNumberOption = {
@@ -152,27 +161,49 @@ const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState
   }
 }
 
-const extractUploadErrorMessage = (error: unknown): string => {
+const asStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      .map((item) => item.trim())
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    return [value.trim()]
+  }
+
+  return []
+}
+
+const extractUploadErrorDetails = (
+  error: unknown,
+): { message: string; details: UploadQueueReviewDetails } => {
   const response = (error as any)?.response
   const data = response?.data
   const status = response?.status
+  const errors = asStringArray(data?.errors)
+  const warnings = asStringArray(data?.warnings)
 
-  if (Array.isArray(data?.errors) && data.errors.length > 0) {
-    return data.errors.join(' ')
+  const message =
+    errors.length > 0
+      ? errors.join(' ')
+      : typeof data?.message === 'string' && data.message.trim()
+        ? data.message.trim()
+        : typeof data === 'string' && data.trim()
+          ? data.trim()
+          : status
+            ? `Upload request failed with status ${status}.`
+            : 'Upload request failed. Please try again or contact support.'
+
+  return {
+    message,
+    details: {
+      summary:
+        typeof data?.message === 'string' && data.message.trim() ? data.message.trim() : message,
+      errors,
+      warnings,
+    },
   }
-  if (typeof data?.errors === 'string' && data.errors.trim()) {
-    return data.errors
-  }
-  if (typeof data?.message === 'string' && data.message.trim()) {
-    return data.message
-  }
-  if (typeof data === 'string' && data.trim()) {
-    return data
-  }
-  if (status) {
-    return `Upload request failed with status ${status}.`
-  }
-  return 'Upload request failed. Please try again or contact support.'
 }
 
 const getFileExtension = (fileName: string): string => {
@@ -457,6 +488,18 @@ const buildUploadResultMessage = (
   return `${summary}${warnings}`
 }
 
+const buildUploadReviewDetails = (
+  message: string,
+  result?: AdminUploadResult,
+): UploadQueueReviewDetails => ({
+  summary: message,
+  errors: asStringArray(result?.errors),
+  warnings: asStringArray(result?.warnings),
+  applicationNumber: result?.applicationNumber,
+  packageNumber: result?.packageNumber,
+  scaleRows: result?.scaleRows,
+})
+
 const AdminUploadsPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -594,6 +637,9 @@ const AdminUploadsPage: FC = () => {
         queuedAt,
         status: validationMessage ? ('invalid' as const) : ('queued' as const),
         message: validationMessage,
+        details: validationMessage
+          ? { summary: validationMessage, errors: [validationMessage] }
+          : undefined,
       }
     })
 
@@ -611,7 +657,11 @@ const AdminUploadsPage: FC = () => {
                 currentItem.id === item.id &&
                 currentItem.status === 'queued' &&
                 !currentItem.message
-                  ? { ...currentItem, message }
+                  ? {
+                      ...currentItem,
+                      message,
+                      details: { ...currentItem.details, summary: message },
+                    }
                   : currentItem,
               ),
             )
@@ -639,6 +689,7 @@ const AdminUploadsPage: FC = () => {
     message = '',
     resultApplicationNumber?: number,
     targetSummary?: string,
+    details?: UploadQueueReviewDetails,
   ): void => {
     setUploadQueue((current) =>
       current.map((item) =>
@@ -647,6 +698,7 @@ const AdminUploadsPage: FC = () => {
               ...item,
               status,
               message,
+              details: details ?? item.details,
               resultApplicationNumber,
               targetSummary: targetSummary ?? item.targetSummary,
             }
@@ -661,13 +713,15 @@ const AdminUploadsPage: FC = () => {
         file,
         fileDescription: formState.fileDescription.trim(),
       })
+      const message = buildUploadResultMessage(
+        'lexisXml',
+        'LEXIS XML import submitted. Verify the created application and package details.',
+        result,
+      )
       return {
-        message: buildUploadResultMessage(
-          'lexisXml',
-          'LEXIS XML import submitted. Verify the created application and package details.',
-          result,
-        ),
+        message,
         applicationNumber: result.applicationNumber,
+        details: buildUploadReviewDetails(message, result),
       }
     }
 
@@ -677,12 +731,14 @@ const AdminUploadsPage: FC = () => {
         file,
         fileDescription: formState.fileDescription.trim(),
       })
+      const message = buildUploadResultMessage(
+        'application',
+        'Application document upload submitted.',
+        result,
+      )
       return {
-        message: buildUploadResultMessage(
-          'application',
-          'Application document upload submitted.',
-          result,
-        ),
+        message,
+        details: buildUploadReviewDetails(message, result),
       }
     }
 
@@ -692,12 +748,14 @@ const AdminUploadsPage: FC = () => {
         file,
         fileDescription: formState.fileDescription.trim(),
       })
+      const message = buildUploadResultMessage(
+        'exemption',
+        'Exemption document upload submitted.',
+        result,
+      )
       return {
-        message: buildUploadResultMessage(
-          'exemption',
-          'Exemption document upload submitted.',
-          result,
-        ),
+        message,
+        details: buildUploadReviewDetails(message, result),
       }
     }
 
@@ -707,8 +765,14 @@ const AdminUploadsPage: FC = () => {
         file,
         fileDescription: formState.fileDescription.trim(),
       })
+      const message = buildUploadResultMessage(
+        'permit',
+        'Permit document upload submitted.',
+        result,
+      )
       return {
-        message: buildUploadResultMessage('permit', 'Permit document upload submitted.', result),
+        message,
+        details: buildUploadReviewDetails(message, result),
       }
     }
 
@@ -721,8 +785,10 @@ const AdminUploadsPage: FC = () => {
       file,
       fileDescription: formState.fileDescription.trim(),
     })
+    const message = buildUploadResultMessage('invoice', 'Invoice upload submitted.', result)
     return {
-      message: buildUploadResultMessage('invoice', 'Invoice upload submitted.', result),
+      message,
+      details: buildUploadReviewDetails(message, result),
     }
   }
 
@@ -769,15 +835,18 @@ const AdminUploadsPage: FC = () => {
           result.message,
           result.applicationNumber,
           currentUploadTargetSummary,
+          result.details,
         )
       } catch (error) {
         failureCount += 1
+        const uploadError = extractUploadErrorDetails(error)
         setQueueItemStatus(
           item.id,
           'failed',
-          extractUploadErrorMessage(error),
+          uploadError.message,
           undefined,
           currentUploadTargetSummary,
+          uploadError.details,
         )
       }
     }

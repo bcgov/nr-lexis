@@ -1036,6 +1036,120 @@ body {
   gap: 0.75rem;
 }
 
+.admin-upload-review {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-top: 1px solid var(--cds-border-subtle);
+}
+
+.admin-upload-review__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin-upload-review__header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.admin-upload-review__header span {
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+}
+
+.admin-upload-review__list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.admin-upload-review__item {
+  background: var(--cds-layer);
+  border: 1px solid var(--cds-border-subtle);
+  border-radius: 4px;
+}
+
+.admin-upload-review__item--failed,
+.admin-upload-review__item--invalid {
+  border-color: var(--cds-support-error);
+}
+
+.admin-upload-review__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+}
+
+.admin-upload-review__file-name {
+  font-weight: 600;
+}
+
+.admin-upload-review__summary-text {
+  color: var(--cds-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.admin-upload-review__content {
+  display: grid;
+  gap: 1rem;
+  padding: 0 1rem 1rem;
+}
+
+.admin-upload-review__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 0;
+}
+
+.admin-upload-review__meta div {
+  min-inline-size: 0;
+}
+
+.admin-upload-review__meta dt {
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.admin-upload-review__meta dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-upload-review__issue-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.admin-upload-review__issue-group h4 {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.admin-upload-review__issue-group ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-inline-start: 1.25rem;
+}
+
+.admin-upload-review__issue-group li,
+.admin-upload-review__empty-result {
+  overflow-wrap: anywhere;
+}
+
+.admin-upload-review__empty-result {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
 @media (max-width: 671px) {
   .admin-upload-workspace {
     grid-template-columns: 1fr;

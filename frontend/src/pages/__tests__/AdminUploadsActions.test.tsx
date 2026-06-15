@@ -299,14 +299,14 @@ describe('Admin upload workflow smoke', () => {
     const scaleDocument = new File(['scale upload'], 'scale.csv', { type: 'text/csv' })
     await userEvent.upload(screen.getByLabelText('Document File'), [permitDocument, scaleDocument])
 
-    expect(screen.getByText('permit.pdf')).toBeInTheDocument()
-    expect(screen.getByText('scale.csv')).toBeInTheDocument()
+    expect(screen.getAllByText('permit.pdf').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('scale.csv').length).toBeGreaterThan(0)
     expect(screen.getByText('Showing 2 of 2 files')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Filter queued files'), 'scale')
 
     expect(screen.queryByText('permit.pdf')).not.toBeInTheDocument()
-    expect(screen.getByText('scale.csv')).toBeInTheDocument()
+    expect(screen.getAllByText('scale.csv').length).toBeGreaterThan(0)
     expect(screen.getByText('Showing 1 of 2 files')).toBeInTheDocument()
 
     await userEvent.clear(screen.getByLabelText('Filter queued files'))
@@ -435,10 +435,12 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
 
     expect(
-      await screen.findByText(
-        'Preview: Package TEST23-652-7D-2, Region RSC, Species/end use HE/PL, Client 1074, 2 scale rows.',
-      ),
-    ).toBeInTheDocument()
+      (
+        await screen.findAllByText(
+          'Preview: Package TEST23-652-7D-2, Region RSC, Species/end use HE/PL, Client 1074, 2 scale rows.',
+        )
+      ).length,
+    ).toBeGreaterThan(0)
   })
 
   it('previews queued ZIP files as server-validated XML archives before submit', async () => {
@@ -452,8 +454,8 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
 
     expect(
-      await screen.findByText('ZIP archive will be unpacked and validated on upload.'),
-    ).toBeInTheDocument()
+      (await screen.findAllByText('ZIP archive will be unpacked and validated on upload.')).length,
+    ).toBeGreaterThan(0)
   })
 
   it('submits queued XML files one at a time', async () => {
@@ -492,8 +494,59 @@ describe('Admin upload workflow smoke', () => {
     expect(
       screen.getByText('2 files uploaded. Verify updates in the target details view.'),
     ).toBeInTheDocument()
-    expect(screen.getByText('First XML import created application 9001.')).toBeInTheDocument()
-    expect(screen.getByText('Second XML import created application 9002.')).toBeInTheDocument()
+    expect(
+      screen.getAllByText('First XML import created application 9001.').length,
+    ).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText('Second XML import created application 9002.').length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('shows per-file review details for mixed XML upload results', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+    mockedSubmitAdminUpload
+      .mockResolvedValueOnce({
+        applicationNumber: 9001,
+        packageNumber: 'TEST23-652-7D-2',
+        scaleRows: 3,
+        warnings: ['Imported payload/first.xml from ZIP archive first.zip.'],
+      })
+      .mockRejectedValueOnce({
+        response: {
+          status: 422,
+          data: {
+            message: 'LEXIS XML import rejected.',
+            errors: ['Line: 53 Column: 7: boomNumber is required.'],
+          },
+        },
+      })
+
+    renderPage('/admin/uploads?type=lexisXml')
+
+    const firstFile = new File(['<xml />'], 'first.xml', { type: 'application/xml' })
+    const secondFile = new File(['<xml />'], 'second.xml', { type: 'application/xml' })
+    await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), [firstFile, secondFile])
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
+    })
+
+    expect(await screen.findByText('File Review')).toBeInTheDocument()
+    expect(screen.getByText('1 file failed. Review the queue for details.')).toBeInTheDocument()
+    expect(screen.getAllByText('first.xml').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('second.xml').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Application 9001/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText(/Imported payload\/first.xml from ZIP archive first.zip/).length,
+    ).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText(/Line: 53 Column: 7: boomNumber is required/).length,
+    ).toBeGreaterThan(0)
   })
 
   it('blocks non-XML files in the LEXIS XML queue', async () => {
@@ -508,8 +561,10 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['not xml'], 'submission.pdf', { type: 'application/pdf' })
     await user.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
 
-    expect(screen.getByText('Invalid')).toBeInTheDocument()
-    expect(screen.getByText('LEXIS XML uploads must use a .xml or .zip file.')).toBeInTheDocument()
+    expect(screen.getAllByText('Invalid').length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText('LEXIS XML uploads must use a .xml or .zip file.').length,
+    ).toBeGreaterThan(0)
 
     await user.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
@@ -529,12 +584,12 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['permit upload'], 'permit', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
 
-    expect(screen.getByText('Invalid')).toBeInTheDocument()
+    expect(screen.getAllByText('Invalid').length).toBeGreaterThan(0)
     expect(
-      screen.getByText(
+      screen.getAllByText(
         'Document uploads need a file extension so LEXIS can resolve the file type.',
-      ),
-    ).toBeInTheDocument()
+      ).length,
+    ).toBeGreaterThan(0)
 
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
@@ -554,8 +609,8 @@ describe('Admin upload workflow smoke', () => {
     const file = new File([], 'empty.xml', { type: 'application/xml' })
     await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
 
-    expect(screen.getByText('Invalid')).toBeInTheDocument()
-    expect(screen.getByText('File is empty.')).toBeInTheDocument()
+    expect(screen.getAllByText('Invalid').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('File is empty.').length).toBeGreaterThan(0)
 
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
@@ -586,6 +641,6 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
     expect(await screen.findByText('Upload Error')).toBeInTheDocument()
-    expect(screen.getByText('Package TEST23-652-7D-2 already exists.')).toBeInTheDocument()
+    expect(screen.getAllByText('Package TEST23-652-7D-2 already exists.').length).toBeGreaterThan(0)
   })
 })
