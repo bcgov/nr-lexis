@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminUploadsPage from '@/pages/AdminUploads'
 import { submitAdminUpload } from '@/service/admin-upload-service'
+import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -14,8 +15,15 @@ vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
 }))
 
+vi.mock('@/service/provincial-application-search-service', () => ({
+  searchProvincialApplicationNumberOptions: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
+  searchProvincialApplicationNumberOptions,
+)
 
 const renderPage = (path = '/admin/uploads?type=permit') => {
   render(
@@ -31,6 +39,7 @@ describe('Admin upload workflow smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedSubmitAdminUpload.mockResolvedValue({})
+    mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([])
   })
 
   it('submits permit upload with query-prefilled number', async () => {
@@ -60,6 +69,55 @@ describe('Admin upload workflow smoke', () => {
     })
 
     expect(screen.getByText('Upload Submitted')).toBeInTheDocument()
+  })
+
+  it('searches application numbers for application document uploads', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === '/fileApplicationUpload',
+    } as any)
+    mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([
+      {
+        value: '45963',
+        label: '45963 - New - Owner 00001012 - Region RSI',
+        status: 'New',
+        applicantClientNumber: '',
+        ownerClientNumber: '00001012',
+        region: 'RSI',
+        listingDate: '2026-06-10',
+        exemptionNumber: '',
+      },
+    ])
+
+    renderPage('/admin/uploads?type=application')
+
+    const applicationNumberInput = screen.getByRole('combobox', {
+      name: 'Application Number',
+    })
+    await userEvent.type(applicationNumberInput, '45963')
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplicationNumberOptions).toHaveBeenLastCalledWith('45963')
+    })
+
+    await userEvent.click(
+      await screen.findByRole('option', {
+        name: '45963 - New - Owner 00001012 - Region RSI',
+      }),
+    )
+
+    const file = new File(['application upload'], 'application.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'application',
+        expect.objectContaining({
+          applicationNumber: '45963',
+          file,
+        }),
+      )
+    })
   })
 
   it('blocks invoice workflow when upload action is not granted', () => {

@@ -11,6 +11,7 @@ import {
 } from '@carbon/react'
 import { Upload } from '@carbon/icons-react'
 import { Link, useSearchParams } from 'react-router-dom'
+import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
 import SearchableSelect from '@/components/SearchableSelect'
 import { useAuth } from '@/context/auth/useAuth'
 import {
@@ -657,18 +658,17 @@ const AdminUploadsPage: FC = () => {
             />
 
             {selectedWorkflowType === 'application' && (
-              <TextInput
+              <ApplicationNumberSelect
                 id="applicationNumber"
                 labelText={selectedWorkflow.numberFieldLabel}
                 value={formState.applicationNumber}
-                placeholder={selectedWorkflow.numberFieldPlaceholder}
                 invalid={!!fieldError('applicationNumber')}
                 invalidText={fieldError('applicationNumber')}
                 onBlur={() => markFieldTouched('applicationNumber')}
-                onChange={(event) =>
+                onChange={(value) =>
                   setFormState((current) => ({
                     ...current,
-                    applicationNumber: event.target.value,
+                    applicationNumber: value,
                   }))
                 }
               />
