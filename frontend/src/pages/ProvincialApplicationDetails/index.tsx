@@ -60,6 +60,7 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import SearchableSelect from '@/components/SearchableSelect'
 import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
@@ -1505,18 +1506,24 @@ const ProvincialApplicationDetailsPage: FC = () => {
     navigate(query.length > 0 ? `/provincial/offers/create?${query}` : '/provincial/offers/create')
   }, [detail, navigate])
 
+  const refreshApplicationDocuments = useCallback(async () => {
+    if (!applicationNumber) {
+      return
+    }
+
+    const documentsResult = await fetchApplicationDocuments(applicationNumber)
+    setDocumentRows(documentsResult.rows)
+    setDocumentsErrorMessage('')
+  }, [applicationNumber])
+
   const onOpenApplicationUpload = useCallback(() => {
     if (!detail) {
       return
     }
     setActionErrorMessage('')
     setActionInfoMessage('')
-    const params = new URLSearchParams({
-      type: 'application',
-      applicationNumber: String(detail.applicationNumber),
-    })
-    navigate(`/admin/uploads?${params.toString()}`)
-  }, [detail, navigate])
+    document.getElementById('applicationDocumentUpload')?.scrollIntoView({ block: 'start' })
+  }, [detail])
 
   const onOpenDocument = useCallback(async (row: ProvincialApplicationDocumentRow) => {
     setActionErrorMessage('')
@@ -2804,15 +2811,13 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 Documents <Tag type="green">API</Tag>
               </h2>
               {canUploadApplicationDocuments && (
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  renderIcon={Upload}
+                <DetailDocumentUploadPanel
+                  workflowType="application"
+                  targetNumber={String(detail.applicationNumber ?? '')}
+                  inputId="applicationDocumentUpload"
                   disabled={!detail.applicationNumber}
-                  onClick={onOpenApplicationUpload}
-                >
-                  Upload Application Document
-                </Button>
+                  onUploadComplete={refreshApplicationDocuments}
+                />
               )}
               <TextInput
                 id="applicationDetailDocumentsFilter"

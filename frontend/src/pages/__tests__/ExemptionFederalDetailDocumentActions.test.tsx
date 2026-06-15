@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { FederalApplicationDetail, ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
@@ -46,6 +46,8 @@ vi.mock('@/service/federal-application-documents-service', () => ({
 vi.mock('@/service/report-service', () => ({
   runReport: vi.fn(),
 }))
+
+Element.prototype.scrollIntoView = vi.fn()
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchFederalApplicationDetail = vi.mocked(fetchFederalApplicationDetail)
@@ -109,11 +111,6 @@ const federalDetail: FederalApplicationDetail = {
   },
 }
 
-const LocationProbe = () => {
-  const location = useLocation()
-  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
-}
-
 describe('Exemption and Federal Detail Document Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -156,7 +153,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
   })
 
-  it('navigates to upload center with exemption context', async () => {
+  it('jumps from the exemption action to the embedded upload panel', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
         <Routes>
@@ -164,7 +161,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
             path="/provincial/exemption/:exemptionNumber"
             element={<ProvincialExemptionDetailsPage />}
           />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -173,8 +169,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/admin/uploads?type=exemption&exemptionNumber=EX-777')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    expect(await screen.findByText('Upload Exemption Documents')).toBeInTheDocument()
   })
 
   it('opens exemption document from API response', async () => {
@@ -335,12 +331,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
   })
 
-  it('navigates to upload center with federal application context', async () => {
+  it('jumps from the federal application action to the embedded upload panel', async () => {
     render(
       <MemoryRouter initialEntries={['/federal/888']}>
         <Routes>
           <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -349,8 +344,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/admin/uploads?type=application&applicationNumber=888')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    expect(await screen.findByText('Upload Application Documents')).toBeInTheDocument()
   })
 
   it('opens federal document from API response', async () => {

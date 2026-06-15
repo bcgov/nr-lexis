@@ -1150,6 +1150,24 @@ body {
   color: var(--cds-text-secondary);
 }
 
+.detail-document-upload {
+  display: grid;
+  gap: 1rem;
+  margin-block: 1rem;
+}
+
+.detail-document-upload__workspace {
+  grid-template-columns: minmax(min(100%, 26rem), 0.85fr) minmax(min(100%, 32rem), 1.15fr);
+}
+
+.detail-document-upload .admin-upload-panel__header h2 {
+  font-size: 1rem;
+}
+
+.detail-document-upload .admin-upload-panel .cds--text-area__wrapper {
+  margin: 1rem;
+}
+
 @media (max-width: 671px) {
   .admin-upload-workspace {
     grid-template-columns: 1fr;

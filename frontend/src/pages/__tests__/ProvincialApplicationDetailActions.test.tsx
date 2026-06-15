@@ -47,6 +47,7 @@ import {
   fetchApplicationReviewOptions,
   fetchProvincialApplicationOptions,
 } from '@/service/search-options-service'
+import { submitAdminUpload } from '@/service/admin-upload-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -100,6 +101,10 @@ vi.mock('@/service/provincial-application-items-service', () => ({
 vi.mock('@/service/search-options-service', () => ({
   fetchApplicationReviewOptions: vi.fn(),
   fetchProvincialApplicationOptions: vi.fn(),
+}))
+
+vi.mock('@/service/admin-upload-service', () => ({
+  submitAdminUpload: vi.fn(),
 }))
 
 Element.prototype.scrollIntoView = vi.fn()
@@ -161,6 +166,7 @@ const mockedUpdateApplicationSummary = vi.mocked(updateApplicationSummary)
 const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
 const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOptions)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
+const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 
 const applicationDetail: ProvincialApplicationDetail = {
   applicationNumber: 321,
@@ -261,6 +267,10 @@ describe('Provincial Application Detail Document Actions', () => {
     mockedRemoveApplicationDocument.mockResolvedValue({
       success: true,
       source: 'api',
+    })
+    mockedSubmitAdminUpload.mockResolvedValue({
+      status: 'success',
+      message: 'Application document upload submitted.',
     })
     mockedFetchApplicationReviewOptions.mockResolvedValue({
       productTypes: [],
@@ -582,7 +592,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(location.textContent).toBe('/provincial/permit/900101?packageFilter=PKG-1')
   })
 
-  it('navigates to upload center with application context', async () => {
+  it('jumps from the header action to the embedded application upload panel', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -590,7 +600,6 @@ describe('Provincial Application Detail Document Actions', () => {
             path="/provincial/application/:applicationNumber"
             element={<ProvincialApplicationDetailsPage />}
           />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -601,8 +610,8 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/admin/uploads?type=application&applicationNumber=321')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    expect(await screen.findByText('Upload Application Documents')).toBeInTheDocument()
   })
 
   it('blocks application summary and package edits for exemption approvers', async () => {
@@ -638,7 +647,24 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
-  it('uses upload center instead of an inline application document upload form', async () => {
+  it('uploads application documents inline and refreshes document rows', async () => {
+    mockedFetchApplicationDocuments
+      .mockResolvedValueOnce({
+        rows: [],
+        source: 'api',
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '900',
+            name: 'uploaded-doc.pdf',
+            description: 'Uploaded',
+            type: 'Attachment',
+          },
+        ],
+        source: 'api',
+      })
+
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -646,20 +672,32 @@ describe('Provincial Application Detail Document Actions', () => {
             path="/provincial/application/:applicationNumber"
             element={<ProvincialApplicationDetailsPage />}
           />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
 
     expect(await screen.findByText('Documents')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Application Document File')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Upload Document' })).not.toBeInTheDocument()
+    const file = new File(['test'], 'uploaded-doc.pdf', { type: 'application/pdf' })
 
-    const uploadButtons = screen.getAllByRole('button', { name: 'Upload Application Document' })
-    await userEvent.click(uploadButtons[uploadButtons.length - 1])
+    await userEvent.type(screen.getByLabelText('Document Description'), 'Uploaded')
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/admin/uploads?type=application&applicationNumber=321')
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'application',
+        expect.objectContaining({
+          applicationNumber: '321',
+          file,
+          fileDescription: 'Uploaded',
+        }),
+      )
+    })
+
+    await waitFor(() => {
+      expect(screen.getAllByText('uploaded-doc.pdf').length).toBeGreaterThanOrEqual(1)
+    })
+    expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
   })
 
   it('ignores stale detail responses after navigating to another application', async () => {

@@ -17,6 +17,7 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -275,6 +276,16 @@ const ProvincialExemptionDetailsPage: FC = () => {
     navigate(query.length > 0 ? `/provincial/permit/create?${query}` : '/provincial/permit/create')
   }, [detail, navigate])
 
+  const refreshExemptionDocuments = useCallback(async () => {
+    if (!exemptionNumber) {
+      return
+    }
+
+    const documentsResult = await fetchExemptionDocuments(exemptionNumber)
+    setDocumentRows(documentsResult.rows)
+    setDocumentsErrorMessage('')
+  }, [exemptionNumber])
+
   const onOpenExemptionUpload = useCallback(() => {
     if (!detail) {
       return
@@ -282,12 +293,8 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
-    const params = new URLSearchParams({
-      type: 'exemption',
-      exemptionNumber: detail.exemptionNumber,
-    })
-    navigate(`/admin/uploads?${params.toString()}`)
-  }, [detail, navigate])
+    document.getElementById('exemptionDocumentUpload')?.scrollIntoView({ block: 'start' })
+  }, [detail])
 
   const onOpenDocument = useCallback(async (row: ProvincialExemptionDocumentRow) => {
     setActionErrorMessage('')
@@ -575,6 +582,15 @@ const ProvincialExemptionDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Documents <Tag type="green">API</Tag>
               </h2>
+              {canManageDocuments && (
+                <DetailDocumentUploadPanel
+                  workflowType="exemption"
+                  targetNumber={detail.exemptionNumber}
+                  inputId="exemptionDocumentUpload"
+                  disabled={!detail.exemptionNumber}
+                  onUploadComplete={refreshExemptionDocuments}
+                />
+              )}
               <TextInput
                 id="exemptionDetailDocumentsFilter"
                 labelText="Filter document rows"

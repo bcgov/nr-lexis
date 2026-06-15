@@ -17,6 +17,7 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import {
@@ -426,6 +427,19 @@ const ProvincialPermitDetailsPage: FC = () => {
     }
   }, [detail, permitNumber])
 
+  const refreshPermitDocuments = useCallback(async () => {
+    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    if (!resolvedPermitNumber) {
+      return
+    }
+
+    const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
+    const invoicesResult = await fetchPermitInvoices(resolvedPermitNumber)
+    setDocumentRows(documentsResult.rows)
+    setInvoiceRows(invoicesResult.rows)
+    setDocumentsInvoicesErrorMessage('')
+  }, [detail?.permitNumber, permitNumber])
+
   const onOpenPermitUpload = useCallback(() => {
     if (!detail?.permitNumber) {
       return
@@ -433,12 +447,8 @@ const ProvincialPermitDetailsPage: FC = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
-    const params = new URLSearchParams({
-      type: 'permit',
-      permitNumber: String(detail.permitNumber),
-    })
-    navigate(`/admin/uploads?${params.toString()}`)
-  }, [detail?.permitNumber, navigate])
+    document.getElementById('permitDocumentUpload')?.scrollIntoView({ block: 'start' })
+  }, [detail?.permitNumber])
 
   const onOpenDocument = useCallback(async (row: PermitDocumentRow) => {
     setActionErrorMessage('')
@@ -1095,6 +1105,15 @@ const ProvincialPermitDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Permit Documents <Tag type="green">API</Tag>
               </h2>
+              {canDeletePermitDocuments && (
+                <DetailDocumentUploadPanel
+                  workflowType="permit"
+                  targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
+                  inputId="permitDocumentUpload"
+                  disabled={!detail.permitNumber}
+                  onUploadComplete={refreshPermitDocuments}
+                />
+              )}
               <TextInput
                 id="permitDocumentsFilter"
                 labelText="Filter document rows"

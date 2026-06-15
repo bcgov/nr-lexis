@@ -17,6 +17,7 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -202,6 +203,16 @@ const FederalApplicationDetailsPage: FC = () => {
     canPerform('/federalApplicationSearch') || canPerform('viewFederalApplication')
   const canManageDocuments = canPerform('/fileApplicationUpload')
 
+  const refreshFederalApplicationDocuments = useCallback(async () => {
+    if (!applicationNumber) {
+      return
+    }
+
+    const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
+    setDocumentRows(documentsResult.rows)
+    setDocumentsErrorMessage('')
+  }, [applicationNumber])
+
   const onOpenApplicationUpload = useCallback(() => {
     if (!detail) {
       return
@@ -215,12 +226,8 @@ const FederalApplicationDetailsPage: FC = () => {
     }
     setActionErrorMessage('')
     setActionInfoMessage('')
-    const params = new URLSearchParams({
-      type: 'application',
-      applicationNumber: resolvedApplicationNumber,
-    })
-    navigate(`/admin/uploads?${params.toString()}`)
-  }, [applicationNumber, detail, navigate])
+    document.getElementById('federalApplicationDocumentUpload')?.scrollIntoView({ block: 'start' })
+  }, [applicationNumber, detail])
 
   const onOpenDocument = useCallback(async (row: FederalApplicationDocumentRow) => {
     setActionErrorMessage('')
@@ -539,6 +546,15 @@ const FederalApplicationDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Documents <Tag type="green">API</Tag>
               </h2>
+              {canManageDocuments && (
+                <DetailDocumentUploadPanel
+                  workflowType="application"
+                  targetNumber={String(detail.applicationNumber ?? applicationNumber ?? '')}
+                  inputId="federalApplicationDocumentUpload"
+                  disabled={!detail.applicationNumber && !applicationNumber}
+                  onUploadComplete={refreshFederalApplicationDocuments}
+                />
+              )}
               <TextInput
                 id="federalDetailDocumentsFilter"
                 labelText="Filter document rows"

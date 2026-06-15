@@ -56,6 +56,8 @@ vi.mock('@/service/report-service', () => ({
   runReport: vi.fn(),
 }))
 
+Element.prototype.scrollIntoView = vi.fn()
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailTabs)
@@ -231,7 +233,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
   })
 
-  it('navigates to upload center with permit context', async () => {
+  it('jumps from the permit document action to the embedded upload panel', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -239,7 +241,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
             path="/provincial/permit/:permitNumber"
             element={<ProvincialPermitDetailsPage />}
           />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -248,8 +249,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/admin/uploads?type=permit&permitNumber=777')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    expect(await screen.findByText('Upload Permit Documents')).toBeInTheDocument()
   })
 
   it('navigates to invoice upload context with conversion rate lookup', async () => {
