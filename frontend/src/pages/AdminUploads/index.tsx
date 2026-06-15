@@ -838,57 +838,52 @@ const AdminUploadsPage: FC = () => {
             )}
           </section>
 
-          <section className="admin-upload-panel" aria-labelledby="admin-upload-queue-title">
+          <section className="admin-upload-panel" aria-labelledby="admin-upload-preview-title">
             <div className="admin-upload-panel__header">
               <div>
-                <h2 id="admin-upload-queue-title">Upload Queue</h2>
+                <h2 id="admin-upload-preview-title">Data Preview</h2>
                 <p>
                   {uploadQueue.length === 0
-                    ? 'Select files to preview them before submitting.'
-                    : `${uploadQueue.length} file${uploadQueue.length === 1 ? '' : 's'} selected.`}
+                    ? 'Upload files to view them before submitting.'
+                    : `Review ${uploadQueue.length} selected file${uploadQueue.length === 1 ? '' : 's'} before submitting.`}
                 </p>
               </div>
-              <div className="admin-upload-queue-summary" aria-label="Upload queue summary">
-                <Tag type="gray">Ready {readyUploadCount}</Tag>
-                <Tag type="red">Invalid {invalidUploadCount}</Tag>
-                <Tag type="green">Complete {completeUploadCount}</Tag>
-                <Tag type="red">Failed {failedUploadCount}</Tag>
-              </div>
               {uploadQueue.length > 0 && (
-                <Button kind="ghost" size="sm" onClick={clearQueuedFiles} disabled={isSubmitting}>
-                  Clear Queue
-                </Button>
+                <>
+                  <div className="admin-upload-queue-summary" aria-label="Upload preview summary">
+                    <Tag type="gray">Ready {readyUploadCount}</Tag>
+                    <Tag type="red">Invalid {invalidUploadCount}</Tag>
+                    <Tag type="green">Complete {completeUploadCount}</Tag>
+                    <Tag type="red">Failed {failedUploadCount}</Tag>
+                  </div>
+                  <Button kind="ghost" size="sm" onClick={clearQueuedFiles} disabled={isSubmitting}>
+                    Clear
+                  </Button>
+                </>
               )}
             </div>
 
-            <div className="admin-upload-queue">
-              <h2>
-                {uploadQueue.length === 0
-                  ? 'No data uploaded yet'
-                  : `Preview ${uploadQueue.length} queued file${uploadQueue.length === 1 ? '' : 's'}`}
-              </h2>
-              {uploadQueue.length === 0 && (
-                <p className="admin-upload-empty-copy">Upload files to see them here.</p>
-              )}
-            </div>
-
-            <table className="cds--data-table admin-upload-queue__table">
-              <thead>
-                <tr>
-                  <th>File</th>
-                  <th>Size</th>
-                  <th>Status</th>
-                  <th>Message</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {uploadQueue.length === 0 ? (
+            {uploadQueue.length === 0 ? (
+              <div className="admin-upload-empty-state">
+                <div className="admin-upload-empty-state__icon" aria-hidden="true">
+                  <Upload size={32} />
+                </div>
+                <p>No data uploaded yet</p>
+                <p>Upload files to see them here.</p>
+              </div>
+            ) : (
+              <table className="cds--data-table admin-upload-queue__table">
+                <thead>
                   <tr>
-                    <td colSpan={5}>Choose files to populate the upload queue.</td>
+                    <th>File</th>
+                    <th>Size</th>
+                    <th>Status</th>
+                    <th>Message</th>
+                    <th>Action</th>
                   </tr>
-                ) : (
-                  uploadQueue.map((item) => (
+                </thead>
+                <tbody>
+                  {uploadQueue.map((item) => (
                     <tr key={item.id}>
                       <td>{item.file.name}</td>
                       <td>{formatFileSize(item.file.size)}</td>
@@ -914,10 +909,10 @@ const AdminUploadsPage: FC = () => {
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </section>
 
           <div className="legacy-search-actions">

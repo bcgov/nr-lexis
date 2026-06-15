@@ -76,6 +76,18 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByRole('button', { name: 'Submit Upload' })).toBeDisabled()
   })
 
+  it('shows a data preview empty state before files are selected', () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === '/filePermitUpload',
+    } as any)
+
+    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+
+    expect(screen.getByRole('heading', { name: 'Data Preview' })).toBeInTheDocument()
+    expect(screen.getByText('No data uploaded yet')).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'File' })).not.toBeInTheDocument()
+  })
+
   it('shows field validation for missing permit upload inputs', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === '/filePermitUpload',

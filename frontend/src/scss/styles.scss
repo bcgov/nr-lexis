@@ -824,8 +824,7 @@ body {
 }
 
 .admin-upload-workflow__header h2,
-.admin-upload-panel__header h2,
-.admin-upload-queue h2 {
+.admin-upload-panel__header h2 {
   margin: 0 0 0.25rem;
 }
 
@@ -908,21 +907,41 @@ body {
   margin: 0 1rem 1rem;
 }
 
-.admin-upload-queue {
-  display: grid;
-  gap: 0.75rem;
-  padding: 1rem;
-}
-
 .admin-upload-queue-summary {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
 }
 
-.admin-upload-empty-copy {
-  margin: 0;
+.admin-upload-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  padding: 3rem 1rem;
   color: var(--cds-text-secondary);
+  text-align: center;
+}
+
+.admin-upload-empty-state p {
+  margin: 0;
+}
+
+.admin-upload-empty-state p:first-of-type {
+  color: var(--cds-text-primary);
+}
+
+.admin-upload-empty-state p:last-of-type {
+  font-size: 0.875rem;
+}
+
+.admin-upload-empty-state__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 4rem;
+  block-size: 4rem;
+  background: var(--cds-layer-accent);
+  border-radius: 50%;
 }
 
 .admin-upload-queue__table {
