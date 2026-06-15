@@ -253,6 +253,45 @@ const workflowDescription = (workflowType: UploadWorkflowType): string => {
   return 'Attach one or more documents to an existing permit.'
 }
 
+const buildUploadResultMessage = (
+  workflowType: UploadWorkflowType,
+  resultMessage: string,
+  result?: {
+    message?: string
+    applicationNumber?: number
+    packageNumber?: string
+    scaleRows?: number
+    warnings?: string[]
+  },
+): string => {
+  if (workflowType !== 'lexisXml') {
+    return result?.message?.trim() || resultMessage
+  }
+
+  const details: string[] = []
+  if (result?.applicationNumber) {
+    details.push(`Application ${result.applicationNumber}`)
+  }
+  if (result?.packageNumber) {
+    details.push(`Package ${result.packageNumber}`)
+  }
+  if (typeof result?.scaleRows === 'number') {
+    details.push(`${result.scaleRows} scale row${result.scaleRows === 1 ? '' : 's'}`)
+  }
+
+  const summary =
+    details.length > 0
+      ? `LEXIS XML import created ${details.join(', ')}.`
+      : result?.message?.trim() || resultMessage
+
+  const warnings =
+    Array.isArray(result?.warnings) && result.warnings.length > 0
+      ? ` Warnings: ${result.warnings.join(' ')}`
+      : ''
+
+  return `${summary}${warnings}`
+}
+
 const AdminUploadsPage: FC = () => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -426,40 +465,45 @@ const AdminUploadsPage: FC = () => {
         file,
         fileDescription: formState.fileDescription.trim(),
       })
-      return (
-        result.message ??
-        'LEXIS XML import submitted. Verify the created application and package details.'
+      return buildUploadResultMessage(
+        'lexisXml',
+        'LEXIS XML import submitted. Verify the created application and package details.',
+        result,
       )
     }
 
     if (selectedWorkflowType === 'application') {
-      await submitAdminUpload('application', {
+      const result = await submitAdminUpload('application', {
         applicationNumber: formState.applicationNumber.trim(),
         file,
         fileDescription: formState.fileDescription.trim(),
       })
-      return 'Application document upload submitted.'
+      return buildUploadResultMessage(
+        'application',
+        'Application document upload submitted.',
+        result,
+      )
     }
 
     if (selectedWorkflowType === 'exemption') {
-      await submitAdminUpload('exemption', {
+      const result = await submitAdminUpload('exemption', {
         exemptionNumber: formState.exemptionNumber.trim(),
         file,
         fileDescription: formState.fileDescription.trim(),
       })
-      return 'Exemption document upload submitted.'
+      return buildUploadResultMessage('exemption', 'Exemption document upload submitted.', result)
     }
 
     if (selectedWorkflowType === 'permit') {
-      await submitAdminUpload('permit', {
+      const result = await submitAdminUpload('permit', {
         permitNumber: formState.permitNumber.trim(),
         file,
         fileDescription: formState.fileDescription.trim(),
       })
-      return 'Permit document upload submitted.'
+      return buildUploadResultMessage('permit', 'Permit document upload submitted.', result)
     }
 
-    await submitAdminUpload('invoice', {
+    const result = await submitAdminUpload('invoice', {
       permitNumber: formState.permitNumber.trim(),
       salesInvoiceNumber: formState.salesInvoiceNumber.trim(),
       invoiceExportValue: formState.invoiceExportValue.trim(),
@@ -468,7 +512,7 @@ const AdminUploadsPage: FC = () => {
       file,
       fileDescription: formState.fileDescription.trim(),
     })
-    return 'Invoice upload submitted.'
+    return buildUploadResultMessage('invoice', 'Invoice upload submitted.', result)
   }
 
   const onSubmitUpload = async (): Promise<void> => {

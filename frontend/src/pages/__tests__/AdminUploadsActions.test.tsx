@@ -124,7 +124,33 @@ describe('Admin upload workflow smoke', () => {
     })
 
     expect(screen.getByText('Upload Submitted')).toBeInTheDocument()
-    expect(screen.getAllByText(/created application 9001/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Application 9001/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
+  })
+
+  it('shows structured XML warning details in the upload queue', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+    mockedSubmitAdminUpload.mockResolvedValue({
+      applicationNumber: 9001,
+      packageNumber: 'TEST23-652-7D-2',
+      scaleRows: 3,
+      warnings: ['Imported payload/6-652-7.xml from ZIP archive submission.zip.'],
+    })
+
+    renderPage('/admin/uploads?type=lexisXml')
+
+    const file = new File(['zip-data'], 'submission.zip', { type: 'application/zip' })
+    await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    expect(await screen.findByText('Upload Submitted')).toBeInTheDocument()
+    expect(screen.getAllByText(/Application 9001/).length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText(/Imported payload\/6-652-7.xml from ZIP archive submission.zip/).length,
+    ).toBeGreaterThan(0)
   })
 
   it('submits queued XML files one at a time', async () => {
