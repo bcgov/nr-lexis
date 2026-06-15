@@ -45,15 +45,24 @@ jobs:
 
             APP="${{ github.event.repository.name }}"
             PR="${{ github.event.number }}"
+            NAMESPACE="${{ secrets.oc_namespace }}"
             RESOURCE_TYPES="deploy,rs,pod,svc,route,hpa,networkpolicy,secret,pvc,cm"
+
+            echo "Verifying OpenShift session and namespace access"
+            oc whoami >/dev/null
+            oc project "${NAMESPACE}" >/dev/null
+            if [ "$(oc auth can-i delete deployments -n "${NAMESPACE}")" != "yes" ]; then
+              echo "OpenShift token cannot delete deployments in the target namespace."
+              exit 1
+            fi
 
             echo "Deleting preview resources for PR ${PR}"
 
             for component in backend frontend; do
               label="${APP}-${component}-${PR}"
               echo "Deleting resources labelled app=${label}"
-              oc delete "${RESOURCE_TYPES}" -l "app=${label}" --ignore-not-found
+              oc delete "${RESOURCE_TYPES}" -n "${NAMESPACE}" -l "app=${label}" --ignore-not-found
             done
 
             echo "Deleting generated backend serving cert secret, if present"
-            oc delete secret "${APP}-backend-cert-${PR}" --ignore-not-found
+            oc delete secret "${APP}-backend-cert-${PR}" -n "${NAMESPACE}" --ignore-not-found
