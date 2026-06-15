@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
@@ -21,6 +21,7 @@ import {
   removePermitInvoiceDocument,
 } from '@/service/provincial-permit-documents-invoices-service'
 import { runReport } from '@/service/report-service'
+import { submitAdminUpload } from '@/service/admin-upload-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -56,6 +57,10 @@ vi.mock('@/service/report-service', () => ({
   runReport: vi.fn(),
 }))
 
+vi.mock('@/service/admin-upload-service', () => ({
+  submitAdminUpload: vi.fn(),
+}))
+
 Element.prototype.scrollIntoView = vi.fn()
 
 const mockedUseAuth = vi.mocked(useAuth)
@@ -70,6 +75,7 @@ const mockedRemovePermitApplicationDocument = vi.mocked(removePermitApplicationD
 const mockedRemovePermitDocument = vi.mocked(removePermitDocument)
 const mockedRemovePermitInvoiceDocument = vi.mocked(removePermitInvoiceDocument)
 const mockedRunReport = vi.mocked(runReport)
+const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 
 const permitDetail: ProvincialPermitDetail = {
   permitNumber: 777,
@@ -105,11 +111,6 @@ const tabsResult: ProvincialPermitDetailTabsData = {
   gbmsEvents: [],
   oicItems: [],
   boicItems: [],
-}
-
-const LocationProbe = () => {
-  const location = useLocation()
-  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
 }
 
 describe('Provincial Permit Detail Action Smoke', () => {
@@ -155,6 +156,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     mockedRemovePermitInvoiceDocument.mockResolvedValue({
       success: true,
       source: 'api',
+    })
+    mockedSubmitAdminUpload.mockResolvedValue({
+      status: 'success',
+      message: 'Invoice upload submitted.',
     })
   })
 
@@ -253,7 +258,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByText('Upload Permit Documents')).toBeInTheDocument()
   })
 
-  it('navigates to invoice upload context with conversion rate lookup', async () => {
+  it('jumps to embedded invoice upload with conversion rate lookup', async () => {
     mockedFetchPermitInvoiceConversionRate.mockResolvedValue({
       conversionRate: '1.37',
       source: 'api',
@@ -266,7 +271,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
             path="/provincial/permit/:permitNumber"
             element={<ProvincialPermitDetailsPage />}
           />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -277,10 +281,50 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await waitFor(() => {
       expect(mockedFetchPermitInvoiceConversionRate).toHaveBeenCalledTimes(1)
-      expect(screen.getByTestId('location').textContent).toBe(
-        '/admin/uploads?type=invoice&permitNumber=777&invoiceConversionRate=1.37',
+      expect(screen.getByLabelText('Upload Invoice Conversion Rate')).toHaveValue('1.37')
+    })
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+  })
+
+  it('uploads invoice files inline and refreshes permit document data', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const invoicePanel = (await screen.findByText('Upload Invoices')).closest(
+      '.detail-document-upload',
+    )
+    expect(invoicePanel).toBeTruthy()
+    const invoiceControls = within(invoicePanel as HTMLElement)
+    const file = new File(['invoice upload'], 'invoice.pdf', { type: 'application/pdf' })
+
+    await userEvent.type(invoiceControls.getByLabelText('Upload Invoice Number'), 'INV123')
+    await userEvent.type(invoiceControls.getByLabelText('Upload Invoice Export Value'), '1000')
+    await userEvent.upload(invoiceControls.getByLabelText('Document File'), file)
+    await userEvent.click(invoiceControls.getByRole('button', { name: 'Submit Upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'invoice',
+        expect.objectContaining({
+          permitNumber: '777',
+          salesInvoiceNumber: 'INV123',
+          invoiceExportValue: '1000',
+          invoiceConversionRate: '1.00',
+          invoiceFeeInLieu: '1.00',
+          file,
+        }),
       )
     })
+    expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(2)
+    expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(2)
   })
 
   it('opens permit document from API response', async () => {

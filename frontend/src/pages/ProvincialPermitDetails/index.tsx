@@ -139,6 +139,7 @@ const ProvincialPermitDetailsPage: FC = () => {
   const [invoiceDraftNumber, setInvoiceDraftNumber] = useState('')
   const [invoiceDraftExportValue, setInvoiceDraftExportValue] = useState('')
   const [invoiceDraftFeeInLieu, setInvoiceDraftFeeInLieu] = useState('')
+  const [invoiceUploadConversionRate, setInvoiceUploadConversionRate] = useState('1.00')
   const [isAddingInvoice, setIsAddingInvoice] = useState(false)
   const [touchedInvoiceFields, setTouchedInvoiceFields] = useState<
     TouchedFields<PermitInvoiceField>
@@ -632,15 +633,11 @@ const ProvincialPermitDetailsPage: FC = () => {
       setActionInfoMessage('Unable to retrieve conversion rate. Using 1.00 for invoice upload.')
     }
 
-    const params = new URLSearchParams({
-      type: 'invoice',
-      permitNumber: String(detail.permitNumber),
-      invoiceConversionRate: conversionRate,
-    })
     if (isLatestRequest()) {
-      navigate(`/admin/uploads?${params.toString()}`)
+      setInvoiceUploadConversionRate(conversionRate)
+      document.getElementById('permitInvoiceUpload')?.scrollIntoView({ block: 'start' })
     }
-  }, [beginInvoiceUploadRequest, detail?.permitNumber, navigate])
+  }, [beginInvoiceUploadRequest, detail?.permitNumber])
 
   return (
     <Grid fullWidth className="default-grid">
@@ -1180,6 +1177,16 @@ const ProvincialPermitDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Invoices <Tag type="green">API</Tag>
               </h2>
+              {canDeleteInvoiceDocuments && (
+                <DetailDocumentUploadPanel
+                  workflowType="invoice"
+                  targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
+                  inputId="permitInvoiceUpload"
+                  disabled={!detail.permitNumber}
+                  initialInvoiceConversionRate={invoiceUploadConversionRate}
+                  onUploadComplete={refreshPermitDocuments}
+                />
+              )}
               <TextInput
                 id="permitInvoicesFilter"
                 labelText="Filter invoice rows"

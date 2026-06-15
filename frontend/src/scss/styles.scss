@@ -1168,6 +1168,10 @@ body {
   margin: 1rem;
 }
 
+.detail-document-upload__invoice-fields {
+  padding: 1rem 1rem 0;
+}
+
 @media (max-width: 671px) {
   .admin-upload-workspace {
     grid-template-columns: 1fr;

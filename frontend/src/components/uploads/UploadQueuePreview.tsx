@@ -13,6 +13,7 @@ type UploadQueuePreviewProps = {
   onReset: () => void
   onClear: () => void
   onRemove: (id: string) => void
+  idPrefix?: string
   renderCompleteAction?: (item: UploadQueueItem) => ReactNode
 }
 
@@ -93,6 +94,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
   onReset,
   onClear,
   onRemove,
+  idPrefix = 'adminUpload',
   renderCompleteAction,
 }) => {
   const [queueFilter, setQueueFilter] = useState('')
@@ -136,12 +138,14 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
     setQueueFilter('')
     onReset()
   }
+  const previewTitleId = `${idPrefix}PreviewTitle`
+  const queueFilterId = `${idPrefix}QueueFilter`
 
   return (
-    <section className="admin-upload-panel" aria-labelledby="admin-upload-preview-title">
+    <section className="admin-upload-panel" aria-labelledby={previewTitleId}>
       <div className="admin-upload-panel__header">
         <div>
-          <h2 id="admin-upload-preview-title">Data Preview</h2>
+          <h2 id={previewTitleId}>Data Preview</h2>
           <p>
             {items.length === 0
               ? 'Upload files to view them before submitting.'
@@ -183,7 +187,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
         <>
           <div className="admin-upload-preview-filter">
             <TextInput
-              id="adminUploadQueueFilter"
+              id={queueFilterId}
               labelText="Filter queued files"
               placeholder="Filter by upload type, file name, target, status, or message"
               value={queueFilter}
@@ -251,7 +255,11 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
               {failedCount}
             </span>
           </div>
-          <UploadQueueReviewAccordion items={filteredItems} targetSummary={targetSummary} />
+          <UploadQueueReviewAccordion
+            items={filteredItems}
+            targetSummary={targetSummary}
+            idPrefix={`${idPrefix}Review`}
+          />
         </>
       )}
     </section>

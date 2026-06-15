@@ -1,5 +1,5 @@
 import { useMemo, useState, type FC } from 'react'
-import { InlineNotification, TextArea } from '@carbon/react'
+import { InlineNotification, TextArea, TextInput } from '@carbon/react'
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
@@ -13,9 +13,16 @@ import type {
   UploadQueueReviewDetails,
   UploadQueueStatus,
 } from './uploadQueueTypes'
+import {
+  firstValidationError,
+  maxLengthFieldError,
+  numericFieldError,
+  positiveNumericFieldError,
+  requiredFieldError,
+} from '@/pages/shared/create-form-utils'
 import { submitAdminUpload } from '@/service/admin-upload-service'
 
-type DetailDocumentUploadType = 'application' | 'exemption' | 'permit'
+type DetailDocumentUploadType = 'application' | 'exemption' | 'permit' | 'invoice'
 
 type DetailDocumentUploadPanelProps = {
   workflowType: DetailDocumentUploadType
@@ -23,6 +30,7 @@ type DetailDocumentUploadPanelProps = {
   inputId: string
   disabled?: boolean
   disabledReason?: string
+  initialInvoiceConversionRate?: string
   onUploadComplete?: () => Promise<void> | void
 }
 
@@ -52,6 +60,12 @@ const UPLOAD_COPY: Record<DetailDocumentUploadType, UploadCopy> = {
     targetLabel: 'Permit',
     defaultMessage: 'Permit document upload submitted.',
   },
+  invoice: {
+    title: 'Upload Invoices',
+    workflowLabel: 'Invoice Upload',
+    targetLabel: 'Permit',
+    defaultMessage: 'Invoice upload submitted.',
+  },
 }
 
 const uploadTargetSummary = (copy: UploadCopy, targetNumber: string): string =>
@@ -63,15 +77,25 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
   inputId,
   disabled = false,
   disabledReason = 'Your session does not include the required upload permission.',
+  initialInvoiceConversionRate = '1.00',
   onUploadComplete,
 }) => {
   const copy = UPLOAD_COPY[workflowType]
   const [fileDescription, setFileDescription] = useState('')
+  const [salesInvoiceNumber, setSalesInvoiceNumber] = useState('')
+  const [invoiceExportValue, setInvoiceExportValue] = useState('')
+  const [invoiceConversionRateOverride, setInvoiceConversionRateOverride] = useState<string | null>(
+    null,
+  )
+  const [invoiceFeeInLieu, setInvoiceFeeInLieu] = useState('1.00')
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
   const [fileInputKey, setFileInputKey] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [showInvoiceValidationErrors, setShowInvoiceValidationErrors] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const invoiceConversionRate =
+    (invoiceConversionRateOverride ?? initialInvoiceConversionRate) || '1.00'
 
   const invalidUploadCount = useMemo(
     () => uploadQueue.filter((item) => item.status === 'invalid').length,
@@ -81,7 +105,61 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
     () => uploadQueue.filter((item) => item.status === 'queued' || item.status === 'failed').length,
     [uploadQueue],
   )
-  const currentTargetSummary = uploadTargetSummary(copy, targetNumber)
+  const invoiceValidationErrors = useMemo(() => {
+    if (workflowType !== 'invoice') {
+      return []
+    }
+
+    return [
+      requiredFieldError(salesInvoiceNumber, 'Invoice number'),
+      maxLengthFieldError(salesInvoiceNumber, 9, 'Invoice number'),
+      firstValidationError(
+        () => requiredFieldError(invoiceExportValue, 'Invoice export value'),
+        () => numericFieldError(invoiceExportValue, 'Invoice export value'),
+        () => positiveNumericFieldError(invoiceExportValue),
+      ),
+      firstValidationError(
+        () => requiredFieldError(invoiceConversionRate, 'Invoice conversion rate'),
+        () => numericFieldError(invoiceConversionRate, 'Invoice conversion rate'),
+        () => positiveNumericFieldError(invoiceConversionRate),
+      ),
+      firstValidationError(
+        () => requiredFieldError(invoiceFeeInLieu, 'Invoice fee in lieu'),
+        () => numericFieldError(invoiceFeeInLieu, 'Invoice fee in lieu'),
+        () => positiveNumericFieldError(invoiceFeeInLieu),
+      ),
+    ].filter((error): error is string => !!error)
+  }, [
+    invoiceConversionRate,
+    invoiceExportValue,
+    invoiceFeeInLieu,
+    salesInvoiceNumber,
+    workflowType,
+  ])
+  const baseTargetSummary = uploadTargetSummary(copy, targetNumber)
+  const currentTargetSummary =
+    workflowType === 'invoice' && salesInvoiceNumber.trim()
+      ? `${baseTargetSummary}; invoice ${salesInvoiceNumber.trim()}`
+      : baseTargetSummary
+  const invoiceNumberError =
+    requiredFieldError(salesInvoiceNumber, 'Invoice number') ??
+    maxLengthFieldError(salesInvoiceNumber, 9, 'Invoice number')
+  const invoiceExportValueError = firstValidationError(
+    () => requiredFieldError(invoiceExportValue, 'Invoice export value'),
+    () => numericFieldError(invoiceExportValue, 'Invoice export value'),
+    () => positiveNumericFieldError(invoiceExportValue),
+  )
+  const invoiceConversionRateError = firstValidationError(
+    () => requiredFieldError(invoiceConversionRate, 'Invoice conversion rate'),
+    () => numericFieldError(invoiceConversionRate, 'Invoice conversion rate'),
+    () => positiveNumericFieldError(invoiceConversionRate),
+  )
+  const invoiceFeeInLieuError = firstValidationError(
+    () => requiredFieldError(invoiceFeeInLieu, 'Invoice fee in lieu'),
+    () => numericFieldError(invoiceFeeInLieu, 'Invoice fee in lieu'),
+    () => positiveNumericFieldError(invoiceFeeInLieu),
+  )
+  const showInvoiceFieldErrors = workflowType === 'invoice' && showInvoiceValidationErrors
   const canSubmit =
     !disabled && !!targetNumber.trim() && queuedUploadCount > 0 && invalidUploadCount === 0
 
@@ -125,8 +203,13 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
   const resetUpload = (): void => {
     clearQueuedFiles()
     setFileDescription('')
+    setSalesInvoiceNumber('')
+    setInvoiceExportValue('')
+    setInvoiceConversionRateOverride(null)
+    setInvoiceFeeInLieu('1.00')
     setErrorMessage('')
     setSuccessMessage('')
+    setShowInvoiceValidationErrors(false)
   }
 
   const setQueueItemStatus = (
@@ -180,6 +263,19 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
       return { message, details: buildUploadReviewDetails(message, result) }
     }
 
+    if (workflowType === 'invoice') {
+      const result = await submitAdminUpload('invoice', {
+        ...baseRequest,
+        permitNumber: targetNumber.trim(),
+        salesInvoiceNumber: salesInvoiceNumber.trim(),
+        invoiceExportValue: invoiceExportValue.trim(),
+        invoiceConversionRate: invoiceConversionRate.trim(),
+        invoiceFeeInLieu: invoiceFeeInLieu.trim(),
+      })
+      const message = buildUploadResultMessage('invoice', copy.defaultMessage, result)
+      return { message, details: buildUploadReviewDetails(message, result) }
+    }
+
     const result = await submitAdminUpload('permit', {
       ...baseRequest,
       permitNumber: targetNumber.trim(),
@@ -199,6 +295,12 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
 
     if (!targetNumber.trim()) {
       setErrorMessage(`${copy.targetLabel} number is required before uploading documents.`)
+      return
+    }
+
+    if (invoiceValidationErrors.length > 0) {
+      setShowInvoiceValidationErrors(true)
+      setErrorMessage(invoiceValidationErrors.join(' '))
       return
     }
 
@@ -307,9 +409,49 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
             </div>
             <div>
               <span>Format</span>
-              <strong>Document</strong>
+              <strong>{workflowType === 'invoice' ? 'Invoice' : 'Document'}</strong>
             </div>
           </div>
+          {workflowType === 'invoice' && (
+            <div className="legacy-search-grid detail-document-upload__invoice-fields">
+              <TextInput
+                id={`${inputId}SalesInvoiceNumber`}
+                labelText="Upload Invoice Number"
+                value={salesInvoiceNumber}
+                invalid={showInvoiceFieldErrors && !!invoiceNumberError}
+                invalidText={showInvoiceFieldErrors ? invoiceNumberError : undefined}
+                onChange={(event) => setSalesInvoiceNumber(event.target.value)}
+                disabled={disabled}
+              />
+              <TextInput
+                id={`${inputId}InvoiceExportValue`}
+                labelText="Upload Invoice Export Value"
+                value={invoiceExportValue}
+                invalid={showInvoiceFieldErrors && !!invoiceExportValueError}
+                invalidText={showInvoiceFieldErrors ? invoiceExportValueError : undefined}
+                onChange={(event) => setInvoiceExportValue(event.target.value)}
+                disabled={disabled}
+              />
+              <TextInput
+                id={`${inputId}InvoiceConversionRate`}
+                labelText="Upload Invoice Conversion Rate"
+                value={invoiceConversionRate}
+                invalid={showInvoiceFieldErrors && !!invoiceConversionRateError}
+                invalidText={showInvoiceFieldErrors ? invoiceConversionRateError : undefined}
+                onChange={(event) => setInvoiceConversionRateOverride(event.target.value)}
+                disabled={disabled}
+              />
+              <TextInput
+                id={`${inputId}InvoiceFeeInLieu`}
+                labelText="Upload Invoice Fee In Lieu"
+                value={invoiceFeeInLieu}
+                invalid={showInvoiceFieldErrors && !!invoiceFeeInLieuError}
+                invalidText={showInvoiceFieldErrors ? invoiceFeeInLieuError : undefined}
+                onChange={(event) => setInvoiceFeeInLieu(event.target.value)}
+                disabled={disabled}
+              />
+            </div>
+          )}
           <TextArea
             id={`${inputId}Description`}
             labelText="Document Description"
@@ -340,6 +482,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
         targetSummary={currentTargetSummary}
         canSubmit={canSubmit}
         isSubmitting={isSubmitting}
+        idPrefix={`${inputId}Queue`}
         onSubmit={() => void onSubmitUpload()}
         onReset={resetUpload}
         onClear={clearQueuedFiles}

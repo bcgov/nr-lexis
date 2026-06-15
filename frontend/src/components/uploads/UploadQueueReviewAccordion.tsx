@@ -5,6 +5,7 @@ import type { UploadQueueItem, UploadQueueStatus } from './uploadQueueTypes'
 type UploadQueueReviewAccordionProps = {
   items: UploadQueueItem[]
   targetSummary: string
+  idPrefix?: string
 }
 
 const statusTagType = (status: UploadQueueStatus): 'gray' | 'blue' | 'green' | 'red' => {
@@ -44,15 +45,18 @@ const asList = (value: string[] | undefined): string[] => value?.filter(Boolean)
 const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
   items,
   targetSummary,
+  idPrefix = 'adminUploadReview',
 }) => {
   if (items.length === 0) {
     return null
   }
 
+  const titleId = `${idPrefix}Title`
+
   return (
-    <section className="admin-upload-review" aria-labelledby="admin-upload-review-title">
+    <section className="admin-upload-review" aria-labelledby={titleId}>
       <div className="admin-upload-review__header">
-        <h3 id="admin-upload-review-title">File Review</h3>
+        <h3 id={titleId}>File Review</h3>
         <span>
           {items.length} file{items.length === 1 ? '' : 's'}
         </span>
