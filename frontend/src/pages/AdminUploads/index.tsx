@@ -1,18 +1,11 @@
-import { useEffect, useMemo, useState, type DragEvent, type FC, type ReactNode } from 'react'
-import {
-  Button,
-  Column,
-  ComboBox,
-  Grid,
-  InlineNotification,
-  Tag,
-  TextArea,
-  TextInput,
-} from '@carbon/react'
-import { Upload } from '@carbon/icons-react'
+import { useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
+import { Column, ComboBox, Grid, InlineNotification, Tag, TextArea, TextInput } from '@carbon/react'
 import { Link, useSearchParams } from 'react-router-dom'
 import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
 import SearchableSelect from '@/components/SearchableSelect'
+import MultiFileDropZone from '@/components/uploads/MultiFileDropZone'
+import UploadQueuePreview from '@/components/uploads/UploadQueuePreview'
+import type { UploadQueueItem, UploadQueueStatus } from '@/components/uploads/uploadQueueTypes'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   firstValidationError,
@@ -90,19 +83,6 @@ type UploadFormState = {
 }
 
 type UploadField = keyof UploadFormState | 'uploadFile'
-
-type UploadQueueStatus = 'queued' | 'invalid' | 'uploading' | 'complete' | 'failed'
-
-type UploadQueueItem = {
-  id: string
-  file: File
-  workflowLabel: string
-  queuedAt: number
-  status: UploadQueueStatus
-  message: string
-  resultApplicationNumber?: number
-  targetSummary?: string
-}
 
 type QueuedUploadResult = {
   message: string
@@ -195,16 +175,6 @@ const extractUploadErrorMessage = (error: unknown): string => {
   return 'Upload request failed. Please try again or contact support.'
 }
 
-const formatFileSize = (size: number): string => {
-  if (size < 1024) {
-    return `${size} B`
-  }
-  if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(1)} KB`
-  }
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}
-
 const getFileExtension = (fileName: string): string => {
   const normalizedName = fileName.trim().toLowerCase()
   const extensionStart = normalizedName.lastIndexOf('.')
@@ -214,21 +184,6 @@ const getFileExtension = (fileName: string): string => {
   }
 
   return normalizedName.slice(extensionStart)
-}
-
-const formatFileType = (file: File): string => {
-  const extension = getFileExtension(file.name)
-  if (extension) {
-    return extension.slice(1).toUpperCase()
-  }
-  return file.type || 'Unknown type'
-}
-
-const formatQueuedAt = (timestamp: number): string => {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(timestamp)
 }
 
 const trimTargetNumberInput = (input: string): string => input.trim()
@@ -417,38 +372,6 @@ const buildLexisXmlPreviewMessage = async (file: File): Promise<string> => {
   }
 }
 
-const statusTagType = (status: UploadQueueStatus): 'gray' | 'blue' | 'green' | 'red' => {
-  if (status === 'invalid') {
-    return 'red'
-  }
-  if (status === 'uploading') {
-    return 'blue'
-  }
-  if (status === 'complete') {
-    return 'green'
-  }
-  if (status === 'failed') {
-    return 'red'
-  }
-  return 'gray'
-}
-
-const statusLabel = (status: UploadQueueStatus): string => {
-  if (status === 'invalid') {
-    return 'Invalid'
-  }
-  if (status === 'uploading') {
-    return 'Uploading'
-  }
-  if (status === 'complete') {
-    return 'Complete'
-  }
-  if (status === 'failed') {
-    return 'Failed'
-  }
-  return 'Queued'
-}
-
 const workflowDescription = (workflowType: UploadWorkflowType): string => {
   if (workflowType === 'lexisXml') {
     return 'Import ESF LEXIS XML submissions and create the application, package, species, and scale rows in LEXIS.'
@@ -548,8 +471,6 @@ const AdminUploadsPage: FC = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isDraggingOver, setIsDraggingOver] = useState(false)
-  const [queueFilter, setQueueFilter] = useState('')
   const [touchedFields, setTouchedFields] = useState<TouchedFields<UploadField>>({})
   const [showValidationErrors, setShowValidationErrors] = useState(false)
 
@@ -566,18 +487,6 @@ const AdminUploadsPage: FC = () => {
     () => uploadQueue.filter((item) => item.status === 'invalid').length,
     [uploadQueue],
   )
-  const completeUploadCount = useMemo(
-    () => uploadQueue.filter((item) => item.status === 'complete').length,
-    [uploadQueue],
-  )
-  const failedUploadCount = useMemo(
-    () => uploadQueue.filter((item) => item.status === 'failed').length,
-    [uploadQueue],
-  )
-  const readyUploadCount = useMemo(
-    () => uploadQueue.filter((item) => item.status === 'queued').length,
-    [uploadQueue],
-  )
   const uploadInputLabel =
     selectedWorkflowType === 'lexisXml' ? 'LEXIS XML or ZIP File' : 'Document File'
   const uploadAccept =
@@ -589,25 +498,6 @@ const AdminUploadsPage: FC = () => {
       ? 'Supported formats: .xml and .zip'
       : 'Supported files: any document with a file extension'
   const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
-  const filteredUploadQueue = useMemo(() => {
-    const query = queueFilter.trim().toLowerCase()
-    if (!query) {
-      return uploadQueue
-    }
-
-    return uploadQueue.filter((item) =>
-      [
-        item.workflowLabel,
-        item.file.name,
-        item.targetSummary ?? currentUploadTargetSummary,
-        statusLabel(item.status),
-        item.message,
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(query),
-    )
-  }, [currentUploadTargetSummary, queueFilter, uploadQueue])
 
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
@@ -682,7 +572,6 @@ const AdminUploadsPage: FC = () => {
     setSelectedWorkflowType(workflowType)
     setUploadQueue([])
     setFileInputKey((current) => current + 1)
-    setQueueFilter('')
     setErrorMessage('')
     setSuccessMessage('')
     setShowValidationErrors(false)
@@ -735,19 +624,12 @@ const AdminUploadsPage: FC = () => {
     setFileInputKey((current) => current + 1)
   }
 
-  const onDropUploadFiles = (event: DragEvent<HTMLDivElement>): void => {
-    event.preventDefault()
-    setIsDraggingOver(false)
-    addFilesToQueue(event.dataTransfer.files)
-  }
-
   const removeQueuedFile = (id: string): void => {
     setUploadQueue((current) => current.filter((item) => item.id !== id))
   }
 
   const clearQueuedFiles = (): void => {
     setUploadQueue([])
-    setQueueFilter('')
     setFileInputKey((current) => current + 1)
   }
 
@@ -923,8 +805,6 @@ const AdminUploadsPage: FC = () => {
     setErrorMessage('')
     setSuccessMessage('')
     setShowValidationErrors(false)
-    setIsDraggingOver(false)
-    setQueueFilter('')
   }
 
   return (
@@ -1123,201 +1003,39 @@ const AdminUploadsPage: FC = () => {
               </div>
             </section>
 
-            <section className="admin-upload-panel" aria-labelledby="admin-upload-panel-title">
-              <div className="admin-upload-panel__header">
-                <div>
-                  <h2 id="admin-upload-panel-title">
-                    {selectedWorkflowType === 'lexisXml'
-                      ? 'Upload LEXIS XML Submissions'
-                      : 'Upload Documents'}
-                  </h2>
-                  <p>{uploadFormatText}. Multiple files can be queued and submitted together.</p>
-                </div>
-              </div>
-
-              <div
-                className={`admin-upload-drop-zone${isDraggingOver ? ' is-dragging' : ''}`}
-                onDragEnter={(event) => {
-                  event.preventDefault()
-                  setIsDraggingOver(true)
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault()
-                  setIsDraggingOver(true)
-                }}
-                onDragLeave={() => setIsDraggingOver(false)}
-                onDrop={onDropUploadFiles}
-              >
-                <div className="admin-upload-drop-zone__icon" aria-hidden="true">
-                  <Upload size={32} />
-                </div>
-                <div className="admin-upload-drop-zone__copy">
-                  <p>Drag and drop files here, or browse for files.</p>
-                  <p>{uploadFormatText}</p>
-                </div>
-                <input
-                  key={fileInputKey}
-                  id="uploadFile"
-                  className="admin-upload-native-input"
-                  type="file"
-                  aria-label={uploadInputLabel}
-                  aria-invalid={!!fieldError('uploadFile')}
-                  aria-describedby={fieldError('uploadFile') ? 'uploadFile-error' : undefined}
-                  accept={uploadAccept}
-                  multiple
-                  onChange={(event) => {
-                    const target = event.target as HTMLInputElement
-                    addFilesToQueue(target.files)
-                  }}
-                />
-                <label
-                  className="cds--btn cds--btn--primary admin-upload-browse-button"
-                  htmlFor="uploadFile"
-                >
-                  Browse files
-                </label>
-              </div>
-
-              {fieldError('uploadFile') && (
-                <p
-                  className="legacy-search-error admin-upload-file-error"
-                  id="uploadFile-error"
-                  role="alert"
-                >
-                  {fieldError('uploadFile')}
-                </p>
-              )}
-            </section>
+            <MultiFileDropZone
+              title={
+                selectedWorkflowType === 'lexisXml'
+                  ? 'Upload LEXIS XML Submissions'
+                  : 'Upload Documents'
+              }
+              description={uploadFormatText}
+              inputId="uploadFile"
+              inputKey={fileInputKey}
+              inputLabel={uploadInputLabel}
+              accept={uploadAccept}
+              invalidText={fieldError('uploadFile')}
+              onFilesSelected={addFilesToQueue}
+            />
           </div>
 
-          <section className="admin-upload-panel" aria-labelledby="admin-upload-preview-title">
-            <div className="admin-upload-panel__header">
-              <div>
-                <h2 id="admin-upload-preview-title">Data Preview</h2>
-                <p>
-                  {uploadQueue.length === 0
-                    ? 'Upload files to view them before submitting.'
-                    : `Review ${uploadQueue.length} selected file${uploadQueue.length === 1 ? '' : 's'} before submitting.`}
-                </p>
-              </div>
-              <div className="admin-upload-preview-actions">
-                {uploadQueue.length > 0 && (
-                  <div className="admin-upload-queue-summary" aria-label="Upload preview summary">
-                    <Tag type="gray">Ready {readyUploadCount}</Tag>
-                    <Tag type="red">Invalid {invalidUploadCount}</Tag>
-                    <Tag type="green">Complete {completeUploadCount}</Tag>
-                    <Tag type="red">Failed {failedUploadCount}</Tag>
-                  </div>
-                )}
-                {uploadQueue.length > 0 && (
-                  <Button kind="ghost" size="sm" onClick={clearQueuedFiles} disabled={isSubmitting}>
-                    Clear
-                  </Button>
-                )}
-                <Button
-                  kind="primary"
-                  size="sm"
-                  onClick={() => void onSubmitUpload()}
-                  disabled={isSubmitting || !hasUploadAccess}
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit Upload'}
-                </Button>
-                <Button kind="ghost" size="sm" onClick={onReset} disabled={isSubmitting}>
-                  Reset
-                </Button>
-              </div>
-            </div>
-
-            {uploadQueue.length === 0 ? (
-              <div className="admin-upload-empty-state">
-                <div className="admin-upload-empty-state__icon" aria-hidden="true">
-                  <Upload size={32} />
-                </div>
-                <p>No data uploaded yet</p>
-                <p>Upload files to see them here.</p>
-              </div>
-            ) : (
-              <>
-                <div className="admin-upload-preview-filter">
-                  <TextInput
-                    id="adminUploadQueueFilter"
-                    labelText="Filter queued files"
-                    placeholder="Filter by upload type, file name, target, status, or message"
-                    value={queueFilter}
-                    onChange={(event) => setQueueFilter(event.target.value)}
-                  />
-                </div>
-                <table className="cds--data-table admin-upload-queue__table">
-                  <thead>
-                    <tr>
-                      <th>Upload Type</th>
-                      <th>File</th>
-                      <th>Target</th>
-                      <th>Status</th>
-                      <th>Message</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUploadQueue.length === 0 ? (
-                      <tr>
-                        <td colSpan={6}>No queued files match the current filter.</td>
-                      </tr>
-                    ) : (
-                      filteredUploadQueue.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.workflowLabel}</td>
-                          <td>
-                            <div className="admin-upload-file-cell">
-                              <span>{item.file.name}</span>
-                              <span>
-                                {formatFileType(item.file)} | {formatFileSize(item.file.size)} |
-                                Added {formatQueuedAt(item.queuedAt)}
-                              </span>
-                            </div>
-                          </td>
-                          <td>{item.targetSummary ?? currentUploadTargetSummary}</td>
-                          <td>
-                            <Tag type={statusTagType(item.status)}>{statusLabel(item.status)}</Tag>
-                          </td>
-                          <td>{item.message || 'Not submitted yet.'}</td>
-                          <td>
-                            <div className="admin-upload-row-actions">
-                              {item.status === 'complete' && item.resultApplicationNumber && (
-                                <Link
-                                  to={`/provincial/application/${item.resultApplicationNumber}`}
-                                >
-                                  Open Application
-                                </Link>
-                              )}
-                              <Button
-                                kind="ghost"
-                                size="sm"
-                                onClick={() => removeQueuedFile(item.id)}
-                                disabled={isSubmitting && item.status === 'uploading'}
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-                <div className="admin-upload-preview-footer">
-                  <span>
-                    Showing {filteredUploadQueue.length} of {uploadQueue.length} file
-                    {uploadQueue.length === 1 ? '' : 's'}
-                  </span>
-                  <span>
-                    Ready {readyUploadCount} | Invalid {invalidUploadCount} | Complete{' '}
-                    {completeUploadCount} | Failed {failedUploadCount}
-                  </span>
-                </div>
-              </>
-            )}
-          </section>
+          <UploadQueuePreview
+            items={uploadQueue}
+            targetSummary={currentUploadTargetSummary}
+            canSubmit={hasUploadAccess}
+            isSubmitting={isSubmitting}
+            onSubmit={() => void onSubmitUpload()}
+            onReset={onReset}
+            onClear={clearQueuedFiles}
+            onRemove={removeQueuedFile}
+            renderCompleteAction={(item) =>
+              item.status === 'complete' && item.resultApplicationNumber ? (
+                <Link to={`/provincial/application/${item.resultApplicationNumber}`}>
+                  Open Application
+                </Link>
+              ) : null
+            }
+          />
         </div>
       </Column>
     </Grid>
