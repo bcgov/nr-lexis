@@ -81,7 +81,7 @@ type UploadFormState = {
 
 type UploadField = keyof UploadFormState | 'uploadFile'
 
-type UploadQueueStatus = 'queued' | 'uploading' | 'complete' | 'failed'
+type UploadQueueStatus = 'queued' | 'invalid' | 'uploading' | 'complete' | 'failed'
 
 type UploadQueueItem = {
   id: string
@@ -169,7 +169,45 @@ const formatFileSize = (size: number): string => {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
+const getFileExtension = (fileName: string): string => {
+  const normalizedName = fileName.trim().toLowerCase()
+  const extensionStart = normalizedName.lastIndexOf('.')
+
+  if (extensionStart <= 0 || extensionStart === normalizedName.length - 1) {
+    return ''
+  }
+
+  return normalizedName.slice(extensionStart)
+}
+
+const validateQueuedFile = (file: File, workflowType: UploadWorkflowType): string => {
+  if (!file.name.trim()) {
+    return 'File name is required.'
+  }
+
+  if (file.size === 0) {
+    return 'File is empty.'
+  }
+
+  const extension = getFileExtension(file.name)
+
+  if (workflowType === 'lexisXml') {
+    return extension === '.xml' || extension === '.zip'
+      ? ''
+      : 'LEXIS XML uploads must use a .xml or .zip file.'
+  }
+
+  if (!extension) {
+    return 'Document uploads need a file extension so LEXIS can resolve the file type.'
+  }
+
+  return ''
+}
+
 const statusTagType = (status: UploadQueueStatus): 'gray' | 'blue' | 'green' | 'red' => {
+  if (status === 'invalid') {
+    return 'red'
+  }
   if (status === 'uploading') {
     return 'blue'
   }
@@ -183,6 +221,9 @@ const statusTagType = (status: UploadQueueStatus): 'gray' | 'blue' | 'green' | '
 }
 
 const statusLabel = (status: UploadQueueStatus): string => {
+  if (status === 'invalid') {
+    return 'Invalid'
+  }
   if (status === 'uploading') {
     return 'Uploading'
   }
@@ -221,14 +262,21 @@ const AdminUploadsPage: FC = () => {
 
   const hasUploadAccess = canPerform(selectedWorkflow.requiredAction)
 
+  const invalidUploadCount = useMemo(
+    () => uploadQueue.filter((item) => item.status === 'invalid').length,
+    [uploadQueue],
+  )
+
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
       uploadFile:
-        uploadQueue.length > 0
-          ? undefined
-          : selectedWorkflowType === 'lexisXml'
-            ? 'Choose at least one LEXIS XML or ZIP file to import.'
-            : 'Choose at least one file to upload.',
+        invalidUploadCount > 0
+          ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before upload.`
+          : uploadQueue.length > 0
+            ? undefined
+            : selectedWorkflowType === 'lexisXml'
+              ? 'Choose at least one LEXIS XML or ZIP file to import.'
+              : 'Choose at least one file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
           ? (requiredFieldError(formState.applicationNumber, 'Application number') ?? undefined)
@@ -262,7 +310,7 @@ const AdminUploadsPage: FC = () => {
           ? (numericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu') ?? undefined)
           : undefined,
     }),
-    [formState, uploadQueue.length, selectedWorkflowType],
+    [formState, invalidUploadCount, uploadQueue.length, selectedWorkflowType],
   )
 
   const validationErrors = useMemo(
@@ -293,12 +341,16 @@ const AdminUploadsPage: FC = () => {
     }
 
     const queuedAt = Date.now()
-    const nextItems = Array.from(files).map((file, index) => ({
-      id: `${queuedAt}-${index}-${file.name}-${file.size}`,
-      file,
-      status: 'queued' as const,
-      message: '',
-    }))
+    const nextItems = Array.from(files).map((file, index) => {
+      const validationMessage = validateQueuedFile(file, selectedWorkflowType)
+
+      return {
+        id: `${queuedAt}-${index}-${file.name}-${file.size}`,
+        file,
+        status: validationMessage ? ('invalid' as const) : ('queued' as const),
+        message: validationMessage,
+      }
+    })
 
     setUploadQueue((current) => [...current, ...nextItems])
     setErrorMessage('')
@@ -400,7 +452,7 @@ const AdminUploadsPage: FC = () => {
     let lastSuccessMessage = ''
 
     for (const item of uploadQueue) {
-      if (item.status === 'complete') {
+      if (item.status === 'complete' || item.status === 'invalid') {
         continue
       }
 

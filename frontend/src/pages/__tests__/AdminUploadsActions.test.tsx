@@ -165,6 +165,75 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('Second XML import created application 9002.')).toBeInTheDocument()
   })
 
+  it('blocks non-XML files in the LEXIS XML queue', async () => {
+    const user = userEvent.setup({ applyAccept: false })
+
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+
+    renderPage('/admin/uploads?type=lexisXml')
+
+    const file = new File(['not xml'], 'submission.pdf', { type: 'application/pdf' })
+    await user.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
+
+    expect(screen.getByText('Invalid')).toBeInTheDocument()
+    expect(screen.getByText('LEXIS XML uploads must use a .xml or .zip file.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    expect(
+      screen.getAllByText('1 queued file needs attention before upload.').length,
+    ).toBeGreaterThan(0)
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('blocks document uploads without a file extension', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === '/filePermitUpload',
+    } as any)
+
+    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+
+    const file = new File(['permit upload'], 'permit', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+
+    expect(screen.getByText('Invalid')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Document uploads need a file extension so LEXIS can resolve the file type.',
+      ),
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    expect(
+      screen.getAllByText('1 queued file needs attention before upload.').length,
+    ).toBeGreaterThan(0)
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('blocks empty files before submit', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+
+    renderPage('/admin/uploads?type=lexisXml')
+
+    const file = new File([], 'empty.xml', { type: 'application/xml' })
+    await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
+
+    expect(screen.getByText('Invalid')).toBeInTheDocument()
+    expect(screen.getByText('File is empty.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    expect(
+      screen.getAllByText('1 queued file needs attention before upload.').length,
+    ).toBeGreaterThan(0)
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
   it('shows LEXIS XML import rejection details from a 422 response', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
