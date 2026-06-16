@@ -1,6 +1,7 @@
-import type { AxiosRequestConfig, AxiosResponseHeaders, RawAxiosResponseHeaders } from 'axios'
+import type { AxiosRequestConfig } from 'axios'
 import { env } from '@/env'
 import apiService from '@/service/api-service'
+import { extractResponseFilename, getResponseHeaderValue } from '@/service/document-service-utils'
 
 export type RunReportRequest = {
   reportId: string
@@ -192,54 +193,12 @@ const buildReportPayload = (
   }
 }
 
-const getResponseHeaderValue = (
-  headers: RawAxiosResponseHeaders | AxiosResponseHeaders,
-  name: string,
-): string | null => {
-  const headerValue = headers[name] ?? headers[name.toLowerCase()] ?? headers[name.toUpperCase()]
-  if (typeof headerValue === 'string') {
-    return headerValue
-  }
-  if (Array.isArray(headerValue)) {
-    return headerValue[0] ?? null
-  }
-  return null
-}
-
 const getDefaultFilename = (
   reportId: string,
   values: Record<string, string>,
   actionMapping?: string,
 ): string => {
   return `lexis-${reportId}.${resolveReportExtension(reportId, values, actionMapping)}`
-}
-
-const extractFilename = (
-  headers: RawAxiosResponseHeaders | AxiosResponseHeaders,
-  reportId: string,
-  values: Record<string, string>,
-  actionMapping?: string,
-): string => {
-  const contentDisposition = getResponseHeaderValue(headers, 'content-disposition')
-  if (!contentDisposition) {
-    return getDefaultFilename(reportId, values, actionMapping)
-  }
-
-  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
-  if (utf8Match && utf8Match[1]) {
-    try {
-      return decodeURIComponent(utf8Match[1])
-    } catch {
-      // ignore and continue to fallback parser
-    }
-  }
-
-  const regularMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
-  if (regularMatch && regularMatch[1]) {
-    return regularMatch[1]
-  }
-
-  return getDefaultFilename(reportId, values, actionMapping)
 }
 
 export const runReport = async (request: RunReportRequest): Promise<RunReportResult> => {
@@ -261,11 +220,9 @@ export const runReport = async (request: RunReportRequest): Promise<RunReportRes
 
   const contentType =
     getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream'
-  const filename = extractFilename(
+  const filename = extractResponseFilename(
     response.headers,
-    request.reportId,
-    request.values,
-    request.actionMapping,
+    getDefaultFilename(request.reportId, request.values, request.actionMapping),
   )
 
   return {
