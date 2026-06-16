@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.upload.UploadRepository;
+import ca.bc.gov.mof.lexis.repository.upload.UploadRepository.UploadFailureReason;
+import ca.bc.gov.mof.lexis.repository.upload.UploadRepository.UploadPersistenceResult;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.DisplayName;
@@ -41,7 +43,7 @@ class OracleLexisUploadServiceTest {
                 eq("PDF"),
                 eq("jsmith"),
                 any(byte[].class)))
-        .thenReturn(true);
+        .thenReturn(UploadPersistenceResult.success());
 
     LexisUploadResultDto result =
         service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
@@ -105,7 +107,7 @@ class OracleLexisUploadServiceTest {
                 eq("PDF"),
                 eq("jsmith"),
                 any(byte[].class)))
-        .thenReturn(false);
+        .thenReturn(UploadPersistenceResult.failed(UploadFailureReason.UNKNOWN));
 
     LexisUploadResultDto result =
         service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
@@ -114,6 +116,33 @@ class OracleLexisUploadServiceTest {
     assertThat(result.message())
         .isEqualTo(
             "Could not attach file to application 7000123. Confirm the application exists before uploading.");
+  }
+
+  @Test
+  void uploadApplicationShouldReturnParentKeyMessageWhenOracleParentIsMissing() {
+    OracleLexisUploadService service = new OracleLexisUploadService(uploadRepository);
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "formFile", "application.pdf", "application/pdf", "pdf-bytes".getBytes(StandardCharsets.UTF_8));
+    when(uploadRepository.isFileTypeCodeValid("PDF")).thenReturn(true);
+    when(
+            uploadRepository.insertApplicationFile(
+                eq(7000123L),
+                eq("application.pdf"),
+                eq("App file"),
+                eq("INS"),
+                eq("PDF"),
+                eq("jsmith"),
+                any(byte[].class)))
+        .thenReturn(UploadPersistenceResult.failed(UploadFailureReason.PARENT_NOT_FOUND));
+
+    LexisUploadResultDto result =
+        service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.message())
+        .isEqualTo(
+            "Could not attach file to application 7000123 because the Oracle attachment parent row was not found. Refresh the details page and confirm the application is saved before uploading.");
   }
 
   @Test

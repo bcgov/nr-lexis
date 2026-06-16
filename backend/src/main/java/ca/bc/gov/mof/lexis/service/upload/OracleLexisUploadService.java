@@ -5,6 +5,8 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.upload.UploadRepository;
+import ca.bc.gov.mof.lexis.repository.upload.UploadRepository.UploadFailureReason;
+import ca.bc.gov.mof.lexis.repository.upload.UploadRepository.UploadPersistenceResult;
 import java.math.BigDecimal;
 import java.util.Locale;
 import java.util.Optional;
@@ -42,7 +44,7 @@ public class OracleLexisUploadService implements LexisUploadService {
       return fileTypeRejection;
     }
 
-    boolean persisted =
+    UploadPersistenceResult persistenceResult =
         uploadRepository.insertApplicationFile(
             applicationNumber,
             resolveFileName(file),
@@ -52,15 +54,16 @@ public class OracleLexisUploadService implements LexisUploadService {
             defaultSystemUser(entryUserId),
             fileBytes(file));
 
-    return persisted
+    return persistenceResult.persisted()
         ? Optional.of(success("application", file, "Application upload persisted."))
         : Optional.of(
             rejected(
                 "application",
                 file,
-                "Could not attach file to application "
-                    + applicationNumber
-                    + ". Confirm the application exists before uploading."));
+                uploadFailureMessage(
+                    "application",
+                    applicationNumber.toString(),
+                    persistenceResult.failureReason())));
   }
 
   @Override
@@ -78,7 +81,7 @@ public class OracleLexisUploadService implements LexisUploadService {
       return fileTypeRejection;
     }
 
-    boolean persisted =
+    UploadPersistenceResult persistenceResult =
         uploadRepository.insertPermitFile(
             permitNumber,
             resolveFileName(file),
@@ -88,15 +91,14 @@ public class OracleLexisUploadService implements LexisUploadService {
             defaultSystemUser(entryUserId),
             fileBytes(file));
 
-    return persisted
+    return persistenceResult.persisted()
         ? Optional.of(success("permit", file, "Permit upload persisted."))
         : Optional.of(
             rejected(
                 "permit",
                 file,
-                "Could not attach file to permit "
-                    + permitNumber
-                    + ". Confirm the permit exists before uploading."));
+                uploadFailureMessage(
+                    "permit", permitNumber.toString(), persistenceResult.failureReason())));
   }
 
   @Override
@@ -115,7 +117,7 @@ public class OracleLexisUploadService implements LexisUploadService {
       return fileTypeRejection;
     }
 
-    boolean persisted =
+    UploadPersistenceResult persistenceResult =
         uploadRepository.insertExemptionFile(
             normalizedExemptionNumber,
             resolveFileName(file),
@@ -125,15 +127,14 @@ public class OracleLexisUploadService implements LexisUploadService {
             defaultSystemUser(entryUserId),
             fileBytes(file));
 
-    return persisted
+    return persistenceResult.persisted()
         ? Optional.of(success("exemption", file, "Exemption upload persisted."))
         : Optional.of(
             rejected(
                 "exemption",
                 file,
-                "Could not attach file to exemption "
-                    + normalizedExemptionNumber
-                    + ". Confirm the exemption exists before uploading."));
+                uploadFailureMessage(
+                    "exemption", normalizedExemptionNumber, persistenceResult.failureReason())));
   }
 
   @Override
@@ -171,7 +172,7 @@ public class OracleLexisUploadService implements LexisUploadService {
       normalizedDescription = "Invoice " + normalizedSalesInvoiceNumber;
     }
 
-    boolean persisted =
+    UploadPersistenceResult persistenceResult =
         uploadRepository.insertInvoiceFile(
             permitNumber,
             normalizedSalesInvoiceNumber,
@@ -185,15 +186,16 @@ public class OracleLexisUploadService implements LexisUploadService {
             defaultSystemUser(entryUserId),
             fileBytes(file));
 
-    return persisted
+    return persistenceResult.persisted()
         ? Optional.of(success("invoice", file, "Invoice upload persisted."))
         : Optional.of(
             rejected(
                 "invoice",
                 file,
-                "Could not attach file to invoice "
-                    + normalizedSalesInvoiceNumber
-                    + ". Confirm the permit and invoice exist before uploading."));
+                uploadFailureMessage(
+                    "invoice",
+                    normalizedSalesInvoiceNumber + " for permit " + permitNumber,
+                    persistenceResult.failureReason())));
   }
 
   private LexisUploadResultDto success(String uploadType, MultipartFile file, String message) {
@@ -202,6 +204,23 @@ public class OracleLexisUploadService implements LexisUploadService {
 
   private LexisUploadResultDto rejected(String uploadType, MultipartFile file, String message) {
     return new LexisUploadResultDto(uploadType, resolveFileName(file), file.getSize(), "rejected", message);
+  }
+
+  private String uploadFailureMessage(
+      String targetType, String targetIdentifier, UploadFailureReason failureReason) {
+    String target = targetType + " " + targetIdentifier;
+    if (failureReason == UploadFailureReason.PARENT_NOT_FOUND) {
+      return "Could not attach file to "
+          + target
+          + " because the Oracle attachment parent row was not found. Refresh the details page and confirm the "
+          + targetType
+          + " is saved before uploading.";
+    }
+    return "Could not attach file to "
+        + target
+        + ". Confirm the "
+        + targetType
+        + " exists before uploading.";
   }
 
   private Optional<LexisUploadResultDto> rejectUnsupportedFileType(
