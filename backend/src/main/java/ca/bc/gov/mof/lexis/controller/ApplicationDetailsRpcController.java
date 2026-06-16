@@ -6,6 +6,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseNonNegativeLong;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
@@ -14,6 +15,7 @@ import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.util.TextUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -1285,14 +1287,6 @@ public class ApplicationDetailsRpcController {
         data == null ? null : data.email());
   }
 
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
   private String normalizeClientNumber(String clientNumber) {
     String normalized = trimToNull(clientNumber);
     if (normalized == null) {
@@ -1316,7 +1310,7 @@ public class ApplicationDetailsRpcController {
     }
     try {
       return OBJECT_MAPPER.readValue(speciesJson, STRING_LIST_TYPE).stream()
-          .map(this::trimToNull)
+          .map(TextUtils::trimToNull)
           .filter(value -> value != null)
           .toList();
     } catch (JsonProcessingException ex) {
@@ -1345,7 +1339,7 @@ public class ApplicationDetailsRpcController {
       return List.of();
     }
     return List.of(normalized.split(",")).stream()
-        .map(this::trimToNull)
+        .map(TextUtils::trimToNull)
         .filter(value -> value != null)
         .toList();
   }
