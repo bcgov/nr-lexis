@@ -485,6 +485,25 @@ class LexisXmlImportServiceTest {
     assertThat(result.errors()).contains("Species/end-use sort must be formatted as species/end use.");
   }
 
+  @Test
+  void shouldRejectDuplicateScaleCombinationsBeforePersistence() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:species>FI</lexis:species>", "<lexis:species>HE</lexis:species>");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains("A scale with the same Timber Mark/Species/Grade combination already exists.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
   private LexisXmlImportService service() {
     return new LexisXmlImportService(
         applicationDetailsServiceProvider,

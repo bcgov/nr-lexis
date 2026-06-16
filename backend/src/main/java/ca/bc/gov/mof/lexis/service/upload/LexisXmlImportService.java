@@ -619,7 +619,7 @@ public class LexisXmlImportService {
     }
     List<ScaleLine> rows = new ArrayList<>();
     for (Element harvestedTimber : children(productDetail, "harvestedTimber")) {
-      String timberMark = text(harvestedTimber, "timberMark", "Scale timber mark", errors);
+      String timberMark = upper(text(harvestedTimber, "timberMark", "Scale timber mark", errors));
       Long pieces =
           parseNonNegativeLong(
               text(harvestedTimber, "numberOfPieces", "Scale pieces", errors), "pieces", errors);
@@ -642,7 +642,18 @@ public class LexisXmlImportService {
         rows.add(new ScaleLine(timberMark, pieces, species, grade, roundOneDecimal(volume)));
       }
     }
+    rejectDuplicateScaleCombinations(rows, errors);
     return rows;
+  }
+
+  private void rejectDuplicateScaleCombinations(List<ScaleLine> rows, List<String> errors) {
+    Map<String, ScaleLine> rowsByCombination = new LinkedHashMap<>();
+    for (ScaleLine row : rows) {
+      String combinationKey = row.timberMark() + "\u0000" + row.speciesCode() + "\u0000" + row.gradeCode();
+      if (rowsByCombination.putIfAbsent(combinationKey, row) != null) {
+        errors.add("A scale with the same Timber Mark/Species/Grade combination already exists.");
+      }
+    }
   }
 
   private CreateApplicationRequest toCreateApplicationRequest(ParsedSubmission submission, LocalDate importDate) {
