@@ -39,6 +39,7 @@ import {
   fetchApplicationSpecies,
   fetchApplicationSpeciesCodes,
   fetchApplicationSummarySnapshot,
+  fetchApplicationUniqueScales,
   saveApplicationRemark,
   updateApplicationSummary,
   updateApplicationPackage,
@@ -93,6 +94,7 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationSpecies: vi.fn(),
   fetchApplicationSpeciesCodes: vi.fn(),
   fetchApplicationSummarySnapshot: vi.fn(),
+  fetchApplicationUniqueScales: vi.fn(),
   saveApplicationRemark: vi.fn(),
   updateApplicationSummary: vi.fn(),
   updateApplicationPackage: vi.fn(),
@@ -161,6 +163,7 @@ const mockedFetchApplicationScaleDetails = vi.mocked(fetchApplicationScaleDetail
 const mockedFetchApplicationSpecies = vi.mocked(fetchApplicationSpecies)
 const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
 const mockedFetchApplicationSummarySnapshot = vi.mocked(fetchApplicationSummarySnapshot)
+const mockedFetchApplicationUniqueScales = vi.mocked(fetchApplicationUniqueScales)
 const mockedSaveApplicationRemark = vi.mocked(saveApplicationRemark)
 const mockedUpdateApplicationSummary = vi.mocked(updateApplicationSummary)
 const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
@@ -434,6 +437,7 @@ describe('Provincial Application Detail Document Actions', () => {
         cascadeSplitCode: 'S',
       },
     ])
+    mockedFetchApplicationUniqueScales.mockResolvedValue([])
     mockedFetchApplicationSpeciesCodes.mockResolvedValue([
       { code: 'FI', description: 'Douglas-fir' },
       { code: 'CE', description: 'Cedar' },
@@ -1411,6 +1415,28 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.queryByText('TM001')).not.toBeInTheDocument()
     expect(mockedFetchApplicationPackageSpecies).not.toHaveBeenCalledWith('PKG-1')
     expect(mockedFetchApplicationPackageScales).not.toHaveBeenCalledWith('PKG-1')
+  })
+
+  it('shows legacy timber mark summaries for application scales', async () => {
+    mockedFetchApplicationUniqueScales.mockResolvedValue([{ timberMark: 'TM-SUMMARY' }])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const timberMarksSection = (
+      await screen.findByRole('heading', { name: 'Timber Marks' })
+    ).closest('div')
+    expect(timberMarksSection).toBeTruthy()
+    expect(within(timberMarksSection as HTMLElement).getByText('TM-SUMMARY')).toBeInTheDocument()
+    expect(mockedFetchApplicationUniqueScales).toHaveBeenCalledWith('321')
   })
 
   it('adds, looks up, and deletes package scales', async () => {

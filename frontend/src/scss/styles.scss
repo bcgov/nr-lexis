@@ -1473,11 +1473,21 @@ body {
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.6fr);
 }
 
+.application-items-package-edit-panel {
+  grid-row: 1 / span 2;
+  min-width: 0;
+}
+
 .application-items-species-panel {
   min-width: 0;
 }
 
-.application-items-species-panel h4 {
+.application-items-timber-marks-panel {
+  min-width: 0;
+}
+
+.application-items-species-panel h4,
+.application-items-timber-marks-panel h4 {
   border-bottom: 1px solid var(--csp-tile-border);
   font-size: 0.875rem;
   margin: 0 0 0.75rem;
@@ -1576,6 +1586,10 @@ body {
   .application-items-section-header,
   .application-items-package-workspace {
     grid-template-columns: 1fr;
+  }
+
+  .application-items-package-edit-panel {
+    grid-row: auto;
   }
 
   .application-detail-documents .legacy-search-grid,

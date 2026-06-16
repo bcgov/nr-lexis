@@ -38,10 +38,12 @@ import {
   fetchApplicationRemainingSpecies,
   fetchApplicationScaleDetails,
   fetchApplicationSpeciesCodes,
+  fetchApplicationUniqueScales,
   updateApplicationPackage,
   type ApplicationCodeOption,
   type ApplicationPackageDetails,
   type ApplicationPackageScaleRow,
+  type ApplicationScaleSummaryRow,
   type ApplicationPackageSpeciesRow,
 } from '@/service/provincial-application-items-service'
 
@@ -351,6 +353,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   const [speciesDraft, setSpeciesDraft] = useState<string[]>([])
   const [createSpeciesDraft, setCreateSpeciesDraft] = useState<string[]>([])
   const [scales, setScales] = useState<ApplicationPackageScaleRow[]>([])
+  const [applicationScaleRows, setApplicationScaleRows] = useState<ApplicationScaleSummaryRow[]>([])
   const [speciesOptions, setSpeciesOptions] = useState<ApplicationCodeOption[]>([])
   const [packageStatusOptions, setPackageStatusOptions] = useState<ApplicationCodeOption[]>([])
   const [remainingSpeciesOptions, setRemainingSpeciesOptions] = useState<ApplicationCodeOption[]>(
@@ -508,6 +511,15 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   const firstItemError = (...fields: ApplicationItemField[]): string | undefined =>
     fields.map((field) => itemFieldErrors[field]).find((error): error is string => !!error)
 
+  const loadApplicationScaleSummary = useCallback(async () => {
+    try {
+      const result = await fetchApplicationUniqueScales(applicationNumber)
+      setApplicationScaleRows(result)
+    } catch {
+      setApplicationScaleRows([])
+    }
+  }, [applicationNumber])
+
   useEffect(() => {
     dispatchPackageSelection({ type: 'sync', packageNumbers: packageNumbersFromDetail })
   }, [packageNumbersFromDetail])
@@ -542,6 +554,10 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    void loadApplicationScaleSummary()
+  }, [loadApplicationScaleSummary])
 
   const loadPackageItems = useCallback(
     async (packageNumber: string) => {
@@ -875,6 +891,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       })
       setItemsInfoMessage(`Package ${nextPackageNumber} saved.`)
       await onDetailChanged()
+      await loadApplicationScaleSummary()
       await loadPackageItems(nextPackageNumber)
     } catch {
       setItemsErrorMessage('Unable to save package details.')
@@ -931,6 +948,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       setShowCreatePackageValidationErrors(false)
       setItemsInfoMessage(`Package ${nextPackageNumber} created.`)
       await onDetailChanged()
+      await loadApplicationScaleSummary()
       await loadPackageItems(nextPackageNumber)
     } catch {
       setItemsErrorMessage('Unable to create package.')
@@ -968,6 +986,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       dispatchPackageSelection({ type: 'delete', packageNumber: deletedPackageNumber })
       setItemsInfoMessage(`Package ${deletedPackageNumber} deleted.`)
       await onDetailChanged()
+      await loadApplicationScaleSummary()
     } catch {
       setItemsErrorMessage('Unable to delete package.')
     } finally {
@@ -1017,6 +1036,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       setShowScaleValidationErrors(false)
       setItemsInfoMessage(`Scale ${result.result.id} added.`)
       await onDetailChanged()
+      await loadApplicationScaleSummary()
       await loadPackageItems(selectedPackageNumber)
     } catch {
       setItemsErrorMessage('Unable to add scale.')
@@ -1038,6 +1058,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       setScales((current) => current.filter((item) => item.id !== scaleId))
       setItemsInfoMessage(`Scale ${scaleId} deleted.`)
       await onDetailChanged()
+      await loadApplicationScaleSummary()
       await loadPackageItems(selectedPackageNumber)
     } catch {
       setItemsErrorMessage('Unable to delete scale.')
@@ -1178,7 +1199,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             ))}
           </dl>
           <div className="application-items-package-workspace">
-            <div>
+            <div className="application-items-package-edit-panel">
               <div className="application-items-form">
                 <TextInput
                   id="applicationItemsPackageNumber"
@@ -1379,6 +1400,31 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                     {speciesDraft.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={3}>No species assigned to this package.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            <div className="application-items-timber-marks-panel">
+              <h4>Timber Marks</h4>
+              <div className="application-items-table-scroll">
+                <Table useZebraStyles>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>Timber Mark</TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {applicationScaleRows.map((row) => (
+                      <TableRow key={row.timberMark}>
+                        <TableCell>{row.timberMark}</TableCell>
+                      </TableRow>
+                    ))}
+                    {applicationScaleRows.length === 0 && (
+                      <TableRow>
+                        <TableCell>No timber marks have been added to this application.</TableCell>
                       </TableRow>
                     )}
                   </TableBody>

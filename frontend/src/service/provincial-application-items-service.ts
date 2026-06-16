@@ -47,6 +47,10 @@ export type ApplicationPackageScaleRow = {
   cascadeSplitCode: string
 }
 
+export type ApplicationScaleSummaryRow = {
+  timberMark: string
+}
+
 export type ApplicationScaleDetails = {
   success: boolean
   timberMark: string
@@ -245,6 +249,13 @@ const normalizePackageScaleRow = (row: unknown): ApplicationPackageScaleRow => {
   }
 }
 
+const normalizeApplicationScaleSummaryRow = (row: unknown): ApplicationScaleSummaryRow => {
+  const source = (row ?? {}) as Record<string, unknown>
+  return {
+    timberMark: asString(source.timberMark),
+  }
+}
+
 const normalizeScaleDetails = (payload: unknown): ApplicationScaleDetails => {
   const source = (payload ?? {}) as Record<string, unknown>
   return {
@@ -428,6 +439,25 @@ export const fetchApplicationPackageScales = async (
     return parsePayloadArrayOrEmpty(response.data).map(normalizePackageScaleRow)
   } catch (error) {
     throw toSearchServiceError('Unable to load package scales.', error)
+  }
+}
+
+export const fetchApplicationUniqueScales = async (
+  applicationNumber: string,
+): Promise<ApplicationScaleSummaryRow[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/unique-scales',
+      {
+        params: { applicationNumber },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parsePayloadArrayOrEmpty(response.data)
+      .map(normalizeApplicationScaleSummaryRow)
+      .filter((row) => row.timberMark)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application timber marks.', error)
   }
 }
 
