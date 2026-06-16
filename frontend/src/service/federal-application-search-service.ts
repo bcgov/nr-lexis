@@ -1,4 +1,4 @@
-import { getCachedSearchResponse } from '@/service/cached-search-service'
+import { getCachedSearchResponse, parsePagedSearchResponse } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
@@ -18,13 +18,6 @@ type BackendFederalApplicationSearchResult = {
   locked?: boolean | null
   receivedDate: string
   listingDate: string
-}
-
-type BackendFederalApplicationSearchResponse = {
-  results: BackendFederalApplicationSearchResult[]
-  total: number
-  page: number
-  size: number
 }
 
 const buildBackendParams = (request: FederalApplicationSearchRequest): URLSearchParams => {
@@ -60,43 +53,28 @@ const buildBackendParams = (request: FederalApplicationSearchRequest): URLSearch
 }
 
 const parseBackendResponse = (payload: unknown): FederalApplicationSearchResponse | null => {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
-    return null
-  }
+  return parsePagedSearchResponse<
+    BackendFederalApplicationSearchResult,
+    FederalApplicationSearchResponse['content'][number]
+  >(payload, (row) => {
+    const hasExemptionNumber =
+      typeof row.exemptionNumber === 'string' && row.exemptionNumber.trim().length > 0
 
-  const backendResponse = payload as BackendFederalApplicationSearchResponse
-  const totalElements = Number.isFinite(backendResponse.total) ? backendResponse.total : 0
-  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 10
-  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
-  const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
-
-  return {
-    content: backendResponse.results.map((row) => {
-      const hasExemptionNumber =
-        typeof row.exemptionNumber === 'string' && row.exemptionNumber.trim().length > 0
-
-      return {
-        applicationNumber: String(row.applicationNumber ?? ''),
-        federalApplicationNumber: row.federalApplicationNumber ?? '',
-        status: row.status ?? '',
-        clientNumber: row.client ?? '',
-        reason: row.reason ?? '',
-        exemptionType: row.exemptionType ?? '',
-        exemptionNumber: row.exemptionNumber ?? '',
-        receivedDate: row.receivedDate ?? '',
-        listingDate: row.listingDate ?? '',
-        packageNumber: '',
-        allowCreateExemption:
-          Boolean(row.showCheckbox ?? !hasExemptionNumber) && !Boolean(row.locked),
-      }
-    }),
-    page: {
-      number: pageNumber,
-      size: pageSize,
-      totalElements,
-      totalPages,
-    },
-  }
+    return {
+      applicationNumber: String(row.applicationNumber ?? ''),
+      federalApplicationNumber: row.federalApplicationNumber ?? '',
+      status: row.status ?? '',
+      clientNumber: row.client ?? '',
+      reason: row.reason ?? '',
+      exemptionType: row.exemptionType ?? '',
+      exemptionNumber: row.exemptionNumber ?? '',
+      receivedDate: row.receivedDate ?? '',
+      listingDate: row.listingDate ?? '',
+      packageNumber: '',
+      allowCreateExemption:
+        Boolean(row.showCheckbox ?? !hasExemptionNumber) && !Boolean(row.locked),
+    }
+  })
 }
 
 export const searchFederalApplications = async (

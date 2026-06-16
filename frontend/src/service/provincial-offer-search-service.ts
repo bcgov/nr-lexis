@@ -1,4 +1,4 @@
-import { getCachedSearchResponse } from '@/service/cached-search-service'
+import { getCachedSearchResponse, parsePagedSearchResponse } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
@@ -13,13 +13,6 @@ type BackendProvincialOfferSearchResult = {
   listingDate: string
   region: string
   offerWithdrawalDate: string | null
-}
-
-type BackendProvincialOfferSearchResponse = {
-  results: BackendProvincialOfferSearchResult[]
-  total: number
-  page: number
-  size: number
 }
 
 const buildBackendParams = (request: ProvincialOfferSearchRequest): URLSearchParams => {
@@ -58,33 +51,18 @@ const buildBackendParams = (request: ProvincialOfferSearchRequest): URLSearchPar
 }
 
 const parseBackendResponse = (payload: unknown): ProvincialOfferSearchResponse | null => {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
-    return null
-  }
-
-  const backendResponse = payload as BackendProvincialOfferSearchResponse
-  const totalElements = Number.isFinite(backendResponse.total) ? backendResponse.total : 0
-  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 10
-  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
-  const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
-
-  return {
-    content: backendResponse.results.map((row) => ({
-      offerNumber: String(row.offerNumber ?? ''),
-      applicationNumber: String(row.applicationNumber ?? ''),
-      packageNumber: row.packageNumber ?? '',
-      listingDate: row.listingDate ?? '',
-      region: row.region ?? '',
-      offerWithdrawalDate: row.offerWithdrawalDate ?? '',
-      clientNumber: '',
-    })),
-    page: {
-      number: pageNumber,
-      size: pageSize,
-      totalElements,
-      totalPages,
-    },
-  }
+  return parsePagedSearchResponse<
+    BackendProvincialOfferSearchResult,
+    ProvincialOfferSearchResponse['content'][number]
+  >(payload, (row) => ({
+    offerNumber: String(row.offerNumber ?? ''),
+    applicationNumber: String(row.applicationNumber ?? ''),
+    packageNumber: row.packageNumber ?? '',
+    listingDate: row.listingDate ?? '',
+    region: row.region ?? '',
+    offerWithdrawalDate: row.offerWithdrawalDate ?? '',
+    clientNumber: '',
+  }))
 }
 
 export const searchProvincialOffers = async (

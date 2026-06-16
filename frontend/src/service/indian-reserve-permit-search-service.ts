@@ -1,4 +1,4 @@
-import { getCachedSearchResponse } from '@/service/cached-search-service'
+import { getCachedSearchResponse, parsePagedSearchResponse } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
@@ -11,13 +11,6 @@ type BackendIndianReservePermitSearchResult = {
   clientNumber: string
   issueDate: string
   shippingDate: string
-}
-
-type BackendIndianReservePermitSearchResponse = {
-  results: BackendIndianReservePermitSearchResult[]
-  total: number
-  page: number
-  size: number
 }
 
 const buildBackendParams = (request: IndianReservePermitSearchRequest): URLSearchParams => {
@@ -48,31 +41,16 @@ const buildBackendParams = (request: IndianReservePermitSearchRequest): URLSearc
 }
 
 const parseBackendResponse = (payload: unknown): IndianReservePermitSearchResponse | null => {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
-    return null
-  }
-
-  const backendResponse = payload as BackendIndianReservePermitSearchResponse
-  const totalElements = Number.isFinite(backendResponse.total) ? backendResponse.total : 0
-  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 10
-  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
-  const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
-
-  return {
-    content: backendResponse.results.map((row) => ({
-      permitNumber: row.permitNumber ?? '',
-      clientNumber: row.clientNumber ?? '',
-      issueDate: row.issueDate ?? '',
-      shippingDate: row.shippingDate ?? '',
-      packageNumber: '',
-    })),
-    page: {
-      number: pageNumber,
-      size: pageSize,
-      totalElements,
-      totalPages,
-    },
-  }
+  return parsePagedSearchResponse<
+    BackendIndianReservePermitSearchResult,
+    IndianReservePermitSearchResponse['content'][number]
+  >(payload, (row) => ({
+    permitNumber: row.permitNumber ?? '',
+    clientNumber: row.clientNumber ?? '',
+    issueDate: row.issueDate ?? '',
+    shippingDate: row.shippingDate ?? '',
+    packageNumber: '',
+  }))
 }
 
 export const searchIndianReservePermits = async (

@@ -1,4 +1,4 @@
-import { getCachedSearchResponse } from '@/service/cached-search-service'
+import { getCachedSearchResponse, parsePagedSearchResponse } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
@@ -16,13 +16,6 @@ type BackendProvincialExemptionSearchResult = {
   region: string
   approvedVolume: number
   locked: boolean
-}
-
-type BackendProvincialExemptionSearchResponse = {
-  results: BackendProvincialExemptionSearchResult[]
-  total: number
-  page: number
-  size: number
 }
 
 export type ProvincialExemptionNumberOption = {
@@ -87,46 +80,31 @@ const buildBackendParams = (request: ProvincialExemptionSearchRequest): URLSearc
 }
 
 const parseBackendResponse = (payload: unknown): ProvincialExemptionSearchResponse | null => {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
-    return null
-  }
-
-  const backendResponse = payload as BackendProvincialExemptionSearchResponse
-  const totalElements = Number.isFinite(backendResponse.total) ? backendResponse.total : 0
-  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 10
-  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
-  const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
-
-  return {
-    content: backendResponse.results.map((row) => {
-      const statusCode = normalizeStatusCode(row.status ?? '')
-      return {
-        applicationNumber: String(row.applicationNumber ?? ''),
-        packageNumber: '',
-        exemptionNumber: row.exemptionNumber ?? '',
-        type: row.exemptionType ?? '',
-        typeCode: row.exemptionType ?? '',
-        status: row.status ?? '',
-        statusCode,
-        applicantClientNumber: '',
-        ownerClientNumber: row.ownerClientNumber ?? '',
-        approvedVolume: row.approvedVolume ?? 0,
-        balanceRemaining: 0,
-        listingDate: row.listingDate ?? '',
-        expiryDate: '',
-        region: row.region ?? '',
-        canApprove: statusCode === 'NEW',
-        canViewExemption: true,
-        isLocked: Boolean(row.locked),
-      }
-    }),
-    page: {
-      number: pageNumber,
-      size: pageSize,
-      totalElements,
-      totalPages,
-    },
-  }
+  return parsePagedSearchResponse<
+    BackendProvincialExemptionSearchResult,
+    ProvincialExemptionSearchResponse['content'][number]
+  >(payload, (row) => {
+    const statusCode = normalizeStatusCode(row.status ?? '')
+    return {
+      applicationNumber: String(row.applicationNumber ?? ''),
+      packageNumber: '',
+      exemptionNumber: row.exemptionNumber ?? '',
+      type: row.exemptionType ?? '',
+      typeCode: row.exemptionType ?? '',
+      status: row.status ?? '',
+      statusCode,
+      applicantClientNumber: '',
+      ownerClientNumber: row.ownerClientNumber ?? '',
+      approvedVolume: row.approvedVolume ?? 0,
+      balanceRemaining: 0,
+      listingDate: row.listingDate ?? '',
+      expiryDate: '',
+      region: row.region ?? '',
+      canApprove: statusCode === 'NEW',
+      canViewExemption: true,
+      isLocked: Boolean(row.locked),
+    }
+  })
 }
 
 export const searchProvincialExemptions = async (

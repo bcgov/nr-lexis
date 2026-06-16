@@ -1,4 +1,4 @@
-import { getCachedSearchResponse } from '@/service/cached-search-service'
+import { getCachedSearchResponse, parsePagedSearchResponse } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
@@ -15,13 +15,6 @@ type BackendProvincialPermitSearchResult = {
   totalVolume: number
   issueDate: string
   region: string
-}
-
-type BackendProvincialPermitSearchResponse = {
-  results: BackendProvincialPermitSearchResult[]
-  total: number
-  page: number
-  size: number
 }
 
 type ProvincialPermitSearchOptions = {
@@ -88,35 +81,20 @@ const buildBackendParams = (request: ProvincialPermitSearchRequest): URLSearchPa
 }
 
 const parseBackendResponse = (payload: unknown): ProvincialPermitSearchResponse | null => {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
-    return null
-  }
-
-  const backendResponse = payload as BackendProvincialPermitSearchResponse
-  const totalElements = Number.isFinite(backendResponse.total) ? backendResponse.total : 0
-  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 10
-  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
-  const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
-
-  return {
-    content: backendResponse.results.map((row) => ({
-      applicationNumber: '',
-      packageNumber: '',
-      permitNumber: String(row.permitNumber ?? ''),
-      status: (row.statusDescription ?? 'Active') as ProvincialPermitStatus,
-      applicantClientNumber: row.applicantClientNumber ?? '',
-      ownerClientNumber: row.ownerClientNumber ?? '',
-      totalVolume: row.totalVolume ?? 0,
-      issueDate: row.issueDate ?? '',
-      region: row.region ?? '',
-    })),
-    page: {
-      number: pageNumber,
-      size: pageSize,
-      totalElements,
-      totalPages,
-    },
-  }
+  return parsePagedSearchResponse<
+    BackendProvincialPermitSearchResult,
+    ProvincialPermitSearchResponse['content'][number]
+  >(payload, (row) => ({
+    applicationNumber: '',
+    packageNumber: '',
+    permitNumber: String(row.permitNumber ?? ''),
+    status: (row.statusDescription ?? 'Active') as ProvincialPermitStatus,
+    applicantClientNumber: row.applicantClientNumber ?? '',
+    ownerClientNumber: row.ownerClientNumber ?? '',
+    totalVolume: row.totalVolume ?? 0,
+    issueDate: row.issueDate ?? '',
+    region: row.region ?? '',
+  }))
 }
 
 export const searchProvincialPermits = async (

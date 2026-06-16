@@ -1,4 +1,4 @@
-import { getCachedSearchResponse } from '@/service/cached-search-service'
+import { getCachedSearchResponse, parsePagedSearchResponse } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
@@ -19,13 +19,6 @@ type BackendProvincialApplicationSearchResult = {
   applicationVolume: number
   showCheckbox: boolean
   locked: boolean
-}
-
-type BackendProvincialApplicationSearchResponse = {
-  results: BackendProvincialApplicationSearchResult[]
-  total: number
-  page: number
-  size: number
 }
 
 export type ProvincialApplicationNumberOption = {
@@ -92,38 +85,23 @@ const buildBackendParams = (request: ProvincialApplicationSearchRequest): URLSea
 }
 
 const parseBackendResponse = (payload: unknown): ProvincialApplicationSearchResponse | null => {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
-    return null
-  }
-
-  const backendResponse = payload as BackendProvincialApplicationSearchResponse
-  const totalElements = Number.isFinite(backendResponse.total) ? backendResponse.total : 0
-  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 10
-  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
-  const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
-
-  return {
-    content: backendResponse.results.map((row) => ({
-      applicationNumber: String(row.application),
-      status: row.status,
-      applicantClientNumber: row.client ?? '',
-      ownerClientNumber: row.ownerClientNumber ?? '',
-      region: row.region ?? '',
-      applicationVolume: row.applicationVolume ?? 0,
-      exemptionNumber: row.exemptionNumber ?? '',
-      listingDate: row.listingDate ?? '',
-      packageNumber: '',
-      exemptionType: '',
-      productTypeCode: '',
-      allowCreateExemption: Boolean(row.showCheckbox) && !Boolean(row.locked),
-    })),
-    page: {
-      number: pageNumber,
-      size: pageSize,
-      totalElements,
-      totalPages,
-    },
-  }
+  return parsePagedSearchResponse<
+    BackendProvincialApplicationSearchResult,
+    ProvincialApplicationSearchResponse['content'][number]
+  >(payload, (row) => ({
+    applicationNumber: String(row.application),
+    status: row.status,
+    applicantClientNumber: row.client ?? '',
+    ownerClientNumber: row.ownerClientNumber ?? '',
+    region: row.region ?? '',
+    applicationVolume: row.applicationVolume ?? 0,
+    exemptionNumber: row.exemptionNumber ?? '',
+    listingDate: row.listingDate ?? '',
+    packageNumber: '',
+    exemptionType: '',
+    productTypeCode: '',
+    allowCreateExemption: Boolean(row.showCheckbox) && !Boolean(row.locked),
+  }))
 }
 
 export const searchProvincialApplications = async (
