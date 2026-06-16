@@ -225,18 +225,15 @@ public class LexisXmlImportService {
   private UploadedLexisSubmission readUploadedLexisSubmission(MultipartFile file) throws Exception {
     String fileName = resolveFileName(file);
     String lowerFileName = fileName.toLowerCase(Locale.ROOT);
-    if (lowerFileName.endsWith(XML_EXTENSION)) {
-      try (InputStream inputStream = file.getInputStream()) {
-        return new UploadedLexisSubmission(readBounded(inputStream), UploadFormat.XML, List.of());
-      }
-    }
-    if (lowerFileName.endsWith(GEOJSON_EXTENSION) || lowerFileName.endsWith(JSON_EXTENSION)) {
-      try (InputStream inputStream = file.getInputStream()) {
-        return new UploadedLexisSubmission(readBounded(inputStream), UploadFormat.GEOJSON, List.of());
-      }
-    }
     if (lowerFileName.endsWith(ZIP_EXTENSION)) {
       return readZippedLexisSubmission(file, fileName);
+    }
+    try (InputStream inputStream = file.getInputStream()) {
+      byte[] bytes = readBounded(inputStream);
+      UploadFormat format = resolveUploadFormat(fileName, bytes);
+      if (format != null) {
+        return new UploadedLexisSubmission(bytes, format, List.of());
+      }
     }
     throw new LexisXmlImportException(
         List.of("The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file."));
@@ -260,7 +257,8 @@ public class LexisXmlImportService {
           zipInputStream.closeEntry();
           continue;
         }
-        UploadFormat entryFormat = uploadFormatFromFileName(entryName);
+        byte[] entryBytes = readBounded(zipInputStream);
+        UploadFormat entryFormat = resolveUploadFormat(entryName, entryBytes);
         if (entryFormat == null) {
           unexpectedEntryNames.add(entryName == null ? "(unnamed file)" : entryName);
           zipInputStream.closeEntry();
@@ -268,7 +266,7 @@ public class LexisXmlImportService {
         }
         importEntryNames.add(entryName);
         if (importBytes == null) {
-          importBytes = readBounded(zipInputStream);
+          importBytes = entryBytes;
           importFormat = entryFormat;
         }
         zipInputStream.closeEntry();
@@ -296,6 +294,11 @@ public class LexisXmlImportService {
         List.of("Imported " + importEntryNames.get(0) + " from ZIP archive " + fileName + "."));
   }
 
+  private UploadFormat resolveUploadFormat(String fileName, byte[] bytes) {
+    UploadFormat detectedFormat = uploadFormatFromBytes(bytes);
+    return detectedFormat == null ? uploadFormatFromFileName(fileName) : detectedFormat;
+  }
+
   private UploadFormat uploadFormatFromFileName(String fileName) {
     if (fileName == null) {
       return null;
@@ -306,6 +309,34 @@ public class LexisXmlImportService {
     }
     if (lowerFileName.endsWith(GEOJSON_EXTENSION) || lowerFileName.endsWith(JSON_EXTENSION)) {
       return UploadFormat.GEOJSON;
+    }
+    return null;
+  }
+
+  private UploadFormat uploadFormatFromBytes(byte[] bytes) {
+    if (bytes == null) {
+      return null;
+    }
+    int offset = 0;
+    if (bytes.length >= 3
+        && (bytes[0] & 0xFF) == 0xEF
+        && (bytes[1] & 0xFF) == 0xBB
+        && (bytes[2] & 0xFF) == 0xBF) {
+      offset = 3;
+    }
+    while (offset < bytes.length) {
+      byte value = bytes[offset];
+      if (value == ' ' || value == '\t' || value == '\n' || value == '\r') {
+        offset++;
+        continue;
+      }
+      if (value == '<') {
+        return UploadFormat.XML;
+      }
+      if (value == '{') {
+        return UploadFormat.GEOJSON;
+      }
+      return null;
     }
     return null;
   }
