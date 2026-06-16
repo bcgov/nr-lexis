@@ -213,8 +213,7 @@ const UploadTargetNumberSelect: FC<UploadTargetNumberSelectProps> = ({
             setOptions(items)
           }
         })
-        .catch((error) => {
-          console.warn('Unable to load upload target number options.', error)
+        .catch(() => {
           if (!ignore) {
             setOptions([])
           }

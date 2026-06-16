@@ -53,8 +53,7 @@ export const buildLexisXmlPreviewMessage = async (file: File): Promise<string> =
     ].filter(Boolean)
 
     return details.length > 0 ? `Preview: ${details.join(', ')}.` : XML_PREVIEW_UNAVAILABLE
-  } catch (error) {
-    console.warn('Unable to build LEXIS XML upload preview.', error)
+  } catch {
     return XML_PREVIEW_UNAVAILABLE
   }
 }

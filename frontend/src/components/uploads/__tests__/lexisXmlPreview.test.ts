@@ -74,4 +74,17 @@ describe('lexisXmlPreview', () => {
       buildLexisXmlPreviewMessage(new File(['<xml />'], 'submission.xml')),
     ).resolves.toBe(XML_PREVIEW_UNAVAILABLE)
   })
+
+  it('falls back when the browser cannot read XML text', async () => {
+    const unreadableXmlFile = new File([XML_PREVIEW_FIXTURE], 'submission.xml', {
+      type: 'application/xml',
+    })
+    Object.defineProperty(unreadableXmlFile, 'text', {
+      value: () => Promise.reject(new Error('unreadable file')),
+    })
+
+    await expect(buildLexisXmlPreviewMessage(unreadableXmlFile)).resolves.toBe(
+      XML_PREVIEW_UNAVAILABLE,
+    )
+  })
 })
