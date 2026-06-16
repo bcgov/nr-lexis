@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
@@ -18,16 +19,12 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.security.Principal;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
@@ -38,7 +35,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/lexis/application-reviews")
@@ -46,8 +42,6 @@ import org.springframework.web.server.ResponseStatusException;
 public class ApplicationReviewController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ApplicationReviewController.class);
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ObjectProvider<ApplicationReviewService> serviceProvider;
 
@@ -343,35 +337,13 @@ public class ApplicationReviewController {
     return new ApplicationReviewSearchCriteria(
         applicationNumber,
         productTypeCode,
-        parseDate(receivedFromDate),
-        parseDate(receivedToDate),
-        parseDate(listingFromDate),
-        parseDate(listingToDate),
+        parseSearchDate(receivedFromDate),
+        parseSearchDate(receivedToDate),
+        parseSearchDate(listingFromDate),
+        parseSearchDate(listingToDate),
         regionNumbers == null ? List.of() : regionNumbers,
         sortField,
         page,
         size);
-  }
-
-  private LocalDate parseDate(String input) {
-    if (input == null || input.trim().isEmpty()) {
-      return null;
-    }
-
-    String value = input.trim();
-    try {
-      return LocalDate.parse(value);
-    } catch (DateTimeParseException ignored) {
-      // Fallback for legacy date format.
-    }
-
-    try {
-      return LocalDate.parse(value, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ex) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST,
-          "Invalid date value '" + value + "'. Use yyyy-MM-dd or MM/dd/yyyy.",
-          ex);
-    }
   }
 }

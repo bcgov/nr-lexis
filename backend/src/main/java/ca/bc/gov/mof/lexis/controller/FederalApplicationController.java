@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
+
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
@@ -12,9 +14,6 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.List;
 import org.slf4j.Logger;
@@ -36,8 +35,6 @@ import org.springframework.web.server.ResponseStatusException;
 public class FederalApplicationController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(FederalApplicationController.class);
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ObjectProvider<FederalApplicationService> serviceProvider;
 
@@ -206,36 +203,14 @@ public class FederalApplicationController {
         packageNumber,
         exemptionNumber,
         applicationStatus,
-        parseDate(receivedFromDate),
-        parseDate(receivedToDate),
-        parseDate(listingFromDate),
-        parseDate(listingToDate),
+        parseSearchDate(receivedFromDate),
+        parseSearchDate(receivedToDate),
+        parseSearchDate(listingFromDate),
+        parseSearchDate(listingToDate),
         ownerClientNumber,
         agentClientNumber,
         page,
         size);
-  }
-
-  private LocalDate parseDate(String input) {
-    if (input == null || input.trim().isEmpty()) {
-      return null;
-    }
-
-    String value = input.trim();
-    try {
-      return LocalDate.parse(value);
-    } catch (DateTimeParseException ignored) {
-      // Fallback for legacy date format.
-    }
-
-    try {
-      return LocalDate.parse(value, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ex) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST,
-          "Invalid date value '" + value + "'. Use yyyy-MM-dd or MM/dd/yyyy.",
-          ex);
-    }
   }
 
   private String firstNonBlank(String value1, String value2) {
