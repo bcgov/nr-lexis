@@ -20,6 +20,11 @@ import { useAuth } from '@/context/auth/useAuth'
 import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import {
+  displayValue,
+  matchesFilter,
+  normalizeFilterText as normalizeText,
+} from '@/pages/shared/detail-page-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchFederalApplicationDetail } from '@/service/lexis-detail-service'
 import {
@@ -28,38 +33,7 @@ import {
   removeFederalApplicationDocument,
   type FederalApplicationDocumentRow,
 } from '@/service/federal-application-documents-service'
-
-const displayValue = (value: string | number | null | undefined): string => {
-  if (value === null || value === undefined || value === '') {
-    return 'Not provided'
-  }
-  return String(value)
-}
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
-
-const triggerBrowserDownload = (blob: Blob, filename: string): void => {
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = objectUrl
-  anchor.download = filename
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(objectUrl)
-}
-
-const matchesFilter = (
-  values: Array<string | number | null | undefined>,
-  filterValue: string,
-): boolean => {
-  if (!filterValue.trim()) {
-    return true
-  }
-
-  const normalizedFilter = normalizeText(filterValue)
-  return values.some((value) => normalizeText(String(value ?? '')).includes(normalizedFilter))
-}
+import { triggerBrowserDownload } from '@/utils/download'
 
 const FederalApplicationDetailsPage: FC = () => {
   const navigate = useNavigate()

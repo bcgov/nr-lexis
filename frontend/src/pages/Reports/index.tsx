@@ -20,6 +20,7 @@ import SearchableSelect from '@/components/SearchableSelect'
 import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import { runReport } from '@/service/report-service'
+import { triggerBrowserDownload } from '@/utils/download'
 import {
   fetchReportOptions,
   fetchProvincialApplicationOptions,
@@ -845,17 +846,6 @@ const buildReportSearchParams = (payload: {
 }
 
 const normalizeText = (value: string): string => value.trim().toLowerCase()
-
-const triggerBrowserDownload = (blob: Blob, filename: string): void => {
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = objectUrl
-  anchor.download = filename
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(objectUrl)
-}
 
 const openBlobInNewTab = (blob: Blob): boolean => {
   const objectUrl = URL.createObjectURL(blob)

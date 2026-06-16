@@ -21,6 +21,11 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
+import {
+  displayValue,
+  matchesFilter,
+  normalizeFilterText as normalizeText,
+} from '@/pages/shared/detail-page-utils'
 import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
@@ -84,16 +89,9 @@ import {
   requiredFieldError,
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
+import { triggerBrowserDownload } from '@/utils/download'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
-const displayValue = (value: string | number | null | undefined): string => {
-  if (value === null || value === undefined || value === '') {
-    return 'Not provided'
-  }
-  return String(value)
-}
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
 const normalizeReviewStatus = (status: string): string => status.trim().toUpperCase()
 const normalizeEmail = (email: string): string => email.trim()
 const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
@@ -174,29 +172,6 @@ const optionsWithCurrentValue = (options: SearchOption[], currentValue: string):
   }
 
   return [{ value: normalizedCurrentValue, label: normalizedCurrentValue }, ...options]
-}
-
-const triggerBrowserDownload = (blob: Blob, filename: string): void => {
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = objectUrl
-  anchor.download = filename
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(objectUrl)
-}
-
-const matchesFilter = (
-  values: Array<string | number | null | undefined>,
-  filterValue: string,
-): boolean => {
-  if (!filterValue.trim()) {
-    return true
-  }
-
-  const normalizedFilter = normalizeText(filterValue)
-  return values.some((value) => normalizeText(String(value ?? '')).includes(normalizedFilter))
 }
 
 type ApplicationSummaryFormState = {

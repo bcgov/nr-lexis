@@ -20,6 +20,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
 import {
   firstValidationError,
   getVisibleFieldError,
@@ -48,32 +49,13 @@ import {
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
 import { runReport } from '@/service/report-service'
-
-const displayValue = (value: string | number | null | undefined): string => {
-  if (value === null || value === undefined || value === '') {
-    return 'Not provided'
-  }
-  return String(value)
-}
+import { triggerBrowserDownload } from '@/utils/download'
 
 const formatAmount = (value: number): string => {
   return value.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-}
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
-
-const triggerBrowserDownload = (blob: Blob, filename: string): void => {
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = objectUrl
-  anchor.download = filename
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(objectUrl)
 }
 
 const openBlobInNewTab = (blob: Blob): boolean => {
@@ -91,18 +73,6 @@ const openBlobInNewTab = (blob: Blob): boolean => {
 
   setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
   return true
-}
-
-const matchesFilter = (
-  values: Array<string | number | null | undefined>,
-  filterValue: string,
-): boolean => {
-  if (!filterValue.trim()) {
-    return true
-  }
-
-  const normalizedFilter = normalizeText(filterValue)
-  return values.some((value) => normalizeText(String(value ?? '')).includes(normalizedFilter))
 }
 
 const isInvoiceDocumentRow = (row: PermitDocumentRow): boolean => {

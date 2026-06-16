@@ -18,17 +18,12 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { IndianReservePermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import {
+  displayValue,
+  normalizeFilterText as normalizeText,
+} from '@/pages/shared/detail-page-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchIndianReservePermitDetail } from '@/service/lexis-detail-service'
-
-const displayValue = (value: string | number | null | undefined): string => {
-  if (value === null || value === undefined || value === '') {
-    return 'Not provided'
-  }
-  return String(value)
-}
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
 
 const IndianReservePermitDetailsPage: FC = () => {
   const navigate = useNavigate()
