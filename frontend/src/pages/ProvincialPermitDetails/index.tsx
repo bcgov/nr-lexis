@@ -49,30 +49,13 @@ import {
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
 import { runReport } from '@/service/report-service'
-import { triggerBrowserDownload } from '@/utils/download'
+import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
 
 const formatAmount = (value: number): string => {
   return value.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-}
-
-const openBlobInNewTab = (blob: Blob): boolean => {
-  const objectUrl = URL.createObjectURL(blob)
-  const openedWindow = window.open(
-    objectUrl,
-    'permitReportWindow',
-    'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
-  )
-
-  if (!openedWindow) {
-    URL.revokeObjectURL(objectUrl)
-    return false
-  }
-
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-  return true
 }
 
 const isInvoiceDocumentRow = (row: PermitDocumentRow): boolean => {
@@ -383,7 +366,7 @@ const ProvincialPermitDetailsPage: FC = () => {
         },
       })
 
-      const opened = openBlobInNewTab(runResult.blob)
+      const opened = openBlobInNewTab(runResult.blob, 'permitReportWindow')
       if (!opened) {
         triggerBrowserDownload(runResult.blob, runResult.filename)
         setActionErrorMessage(

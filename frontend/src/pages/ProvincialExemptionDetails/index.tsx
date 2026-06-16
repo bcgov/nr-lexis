@@ -34,24 +34,7 @@ import {
   type ProvincialExemptionDocumentRow,
 } from '@/service/provincial-exemption-documents-service'
 import { runReport } from '@/service/report-service'
-import { triggerBrowserDownload } from '@/utils/download'
-
-const openBlobInNewTab = (blob: Blob): boolean => {
-  const objectUrl = URL.createObjectURL(blob)
-  const openedWindow = window.open(
-    objectUrl,
-    'approvedExemptionReportWindow',
-    'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
-  )
-
-  if (!openedWindow) {
-    URL.revokeObjectURL(objectUrl)
-    return false
-  }
-
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-  return true
-}
+import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
 
 const ProvincialExemptionDetailsPage: FC = () => {
   const navigate = useNavigate()
@@ -214,7 +197,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
         },
       })
 
-      const opened = openBlobInNewTab(runResult.blob)
+      const opened = openBlobInNewTab(runResult.blob, 'approvedExemptionReportWindow')
       if (!opened) {
         triggerBrowserDownload(runResult.blob, runResult.filename)
         setActionErrorMessage(
