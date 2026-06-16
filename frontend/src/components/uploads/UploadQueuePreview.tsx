@@ -2,8 +2,12 @@ import { useMemo, useState, type FC, type ReactNode } from 'react'
 import { Button, Tag, TextInput } from '@carbon/react'
 import { Upload } from '@carbon/icons-react'
 import UploadQueueReviewAccordion from './UploadQueueReviewAccordion'
-import { getFileExtension } from './uploadQueueHelpers'
-import type { UploadQueueItem, UploadQueueStatus } from './uploadQueueTypes'
+import {
+  getFileExtension,
+  uploadQueueStatusLabel,
+  uploadQueueStatusTagType,
+} from './uploadQueueHelpers'
+import type { UploadQueueItem } from './uploadQueueTypes'
 
 type UploadQueuePreviewProps = {
   items: UploadQueueItem[]
@@ -43,38 +47,6 @@ const formatQueuedAt = (timestamp: number): string => {
   }).format(timestamp)
 }
 
-const statusTagType = (status: UploadQueueStatus): 'gray' | 'blue' | 'green' | 'red' => {
-  if (status === 'invalid') {
-    return 'red'
-  }
-  if (status === 'uploading') {
-    return 'blue'
-  }
-  if (status === 'complete') {
-    return 'green'
-  }
-  if (status === 'failed') {
-    return 'red'
-  }
-  return 'gray'
-}
-
-const statusLabel = (status: UploadQueueStatus): string => {
-  if (status === 'invalid') {
-    return 'Invalid'
-  }
-  if (status === 'uploading') {
-    return 'Uploading'
-  }
-  if (status === 'complete') {
-    return 'Complete'
-  }
-  if (status === 'failed') {
-    return 'Failed'
-  }
-  return 'Queued'
-}
-
 const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
   items,
   targetSummary,
@@ -104,7 +76,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
         item.workflowLabel,
         item.file.name,
         item.targetSummary ?? targetSummary,
-        statusLabel(item.status),
+        uploadQueueStatusLabel(item.status),
         item.message,
         item.details?.summary,
         item.details?.errors?.join(' '),
@@ -215,7 +187,9 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
                     </td>
                     <td>{item.targetSummary ?? targetSummary}</td>
                     <td>
-                      <Tag type={statusTagType(item.status)}>{statusLabel(item.status)}</Tag>
+                      <Tag type={uploadQueueStatusTagType(item.status)}>
+                        {uploadQueueStatusLabel(item.status)}
+                      </Tag>
                     </td>
                     <td>{item.message || 'Not submitted yet.'}</td>
                     <td>

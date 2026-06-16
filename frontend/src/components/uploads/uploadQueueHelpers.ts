@@ -1,5 +1,5 @@
 import type { AdminUploadResult, UploadWorkflowType } from '@/service/admin-upload-service'
-import type { UploadQueueReviewDetails } from './uploadQueueTypes'
+import type { UploadQueueReviewDetails, UploadQueueStatus } from './uploadQueueTypes'
 
 export const asStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -57,6 +57,40 @@ export const getFileExtension = (fileName: string): string => {
   return normalizedName.slice(extensionStart)
 }
 
+export const uploadQueueStatusTagType = (
+  status: UploadQueueStatus,
+): 'gray' | 'blue' | 'green' | 'red' => {
+  if (status === 'invalid' || status === 'failed') {
+    return 'red'
+  }
+  if (status === 'uploading') {
+    return 'blue'
+  }
+  if (status === 'complete') {
+    return 'green'
+  }
+  return 'gray'
+}
+
+export const uploadQueueStatusLabel = (status: UploadQueueStatus): string => {
+  if (status === 'invalid') {
+    return 'Invalid'
+  }
+  if (status === 'uploading') {
+    return 'Uploading'
+  }
+  if (status === 'complete') {
+    return 'Complete'
+  }
+  if (status === 'failed') {
+    return 'Failed'
+  }
+  return 'Queued'
+}
+
+export const formatScaleRows = (scaleRows: number): string =>
+  `${scaleRows} scale row${scaleRows === 1 ? '' : 's'}`
+
 export const validateDocumentUploadFile = (file: File): string => {
   if (!file.name.trim()) {
     return 'File name is required.'
@@ -96,7 +130,7 @@ export const buildUploadResultMessage = (
     details.push(`Package ${result.packageNumber}`)
   }
   if (typeof result?.scaleRows === 'number') {
-    details.push(`${result.scaleRows} scale row${result.scaleRows === 1 ? '' : 's'}`)
+    details.push(formatScaleRows(result.scaleRows))
   }
 
   const summary =

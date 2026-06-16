@@ -1,44 +1,17 @@
 import { type FC } from 'react'
 import { Tag } from '@carbon/react'
-import type { UploadQueueItem, UploadQueueStatus } from './uploadQueueTypes'
+import {
+  formatScaleRows,
+  uploadQueueStatusLabel,
+  uploadQueueStatusTagType,
+} from './uploadQueueHelpers'
+import type { UploadQueueItem } from './uploadQueueTypes'
 
 type UploadQueueReviewAccordionProps = {
   items: UploadQueueItem[]
   targetSummary: string
   idPrefix?: string
 }
-
-const statusTagType = (status: UploadQueueStatus): 'gray' | 'blue' | 'green' | 'red' => {
-  if (status === 'invalid' || status === 'failed') {
-    return 'red'
-  }
-  if (status === 'uploading') {
-    return 'blue'
-  }
-  if (status === 'complete') {
-    return 'green'
-  }
-  return 'gray'
-}
-
-const statusLabel = (status: UploadQueueStatus): string => {
-  if (status === 'invalid') {
-    return 'Invalid'
-  }
-  if (status === 'uploading') {
-    return 'Uploading'
-  }
-  if (status === 'complete') {
-    return 'Complete'
-  }
-  if (status === 'failed') {
-    return 'Failed'
-  }
-  return 'Queued'
-}
-
-const formatScaleRows = (scaleRows: number): string =>
-  `${scaleRows} scale row${scaleRows === 1 ? '' : 's'}`
 
 const asList = (value: string[] | undefined): string[] => value?.filter(Boolean) ?? []
 
@@ -85,7 +58,9 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
             >
               <summary className="admin-upload-review__summary">
                 <span className="admin-upload-review__file-name">{item.file.name}</span>
-                <Tag type={statusTagType(item.status)}>{statusLabel(item.status)}</Tag>
+                <Tag type={uploadQueueStatusTagType(item.status)}>
+                  {uploadQueueStatusLabel(item.status)}
+                </Tag>
                 <span className="admin-upload-review__summary-text">{summary}</span>
               </summary>
 
@@ -101,7 +76,7 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                   </div>
                   <div>
                     <dt>Status</dt>
-                    <dd>{statusLabel(item.status)}</dd>
+                    <dd>{uploadQueueStatusLabel(item.status)}</dd>
                   </div>
                   {applicationNumber && (
                     <div>
