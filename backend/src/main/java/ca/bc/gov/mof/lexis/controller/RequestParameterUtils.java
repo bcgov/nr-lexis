@@ -80,4 +80,16 @@ final class RequestParameterUtils {
       }
     }
   }
+
+  static String sanitizeFileName(String rawValue) {
+    if (rawValue == null || rawValue.isBlank()) {
+      return null;
+    }
+    String normalized = rawValue.trim();
+    int slashIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
+    if (slashIndex >= 0 && slashIndex < normalized.length() - 1) {
+      normalized = normalized.substring(slashIndex + 1);
+    }
+    return normalized;
+  }
 }

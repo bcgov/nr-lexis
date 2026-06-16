@@ -73,4 +73,18 @@ class RequestParameterUtilsTest {
     assertThat(RequestParameterUtils.parseDate("15/06/2026")).isNull();
     assertThat(RequestParameterUtils.parseDate(" ")).isNull();
   }
+
+  @Test
+  void sanitizeFileNameTrimsAndRemovesPathSegments() {
+    assertThat(RequestParameterUtils.sanitizeFileName(" report.pdf ")).isEqualTo("report.pdf");
+    assertThat(RequestParameterUtils.sanitizeFileName("/tmp/upload/report.pdf")).isEqualTo("report.pdf");
+    assertThat(RequestParameterUtils.sanitizeFileName("C:\\tmp\\upload\\report.pdf")).isEqualTo("report.pdf");
+  }
+
+  @Test
+  void sanitizeFileNameReturnsNullForBlankValuesAndPreservesTrailingSeparators() {
+    assertThat(RequestParameterUtils.sanitizeFileName(null)).isNull();
+    assertThat(RequestParameterUtils.sanitizeFileName(" ")).isNull();
+    assertThat(RequestParameterUtils.sanitizeFileName("/tmp/upload/")).isEqualTo("/tmp/upload/");
+  }
 }

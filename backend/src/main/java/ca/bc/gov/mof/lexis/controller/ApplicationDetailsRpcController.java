@@ -5,6 +5,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseNonNegativeLong;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
 
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
@@ -1205,18 +1206,6 @@ public class ApplicationDetailsRpcController {
       return Double.toString(doubleValue);
     }
     return value.toString().trim();
-  }
-
-  private String sanitizeFileName(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    String normalized = rawValue.trim();
-    int slashIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
-    if (slashIndex >= 0 && slashIndex < normalized.length() - 1) {
-      normalized = normalized.substring(slashIndex + 1);
-    }
-    return normalized;
   }
 
   private boolean isSelectedLocation(
