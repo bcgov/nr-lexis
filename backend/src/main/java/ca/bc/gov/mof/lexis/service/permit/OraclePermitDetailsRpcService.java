@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
@@ -48,6 +49,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationR
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
+import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -1249,7 +1251,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         applicationService
             .findPackageByPackageNumber(normalizedPackageNumber)
             .map(LexisPackageLookupDto::growthTypeCode)
-            .map(this::trimToNull)
+            .map(TextUtils::trimToNull)
             .orElse(null);
     if (growthTypeCode == null) {
       return "";
@@ -1617,14 +1619,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         .map(String::trim)
         .filter(token -> !token.isEmpty())
         .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private String nonNull(String value) {
