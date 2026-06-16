@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.summary;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
@@ -446,14 +448,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
 
   private String blankToNull(String value) {
     return trimToNull(value);
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private List<PermitSearchResultDto> filterPermitResultsForClient(

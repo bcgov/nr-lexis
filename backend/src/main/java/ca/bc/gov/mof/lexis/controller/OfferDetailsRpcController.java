@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
@@ -451,14 +453,6 @@ public class OfferDetailsRpcController {
 
   private String formatVolume(double value) {
     return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private String fallbackApplicationNumber(String value) {

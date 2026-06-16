@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.admin;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcRequestDto;
 import ca.bc.gov.mof.lexis.repository.admin.LexisAdminPolicyRepository;
 import java.time.LocalDate;
@@ -468,14 +470,6 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
 
   private String formatDate(LocalDate value) {
     return value == null ? "" : value.format(DISPLAY_DATE_FORMATTER);
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private String renderPaginationHtml(

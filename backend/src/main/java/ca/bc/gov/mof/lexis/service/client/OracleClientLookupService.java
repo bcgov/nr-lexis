@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.client;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository.ClientLocationRow;
 import java.util.List;
@@ -130,11 +132,4 @@ public class OracleClientLookupService implements ClientLookupService {
     return normalized.length() >= 8 ? normalized : "0".repeat(8 - normalized.length()) + normalized;
   }
 
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
 }

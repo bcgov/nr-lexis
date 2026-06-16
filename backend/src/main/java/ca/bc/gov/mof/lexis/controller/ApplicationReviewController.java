@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewPreviewResponseDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
@@ -325,14 +327,6 @@ public class ApplicationReviewController {
       }
     }
     return null;
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private ApplicationReviewSearchCriteria buildCriteria(
