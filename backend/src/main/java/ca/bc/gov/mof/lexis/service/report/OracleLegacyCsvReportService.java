@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.report;
 
 import static ca.bc.gov.mof.lexis.service.report.ReportParameterUtils.first;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.io.ByteArrayOutputStream;
@@ -150,20 +151,20 @@ public class OracleLegacyCsvReportService {
           cs.setDate(1, toSqlDate(first(parameters, "fromDate")));
           cs.setDate(2, toSqlDate(first(parameters, "toDate")));
           setNullableString(cs, 3, csvValue(parameters, "region"));
-          setNullableString(cs, 4, emptyToNull(first(parameters, "exemptionNumber")));
-          setNullableString(cs, 5, emptyToNull(first(parameters, "exemptionType")));
-          setNullableString(cs, 6, emptyToNull(first(parameters, "exemptionReason")));
-          setNullableString(cs, 7, emptyToNull(first(parameters, "growthType")));
-          setNullableString(cs, 8, emptyToNull(first(parameters, "timberMark")));
-          setNullableString(cs, 9, emptyToNull(first(parameters, "forestFileId")));
-          setNullableString(cs, 10, emptyToNull(first(parameters, "permitStatus")));
+          setNullableString(cs, 4, trimToNull(first(parameters, "exemptionNumber")));
+          setNullableString(cs, 5, trimToNull(first(parameters, "exemptionType")));
+          setNullableString(cs, 6, trimToNull(first(parameters, "exemptionReason")));
+          setNullableString(cs, 7, trimToNull(first(parameters, "growthType")));
+          setNullableString(cs, 8, trimToNull(first(parameters, "timberMark")));
+          setNullableString(cs, 9, trimToNull(first(parameters, "forestFileId")));
+          setNullableString(cs, 10, trimToNull(first(parameters, "permitStatus")));
         },
         11);
   }
 
   private Optional<LegacyTabularReportData> loadTeacData(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
-    String jurisdiction = normalize(first(parameters, "exportJurisdictionCode", "jurisdiction"));
+    String jurisdiction = trimToNull(first(parameters, "exportJurisdictionCode", "jurisdiction"));
 
     String procedureCall;
     if (JURISDICTION_PROVINCIAL.equalsIgnoreCase(jurisdiction)) {
@@ -186,7 +187,7 @@ public class OracleLegacyCsvReportService {
 
   private Optional<LegacyTabularReportData> loadApprovedExemptionData(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
-    String exemptionNumber = emptyToNull(first(parameters, "exemptionNumber"));
+    String exemptionNumber = trimToNull(first(parameters, "exemptionNumber"));
     if (exemptionNumber == null) {
       LOGGER.warn("Approved exemption report request missing exemptionNumber");
       return Optional.empty();
@@ -649,7 +650,7 @@ public class OracleLegacyCsvReportService {
   }
 
   private String normalizeCsv(String value) {
-    String normalized = normalize(value);
+    String normalized = trimToNull(value);
     if (normalized == null) {
       return "";
     }
@@ -661,7 +662,7 @@ public class OracleLegacyCsvReportService {
     String[] parts = normalized.split(",");
     StringBuilder builder = new StringBuilder();
     for (String part : parts) {
-      String trimmed = normalize(part);
+      String trimmed = trimToNull(part);
       if (trimmed == null) {
         continue;
       }
@@ -672,14 +673,6 @@ public class OracleLegacyCsvReportService {
     }
 
     return builder.toString();
-  }
-
-  private String normalize(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private String defaultDate(String value, String fallback) {
@@ -703,17 +696,13 @@ public class OracleLegacyCsvReportService {
     return value;
   }
 
-  private String emptyToNull(String value) {
-    return normalize(value);
-  }
-
   private java.sql.Date toSqlDate(String value) {
     LocalDate localDate = parseDate(value);
     return localDate == null ? null : java.sql.Date.valueOf(localDate);
   }
 
   private LocalDate parseDate(String raw) {
-    String value = normalize(raw);
+    String value = trimToNull(raw);
     if (value == null) {
       return null;
     }
@@ -732,7 +721,7 @@ public class OracleLegacyCsvReportService {
   }
 
   private long parseLongOrZero(String raw) {
-    String value = normalize(raw);
+    String value = trimToNull(raw);
     if (value == null) {
       return 0L;
     }
