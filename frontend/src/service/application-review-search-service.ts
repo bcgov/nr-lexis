@@ -6,6 +6,9 @@ import type {
 } from '@/interfaces/ApplicationReviewSearch'
 import apiService from '@/service/api-service'
 import {
+  appendNumericSearchParams,
+  appendSearchParam,
+  appendSearchSortAndPageParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
   parsePreviewSearchResponse,
@@ -46,33 +49,15 @@ export type ApplicationReviewStatusEmailResult = {
 const buildBackendParams = (request: ApplicationReviewSearchRequest): URLSearchParams => {
   const params = new URLSearchParams()
 
-  const appendIfPresent = (key: string, value: string) => {
-    const trimmed = value.trim()
-    if (trimmed.length > 0) {
-      params.append(key, trimmed)
-    }
-  }
-
   const { filters } = request
-  appendIfPresent('applicationNumber', filters.applicationNumber)
-  appendIfPresent('productTypeCode', filters.productTypeCode)
-  appendIfPresent('receivedFromDate', filters.receivedFromDate)
-  appendIfPresent('receivedToDate', filters.receivedToDate)
-  appendIfPresent('listingFromDate', filters.listingFromDate)
-  appendIfPresent('listingToDate', filters.listingToDate)
-
-  filters.region
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value) && value > 0)
-    .forEach((value) => {
-      params.append('region', String(value))
-    })
-
-  const backendSortField =
-    request.sortDirection === 'desc' ? `${request.sortField} DESC` : request.sortField
-  params.append('sortField', backendSortField)
-  params.append('page', String(request.page))
-  params.append('size', String(request.pageSize))
+  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
+  appendSearchParam(params, 'productTypeCode', filters.productTypeCode)
+  appendSearchParam(params, 'receivedFromDate', filters.receivedFromDate)
+  appendSearchParam(params, 'receivedToDate', filters.receivedToDate)
+  appendSearchParam(params, 'listingFromDate', filters.listingFromDate)
+  appendSearchParam(params, 'listingToDate', filters.listingToDate)
+  appendNumericSearchParams(params, 'region', filters.region)
+  appendSearchSortAndPageParams(params, request)
 
   return params
 }

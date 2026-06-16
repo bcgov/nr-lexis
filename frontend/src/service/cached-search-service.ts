@@ -4,6 +4,16 @@ import { booleanField, isRecord, type UnknownRecord } from '@/utils/record'
 
 const SEARCH_CACHE_TTL_MS = 10_000
 
+type SearchPageRequest = {
+  page: number
+  pageSize: number
+}
+
+type SearchSortRequest = SearchPageRequest & {
+  sortField: string
+  sortDirection: 'asc' | 'desc'
+}
+
 export type PagedSearchResponse<T> = {
   content: T[]
   page: {
@@ -53,6 +63,44 @@ export const getCachedSearchResponse = async <T>(
       ttlMs: SEARCH_CACHE_TTL_MS,
     },
   )
+}
+
+export const appendSearchParam = (params: URLSearchParams, key: string, value: string): void => {
+  const trimmed = value.trim()
+  if (trimmed.length > 0) {
+    params.append(key, trimmed)
+  }
+}
+
+export const appendNumericSearchParams = (
+  params: URLSearchParams,
+  key: string,
+  values: string[],
+): void => {
+  values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .forEach((value) => {
+      params.append(key, String(value))
+    })
+}
+
+export const appendSearchPageParams = (
+  params: URLSearchParams,
+  request: SearchPageRequest,
+): void => {
+  params.append('page', String(request.page))
+  params.append('size', String(request.pageSize))
+}
+
+export const appendSearchSortAndPageParams = (
+  params: URLSearchParams,
+  request: SearchSortRequest,
+): void => {
+  const backendSortField =
+    request.sortDirection === 'desc' ? `${request.sortField} DESC` : request.sortField
+  params.append('sortField', backendSortField)
+  appendSearchPageParams(params, request)
 }
 
 export const parsePagedSearchResponse = <BackendRow, SearchItem>(

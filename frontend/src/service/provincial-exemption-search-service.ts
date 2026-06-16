@@ -1,4 +1,10 @@
-import { getCachedSearchResponse, parsePagedSearchResponse } from '@/service/cached-search-service'
+import {
+  appendNumericSearchParams,
+  appendSearchPageParams,
+  appendSearchParam,
+  getCachedSearchResponse,
+  parsePagedSearchResponse,
+} from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
@@ -49,33 +55,18 @@ const normalizeStatusCode = (status: string): string => {
 const buildBackendParams = (request: ProvincialExemptionSearchRequest): URLSearchParams => {
   const params = new URLSearchParams()
 
-  const appendIfPresent = (key: string, value: string) => {
-    const trimmed = value.trim()
-    if (trimmed.length > 0) {
-      params.append(key, trimmed)
-    }
-  }
-
   const { filters } = request
-  appendIfPresent('applicationNumber', filters.applicationNumber)
-  appendIfPresent('packageNumber', filters.packageNumber)
-  appendIfPresent('exemptionNumber', filters.exemptionNumber)
-  appendIfPresent('listingFromDate', filters.listFromDate)
-  appendIfPresent('listingToDate', filters.listToDate)
-  appendIfPresent('exemptionTypeCode', filters.exemptionTypeCode)
-  appendIfPresent('exemptionStatusCode', filters.exemptionStatusCode)
-  appendIfPresent('applicantClientNumber', filters.applicantClientNumber)
-  appendIfPresent('ownerClientNumber', filters.ownerClientNumber)
-
-  filters.region
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value) && value > 0)
-    .forEach((value) => {
-      params.append('region', String(value))
-    })
-
-  params.append('page', String(request.page))
-  params.append('size', String(request.pageSize))
+  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
+  appendSearchParam(params, 'packageNumber', filters.packageNumber)
+  appendSearchParam(params, 'exemptionNumber', filters.exemptionNumber)
+  appendSearchParam(params, 'listingFromDate', filters.listFromDate)
+  appendSearchParam(params, 'listingToDate', filters.listToDate)
+  appendSearchParam(params, 'exemptionTypeCode', filters.exemptionTypeCode)
+  appendSearchParam(params, 'exemptionStatusCode', filters.exemptionStatusCode)
+  appendSearchParam(params, 'applicantClientNumber', filters.applicantClientNumber)
+  appendSearchParam(params, 'ownerClientNumber', filters.ownerClientNumber)
+  appendNumericSearchParams(params, 'region', filters.region)
+  appendSearchPageParams(params, request)
   return params
 }
 

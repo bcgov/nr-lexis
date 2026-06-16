@@ -1,4 +1,9 @@
-import { getCachedSearchResponse, parsePagedSearchResponse } from '@/service/cached-search-service'
+import {
+  appendSearchParam,
+  appendSearchSortAndPageParams,
+  getCachedSearchResponse,
+  parsePagedSearchResponse,
+} from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
@@ -23,31 +28,19 @@ type BackendFederalApplicationSearchResult = {
 const buildBackendParams = (request: FederalApplicationSearchRequest): URLSearchParams => {
   const params = new URLSearchParams()
 
-  const appendIfPresent = (key: string, value: string) => {
-    const trimmed = value.trim()
-    if (trimmed.length > 0) {
-      params.append(key, trimmed)
-    }
-  }
-
   const { filters } = request
-  appendIfPresent('applicationNumber', filters.applicationNumber)
-  appendIfPresent('packageNumber', filters.packageNumber)
-  appendIfPresent('applicationStatus', filters.applicationStatus)
-  appendIfPresent('receivedFromDate', filters.receivedFromDate)
-  appendIfPresent('receivedToDate', filters.receivedToDate)
-  appendIfPresent('listingFromDate', filters.listingFromDate)
-  appendIfPresent('listingToDate', filters.listingToDate)
+  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
+  appendSearchParam(params, 'packageNumber', filters.packageNumber)
+  appendSearchParam(params, 'applicationStatus', filters.applicationStatus)
+  appendSearchParam(params, 'receivedFromDate', filters.receivedFromDate)
+  appendSearchParam(params, 'receivedToDate', filters.receivedToDate)
+  appendSearchParam(params, 'listingFromDate', filters.listingFromDate)
+  appendSearchParam(params, 'listingToDate', filters.listingToDate)
 
   // Legacy UI uses one client filter; backend currently supports owner and agent.
-  appendIfPresent('ownerClientNumber', filters.clientNumber)
-  appendIfPresent('agentClientNumber', filters.clientNumber)
-
-  const backendSortField =
-    request.sortDirection === 'desc' ? `${request.sortField} DESC` : request.sortField
-  params.append('sortField', backendSortField)
-  params.append('page', String(request.page))
-  params.append('size', String(request.pageSize))
+  appendSearchParam(params, 'ownerClientNumber', filters.clientNumber)
+  appendSearchParam(params, 'agentClientNumber', filters.clientNumber)
+  appendSearchSortAndPageParams(params, request)
 
   return params
 }

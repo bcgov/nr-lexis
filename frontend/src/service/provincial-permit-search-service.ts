@@ -1,4 +1,10 @@
-import { getCachedSearchResponse, parsePagedSearchResponse } from '@/service/cached-search-service'
+import {
+  appendNumericSearchParams,
+  appendSearchParam,
+  appendSearchSortAndPageParams,
+  getCachedSearchResponse,
+  parsePagedSearchResponse,
+} from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import type {
@@ -47,35 +53,17 @@ const DEFAULT_PERMIT_SEARCH_FILTERS = {
 const buildBackendParams = (request: ProvincialPermitSearchRequest): URLSearchParams => {
   const params = new URLSearchParams()
 
-  const appendIfPresent = (key: string, value: string) => {
-    const trimmed = value.trim()
-    if (trimmed.length > 0) {
-      params.append(key, trimmed)
-    }
-  }
-
   const { filters } = request
-  appendIfPresent('applicationNumber', filters.applicationNumber)
-  appendIfPresent('packageNumber', filters.packageNumber)
-  appendIfPresent('permitNumber', filters.permitNumber)
-  appendIfPresent('issuedFromDate', filters.issuedFromDate)
-  appendIfPresent('issuedToDate', filters.issuedToDate)
-  appendIfPresent('permitStatus', filters.permitStatus)
-  appendIfPresent('applicantClientNumber', filters.applicantClientNumber)
-  appendIfPresent('ownerClientNumber', filters.ownerClientNumber)
-
-  filters.region
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value) && value > 0)
-    .forEach((value) => {
-      params.append('region', String(value))
-    })
-
-  const backendSortField =
-    request.sortDirection === 'desc' ? `${request.sortField} DESC` : request.sortField
-  params.append('sortField', backendSortField)
-  params.append('page', String(request.page))
-  params.append('size', String(request.pageSize))
+  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
+  appendSearchParam(params, 'packageNumber', filters.packageNumber)
+  appendSearchParam(params, 'permitNumber', filters.permitNumber)
+  appendSearchParam(params, 'issuedFromDate', filters.issuedFromDate)
+  appendSearchParam(params, 'issuedToDate', filters.issuedToDate)
+  appendSearchParam(params, 'permitStatus', filters.permitStatus)
+  appendSearchParam(params, 'applicantClientNumber', filters.applicantClientNumber)
+  appendSearchParam(params, 'ownerClientNumber', filters.ownerClientNumber)
+  appendNumericSearchParams(params, 'region', filters.region)
+  appendSearchSortAndPageParams(params, request)
 
   return params
 }
