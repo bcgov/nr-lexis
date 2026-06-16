@@ -27,17 +27,15 @@ const XML_PREVIEW_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
 </esf:ESFSubmission>`
 
 describe('lexisXmlPreview', () => {
-  it('summarizes useful fields from a LEXIS XML submission', async () => {
+  it('summarizes safe structure from a LEXIS XML submission', async () => {
     await expect(
       buildLexisXmlPreviewMessage(
         new File([XML_PREVIEW_FIXTURE], 'submission.xml', { type: 'application/xml' }),
       ),
-    ).resolves.toBe(
-      'Preview: Package TEST23-652-7D-2, Region RSC, Species/end use HE/PL, Client 1074, 2 scale rows.',
-    )
+    ).resolves.toBe('Preview: LEXIS XML structure detected, 2 scale rows.')
   })
 
-  it('omits preview values that contain nested markup', async () => {
+  it('does not echo XML element text into the preview', async () => {
     const xmlWithMarkupInPreviewField = XML_PREVIEW_FIXTURE.replace(
       '<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>',
       '<lexis:boomNumber><script>alert(1)</script></lexis:boomNumber>',
@@ -47,10 +45,10 @@ describe('lexisXmlPreview', () => {
       buildLexisXmlPreviewMessage(
         new File([xmlWithMarkupInPreviewField], 'submission.xml', { type: 'application/xml' }),
       ),
-    ).resolves.toBe('Preview: Region RSC, Species/end use HE/PL, Client 1074, 2 scale rows.')
+    ).resolves.toBe('Preview: LEXIS XML structure detected, 2 scale rows.')
   })
 
-  it('omits preview values that contain escaped markup text', async () => {
+  it('does not echo escaped markup text into the preview', async () => {
     const xmlWithEscapedMarkupInPreviewField = XML_PREVIEW_FIXTURE.replace(
       '<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>',
       '<lexis:boomNumber>&lt;script&gt;alert(1)&lt;/script&gt;</lexis:boomNumber>',
@@ -62,7 +60,7 @@ describe('lexisXmlPreview', () => {
           type: 'application/xml',
         }),
       ),
-    ).resolves.toBe('Preview: Region RSC, Species/end use HE/PL, Client 1074, 2 scale rows.')
+    ).resolves.toBe('Preview: LEXIS XML structure detected, 2 scale rows.')
   })
 
   it('describes ZIP uploads without reading archive content client-side', async () => {

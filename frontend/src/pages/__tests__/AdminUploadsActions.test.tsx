@@ -424,7 +424,7 @@ describe('Admin upload workflow smoke', () => {
     ).toBeGreaterThan(0)
   })
 
-  it('previews useful fields from queued LEXIS XML files before submit', async () => {
+  it('previews safe structure from queued LEXIS XML files before submit', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
     } as any)
@@ -435,15 +435,11 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
 
     expect(
-      (
-        await screen.findAllByText(
-          'Preview: Package TEST23-652-7D-2, Region RSC, Species/end use HE/PL, Client 1074, 2 scale rows.',
-        )
-      ).length,
+      (await screen.findAllByText('Preview: LEXIS XML structure detected, 2 scale rows.')).length,
     ).toBeGreaterThan(0)
   })
 
-  it('omits XML preview fields that contain nested markup', async () => {
+  it('does not echo XML preview fields that contain nested markup', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
     } as any)
@@ -459,7 +455,9 @@ describe('Admin upload workflow smoke', () => {
     })
     await userEvent.upload(screen.getByLabelText('LEXIS XML or ZIP File'), file)
 
-    expect((await screen.findAllByText(/Preview: Region RSC/)).length).toBeGreaterThan(0)
+    expect(
+      (await screen.findAllByText('Preview: LEXIS XML structure detected, 2 scale rows.')).length,
+    ).toBeGreaterThan(0)
     expect(screen.queryByText(/Package alert/)).not.toBeInTheDocument()
     expect(screen.queryByText(/alert\(1\)/)).not.toBeInTheDocument()
   })
