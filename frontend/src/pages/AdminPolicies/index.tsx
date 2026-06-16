@@ -19,6 +19,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import {
   firstValidationError,
   getVisibleFieldError,
+  isoDateFieldError,
   numericFieldError,
   requiredFieldError,
   type FieldErrors,
@@ -74,13 +75,21 @@ const AdminPoliciesPage: FC = () => {
   const filPolicyCount = useMemo(() => filPolicies.length, [filPolicies.length])
   const fieldErrors = useMemo<FieldErrors<PolicyField>>(
     () => ({
-      feeEffectiveDate: requiredFieldError(feeEffectiveDate, 'Policy effective date') ?? undefined,
+      feeEffectiveDate:
+        firstValidationError(
+          () => requiredFieldError(feeEffectiveDate, 'Policy effective date'),
+          () => isoDateFieldError(feeEffectiveDate),
+        ) ?? undefined,
       feeOrgUnitCode: requiredFieldError(feeOrgUnitCode, 'Region code') ?? undefined,
       feePolicyPercentage: firstValidationError(
         () => requiredFieldError(feePolicyPercentage, 'Fee increase percentage'),
         () => numericFieldError(feePolicyPercentage, 'Fee policy percentage'),
       ),
-      filEffectiveDate: requiredFieldError(filEffectiveDate, 'Policy effective date') ?? undefined,
+      filEffectiveDate:
+        firstValidationError(
+          () => requiredFieldError(filEffectiveDate, 'Policy effective date'),
+          () => isoDateFieldError(filEffectiveDate),
+        ) ?? undefined,
       filPolicyPercentage: firstValidationError(
         () => requiredFieldError(filPolicyPercentage, 'FIL percentage'),
         () => numericFieldError(filPolicyPercentage, 'FIL policy percentage'),

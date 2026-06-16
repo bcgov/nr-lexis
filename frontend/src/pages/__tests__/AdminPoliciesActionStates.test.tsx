@@ -182,4 +182,26 @@ describe('Admin policy action states', () => {
     expect(screen.getByText('Fee increase percentage is required.')).toBeInTheDocument()
     expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
   })
+
+  it('blocks typed policy dates that are not valid ISO dates', async () => {
+    renderPage()
+
+    await screen.findByText('Fee Policy Administration')
+
+    const policyDateInputs = screen.getAllByLabelText('Policy Effective Date')
+    fireEvent.change(policyDateInputs[0], { target: { value: '2026-99-99' } })
+    await userEvent.type(screen.getByLabelText('Region Code'), '11')
+    await userEvent.type(screen.getByLabelText('Fee Increase Percentage'), '4.2')
+    await userEvent.click(screen.getByRole('button', { name: 'Add Fee Policy' }))
+
+    expect(await screen.findByText('Date must be YYYY-MM-DD.')).toBeInTheDocument()
+    expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
+
+    fireEvent.change(policyDateInputs[1], { target: { value: 'not-a-date' } })
+    await userEvent.type(screen.getByLabelText('FIL Percentage'), '2.5')
+    await userEvent.click(screen.getByRole('button', { name: 'Add FIL Policy' }))
+
+    expect(await screen.findAllByText('Date must be YYYY-MM-DD.')).toHaveLength(2)
+    expect(mockedUpsertFilPolicy).not.toHaveBeenCalled()
+  })
 })
