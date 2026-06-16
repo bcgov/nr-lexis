@@ -341,7 +341,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
         result.status(),
         reason,
         exemptionType,
-        blankToNull(result.exemptionNumber()),
+        trimToNull(result.exemptionNumber()),
         detail.map(LexisApplicationDetailDto::receivedDate).orElse(null),
         result.listingDate(),
         packageNumbers);
@@ -444,10 +444,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
       return normalized;
     }
     return fallback;
-  }
-
-  private String blankToNull(String value) {
-    return trimToNull(value);
   }
 
   private List<PermitSearchResultDto> filterPermitResultsForClient(
