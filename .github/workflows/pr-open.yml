@@ -11,6 +11,10 @@ concurrency:
 permissions: {}
 
 jobs:
+  # Cognito clients do not accept wildcard callback URLs. The client is
+  # configured once with a fixed pool of 50 redirect hosts, and each PR maps
+  # into that pool with `slot = PR # mod 50`. OpenShift object names and
+  # labels still use the full PR number so cleanup remains unambiguous.
   vars:
     name: Variables
     runs-on: ubuntu-24.04

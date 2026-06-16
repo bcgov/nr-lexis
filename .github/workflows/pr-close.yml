@@ -5,6 +5,8 @@ on:
     types: [closed]
 
 concurrency:
+  # PR open and close use the same group, allowing only one to mutate a
+  # preview environment at a time.
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
@@ -23,7 +25,13 @@ jobs:
       environment: dev
       cleanup: label
       packages: backend frontend
-      # Use explicit backend/frontend labels so PR cleanup removes both stacks.
+      # The helper's default cleanup label is `app=<repo>-<PR#>`, but the
+      # templates label backend/frontend resources independently:
+      # `app=nr-lexis-backend-<PR#>` and `app=nr-lexis-frontend-<PR#>`.
+      # These labels are also the selectors for each component, so they cannot
+      # be flattened into one PR-wide label without mixing backend/frontend pods.
+      # `cleanup_name` is the helper's escape hatch: a space-separated list of
+      # app label values to delete.
       cleanup_name: ${{ github.event.repository.name }}-backend-${{ github.event.number }} ${{ github.event.repository.name }}-frontend-${{ github.event.number }}
 
   cleanup-preview-resources:
@@ -45,6 +53,9 @@ jobs:
 
             APP="${{ github.event.repository.name }}"
             PR="${{ github.event.number }}"
+            # The quickstart helper deletes the common `all,cm,pvc,secret`
+            # set. This explicit sweep also covers routes, HPAs, replica sets,
+            # pods, and per-PR NetworkPolicies.
             RESOURCE_TYPES="deploy,rs,pod,svc,route,hpa,networkpolicy,secret,pvc,cm"
 
             echo "Deleting preview resources for PR ${PR}"
