@@ -27,4 +27,14 @@ class TextUtilsTest {
   void firstNonBlankShouldReturnFallbackWhenPrimaryIsBlank() {
     assertThat(TextUtils.firstNonBlank("  ", "fallback")).isEqualTo("fallback");
   }
+
+  @Test
+  void defaultSystemUserShouldReturnTrimmedUserId() {
+    assertThat(TextUtils.defaultSystemUser("  user-id  ")).isEqualTo("user-id");
+  }
+
+  @Test
+  void defaultSystemUserShouldReturnSystemWhenUserIdIsBlank() {
+    assertThat(TextUtils.defaultSystemUser("  ")).isEqualTo("system");
+  }
 }

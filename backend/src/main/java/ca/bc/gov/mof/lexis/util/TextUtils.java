@@ -16,4 +16,9 @@ public final class TextUtils {
     String normalized = trimToNull(value);
     return normalized == null ? fallback : normalized;
   }
+
+  public static String defaultSystemUser(String userId) {
+    String normalized = trimToNull(userId);
+    return normalized == null ? "system" : normalized;
+  }
 }

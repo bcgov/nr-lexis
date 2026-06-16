@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.review;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewPreviewResponseDto;
@@ -209,8 +210,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
   }
 
   private String defaultMutationUser(String userId) {
-    String normalized = trimToNull(userId);
-    return normalized == null ? "system" : normalized;
+    return defaultSystemUser(userId);
   }
 
 }

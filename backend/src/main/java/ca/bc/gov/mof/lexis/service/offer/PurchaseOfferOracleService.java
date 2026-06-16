@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.offer;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstNonBlank;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -452,8 +453,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   }
 
   private String defaultMutationUser(String userId) {
-    String normalized = trimToNull(userId);
-    return normalized == null ? "system" : normalized;
+    return defaultSystemUser(userId);
   }
 
   private <T> T firstNonNull(T value, T fallback) {

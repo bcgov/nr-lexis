@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.application;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstNonBlank;
 
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
@@ -1740,7 +1741,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private String defaultMutationUser(String userId) {
-    String normalized = trimToNull(userId);
-    return normalized == null ? "system" : normalized;
+    return defaultSystemUser(userId);
   }
 }
