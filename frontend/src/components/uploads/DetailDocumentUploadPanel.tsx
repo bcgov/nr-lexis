@@ -350,8 +350,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
     if (successCount > 0) {
       try {
         await onUploadComplete?.()
-      } catch (error) {
-        console.error(error)
+      } catch {
         setErrorMessage('Documents uploaded, but the document list could not refresh.')
       }
       setSuccessMessage(
