@@ -39,9 +39,7 @@ describe('search-query-utils', () => {
   })
 
   it('maps selected ids back to option objects with fallback labels', () => {
-    expect(
-      mapSelectedOptionsById(['RSI', 'RSC'], [{ id: 'RSI', text: 'South Island' }]),
-    ).toEqual([
+    expect(mapSelectedOptionsById(['RSI', 'RSC'], [{ id: 'RSI', text: 'South Island' }])).toEqual([
       { id: 'RSI', text: 'South Island' },
       { id: 'RSC', text: 'RSC' },
     ])
