@@ -1497,6 +1497,19 @@ body {
   overflow-x: auto;
 }
 
+.application-items-table-scroll {
+  margin-bottom: 0.75rem;
+  overflow-x: auto;
+}
+
+.application-items-table-scroll .cds--data-table {
+  min-inline-size: 100%;
+}
+
+.application-items-table-scroll--scales .cds--data-table {
+  min-inline-size: 44rem;
+}
+
 .provincial-application-detail .application-items-panel .detail-tile-title {
   margin-bottom: 0.5rem;
 }

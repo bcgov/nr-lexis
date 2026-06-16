@@ -1150,7 +1150,9 @@ describe('Provincial Application Detail Document Actions', () => {
       createPackageControls.getByRole('combobox', { name: 'Create Package Species' }),
       'CE - Cedar',
     )
-    await userEvent.click(createPackageControls.getByRole('button', { name: 'Add Create Species' }))
+    await userEvent.click(
+      createPackageControls.getByRole('button', { name: 'Add species to new package' }),
+    )
     await waitFor(() => {
       expect(createPackageControls.getByText('CE - Cedar')).toBeInTheDocument()
     })

@@ -1318,43 +1318,45 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                   Add Species
                 </Button>
               </div>
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Species</TableHeader>
-                    <TableHeader>End Use</TableHeader>
-                    <TableHeader>Action</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {selectedSpeciesOptions.map((row) => {
-                    const existing = packageSpeciesRows.find((item) => item.species === row.code)
-                    return (
-                      <TableRow key={row.code}>
-                        <TableCell>{asOptionText(row)}</TableCell>
-                        <TableCell>
-                          {existing?.endUseDescription || packageForm.endUseCode || '-'}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            kind="ghost"
-                            size="sm"
-                            disabled={!canSaveSelectedPackage}
-                            onClick={() => onRemoveSpecies(row.code)}
-                          >
-                            Remove
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                  {speciesDraft.length === 0 && (
+              <div className="application-items-table-scroll">
+                <Table useZebraStyles>
+                  <TableHead>
                     <TableRow>
-                      <TableCell colSpan={3}>No species assigned to this package.</TableCell>
+                      <TableHeader>Species</TableHeader>
+                      <TableHeader>End Use</TableHeader>
+                      <TableHeader>Action</TableHeader>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHead>
+                  <TableBody>
+                    {selectedSpeciesOptions.map((row) => {
+                      const existing = packageSpeciesRows.find((item) => item.species === row.code)
+                      return (
+                        <TableRow key={row.code}>
+                          <TableCell>{asOptionText(row)}</TableCell>
+                          <TableCell>
+                            {existing?.endUseDescription || packageForm.endUseCode || '-'}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              kind="ghost"
+                              size="sm"
+                              disabled={!canSaveSelectedPackage}
+                              onClick={() => onRemoveSpecies(row.code)}
+                            >
+                              Remove
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                    {speciesDraft.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={3}>No species assigned to this package.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </div>
         </section>
@@ -1478,42 +1480,45 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             <Button
               kind="secondary"
               size="sm"
+              aria-label="Add species to new package"
               disabled={!canManageItems || !createSpeciesToAdd}
               onClick={onAddCreateSpecies}
             >
-              Add Create Species
+              Add Species
             </Button>
           </div>
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Species</TableHeader>
-                <TableHeader>Action</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {selectedCreateSpeciesOptions.map((row) => (
-                <TableRow key={row.code}>
-                  <TableCell>{asOptionText(row)}</TableCell>
-                  <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      disabled={!canManageItems}
-                      onClick={() => onRemoveCreateSpecies(row.code)}
-                    >
-                      Remove
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {createSpeciesDraft.length === 0 && (
+          <div className="application-items-table-scroll">
+            <Table useZebraStyles>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={2}>No species selected for the new package.</TableCell>
+                  <TableHeader>Species</TableHeader>
+                  <TableHeader>Action</TableHeader>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {selectedCreateSpeciesOptions.map((row) => (
+                  <TableRow key={row.code}>
+                    <TableCell>{asOptionText(row)}</TableCell>
+                    <TableCell>
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        disabled={!canManageItems}
+                        onClick={() => onRemoveCreateSpecies(row.code)}
+                      >
+                        Remove
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {createSpeciesDraft.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={2}>No species selected for the new package.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
           <div className="legacy-search-actions">
             <Button
               kind="secondary"
@@ -1606,46 +1611,48 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             </Button>
           </div>
           {scaleLookupResult && <p className="detail-field-value">{scaleLookupResult}</p>}
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Timber Mark</TableHeader>
-                <TableHeader>Scale Type</TableHeader>
-                <TableHeader>Species</TableHeader>
-                <TableHeader>Grade</TableHeader>
-                <TableHeader>Pieces</TableHeader>
-                <TableHeader>Volume</TableHeader>
-                <TableHeader>Action</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {scales.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell>{row.timberMark}</TableCell>
-                  <TableCell>{row.cascadeSplitCode || '-'}</TableCell>
-                  <TableCell>{row.species}</TableCell>
-                  <TableCell>{row.grade}</TableCell>
-                  <TableCell>{row.pieces.toLocaleString()}</TableCell>
-                  <TableCell>{row.volume}</TableCell>
-                  <TableCell>
-                    <Button
-                      kind="danger--ghost"
-                      size="sm"
-                      disabled={!canManageItems || deletingScaleId === row.id || row.permitted}
-                      onClick={() => void onDeleteScale(row.id)}
-                    >
-                      {deletingScaleId === row.id ? 'Deleting...' : 'Delete'}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {scales.length === 0 && (
+          <div className="application-items-table-scroll application-items-table-scroll--scales">
+            <Table useZebraStyles>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={7}>No scales assigned to this package.</TableCell>
+                  <TableHeader>Timber Mark</TableHeader>
+                  <TableHeader>Scale Type</TableHeader>
+                  <TableHeader>Species</TableHeader>
+                  <TableHeader>Grade</TableHeader>
+                  <TableHeader>Pieces</TableHeader>
+                  <TableHeader>Volume</TableHeader>
+                  <TableHeader>Action</TableHeader>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {scales.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>{row.timberMark}</TableCell>
+                    <TableCell>{row.cascadeSplitCode || '-'}</TableCell>
+                    <TableCell>{row.species}</TableCell>
+                    <TableCell>{row.grade}</TableCell>
+                    <TableCell>{row.pieces.toLocaleString()}</TableCell>
+                    <TableCell>{row.volume}</TableCell>
+                    <TableCell>
+                      <Button
+                        kind="danger--ghost"
+                        size="sm"
+                        disabled={!canManageItems || deletingScaleId === row.id || row.permitted}
+                        onClick={() => void onDeleteScale(row.id)}
+                      >
+                        {deletingScaleId === row.id ? 'Deleting...' : 'Delete'}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {scales.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7}>No scales assigned to this package.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </section>
       </div>
     </Tile>
