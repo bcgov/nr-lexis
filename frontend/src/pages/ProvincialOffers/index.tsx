@@ -41,7 +41,10 @@ import {
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
-import { fetchProvincialOfferOptions } from '@/service/search-options-service'
+import {
+  fetchProvincialApplicationOptions,
+  fetchProvincialOfferOptions,
+} from '@/service/search-options-service'
 
 type RegionOption = {
   id: string
@@ -89,6 +92,12 @@ const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialOfferSearchSortField[]
+const formatDate = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = `${(date.getMonth() + 1).toString().padStart(2, '0')}`
+  const day = `${date.getDate().toString().padStart(2, '0')}`
+  return `${year}-${month}-${day}`
+}
 
 const buildSearchParams = (
   filters: ProvincialOfferSearchFilters,
@@ -122,6 +131,8 @@ const ProvincialOffersPage: FC = () => {
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [defaultListingToDate, setDefaultListingToDate] = useState('')
+  const [isOptionsLoaded, setIsOptionsLoaded] = useState(false)
   const canCreateOffer = canPerform('createOffer')
   const withCurrentSearch = useCallback(
     (path: string): string => {
@@ -268,17 +279,43 @@ const ProvincialOffersPage: FC = () => {
 
   useEffect(() => {
     const loadOptions = async () => {
-      const options = await fetchProvincialOfferOptions()
+      const [offerOptions, applicationOptions] = await Promise.all([
+        fetchProvincialOfferOptions(),
+        fetchProvincialApplicationOptions(),
+      ])
       setRegionOptions(
-        options.regions.map((option) => ({
+        offerOptions.regions.map((option) => ({
           id: option.value,
           text: `${option.label} (${option.value})`,
         })),
       )
+      setDefaultListingToDate(
+        applicationOptions.currentSchedules[0]?.value ?? formatDate(new Date()),
+      )
+      setIsOptionsLoaded(true)
     }
 
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    if (!isOptionsLoaded) {
+      return
+    }
+    const hasSearchQuery = searchParams.toString().length > 0
+    if (!hasSearchQuery) {
+      setSearchParams(
+        buildSearchParams(
+          { ...INITIAL_FILTERS, listingToDate: defaultListingToDate },
+          DEFAULT_SORT_FIELD,
+          DEFAULT_SORT_DIRECTION,
+          DEFAULT_PAGE,
+          DEFAULT_PAGE_SIZE,
+        ),
+        { replace: true },
+      )
+    }
+  }, [defaultListingToDate, isOptionsLoaded, searchParams, setSearchParams])
 
   const onSearch = () => {
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))

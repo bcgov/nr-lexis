@@ -136,7 +136,7 @@ const buildSearchParams = (
 }
 
 const ProvincialExemptionPage: FC = () => {
-  const { capabilities, canPerform } = useAuth()
+  const { capabilities, canPerform, isLoading } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
@@ -287,6 +287,29 @@ const ProvincialExemptionPage: FC = () => {
       sortDirection: debouncedUrlState.sortDirection,
     })
   }, [debouncedUrlState, runSearch])
+
+  useEffect(() => {
+    const isExemptionApprover =
+      capabilities.roles.includes('EXEMPTION_APPROVER') ||
+      capabilities.roles.includes('LEXIS_EXEMPTION_APPROVER')
+    const hasSearchQuery = searchParams.toString().length > 0
+    if (!isLoading && !hasSearchQuery && isExemptionApprover) {
+      setSearchParams(
+        buildSearchParams(
+          {
+            ...INITIAL_FILTERS,
+            exemptionStatusCode: 'NEW',
+            exemptionTypeCode: 'M',
+          },
+          DEFAULT_SORT_FIELD,
+          DEFAULT_SORT_DIRECTION,
+          DEFAULT_PAGE,
+          DEFAULT_PAGE_SIZE,
+        ),
+        { replace: true },
+      )
+    }
+  }, [capabilities.roles, isLoading, searchParams, setSearchParams])
 
   useEffect(() => {
     const loadOptions = async () => {

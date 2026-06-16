@@ -123,7 +123,7 @@ type ExemptionCreatePrefillState = {
 
 const FederalPage: FC = () => {
   const navigate = useNavigate()
-  const { capabilities, canPerform } = useAuth()
+  const { capabilities, canPerform, isLoading } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
   const [results, setResults] = useState<FederalApplicationSearchResponse>(EMPTY_RESULTS)
@@ -271,6 +271,22 @@ const FederalPage: FC = () => {
       pageSize: debouncedUrlState.pageSize,
     })
   }, [debouncedUrlState, runSearch])
+
+  useEffect(() => {
+    const hasSearchQuery = searchParams.toString().length > 0
+    if (!isLoading && !hasSearchQuery) {
+      setSearchParams(
+        buildSearchParams(
+          { ...INITIAL_FILTERS, applicationStatus: 'APP' },
+          DEFAULT_SORT_FIELD,
+          DEFAULT_SORT_DIRECTION,
+          DEFAULT_PAGE,
+          DEFAULT_PAGE_SIZE,
+        ),
+        { replace: true },
+      )
+    }
+  }, [isLoading, searchParams, setSearchParams])
 
   useEffect(() => {
     const loadOptions = async () => {
