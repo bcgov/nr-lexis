@@ -17,6 +17,19 @@ public final class TextUtils {
     return normalized == null ? fallback : normalized;
   }
 
+  public static String firstTrimmedNonBlank(String... values) {
+    if (values == null) {
+      return null;
+    }
+    for (String value : values) {
+      String normalized = trimToNull(value);
+      if (normalized != null) {
+        return normalized;
+      }
+    }
+    return null;
+  }
+
   public static String defaultSystemUser(String userId) {
     String normalized = trimToNull(userId);
     return normalized == null ? "system" : normalized;

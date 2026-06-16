@@ -29,6 +29,22 @@ class TextUtilsTest {
   }
 
   @Test
+  void firstTrimmedNonBlankShouldReturnFirstTrimmedValue() {
+    assertThat(TextUtils.firstTrimmedNonBlank(null, "  ", "  value  ", "fallback"))
+        .isEqualTo("value");
+  }
+
+  @Test
+  void firstTrimmedNonBlankShouldReturnNullWhenValuesAreBlank() {
+    assertThat(TextUtils.firstTrimmedNonBlank(null, "", "  ")).isNull();
+  }
+
+  @Test
+  void firstTrimmedNonBlankShouldReturnNullForNullArray() {
+    assertThat(TextUtils.firstTrimmedNonBlank((String[]) null)).isNull();
+  }
+
+  @Test
   void defaultSystemUserShouldReturnTrimmedUserId() {
     assertThat(TextUtils.defaultSystemUser("  user-id  ")).isEqualTo("user-id");
   }

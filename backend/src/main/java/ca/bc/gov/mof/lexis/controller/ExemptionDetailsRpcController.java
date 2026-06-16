@@ -5,6 +5,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
+import static ca.bc.gov.mof.lexis.util.TextUtils.firstTrimmedNonBlank;
 
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
@@ -458,7 +459,7 @@ public class ExemptionDetailsRpcController {
 
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult result =
         service.sendExemptionApprovalEmail(
-            firstNonBlank(exemptionNumber, legacyExemptionNumber), toEmailAddress);
+            firstTrimmedNonBlank(exemptionNumber, legacyExemptionNumber), toEmailAddress);
     return ResponseEntity.ok(new ExemptionApprovalEmailResponseDto(result.success(), result.message()));
   }
 
@@ -662,18 +663,6 @@ public class ExemptionDetailsRpcController {
     }
     if (hasParameter(parameters, "feeRate")) {
       return Boolean.FALSE;
-    }
-    return null;
-  }
-
-  private String firstNonBlank(String... values) {
-    if (values == null) {
-      return null;
-    }
-    for (String value : values) {
-      if (value != null && !value.isBlank()) {
-        return value.trim();
-      }
     }
     return null;
   }

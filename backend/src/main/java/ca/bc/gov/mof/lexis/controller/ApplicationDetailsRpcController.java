@@ -6,6 +6,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseNonNegativeLong;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
+import static ca.bc.gov.mof.lexis.util.TextUtils.firstTrimmedNonBlank;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
@@ -585,7 +586,9 @@ public class ApplicationDetailsRpcController {
     }
 
     return ResponseEntity.ok(
-        service.getGradeCodes(firstNonBlank(orgUnitNumber, region), firstNonBlank(speciesCode, species))
+        service.getGradeCodes(
+            firstTrimmedNonBlank(orgUnitNumber, region),
+            firstTrimmedNonBlank(speciesCode, species))
             .stream()
             .map(this::toCodeResponse)
             .toList());
@@ -612,7 +615,8 @@ public class ApplicationDetailsRpcController {
     }
 
     return ResponseEntity.ok(
-        service.getEndUsesForSpeciesRegion(firstNonBlank(region, orgUnitNumber), parseSpeciesJson(speciesJson))
+        service.getEndUsesForSpeciesRegion(
+            firstTrimmedNonBlank(region, orgUnitNumber), parseSpeciesJson(speciesJson))
             .stream()
             .map(this::toCodeResponse)
             .toList());
@@ -644,8 +648,8 @@ public class ApplicationDetailsRpcController {
     return ResponseEntity.ok(
         service
             .getRemainingSpecies(
-                firstNonBlank(region, orgUnitNumber),
-                firstNonBlank(productType, productTypeCode),
+                firstTrimmedNonBlank(region, orgUnitNumber),
+                firstTrimmedNonBlank(productType, productTypeCode),
                 parseSpeciesJson(speciesJson))
             .stream()
             .map(item -> new ApplicationRemainingSpeciesResponseDto(item.code()))
@@ -839,7 +843,8 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    return ResponseEntity.ok(toScaleDetailResponse(service.getScaleById(firstNonBlank(scaleDetailId, scaleId))));
+    return ResponseEntity.ok(
+        toScaleDetailResponse(service.getScaleById(firstTrimmedNonBlank(scaleDetailId, scaleId))));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SCALE_BY_ID)
@@ -1297,11 +1302,6 @@ public class ApplicationDetailsRpcController {
 
   private boolean equalsIgnoreCase(String left, String right) {
     return left != null && right != null && left.equalsIgnoreCase(right);
-  }
-
-  private String firstNonBlank(String first, String second) {
-    String normalizedFirst = trimToNull(first);
-    return normalizedFirst == null ? trimToNull(second) : normalizedFirst;
   }
 
   private List<String> parseSpeciesJson(String speciesJson) {
