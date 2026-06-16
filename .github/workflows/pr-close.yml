@@ -24,11 +24,4 @@ jobs:
     with:
       cleanup: label
       packages: backend frontend
-      # The helper's default cleanup label is `app=<repo-name>-<target>`
-      # (i.e. `app=nr-lexis-<PR#>`), but every object in our templates is
-      # labelled `app=nr-lexis-{backend,frontend}-<PR#>`. Those labels are
-      # also the selectors for each component, so they cannot be flattened
-      # into one PR-wide value without mixing backend and frontend pods.
-      # `cleanup_name` is the helper's escape hatch: a space-separated list
-      # of label values it iterates over.
       cleanup_name: nr-lexis-backend-${{ github.event.number }} nr-lexis-frontend-${{ github.event.number }}
