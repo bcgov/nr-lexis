@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.report;
 
+import static ca.bc.gov.mof.lexis.service.report.ReportParameterUtils.first;
+
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -298,15 +300,6 @@ public class LexisJasperReportParameterProvider {
     }
     String normalized = actionMapping.trim();
     return normalized.isEmpty() ? null : normalized.toLowerCase(Locale.ROOT);
-  }
-
-  private String first(Map<String, String> parameters, String... keys) {
-    for (String key : keys) {
-      if (parameters.containsKey(key)) {
-        return parameters.get(key);
-      }
-    }
-    return null;
   }
 
   private String csvValue(Map<String, String> parameters, String... keys) {

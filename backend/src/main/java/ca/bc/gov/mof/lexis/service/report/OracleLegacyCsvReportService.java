@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.report;
 
+import static ca.bc.gov.mof.lexis.service.report.ReportParameterUtils.first;
+
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -610,15 +612,6 @@ public class OracleLegacyCsvReportService {
       return Map.of();
     }
     return request.parameters();
-  }
-
-  private String first(Map<String, String> parameters, String... keys) {
-    for (String key : keys) {
-      if (parameters.containsKey(key)) {
-        return parameters.get(key);
-      }
-    }
-    return null;
   }
 
   private String csvValue(Map<String, String> parameters, String... keys) {
