@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.offer;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
@@ -306,10 +307,6 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     cs.setString(index++, auditUserOrDefault(record.updateUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     setDoubleOrNull(cs, index, record.offerVolume());
-  }
-
-  private double coalesce(Double value, double fallback) {
-    return value == null ? fallback : value;
   }
 
   public record PurchaseOfferInsertRecord(

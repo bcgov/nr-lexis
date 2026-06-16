@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
@@ -550,14 +551,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
 
   private boolean equalsNullable(String left, String right) {
     return left == null ? right == null : left.equals(right);
-  }
-
-  private double coalesce(Double value, double fallback) {
-    return value == null ? fallback : value;
-  }
-
-  private long coalesce(Long value, long fallback) {
-    return value == null ? fallback : value;
   }
 
   private record ApplicationSnapshot(

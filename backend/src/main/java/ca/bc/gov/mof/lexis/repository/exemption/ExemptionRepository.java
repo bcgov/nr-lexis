@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.exemption;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
@@ -218,7 +219,4 @@ public class ExemptionRepository extends OracleRepositorySupport {
             List.of()));
   }
 
-  private double coalesce(Double value, double fallback) {
-    return value == null ? fallback : value;
-  }
 }

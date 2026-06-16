@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
@@ -167,11 +168,4 @@ public class PermitRepository extends OracleRepositorySupport {
                 firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
   }
 
-  private double coalesce(Double value, double fallback) {
-    return value == null ? fallback : value;
-  }
-
-  private long coalesce(Long value, long fallback) {
-    return value == null ? fallback : value;
-  }
 }
