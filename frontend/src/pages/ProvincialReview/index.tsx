@@ -55,6 +55,11 @@ import {
   updateApplicationReviewStatus,
 } from '@/service/application-review-search-service'
 import { fetchApplicationReviewOptions, type SearchOption } from '@/service/search-options-service'
+import {
+  isValidEmail,
+  normalizeTrimmedText as normalizeEmail,
+  normalizeUpperText as normalizeReviewStatus,
+} from '@/utils/text'
 
 type RegionOption = {
   id: string
@@ -87,10 +92,6 @@ const EMPTY_RESULTS: ApplicationReviewSearchResponse = {
     totalPages: 1,
   },
 }
-
-const normalizeReviewStatus = (status: string): string => status.trim().toUpperCase()
-const normalizeEmail = (email: string): string => email.trim()
-const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
 
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
 

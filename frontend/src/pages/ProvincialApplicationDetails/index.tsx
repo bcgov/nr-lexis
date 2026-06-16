@@ -90,11 +90,13 @@ import {
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
 import { triggerBrowserDownload } from '@/utils/download'
+import {
+  isValidEmail,
+  normalizeTrimmedText as normalizeEmail,
+  normalizeUpperText as normalizeReviewStatus,
+} from '@/utils/text'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
-const normalizeReviewStatus = (status: string): string => status.trim().toUpperCase()
-const normalizeEmail = (email: string): string => email.trim()
-const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
 const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['REJ', 'WDN'])
 const APPLICANT_TYPE_OPTIONS: SearchOption[] = [
