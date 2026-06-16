@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
+
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import java.math.BigDecimal;
@@ -189,7 +191,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       return new CreateExemptionResult(false, null, null, false, errors, warnings);
     }
 
-    String entryUserId = defaultEntryUser(userId);
+    String entryUserId = defaultSystemUser(userId);
     Optional<ExemptionDetailsRpcRepository.ExemptionInsertRow> inserted =
         repository.insertExemption(toInsertRecord(normalized, entryUserId));
     String exemptionNumber =
@@ -631,11 +633,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private String defaultUpdateUser(String userId, String fallback) {
     String normalized = blankToNull(userId);
     return normalized == null ? blankToNull(fallback) : normalized;
-  }
-
-  private String defaultEntryUser(String userId) {
-    String normalized = blankToNull(userId);
-    return normalized == null ? "system" : normalized;
   }
 
   private String displayApplicationNumber(Long applicationNumber) {

@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.upload;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
@@ -48,7 +49,7 @@ public class OracleLexisUploadService implements LexisUploadService {
             defaultDescription(description),
             ATTACHMENT_TYPE_APPLICATION,
             fileTypeCode,
-            defaultEntryUser(entryUserId),
+            defaultSystemUser(entryUserId),
             fileBytes(file));
 
     return persisted
@@ -84,7 +85,7 @@ public class OracleLexisUploadService implements LexisUploadService {
             defaultDescription(description),
             ATTACHMENT_TYPE_PERMIT,
             fileTypeCode,
-            defaultEntryUser(entryUserId),
+            defaultSystemUser(entryUserId),
             fileBytes(file));
 
     return persisted
@@ -121,7 +122,7 @@ public class OracleLexisUploadService implements LexisUploadService {
             defaultDescription(description),
             ATTACHMENT_TYPE_EXEMPTION,
             fileTypeCode,
-            defaultEntryUser(entryUserId),
+            defaultSystemUser(entryUserId),
             fileBytes(file));
 
     return persisted
@@ -181,7 +182,7 @@ public class OracleLexisUploadService implements LexisUploadService {
             exportValue,
             currencyConversionRate,
             feeInLieu,
-            defaultEntryUser(entryUserId),
+            defaultSystemUser(entryUserId),
             fileBytes(file));
 
     return persisted
@@ -253,8 +254,4 @@ public class OracleLexisUploadService implements LexisUploadService {
     return normalizedDescription == null ? "" : normalizedDescription;
   }
 
-  private String defaultEntryUser(String entryUserId) {
-    String normalizedEntryUserId = trimToNull(entryUserId);
-    return normalizedEntryUserId == null ? "system" : normalizedEntryUserId;
-  }
 }
