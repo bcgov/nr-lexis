@@ -7,6 +7,7 @@ import {
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
+import { joinNonBlankText } from '@/utils/text'
 import type {
   ProvincialExemptionSearchRequest,
   ProvincialExemptionSearchResponse,
@@ -130,15 +131,16 @@ export const countProvincialExemptions = async (
 const exemptionNumberOptionLabel = (
   item: ProvincialExemptionSearchResponse['content'][number],
 ): string =>
-  [
-    item.exemptionNumber,
-    item.status,
-    item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
-    item.region ? `Region ${item.region}` : '',
-    item.listingDate,
-  ]
-    .filter((value) => value.trim().length > 0)
-    .join(' - ')
+  joinNonBlankText(
+    [
+      item.exemptionNumber,
+      item.status,
+      item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
+      item.region ? `Region ${item.region}` : '',
+      item.listingDate,
+    ],
+    ' - ',
+  )
 
 export const searchProvincialExemptionNumberOptions = async (
   query: string,

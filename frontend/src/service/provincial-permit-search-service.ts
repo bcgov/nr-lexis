@@ -7,6 +7,7 @@ import {
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
+import { joinNonBlankText } from '@/utils/text'
 import type {
   ProvincialPermitSearchRequest,
   ProvincialPermitSearchResponse,
@@ -118,15 +119,16 @@ export const countProvincialPermits = async (
   )
 
 const permitNumberOptionLabel = (item: ProvincialPermitSearchResponse['content'][number]): string =>
-  [
-    item.permitNumber,
-    item.status,
-    item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
-    item.region ? `Region ${item.region}` : '',
-    item.issueDate,
-  ]
-    .filter((value) => value.trim().length > 0)
-    .join(' - ')
+  joinNonBlankText(
+    [
+      item.permitNumber,
+      item.status,
+      item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
+      item.region ? `Region ${item.region}` : '',
+      item.issueDate,
+    ],
+    ' - ',
+  )
 
 export const searchProvincialPermitNumberOptions = async (
   query: string,

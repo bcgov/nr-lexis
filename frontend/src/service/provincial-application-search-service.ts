@@ -7,6 +7,7 @@ import {
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
+import { joinNonBlankText } from '@/utils/text'
 import type {
   ProvincialApplicationSearchFilters,
   ProvincialApplicationSearchItem,
@@ -122,15 +123,16 @@ export const countProvincialApplications = async (
   )
 
 const applicationNumberOptionLabel = (item: ProvincialApplicationSearchItem): string =>
-  [
-    item.applicationNumber,
-    item.status,
-    item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
-    item.region ? `Region ${item.region}` : '',
-    item.listingDate,
-  ]
-    .filter((value) => value.trim().length > 0)
-    .join(' - ')
+  joinNonBlankText(
+    [
+      item.applicationNumber,
+      item.status,
+      item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
+      item.region ? `Region ${item.region}` : '',
+      item.listingDate,
+    ],
+    ' - ',
+  )
 
 export const searchProvincialApplicationNumberOptions = async (
   query: string,
