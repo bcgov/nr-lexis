@@ -40,4 +40,30 @@ class ValueUtilsTest {
   void coalesceLongShouldReturnFallbackWhenValueIsNull() {
     assertThat(ValueUtils.coalesce((Long) null, 7L)).isEqualTo(7L);
   }
+
+  @Test
+  void parsePositiveLongShouldReturnPositiveLong() {
+    assertThat(ValueUtils.parsePositiveLong(" 12 ")).isEqualTo(12L);
+  }
+
+  @Test
+  void parsePositiveLongShouldReturnNullForBlankInvalidOrNonPositiveValues() {
+    assertThat(ValueUtils.parsePositiveLong(null)).isNull();
+    assertThat(ValueUtils.parsePositiveLong(" ")).isNull();
+    assertThat(ValueUtils.parsePositiveLong("abc")).isNull();
+    assertThat(ValueUtils.parsePositiveLong("0")).isNull();
+    assertThat(ValueUtils.parsePositiveLong("-1")).isNull();
+  }
+
+  @Test
+  void parseDoubleShouldReturnParsedDouble() {
+    assertThat(ValueUtils.parseDouble(" 12.5 ")).isEqualTo(12.5d);
+  }
+
+  @Test
+  void parseDoubleShouldReturnNullForBlankOrInvalidValues() {
+    assertThat(ValueUtils.parseDouble(null)).isNull();
+    assertThat(ValueUtils.parseDouble(" ")).isNull();
+    assertThat(ValueUtils.parseDouble("abc")).isNull();
+  }
 }

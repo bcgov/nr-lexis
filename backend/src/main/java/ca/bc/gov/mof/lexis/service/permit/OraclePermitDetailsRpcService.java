@@ -2,6 +2,8 @@ package ca.bc.gov.mof.lexis.service.permit;
 
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.parseDouble;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
@@ -1524,31 +1526,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return Long.parseLong(normalized);
     } catch (NumberFormatException ex) {
       return 0L;
-    }
-  }
-
-  private Long parsePositiveLong(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(normalized);
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
-  private Double parseDouble(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      return null;
-    }
-    try {
-      return Double.parseDouble(normalized);
-    } catch (NumberFormatException ex) {
-      return null;
     }
   }
 

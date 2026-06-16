@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.reserve;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong;
 
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitDetailDto;
@@ -143,7 +144,9 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
     Optional<ReservePermitInsertRow> inserted =
         repository.insertReservePermit(insertRow, normalizedUserId);
     Long insertedPermitNumber =
-        inserted.map(ReservePermitInsertRow::permitNumber).map(this::parsePositiveLong).orElse(null);
+        inserted.map(ReservePermitInsertRow::permitNumber)
+            .map(value -> parsePositiveLong(value))
+            .orElse(null);
     if (insertedPermitNumber == null) {
       return failure(List.of("Unable to save indigenous reserve permit."), submittedPermitNumber);
     }
@@ -175,19 +178,6 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
         input.shippingToDate(),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
-  }
-
-  private Long parsePositiveLong(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(normalized);
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
   }
 
   private LocalDate parseDate(String value) {
