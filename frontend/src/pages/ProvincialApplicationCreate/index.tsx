@@ -4,7 +4,6 @@ import {
   Button,
   Column,
   Grid,
-  InlineNotification,
   Tag,
   TextArea,
   TextInput,
@@ -12,6 +11,7 @@ import {
 } from '@carbon/react'
 import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
+import { AppNotification } from '@/components/AppNotification'
 import {
   calculateApplicationTermDays,
   nonNegativeWholeNumberFieldError,
@@ -30,7 +30,6 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
-  joinCreateSubmitMessages,
   maxNumericValueFieldError,
   maxLengthFieldError,
   mergeCreateDraftPayload,
@@ -196,6 +195,7 @@ const ProvincialApplicationCreatePage: FC = () => {
     listCreateDrafts(MODULE_KEY),
   )
   const [status, setStatus] = useState<PageStatus | null>(null)
+  const [showMissingRequiredOptions, setShowMissingRequiredOptions] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [touchedFields, setTouchedFields] = useState<
     TouchedFields<ProvincialApplicationCreateField>
@@ -781,7 +781,7 @@ const ProvincialApplicationCreatePage: FC = () => {
     () => Object.values(fieldErrors).some((error) => !!error),
     [fieldErrors],
   )
-  const missingRequiredOptions = productTypes.length === 0
+  const missingRequiredOptions = productTypes.length === 0 && showMissingRequiredOptions
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
@@ -885,7 +885,7 @@ const ProvincialApplicationCreatePage: FC = () => {
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
+    setStatus({ kind: 'success', title: 'Draft saved', message: `Draft ${saved.id} saved.` })
   }
 
   const onSubmit = async () => {
@@ -906,8 +906,6 @@ const ProvincialApplicationCreatePage: FC = () => {
         ...form,
         applicationTermDays: calculatedApplicationTermDays,
       })
-      const responseMessage = joinCreateSubmitMessages(result)
-
       if (result.success) {
         if (result.createdId) {
           navigate(`/provincial/application/${encodeURIComponent(result.createdId)}`)
@@ -916,7 +914,7 @@ const ProvincialApplicationCreatePage: FC = () => {
         setStatus({
           kind: 'success',
           title: 'Application Submitted',
-          message: responseMessage || 'Application submitted successfully.',
+          message: 'Application submitted successfully.',
         })
         return
       }
@@ -924,14 +922,16 @@ const ProvincialApplicationCreatePage: FC = () => {
       setStatus({
         kind: 'error',
         title: 'Submit Failed',
-        message: responseMessage || 'Unable to submit provincial application create request.',
+        message:
+          'Application submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } catch (error) {
       console.error(error)
       setStatus({
         kind: 'error',
         title: 'Submit Failed',
-        message: 'Unable to submit provincial application create request.',
+        message:
+          'Application submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } finally {
       setIsSubmitting(false)
@@ -942,7 +942,7 @@ const ProvincialApplicationCreatePage: FC = () => {
     setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
     setTouchedFields({})
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
+    setStatus({ kind: 'success', title: 'Draft loaded', message: `Draft ${record.id} loaded.` })
   }
 
   const onDeleteDraft = (draftId: string) => {
@@ -950,7 +950,7 @@ const ProvincialApplicationCreatePage: FC = () => {
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({
       kind: wasDeleted ? 'success' : 'error',
-      title: wasDeleted ? 'Draft Deleted' : 'Draft Delete Failed',
+      title: wasDeleted ? 'Draft deleted' : 'Draft delete failed',
       message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
     })
   }
@@ -958,29 +958,31 @@ const ProvincialApplicationCreatePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create Provincial Application</h1>
+        <h1>Create provincial application</h1>
       </Column>
 
       {missingRequiredOptions && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind="warning"
             title="Required options unavailable"
             subtitle="Product type values are unavailable. Submit remains disabled until a valid product type is available."
             lowContrast
-            hideCloseButton
+            autoDismissMs={undefined}
+            onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
           />
         </Column>
       )}
 
       {!!status && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind={status.kind}
             title={status.title}
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
+            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
           />
         </Column>
       )}
@@ -990,7 +992,7 @@ const ProvincialApplicationCreatePage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="ownerClientNumber"
-              labelText="Owner Client Number (required)"
+              labelText="Owner client number (required)"
               value={form.ownerClientNumber}
               invalid={!!fieldError('ownerClientNumber')}
               invalidText={fieldError('ownerClientNumber')}
@@ -1001,7 +1003,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <SearchableSelect
               id="ownerClientLocationCode"
-              labelText="Owner Client Location (required)"
+              labelText="Owner client location (required)"
               value={form.ownerClientLocationCode}
               disabled={!form.ownerClientNumber.trim() || isLoadingOwnerClientLocations}
               invalid={!!fieldError('ownerClientLocationCode')}
@@ -1022,7 +1024,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
               <SearchableSelect
                 id="ownerContactName"
-                labelText="Owner Name (required)"
+                labelText="Owner name (required)"
                 value={form.ownerContactName}
                 disabled={!form.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts}
                 invalid={!!fieldError('ownerContactName')}
@@ -1040,7 +1042,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             ) : (
               <TextInput
                 id="ownerContactName"
-                labelText="Owner Name (required)"
+                labelText="Owner name (required)"
                 value={form.ownerContactName}
                 disabled={!form.ownerClientLocationCode.trim()}
                 placeholder="Enter owner contact name"
@@ -1054,7 +1056,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             )}
             <SearchableSelect
               id="applicantTypeCode"
-              labelText="Applicant Type (required)"
+              labelText="Applicant type (required)"
               value={form.applicantTypeCode}
               placeholder="Select applicant type"
               options={[
@@ -1084,7 +1086,7 @@ const ProvincialApplicationCreatePage: FC = () => {
               <>
                 <TextInput
                   id="agentClientNumber"
-                  labelText="Agent Client Number (required)"
+                  labelText="Agent client number (required)"
                   value={form.agentClientNumber}
                   invalid={!!fieldError('agentClientNumber')}
                   invalidText={fieldError('agentClientNumber')}
@@ -1098,7 +1100,7 @@ const ProvincialApplicationCreatePage: FC = () => {
                 />
                 <SearchableSelect
                   id="agentClientLocationCode"
-                  labelText="Agent Client Location (required)"
+                  labelText="Agent client location (required)"
                   value={form.agentClientLocationCode}
                   disabled={!form.agentClientNumber.trim() || isLoadingAgentClientLocations}
                   invalid={!!fieldError('agentClientLocationCode')}
@@ -1121,7 +1123,7 @@ const ProvincialApplicationCreatePage: FC = () => {
                 {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
                   <SearchableSelect
                     id="agentContactName"
-                    labelText="Agent Contact Name (required)"
+                    labelText="Agent contact name (required)"
                     value={form.agentContactName}
                     disabled={!form.agentClientLocationCode.trim() || isLoadingAgentClientContacts}
                     invalid={!!fieldError('agentContactName')}
@@ -1141,7 +1143,7 @@ const ProvincialApplicationCreatePage: FC = () => {
                 ) : (
                   <TextInput
                     id="agentContactName"
-                    labelText="Agent Contact Name (required)"
+                    labelText="Agent contact name (required)"
                     value={form.agentContactName}
                     disabled={!form.agentClientLocationCode.trim()}
                     placeholder="Enter agent contact name"
@@ -1157,7 +1159,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             )}
             <SearchableSelect
               id="productTypeCode"
-              labelText="Product Type (required)"
+              labelText="Product type (required)"
               value={form.productTypeCode}
               invalid={!!fieldError('productTypeCode')}
               invalidText={fieldError('productTypeCode')}
@@ -1183,8 +1185,8 @@ const ProvincialApplicationCreatePage: FC = () => {
               id="ageClass"
               labelText={
                 productTypeRequiresGrowthType(form.productTypeCode)
-                  ? 'Age Class (required)'
-                  : 'Age Class'
+                  ? 'Age class (required)'
+                  : 'Age class'
               }
               value={form.ageClass}
               disabled={!productTypeRequiresGrowthType(form.productTypeCode)}
@@ -1197,7 +1199,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <SearchableSelect
               id="exemptionType"
-              labelText="Exemption Reason (required)"
+              labelText="Exemption reason (required)"
               value={form.exemptionType}
               invalid={!!fieldError('exemptionType')}
               invalidText={fieldError('exemptionType')}
@@ -1231,7 +1233,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="applicationDate"
-              labelText="Application Date (YYYY-MM-DD) (required)"
+              labelText="Application date (YYYY-MM-DD) (required)"
               value={form.applicationDate}
               invalid={!!fieldError('applicationDate')}
               invalidText={fieldError('applicationDate')}
@@ -1240,7 +1242,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <TextInput
               id="applicationTermDays"
-              labelText="Application Term Days (required)"
+              labelText="Application term days (required)"
               value={form.applicationTermDays}
               invalid={!!fieldError('applicationTermDays')}
               invalidText={fieldError('applicationTermDays')}
@@ -1251,7 +1253,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <TextInput
               id="applicationTermMonths"
-              labelText="Application Term Months"
+              labelText="Application term months"
               value={form.applicationTermMonths}
               invalid={!!fieldError('applicationTermMonths')}
               invalidText={fieldError('applicationTermMonths')}
@@ -1262,7 +1264,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <TextInput
               id="applicationTermYears"
-              labelText="Application Term Years"
+              labelText="Application term years"
               value={form.applicationTermYears}
               invalid={!!fieldError('applicationTermYears')}
               invalidText={fieldError('applicationTermYears')}
@@ -1273,7 +1275,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="receivedDate"
-              labelText="Received Date (YYYY-MM-DD) (required)"
+              labelText="Received date (YYYY-MM-DD) (required)"
               value={form.receivedDate}
               invalid={!!fieldError('receivedDate')}
               invalidText={fieldError('receivedDate')}
@@ -1282,7 +1284,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <SearchableSelect
               id="exportScheduleId"
-              labelText="Listing Date"
+              labelText="Listing date"
               value={form.exportScheduleId}
               options={currentSchedules}
               placeholder="Search listing date"
@@ -1298,7 +1300,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <TextArea
               id="productLocation"
-              labelText="Location of Logs (required)"
+              labelText="Location of logs (required)"
               maxCount={250}
               value={form.productLocation}
               invalid={!!fieldError('productLocation')}
@@ -1310,7 +1312,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <TextInput
               id="applicationVolume"
-              labelText="Application Volume (required)"
+              labelText="Application volume (required)"
               value={form.applicationVolume}
               invalid={!!fieldError('applicationVolume')}
               invalidText={fieldError('applicationVolume')}
@@ -1321,7 +1323,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             />
             <TextInput
               id="averageLogVolume"
-              labelText="Average Log Volume (required)"
+              labelText="Average log volume (required)"
               value={form.averageLogVolume}
               invalid={!!fieldError('averageLogVolume')}
               invalidText={fieldError('averageLogVolume')}
@@ -1333,7 +1335,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             <div className="legacy-field-stack">
               <SearchableSelect
                 id="applicationSpeciesCandidate"
-                labelText="Application Species (required)"
+                labelText="Application species (required)"
                 value={applicationSpeciesCandidate}
                 disabled={isApplicationSpeciesSelectDisabled}
                 invalid={!!fieldError('speciesCodes')}
@@ -1351,7 +1353,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             </div>
             <SearchableSelect
               id="applicationEndUse"
-              labelText="Application End Use"
+              labelText="Application end use"
               value={form.endUseCode}
               disabled={
                 form.speciesCodes.length === 0 ||
@@ -1375,7 +1377,7 @@ const ProvincialApplicationCreatePage: FC = () => {
               }
               onClick={onAddApplicationSpecies}
             >
-              Add Application Species
+              Add Application species
             </Button>
             {form.speciesCodes.map((speciesCode) => (
               <span key={speciesCode} className="legacy-search-actions">
@@ -1435,7 +1437,7 @@ const ProvincialApplicationCreatePage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <CreateDraftHistory
-          title="Recent Application Drafts"
+          title="Recent application drafts"
           drafts={drafts}
           onUseDraft={onUseDraft}
           onDeleteDraft={onDeleteDraft}

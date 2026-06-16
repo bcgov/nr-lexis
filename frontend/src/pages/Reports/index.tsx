@@ -4,7 +4,6 @@ import {
   Button,
   Column,
   Grid,
-  InlineNotification,
   FilterableMultiSelect,
   Table,
   TableBody,
@@ -16,6 +15,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
@@ -71,7 +71,7 @@ type ReportOptionSources = {
 
 const OUTPUT_FORMAT_FIELD: ReportFieldDefinition = {
   key: 'outputFormat',
-  label: 'Output Format',
+  label: 'Output format',
   type: 'select',
   options: [
     { value: 'PDF', label: 'PDF' },
@@ -119,7 +119,7 @@ const REPORT_JURISDICTION_FIELD: ReportFieldDefinition = {
     { value: '', label: 'All' },
     { value: 'P', label: 'Provincial' },
     { value: 'F', label: 'Federal' },
-    { value: 'I', label: 'Indian Reserve' },
+    { value: 'I', label: 'Indian reserve' },
   ],
 }
 
@@ -154,13 +154,13 @@ const ORG_UNIT_CODES_FIELD: ReportFieldDefinition = {
 
 const EXEMPTION_REASON_FIELD: ReportFieldDefinition = {
   key: 'exemptionReason',
-  label: 'Exemption Reason',
+  label: 'Exemption reason',
   type: 'select',
 }
 
 const EXEMPTION_TYPE_FIELD: ReportFieldDefinition = {
   key: 'exemptionType',
-  label: 'Exemption Type',
+  label: 'Exemption type',
   type: 'select',
 }
 
@@ -171,25 +171,25 @@ const TENURE_EXEMPTION_TYPE_FIELD: ReportFieldDefinition = {
 
 const GROWTH_TYPE_FIELD: ReportFieldDefinition = {
   key: 'growthType',
-  label: 'Growth Type',
+  label: 'Growth type',
   type: 'select',
 }
 
 const PERMIT_STATUS_FIELD: ReportFieldDefinition = {
   key: 'permitStatus',
-  label: 'Permit Status',
+  label: 'Permit status',
   type: 'select',
 }
 
 const DESTINATION_COUNTRY_FIELD: ReportFieldDefinition = {
   key: 'destinationCountry',
-  label: 'Final Destination Country',
+  label: 'Final destination country',
   type: 'select',
 }
 
 const PORT_OF_EXPORT_FIELD: ReportFieldDefinition = {
   key: 'portOfExport',
-  label: 'Customs Port of Export',
+  label: 'Customs port of export',
   type: 'select',
 }
 
@@ -207,18 +207,18 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       BIWEEKLY_JURISDICTION_FIELD,
       {
         key: 'clientNumber',
-        label: 'Client Number',
+        label: 'Client number',
         type: 'text',
       },
       GROWTH_TYPE_FIELD,
       {
         key: 'fromDate',
-        label: 'Received From Date',
+        label: 'Received from date',
         type: 'date',
       },
       {
         key: 'toDate',
-        label: 'Received To Date',
+        label: 'Received to date',
         type: 'date',
       },
       OUTPUT_FORMAT_FIELD,
@@ -236,27 +236,27 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       REPORT_JURISDICTION_FIELD,
       {
         key: 'clientNumber',
-        label: 'Client Number',
+        label: 'Client number',
         type: 'text',
       },
       {
         key: 'fromDate',
-        label: 'Application From Date',
+        label: 'Application from date',
         type: 'date',
       },
       {
         key: 'toDate',
-        label: 'Application To Date',
+        label: 'Application to date',
         type: 'date',
       },
       {
         key: 'withdrawnFromDate',
-        label: 'Withdrawn From Date',
+        label: 'Withdrawn from date',
         type: 'date',
       },
       {
         key: 'withdrawnToDate',
-        label: 'Withdrawn To Date',
+        label: 'Withdrawn to date',
         type: 'date',
       },
       OUTPUT_FORMAT_FIELD,
@@ -264,17 +264,17 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'teacReport',
-    title: 'TEAC Package Report',
+    title: 'Timber Export Advisory Committee package report',
     category: 'Cross-Module',
     action: '/teacReport',
-    description: 'TEAC package readiness and review data.',
+    description: 'Timber Export Advisory Committee package readiness and review data.',
     actionMappings: [{ value: 'generate', label: 'Generate' }],
     fields: [
       REGION_CODES_FIELD,
       TEAC_JURISDICTION_FIELD,
       {
         key: 'exportSchedule',
-        label: 'Advertising Date',
+        label: 'Advertising date',
         type: 'select',
       },
       OUTPUT_FORMAT_FIELD,
@@ -294,27 +294,27 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       EXEMPTION_TYPE_FIELD,
       {
         key: 'exemptionStatus',
-        label: 'Exemption Status',
+        label: 'Exemption status',
         type: 'select',
       },
       {
         key: 'listingFromDate',
-        label: 'Listing From Date',
+        label: 'Listing from date',
         type: 'date',
       },
       {
         key: 'listingToDate',
-        label: 'Listing To Date',
+        label: 'Listing to date',
         type: 'date',
       },
       {
         key: 'clientNumber',
-        label: 'Client Number',
+        label: 'Client number',
         type: 'text',
       },
       {
         key: 'exemptionNumber',
-        label: 'Exemption Number',
+        label: 'Exemption number',
         type: 'text',
       },
       OUTPUT_FORMAT_FIELD,
@@ -331,12 +331,12 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       REGION_CODES_FIELD,
       {
         key: 'clientNumber',
-        label: 'Client Number',
+        label: 'Client number',
         type: 'text',
       },
       {
         key: 'exemptionNumber',
-        label: 'Exemption Number',
+        label: 'Exemption number',
         type: 'text',
       },
       EXEMPTION_TYPE_FIELD,
@@ -345,18 +345,18 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       GROWTH_TYPE_FIELD,
       {
         key: 'timberMark',
-        label: 'Timber Mark',
+        label: 'Timber mark',
         type: 'text',
       },
       DESTINATION_COUNTRY_FIELD,
       {
         key: 'fromDate',
-        label: 'Issued From Date',
+        label: 'Issued from date',
         type: 'date',
       },
       {
         key: 'toDate',
-        label: 'Issued To Date',
+        label: 'Issued to date',
         type: 'date',
       },
       OUTPUT_FORMAT_FIELD,
@@ -376,17 +376,17 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       PORT_OF_EXPORT_FIELD,
       {
         key: 'status',
-        label: 'Permit Status',
+        label: 'Permit status',
         type: 'select',
       },
       {
         key: 'fromDate',
-        label: 'Permit Issued From Date',
+        label: 'Permit issued from date',
         type: 'date',
       },
       {
         key: 'toDate',
-        label: 'Permit Issued To Date',
+        label: 'Permit issued to date',
         type: 'date',
       },
       OUTPUT_FORMAT_FIELD,
@@ -403,13 +403,13 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       REGION_CODES_FIELD,
       {
         key: 'permitStatus',
-        label: 'Permit Status',
+        label: 'Permit status',
         type: 'select',
         defaultValue: 'COM',
       },
       {
         key: 'exemptionNumber',
-        label: 'Exemption Number',
+        label: 'Exemption number',
         type: 'text',
       },
       EXEMPTION_TYPE_FIELD,
@@ -417,22 +417,22 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       GROWTH_TYPE_FIELD,
       {
         key: 'timberMark',
-        label: 'Timber Mark',
+        label: 'Timber mark',
         type: 'text',
       },
       {
         key: 'forestFileId',
-        label: 'Forest File ID',
+        label: 'Forest file ID',
         type: 'text',
       },
       {
         key: 'fromDate',
-        label: 'Permit Issued From Date',
+        label: 'Permit issued from date',
         type: 'date',
       },
       {
         key: 'toDate',
-        label: 'Permit Issued To Date',
+        label: 'Permit issued to date',
         type: 'date',
       },
       OUTPUT_FORMAT_FIELD,
@@ -449,7 +449,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       ORG_UNIT_CODES_FIELD,
       {
         key: 'exemptionNumber',
-        label: 'Exemption Number',
+        label: 'Exemption number',
         type: 'text',
       },
       EXEMPTION_TYPE_FIELD,
@@ -457,12 +457,12 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       GROWTH_TYPE_FIELD,
       {
         key: 'fromDate',
-        label: 'Permit Issued From Date',
+        label: 'Permit issued from date',
         type: 'date',
       },
       {
         key: 'toDate',
-        label: 'Permit Issued To Date',
+        label: 'Permit issued to date',
         type: 'date',
       },
       OUTPUT_FORMAT_FIELD,
@@ -475,109 +475,109 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     action: '/tenureReport',
     description: 'Tenure trends by region and period.',
     actionMappings: [
-      { value: 'generatePermitReport', label: 'Permit Details Report' },
-      { value: 'generateTenureReport', label: 'Tenure Types Report' },
-      { value: 'generateMarkReport', label: 'Timber Marks Report' },
-      { value: 'generateFileReport', label: 'Forest File Report' },
+      { value: 'generatePermitReport', label: 'Permit details report' },
+      { value: 'generateTenureReport', label: 'Tenure types report' },
+      { value: 'generateMarkReport', label: 'Timber marks report' },
+      { value: 'generateFileReport', label: 'Forest file report' },
     ],
     fields: [
       {
         key: 'fromDate',
-        label: 'Issued From Date',
+        label: 'Issued from date',
         type: 'date',
         defaultValue: getLegacyTenureDefaultFromDate(),
       },
       {
         key: 'toDate',
-        label: 'Issued To Date',
+        label: 'Issued to date',
         type: 'date',
         defaultValue: getLegacyTenureDefaultToDate(),
       },
       REGION_CODES_FIELD,
       {
         key: 'exemptionNumber',
-        label: 'Exemption Number',
+        label: 'Exemption number',
         type: 'text',
       },
       TENURE_EXEMPTION_TYPE_FIELD,
       {
         key: 'clientNumber',
-        label: 'Client Number',
+        label: 'Client number',
         type: 'text',
       },
       {
         key: 'forestFileId',
-        label: 'Forest File ID',
+        label: 'Forest file ID',
         type: 'text',
       },
       EXEMPTION_REASON_FIELD,
       {
         key: 'clientType',
-        label: 'Client Type',
+        label: 'Client type',
         type: 'select',
         options: [
-          { value: 'P', label: 'Permit Holder' },
-          { value: 'M', label: 'Mark Holder' },
+          { value: 'P', label: 'Permit holder' },
+          { value: 'M', label: 'Mark holder' },
         ],
       },
       {
         key: 'tenureType1',
-        label: 'Tenure Type 1',
+        label: 'Tenure type 1',
         type: 'text',
       },
       {
         key: 'tenureType2',
-        label: 'Tenure Type 2',
+        label: 'Tenure type 2',
         type: 'text',
       },
       {
         key: 'tenureType3',
-        label: 'Tenure Type 3',
+        label: 'Tenure type 3',
         type: 'text',
       },
       {
         key: 'tenureType4',
-        label: 'Tenure Type 4',
+        label: 'Tenure type 4',
         type: 'text',
       },
       {
         key: 'tenureType5',
-        label: 'Tenure Type 5',
+        label: 'Tenure type 5',
         type: 'text',
       },
       {
         key: 'tenureType6',
-        label: 'Tenure Type 6',
+        label: 'Tenure type 6',
         type: 'text',
       },
       {
         key: 'timberMark1',
-        label: 'Timber Mark 1',
+        label: 'Timber mark 1',
         type: 'text',
       },
       {
         key: 'timberMark2',
-        label: 'Timber Mark 2',
+        label: 'Timber mark 2',
         type: 'text',
       },
       {
         key: 'timberMark3',
-        label: 'Timber Mark 3',
+        label: 'Timber mark 3',
         type: 'text',
       },
       {
         key: 'timberMark4',
-        label: 'Timber Mark 4',
+        label: 'Timber mark 4',
         type: 'text',
       },
       {
         key: 'timberMark5',
-        label: 'Timber Mark 5',
+        label: 'Timber mark 5',
         type: 'text',
       },
       {
         key: 'timberMark6',
-        label: 'Timber Mark 6',
+        label: 'Timber mark 6',
         type: 'text',
       },
       TENURE_OUTPUT_FORMAT_FIELD,
@@ -590,21 +590,21 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     action: 'mofrListing',
     description: 'MOFR listing output.',
     actionMappings: [
-      { value: 'generate', label: 'Generate With Filters' },
-      { value: 'generateIndustryPDF', label: 'Advertising List PDF' },
-      { value: 'generateIndustryCSV', label: 'Advertising List CSV' },
+      { value: 'generate', label: 'Generate with filters' },
+      { value: 'generateIndustryPDF', label: 'Advertising list PDF' },
+      { value: 'generateIndustryCSV', label: 'Advertising list CSV' },
     ],
     fields: [
       REGION_CODES_FIELD,
       BIWEEKLY_JURISDICTION_FIELD,
       {
         key: 'fromDate',
-        label: 'Listing From Date',
+        label: 'Listing from date',
         type: 'date',
       },
       {
         key: 'toDate',
-        label: 'Listing To Date',
+        label: 'Listing to date',
         type: 'date',
       },
       OUTPUT_FORMAT_FIELD,
@@ -1267,7 +1267,7 @@ const ReportsPage: FC = () => {
               <TableRow>
                 <TableHeader>Report</TableHeader>
                 <TableHeader>Category</TableHeader>
-                <TableHeader>Required Action</TableHeader>
+                <TableHeader>Required action</TableHeader>
                 <TableHeader>Open</TableHeader>
               </TableRow>
             </TableHead>
@@ -1316,7 +1316,7 @@ const ReportsPage: FC = () => {
                 {selectedReport.actionMappings.length > 1 && (
                   <SearchableSelect
                     id="reportActionMapping"
-                    labelText="Report Variant"
+                    labelText="Report variant"
                     value={selectedActionMapping}
                     options={selectedReport.actionMappings}
                     onChange={(value) =>
@@ -1481,9 +1481,9 @@ const ReportsPage: FC = () => {
                 </Button>
               </div>
               {launchErrorMessage && (
-                <InlineNotification
+                <AppNotification
                   kind="error"
-                  title="Report Launch Error"
+                  title="Report launch error"
                   subtitle={launchErrorMessage}
                   lowContrast
                   onCloseButtonClick={() => setLaunchErrorMessage('')}
@@ -1492,7 +1492,7 @@ const ReportsPage: FC = () => {
             </>
           ) : (
             <>
-              <h2 className="dashboard-title">No Reports Available</h2>
+              <h2 className="dashboard-title">No reports available</h2>
               <p>No report actions are available for the current session.</p>
             </>
           )}

@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
 import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
 import IsoDatePicker from '@/components/IsoDatePicker'
+import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
-  joinCreateSubmitMessages,
   mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
@@ -98,6 +98,7 @@ const ProvincialPermitCreatePage: FC = () => {
     listCreateDrafts(MODULE_KEY),
   )
   const [status, setStatus] = useState<PageStatus | null>(null)
+  const [showMissingRequiredOptions, setShowMissingRequiredOptions] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialPermitCreateField>>({})
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
@@ -147,7 +148,8 @@ const ProvincialPermitCreatePage: FC = () => {
     () => Object.values(fieldErrors).some((error) => !!error),
     [fieldErrors],
   )
-  const missingRequiredOptions = permitStatuses.length === 0 || regions.length === 0
+  const missingRequiredOptions =
+    (permitStatuses.length === 0 || regions.length === 0) && showMissingRequiredOptions
 
   const markFieldTouched = (field: ProvincialPermitCreateField): void => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
@@ -161,7 +163,7 @@ const ProvincialPermitCreatePage: FC = () => {
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
+    setStatus({ kind: 'success', title: 'Draft saved', message: `Draft ${saved.id} saved.` })
   }
 
   const onSubmit = async () => {
@@ -179,8 +181,6 @@ const ProvincialPermitCreatePage: FC = () => {
     setIsSubmitting(true)
     try {
       const result = await submitProvincialPermitCreate(form)
-      const responseMessage = joinCreateSubmitMessages(result)
-
       if (result.success) {
         if (result.createdId) {
           navigate(`/provincial/permit/${encodeURIComponent(result.createdId)}`)
@@ -189,7 +189,7 @@ const ProvincialPermitCreatePage: FC = () => {
         setStatus({
           kind: 'success',
           title: 'Permit Submitted',
-          message: responseMessage || 'Permit submitted successfully.',
+          message: 'Permit submitted successfully.',
         })
         return
       }
@@ -197,14 +197,16 @@ const ProvincialPermitCreatePage: FC = () => {
       setStatus({
         kind: 'error',
         title: 'Submit Failed',
-        message: responseMessage || 'Unable to submit provincial permit create request.',
+        message:
+          'Permit submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } catch (error) {
       console.error(error)
       setStatus({
         kind: 'error',
         title: 'Submit Failed',
-        message: 'Unable to submit provincial permit create request.',
+        message:
+          'Permit submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } finally {
       setIsSubmitting(false)
@@ -215,7 +217,7 @@ const ProvincialPermitCreatePage: FC = () => {
     setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
     setTouchedFields({})
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
+    setStatus({ kind: 'success', title: 'Draft loaded', message: `Draft ${record.id} loaded.` })
   }
 
   const onDeleteDraft = (draftId: string) => {
@@ -223,7 +225,7 @@ const ProvincialPermitCreatePage: FC = () => {
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({
       kind: wasDeleted ? 'success' : 'error',
-      title: wasDeleted ? 'Draft Deleted' : 'Draft Delete Failed',
+      title: wasDeleted ? 'Draft deleted' : 'Draft delete failed',
       message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
     })
   }
@@ -231,29 +233,30 @@ const ProvincialPermitCreatePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create Provincial Permit</h1>
+        <h1>Create provincial permit</h1>
       </Column>
 
       {missingRequiredOptions && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind="warning"
             title="Required options unavailable"
             subtitle="Permit status or region values are unavailable. Submit remains disabled until valid options are available."
             lowContrast
-            hideCloseButton
+            onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
           />
         </Column>
       )}
 
       {!!status && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind={status.kind}
             title={status.title}
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
+            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
           />
         </Column>
       )}
@@ -263,7 +266,7 @@ const ProvincialPermitCreatePage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="permitNumber"
-              labelText="Permit Number (required)"
+              labelText="Permit number (required)"
               value={form.permitNumber}
               invalid={!!fieldError('permitNumber')}
               invalidText={fieldError('permitNumber')}
@@ -274,7 +277,7 @@ const ProvincialPermitCreatePage: FC = () => {
             />
             <ApplicationNumberSelect
               id="applicationNumber"
-              labelText="Application Number (required)"
+              labelText="Application number (required)"
               value={form.applicationNumber}
               invalid={!!fieldError('applicationNumber')}
               invalidText={fieldError('applicationNumber')}
@@ -283,7 +286,7 @@ const ProvincialPermitCreatePage: FC = () => {
             />
             <TextInput
               id="packageNumber"
-              labelText="Package Number (required)"
+              labelText="Package number (required)"
               value={form.packageNumber}
               invalid={!!fieldError('packageNumber')}
               invalidText={fieldError('packageNumber')}
@@ -294,7 +297,7 @@ const ProvincialPermitCreatePage: FC = () => {
             />
             <TextInput
               id="exemptionNumber"
-              labelText="Exemption Number (required)"
+              labelText="Exemption number (required)"
               value={form.exemptionNumber}
               invalid={!!fieldError('exemptionNumber')}
               invalidText={fieldError('exemptionNumber')}
@@ -316,7 +319,7 @@ const ProvincialPermitCreatePage: FC = () => {
             />
             <SearchableSelect
               id="permitStatus"
-              labelText="Permit Status (required)"
+              labelText="Permit status (required)"
               value={form.permitStatus}
               invalid={!!fieldError('permitStatus')}
               invalidText={fieldError('permitStatus')}
@@ -327,7 +330,7 @@ const ProvincialPermitCreatePage: FC = () => {
             />
             <TextInput
               id="applicantClientNumber"
-              labelText="Applicant Client Number (required)"
+              labelText="Applicant client number (required)"
               value={form.applicantClientNumber}
               invalid={!!fieldError('applicantClientNumber')}
               invalidText={fieldError('applicantClientNumber')}
@@ -338,7 +341,7 @@ const ProvincialPermitCreatePage: FC = () => {
             />
             <TextInput
               id="ownerClientNumber"
-              labelText="Owner Client Number (required)"
+              labelText="Owner client number (required)"
               value={form.ownerClientNumber}
               invalid={!!fieldError('ownerClientNumber')}
               invalidText={fieldError('ownerClientNumber')}
@@ -349,7 +352,7 @@ const ProvincialPermitCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="submitDate"
-              labelText="Submit Date (YYYY-MM-DD) (required)"
+              labelText="Submit date (YYYY-MM-DD) (required)"
               value={form.submitDate}
               invalid={!!fieldError('submitDate')}
               invalidText={fieldError('submitDate')}
@@ -358,7 +361,7 @@ const ProvincialPermitCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="issueDate"
-              labelText="Issue Date (YYYY-MM-DD) (required)"
+              labelText="Issue date (YYYY-MM-DD) (required)"
               value={form.issueDate}
               invalid={!!fieldError('issueDate')}
               invalidText={fieldError('issueDate')}
@@ -367,7 +370,7 @@ const ProvincialPermitCreatePage: FC = () => {
             />
             <TextInput
               id="estimatedShippingDate"
-              labelText="Estimated Shipping Date (YYYY-MM-DD)"
+              labelText="Estimated shipping date (YYYY-MM-DD)"
               value={form.estimatedShippingDate}
               invalid={!!fieldError('estimatedShippingDate')}
               invalidText={fieldError('estimatedShippingDate')}
@@ -381,7 +384,7 @@ const ProvincialPermitCreatePage: FC = () => {
             />
             <TextInput
               id="permitVolume"
-              labelText="Permit Volume (m³)"
+              labelText="Permit volume (m³)"
               value={form.permitVolume}
               invalid={!!fieldError('permitVolume')}
               invalidText={fieldError('permitVolume')}
@@ -431,7 +434,7 @@ const ProvincialPermitCreatePage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <CreateDraftHistory
-          title="Recent Permit Drafts"
+          title="Recent permit drafts"
           drafts={drafts}
           onUseDraft={onUseDraft}
           onDeleteDraft={onDeleteDraft}

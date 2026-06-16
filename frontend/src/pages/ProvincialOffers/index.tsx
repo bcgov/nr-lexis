@@ -79,9 +79,9 @@ const SORT_COLUMNS: {
   { id: 'offerNumber', label: 'Offer' },
   { id: 'applicationNumber', label: 'Application' },
   { id: 'packageNumber', label: 'Package' },
-  { id: 'listingDate', label: 'Listing Date' },
-  { id: 'region', label: 'Natural Resource Region Code' },
-  { id: 'offerWithdrawalDate', label: 'Offer Withdrawn Date' },
+  { id: 'listingDate', label: 'Listing date' },
+  { id: 'region', label: 'Natural resource region code' },
+  { id: 'offerWithdrawalDate', label: 'Offer withdrawn date' },
 ]
 
 const DEFAULT_SORT_FIELD: ProvincialOfferSearchSortField = 'listingDate'
@@ -350,7 +350,7 @@ const ProvincialOffersPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial Offers Search</h1>
+        <h1>Provincial offers search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -359,25 +359,25 @@ const ProvincialOffersPage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="applicationNumber"
-              labelText="Application Number"
+              labelText="Application number"
               value={filters.applicationNumber}
               onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
             <TextInput
               id="packageNumber"
-              labelText="Package Number"
+              labelText="Package number"
               value={filters.packageNumber}
               onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
             <TextInput
               id="clientNumber"
-              labelText="Client Number"
+              labelText="Client number"
               value={filters.clientNumber}
               onChange={(event) => updateFilter('clientNumber', event.target.value)}
             />
             <IsoDatePicker
               id="listingFromDate"
-              labelText="Listing From Date (YYYY-MM-DD)"
+              labelText="Listing from date (YYYY-MM-DD)"
               value={filters.listingFromDate}
               invalid={!isValidIsoDate(filters.listingFromDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -385,7 +385,7 @@ const ProvincialOffersPage: FC = () => {
             />
             <IsoDatePicker
               id="listingToDate"
-              labelText="Listing To Date (YYYY-MM-DD)"
+              labelText="Listing to date (YYYY-MM-DD)"
               value={filters.listingToDate}
               invalid={!isValidIsoDate(filters.listingToDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -409,7 +409,7 @@ const ProvincialOffersPage: FC = () => {
             />
             <IsoDatePicker
               id="withdrawalFromDate"
-              labelText="Withdrawn From Date (YYYY-MM-DD)"
+              labelText="Withdrawn from date (YYYY-MM-DD)"
               value={filters.withdrawalFromDate}
               invalid={!isValidIsoDate(filters.withdrawalFromDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -417,7 +417,7 @@ const ProvincialOffersPage: FC = () => {
             />
             <IsoDatePicker
               id="withdrawalToDate"
-              labelText="Withdrawn To Date (YYYY-MM-DD)"
+              labelText="Withdrawn to date (YYYY-MM-DD)"
               value={filters.withdrawalToDate}
               invalid={!isValidIsoDate(filters.withdrawalToDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -448,7 +448,7 @@ const ProvincialOffersPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Search Results</h2>
+          <h2 className="dashboard-title">Search results</h2>
           {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
           <SearchResultsTableFrame
             loading={loading}

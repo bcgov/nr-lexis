@@ -5,7 +5,6 @@ import {
   Checkbox,
   Column,
   Grid,
-  InlineNotification,
   Pagination,
   Table,
   TableBody,
@@ -17,6 +16,7 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import type {
@@ -76,8 +76,8 @@ const SORT_COLUMNS: {
   { id: 'status', label: 'Status' },
   { id: 'clientNumber', label: 'Client' },
   { id: 'reason', label: 'Reason' },
-  { id: 'receivedDate', label: 'Received Date' },
-  { id: 'listingDate', label: 'Listing Date' },
+  { id: 'receivedDate', label: 'Received date' },
+  { id: 'listingDate', label: 'Listing date' },
 ]
 const DEFAULT_SORT_FIELD: FederalApplicationSearchSortField = 'federalApplicationNumber'
 const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
@@ -405,7 +405,7 @@ const FederalPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Federal Application Search</h1>
+        <h1>Federal application search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -414,19 +414,19 @@ const FederalPage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="applicationNumber"
-              labelText="Application Number"
+              labelText="Application number"
               value={filters.applicationNumber}
               onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
             <TextInput
               id="packageNumber"
-              labelText="Package Number"
+              labelText="Package number"
               value={filters.packageNumber}
               onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
             <SearchableSelect
               id="applicationStatus"
-              labelText="Application Status"
+              labelText="Application status"
               value={filters.applicationStatus}
               placeholder="All statuses"
               options={applicationStatusOptions}
@@ -434,13 +434,13 @@ const FederalPage: FC = () => {
             />
             <TextInput
               id="clientNumber"
-              labelText="Client Number"
+              labelText="Client number"
               value={filters.clientNumber}
               onChange={(event) => updateFilter('clientNumber', event.target.value)}
             />
             <IsoDatePicker
               id="receivedFromDate"
-              labelText="Received From Date (YYYY-MM-DD)"
+              labelText="Received from date (YYYY-MM-DD)"
               value={filters.receivedFromDate}
               invalid={!isValidIsoDate(filters.receivedFromDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -448,7 +448,7 @@ const FederalPage: FC = () => {
             />
             <IsoDatePicker
               id="receivedToDate"
-              labelText="Received To Date (YYYY-MM-DD)"
+              labelText="Received to date (YYYY-MM-DD)"
               value={filters.receivedToDate}
               invalid={!isValidIsoDate(filters.receivedToDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -456,7 +456,7 @@ const FederalPage: FC = () => {
             />
             <IsoDatePicker
               id="listingFromDate"
-              labelText="Listing From Date (YYYY-MM-DD)"
+              labelText="Listing from date (YYYY-MM-DD)"
               value={filters.listingFromDate}
               invalid={!isValidIsoDate(filters.listingFromDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -464,7 +464,7 @@ const FederalPage: FC = () => {
             />
             <IsoDatePicker
               id="listingToDate"
-              labelText="Listing To Date (YYYY-MM-DD)"
+              labelText="Listing to date (YYYY-MM-DD)"
               value={filters.listingToDate}
               invalid={!isValidIsoDate(filters.listingToDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -489,17 +489,18 @@ const FederalPage: FC = () => {
               onClick={onCreateExemptionClick}
               disabled={selectedRowsCount === 0 || !canCreateExemption}
             >
-              Create Exemption for Selected Applications
+              Create exemption for Selected Applications
             </Button>
           </div>
           {exemptionSelectionStatus && (
-            <InlineNotification
+            <AppNotification
               className="legacy-inline-notification"
               kind={exemptionSelectionStatus.kind}
               title={
                 exemptionSelectionStatus.kind === 'error' ? 'Validation failed' : 'Selection ready'
               }
               subtitle={exemptionSelectionStatus.message}
+              autoDismissMs={exemptionSelectionStatus.kind === 'success' ? 8000 : undefined}
               onCloseButtonClick={() => setExemptionSelectionStatus(null)}
             />
           )}
@@ -509,7 +510,7 @@ const FederalPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Search Results</h2>
+          <h2 className="dashboard-title">Search results</h2>
           {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
           <SearchResultsTableFrame
             loading={loading}
@@ -541,8 +542,8 @@ const FederalPage: FC = () => {
                     </button>
                   </TableHeader>
                 ))}
-                <TableHeader>Exemption Type</TableHeader>
-                <TableHeader>Exemption Number</TableHeader>
+                <TableHeader>Exemption type</TableHeader>
+                <TableHeader>Exemption number</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>

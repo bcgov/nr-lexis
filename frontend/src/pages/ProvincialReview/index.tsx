@@ -5,7 +5,6 @@ import {
   Checkbox,
   Column,
   Grid,
-  InlineNotification,
   FilterableMultiSelect,
   Pagination,
   Table,
@@ -19,6 +18,7 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import type {
@@ -103,8 +103,8 @@ const SORT_COLUMNS: {
 }[] = [
   { id: 'applicationNumber', label: 'Application' },
   { id: 'volume', label: 'Volume (m³)' },
-  { id: 'speciesEndUse', label: 'Species / End Use' },
-  { id: 'listingDate', label: 'Listing Date' },
+  { id: 'speciesEndUse', label: 'Species / end use' },
+  { id: 'listingDate', label: 'Listing date' },
   { id: 'status', label: 'Status' },
   { id: 'region', label: 'Region' },
 ]
@@ -648,7 +648,7 @@ const ProvincialReviewPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial Review</h1>
+        <h1>Provincial review</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -657,13 +657,13 @@ const ProvincialReviewPage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="applicationNumber"
-              labelText="Application Number"
+              labelText="Application number"
               value={filters.applicationNumber}
               onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
             <SearchableSelect
               id="productTypeCode"
-              labelText="Product Type"
+              labelText="Product type"
               value={filters.productTypeCode}
               placeholder="All product types"
               options={productTypeOptions}
@@ -687,7 +687,7 @@ const ProvincialReviewPage: FC = () => {
             />
             <IsoDatePicker
               id="receivedFromDate"
-              labelText="Received From Date (YYYY-MM-DD)"
+              labelText="Received from date (YYYY-MM-DD)"
               value={filters.receivedFromDate}
               invalid={!isValidIsoDate(filters.receivedFromDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -695,7 +695,7 @@ const ProvincialReviewPage: FC = () => {
             />
             <IsoDatePicker
               id="receivedToDate"
-              labelText="Received To Date (YYYY-MM-DD)"
+              labelText="Received to date (YYYY-MM-DD)"
               value={filters.receivedToDate}
               invalid={!isValidIsoDate(filters.receivedToDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -703,7 +703,7 @@ const ProvincialReviewPage: FC = () => {
             />
             <IsoDatePicker
               id="listingFromDate"
-              labelText="Listing From Date (YYYY-MM-DD)"
+              labelText="Listing from date (YYYY-MM-DD)"
               value={filters.listingFromDate}
               invalid={!isValidIsoDate(filters.listingFromDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -711,7 +711,7 @@ const ProvincialReviewPage: FC = () => {
             />
             <IsoDatePicker
               id="listingToDate"
-              labelText="Listing To Date (YYYY-MM-DD)"
+              labelText="Listing to date (YYYY-MM-DD)"
               value={filters.listingToDate}
               invalid={!isValidIsoDate(filters.listingToDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -742,7 +742,7 @@ const ProvincialReviewPage: FC = () => {
           <div className="legacy-search-grid">
             <SearchableSelect
               id="reviewStatusCode"
-              labelText="Update Status Code"
+              labelText="Update status code"
               value={selectedStatusCode}
               placeholder="Select status"
               options={reviewStatusOptions}
@@ -757,7 +757,7 @@ const ProvincialReviewPage: FC = () => {
             />
             <TextInput
               id="reviewStatusEmail"
-              labelText="Client Email Address (required for status email)"
+              labelText="Client email address (required for status email)"
               value={statusEmailAddress}
               invalid={
                 !!statusFieldError('reviewStatusEmail') ||
@@ -802,7 +802,7 @@ const ProvincialReviewPage: FC = () => {
           <div className="legacy-search-actions">
             <TextArea
               id="reviewStatusRemark"
-              labelText="Status Remark"
+              labelText="Status remark"
               value={statusRemark}
               onChange={(event) => {
                 setReviewActionStatus(null)
@@ -811,11 +811,12 @@ const ProvincialReviewPage: FC = () => {
             />
           </div>
           {!!reviewActionStatus && (
-            <InlineNotification
+            <AppNotification
               className="legacy-inline-notification"
               kind={reviewActionStatus.kind}
               title={reviewActionStatus.kind === 'success' ? 'Action complete' : 'Action failed'}
               subtitle={reviewActionStatus.message}
+              autoDismissMs={reviewActionStatus.kind === 'success' ? 8000 : undefined}
               onCloseButtonClick={() => setReviewActionStatus(null)}
             />
           )}
@@ -825,7 +826,7 @@ const ProvincialReviewPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Review Queue</h2>
+          <h2 className="dashboard-title">Review queue</h2>
           {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
           <SearchResultsTableFrame
             loading={loading}

@@ -4,7 +4,6 @@ import {
   Column,
   Grid,
   InlineLoading,
-  InlineNotification,
   Table,
   TableBody,
   TableCell,
@@ -95,6 +94,8 @@ import {
   normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
 } from '@/utils/text'
+import { ApiSourceTag } from '@/components/AbbreviatedSourceTag'
+import { AppNotification } from '@/components/AppNotification'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
@@ -122,6 +123,12 @@ type ClientDataSummaryProps = {
 }
 
 const ClientDataSummary: FC<ClientDataSummaryProps> = ({ title, clientData, isLoading }) => {
+  const [showClientLookupMessage, setShowClientLookupMessage] = useState(false)
+
+  useEffect(() => {
+    setShowClientLookupMessage(Boolean(clientData?.notfound))
+  }, [clientData?.notfound])
+
   if (isLoading) {
     return <InlineLoading description={`Loading ${title.toLowerCase()}...`} />
   }
@@ -135,15 +142,15 @@ const ClientDataSummary: FC<ClientDataSummaryProps> = ({ title, clientData, isLo
       <h3 className="application-client-summary__title">{title}</h3>
       <dl className="detail-field-grid">
         {[
-          ['Company Name', displayValue(clientData.companyName)],
+          ['Company name', displayValue(clientData.companyName)],
           ['Address', displayValue(clientData.address)],
           ['City', displayValue(clientData.city)],
           ['Province', displayValue(clientData.province)],
-          ['Postal Code', displayValue(clientData.postalCode)],
+          ['Postal code', displayValue(clientData.postalCode)],
           ['Country', displayValue(clientData.country)],
           ['Phone', displayValue(clientData.phone)],
           ['Fax', displayValue(clientData.fax)],
-          ['E-Mail', displayValue(clientData.email)],
+          ['Email', displayValue(clientData.email)],
         ].map(([label, value]) => (
           <div key={label} className="detail-field-item">
             <dt className="detail-field-label">{label}</dt>
@@ -151,13 +158,13 @@ const ClientDataSummary: FC<ClientDataSummaryProps> = ({ title, clientData, isLo
           </div>
         ))}
       </dl>
-      {clientData.notfound && (
-        <InlineNotification
+      {showClientLookupMessage && clientData?.notfound && (
+        <AppNotification
           kind="warning"
-          title="Client Lookup"
+          title="Client lookup"
           subtitle={clientData.notfound}
           lowContrast
-          hideCloseButton
+          onCloseButtonClick={() => setShowClientLookupMessage(false)}
         />
       )}
     </section>
@@ -400,6 +407,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
   const [isLoadingOwnerClientData, setIsLoadingOwnerClientData] = useState(false)
   const [isLoadingAgentClientData, setIsLoadingAgentClientData] = useState(false)
+  const [showClientLookupMessage, setShowClientLookupMessage] = useState(false)
+  const [showDocumentUploadUnavailableMessage, setShowDocumentUploadUnavailableMessage] =
+    useState(false)
   const [summaryExemptionReasonOptions, setSummaryExemptionReasonOptions] = useState<
     SearchOption[]
   >([])
@@ -640,6 +650,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
     detail,
     permitRows,
   )
+  useEffect(() => {
+    if (ownerClientData?.notfound || agentClientData?.notfound) {
+      setShowClientLookupMessage(true)
+    }
+  }, [ownerClientData?.notfound, agentClientData?.notfound])
+  useEffect(() => {
+    setShowDocumentUploadUnavailableMessage(Boolean(documentUploadUnavailableMessage))
+  }, [documentUploadUnavailableMessage])
   const canAddApplicationDocuments =
     canUploadApplicationDocuments && !documentUploadUnavailableMessage
   const canManageItems =
@@ -831,11 +849,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
             : 'Jurisdiction must be Provincial or Federal.',
       ),
       oicIndicator: firstValidationError(
-        () => requiredFieldError(summaryForm.oicIndicator, 'OIC indicator'),
+        () => requiredFieldError(summaryForm.oicIndicator, 'Order in Council indicator'),
         () =>
           summaryForm.oicIndicator === 'Y' || summaryForm.oicIndicator === 'N'
             ? null
-            : 'OIC indicator must be Yes or No.',
+            : 'Order in Council indicator must be Yes or No.',
       ),
     }
   }, [calculatedSummaryTermDays, summaryForm])
@@ -1826,7 +1844,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
     ownerClientData || agentClientData || isLoadingOwnerClientData || isLoadingAgentClientData ? (
       <div className="application-client-summary-grid">
         <ClientDataSummary
-          title="Owner Client Details"
+          title="Owner client details"
           clientData={ownerClientData}
           isLoading={isLoadingOwnerClientData}
         />
@@ -1834,7 +1852,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
           agentClientData ||
           isLoadingAgentClientData) && (
           <ClientDataSummary
-            title="Agent Client Details"
+            title="Agent client details"
             clientData={agentClientData}
             isLoading={isLoadingAgentClientData}
           />
@@ -1847,7 +1865,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <div className="application-detail-title-row">
           <div>
-            <h1>Provincial Application Details</h1>
+            <h1>Provincial application details</h1>
             <p>
               Application <code>{applicationNumber}</code>
             </p>
@@ -1855,11 +1873,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
           {detail && (
             <dl className="application-detail-header-metrics" aria-label="Application highlights">
               <div>
-                <dt>Package Count</dt>
+                <dt>Package count</dt>
                 <dd>{detail.packages.length.toLocaleString()}</dd>
               </div>
               <div>
-                <dt>File Count</dt>
+                <dt>File count</dt>
                 <dd>{documentRows.length.toLocaleString()}</dd>
               </div>
             </dl>
@@ -1875,11 +1893,12 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <InlineNotification
+          <AppNotification
             kind="error"
             title="Detail unavailable"
             subtitle={errorMessage}
             lowContrast
+            onCloseButtonClick={() => setErrorMessage('')}
           />
         </Column>
       )}
@@ -1888,41 +1907,46 @@ const ProvincialApplicationDetailsPage: FC = () => {
         <>
           {!!documentsErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="warning"
                 title="Documents unavailable"
                 subtitle={documentsErrorMessage}
                 lowContrast
+                onCloseButtonClick={() => setDocumentsErrorMessage('')}
               />
             </Column>
           )}
           {!!actionErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="error"
                 title="Action failed"
                 subtitle={actionErrorMessage}
                 lowContrast
+                onCloseButtonClick={() => setActionErrorMessage('')}
               />
             </Column>
           )}
           {!!actionWarningMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="warning"
                 title="Review package volumes"
                 subtitle={actionWarningMessage}
                 lowContrast
+                onCloseButtonClick={() => setActionWarningMessage('')}
               />
             </Column>
           )}
           {!!actionInfoMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="info"
                 title="Action completed"
                 subtitle={actionInfoMessage}
                 lowContrast
+                autoDismissMs={8000}
+                onCloseButtonClick={() => setActionInfoMessage('')}
               />
             </Column>
           )}
@@ -1932,14 +1956,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
               className="application-detail-section-nav"
               aria-label="Application detail sections"
             >
-              <a href="#application-summary">Summary Fields</a>
+              <a href="#application-summary">Summary fields</a>
               {canReviewApplication && <a href="#application-review">Review Actions</a>}
-              <a href="#application-packages">Package List</a>
+              <a href="#application-packages">Package list</a>
               <a href="#application-items">Item Editor</a>
               <a href="#application-documents">Document Files</a>
-              <a href="#application-offers">Offer Rows</a>
-              <a href="#application-permits">Permit Rows</a>
-              <a href="#application-remarks">Remark Log</a>
+              <a href="#application-offers">Offer rows</a>
+              <a href="#application-permits">Permit rows</a>
+              <a href="#application-remarks">Remark log</a>
             </nav>
           </Column>
 
@@ -1954,7 +1978,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   disabled={!canPerform('/applicationSearch')}
                   onClick={() => navigate(withCurrentSearch('/provincial/application'))}
                 >
-                  Back to Application Search Results
+                  Back to Application search Results
                 </Button>
                 <Button
                   kind="secondary"
@@ -2008,7 +2032,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   }
                   onClick={onCreateOffer}
                 >
-                  Create Offer
+                  Create offer
                 </Button>
               </div>
             </Tile>
@@ -2019,20 +2043,20 @@ const ProvincialApplicationDetailsPage: FC = () => {
               id="application-summary"
               className="application-detail-section application-detail-summary"
             >
-              <h2 className="detail-tile-title">Application Summary</h2>
+              <h2 className="detail-tile-title">Application summary</h2>
               <dl className="detail-field-grid">
                 {[
-                  ['Application Number', displayValue(detail.applicationNumber)],
-                  ['Exemption Number', displayValue(detail.exemptionNumber)],
+                  ['Application number', displayValue(detail.applicationNumber)],
+                  ['Exemption number', displayValue(detail.exemptionNumber)],
                   [
                     'Status',
                     displayValue(detail.statusDescription ?? detail.applicationStatusCode),
                   ],
-                  ['Product Type', displayValue(detail.productTypeCode)],
-                  ['Owner Client Number', displayValue(detail.ownerClientNumber)],
-                  ['Agent Client Number', displayValue(detail.agentClientNumber)],
+                  ['Product type', displayValue(detail.productTypeCode)],
+                  ['Owner client number', displayValue(detail.ownerClientNumber)],
+                  ['Agent client number', displayValue(detail.agentClientNumber)],
                   ['Org Unit', displayValue(detail.orgUnitName ?? detail.orgUnitNumber)],
-                  ['Listing Date', displayValue(detail.listingDate)],
+                  ['Listing date', displayValue(detail.listingDate)],
                 ].map(([label, value]) => (
                   <div key={label} className="detail-field-item">
                     <dt className="detail-field-label">{label}</dt>
@@ -2045,7 +2069,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   <div className="legacy-search-grid">
                     <SearchableSelect
                       id="applicationSummaryExemptionReason"
-                      labelText="Exemption Reason"
+                      labelText="Exemption reason"
                       value={summaryForm.exemptionReasonCode}
                       invalid={Boolean(visibleSummaryFieldError('exemptionReasonCode'))}
                       invalidText={visibleSummaryFieldError('exemptionReasonCode')}
@@ -2061,7 +2085,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <IsoDatePicker
                       id="applicationSummaryApplicationDate"
-                      labelText="Application Date"
+                      labelText="Application date"
                       value={summaryForm.applicationDate}
                       invalid={Boolean(visibleSummaryFieldError('applicationDate'))}
                       invalidText={visibleSummaryFieldError('applicationDate')}
@@ -2069,7 +2093,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <IsoDatePicker
                       id="applicationSummaryReceivedDate"
-                      labelText="Received Date"
+                      labelText="Received date"
                       value={summaryForm.receivedDate}
                       invalid={Boolean(visibleSummaryFieldError('receivedDate'))}
                       invalidText={visibleSummaryFieldError('receivedDate')}
@@ -2107,7 +2131,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <TextInput
                       id="applicationSummaryVolume"
-                      labelText="Application Volume (m³)"
+                      labelText="Application volume (m³)"
                       type="number"
                       min={0}
                       step="0.1"
@@ -2120,7 +2144,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <TextInput
                       id="applicationSummaryAverageLogVolume"
-                      labelText="Average Log Volume"
+                      labelText="Average log volume"
                       type="number"
                       min={0}
                       step="0.1"
@@ -2133,7 +2157,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <TextInput
                       id="applicationSummaryOwnerClientNumber"
-                      labelText="Owner Client Number"
+                      labelText="Owner client number"
                       value={summaryForm.ownerClientNumber}
                       invalid={Boolean(visibleSummaryFieldError('ownerClientNumber'))}
                       invalidText={visibleSummaryFieldError('ownerClientNumber')}
@@ -2143,7 +2167,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <SearchableSelect
                       id="applicationSummaryOwnerClientLocationCode"
-                      labelText="Owner Client Location"
+                      labelText="Owner client location"
                       value={summaryForm.ownerClientLocationCode}
                       invalid={Boolean(visibleSummaryFieldError('ownerClientLocationCode'))}
                       invalidText={visibleSummaryFieldError('ownerClientLocationCode')}
@@ -2162,7 +2186,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
                       <SearchableSelect
                         id="applicationSummaryOwnerContactName"
-                        labelText="Owner Contact Name"
+                        labelText="Owner contact name"
                         value={summaryForm.ownerContactName}
                         invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
                         invalidText={visibleSummaryFieldError('ownerContactName')}
@@ -2182,7 +2206,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     ) : (
                       <TextInput
                         id="applicationSummaryOwnerContactName"
-                        labelText="Owner Contact Name"
+                        labelText="Owner contact name"
                         value={summaryForm.ownerContactName}
                         invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
                         invalidText={visibleSummaryFieldError('ownerContactName')}
@@ -2195,7 +2219,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     )}
                     <SearchableSelect
                       id="applicationSummaryApplicantTypeCode"
-                      labelText="Applicant Type"
+                      labelText="Applicant type"
                       value={summaryForm.applicantTypeCode}
                       placeholder="Select applicant type"
                       options={optionsWithCurrentValue(
@@ -2210,7 +2234,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <TextInput
                       id="applicationSummaryAgentClientNumber"
-                      labelText="Agent Client Number"
+                      labelText="Agent client number"
                       value={summaryForm.agentClientNumber}
                       invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
                       invalidText={visibleSummaryFieldError('agentClientNumber')}
@@ -2220,7 +2244,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <SearchableSelect
                       id="applicationSummaryAgentClientLocationCode"
-                      labelText="Agent Client Location"
+                      labelText="Agent client location"
                       value={summaryForm.agentClientLocationCode}
                       invalid={Boolean(visibleSummaryFieldError('agentClientLocationCode'))}
                       invalidText={visibleSummaryFieldError('agentClientLocationCode')}
@@ -2239,7 +2263,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
                       <SearchableSelect
                         id="applicationSummaryAgentContactName"
-                        labelText="Agent Contact Name"
+                        labelText="Agent contact name"
                         value={summaryForm.agentContactName}
                         invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
                         invalidText={visibleSummaryFieldError('agentContactName')}
@@ -2259,7 +2283,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     ) : (
                       <TextInput
                         id="applicationSummaryAgentContactName"
-                        labelText="Agent Contact Name"
+                        labelText="Agent contact name"
                         value={summaryForm.agentContactName}
                         invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
                         invalidText={visibleSummaryFieldError('agentContactName')}
@@ -2283,7 +2307,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <SearchableSelect
                       id="applicationSummaryProductType"
-                      labelText="Product Type"
+                      labelText="Product type"
                       value={summaryForm.productTypeCode}
                       invalid={Boolean(visibleSummaryFieldError('productTypeCode'))}
                       invalidText={visibleSummaryFieldError('productTypeCode')}
@@ -2299,7 +2323,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <SearchableSelect
                       id="applicationSummaryGrowthType"
-                      labelText="Growth Type"
+                      labelText="Growth type"
                       value={summaryForm.growthTypeCode}
                       invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
                       invalidText={visibleSummaryFieldError('growthTypeCode')}
@@ -2315,7 +2339,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <SearchableSelect
                       id="applicationSummaryStatus"
-                      labelText="Application Status"
+                      labelText="Application status"
                       value={summaryForm.applicationStatusCode}
                       invalid={Boolean(visibleSummaryFieldError('applicationStatusCode'))}
                       invalidText={visibleSummaryFieldError('applicationStatusCode')}
@@ -2346,7 +2370,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <SearchableSelect
                       id="applicationSummarySchedule"
-                      labelText="Listing Date"
+                      labelText="Listing date"
                       value={summaryForm.exportScheduleId}
                       disabled={isLoadingSummaryOptions && summaryScheduleOptions.length === 0}
                       placeholder="Search listing date"
@@ -2358,9 +2382,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <SearchableSelect
                       id="applicationSummaryOicIndicator"
-                      labelText="OIC Indicator"
+                      labelText="Order in Council indicator"
                       value={summaryForm.oicIndicator}
-                      placeholder="Select OIC indicator"
+                      placeholder="Select Order in Council indicator"
                       options={optionsWithCurrentValue(
                         OIC_INDICATOR_OPTIONS,
                         summaryForm.oicIndicator,
@@ -2374,7 +2398,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   <div className="legacy-search-grid">
                     <TextArea
                       id="applicationSummaryProductLocation"
-                      labelText="Location of Logs"
+                      labelText="Location of logs"
                       value={summaryForm.productLocation}
                       invalid={Boolean(visibleSummaryFieldError('productLocation'))}
                       invalidText={visibleSummaryFieldError('productLocation')}
@@ -2386,7 +2410,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   <div className="legacy-search-grid">
                     <SearchableSelect
                       id="applicationSummarySpeciesCandidate"
-                      labelText="Application Species"
+                      labelText="Application species"
                       value={applicationSpeciesCandidate}
                       disabled={applicationSpeciesSelectOptions.length === 0}
                       placeholder={speciesPlaceholder}
@@ -2395,7 +2419,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     />
                     <SearchableSelect
                       id="applicationSummaryEndUse"
-                      labelText="Application End Use"
+                      labelText="Application end use"
                       value={summaryForm.endUseCode}
                       disabled={
                         (summaryForm.speciesCodes ?? []).length === 0 ||
@@ -2418,7 +2442,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                       }
                       onClick={onAddApplicationSpecies}
                     >
-                      Add Application Species
+                      Add Application species
                     </Button>
                     {(summaryForm.speciesCodes ?? []).map((speciesCode) => (
                       <span key={speciesCode} className="legacy-search-actions">
@@ -2459,12 +2483,12 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 <>
                   <dl className="detail-field-grid">
                     {[
-                      ['Exemption Reason', displayValue(detail.exemptionReasonCode)],
-                      ['Application Date', displayValue(detail.applicationDate)],
-                      ['Received Date', displayValue(detail.receivedDate)],
+                      ['Exemption reason', displayValue(detail.exemptionReasonCode)],
+                      ['Application date', displayValue(detail.applicationDate)],
+                      ['Received date', displayValue(detail.receivedDate)],
                       ['Term (days)', displayValue(detail.termDays)],
-                      ['Application Volume (m³)', displayValue(detail.applicationVolume)],
-                      ['Average Log Volume', displayValue(detail.averageLogVolume)],
+                      ['Application volume (m³)', displayValue(detail.applicationVolume)],
+                      ['Average log volume', displayValue(detail.averageLogVolume)],
                     ].map(([label, value]) => (
                       <div key={label} className="detail-field-item">
                         <dt className="detail-field-label">{label}</dt>
@@ -2480,10 +2504,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
           <Column sm={4} md={8} lg={16}>
             <Tile className="application-detail-section application-detail-status-strip">
-              <h2 className="detail-tile-title">Access & Workflow Flags</h2>
+              <h2 className="detail-tile-title">Access & workflow flags</h2>
               <div className="application-detail-flag-row">
                 <Tag type={detail.canCreateOffers ? 'green' : 'gray'}>
-                  Create Offers: {detail.canCreateOffers ? 'Yes' : 'No'}
+                  Create offers: {detail.canCreateOffers ? 'Yes' : 'No'}
                 </Tag>
                 <Tag type={detail.industryUser ? 'green' : 'gray'}>
                   Industry User: {detail.industryUser ? 'Yes' : 'No'}
@@ -2507,11 +2531,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 id="application-review"
                 className="application-detail-section application-detail-review"
               >
-                <h2 className="detail-tile-title">Application Review</h2>
+                <h2 className="detail-tile-title">Application review</h2>
                 <div className="legacy-search-grid">
                   <SearchableSelect
                     id="applicationDetailReviewStatus"
-                    labelText="Application Status"
+                    labelText="Application status"
                     value={reviewStatusCode}
                     placeholder="Select status"
                     options={reviewStatusOptions}
@@ -2524,7 +2548,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   />
                   <TextInput
                     id="applicationDetailReviewEmail"
-                    labelText="Client Email Address"
+                    labelText="Client email address"
                     value={reviewStatusEmailAddress}
                     invalid={
                       !!reviewValidationMessage &&
@@ -2540,15 +2564,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
                 <div className="legacy-search-grid">
                   <TextArea
                     id="applicationDetailReviewRemark"
-                    labelText="Review Remark"
+                    labelText="Review remark"
                     maxCount={250}
                     value={reviewStatusRemark}
                     onChange={(event) => setReviewStatusRemark(event.target.value.slice(0, 250))}
                   />
                 </div>
                 {!!reviewValidationMessage && normalizedReviewStatusCode && (
-                  <InlineNotification
-                    className="legacy-inline-notification"
+                  <AppNotification
                     kind="error"
                     title="Review validation"
                     subtitle={reviewValidationMessage}
@@ -2743,15 +2766,15 @@ const ProvincialApplicationDetailsPage: FC = () => {
               className="application-detail-section application-detail-documents"
             >
               <h2 className="detail-tile-title">
-                Documents <Tag type="green">API</Tag>
+                Documents <ApiSourceTag context="Application documents are returned from the document service." />
               </h2>
-              {!!documentUploadUnavailableMessage && canUploadApplicationDocuments && (
-                <InlineNotification
+              {!!showDocumentUploadUnavailableMessage && canUploadApplicationDocuments && (
+                <AppNotification
                   kind="info"
                   title="Upload unavailable"
                   subtitle={documentUploadUnavailableMessage}
                   lowContrast
-                  hideCloseButton
+                  onCloseButtonClick={() => setShowDocumentUploadUnavailableMessage(false)}
                 />
               )}
               {canAddApplicationDocuments && (

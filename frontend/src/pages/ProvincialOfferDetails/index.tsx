@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FC } from 'react'
-import { Button, Column, Grid, InlineLoading, InlineNotification, Tile } from '@carbon/react'
+import { Button, Column, Grid, InlineLoading, Tile } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { AppNotification } from '@/components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
@@ -66,7 +67,7 @@ const ProvincialOfferDetailsPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <h1>Provincial Offer Details</h1>
+        <h1>Provincial offer details</h1>
         <p>
           Offer <code>{offerNumber}</code>
         </p>
@@ -80,11 +81,12 @@ const ProvincialOfferDetailsPage: FC = () => {
 
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <InlineNotification
+          <AppNotification
             kind="error"
             title="Detail unavailable"
             subtitle={errorMessage}
             lowContrast
+            onCloseButtonClick={() => setErrorMessage('')}
           />
         </Column>
       )}
@@ -101,7 +103,7 @@ const ProvincialOfferDetailsPage: FC = () => {
                   disabled={!canPerform('/offersSearch')}
                   onClick={() => navigate(withCurrentSearch('/provincial/offers'))}
                 >
-                  Back to Offer Search Results
+                  Back to Offer search Results
                 </Button>
                 <Button
                   kind="secondary"
@@ -126,45 +128,48 @@ const ProvincialOfferDetailsPage: FC = () => {
           </Column>
           <Column sm={4} md={8} lg={16}>
             <DetailFieldTile
-              title="Offer Summary"
+              title="Offer summary"
               fields={[
-                { label: 'Offer Number', value: displayValue(detail.offerNumber) },
-                { label: 'Application Number', value: displayValue(detail.applicationNumber) },
-                { label: 'Package Number', value: displayValue(detail.packageNumber) },
-                { label: 'Company Name', value: displayValue(detail.companyName) },
-                { label: 'Contact Name', value: displayValue(detail.contactName) },
+                { label: 'Offer number', value: displayValue(detail.offerNumber) },
+                { label: 'Application number', value: displayValue(detail.applicationNumber) },
+                { label: 'Package number', value: displayValue(detail.packageNumber) },
+                { label: 'Company name', value: displayValue(detail.companyName) },
+                { label: 'Contact name', value: displayValue(detail.contactName) },
                 {
-                  label: 'Offer Amount',
+                  label: 'Offer amount',
                   value:
                     detail.purchaseOfferAmount === null
                       ? 'Not provided'
                       : `$${detail.purchaseOfferAmount.toLocaleString()}`,
                 },
-                { label: 'Offer Date', value: displayValue(detail.purchaseOfferDate) },
-                { label: 'Withdrawal Date', value: displayValue(detail.offerWithdrawalDate) },
-                { label: 'TEAC Review Date', value: displayValue(detail.teacReviewDate) },
-                { label: 'Approval Indicator', value: displayValue(detail.approvalIndicator) },
-                { label: 'Valid Offer', value: displayValue(detail.validOfferIndicator) },
-                { label: 'Fair Offer', value: displayValue(detail.fairOfferIndicator) },
-                { label: 'Offer Remark', value: displayValue(detail.offerRemark) },
-                { label: 'Withdraw Reason', value: displayValue(detail.withdrawReason) },
+                { label: 'Offer date', value: displayValue(detail.purchaseOfferDate) },
+                { label: 'Withdrawal date', value: displayValue(detail.offerWithdrawalDate) },
                 {
-                  label: 'Export Jurisdiction',
+                  label: 'Timber Export Advisory Committee review date',
+                  value: displayValue(detail.teacReviewDate),
+                },
+                { label: 'Approval indicator', value: displayValue(detail.approvalIndicator) },
+                { label: 'Valid offer', value: displayValue(detail.validOfferIndicator) },
+                { label: 'Fair offer', value: displayValue(detail.fairOfferIndicator) },
+                { label: 'Offer remark', value: displayValue(detail.offerRemark) },
+                { label: 'Withdraw reason', value: displayValue(detail.withdrawReason) },
+                {
+                  label: 'Export jurisdiction',
                   value: displayValue(detail.exportJurisdictionCode),
                 },
                 {
-                  label: 'Manufacturing Facility',
+                  label: 'Manufacturing facility',
                   value: displayValue(detail.manufacturingFacilityInfo),
                 },
                 {
-                  label: 'Offering Client Number',
+                  label: 'Offering client number',
                   value: displayValue(detail.offeringClientNumber),
                 },
-                { label: 'Pickup Location', value: displayValue(detail.pickupLocation) },
-                { label: 'Offer Condition', value: displayValue(detail.offerCondition) },
-                { label: 'Advertising Date', value: displayValue(detail.advertisingDate) },
-                { label: 'Offer End Date', value: displayValue(detail.offerEndDate) },
-                { label: 'Offer Volume (m³)', value: displayValue(detail.offerVolume) },
+                { label: 'Pickup location', value: displayValue(detail.pickupLocation) },
+                { label: 'Offer condition', value: displayValue(detail.offerCondition) },
+                { label: 'Advertising date', value: displayValue(detail.advertisingDate) },
+                { label: 'Offer end date', value: displayValue(detail.offerEndDate) },
+                { label: 'Offer volume (m³)', value: displayValue(detail.offerVolume) },
                 { label: 'Region', value: displayValue(detail.region) },
               ]}
             />

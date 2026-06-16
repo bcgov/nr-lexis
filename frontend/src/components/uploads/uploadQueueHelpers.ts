@@ -37,7 +37,7 @@ export const extractUploadErrorDetails = (
         : textResponseMessage
           ? textResponseMessage
           : status
-            ? `Upload request failed with status ${status}.`
+            ? 'Upload request failed. Verify the file format and retry. If the issue continues, contact support.'
             : 'Upload request failed. Please try again or contact support.'
 
   return {

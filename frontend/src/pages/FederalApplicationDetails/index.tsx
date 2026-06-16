@@ -4,7 +4,6 @@ import {
   Column,
   Grid,
   InlineLoading,
-  InlineNotification,
   Table,
   TableBody,
   TableCell,
@@ -17,6 +16,8 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import { ApiSourceTag } from '@/components/AbbreviatedSourceTag'
+import { AppNotification } from '@/components/AppNotification'
 import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
@@ -258,7 +259,7 @@ const FederalApplicationDetailsPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <h1>Federal Application Details</h1>
+        <h1>Federal application details</h1>
         <p>
           Federal application <code>{applicationNumber}</code>
         </p>
@@ -272,11 +273,12 @@ const FederalApplicationDetailsPage: FC = () => {
 
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <InlineNotification
+          <AppNotification
             kind="error"
             title="Detail unavailable"
             subtitle={errorMessage}
             lowContrast
+            onCloseButtonClick={() => setErrorMessage('')}
           />
         </Column>
       )}
@@ -285,31 +287,35 @@ const FederalApplicationDetailsPage: FC = () => {
         <>
           {!!documentsErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="warning"
                 title="Documents unavailable"
                 subtitle={documentsErrorMessage}
                 lowContrast
+                onCloseButtonClick={() => setDocumentsErrorMessage('')}
               />
             </Column>
           )}
           {!!actionErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="error"
                 title="Action failed"
                 subtitle={actionErrorMessage}
                 lowContrast
+                onCloseButtonClick={() => setActionErrorMessage('')}
               />
             </Column>
           )}
           {!!actionInfoMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="info"
                 title="Action completed"
                 subtitle={actionInfoMessage}
                 lowContrast
+                autoDismissMs={8000}
+                onCloseButtonClick={() => setActionInfoMessage('')}
               />
             </Column>
           )}
@@ -324,7 +330,7 @@ const FederalApplicationDetailsPage: FC = () => {
                   disabled={!canAccessFederalSearch}
                   onClick={() => navigate(withCurrentSearch('/federal'))}
                 >
-                  Back to Federal Search Results
+                  Back to Federal Search results
                 </Button>
                 <Button
                   kind="secondary"
@@ -358,34 +364,34 @@ const FederalApplicationDetailsPage: FC = () => {
 
           <Column sm={4} md={8} lg={16}>
             <DetailFieldTile
-              title="Federal Application Summary"
+              title="Federal application summary"
               fields={[
-                { label: 'Application Number', value: displayValue(detail.applicationNumber) },
+                { label: 'Application number', value: displayValue(detail.applicationNumber) },
                 {
-                  label: 'Federal Application Number',
+                  label: 'Federal application number',
                   value: displayValue(detail.federalApplicationNumber),
                 },
                 {
                   label: 'Status',
                   value: displayValue(detail.statusDescription ?? detail.statusCode),
                 },
-                { label: 'Owner Client Number', value: displayValue(detail.ownerClientNumber) },
+                { label: 'Owner client number', value: displayValue(detail.ownerClientNumber) },
                 {
-                  label: 'Owner Location Code',
+                  label: 'Owner location code',
                   value: displayValue(detail.ownerClientLocationCode),
                 },
-                { label: 'Agent Client Number', value: displayValue(detail.agentClientNumber) },
+                { label: 'Agent client number', value: displayValue(detail.agentClientNumber) },
                 {
-                  label: 'Agent Location Code',
+                  label: 'Agent location code',
                   value: displayValue(detail.agentClientLocationCode),
                 },
-                { label: 'Exemption Number', value: displayValue(detail.exemptionNumber) },
-                { label: 'Exemption Type', value: displayValue(detail.exemptionType) },
-                { label: 'Exemption Reason', value: displayValue(detail.exemptionReason) },
-                { label: 'Received Date', value: displayValue(detail.receivedDate) },
-                { label: 'Listing Date', value: displayValue(detail.listingDate) },
+                { label: 'Exemption number', value: displayValue(detail.exemptionNumber) },
+                { label: 'Exemption type', value: displayValue(detail.exemptionType) },
+                { label: 'Exemption reason', value: displayValue(detail.exemptionReason) },
+                { label: 'Received date', value: displayValue(detail.receivedDate) },
+                { label: 'Listing date', value: displayValue(detail.listingDate) },
                 {
-                  label: 'Read Only',
+                  label: 'Read only',
                   value: (
                     <Tag type={detail.readOnly ? 'red' : 'gray'}>
                       {detail.readOnly ? 'Yes' : 'No'}
@@ -398,38 +404,38 @@ const FederalApplicationDetailsPage: FC = () => {
 
           <Column sm={4} md={8} lg={16}>
             <DetailFieldTile
-              title="Federal Permit"
+              title="Federal permit"
               fields={[
                 {
-                  label: 'Permit Number',
+                  label: 'Permit number',
                   value: displayValue(detail.federalPermit?.permitNumber),
                 },
                 {
-                  label: 'Permit Issue Date',
+                  label: 'Permit issue date',
                   value: displayValue(detail.federalPermit?.permitIssueDate),
                 },
                 {
-                  label: 'Destination Country',
+                  label: 'Destination country',
                   value: displayValue(detail.federalPermit?.destinationCountry),
                 },
                 {
-                  label: 'Transport Type',
+                  label: 'Transport type',
                   value: displayValue(detail.federalPermit?.transportType),
                 },
                 {
-                  label: 'Transport Name',
+                  label: 'Transport name',
                   value: displayValue(detail.federalPermit?.transportName),
                 },
                 {
-                  label: 'Shipping Date',
+                  label: 'Shipping date',
                   value: displayValue(detail.federalPermit?.shippingDate),
                 },
                 {
-                  label: 'Port Of Export',
+                  label: 'Port of export',
                   value: displayValue(detail.federalPermit?.portOfExport),
                 },
                 {
-                  label: 'Other Port Of Export',
+                  label: 'Other port of export',
                   value: displayValue(detail.federalPermit?.otherPortOfExport),
                 },
               ]}
@@ -518,7 +524,7 @@ const FederalApplicationDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Documents <Tag type="green">API</Tag>
+                Documents <ApiSourceTag context="Federal application documents are returned from the document service." />
               </h2>
               {canManageDocuments && (
                 <DetailDocumentUploadPanel

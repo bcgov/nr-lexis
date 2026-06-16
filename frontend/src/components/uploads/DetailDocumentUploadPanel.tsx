@@ -1,5 +1,6 @@
 import { useMemo, useState, type FC } from 'react'
-import { InlineNotification, TextArea, TextInput } from '@carbon/react'
+import { TextArea, TextInput } from '@carbon/react'
+import { AppNotification } from '@/components/AppNotification'
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
@@ -43,26 +44,26 @@ type UploadCopy = {
 
 const UPLOAD_COPY: Record<DetailDocumentUploadType, UploadCopy> = {
   application: {
-    title: 'Upload Application Documents',
-    workflowLabel: 'Application Upload',
+    title: 'Upload application documents',
+    workflowLabel: 'Application upload',
     targetLabel: 'Application',
     defaultMessage: 'Application document upload submitted.',
   },
   exemption: {
-    title: 'Upload Exemption Documents',
-    workflowLabel: 'Exemption Upload',
+    title: 'Upload exemption documents',
+    workflowLabel: 'Exemption upload',
     targetLabel: 'Exemption',
     defaultMessage: 'Exemption document upload submitted.',
   },
   permit: {
-    title: 'Upload Permit Documents',
-    workflowLabel: 'Permit Upload',
+    title: 'Upload permit documents',
+    workflowLabel: 'Permit upload',
     targetLabel: 'Permit',
     defaultMessage: 'Permit document upload submitted.',
   },
   invoice: {
-    title: 'Upload Invoices',
-    workflowLabel: 'Invoice Upload',
+    title: 'Upload invoices',
+    workflowLabel: 'Invoice upload',
     targetLabel: 'Permit',
     defaultMessage: 'Invoice upload submitted.',
   },
@@ -372,18 +373,19 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
   return (
     <div className="detail-document-upload" id={inputId}>
       {successMessage && (
-        <InlineNotification
+        <AppNotification
           kind="success"
-          title="Upload Submitted"
+          title="Upload submitted"
           subtitle={successMessage}
           lowContrast
+          autoDismissMs={8000}
           onCloseButtonClick={() => setSuccessMessage('')}
         />
       )}
       {errorMessage && (
-        <InlineNotification
+        <AppNotification
           kind="error"
-          title="Upload Error"
+          title="Upload error"
           subtitle={errorMessage}
           lowContrast
           onCloseButtonClick={() => setErrorMessage('')}
@@ -403,7 +405,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
               <strong>{currentTargetSummary}</strong>
             </div>
             <div>
-              <span>Queued Files</span>
+              <span>Queued files</span>
               <strong>{uploadQueue.length}</strong>
             </div>
             <div>
@@ -415,7 +417,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
             <div className="legacy-search-grid detail-document-upload__invoice-fields">
               <TextInput
                 id={`${inputId}SalesInvoiceNumber`}
-                labelText="Upload Invoice Number"
+                labelText="Upload invoice number"
                 value={salesInvoiceNumber}
                 invalid={showInvoiceFieldErrors && !!invoiceNumberError}
                 invalidText={showInvoiceFieldErrors ? invoiceNumberError : undefined}
@@ -424,7 +426,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
               />
               <TextInput
                 id={`${inputId}InvoiceExportValue`}
-                labelText="Upload Invoice Export Value"
+                labelText="Upload invoice export value"
                 value={invoiceExportValue}
                 invalid={showInvoiceFieldErrors && !!invoiceExportValueError}
                 invalidText={showInvoiceFieldErrors ? invoiceExportValueError : undefined}
@@ -433,7 +435,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
               />
               <TextInput
                 id={`${inputId}InvoiceConversionRate`}
-                labelText="Upload Invoice Conversion Rate"
+                labelText="Upload invoice conversion rate"
                 value={invoiceConversionRate}
                 invalid={showInvoiceFieldErrors && !!invoiceConversionRateError}
                 invalidText={showInvoiceFieldErrors ? invoiceConversionRateError : undefined}
@@ -442,7 +444,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
               />
               <TextInput
                 id={`${inputId}InvoiceFeeInLieu`}
-                labelText="Upload Invoice Fee In Lieu"
+                labelText="Upload invoice fee in lieu"
                 value={invoiceFeeInLieu}
                 invalid={showInvoiceFieldErrors && !!invoiceFeeInLieuError}
                 invalidText={showInvoiceFieldErrors ? invoiceFeeInLieuError : undefined}
@@ -453,7 +455,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
           )}
           <TextArea
             id={`${inputId}Description`}
-            labelText="Document Description"
+            labelText="Document description"
             value={fileDescription}
             onChange={(event) => setFileDescription(event.target.value)}
             rows={3}
@@ -462,7 +464,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
         </section>
 
         <MultiFileDropZone
-          title="Upload Documents"
+          title="Upload documents"
           description="Supported files: any document with a file extension"
           inputId={`${inputId}File`}
           inputKey={fileInputKey}

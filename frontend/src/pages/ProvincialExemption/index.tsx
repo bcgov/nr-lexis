@@ -5,7 +5,6 @@ import {
   Checkbox,
   Column,
   Grid,
-  InlineNotification,
   FilterableMultiSelect,
   Pagination,
   Table,
@@ -18,6 +17,7 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import type {
   ProvincialExemptionSearchFilters,
@@ -90,12 +90,12 @@ const SORT_COLUMNS: {
   { id: 'exemptionNumber', label: 'Exemption' },
   { id: 'type', label: 'Type' },
   { id: 'status', label: 'Status' },
-  { id: 'applicantClientNumber', label: 'Applicant Client Nbr' },
-  { id: 'ownerClientNumber', label: 'Owner Client Nbr' },
-  { id: 'approvedVolume', label: 'Approved Vol (m³)' },
-  { id: 'balanceRemaining', label: 'Bal Remaining (m³)' },
-  { id: 'listingDate', label: 'Listing Date' },
-  { id: 'expiryDate', label: 'Expiry Date' },
+  { id: 'applicantClientNumber', label: 'Applicant client number' },
+  { id: 'ownerClientNumber', label: 'Owner client number' },
+  { id: 'approvedVolume', label: 'Approved volume (m³)' },
+  { id: 'balanceRemaining', label: 'Balance remaining (m³)' },
+  { id: 'listingDate', label: 'Listing date' },
+  { id: 'expiryDate', label: 'Expiry date' },
   { id: 'region', label: 'Region' },
 ]
 
@@ -421,7 +421,7 @@ const ProvincialExemptionPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial Exemption Search</h1>
+        <h1>Provincial exemption search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -430,19 +430,19 @@ const ProvincialExemptionPage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="applicationNumber"
-              labelText="Application Number"
+              labelText="Application number"
               value={filters.applicationNumber}
               onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
             <TextInput
               id="packageNumber"
-              labelText="Package Number"
+              labelText="Package number"
               value={filters.packageNumber}
               onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
             <TextInput
               id="exemptionNumber"
-              labelText="Exemption Number"
+              labelText="Exemption number"
               value={filters.exemptionNumber}
               onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
             />
@@ -464,7 +464,7 @@ const ProvincialExemptionPage: FC = () => {
             />
             <IsoDatePicker
               id="listFromDate"
-              labelText="List From Date (YYYY-MM-DD)"
+              labelText="List from date (YYYY-MM-DD)"
               value={filters.listFromDate}
               invalid={!isValidIsoDate(filters.listFromDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -472,7 +472,7 @@ const ProvincialExemptionPage: FC = () => {
             />
             <IsoDatePicker
               id="listToDate"
-              labelText="List To Date (YYYY-MM-DD)"
+              labelText="List to date (YYYY-MM-DD)"
               value={filters.listToDate}
               invalid={!isValidIsoDate(filters.listToDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -480,7 +480,7 @@ const ProvincialExemptionPage: FC = () => {
             />
             <SearchableSelect
               id="exemptionTypeCode"
-              labelText="Exemption Type"
+              labelText="Exemption type"
               value={filters.exemptionTypeCode}
               placeholder="All types"
               options={exemptionTypeOptions}
@@ -488,7 +488,7 @@ const ProvincialExemptionPage: FC = () => {
             />
             <SearchableSelect
               id="exemptionStatusCode"
-              labelText="Exemption Status"
+              labelText="Exemption status"
               value={filters.exemptionStatusCode}
               placeholder="All statuses"
               options={exemptionStatusOptions}
@@ -496,13 +496,13 @@ const ProvincialExemptionPage: FC = () => {
             />
             <TextInput
               id="applicantClientNumber"
-              labelText="Applicant Client Number"
+              labelText="Applicant client number"
               value={filters.applicantClientNumber}
               onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
             />
             <TextInput
               id="ownerClientNumber"
-              labelText="Owner Client Number"
+              labelText="Owner client number"
               value={filters.ownerClientNumber}
               onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
             />
@@ -534,11 +534,12 @@ const ProvincialExemptionPage: FC = () => {
             )}
           </div>
           {approvalStatus && (
-            <InlineNotification
+            <AppNotification
               className="legacy-inline-notification"
               kind={approvalStatus.kind}
               title={approvalStatus.kind === 'error' ? 'Validation failed' : 'Selection ready'}
               subtitle={approvalStatus.message}
+              autoDismissMs={approvalStatus.kind === 'success' ? 8000 : undefined}
               onCloseButtonClick={() => setApprovalStatus(null)}
             />
           )}
@@ -548,7 +549,7 @@ const ProvincialExemptionPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Search Results</h2>
+          <h2 className="dashboard-title">Search results</h2>
           {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
           <SearchResultsTableFrame
             loading={loading}

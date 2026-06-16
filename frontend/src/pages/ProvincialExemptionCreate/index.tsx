@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
 import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
 import IsoDatePicker from '@/components/IsoDatePicker'
+import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
@@ -10,7 +11,6 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
-  joinCreateSubmitMessages,
   maxNumericValueFieldError,
   mergeCreateDraftPayload,
   positiveNumericFieldError,
@@ -199,6 +199,8 @@ const ProvincialExemptionCreatePage: FC = () => {
     listCreateDrafts(MODULE_KEY),
   )
   const [status, setStatus] = useState<PageStatus | null>(null)
+  const [showMissingRequiredOptions, setShowMissingRequiredOptions] = useState(true)
+  const [showPrefillNotice, setShowPrefillNotice] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialExemptionCreateField>>(
     {},
@@ -244,7 +246,7 @@ const ProvincialExemptionCreatePage: FC = () => {
     () => Object.values(fieldErrors).some((error) => !!error),
     [fieldErrors],
   )
-  const missingRequiredOptions = exemptionTypes.length === 0
+  const missingRequiredOptions = exemptionTypes.length === 0 && showMissingRequiredOptions
 
   const markFieldTouched = (field: ProvincialExemptionCreateField): void => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
@@ -261,7 +263,7 @@ const ProvincialExemptionCreatePage: FC = () => {
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
+    setStatus({ kind: 'success', title: 'Draft saved', message: `Draft ${saved.id} saved.` })
   }
 
   const onSubmit = async () => {
@@ -284,8 +286,6 @@ const ProvincialExemptionCreatePage: FC = () => {
           form.applicationNumber,
         ],
       })
-      const responseMessage = joinCreateSubmitMessages(result)
-
       if (result.success) {
         if (result.createdId) {
           navigate(`/provincial/exemption/${encodeURIComponent(result.createdId)}`)
@@ -294,7 +294,7 @@ const ProvincialExemptionCreatePage: FC = () => {
         setStatus({
           kind: 'success',
           title: 'Exemption Submitted',
-          message: responseMessage || 'Exemption submitted successfully.',
+          message: 'Exemption submitted successfully.',
         })
         return
       }
@@ -302,14 +302,16 @@ const ProvincialExemptionCreatePage: FC = () => {
       setStatus({
         kind: 'error',
         title: 'Submit Failed',
-        message: responseMessage || 'Unable to submit provincial exemption create request.',
+        message:
+          'Exemption submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } catch (error) {
       console.error(error)
       setStatus({
         kind: 'error',
         title: 'Submit Failed',
-        message: 'Unable to submit provincial exemption create request.',
+        message:
+          'Exemption submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } finally {
       setIsSubmitting(false)
@@ -320,7 +322,7 @@ const ProvincialExemptionCreatePage: FC = () => {
     setForm(mergeCreateDraftPayload(record.payload, initialForm))
     setTouchedFields({})
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
+    setStatus({ kind: 'success', title: 'Draft loaded', message: `Draft ${record.id} loaded.` })
   }
 
   const onDeleteDraft = (draftId: string) => {
@@ -328,7 +330,7 @@ const ProvincialExemptionCreatePage: FC = () => {
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({
       kind: wasDeleted ? 'success' : 'error',
-      title: wasDeleted ? 'Draft Deleted' : 'Draft Delete Failed',
+      title: wasDeleted ? 'Draft deleted' : 'Draft delete failed',
       message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
     })
   }
@@ -336,41 +338,43 @@ const ProvincialExemptionCreatePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create Provincial Exemption</h1>
+        <h1>Create provincial exemption</h1>
       </Column>
 
       {missingRequiredOptions && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind="warning"
             title="Required options unavailable"
             subtitle="Exemption type values are unavailable. Submit remains disabled until a valid type is available."
             lowContrast
-            hideCloseButton
+            onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
           />
         </Column>
       )}
 
-      {!!prefillState && (
+      {!!prefillState && showPrefillNotice && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind="info"
             title="Prefilled from selected applications"
             subtitle={`Loaded ${prefillState.selectedApplicationNumbers.length} application(s) into this form.`}
             lowContrast
-            hideCloseButton
+            onCloseButtonClick={() => setShowPrefillNotice(false)}
+            autoDismissMs={8000}
           />
         </Column>
       )}
 
       {!!status && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind={status.kind}
             title={status.title}
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
+            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
           />
         </Column>
       )}
@@ -380,7 +384,7 @@ const ProvincialExemptionCreatePage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="exemptionNumber"
-              labelText="Exemption Number (required)"
+              labelText="Exemption number (required)"
               value={form.exemptionNumber}
               invalid={!!fieldError('exemptionNumber')}
               invalidText={fieldError('exemptionNumber')}
@@ -391,7 +395,7 @@ const ProvincialExemptionCreatePage: FC = () => {
             />
             <ApplicationNumberSelect
               id="applicationNumber"
-              labelText="Application Number (required)"
+              labelText="Application number (required)"
               value={form.applicationNumber}
               invalid={!!fieldError('applicationNumber')}
               invalidText={fieldError('applicationNumber')}
@@ -400,7 +404,7 @@ const ProvincialExemptionCreatePage: FC = () => {
             />
             <SearchableSelect
               id="exemptionTypeCode"
-              labelText="Exemption Type (required)"
+              labelText="Exemption type (required)"
               value={form.exemptionTypeCode}
               invalid={!!fieldError('exemptionTypeCode')}
               invalidText={fieldError('exemptionTypeCode')}
@@ -411,7 +415,7 @@ const ProvincialExemptionCreatePage: FC = () => {
             />
             <SearchableSelect
               id="exemptionStatusCode"
-              labelText="Exemption Status (required)"
+              labelText="Exemption status (required)"
               value={form.exemptionStatusCode}
               invalid={!!fieldError('exemptionStatusCode')}
               invalidText={fieldError('exemptionStatusCode')}
@@ -424,7 +428,7 @@ const ProvincialExemptionCreatePage: FC = () => {
             />
             <TextInput
               id="ownerClientNumber"
-              labelText="Owner Client Number (required)"
+              labelText="Owner client number (required)"
               value={form.ownerClientNumber}
               invalid={!!fieldError('ownerClientNumber')}
               invalidText={fieldError('ownerClientNumber')}
@@ -435,7 +439,7 @@ const ProvincialExemptionCreatePage: FC = () => {
             />
             <TextInput
               id="applicantClientNumber"
-              labelText="Applicant Client Number (required)"
+              labelText="Applicant client number (required)"
               value={form.applicantClientNumber}
               invalid={!!fieldError('applicantClientNumber')}
               invalidText={fieldError('applicantClientNumber')}
@@ -446,7 +450,7 @@ const ProvincialExemptionCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="approvalDate"
-              labelText="Approval Date (YYYY-MM-DD)"
+              labelText="Approval date (YYYY-MM-DD)"
               value={form.approvalDate}
               invalid={!!fieldError('approvalDate')}
               invalidText={fieldError('approvalDate')}
@@ -455,7 +459,7 @@ const ProvincialExemptionCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="expiryDate"
-              labelText="Expiry Date (YYYY-MM-DD)"
+              labelText="Expiry date (YYYY-MM-DD)"
               value={form.expiryDate}
               invalid={!!fieldError('expiryDate')}
               invalidText={fieldError('expiryDate')}
@@ -464,7 +468,7 @@ const ProvincialExemptionCreatePage: FC = () => {
             />
             <TextInput
               id="approvedVolume"
-              labelText="Approved Volume (m³) (required)"
+              labelText="Approved volumeume (m³) (required)"
               value={form.approvedVolume}
               invalid={!!fieldError('approvedVolume')}
               invalidText={fieldError('approvedVolume')}
@@ -502,7 +506,7 @@ const ProvincialExemptionCreatePage: FC = () => {
           <div className="legacy-search-actions">
             <TextArea
               id="otherConditions"
-              labelText="Other Conditions"
+              labelText="Other conditions"
               value={form.otherConditions}
               onChange={(event) =>
                 setForm((current) => ({ ...current, otherConditions: event.target.value }))
@@ -514,7 +518,7 @@ const ProvincialExemptionCreatePage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <CreateDraftHistory
-          title="Recent Exemption Drafts"
+          title="Recent exemption drafts"
           drafts={drafts}
           onUseDraft={onUseDraft}
           onDeleteDraft={onDeleteDraft}

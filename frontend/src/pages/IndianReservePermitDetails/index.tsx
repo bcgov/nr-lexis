@@ -4,7 +4,6 @@ import {
   Column,
   Grid,
   InlineLoading,
-  InlineNotification,
   Table,
   TableBody,
   TableCell,
@@ -15,6 +14,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { AppNotification } from '@/components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import type { IndianReservePermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
@@ -109,7 +109,7 @@ const IndianReservePermitDetailsPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <h1>Indigenous Reserve Permit Details</h1>
+        <h1>Indigenous reserve permit details</h1>
         <p>
           Permit <code>{permitNumber}</code>
         </p>
@@ -123,11 +123,12 @@ const IndianReservePermitDetailsPage: FC = () => {
 
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <InlineNotification
+          <AppNotification
             kind="error"
             title="Detail unavailable"
             subtitle={errorMessage}
             lowContrast
+            onCloseButtonClick={() => setErrorMessage('')}
           />
         </Column>
       )}
@@ -146,7 +147,7 @@ const IndianReservePermitDetailsPage: FC = () => {
                   }
                   onClick={() => navigate(withCurrentSearch('/indian-reserve'))}
                 >
-                  Back to Reserve Search Results
+                  Back to Reserve Search results
                 </Button>
                 <Button
                   kind="secondary"
@@ -164,26 +165,26 @@ const IndianReservePermitDetailsPage: FC = () => {
 
           <Column sm={4} md={8} lg={16}>
             <DetailFieldTile
-              title="Permit Summary"
+              title="Permit summary"
               fields={[
-                { label: 'Permit Number', value: displayValue(detail.permitNumber) },
-                { label: 'Client Number', value: displayValue(detail.clientNumber) },
-                { label: 'Client Location', value: displayValue(detail.clientLocation) },
+                { label: 'Permit number', value: displayValue(detail.permitNumber) },
+                { label: 'Client number', value: displayValue(detail.clientNumber) },
+                { label: 'Client location', value: displayValue(detail.clientLocation) },
                 { label: 'Region', value: displayValue(detail.region) },
-                { label: 'Application Date', value: displayValue(detail.applicationDate) },
-                { label: 'Permit Issue Date', value: displayValue(detail.permitIssueDate) },
+                { label: 'Application date', value: displayValue(detail.applicationDate) },
+                { label: 'Permit issue date', value: displayValue(detail.permitIssueDate) },
                 {
-                  label: 'Estimated Shipping Date',
+                  label: 'Estimated shipping date',
                   value: displayValue(detail.estimatedShippingDate),
                 },
                 {
-                  label: 'Destination Country',
+                  label: 'Destination country',
                   value: displayValue(detail.destinationCountry),
                 },
-                { label: 'Transport Type', value: displayValue(detail.transportTypeCode) },
-                { label: 'Transport Name', value: displayValue(detail.transportName) },
-                { label: 'Port Of Export', value: displayValue(detail.portOfExport) },
-                { label: 'Other Port Of Export', value: displayValue(detail.otherPortOfExport) },
+                { label: 'Transport type', value: displayValue(detail.transportTypeCode) },
+                { label: 'Transport name', value: displayValue(detail.transportName) },
+                { label: 'Port of export', value: displayValue(detail.portOfExport) },
+                { label: 'Other port of export', value: displayValue(detail.otherPortOfExport) },
               ]}
             />
           </Column>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
+import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
@@ -11,7 +12,6 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
-  joinCreateSubmitMessages,
   mergeCreateDraftPayload,
   requiredFieldError,
   type FieldErrors,
@@ -232,7 +232,7 @@ const IndianReservePermitCreatePage: FC = () => {
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
+    setStatus({ kind: 'success', title: 'Draft saved', message: `Draft ${saved.id} saved.` })
   }
 
   const onSubmit = async () => {
@@ -243,7 +243,7 @@ const IndianReservePermitCreatePage: FC = () => {
       setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
-        title: 'Validation Error',
+        title: 'Validation error',
         message: validationMessage,
       })
       return
@@ -253,8 +253,6 @@ const IndianReservePermitCreatePage: FC = () => {
     setIsSubmitting(true)
     try {
       const result = await submitIndianReservePermitCreate(form)
-      const responseMessage = joinCreateSubmitMessages(result)
-
       if (result.success) {
         if (result.createdId) {
           navigate(`/indian-reserve/permit/${encodeURIComponent(result.createdId)}`)
@@ -262,23 +260,25 @@ const IndianReservePermitCreatePage: FC = () => {
         }
         setStatus({
           kind: 'success',
-          title: 'Permit Submitted',
-          message: responseMessage || 'Indigenous reserve permit submitted successfully.',
+          title: 'Permit submitted',
+          message: 'Indigenous reserve permit submitted successfully.',
         })
         return
       }
 
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
-        message: responseMessage || 'Unable to submit indigenous reserve permit create request.',
+        title: 'Submit failed',
+        message:
+          'Indigenous reserve permit submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } catch (error) {
       console.error(error)
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
-        message: 'Unable to submit indigenous reserve permit create request.',
+        title: 'Submit failed',
+        message:
+          'Indigenous reserve permit submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } finally {
       setIsSubmitting(false)
@@ -289,7 +289,7 @@ const IndianReservePermitCreatePage: FC = () => {
     setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
     setTouchedFields({})
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
+    setStatus({ kind: 'success', title: 'Draft loaded', message: `Draft ${record.id} loaded.` })
   }
 
   const onDeleteDraft = (draftId: string) => {
@@ -297,7 +297,7 @@ const IndianReservePermitCreatePage: FC = () => {
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({
       kind: wasDeleted ? 'success' : 'error',
-      title: wasDeleted ? 'Draft Deleted' : 'Draft Delete Failed',
+      title: wasDeleted ? 'Draft deleted' : 'Draft delete failed',
       message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
     })
   }
@@ -305,16 +305,17 @@ const IndianReservePermitCreatePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create Indigenous Reserve Permit</h1>
+        <h1>Create indigenous reserve permit</h1>
       </Column>
 
       {!!status && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind={status.kind}
             title={status.title}
             subtitle={status.message}
             lowContrast
+            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
             onCloseButtonClick={() => setStatus(null)}
           />
         </Column>
@@ -325,7 +326,7 @@ const IndianReservePermitCreatePage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="permitNumber"
-              labelText="Permit Number (required)"
+              labelText="Permit number (required)"
               value={form.permitNumber}
               invalid={!!fieldError('permitNumber')}
               invalidText={fieldError('permitNumber')}
@@ -336,7 +337,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <TextInput
               id="packageNumber"
-              labelText="Package Number (required)"
+              labelText="Package number (required)"
               value={form.packageNumber}
               invalid={!!fieldError('packageNumber')}
               invalidText={fieldError('packageNumber')}
@@ -347,7 +348,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <TextInput
               id="clientNumber"
-              labelText="Client Number (required)"
+              labelText="Client number (required)"
               value={form.clientNumber}
               invalid={!!fieldError('clientNumber')}
               invalidText={fieldError('clientNumber')}
@@ -358,7 +359,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <SearchableSelect
               id="clientLocation"
-              labelText="Client Location (required)"
+              labelText="Client location (required)"
               value={form.clientLocation}
               disabled={!form.clientNumber.trim() || isLoadingClientLocations}
               invalid={!!fieldError('clientLocation')}
@@ -384,7 +385,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="applicationDate"
-              labelText="Application Date (YYYY-MM-DD) (required)"
+              labelText="Application date (YYYY-MM-DD) (required)"
               value={form.applicationDate}
               invalid={!!fieldError('applicationDate')}
               invalidText={fieldError('applicationDate')}
@@ -393,7 +394,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="permitIssueDate"
-              labelText="Permit Issue Date (YYYY-MM-DD) (required)"
+              labelText="Permit issue date (YYYY-MM-DD) (required)"
               value={form.permitIssueDate}
               invalid={!!fieldError('permitIssueDate')}
               invalidText={fieldError('permitIssueDate')}
@@ -402,7 +403,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="estimatedShippingDate"
-              labelText="Estimated Shipping Date (YYYY-MM-DD) (required)"
+              labelText="Estimated shipping date (YYYY-MM-DD) (required)"
               value={form.estimatedShippingDate}
               invalid={!!fieldError('estimatedShippingDate')}
               invalidText={fieldError('estimatedShippingDate')}
@@ -413,7 +414,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <SearchableSelect
               id="destinationCountry"
-              labelText="Destination Country"
+              labelText="Destination country"
               value={form.destinationCountry}
               placeholder="Select country"
               options={destinationCountries}
@@ -423,7 +424,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <TextInput
               id="transportTypeCode"
-              labelText="Transport Type Code"
+              labelText="Transport type code"
               value={form.transportTypeCode}
               onChange={(event) =>
                 setForm((current) => ({ ...current, transportTypeCode: event.target.value }))
@@ -431,7 +432,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <TextInput
               id="transportName"
-              labelText="Transport Name (required)"
+              labelText="Transport name (required)"
               value={form.transportName}
               invalid={!!fieldError('transportName')}
               invalidText={fieldError('transportName')}
@@ -442,7 +443,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <SearchableSelect
               id="portOfExport"
-              labelText="Port Of Export"
+              labelText="Port of export"
               value={form.portOfExport}
               placeholder="Select port"
               options={portsOfExport}
@@ -450,7 +451,7 @@ const IndianReservePermitCreatePage: FC = () => {
             />
             <TextInput
               id="otherPortOfExport"
-              labelText="Other Port Of Export"
+              labelText="Other port of export"
               value={form.otherPortOfExport}
               onChange={(event) =>
                 setForm((current) => ({ ...current, otherPortOfExport: event.target.value }))
@@ -493,7 +494,7 @@ const IndianReservePermitCreatePage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <CreateDraftHistory
-          title="Recent Indigenous Reserve Permit Drafts"
+          title="Recent indigenous reserve permit drafts"
           drafts={drafts}
           onUseDraft={onUseDraft}
           onDeleteDraft={onDeleteDraft}

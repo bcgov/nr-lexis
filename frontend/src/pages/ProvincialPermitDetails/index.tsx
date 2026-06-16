@@ -4,19 +4,19 @@ import {
   Column,
   Grid,
   InlineLoading,
-  InlineNotification,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
   TextInput,
   Tile,
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import { ApiSourceTag } from '@/components/AbbreviatedSourceTag'
+import { AppNotification } from '@/components/AppNotification'
 import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
@@ -595,7 +595,7 @@ const ProvincialPermitDetailsPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <h1>Provincial Permit Details</h1>
+        <h1>Provincial permit details</h1>
         <p>
           Permit <code>{permitNumber}</code>
         </p>
@@ -609,24 +609,26 @@ const ProvincialPermitDetailsPage: FC = () => {
 
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <InlineNotification
+          <AppNotification
             kind="error"
             title="Detail unavailable"
             subtitle={errorMessage}
             lowContrast
+            onCloseButtonClick={() => setErrorMessage('')}
           />
         </Column>
       )}
 
-      {!loading && !!documentsInvoicesErrorMessage && (
-        <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <InlineNotification
-            kind="warning"
-            title="Documents/Invoices Unavailable"
-            subtitle={documentsInvoicesErrorMessage}
-            lowContrast
-          />
-        </Column>
+          {!loading && !!documentsInvoicesErrorMessage && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <AppNotification
+                kind="warning"
+                title="Documents/invoices unavailable"
+                subtitle={documentsInvoicesErrorMessage}
+                lowContrast
+                onCloseButtonClick={() => setDocumentsInvoicesErrorMessage('')}
+              />
+            </Column>
       )}
 
       {!loading && detail && (
@@ -679,7 +681,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                   disabled={!canPerform('/permitSearch')}
                   onClick={() => navigate(withCurrentSearch('/provincial/permit'))}
                 >
-                  Back to Permit Search Results
+                  Back to Permit search Results
                 </Button>
                 <Button
                   kind="primary"
@@ -711,9 +713,9 @@ const ProvincialPermitDetailsPage: FC = () => {
 
           {!!actionInfoMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="info"
-                title="Action Info"
+                title="Action info"
                 subtitle={actionInfoMessage}
                 lowContrast
                 onCloseButtonClick={() => setActionInfoMessage('')}
@@ -723,9 +725,9 @@ const ProvincialPermitDetailsPage: FC = () => {
 
           {!!actionErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="error"
-                title="Action Failed"
+                title="Action failed"
                 subtitle={actionErrorMessage}
                 lowContrast
                 onCloseButtonClick={() => setActionErrorMessage('')}
@@ -734,43 +736,46 @@ const ProvincialPermitDetailsPage: FC = () => {
           )}
 
           <Column sm={4} md={8} lg={16}>
-            <DetailFieldTile
-              title="Permit Summary"
-              fields={[
-                { label: 'Permit Number', value: displayValue(detail.permitNumber) },
-                { label: 'Application Number', value: displayValue(detail.applicationNumber) },
-                { label: 'Package Number', value: displayValue(detail.packageNumber) },
-                { label: 'Exemption Number', value: displayValue(detail.exemptionNumber) },
+          <DetailFieldTile
+            title="Permit summary"
+            fields={[
+                { label: 'Permit number', value: displayValue(detail.permitNumber) },
+                { label: 'Application number', value: displayValue(detail.applicationNumber) },
+                { label: 'Package number', value: displayValue(detail.packageNumber) },
+                { label: 'Exemption number', value: displayValue(detail.exemptionNumber) },
                 {
                   label: 'Status',
                   value: displayValue(detail.permitStatusDescription ?? detail.permitStatusCode),
                 },
-                { label: 'Issue Date', value: displayValue(detail.issueDate) },
-                { label: 'Expiry Date', value: displayValue(detail.expiryDate) },
-                { label: 'Received Date', value: displayValue(detail.receivedDate) },
+                { label: 'Issue date', value: displayValue(detail.issueDate) },
+                { label: 'Expiry date', value: displayValue(detail.expiryDate) },
+                { label: 'Received date', value: displayValue(detail.receivedDate) },
                 { label: 'Region', value: displayValue(detail.region) },
               ]}
             />
           </Column>
 
           <Column sm={4} md={8} lg={8}>
-            <DetailFieldTile
-              title="Shipping"
-              fields={[
+          <DetailFieldTile
+            title="Shipping"
+            fields={[
                 {
-                  label: 'Destination Company',
+                  label: 'Destination company',
                   value: displayValue(detail.destinationCompanyName),
                 },
                 {
-                  label: 'Destination Country',
+                  label: 'Destination country',
                   value: displayValue(detail.destinationCountryCode),
                 },
-                { label: 'Transport Type', value: displayValue(detail.transportTypeCode) },
-                { label: 'Transport Name', value: displayValue(detail.transportName) },
-                { label: 'Port Of Export', value: displayValue(detail.portOfExportCode) },
-                { label: 'Other Port Of Export', value: displayValue(detail.otherPortOfExport) },
+                { label: 'Transport type', value: displayValue(detail.transportTypeCode) },
+                { label: 'Transport name', value: displayValue(detail.transportName) },
+                { label: 'Port of export', value: displayValue(detail.portOfExportCode) },
                 {
-                  label: 'Estimated Shipping Date',
+                  label: 'Other port of export',
+                  value: displayValue(detail.otherPortOfExport),
+                },
+                {
+                  label: 'Estimated shipping date',
                   value: displayValue(detail.estimatedShippingDate),
                 },
               ]}
@@ -778,19 +783,22 @@ const ProvincialPermitDetailsPage: FC = () => {
           </Column>
 
           <Column sm={4} md={8} lg={8}>
-            <DetailFieldTile
-              title="Financial and Volume"
-              fields={[
-                { label: 'Permit Volume (m3)', value: displayValue(detail.permitVolume) },
-                { label: 'Number Of Pieces', value: displayValue(detail.numberOfPieces) },
-                { label: 'Receipt Number', value: displayValue(detail.receiptNumber) },
-                { label: 'Invoice Number', value: displayValue(detail.invoiceNumber) },
-                { label: 'Federal Permit Number', value: displayValue(detail.federalPermitNumber) },
+          <DetailFieldTile
+            title="Financial and volume"
+            fields={[
+                { label: 'Permit volume (m3)', value: displayValue(detail.permitVolume) },
+                { label: 'Number of pieces', value: displayValue(detail.numberOfPieces) },
+                { label: 'Receipt number', value: displayValue(detail.receiptNumber) },
+                { label: 'Invoice number', value: displayValue(detail.invoiceNumber) },
                 {
-                  label: 'Applicant Client Number',
+                  label: 'Federal permit number',
+                  value: displayValue(detail.federalPermitNumber),
+                },
+                {
+                  label: 'Applicant client number',
                   value: displayValue(detail.applicantClientNumber),
                 },
-                { label: 'Owner Client Number', value: displayValue(detail.ownerClientNumber) },
+                { label: 'Owner client number', value: displayValue(detail.ownerClientNumber) },
                 { label: 'Remarks', value: displayValue(detail.remarks) },
               ]}
             />
@@ -799,7 +807,7 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Permit Items <Tag type="green">API</Tag>
+                Permit items <ApiSourceTag context="Permit item rows are returned from the permit items service." />
               </h2>
               <TextInput
                 id="permitItemsFilter"
@@ -812,7 +820,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                 <TableHead>
                   <TableRow>
                     <TableHeader>Item</TableHeader>
-                    <TableHeader>Timber Mark</TableHeader>
+                    <TableHeader>Timber mark</TableHeader>
                     <TableHeader>Species</TableHeader>
                     <TableHeader>Grade</TableHeader>
                     <TableHeader>Pieces</TableHeader>
@@ -842,7 +850,7 @@ const ProvincialPermitDetailsPage: FC = () => {
               <div className="legacy-search-grid">
                 <TextInput
                   id="permitInvoiceDraftNumber"
-                  labelText="Invoice Number"
+                  labelText="Invoice number"
                   value={invoiceDraftNumber}
                   invalid={!!invoiceFieldError('invoiceDraftNumber')}
                   invalidText={invoiceFieldError('invoiceDraftNumber')}
@@ -852,7 +860,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                 />
                 <TextInput
                   id="permitInvoiceDraftExportValue"
-                  labelText="Export Value"
+                  labelText="Export value"
                   value={invoiceDraftExportValue}
                   invalid={!!invoiceFieldError('invoiceDraftExportValue')}
                   invalidText={invoiceFieldError('invoiceDraftExportValue')}
@@ -862,7 +870,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                 />
                 <TextInput
                   id="permitInvoiceDraftFeeInLieu"
-                  labelText="Fee In Lieu"
+                  labelText="Fee in lieu"
                   value={invoiceDraftFeeInLieu}
                   invalid={!!invoiceFieldError('invoiceDraftFeeInLieu')}
                   invalidText={invoiceFieldError('invoiceDraftFeeInLieu')}
@@ -887,7 +895,7 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Fee Ledger <Tag type="green">API</Tag>
+                Fee ledger <ApiSourceTag context="Permit fee records are returned from the permit ledger service." />
               </h2>
               <TextInput
                 id="permitFeesFilter"
@@ -931,11 +939,11 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                GBMS Events <Tag type="green">API</Tag>
+                General Billing Management System events <ApiSourceTag context="Permit billing events are returned from the General Billing Management System integration service." />
               </h2>
               <TextInput
                 id="permitGbmsFilter"
-                labelText="Filter GBMS rows"
+                labelText="Filter General Billing Management System rows"
                 value={gbmsFilter}
                 onChange={(event) => updateFilterParam('gbmsFilter', event.target.value)}
                 placeholder="Filter by type, status, date, reference, or notes"
@@ -962,7 +970,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                   ))}
                   {filteredGbmsEvents.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5}>No GBMS rows matched the current filter.</TableCell>
+                      <TableCell colSpan={5}>No billing system rows matched the current filter.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -973,11 +981,11 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={8}>
             <Tile>
               <h2 className="detail-tile-title">
-                OIC Items <Tag type="green">API</Tag>
+                Order in Council items <ApiSourceTag context="Order in Council item rows are returned from the permit Order in Council dataset." />
               </h2>
               <TextInput
                 id="permitOicFilter"
-                labelText="Filter OIC rows"
+                labelText="Filter Order in Council rows"
                 value={oicFilter}
                 onChange={(event) => updateFilterParam('oicFilter', event.target.value)}
                 placeholder="Filter by type, status, date, reference, or notes"
@@ -1002,7 +1010,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                   ))}
                   {filteredOicItems.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4}>No OIC rows matched the current filter.</TableCell>
+                      <TableCell colSpan={4}>No Order in Council rows matched the current filter.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -1013,11 +1021,11 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={8}>
             <Tile>
               <h2 className="detail-tile-title">
-                BOIC Items <Tag type="green">API</Tag>
+                Blanket Order in Council items <ApiSourceTag context="Blanket Order in Council item rows are returned from the permit Blanket Order in Council dataset." />
               </h2>
               <TextInput
                 id="permitBoicFilter"
-                labelText="Filter BOIC rows"
+                labelText="Filter Blanket Order in Council rows"
                 value={boicFilter}
                 onChange={(event) => updateFilterParam('boicFilter', event.target.value)}
                 placeholder="Filter by type, status, date, reference, or notes"
@@ -1042,7 +1050,7 @@ const ProvincialPermitDetailsPage: FC = () => {
                   ))}
                   {filteredBoicItems.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4}>No BOIC rows matched the current filter.</TableCell>
+                      <TableCell colSpan={4}>No Blanket Order in Council rows matched the current filter.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -1053,7 +1061,7 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Permit Documents <Tag type="green">API</Tag>
+                Permit documents <ApiSourceTag context="Permit documents are returned from the permit documents service." />
               </h2>
               {canDeletePermitDocuments && (
                 <DetailDocumentUploadPanel
@@ -1128,7 +1136,7 @@ const ProvincialPermitDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Invoices <Tag type="green">API</Tag>
+                Invoices <ApiSourceTag context="Permit invoices are returned from the permit invoice service." />
               </h2>
               {canDeleteInvoiceDocuments && (
                 <DetailDocumentUploadPanel
@@ -1150,10 +1158,10 @@ const ProvincialPermitDetailsPage: FC = () => {
               <Table useZebraStyles>
                 <TableHead>
                   <TableRow>
-                    <TableHeader>Invoice Number</TableHeader>
-                    <TableHeader>Export Value (CAD)</TableHeader>
+                    <TableHeader>Invoice number</TableHeader>
+                    <TableHeader>Export value (CAD)</TableHeader>
                     <TableHeader>Conversion Rate</TableHeader>
-                    <TableHeader>Fee In Lieu</TableHeader>
+                    <TableHeader>Fee in lieu</TableHeader>
                     <TableHeader>Status</TableHeader>
                   </TableRow>
                 </TableHead>
@@ -1179,15 +1187,27 @@ const ProvincialPermitDetailsPage: FC = () => {
 
           <Column sm={4} md={8} lg={8}>
             <DetailFieldTile
-              title="Tab Data Sources"
+              title="Tab data sources"
               fields={[
-                { label: 'Items', value: 'API' },
-                { label: 'Fees', value: 'API' },
-                { label: 'GBMS Events', value: 'API' },
-                { label: 'OIC Items', value: 'API' },
-                { label: 'BOIC Items', value: 'API' },
-                { label: 'Documents', value: 'API' },
-                { label: 'Invoices', value: 'API' },
+                { label: 'Items', value: <ApiSourceTag context="Permit item rows come from the permit items service." /> },
+                { label: 'Fees', value: <ApiSourceTag context="Permit fee records come from the permit ledger service." /> },
+                { label: 'General Billing Management System events', value: <ApiSourceTag context="Billing event rows come from the General Billing Management System integration service." /> },
+                {
+                  label: 'Order in Council items',
+                  value: <ApiSourceTag context="Order in Council item rows come from the permit Order in Council service." />,
+                },
+                {
+                  label: 'Blanket Order in Council items',
+                  value: <ApiSourceTag context="Blanket Order in Council item rows come from the permit Blanket Order in Council service." />,
+                },
+                {
+                  label: 'Documents',
+                  value: <ApiSourceTag context="Permit documents come from the permit documents service." />,
+                },
+                {
+                  label: 'Invoices',
+                  value: <ApiSourceTag context="Permit invoices come from the permit invoice service." />,
+                },
               ]}
             />
           </Column>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
+import { AppNotification } from '@/components/AppNotification'
 import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import SearchableSelect from '@/components/SearchableSelect'
@@ -9,7 +10,6 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
-  joinCreateSubmitMessages,
   mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
@@ -152,7 +152,7 @@ const ProvincialOfferCreatePage: FC = () => {
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
+    setStatus({ kind: 'success', title: 'Draft saved', message: `Draft ${saved.id} saved.` })
   }
 
   const onSubmit = async () => {
@@ -163,7 +163,7 @@ const ProvincialOfferCreatePage: FC = () => {
       setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
-        title: 'Validation Error',
+        title: 'Validation error',
         message: validationMessage,
       })
       return
@@ -173,8 +173,6 @@ const ProvincialOfferCreatePage: FC = () => {
     setIsSubmitting(true)
     try {
       const result = await submitProvincialOfferCreate(form)
-      const responseMessage = joinCreateSubmitMessages(result)
-
       if (result.success) {
         if (result.createdId) {
           navigate(`/provincial/offers/${encodeURIComponent(result.createdId)}`)
@@ -182,23 +180,25 @@ const ProvincialOfferCreatePage: FC = () => {
         }
         setStatus({
           kind: 'success',
-          title: 'Offer Submitted',
-          message: responseMessage || 'Offer submitted successfully.',
+          title: 'Offer submitted',
+          message: 'Offer submitted successfully.',
         })
         return
       }
 
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
-        message: responseMessage || 'Unable to submit provincial offer create request.',
+        title: 'Submit failed',
+        message:
+          'Offer submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } catch (error) {
       console.error(error)
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
-        message: 'Unable to submit provincial offer create request.',
+        title: 'Submit failed',
+        message:
+          'Offer submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } finally {
       setIsSubmitting(false)
@@ -209,7 +209,7 @@ const ProvincialOfferCreatePage: FC = () => {
     setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
     setTouchedFields({})
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
+    setStatus({ kind: 'success', title: 'Draft loaded', message: `Draft ${record.id} loaded.` })
   }
 
   const onDeleteDraft = (draftId: string) => {
@@ -217,7 +217,7 @@ const ProvincialOfferCreatePage: FC = () => {
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({
       kind: wasDeleted ? 'success' : 'error',
-      title: wasDeleted ? 'Draft Deleted' : 'Draft Delete Failed',
+      title: wasDeleted ? 'Draft deleted' : 'Draft delete failed',
       message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
     })
   }
@@ -225,16 +225,17 @@ const ProvincialOfferCreatePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create Provincial Offer</h1>
+        <h1>Create provincial offer</h1>
       </Column>
 
       {!!status && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind={status.kind}
             title={status.title}
             subtitle={status.message}
             lowContrast
+            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
             onCloseButtonClick={() => setStatus(null)}
           />
         </Column>
@@ -245,7 +246,7 @@ const ProvincialOfferCreatePage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="offerNumber"
-              labelText="Offer Number (required)"
+              labelText="Offer number (required)"
               value={form.offerNumber}
               invalid={!!fieldError('offerNumber')}
               invalidText={fieldError('offerNumber')}
@@ -256,7 +257,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <ApplicationNumberSelect
               id="applicationNumber"
-              labelText="Application Number (required)"
+              labelText="Application number (required)"
               value={form.applicationNumber}
               invalid={!!fieldError('applicationNumber')}
               invalidText={fieldError('applicationNumber')}
@@ -265,7 +266,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="packageNumber"
-              labelText="Package Number (required)"
+              labelText="Package number (required)"
               value={form.packageNumber}
               invalid={!!fieldError('packageNumber')}
               invalidText={fieldError('packageNumber')}
@@ -276,7 +277,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="offeringClientNumber"
-              labelText="Offering Client Number (required)"
+              labelText="Offering client number (required)"
               value={form.offeringClientNumber}
               invalid={!!fieldError('offeringClientNumber')}
               invalidText={fieldError('offeringClientNumber')}
@@ -287,7 +288,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="companyName"
-              labelText="Company Name (required)"
+              labelText="Company name (required)"
               value={form.companyName}
               invalid={!!fieldError('companyName')}
               invalidText={fieldError('companyName')}
@@ -298,7 +299,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="contactName"
-              labelText="Contact Name (required)"
+              labelText="Contact name (required)"
               value={form.contactName}
               invalid={!!fieldError('contactName')}
               invalidText={fieldError('contactName')}
@@ -317,7 +318,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="purchaseOfferAmount"
-              labelText="Offer Amount (required)"
+              labelText="Offer amount (required)"
               value={form.purchaseOfferAmount}
               invalid={!!fieldError('purchaseOfferAmount')}
               invalidText={fieldError('purchaseOfferAmount')}
@@ -328,7 +329,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="purchaseOfferDate"
-              labelText="Offer Date (YYYY-MM-DD) (required)"
+              labelText="Offer date (YYYY-MM-DD) (required)"
               value={form.purchaseOfferDate}
               invalid={!!fieldError('purchaseOfferDate')}
               invalidText={fieldError('purchaseOfferDate')}
@@ -337,7 +338,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="offerEndDate"
-              labelText="Withdrawal Date (YYYY-MM-DD)"
+              labelText="Withdrawal date (YYYY-MM-DD)"
               value={form.offerEndDate}
               invalid={!!fieldError('offerEndDate')}
               invalidText={fieldError('offerEndDate')}
@@ -346,7 +347,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="withdrawReason"
-              labelText="Withdraw Reason (required when withdrawn)"
+              labelText="Withdraw reason (required when withdrawn)"
               value={form.withdrawReason}
               invalid={!!fieldError('withdrawReason')}
               invalidText={fieldError('withdrawReason')}
@@ -357,7 +358,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="pickupLocation"
-              labelText="Pickup Location (required)"
+              labelText="Pickup location (required)"
               value={form.pickupLocation}
               invalid={!!fieldError('pickupLocation')}
               invalidText={fieldError('pickupLocation')}
@@ -391,7 +392,7 @@ const ProvincialOfferCreatePage: FC = () => {
           <div className="legacy-search-actions">
             <TextArea
               id="offerCondition"
-              labelText="Offer Conditions / Remarks"
+              labelText="Offer conditions / remarks"
               value={form.offerCondition}
               onChange={(event) =>
                 setForm((current) => ({ ...current, offerCondition: event.target.value }))
@@ -403,7 +404,7 @@ const ProvincialOfferCreatePage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <CreateDraftHistory
-          title="Recent Offer Drafts"
+          title="Recent offer drafts"
           drafts={drafts}
           onUseDraft={onUseDraft}
           onDeleteDraft={onDeleteDraft}

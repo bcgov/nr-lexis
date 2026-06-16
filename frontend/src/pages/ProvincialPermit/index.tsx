@@ -77,10 +77,10 @@ const SORT_COLUMNS: {
 }[] = [
   { id: 'permitNumber', label: 'Permit' },
   { id: 'status', label: 'Status' },
-  { id: 'applicantClientNumber', label: 'Applicant Client Nbr' },
-  { id: 'ownerClientNumber', label: 'Owner Client Nbr' },
-  { id: 'totalVolume', label: 'Total Volume (m³)' },
-  { id: 'issueDate', label: 'Issue Date' },
+  { id: 'applicantClientNumber', label: 'Applicant client number' },
+  { id: 'ownerClientNumber', label: 'Owner client number' },
+  { id: 'totalVolume', label: 'Total volume (m³)' },
+  { id: 'issueDate', label: 'Issue date' },
   { id: 'region', label: 'Region' },
 ]
 
@@ -360,7 +360,7 @@ const ProvincialPermitPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial Permit Search</h1>
+        <h1>Provincial permit search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -369,13 +369,13 @@ const ProvincialPermitPage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="applicationNumber"
-              labelText="Application Number"
+              labelText="Application number"
               value={filters.applicationNumber}
               onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
             <TextInput
               id="packageNumber"
-              labelText="Package Number"
+              labelText="Package number"
               value={filters.packageNumber}
               onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
@@ -397,7 +397,7 @@ const ProvincialPermitPage: FC = () => {
             />
             <IsoDatePicker
               id="issuedFromDate"
-              labelText="Issued From Date (YYYY-MM-DD)"
+              labelText="Issued from date (YYYY-MM-DD)"
               value={filters.issuedFromDate}
               invalid={!isValidIsoDate(filters.issuedFromDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -405,7 +405,7 @@ const ProvincialPermitPage: FC = () => {
             />
             <IsoDatePicker
               id="issuedToDate"
-              labelText="Issued To Date (YYYY-MM-DD)"
+              labelText="Issued to date (YYYY-MM-DD)"
               value={filters.issuedToDate}
               invalid={!isValidIsoDate(filters.issuedToDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -413,7 +413,7 @@ const ProvincialPermitPage: FC = () => {
             />
             <SearchableSelect
               id="permitStatus"
-              labelText="Permit Status"
+              labelText="Permit status"
               value={filters.permitStatus}
               placeholder="All statuses"
               options={permitStatusOptions}
@@ -421,19 +421,19 @@ const ProvincialPermitPage: FC = () => {
             />
             <TextInput
               id="permitNumber"
-              labelText="Permit Number"
+              labelText="Permit number"
               value={filters.permitNumber}
               onChange={(event) => updateFilter('permitNumber', event.target.value)}
             />
             <TextInput
               id="applicantClientNumber"
-              labelText="Applicant Client Number"
+              labelText="Applicant client number"
               value={filters.applicantClientNumber}
               onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
             />
             <TextInput
               id="ownerClientNumber"
-              labelText="Owner Client Number"
+              labelText="Owner client number"
               value={filters.ownerClientNumber}
               onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
             />
@@ -462,7 +462,7 @@ const ProvincialPermitPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Search Results</h2>
+          <h2 className="dashboard-title">Search results</h2>
           {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
           <SearchResultsTableFrame
             loading={loading}

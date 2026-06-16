@@ -5,7 +5,6 @@ import {
   Checkbox,
   Column,
   Grid,
-  InlineNotification,
   FilterableMultiSelect,
   Pagination,
   Table,
@@ -18,6 +17,7 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import type {
   ProvincialApplicationSearchFilters,
@@ -96,12 +96,12 @@ const SORT_COLUMNS: {
 }[] = [
   { id: 'applicationNumber', label: 'Application' },
   { id: 'status', label: 'Status' },
-  { id: 'applicantClientNumber', label: 'Applicant Client Number' },
-  { id: 'ownerClientNumber', label: 'Owner Client Number' },
+  { id: 'applicantClientNumber', label: 'Applicant client number' },
+  { id: 'ownerClientNumber', label: 'Owner client number' },
   { id: 'region', label: 'Region' },
-  { id: 'applicationVolume', label: 'Application Volume (m³)' },
-  { id: 'exemptionNumber', label: 'Exemption Number' },
-  { id: 'listingDate', label: 'Listing Date' },
+  { id: 'applicationVolume', label: 'Application volume (m³)' },
+  { id: 'exemptionNumber', label: 'Exemption number' },
+  { id: 'listingDate', label: 'Listing date' },
 ]
 
 const DEFAULT_SORT_FIELD: ProvincialApplicationSearchSortField = 'applicationNumber'
@@ -446,7 +446,7 @@ const ProvincialApplicationPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial Application Search</h1>
+        <h1>Provincial application search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -455,19 +455,19 @@ const ProvincialApplicationPage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="applicationNumber"
-              labelText="Application Number"
+              labelText="Application number"
               value={filters.applicationNumber}
               onChange={(event) => updateFilter('applicationNumber', event.target.value)}
             />
             <TextInput
               id="packageNumber"
-              labelText="Package Number"
+              labelText="Package number"
               value={filters.packageNumber}
               onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
             <SearchableSelect
               id="exemptionType"
-              labelText="Exemption Type"
+              labelText="Exemption type"
               value={filters.exemptionType}
               placeholder="All types"
               options={exemptionTypeOptions}
@@ -475,13 +475,13 @@ const ProvincialApplicationPage: FC = () => {
             />
             <TextInput
               id="exemptionNumber"
-              labelText="Exemption Number"
+              labelText="Exemption number"
               value={filters.exemptionNumber}
               onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
             />
             <SearchableSelect
               id="applicationStatus"
-              labelText="Application Status"
+              labelText="Application status"
               value={filters.applicationStatus}
               placeholder="All statuses"
               options={applicationStatusOptions}
@@ -489,7 +489,7 @@ const ProvincialApplicationPage: FC = () => {
             />
             <SearchableSelect
               id="productTypeCode"
-              labelText="Product Type"
+              labelText="Product type"
               value={filters.productTypeCode}
               placeholder="All product types"
               options={productTypeOptions}
@@ -513,7 +513,7 @@ const ProvincialApplicationPage: FC = () => {
             />
             <IsoDatePicker
               id="listingFromDate"
-              labelText="Listing From Date (YYYY-MM-DD)"
+              labelText="Listing from date (YYYY-MM-DD)"
               value={filters.listingFromDate}
               invalid={!isValidIsoDate(filters.listingFromDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -521,7 +521,7 @@ const ProvincialApplicationPage: FC = () => {
             />
             <IsoDatePicker
               id="listingToDate"
-              labelText="Listing To Date (YYYY-MM-DD)"
+              labelText="Listing to date (YYYY-MM-DD)"
               value={filters.listingToDate}
               invalid={!isValidIsoDate(filters.listingToDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -529,13 +529,13 @@ const ProvincialApplicationPage: FC = () => {
             />
             <TextInput
               id="applicantClientNumber"
-              labelText="Applicant Client Number"
+              labelText="Applicant client number"
               value={filters.applicantClientNumber}
               onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
             />
             <TextInput
               id="ownerClientNumber"
-              labelText="Owner Client Number"
+              labelText="Owner client number"
               value={filters.ownerClientNumber}
               onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
             />
@@ -558,7 +558,7 @@ const ProvincialApplicationPage: FC = () => {
               onClick={onCreateExemptionClick}
               disabled={selectedRowsCount === 0 || !canCreateExemption}
             >
-              Create Exemption for Selected Applications
+              Create exemption for Selected Applications
             </Button>
             {canCreateApplication && (
               <Link className="cds--link" to="/provincial/application/create">
@@ -567,7 +567,7 @@ const ProvincialApplicationPage: FC = () => {
             )}
           </div>
           {exemptionStatus && (
-            <InlineNotification
+            <AppNotification
               className="legacy-inline-notification"
               kind={exemptionStatus.kind}
               title="Validation failed"
@@ -581,7 +581,7 @@ const ProvincialApplicationPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Search Results</h2>
+          <h2 className="dashboard-title">Search results</h2>
           {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
           <SearchResultsTableFrame
             loading={loading}

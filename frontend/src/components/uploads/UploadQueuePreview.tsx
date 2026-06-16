@@ -107,7 +107,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
     <section className="admin-upload-panel" aria-labelledby={previewTitleId}>
       <div className="admin-upload-panel__header">
         <div>
-          <h2 id={previewTitleId}>Data Preview</h2>
+          <h2 id={previewTitleId}>Data preview</h2>
           <p>
             {items.length === 0
               ? 'Upload files to view them before submitting.'

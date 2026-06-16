@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
-import { Column, ComboBox, Grid, InlineNotification, Tag, TextArea, TextInput } from '@carbon/react'
+import { Column, ComboBox, Grid, Tag, TextArea, TextInput } from '@carbon/react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { AppNotification } from '@/components/AppNotification'
 import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
 import SearchableSelect from '@/components/SearchableSelect'
 import MultiFileDropZone from '@/components/uploads/MultiFileDropZone'
@@ -43,37 +44,37 @@ type UploadWorkflowDefinition = {
 const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   {
     type: 'lexisXml',
-    label: 'LEXIS Import',
+    label: 'LEXIS import',
     requiredAction: 'createApplication',
     numberFieldLabel: '',
     numberFieldPlaceholder: '',
   },
   {
     type: 'application',
-    label: 'Application Upload',
+    label: 'Application upload',
     requiredAction: '/fileApplicationUpload',
-    numberFieldLabel: 'Application Number',
+    numberFieldLabel: 'Application number',
     numberFieldPlaceholder: 'Enter application number',
   },
   {
     type: 'exemption',
-    label: 'Exemption Upload',
+    label: 'Exemption upload',
     requiredAction: '/fileExemptionUpload',
-    numberFieldLabel: 'Exemption Number',
+    numberFieldLabel: 'Exemption number',
     numberFieldPlaceholder: 'Enter exemption number',
   },
   {
     type: 'permit',
-    label: 'Permit Upload',
+    label: 'Permit upload',
     requiredAction: '/filePermitUpload',
-    numberFieldLabel: 'Permit Number',
+    numberFieldLabel: 'Permit number',
     numberFieldPlaceholder: 'Enter permit number',
   },
   {
     type: 'invoice',
-    label: 'Invoice Upload',
+    label: 'Invoice upload',
     requiredAction: '/fileInvoiceUpload',
-    numberFieldLabel: 'Permit Number',
+    numberFieldLabel: 'Permit number',
     numberFieldPlaceholder: 'Enter permit number for invoice',
   },
 ]
@@ -371,7 +372,7 @@ const AdminUploadsPage: FC = () => {
     [uploadQueue],
   )
   const uploadInputLabel =
-    selectedWorkflowType === 'lexisXml' ? 'LEXIS Import File' : 'Document File'
+    selectedWorkflowType === 'lexisXml' ? 'LEXIS import File' : 'Document File'
   const uploadAccept =
     selectedWorkflowType === 'lexisXml'
       ? '.xml,.zip,.geojson,.json,application/xml,text/xml,application/zip,application/json,application/geo+json'
@@ -719,24 +720,25 @@ const AdminUploadsPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid admin-upload-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Data Upload</h1>
+        <h1>Data upload</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
         <div className="admin-upload-workflow">
           {successMessage && (
-            <InlineNotification
+            <AppNotification
               kind="success"
-              title="Upload Submitted"
+              title="Upload submitted"
               subtitle={successMessage}
               lowContrast
+              autoDismissMs={8000}
               onCloseButtonClick={() => setSuccessMessage('')}
             />
           )}
           {errorMessage && (
-            <InlineNotification
+            <AppNotification
               kind="error"
-              title="Upload Error"
+              title="Upload error"
               subtitle={errorMessage}
               lowContrast
               onCloseButtonClick={() => setErrorMessage('')}
@@ -761,7 +763,7 @@ const AdminUploadsPage: FC = () => {
                   <strong>{currentUploadTargetSummary}</strong>
                 </div>
                 <div>
-                  <span>Queued Files</span>
+                  <span>Queued files</span>
                   <strong>{uploadQueue.length}</strong>
                 </div>
                 <div>
@@ -773,7 +775,7 @@ const AdminUploadsPage: FC = () => {
               <div className="legacy-search-grid admin-upload-settings-grid">
                 <SearchableSelect
                   id="uploadWorkflowType"
-                  labelText="Upload Type"
+                  labelText="Upload type"
                   value={selectedWorkflowType}
                   options={UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
                     value: workflow.type,
@@ -840,7 +842,7 @@ const AdminUploadsPage: FC = () => {
                   <>
                     <TextInput
                       id="salesInvoiceNumber"
-                      labelText="Invoice Number"
+                      labelText="Invoice number"
                       value={formState.salesInvoiceNumber}
                       invalid={!!fieldError('salesInvoiceNumber')}
                       invalidText={fieldError('salesInvoiceNumber')}
@@ -854,7 +856,7 @@ const AdminUploadsPage: FC = () => {
                     />
                     <TextInput
                       id="invoiceExportValue"
-                      labelText="Export Value (CAD)"
+                      labelText="Export value (CAD)"
                       value={formState.invoiceExportValue}
                       invalid={!!fieldError('invoiceExportValue')}
                       invalidText={fieldError('invoiceExportValue')}
@@ -868,7 +870,7 @@ const AdminUploadsPage: FC = () => {
                     />
                     <TextInput
                       id="invoiceConversionRate"
-                      labelText="Conversion Rate"
+                      labelText="Conversion rate"
                       value={formState.invoiceConversionRate}
                       invalid={!!fieldError('invoiceConversionRate')}
                       invalidText={fieldError('invoiceConversionRate')}
@@ -882,7 +884,7 @@ const AdminUploadsPage: FC = () => {
                     />
                     <TextInput
                       id="invoiceFeeInLieu"
-                      labelText="Fee In Lieu"
+                      labelText="Fee in lieu"
                       value={formState.invoiceFeeInLieu}
                       invalid={!!fieldError('invoiceFeeInLieu')}
                       invalidText={fieldError('invoiceFeeInLieu')}
@@ -899,7 +901,7 @@ const AdminUploadsPage: FC = () => {
 
                 <TextArea
                   id="fileDescription"
-                  labelText="Document Description"
+                  labelText="Document description"
                   value={formState.fileDescription}
                   onChange={(event) =>
                     setFormState((current) => ({

@@ -30,21 +30,21 @@ type LegacyLaunchTool = {
 const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
   {
     id: 'lexisAgentAdmin',
-    label: 'LEXIS Administration',
+    label: 'LEXIS administration',
     requiredAction: '/lexisAgentAdmin',
     description: 'User and access administration.',
     reactPath: '/admin',
   },
   {
     id: 'lexisPolicyAdmin',
-    label: 'Fee Policy Administration',
+    label: 'Fee policy administration',
     requiredAction: '/lexisPolicyAdmin',
     description: 'Fee policy administration.',
     reactPath: '/admin/policies',
   },
   {
     id: 'lexisFILAdmin',
-    label: 'FIL Percent Administration',
+    label: 'Fee in lieu percent administration',
     requiredAction: '/lexisFILAdmin',
     description: 'Fee-in-lieu percent policy administration.',
     reactPath: '/admin/policies',
@@ -54,35 +54,35 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
 const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
   {
     id: 'lexisXmlUpload',
-    label: 'LEXIS Import',
+    label: 'LEXIS import',
     requiredAction: 'createApplication',
     description: 'Import LEXIS application XML or GeoJSON.',
     reactUploadType: 'lexisXml',
   },
   {
     id: 'fileApplicationUpload',
-    label: 'Application Upload',
+    label: 'Application upload',
     requiredAction: '/fileApplicationUpload',
     description: 'Application document upload.',
     reactUploadType: 'application',
   },
   {
     id: 'fileExemptionUpload',
-    label: 'Exemption Upload',
+    label: 'Exemption upload',
     requiredAction: '/fileExemptionUpload',
     description: 'Exemption document upload.',
     reactUploadType: 'exemption',
   },
   {
     id: 'filePermitUpload',
-    label: 'Permit Upload',
+    label: 'Permit upload',
     requiredAction: '/filePermitUpload',
     description: 'Permit document upload.',
     reactUploadType: 'permit',
   },
   {
     id: 'fileInvoiceUpload',
-    label: 'Invoice Upload',
+    label: 'Invoice upload',
     requiredAction: '/fileInvoiceUpload',
     description: 'Invoice document upload.',
     reactUploadType: 'invoice',
@@ -141,14 +141,14 @@ const LEGACY_ACTION_CATALOG = [
 ] as const
 
 const ROUTE_ACCESS_CHECKS = [
-  { label: 'Provincial Summary', action: '/summary' },
-  { label: 'Provincial Review', action: '/applicationsReview' },
-  { label: 'Provincial Application Search', action: '/applicationSearch' },
-  { label: 'Provincial Exemption Search', action: '/exemptionSearch' },
-  { label: 'Provincial Offers Search', action: '/offersSearch' },
-  { label: 'Provincial Permit Search', action: '/permitSearch' },
-  { label: 'Federal Application Search', action: '/federalApplicationSearch' },
-  { label: 'Indigenous Reserve Permit Search', action: '/indianReservePermitSearch' },
+  { label: 'Provincial summary', action: '/summary' },
+  { label: 'Provincial review', action: '/applicationsReview' },
+  { label: 'Provincial application search', action: '/applicationSearch' },
+  { label: 'Provincial exemption search', action: '/exemptionSearch' },
+  { label: 'Provincial offers search', action: '/offersSearch' },
+  { label: 'Provincial permit search', action: '/permitSearch' },
+  { label: 'Federal application search', action: '/federalApplicationSearch' },
+  { label: 'Indigenous reserve permit search', action: '/indianReservePermitSearch' },
   { label: 'Reports', action: '/applicationReport' },
   { label: 'Admin', action: '/lexisAgentAdmin' },
 ]
@@ -183,7 +183,7 @@ const AdminPage: FC = () => {
 
       <Column sm={4} md={8} lg={8}>
         <Tile>
-          <h2 className="dashboard-title">Session Snapshot</h2>
+          <h2 className="dashboard-title">Session snapshot</h2>
           <p>
             Principal: <strong>{capabilities.principal ?? 'Anonymous'}</strong>
           </p>
@@ -211,7 +211,7 @@ const AdminPage: FC = () => {
 
       <Column sm={4} md={8} lg={8}>
         <Tile>
-          <h2 className="dashboard-title">Route Access Check</h2>
+          <h2 className="dashboard-title">Route access check</h2>
           <Table useZebraStyles size="sm">
             <TableHead>
               <TableRow>
@@ -238,13 +238,13 @@ const AdminPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <h2 className="dashboard-title">Admin and Upload Tools</h2>
+          <h2 className="dashboard-title">Admin and upload tools</h2>
 
           <Table useZebraStyles>
             <TableHead>
               <TableRow>
                 <TableHeader>Tool</TableHeader>
-                <TableHeader>Required Action</TableHeader>
+                <TableHeader>Required action</TableHeader>
                 <TableHeader>Access</TableHeader>
                 <TableHeader>Open</TableHeader>
               </TableRow>
@@ -297,7 +297,7 @@ const AdminPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <h2 className="dashboard-title">Legacy Action Matrix</h2>
+          <h2 className="dashboard-title">Legacy action matrix</h2>
           <p>
             Granted actions: <strong>{grantedActionCount}</strong> of{' '}
             <strong>{LEGACY_ACTION_CATALOG.length}</strong>
@@ -305,7 +305,7 @@ const AdminPage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="actionFilter"
-              labelText="Filter Action Name"
+              labelText="Filter action name"
               value={actionFilter}
               onChange={(event) => setActionFilter(event.target.value)}
             />

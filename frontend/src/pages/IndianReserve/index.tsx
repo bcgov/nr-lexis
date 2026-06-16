@@ -67,8 +67,8 @@ const SORT_COLUMNS: {
 }[] = [
   { id: 'permitNumber', label: 'Permit' },
   { id: 'clientNumber', label: 'Client' },
-  { id: 'issueDate', label: 'Issue Date' },
-  { id: 'shippingDate', label: 'Shipping Date' },
+  { id: 'issueDate', label: 'Issue date' },
+  { id: 'shippingDate', label: 'Shipping date' },
 ]
 const DEFAULT_SORT_FIELD: IndianReservePermitSearchSortField = 'permitNumber'
 const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
@@ -266,7 +266,7 @@ const IndianReservePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Indigenous Reserve Permit Search</h1>
+        <h1>Indigenous reserve permit search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -275,19 +275,19 @@ const IndianReservePage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="permitNumber"
-              labelText="Permit Number"
+              labelText="Permit number"
               value={filters.permitNumber}
               onChange={(event) => updateFilter('permitNumber', event.target.value)}
             />
             <TextInput
               id="packageNumber"
-              labelText="Package Number"
+              labelText="Package number"
               value={filters.packageNumber}
               onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
             <IsoDatePicker
               id="fromPermitIssueDate"
-              labelText="Issued From Date (YYYY-MM-DD)"
+              labelText="Issued from date (YYYY-MM-DD)"
               value={filters.fromPermitIssueDate}
               invalid={!isValidIsoDate(filters.fromPermitIssueDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -295,7 +295,7 @@ const IndianReservePage: FC = () => {
             />
             <IsoDatePicker
               id="toPermitIssueDate"
-              labelText="Issued To Date (YYYY-MM-DD)"
+              labelText="Issued to date (YYYY-MM-DD)"
               value={filters.toPermitIssueDate}
               invalid={!isValidIsoDate(filters.toPermitIssueDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -303,7 +303,7 @@ const IndianReservePage: FC = () => {
             />
             <IsoDatePicker
               id="fromEstimatedShippingDate"
-              labelText="Shipping From Date (YYYY-MM-DD)"
+              labelText="Shipping from date (YYYY-MM-DD)"
               value={filters.fromEstimatedShippingDate}
               invalid={!isValidIsoDate(filters.fromEstimatedShippingDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -311,7 +311,7 @@ const IndianReservePage: FC = () => {
             />
             <IsoDatePicker
               id="toEstimatedShippingDate"
-              labelText="Shipping To Date (YYYY-MM-DD)"
+              labelText="Shipping to date (YYYY-MM-DD)"
               value={filters.toEstimatedShippingDate}
               invalid={!isValidIsoDate(filters.toEstimatedShippingDate)}
               invalidText="Date must be YYYY-MM-DD"
@@ -342,7 +342,7 @@ const IndianReservePage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--results">
-          <h2 className="dashboard-title">Search Results</h2>
+          <h2 className="dashboard-title">Search results</h2>
           {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
           <SearchResultsTableFrame
             loading={loading}
