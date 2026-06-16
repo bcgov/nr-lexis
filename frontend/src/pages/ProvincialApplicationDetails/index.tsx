@@ -65,6 +65,16 @@ import IsoDatePicker from '@/components/IsoDatePicker'
 import SearchableSelect from '@/components/SearchableSelect'
 import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
 import {
+  isAgentApplicant,
+  isSelectableClientContact,
+  isSelectableClientLocation,
+  productTypeRequiresGrowthType,
+  resolveClientContactName,
+  resolveClientLocationCode,
+  toApplicationCodeOption,
+  toSearchOption,
+} from '@/pages/shared/application-form-utils'
+import {
   atMostOneDecimalFieldError,
   firstValidationError,
   isoDateFieldError,
@@ -102,72 +112,8 @@ const OIC_INDICATOR_OPTIONS: SearchOption[] = [
   { value: 'Y', label: 'Yes' },
 ]
 
-const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
-  location.locationCode !== '0'
-
-const isSelectableClientContact = (contact: ApplicationClientContact): boolean =>
-  contact.contactId !== '0'
-
-const resolveClientLocationCode = (
-  locations: ApplicationClientLocation[],
-  currentCode: string,
-): string => {
-  const normalizedCurrentCode = currentCode.trim()
-  if (
-    normalizedCurrentCode &&
-    locations.some(
-      (location) =>
-        isSelectableClientLocation(location) && location.locationCode === normalizedCurrentCode,
-    )
-  ) {
-    return normalizedCurrentCode
-  }
-
-  const selectedLocation = locations.find(
-    (location) => isSelectableClientLocation(location) && location.selected,
-  )
-  if (selectedLocation) {
-    return selectedLocation.locationCode
-  }
-
-  return locations.find(isSelectableClientLocation)?.locationCode ?? ''
-}
-
-const resolveClientContactName = (
-  contacts: ApplicationClientContact[],
-  currentName: string,
-): string => {
-  const normalizedCurrentName = currentName.trim()
-  if (
-    normalizedCurrentName &&
-    contacts.some(
-      (contact) =>
-        isSelectableClientContact(contact) && contact.contactName === normalizedCurrentName,
-    )
-  ) {
-    return normalizedCurrentName
-  }
-
-  return contacts.find(isSelectableClientContact)?.contactName ?? normalizedCurrentName
-}
-
 const optionLabel = (option: SearchOption): string =>
   option.label === option.value ? option.label : `${option.value} - ${option.label}`
-
-const codeOptionLabel = (option: ApplicationCodeOption): string =>
-  option.description && option.description !== option.code
-    ? `${option.code} - ${option.description}`
-    : option.code
-
-const toSearchOption = (option: ApplicationCodeOption): SearchOption => ({
-  value: option.code,
-  label: codeOptionLabel(option),
-})
-
-const toApplicationCodeOption = (option: SearchOption): ApplicationCodeOption => ({
-  code: option.value,
-  description: option.label,
-})
 
 type ClientDataSummaryProps = {
   title: string
@@ -352,10 +298,6 @@ const withApplicationSpecies = (
   return { ...form, speciesCodes, endUseCode }
 }
 
-const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
-  productTypeCode === 'H' || productTypeCode === 'S'
-
-const isAgentApplicant = (applicantTypeCode: string): boolean => applicantTypeCode === 'A'
 const APPLICATION_STATUS_EXPIRED = 'EXP'
 const APPLICATION_STATUS_PERMITTED = 'PMT'
 const APPLICATION_DOCUMENT_DELETE_ROLES = new Set([
