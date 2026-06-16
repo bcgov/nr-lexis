@@ -1,15 +1,17 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
-import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -102,7 +104,4 @@ public class PermitOracleService implements PermitService {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

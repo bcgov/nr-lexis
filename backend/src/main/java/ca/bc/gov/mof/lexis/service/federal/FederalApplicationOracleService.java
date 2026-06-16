@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.federal;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
@@ -7,10 +9,10 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
-import org.springframework.data.domain.Page;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -112,7 +114,4 @@ public class FederalApplicationOracleService implements FederalApplicationServic
     return trimmed.isEmpty() ? null : trimmed;
   }
 
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

@@ -1,11 +1,13 @@
 package ca.bc.gov.mof.lexis.service.reserve;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository;
 import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository.ReservePermitInsertRecord;
 import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository.ReservePermitInsertRow;
@@ -219,7 +221,4 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
         false, "", errors, List.of(), permitNumber, null, null, null, null, null);
   }
 
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

@@ -1,15 +1,17 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionRepository;
-import org.springframework.data.domain.Page;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -125,7 +127,4 @@ public class ExemptionOracleService implements ExemptionService {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

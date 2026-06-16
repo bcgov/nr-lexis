@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.review;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewPreviewResponseDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchOptionsDto;
@@ -9,11 +11,11 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Slice;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -224,7 +226,4 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     return normalized == null ? "system" : normalized;
   }
 
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

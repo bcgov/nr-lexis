@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.application;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
@@ -144,10 +146,6 @@ public class OracleLexisApplicationService implements LexisApplicationService {
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
-  }
-
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
   }
 
   private List<CodeNameDto> currentScheduleOptions() {
