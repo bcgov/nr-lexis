@@ -18,6 +18,10 @@ public final class ValueUtils {
     return value == null ? fallback : value;
   }
 
+  public static Long positiveOrNull(Long value) {
+    return value == null || value <= 0 ? null : value;
+  }
+
   public static Long parsePositiveLong(String value) {
     String normalized = trimToNull(value);
     if (normalized == null) {

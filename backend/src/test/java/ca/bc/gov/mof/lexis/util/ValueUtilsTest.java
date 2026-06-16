@@ -42,6 +42,14 @@ class ValueUtilsTest {
   }
 
   @Test
+  void positiveOrNullShouldReturnOnlyPositiveValues() {
+    assertThat(ValueUtils.positiveOrNull(12L)).isEqualTo(12L);
+    assertThat(ValueUtils.positiveOrNull(null)).isNull();
+    assertThat(ValueUtils.positiveOrNull(0L)).isNull();
+    assertThat(ValueUtils.positiveOrNull(-1L)).isNull();
+  }
+
+  @Test
   void parsePositiveLongShouldReturnPositiveLong() {
     assertThat(ValueUtils.parsePositiveLong(" 12 ")).isEqualTo(12L);
   }

@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.repository.exemption;
 
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.io.InputStream;
@@ -498,7 +499,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     ApplicationLinkRecord app = record.application();
     int index = 1;
     setLongOrNull(cs, index++, app.applicationNumber());
-    setLongOrNull(cs, index++, emptyToNull(app.federalApplicationNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(app.federalApplicationNumber()));
     setDateOrNull(cs, index++, app.applicationDate());
     setLongOrNull(cs, index++, app.termDays());
     setDateOrNull(cs, index++, app.receivedDate());
@@ -529,10 +530,6 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
 
   private String valueOrEmpty(String value) {
     return value == null ? "" : value;
-  }
-
-  private Long emptyToNull(Long value) {
-    return value == null || value <= 0 ? null : value;
   }
 
   private String safeFileName(String value) {

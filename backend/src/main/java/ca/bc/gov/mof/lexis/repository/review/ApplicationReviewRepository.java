@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.review;
 
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
@@ -254,7 +255,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     int index = 1;
 
     setLongOrNull(cs, index++, record.applicationNumber());
-    setLongOrNull(cs, index++, emptyToNull(record.federalApplicationNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(record.federalApplicationNumber()));
     setDateOrNull(cs, index++, record.applicationDate());
     setLongOrNull(cs, index++, record.termDays());
     setDateOrNull(cs, index++, record.receivedDate());
@@ -303,10 +304,6 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     } catch (SQLException ex) {
       return null;
     }
-  }
-
-  private Long emptyToNull(Long value) {
-    return value == null || value <= 0 ? null : value;
   }
 
   private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
