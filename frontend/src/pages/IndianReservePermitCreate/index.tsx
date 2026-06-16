@@ -11,6 +11,7 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  mergeCreateDraftPayload,
   requiredFieldError,
   type FieldErrors,
   type TouchedFields,
@@ -65,17 +66,6 @@ const INITIAL_FORM: IndianReservePermitCreateForm = {
   portOfExport: '',
   otherPortOfExport: '',
   remarks: '',
-}
-
-const mapDraftPayloadToForm = (payload: unknown): IndianReservePermitCreateForm => {
-  if (!payload || typeof payload !== 'object') {
-    return INITIAL_FORM
-  }
-
-  return {
-    ...INITIAL_FORM,
-    ...(payload as Partial<IndianReservePermitCreateForm>),
-  }
 }
 
 const buildInitialFormFromQuery = (query: URLSearchParams): IndianReservePermitCreateForm => {
@@ -297,7 +287,7 @@ const IndianReservePermitCreatePage: FC = () => {
   }
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
-    setForm(mapDraftPayloadToForm(record.payload))
+    setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
     setTouchedFields({})
     setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })

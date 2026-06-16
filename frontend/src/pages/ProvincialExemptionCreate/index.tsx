@@ -11,6 +11,7 @@ import {
   getVisibleFieldError,
   isoDateFieldError,
   maxNumericValueFieldError,
+  mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
@@ -203,17 +204,6 @@ const ProvincialExemptionCreatePage: FC = () => {
   )
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
 
-  const mapDraftPayloadToForm = (payload: unknown): ProvincialExemptionCreateForm => {
-    if (!payload || typeof payload !== 'object') {
-      return initialForm
-    }
-
-    return {
-      ...initialForm,
-      ...(payload as Partial<ProvincialExemptionCreateForm>),
-    }
-  }
-
   useEffect(() => {
     const loadOptions = async () => {
       const options = await fetchProvincialExemptionOptions()
@@ -328,7 +318,7 @@ const ProvincialExemptionCreatePage: FC = () => {
   }
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
-    setForm(mapDraftPayloadToForm(record.payload))
+    setForm(mergeCreateDraftPayload(record.payload, initialForm))
     setTouchedFields({})
     setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })

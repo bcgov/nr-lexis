@@ -15,6 +15,20 @@ export type FieldErrors<TField extends string> = Partial<Record<TField, string>>
 
 export type TouchedFields<TField extends string> = Partial<Record<TField, boolean>>
 
+export const mergeCreateDraftPayload = <TForm extends object>(
+  payload: unknown,
+  initialForm: TForm,
+): TForm => {
+  if (!payload || typeof payload !== 'object') {
+    return initialForm
+  }
+
+  return {
+    ...initialForm,
+    ...(payload as Partial<TForm>),
+  }
+}
+
 export const firstValidationError = (
   ...validators: Array<() => string | null>
 ): string | undefined => {

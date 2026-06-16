@@ -9,6 +9,7 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
@@ -57,17 +58,6 @@ const INITIAL_FORM: ProvincialOfferCreateForm = {
   withdrawReason: '',
   pickupLocation: '',
   offerCondition: '',
-}
-
-const mapDraftPayloadToForm = (payload: unknown): ProvincialOfferCreateForm => {
-  if (!payload || typeof payload !== 'object') {
-    return INITIAL_FORM
-  }
-
-  return {
-    ...INITIAL_FORM,
-    ...(payload as Partial<ProvincialOfferCreateForm>),
-  }
 }
 
 const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialOfferCreateForm => {
@@ -217,7 +207,7 @@ const ProvincialOfferCreatePage: FC = () => {
   }
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
-    setForm(mapDraftPayloadToForm(record.payload))
+    setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
     setTouchedFields({})
     setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })

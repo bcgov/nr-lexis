@@ -32,6 +32,7 @@ import {
   isoDateFieldError,
   maxNumericValueFieldError,
   maxLengthFieldError,
+  mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
@@ -117,17 +118,6 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   speciesCodes: [],
   endUseCode: '',
   comments: '',
-}
-
-const mapDraftPayloadToForm = (payload: unknown): ProvincialApplicationCreateForm => {
-  if (!payload || typeof payload !== 'object') {
-    return INITIAL_FORM
-  }
-
-  return {
-    ...INITIAL_FORM,
-    ...(payload as Partial<ProvincialApplicationCreateForm>),
-  }
 }
 
 const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicationCreateForm => {
@@ -950,7 +940,7 @@ const ProvincialApplicationCreatePage: FC = () => {
   }
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
-    setForm(mapDraftPayloadToForm(record.payload))
+    setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
     setTouchedFields({})
     setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
