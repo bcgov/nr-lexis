@@ -1,4 +1,5 @@
 import type { AdminUploadResult, UploadWorkflowType } from '@/service/admin-upload-service'
+import { isRecord, stringField } from '@/utils/record'
 import type { UploadQueueReviewDetails, UploadQueueStatus } from './uploadQueueTypes'
 
 export const asStringArray = (value: unknown): string[] => {
@@ -18,19 +19,22 @@ export const asStringArray = (value: unknown): string[] => {
 export const extractUploadErrorDetails = (
   error: unknown,
 ): { message: string; details: UploadQueueReviewDetails } => {
-  const response = (error as any)?.response
+  const response = isRecord(error) && isRecord(error.response) ? error.response : undefined
   const data = response?.data
-  const status = response?.status
-  const errors = asStringArray(data?.errors)
-  const warnings = asStringArray(data?.warnings)
+  const dataRecord = isRecord(data) ? data : undefined
+  const status = typeof response?.status === 'number' ? response.status : undefined
+  const errors = asStringArray(dataRecord?.errors)
+  const warnings = asStringArray(dataRecord?.warnings)
+  const responseMessage = dataRecord ? stringField(dataRecord, 'message') : ''
+  const textResponseMessage = typeof data === 'string' ? data.trim() : ''
 
   const message =
     errors.length > 0
       ? errors.join(' ')
-      : typeof data?.message === 'string' && data.message.trim()
-        ? data.message.trim()
-        : typeof data === 'string' && data.trim()
-          ? data.trim()
+      : responseMessage
+        ? responseMessage
+        : textResponseMessage
+          ? textResponseMessage
           : status
             ? `Upload request failed with status ${status}.`
             : 'Upload request failed. Please try again or contact support.'
@@ -38,8 +42,7 @@ export const extractUploadErrorDetails = (
   return {
     message,
     details: {
-      summary:
-        typeof data?.message === 'string' && data.message.trim() ? data.message.trim() : message,
+      summary: responseMessage || message,
       errors,
       warnings,
     },
