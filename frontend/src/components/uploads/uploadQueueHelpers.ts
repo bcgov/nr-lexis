@@ -139,7 +139,7 @@ export const buildUploadResultMessage = (
 
   const summary =
     details.length > 0
-      ? `LEXIS XML import created ${details.join(', ')}.`
+      ? `LEXIS import created ${details.join(', ')}.`
       : result?.message?.trim() || resultMessage
 
   const warnings =

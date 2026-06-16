@@ -43,7 +43,7 @@ type UploadWorkflowDefinition = {
 const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   {
     type: 'lexisXml',
-    label: 'LEXIS XML Upload',
+    label: 'LEXIS Import',
     requiredAction: 'createApplication',
     numberFieldLabel: '',
     numberFieldPlaceholder: '',
@@ -279,9 +279,12 @@ const validateQueuedFile = (file: File, workflowType: UploadWorkflowType): strin
   const extension = getFileExtension(file.name)
 
   if (workflowType === 'lexisXml') {
-    return extension === '.xml' || extension === '.zip'
+    return extension === '.xml' ||
+      extension === '.zip' ||
+      extension === '.geojson' ||
+      extension === '.json'
       ? ''
-      : 'LEXIS XML uploads must use a .xml or .zip file.'
+      : 'LEXIS imports must use a .xml, .zip, .geojson, or .json file.'
   }
 
   if (!extension) {
@@ -293,7 +296,7 @@ const validateQueuedFile = (file: File, workflowType: UploadWorkflowType): strin
 
 const workflowDescription = (workflowType: UploadWorkflowType): string => {
   if (workflowType === 'lexisXml') {
-    return 'Import ESF LEXIS XML submissions and create the application, package, species, and scale rows in LEXIS.'
+    return 'Import LEXIS XML or GeoJSON submissions and create the application, package, species, and scale rows in LEXIS.'
   }
   if (workflowType === 'invoice') {
     return 'Attach an invoice file and invoice values to an existing permit.'
@@ -368,14 +371,14 @@ const AdminUploadsPage: FC = () => {
     [uploadQueue],
   )
   const uploadInputLabel =
-    selectedWorkflowType === 'lexisXml' ? 'LEXIS XML or ZIP File' : 'Document File'
+    selectedWorkflowType === 'lexisXml' ? 'LEXIS Import File' : 'Document File'
   const uploadAccept =
     selectedWorkflowType === 'lexisXml'
-      ? '.xml,.zip,application/xml,text/xml,application/zip'
+      ? '.xml,.zip,.geojson,.json,application/xml,text/xml,application/zip,application/json,application/geo+json'
       : undefined
   const uploadFormatText =
     selectedWorkflowType === 'lexisXml'
-      ? 'Supported formats: .xml and .zip'
+      ? 'Supported formats: .xml, .zip, .geojson, and .json'
       : 'Supported files: any document with a file extension'
   const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
 
@@ -387,7 +390,7 @@ const AdminUploadsPage: FC = () => {
           : uploadQueue.length > 0
             ? undefined
             : selectedWorkflowType === 'lexisXml'
-              ? 'Choose at least one LEXIS XML or ZIP file to import.'
+              ? 'Choose at least one LEXIS import file.'
               : 'Choose at least one file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
@@ -552,7 +555,7 @@ const AdminUploadsPage: FC = () => {
       })
       const message = buildUploadResultMessage(
         'lexisXml',
-        'LEXIS XML import submitted. Verify the created application and package details.',
+        'LEXIS import submitted. Verify the created application and package details.',
         result,
       )
       return {
@@ -763,7 +766,7 @@ const AdminUploadsPage: FC = () => {
                 </div>
                 <div>
                   <span>Format</span>
-                  <strong>{selectedWorkflowType === 'lexisXml' ? 'XML / ZIP' : 'Document'}</strong>
+                  <strong>{selectedWorkflowType === 'lexisXml' ? 'LEXIS' : 'Document'}</strong>
                 </div>
               </div>
 
@@ -912,7 +915,7 @@ const AdminUploadsPage: FC = () => {
             <MultiFileDropZone
               title={
                 selectedWorkflowType === 'lexisXml'
-                  ? 'Upload LEXIS XML Submissions'
+                  ? 'Upload LEXIS Submissions'
                   : 'Upload Documents'
               }
               description={uploadFormatText}

@@ -10,6 +10,8 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.Pack
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackagePersistenceResult;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScaleMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScalePersistenceResult;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -62,8 +64,12 @@ public class LexisXmlImportService {
   private static final String REJECTED = "rejected";
   private static final String XML_EXTENSION = ".xml";
   private static final String ZIP_EXTENSION = ".zip";
+  private static final String GEOJSON_EXTENSION = ".geojson";
+  private static final String JSON_EXTENSION = ".json";
+  private static final String GEOJSON_FEATURE_COLLECTION = "FeatureCollection";
+  private static final String GEOJSON_HARVESTED_TIMBER_ENTITY = "HARVESTEDTIMBER";
   private static final int MAX_PACKAGE_NUMBER_LENGTH = 20;
-  private static final long MAX_XML_BYTES = 20L * 1024L * 1024L;
+  private static final long MAX_IMPORT_BYTES = 20L * 1024L * 1024L;
   private static final long DEFAULT_TERM_DAYS = 180L;
   private static final String DEFAULT_PACKAGE_STATUS = "ACT";
   private static final String DEFAULT_REPROCESSED_INDICATOR = "N";
@@ -92,17 +98,27 @@ public class LexisXmlImportService {
 
   private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   private final Clock clock;
+  private final ObjectMapper objectMapper;
 
   @Autowired
   public LexisXmlImportService(
-      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider) {
-    this(applicationDetailsServiceProvider, Clock.systemDefaultZone());
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
+      ObjectMapper objectMapper) {
+    this(applicationDetailsServiceProvider, Clock.systemDefaultZone(), objectMapper);
   }
 
   LexisXmlImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider, Clock clock) {
+    this(applicationDetailsServiceProvider, clock, new ObjectMapper());
+  }
+
+  LexisXmlImportService(
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
+      Clock clock,
+      ObjectMapper objectMapper) {
     this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
     this.clock = clock;
+    this.objectMapper = objectMapper;
   }
 
   @Transactional
@@ -110,19 +126,22 @@ public class LexisXmlImportService {
     String fileName = resolveFileName(file);
     long fileSize = file == null ? 0L : file.getSize();
     if (file == null || file.isEmpty()) {
-      return rejected(fileName, fileSize, List.of("Choose a LEXIS XML file to import."), List.of());
+      return rejected(fileName, fileSize, List.of("Choose a LEXIS import file."), List.of());
     }
 
     ParsedSubmission submission;
-    UploadedLexisXml uploadedXml;
+    UploadedLexisSubmission uploadedSubmission;
     try {
-      uploadedXml = readUploadedLexisXml(file);
-      submission = parse(uploadedXml.xmlBytes());
+      uploadedSubmission = readUploadedLexisSubmission(file);
+      submission =
+          uploadedSubmission.format() == UploadFormat.GEOJSON
+              ? parseGeoJson(uploadedSubmission.bytes())
+              : parse(uploadedSubmission.bytes());
     } catch (LexisXmlImportException ex) {
       return rejected(fileName, fileSize, ex.errors(), List.of());
     } catch (Exception ex) {
-      LOGGER.warn("LEXIS XML import failed while parsing [{}]: {}", fileName, ex.getMessage());
-      return rejected(fileName, fileSize, List.of("The XML file could not be parsed."), List.of());
+      LOGGER.warn("LEXIS import failed while parsing [{}]: {}", fileName, ex.getMessage());
+      return rejected(fileName, fileSize, List.of("The LEXIS import file could not be parsed."), List.of());
     }
 
     ApplicationDetailsRpcService applicationDetailsService =
@@ -131,12 +150,12 @@ public class LexisXmlImportService {
       return rejected(
           fileName,
           fileSize,
-          List.of("Application persistence is unavailable for LEXIS XML import."),
+          List.of("Application persistence is unavailable for LEXIS import."),
           List.of());
     }
 
     LocalDate importDate = LocalDate.now(clock);
-    List<String> warnings = new ArrayList<>(uploadedXml.warnings());
+    List<String> warnings = new ArrayList<>(uploadedSubmission.warnings());
     if (submission.applicationStatusCode() != null) {
       warnings.add(
           "Source application status "
@@ -189,7 +208,7 @@ public class LexisXmlImportService {
         fileName,
         fileSize,
         ACCEPTED,
-        "LEXIS XML import created application "
+        "LEXIS import created application "
             + applicationNumber
             + " with package "
             + submission.packageNumber()
@@ -203,29 +222,35 @@ public class LexisXmlImportService {
         warnings);
   }
 
-  private UploadedLexisXml readUploadedLexisXml(MultipartFile file) throws Exception {
+  private UploadedLexisSubmission readUploadedLexisSubmission(MultipartFile file) throws Exception {
     String fileName = resolveFileName(file);
     String lowerFileName = fileName.toLowerCase(Locale.ROOT);
     if (lowerFileName.endsWith(XML_EXTENSION)) {
       try (InputStream inputStream = file.getInputStream()) {
-        return new UploadedLexisXml(readBounded(inputStream), List.of());
+        return new UploadedLexisSubmission(readBounded(inputStream), UploadFormat.XML, List.of());
+      }
+    }
+    if (lowerFileName.endsWith(GEOJSON_EXTENSION) || lowerFileName.endsWith(JSON_EXTENSION)) {
+      try (InputStream inputStream = file.getInputStream()) {
+        return new UploadedLexisSubmission(readBounded(inputStream), UploadFormat.GEOJSON, List.of());
       }
     }
     if (lowerFileName.endsWith(ZIP_EXTENSION)) {
-      return readZippedLexisXml(file, fileName);
+      return readZippedLexisSubmission(file, fileName);
     }
     throw new LexisXmlImportException(
-        List.of("The LEXIS import file must be an XML file or a ZIP file containing one XML file."));
+        List.of("The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file."));
   }
 
-  private UploadedLexisXml readZippedLexisXml(MultipartFile file, String fileName) throws Exception {
+  private UploadedLexisSubmission readZippedLexisSubmission(MultipartFile file, String fileName) throws Exception {
     if (!hasZipHeader(file)) {
       throw new LexisXmlImportException(List.of("The uploaded Zip file is corrupt, and cannot be read."));
     }
 
-    List<String> xmlEntryNames = new ArrayList<>();
+    List<String> importEntryNames = new ArrayList<>();
     List<String> unexpectedEntryNames = new ArrayList<>();
-    byte[] xmlBytes = null;
+    byte[] importBytes = null;
+    UploadFormat importFormat = null;
 
     try (ZipInputStream zipInputStream = new ZipInputStream(file.getInputStream())) {
       ZipEntry entry;
@@ -235,14 +260,16 @@ public class LexisXmlImportService {
           zipInputStream.closeEntry();
           continue;
         }
-        if (entryName == null || !entryName.toLowerCase(Locale.ROOT).endsWith(XML_EXTENSION)) {
+        UploadFormat entryFormat = uploadFormatFromFileName(entryName);
+        if (entryFormat == null) {
           unexpectedEntryNames.add(entryName == null ? "(unnamed file)" : entryName);
           zipInputStream.closeEntry();
           continue;
         }
-        xmlEntryNames.add(entryName);
-        if (xmlBytes == null) {
-          xmlBytes = readBounded(zipInputStream);
+        importEntryNames.add(entryName);
+        if (importBytes == null) {
+          importBytes = readBounded(zipInputStream);
+          importFormat = entryFormat;
         }
         zipInputStream.closeEntry();
       }
@@ -252,20 +279,35 @@ public class LexisXmlImportService {
 
     if (!unexpectedEntryNames.isEmpty()) {
       throw new LexisXmlImportException(
-          List.of("The ZIP file must contain only one LEXIS XML file."));
+          List.of("The ZIP file must contain only one LEXIS XML or GeoJSON import file."));
     }
-    if (xmlEntryNames.isEmpty() || xmlBytes == null) {
+    if (importEntryNames.isEmpty() || importBytes == null || importFormat == null) {
       throw new LexisXmlImportException(
-          List.of("The ZIP file must contain one LEXIS XML file."));
+          List.of("The ZIP file must contain one LEXIS XML or GeoJSON import file."));
     }
-    if (xmlEntryNames.size() > 1) {
+    if (importEntryNames.size() > 1) {
       throw new LexisXmlImportException(
-          List.of("The ZIP file must contain exactly one LEXIS XML file."));
+          List.of("The ZIP file must contain exactly one LEXIS XML or GeoJSON import file."));
     }
 
-    return new UploadedLexisXml(
-        xmlBytes,
-        List.of("Imported " + xmlEntryNames.get(0) + " from ZIP archive " + fileName + "."));
+    return new UploadedLexisSubmission(
+        importBytes,
+        importFormat,
+        List.of("Imported " + importEntryNames.get(0) + " from ZIP archive " + fileName + "."));
+  }
+
+  private UploadFormat uploadFormatFromFileName(String fileName) {
+    if (fileName == null) {
+      return null;
+    }
+    String lowerFileName = fileName.toLowerCase(Locale.ROOT);
+    if (lowerFileName.endsWith(XML_EXTENSION)) {
+      return UploadFormat.XML;
+    }
+    if (lowerFileName.endsWith(GEOJSON_EXTENSION) || lowerFileName.endsWith(JSON_EXTENSION)) {
+      return UploadFormat.GEOJSON;
+    }
+    return null;
   }
 
   private boolean hasZipHeader(MultipartFile file) throws Exception {
@@ -293,13 +335,13 @@ public class LexisXmlImportService {
     int bytesRead;
     while ((bytesRead = inputStream.read(buffer)) >= 0) {
       totalBytes += bytesRead;
-      if (totalBytes > MAX_XML_BYTES) {
-        throw new LexisXmlImportException(List.of("The LEXIS XML file must be 20 MB or smaller."));
+      if (totalBytes > MAX_IMPORT_BYTES) {
+        throw new LexisXmlImportException(List.of("The LEXIS import file must be 20 MB or smaller."));
       }
       outputStream.write(buffer, 0, bytesRead);
     }
     if (totalBytes == 0L) {
-      throw new LexisXmlImportException(List.of("The LEXIS XML file is empty."));
+      throw new LexisXmlImportException(List.of("The LEXIS import file is empty."));
     }
     return outputStream.toByteArray();
   }
@@ -314,6 +356,10 @@ public class LexisXmlImportService {
     } catch (SAXParseException ex) {
       throw new LexisXmlImportException(List.of(formatXmlParseError(ex)));
     }
+    return parseDocument(document);
+  }
+
+  private ParsedSubmission parseDocument(Document document) throws LexisXmlImportException {
     Element root = document.getDocumentElement();
     List<String> errors = new ArrayList<>();
     Element lexisSubmission = resolveLexisSubmissionPayload(root, errors);
@@ -407,7 +453,7 @@ public class LexisXmlImportService {
     if (jurisdictionCode == null) {
       errors.add("Jurisdiction code is required.");
     } else if (!PROVINCIAL_JURISDICTION.equals(jurisdictionCode)) {
-      errors.add("Only provincial LEXIS XML submissions are supported.");
+      errors.add("Only provincial LEXIS submissions are supported.");
     }
     if (exemptionReasonCode == null) {
       errors.add("Exemption reason is required.");
@@ -470,6 +516,240 @@ public class LexisXmlImportService {
         endUseCode,
         speciesCodes,
         scaleLines);
+  }
+
+  private ParsedSubmission parseGeoJson(byte[] geoJsonBytes) throws LexisXmlImportException {
+    JsonNode root;
+    try {
+      root = objectMapper.readTree(geoJsonBytes);
+    } catch (Exception ex) {
+      throw new LexisXmlImportException(List.of("The GeoJSON file is not well-formed JSON."));
+    }
+
+    List<String> errors = new ArrayList<>();
+    if (root == null || !root.isObject()) {
+      errors.add("The GeoJSON file must contain a FeatureCollection object.");
+      throw new LexisXmlImportException(errors);
+    }
+    if (!GEOJSON_FEATURE_COLLECTION.equals(jsonScalarText(root.get("type")))) {
+      errors.add("The GeoJSON type must be FeatureCollection.");
+    }
+
+    JsonNode lexis = requiredJsonObject(root, "lexis", "GeoJSON lexis metadata", errors);
+    JsonNode features = requiredJsonArray(root, "features", "GeoJSON features", errors);
+    if (!errors.isEmpty()) {
+      throw new LexisXmlImportException(errors);
+    }
+
+    try {
+      Document document = newLexisDocument();
+      Element lexisSubmission = document.getDocumentElement();
+      appendGeoJsonSubmissionContent(document, lexisSubmission, lexis, features, errors);
+      if (!errors.isEmpty()) {
+        throw new LexisXmlImportException(errors);
+      }
+      return parseDocument(document);
+    } catch (LexisXmlImportException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      LOGGER.warn("LEXIS GeoJSON import failed while preparing validation: {}", ex.getMessage());
+      throw new LexisXmlImportException(List.of("The GeoJSON file could not be parsed."));
+    }
+  }
+
+  private Document newLexisDocument() throws Exception {
+    Document document = secureDocumentBuilderFactory().newDocumentBuilder().newDocument();
+    Element root = lexisElement(document, "LexisSubmission");
+    root.setAttributeNS(XMLConstants.XMLNS_ATTRIBUTE_NS_URI, "xmlns:lexis", LEXIS_NAMESPACE);
+    root.setAttributeNS(XMLConstants.XMLNS_ATTRIBUTE_NS_URI, "xmlns:xsi", XML_SCHEMA_INSTANCE_NAMESPACE);
+    root.setAttributeNS(
+        XML_SCHEMA_INSTANCE_NAMESPACE,
+        "xsi:schemaLocation",
+        LEXIS_NAMESPACE + " " + EXPECTED_LEXIS_SCHEMA_LOCATION);
+    document.appendChild(root);
+    return document;
+  }
+
+  private void appendGeoJsonSubmissionContent(
+      Document document, Element lexisSubmission, JsonNode lexis, JsonNode features, List<String> errors) {
+    JsonNode applicant = requiredJsonObject(lexis, "applicant", "GeoJSON lexis.applicant", errors);
+    JsonNode applicationDetail =
+        requiredJsonObject(lexis, "applicationDetail", "GeoJSON lexis.applicationDetail", errors);
+    JsonNode productDetail =
+        requiredJsonObject(lexis, "productDetail", "GeoJSON lexis.productDetail", errors);
+    if (applicant == null || applicationDetail == null || productDetail == null) {
+      return;
+    }
+
+    Element applicantElement = lexisElement(document, "applicant");
+    lexisSubmission.appendChild(applicantElement);
+
+    JsonNode applicantDetails =
+        requiredJsonObject(applicant, "applicantDetails", "GeoJSON lexis.applicant.applicantDetails", errors);
+    if (applicantDetails != null) {
+      appendObjectSection(
+          document,
+          applicantElement,
+          "applicantDetails",
+          applicantDetails,
+          List.of("clientNumber", "clientLocnCode", "name"));
+    }
+
+    JsonNode applicantContact =
+        optionalJsonObject(applicant, "applicantContact", "GeoJSON lexis.applicant.applicantContact", errors);
+    if (applicantContact != null) {
+      appendObjectSection(
+          document,
+          applicantElement,
+          "applicantContact",
+          applicantContact,
+          List.of("contactSurname", "contactFirstname"));
+    }
+
+    appendObjectSection(
+        document,
+        lexisSubmission,
+        "applicationDetail",
+        applicationDetail,
+        List.of(
+            "jurisdictionCode",
+            "bcForestRegionCode",
+            "applStatusCode",
+            "exemptionRsnCde",
+            "applicantTypeCode"));
+
+    Element productDetailElement =
+        appendObjectSection(
+            document,
+            lexisSubmission,
+            "productDetail",
+            productDetail,
+            List.of(
+                "productTypeCode",
+                "boomNumber",
+                "speciesEndUseSort",
+                "productLocation",
+                "ageClass",
+                "avgLength",
+                "avgDiameter"));
+    appendGeoJsonScaleFeatures(document, productDetailElement, features, errors);
+  }
+
+  private Element appendObjectSection(
+      Document document, Element parent, String localName, JsonNode object, List<String> fieldNames) {
+    Element section = lexisElement(document, localName);
+    parent.appendChild(section);
+    for (String fieldName : fieldNames) {
+      appendJsonScalarElement(document, section, fieldName, object.get(fieldName));
+    }
+    return section;
+  }
+
+  private void appendGeoJsonScaleFeatures(
+      Document document, Element productDetailElement, JsonNode features, List<String> errors) {
+    int featureNumber = 0;
+    for (JsonNode feature : features) {
+      featureNumber++;
+      if (!feature.isObject()) {
+        errors.add("GeoJSON feature " + featureNumber + " must be an object.");
+        continue;
+      }
+      if (!"Feature".equals(jsonScalarText(feature.get("type")))) {
+        errors.add("GeoJSON feature " + featureNumber + " must use type Feature.");
+        continue;
+      }
+      JsonNode properties =
+          requiredJsonObject(
+              feature,
+              "properties",
+              "GeoJSON feature " + featureNumber + " properties",
+              errors);
+      if (properties == null) {
+        continue;
+      }
+      String entityType = jsonScalarText(properties.get("lexisEntityType"));
+      if (entityType == null) {
+        errors.add("GeoJSON feature " + featureNumber + " must include properties.lexisEntityType.");
+        continue;
+      }
+      if (!GEOJSON_HARVESTED_TIMBER_ENTITY.equals(normalizeGeoJsonEntityType(entityType))) {
+        errors.add("GeoJSON feature " + featureNumber + " has an unsupported properties.lexisEntityType.");
+        continue;
+      }
+
+      Element harvestedTimber = lexisElement(document, "harvestedTimber");
+      productDetailElement.appendChild(harvestedTimber);
+      for (String fieldName : List.of("timberMark", "numberOfPieces", "species", "grade", "quantityVolume")) {
+        appendJsonScalarElement(document, harvestedTimber, fieldName, properties.get(fieldName));
+      }
+    }
+  }
+
+  private void appendJsonScalarElement(Document document, Element parent, String localName, JsonNode value) {
+    String text = jsonScalarText(value);
+    if (text == null) {
+      return;
+    }
+    Element element = lexisElement(document, localName);
+    element.setTextContent(text);
+    parent.appendChild(element);
+  }
+
+  private Element lexisElement(Document document, String localName) {
+    return document.createElementNS(LEXIS_NAMESPACE, "lexis:" + localName);
+  }
+
+  private JsonNode requiredJsonObject(
+      JsonNode parent, String fieldName, String label, List<String> errors) {
+    JsonNode child = parent == null ? null : parent.get(fieldName);
+    if (child == null || child.isNull()) {
+      errors.add(label + " is required.");
+      return null;
+    }
+    if (!child.isObject()) {
+      errors.add(label + " must be an object.");
+      return null;
+    }
+    return child;
+  }
+
+  private JsonNode optionalJsonObject(
+      JsonNode parent, String fieldName, String label, List<String> errors) {
+    JsonNode child = parent == null ? null : parent.get(fieldName);
+    if (child == null || child.isNull()) {
+      return null;
+    }
+    if (!child.isObject()) {
+      errors.add(label + " must be an object.");
+      return null;
+    }
+    return child;
+  }
+
+  private JsonNode requiredJsonArray(
+      JsonNode parent, String fieldName, String label, List<String> errors) {
+    JsonNode child = parent == null ? null : parent.get(fieldName);
+    if (child == null || child.isNull()) {
+      errors.add(label + " are required.");
+      return null;
+    }
+    if (!child.isArray()) {
+      errors.add(label + " must be an array.");
+      return null;
+    }
+    return child;
+  }
+
+  private String jsonScalarText(JsonNode value) {
+    if (value == null || value.isNull() || value.isContainerNode()) {
+      return null;
+    }
+    return trimToNull(value.asText());
+  }
+
+  private String normalizeGeoJsonEntityType(String value) {
+    String normalized = upper(value);
+    return normalized == null ? null : normalized.replaceAll("[^A-Z0-9]", "");
   }
 
   private Element resolveLexisSubmissionPayload(Element root, List<String> errors) {
@@ -690,7 +970,7 @@ public class LexisXmlImportService {
         DEFAULT_OIC_INDICATOR,
         submission.endUseCode(),
         submission.speciesCodes(),
-        "Imported from LEXIS XML upload.",
+        "Imported from LEXIS upload.",
         true);
   }
 
@@ -704,7 +984,7 @@ public class LexisXmlImportService {
         submission.averageLength(),
         submission.averageDiameter(),
         DEFAULT_PACKAGE_STATUS,
-        "Imported from LEXIS XML upload.",
+        "Imported from LEXIS upload.",
         DEFAULT_REPROCESSED_INDICATOR,
         submission.ageClass(),
         submission.productTypeCode(),
@@ -897,7 +1177,7 @@ public class LexisXmlImportService {
       return errors;
     }
     String normalizedMessage = trimToNull(fallbackMessage);
-    return List.of(normalizedMessage == null ? "The LEXIS XML import could not be persisted." : normalizedMessage);
+    return List.of(normalizedMessage == null ? "The LEXIS import could not be persisted." : normalizedMessage);
   }
 
   private void markRollbackOnly() {
@@ -914,13 +1194,13 @@ public class LexisXmlImportService {
     List<String> normalizedWarnings = warnings == null ? List.of() : warnings;
     String detail =
         normalizedErrors.isEmpty() ? "No rejection reason was returned." : normalizedErrors.get(0);
-    LOGGER.warn("LEXIS XML import rejected for [{}]: {}", fileName, detail);
+    LOGGER.warn("LEXIS import rejected for [{}]: {}", fileName, detail);
     return new LexisXmlImportResultDto(
         UPLOAD_TYPE,
         fileName,
         fileSize,
         REJECTED,
-        "LEXIS XML import rejected: " + detail,
+        "LEXIS import rejected: " + detail,
         null,
         null,
         0,
@@ -956,7 +1236,12 @@ public class LexisXmlImportService {
       List<String> speciesCodes,
       List<ScaleLine> scaleLines) {}
 
-  private record UploadedLexisXml(byte[] xmlBytes, List<String> warnings) {}
+  private enum UploadFormat {
+    XML,
+    GEOJSON
+  }
+
+  private record UploadedLexisSubmission(byte[] bytes, UploadFormat format, List<String> warnings) {}
 
   private record ScaleLine(
       String timberMark, Long pieces, String speciesCode, String gradeCode, Double volume) {}

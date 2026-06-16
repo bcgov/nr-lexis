@@ -159,6 +159,41 @@ class LexisXmlImportServiceTest {
   }
 
   @Test
+  void shouldImportLexisGeoJsonAsApplicationPackageAndScales() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
+
+    LexisXmlImportResultDto result = service().importLexisXml(sampleGeoJson(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.applicationNumber()).isEqualTo(9001L);
+    assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
+    assertThat(result.scaleRows()).isEqualTo(3);
+
+    ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).addApplication(applicationCaptor.capture(), eq("jsmith"));
+    assertThat(applicationCaptor.getValue().ownerClientNumber()).isEqualTo("1074");
+    assertThat(applicationCaptor.getValue().ownerClientLocationCode()).isEqualTo("03");
+    assertThat(applicationCaptor.getValue().orgUnitNumber()).isEqualTo(1909L);
+    assertThat(applicationCaptor.getValue().applicationVolume()).isEqualTo(525.0d);
+
+    ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
+        ArgumentCaptor.forClass(ScaleMutationRequest.class);
+    verify(applicationDetailsService, times(3)).addScaleToPackage(scaleCaptor.capture(), eq("jsmith"));
+    assertThat(scaleCaptor.getAllValues())
+        .extracting(ScaleMutationRequest::timberMark)
+        .containsExactly("NCHWP", "NCHWP", "NCHWP");
+  }
+
+  @Test
   void shouldRejectImportAndSkipScalesWhenPackagePersistenceFails() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
@@ -213,9 +248,9 @@ class LexisXmlImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .contains("The LEXIS import file must be an XML file or a ZIP file containing one XML file.");
+        .contains("The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file.");
     assertThat(result.message())
-        .contains("The LEXIS import file must be an XML file or a ZIP file containing one XML file.");
+        .contains("The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file.");
   }
 
   @Test
@@ -226,7 +261,7 @@ class LexisXmlImportServiceTest {
         service.importLexisXml(zippedFile(List.of("first.xml", "second.xml")), "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("The ZIP file must contain exactly one LEXIS XML file.");
+    assertThat(result.errors()).contains("The ZIP file must contain exactly one LEXIS XML or GeoJSON import file.");
   }
 
   @Test
@@ -236,7 +271,7 @@ class LexisXmlImportServiceTest {
     LexisXmlImportResultDto result = service.importLexisXml(emptyZipFile(), "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("The ZIP file must contain one LEXIS XML file.");
+    assertThat(result.errors()).contains("The ZIP file must contain one LEXIS XML or GeoJSON import file.");
   }
 
   @Test
@@ -451,7 +486,7 @@ class LexisXmlImportServiceTest {
             "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("Only provincial LEXIS XML submissions are supported.");
+    assertThat(result.errors()).contains("Only provincial LEXIS submissions are supported.");
   }
 
   @Test
@@ -539,6 +574,11 @@ class LexisXmlImportServiceTest {
   private MockMultipartFile bareSampleXml() {
     return new MockMultipartFile(
         "formFile", "6-652-7-bare.xml", "application/xml", bareSampleXmlText().getBytes(StandardCharsets.UTF_8));
+  }
+
+  private MockMultipartFile sampleGeoJson() {
+    return new MockMultipartFile(
+        "formFile", "6-652-7.geojson", "application/geo+json", SAMPLE_GEOJSON.getBytes(StandardCharsets.UTF_8));
   }
 
   private MockMultipartFile zippedFile(String entryName, String xml) throws Exception {
@@ -639,6 +679,80 @@ class LexisXmlImportServiceTest {
       </esf:ESFSubmission>
       """
           .formatted(SAMPLE_SCHEMA_LOCATION);
+
+  private static final String SAMPLE_GEOJSON =
+      """
+      {
+        "type": "FeatureCollection",
+        "lexis": {
+          "applicant": {
+            "applicantDetails": {
+              "clientNumber": "1074",
+              "clientLocnCode": "03",
+              "name": "Mosaic Forest Management Corporation"
+            },
+            "applicantContact": {
+              "contactSurname": "SERVICE",
+              "contactFirstname": "CUSTOMER"
+            }
+          },
+          "applicationDetail": {
+            "jurisdictionCode": "P",
+            "bcForestRegionCode": "RSC",
+            "applStatusCode": "A",
+            "exemptionRsnCde": "S",
+            "applicantTypeCode": "O"
+          },
+          "productDetail": {
+            "productTypeCode": "H",
+            "boomNumber": "TEST23-652-7D-2",
+            "speciesEndUseSort": "HE/PL",
+            "productLocation": "Port Alberni c/o Pacific Towing",
+            "ageClass": "S",
+            "avgLength": 6.7,
+            "avgDiameter": 12.8
+          }
+        },
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": null,
+            "properties": {
+              "lexisEntityType": "harvestedTimber",
+              "timberMark": "nchwp",
+              "numberOfPieces": 1500,
+              "species": "HE",
+              "grade": "H",
+              "quantityVolume": 500
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": null,
+            "properties": {
+              "lexisEntityType": "HARVESTED_TIMBER",
+              "timberMark": "NCHWP",
+              "numberOfPieces": 50,
+              "species": "HE",
+              "grade": "J",
+              "quantityVolume": 24.5
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": null,
+            "properties": {
+              "lexisEntityType": "HARVESTED_TIMBER",
+              "timberMark": "NCHWP",
+              "numberOfPieces": 1,
+              "species": "FI",
+              "grade": "J",
+              "quantityVolume": 0.5
+            }
+          }
+        ]
+      }
+      """;
 
   private static String bareSampleXmlText() {
     String startTag = "<lexis:LexisSubmission>";

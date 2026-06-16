@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildLexisXmlPreviewMessage,
+  GEOJSON_PREVIEW_UNAVAILABLE,
   XML_PREVIEW_UNAVAILABLE,
 } from '@/components/uploads/lexisXmlPreview'
 
@@ -26,6 +27,41 @@ const XML_PREVIEW_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
   </esf:submissionContent>
 </esf:ESFSubmission>`
 
+const BARE_XML_PREVIEW_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
+<lexis:LexisSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis">
+  <lexis:applicant />
+  <lexis:applicationDetail />
+  <lexis:productDetail>
+    <lexis:harvestedTimber />
+  </lexis:productDetail>
+</lexis:LexisSubmission>`
+
+const GEOJSON_PREVIEW_FIXTURE = JSON.stringify({
+  type: 'FeatureCollection',
+  lexis: {
+    applicant: {},
+    applicationDetail: {},
+    productDetail: {},
+  },
+  features: [
+    {
+      type: 'Feature',
+      geometry: null,
+      properties: {
+        lexisEntityType: 'harvestedTimber',
+        timberMark: '<script>alert(1)</script>',
+      },
+    },
+    {
+      type: 'Feature',
+      geometry: null,
+      properties: {
+        lexisEntityType: 'HARVESTED_TIMBER',
+      },
+    },
+  ],
+})
+
 describe('lexisXmlPreview', () => {
   it('summarizes safe structure from a LEXIS XML submission', async () => {
     await expect(
@@ -33,6 +69,22 @@ describe('lexisXmlPreview', () => {
         new File([XML_PREVIEW_FIXTURE], 'submission.xml', { type: 'application/xml' }),
       ),
     ).resolves.toBe('Preview: LEXIS XML structure detected, 2 scale rows.')
+  })
+
+  it('summarizes safe structure from a bare LEXIS XML submission', async () => {
+    await expect(
+      buildLexisXmlPreviewMessage(
+        new File([BARE_XML_PREVIEW_FIXTURE], 'submission.xml', { type: 'application/xml' }),
+      ),
+    ).resolves.toBe('Preview: LEXIS XML structure detected, 1 scale row.')
+  })
+
+  it('summarizes safe structure from a LEXIS GeoJSON submission', async () => {
+    await expect(
+      buildLexisXmlPreviewMessage(
+        new File([GEOJSON_PREVIEW_FIXTURE], 'submission.geojson', { type: 'application/geo+json' }),
+      ),
+    ).resolves.toBe('Preview: LEXIS GeoJSON structure detected, 2 scale rows.')
   })
 
   it('does not echo XML element text into the preview', async () => {
@@ -73,6 +125,12 @@ describe('lexisXmlPreview', () => {
     await expect(
       buildLexisXmlPreviewMessage(new File(['<xml />'], 'submission.xml')),
     ).resolves.toBe(XML_PREVIEW_UNAVAILABLE)
+  })
+
+  it('falls back when required GeoJSON structure is missing', async () => {
+    await expect(
+      buildLexisXmlPreviewMessage(new File(['{"type":"FeatureCollection"}'], 'submission.geojson')),
+    ).resolves.toBe(GEOJSON_PREVIEW_UNAVAILABLE)
   })
 
   it('falls back when the browser cannot read XML text', async () => {

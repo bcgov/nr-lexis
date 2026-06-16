@@ -54,9 +54,9 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
 const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
   {
     id: 'lexisXmlUpload',
-    label: 'LEXIS XML Upload',
+    label: 'LEXIS Import',
     requiredAction: 'createApplication',
-    description: 'Import LEXIS application XML.',
+    description: 'Import LEXIS application XML or GeoJSON.',
     reactUploadType: 'lexisXml',
   },
   {
