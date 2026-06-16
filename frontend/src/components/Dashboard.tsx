@@ -106,6 +106,7 @@ const DASHBOARD_QUICK_ACTIONS: DashboardModule[] = [
       '/summary',
       '/applicationsReview',
       '/applicationSearch',
+      'createApplication',
       '/exemptionSearch',
       '/offersSearch',
       '/permitSearch',

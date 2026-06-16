@@ -2,6 +2,8 @@ import { type FC } from 'react'
 import { Tag } from '@carbon/react'
 import {
   formatScaleRows,
+  formatUploadFileSize,
+  formatUploadQueuedAt,
   uploadQueueStatusLabel,
   uploadQueueStatusTagType,
 } from './uploadQueueHelpers'
@@ -51,6 +53,7 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
             !!applicationNumber ||
             !!details?.packageNumber ||
             !!details?.userReference ||
+            !!item.file.name ||
             typeof details?.scaleRows === 'number'
           const summary = details?.summary || item.message || 'Waiting for upload.'
           const target = item.targetSummary ?? targetSummary
@@ -80,6 +83,18 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                   <div>
                     <dt>Upload Type</dt>
                     <dd>{item.workflowLabel}</dd>
+                  </div>
+                  <div>
+                    <dt>File Name</dt>
+                    <dd>{item.file.name}</dd>
+                  </div>
+                  <div>
+                    <dt>File Size</dt>
+                    <dd>{formatUploadFileSize(item.file.size)}</dd>
+                  </div>
+                  <div>
+                    <dt>Submission Timestamp</dt>
+                    <dd>{formatUploadQueuedAt(item.queuedAt)}</dd>
                   </div>
                   <div>
                     <dt>Target</dt>
@@ -205,9 +220,9 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                 {(item.status === 'validated' || item.status === 'complete') &&
                   errors.length === 0 &&
                   warnings.length === 0 && (
-                  <p className="admin-upload-review__empty-result">
-                    {hasMetadata ? 'No validation issues returned.' : summary}
-                  </p>
+                    <p className="admin-upload-review__empty-result">
+                      {hasMetadata ? 'No validation issues returned.' : summary}
+                    </p>
                   )}
               </div>
             </details>

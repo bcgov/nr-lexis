@@ -367,6 +367,29 @@ class LexisXmlImportServiceTest {
   }
 
   @Test
+  void shouldRejectDuplicatePackageWhenPackageAppearsDuringImportFinalization() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(
+            new PackageValidityItem(true, null),
+            new PackageValidityItem(false, "Package TEST23-652-7D-2 already exists."));
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(new PackagePersistenceResult(false, null, null, null, null, null, List.of(), List.of()));
+
+    LexisXmlImportResultDto result = service().importLexisXml(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.applicationNumber()).isNull();
+    assertThat(result.packageNumber()).isNull();
+    assertThat(result.scaleRows()).isZero();
+    assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
+    verify(applicationDetailsService, times(2)).isPackageValid("TEST23-652-7D-2");
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+  }
+
+  @Test
   void shouldRejectImportAndStopRemainingScalesWhenScalePersistenceFails() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))

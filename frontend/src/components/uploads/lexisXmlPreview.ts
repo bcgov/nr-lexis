@@ -8,6 +8,8 @@ export const XML_PREVIEW_UNAVAILABLE =
   'XML preview unavailable; server validation will run on upload.'
 export const GEOJSON_PREVIEW_UNAVAILABLE =
   'GeoJSON preview unavailable; server validation will run on upload.'
+export const CONTENT_PREVIEW_UNAVAILABLE =
+  'Preview unavailable; server validation will inspect this submission file.'
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -92,6 +94,23 @@ const buildGeoJsonPreviewMessage = async (file: File): Promise<string> => {
   }
 }
 
+const buildContentDetectedPreviewMessage = async (file: File): Promise<string> => {
+  try {
+    const text = await file.slice(0, 512).text()
+    const trimmed = text.trimStart()
+    if (trimmed.startsWith('<')) {
+      return buildXmlPreviewMessage(file)
+    }
+    if (trimmed.startsWith('{')) {
+      return buildGeoJsonPreviewMessage(file)
+    }
+  } catch {
+    return CONTENT_PREVIEW_UNAVAILABLE
+  }
+
+  return CONTENT_PREVIEW_UNAVAILABLE
+}
+
 export const buildLexisXmlPreviewMessage = async (file: File): Promise<string> => {
   const extension = getFileExtension(file.name)
   if (extension === '.zip') {
@@ -101,7 +120,7 @@ export const buildLexisXmlPreviewMessage = async (file: File): Promise<string> =
     return buildGeoJsonPreviewMessage(file)
   }
   if (extension !== '.xml') {
-    return ''
+    return buildContentDetectedPreviewMessage(file)
   }
 
   return buildXmlPreviewMessage(file)

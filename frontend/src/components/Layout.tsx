@@ -54,6 +54,11 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         requiredActionsMatch: 'all',
       },
       {
+        to: '/provincial/application/upload',
+        label: 'Upload application submission',
+        requiredActions: ['createApplication'],
+      },
+      {
         to: '/provincial/application',
         label: 'Application search',
         requiredActions: ['/applicationSearch'],
@@ -156,7 +161,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
           '/fileExemptionUpload',
           '/filePermitUpload',
           '/fileInvoiceUpload',
-          'createApplication',
         ],
       },
     ],
@@ -168,6 +172,7 @@ const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
   { path: '/provincial/summary', section: 'Provincial' },
   { path: '/provincial/review', section: 'Provincial' },
   { path: '/provincial/application/create', section: 'Provincial' },
+  { path: '/provincial/application/upload', section: 'Provincial' },
   { path: '/provincial/application', section: 'Provincial' },
   { path: '/provincial/exemption/create', section: 'Provincial' },
   { path: '/provincial/exemption', section: 'Provincial' },

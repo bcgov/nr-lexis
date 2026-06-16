@@ -30,6 +30,7 @@ const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
   summary: '/provincial/summary',
   applicationsreview: '/provincial/review',
   applicationsearch: '/provincial/application',
+  createapplication: '/provincial/application/upload',
   exemptionsearch: '/provincial/exemption',
   offerssearch: '/provincial/offers',
   permitsearch: '/provincial/permit',
@@ -42,6 +43,7 @@ const ACTION_PRIORITY: string[] = [
   'summary',
   'applicationsReview',
   'applicationSearch',
+  'createApplication',
   'exemptionSearch',
   'offersSearch',
   'permitSearch',
@@ -156,13 +158,21 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     roleSet.has(ROLE_APPLICATION_APPROVER) || roleSet.has('LEXIS_APPLICATION_APPROVER')
   const isExemptionApproverUser =
     roleSet.has(ROLE_EXEMPTION_APPROVER) || roleSet.has('LEXIS_EXEMPTION_APPROVER')
+  const grantedSet = new Set(capabilities.grantedActions.map(normalizeAction))
+  const hasGrantedAction = (action: string): boolean => grantedSet.has(normalizeAction(action))
 
   if (isReadOnlyUser) {
     return '/provincial/application'
   }
 
   if (isIndustryUser) {
-    return '/provincial/summary'
+    if (hasGrantedAction('/summary')) {
+      return '/provincial/summary'
+    }
+    if (hasGrantedAction('createApplication')) {
+      return '/provincial/application/upload'
+    }
+    return '/dashboard'
   }
 
   if (isAdminOnly) {
@@ -177,7 +187,6 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     return '/provincial/review'
   }
 
-  const grantedSet = new Set(capabilities.grantedActions.map(normalizeAction))
   for (const action of ACTION_PRIORITY) {
     const normalizedAction = normalizeAction(action)
     if (grantedSet.has(normalizedAction)) {

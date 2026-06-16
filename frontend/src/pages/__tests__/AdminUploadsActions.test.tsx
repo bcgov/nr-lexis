@@ -414,6 +414,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.upload(screen.getByLabelText('Application submission file'), file)
     expect(screen.getAllByText('Creates a new application').length).toBeGreaterThan(0)
     expect(screen.getByText(/XML \| 7 B \| Added/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel submission' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Validate submissions' }))
 
     await waitFor(() => {
@@ -427,16 +428,22 @@ describe('Admin upload workflow smoke', () => {
     })
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
     expect(screen.getByText('Submission validated')).toBeInTheDocument()
+    expect(screen.getByText('File Name')).toBeInTheDocument()
+    expect(screen.getByText('File Size')).toBeInTheDocument()
+    expect(screen.getByText('Submission Timestamp')).toBeInTheDocument()
+    expect(screen.getAllByText('submission.xml').length).toBeGreaterThan(0)
+    expect(screen.getByText('7 B')).toBeInTheDocument()
     expect(screen.getByText('Application Summary')).toBeInTheDocument()
     expect(screen.getByText('1074-03')).toBeInTheDocument()
     expect(screen.getByText('CUSTOMER SERVICE')).toBeInTheDocument()
     expect(screen.getAllByText('525.0').length).toBeGreaterThan(0)
     expect(screen.getByText('HE, FI')).toBeInTheDocument()
     expect(screen.getAllByText('CLIENT-REF-1').length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('User reference')).toBeDisabled()
     expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit applications' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Finalize submissions' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -457,6 +464,47 @@ describe('Admin upload workflow smoke', () => {
       'href',
       '/provincial/application/9001',
     )
+  })
+
+  it('validates LEXIS XML content when the file extension does not identify the format', async () => {
+    const user = userEvent.setup({ applyAccept: false })
+
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+    mockedValidateLexisXmlUpload.mockResolvedValue({
+      message:
+        'LEXIS application submission validated for package TEST23-652-7D-2 with 2 scale rows.',
+      packageNumber: 'TEST23-652-7D-2',
+      scaleRows: 2,
+    })
+
+    renderPage('/admin/uploads?type=lexisXml')
+
+    const file = new File([XML_PREVIEW_FIXTURE], 'submission.dat', {
+      type: 'application/octet-stream',
+    })
+    await user.upload(screen.getByLabelText('Application submission file'), file)
+
+    expect(
+      (await screen.findAllByText('Preview: LEXIS XML structure detected, 2 scale rows.')).length,
+    ).toBeGreaterThan(0)
+    expect(screen.getByText(/DAT \|/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Validate submissions' }))
+
+    await waitFor(() => {
+      expect(mockedValidateLexisXmlUpload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          file,
+          fileDescription: '',
+        }),
+      )
+    })
+    expect(screen.getByText('Submission validated')).toBeInTheDocument()
+    expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/2 scale rows/).length).toBeGreaterThan(0)
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
   it('shows structured XML warning details in the upload queue', async () => {
@@ -606,11 +654,11 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
     expect(
       screen.getByText(
-        '2 application submissions validated. Review the file summary and submit applications.',
+        '2 application submissions validated. Review the file summary and finalize submissions.',
       ),
     ).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit applications' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Finalize submissions' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
@@ -683,7 +731,7 @@ describe('Admin upload workflow smoke', () => {
       expect(mockedValidateLexisXmlUpload).toHaveBeenCalledTimes(2)
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit applications' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Finalize submissions' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
@@ -704,29 +752,47 @@ describe('Admin upload workflow smoke', () => {
     ).toBeGreaterThan(0)
   })
 
-  it('blocks unsupported files in the LEXIS import queue', async () => {
+  it('shows server validation details for unsupported LEXIS submission files', async () => {
     const user = userEvent.setup({ applyAccept: false })
 
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
     } as any)
+    mockedValidateLexisXmlUpload.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          message: 'LEXIS XML import rejected.',
+          errors: ['The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file.'],
+        },
+      },
+    })
 
     renderPage('/admin/uploads?type=lexisXml')
 
     const file = new File(['not xml'], 'submission.pdf', { type: 'application/pdf' })
     await user.upload(screen.getByLabelText('Application submission file'), file)
 
-    expect(screen.getAllByText('Invalid').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
     expect(
       screen.getAllByText(
-        'LEXIS application submissions must use a .xml, .zip, .geojson, or .json file.',
+        'Preview unavailable; server validation will inspect this submission file.',
       ).length,
     ).toBeGreaterThan(0)
 
     await user.click(screen.getByRole('button', { name: 'Validate submissions' }))
 
+    await waitFor(() => {
+      expect(mockedValidateLexisXmlUpload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          file,
+          fileDescription: '',
+        }),
+      )
+    })
     expect(
-      screen.getAllByText('1 queued file needs attention before upload.').length,
+      screen.getAllByText('The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file.')
+        .length,
     ).toBeGreaterThan(0)
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })

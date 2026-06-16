@@ -109,6 +109,23 @@ export const uploadQueueStatusLabel = (status: UploadQueueStatus): string => {
 export const formatScaleRows = (scaleRows: number): string =>
   `${scaleRows} scale row${scaleRows === 1 ? '' : 's'}`
 
+export const formatUploadFileSize = (size: number): string => {
+  if (size < 1024) {
+    return `${size} B`
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`
+  }
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export const formatUploadQueuedAt = (timestamp: number): string => {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(timestamp)
+}
+
 export const validateDocumentUploadFile = (file: File): string => {
   if (!file.name.trim()) {
     return 'File name is required.'

@@ -10,9 +10,27 @@ const findRoute = (path: string) => {
 describe('Protected route access matrix', () => {
   it.each([
     {
+      path: '/provincial',
+      requiredActions: [
+        '/summary',
+        '/applicationsReview',
+        '/applicationSearch',
+        'createApplication',
+        '/exemptionSearch',
+        '/offersSearch',
+        '/permitSearch',
+      ],
+      requiredActionsMatch: 'any',
+    },
+    {
       path: '/provincial/application/create',
       requiredActions: ['/applicationSearch', 'createApplication'],
       requiredActionsMatch: 'all',
+    },
+    {
+      path: '/provincial/application/upload',
+      requiredActions: ['createApplication'],
+      requiredActionsMatch: 'any',
     },
     {
       path: '/provincial/exemption/create',
@@ -52,7 +70,6 @@ describe('Protected route access matrix', () => {
         '/fileExemptionUpload',
         '/filePermitUpload',
         '/fileInvoiceUpload',
-        'createApplication',
       ],
       requiredActionsMatch: 'any',
     },

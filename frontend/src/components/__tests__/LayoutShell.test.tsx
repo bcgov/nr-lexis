@@ -50,8 +50,8 @@ describe('Layout shell', () => {
   it('marks only the exact side-nav route as active', () => {
     renderLayout('/admin/uploads')
 
-    const adminLink = screen.getByRole('link', { name: 'LEXIS Administration' })
-    const uploadsLink = screen.getByRole('link', { name: 'Data Upload' })
+    const adminLink = screen.getByRole('link', { name: /LEXIS administration/i })
+    const uploadsLink = screen.getByRole('link', { name: /Data upload/i })
     const activeLinks = document.querySelectorAll('.csp-side-nav__link.cds--side-nav__link--active')
 
     expect(document.querySelector('.page-header__eyebrow')).toHaveTextContent('Administration')
@@ -68,8 +68,8 @@ describe('Layout shell', () => {
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
 
     expect(screen.getByRole('link', { name: 'Dashboard' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'LEXIS Administration' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Data Upload' })).toBeVisible()
+    expect(screen.getByRole('link', { name: /LEXIS administration/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Data upload/i })).toBeVisible()
     expect(document.querySelector('.csp-side-nav__icon')).not.toBeInTheDocument()
     expect(sideNav.querySelector('.csp-side-nav__link svg')).not.toBeInTheDocument()
   })
@@ -110,12 +110,41 @@ describe('Layout shell', () => {
 
     renderLayout('/provincial/application')
 
-    expect(screen.getByRole('link', { name: 'Application Search' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Exemption Search' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Offer Search' })).toBeVisible()
-    expect(screen.queryByRole('link', { name: 'Create/Edit Application' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Create/Edit Exemption' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Create/Edit Offer' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Application search/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Exemption search/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Offer search/i })).toBeVisible()
+    expect(
+      screen.queryByRole('link', { name: /Create\/edit application/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: /Upload application submission/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Create\/edit exemption/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Create\/edit offer/i })).not.toBeInTheDocument()
+  })
+
+  it('shows application submission upload without exposing generic data upload', () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'bceid\\submitter',
+        roles: ['PROVINCIAL_SUBMITTER'],
+        welcomeTarget: '/provincial/application/upload',
+        legacyPath: null,
+        grantedActions: ['createApplication'],
+      },
+      defaultRoute: '/provincial/application/upload',
+      canPerform: (action: string) => action === 'createApplication',
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderLayout('/provincial/application/upload')
+
+    expect(screen.getByRole('link', { name: /Upload application submission/i })).toBeVisible()
+    expect(
+      screen.queryByRole('link', { name: /Create\/edit application/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Data upload/i })).not.toBeInTheDocument()
   })
 
   it('defaults the side nav open and supports collapsing it', async () => {

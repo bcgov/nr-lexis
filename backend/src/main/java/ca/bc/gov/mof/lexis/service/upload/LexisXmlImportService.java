@@ -9,6 +9,7 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.Crea
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationResult;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackageMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackagePersistenceResult;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackageValidityItem;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScaleMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScalePersistenceResult;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -268,7 +269,7 @@ public class LexisXmlImportService {
       return rejected(
           fileName,
           fileSize,
-          resultErrors(packageResult.errors(), null),
+          packagePersistenceErrors(applicationDetailsService, submission.packageNumber(), packageResult),
           warnings,
           submissionSummary,
           normalizedUserReference);
@@ -1370,6 +1371,20 @@ public class LexisXmlImportService {
     }
     String normalizedMessage = trimToNull(fallbackMessage);
     return List.of(normalizedMessage == null ? "The LEXIS import could not be persisted." : normalizedMessage);
+  }
+
+  private List<String> packagePersistenceErrors(
+      ApplicationDetailsRpcService applicationDetailsService,
+      String packageNumber,
+      PackagePersistenceResult packageResult) {
+    PackageValidityItem currentPackageValidity = applicationDetailsService.isPackageValid(packageNumber);
+    if (currentPackageValidity != null && !currentPackageValidity.valid()) {
+      return List.of(
+          currentPackageValidity.message() == null
+              ? "Package " + packageNumber + " already exists."
+              : currentPackageValidity.message());
+    }
+    return resultErrors(packageResult.errors(), null);
   }
 
   private String normalizeUserReference(String userReference) {

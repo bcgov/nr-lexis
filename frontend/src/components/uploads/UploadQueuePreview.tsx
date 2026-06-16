@@ -3,6 +3,8 @@ import { Button, Tag, TextInput } from '@carbon/react'
 import { Upload } from '@carbon/icons-react'
 import UploadQueueReviewAccordion from './UploadQueueReviewAccordion'
 import {
+  formatUploadFileSize,
+  formatUploadQueuedAt,
   getFileExtension,
   uploadQueueStatusLabel,
   uploadQueueStatusTagType,
@@ -26,17 +28,8 @@ type UploadQueuePreviewProps = {
   itemNoun?: string
   submitLabel?: string
   submittingLabel?: string
+  removeLabel?: string
   renderCompleteAction?: (item: UploadQueueItem) => ReactNode
-}
-
-const formatFileSize = (size: number): string => {
-  if (size < 1024) {
-    return `${size} B`
-  }
-  if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(1)} KB`
-  }
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
 const formatFileType = (file: File): string => {
@@ -45,13 +38,6 @@ const formatFileType = (file: File): string => {
     return extension.slice(1).toUpperCase()
   }
   return file.type || 'Unknown type'
-}
-
-const formatQueuedAt = (timestamp: number): string => {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(timestamp)
 }
 
 const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
@@ -71,6 +57,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
   itemNoun = 'file',
   submitLabel = 'Submit Upload',
   submittingLabel = 'Submitting...',
+  removeLabel = 'Remove',
   renderCompleteAction,
 }) => {
   const [queueFilter, setQueueFilter] = useState('')
@@ -98,6 +85,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
         item.details?.warnings?.join(' '),
         item.details?.applicationNumber?.toString(),
         item.details?.packageNumber,
+        item.details?.userReference,
         item.details?.scaleRows?.toString(),
       ]
         .join(' ')
@@ -200,8 +188,8 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
                       <div className="admin-upload-file-cell">
                         <span>{item.file.name}</span>
                         <span>
-                          {formatFileType(item.file)} | {formatFileSize(item.file.size)} | Added{' '}
-                          {formatQueuedAt(item.queuedAt)}
+                          {formatFileType(item.file)} | {formatUploadFileSize(item.file.size)} |
+                          Added {formatUploadQueuedAt(item.queuedAt)}
                         </span>
                       </div>
                     </td>
@@ -221,7 +209,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
                           onClick={() => onRemove(item.id)}
                           disabled={isSubmitting && item.status === 'uploading'}
                         >
-                          Remove
+                          {removeLabel}
                         </Button>
                       </div>
                     </td>

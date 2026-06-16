@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildLexisXmlPreviewMessage,
+  CONTENT_PREVIEW_UNAVAILABLE,
   GEOJSON_PREVIEW_UNAVAILABLE,
   XML_PREVIEW_UNAVAILABLE,
 } from '@/components/uploads/lexisXmlPreview'
@@ -87,6 +88,14 @@ describe('lexisXmlPreview', () => {
     ).resolves.toBe('Preview: LEXIS GeoJSON structure detected, 2 scale rows.')
   })
 
+  it('summarizes XML content when the file extension does not identify the format', async () => {
+    await expect(
+      buildLexisXmlPreviewMessage(
+        new File([XML_PREVIEW_FIXTURE], 'submission.dat', { type: 'application/octet-stream' }),
+      ),
+    ).resolves.toBe('Preview: LEXIS XML structure detected, 2 scale rows.')
+  })
+
   it('does not echo XML element text into the preview', async () => {
     const xmlWithMarkupInPreviewField = XML_PREVIEW_FIXTURE.replace(
       '<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>',
@@ -131,6 +140,12 @@ describe('lexisXmlPreview', () => {
     await expect(
       buildLexisXmlPreviewMessage(new File(['{"type":"FeatureCollection"}'], 'submission.geojson')),
     ).resolves.toBe(GEOJSON_PREVIEW_UNAVAILABLE)
+  })
+
+  it('falls back to server validation when an unknown file cannot be previewed', async () => {
+    await expect(
+      buildLexisXmlPreviewMessage(new File(['not xml'], 'submission.dat')),
+    ).resolves.toBe(CONTENT_PREVIEW_UNAVAILABLE)
   })
 
   it('falls back when the browser cannot read XML text', async () => {

@@ -124,6 +124,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       '/summary',
       '/applicationsReview',
       '/applicationSearch',
+      'createApplication',
       '/exemptionSearch',
       '/offersSearch',
       '/permitSearch',
@@ -397,7 +398,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       '/fileExemptionUpload',
       '/filePermitUpload',
       '/fileInvoiceUpload',
-      'createApplication',
     ],
     element: (
       <Layout>
@@ -412,10 +412,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     requiredActions: ['createApplication'],
     element: (
       <Layout>
-        <AdminUploadsPage
-          lockedWorkflowType="lexisXml"
-          pageTitle="Upload Application Submission"
-        />
+        <AdminUploadsPage lockedWorkflowType="lexisXml" pageTitle="Upload Application Submission" />
       </Layout>
     ),
     isNavigation: false,

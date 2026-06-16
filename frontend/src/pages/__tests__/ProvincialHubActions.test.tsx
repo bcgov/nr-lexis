@@ -46,6 +46,7 @@ const renderPage = () => {
     <MemoryRouter initialEntries={['/provincial']}>
       <Routes>
         <Route path="/provincial" element={<ProvincialPage />} />
+        <Route path="/provincial/application/upload" element={<div>Upload route</div>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -107,5 +108,23 @@ describe('Provincial hub actions', () => {
     expect(screen.queryByText(/Available areas:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Show available areas only')).not.toBeInTheDocument()
+  })
+
+  it('shows application submission upload as an application quick action', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+
+    renderPage()
+
+    expect(screen.queryByText('Applications')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Upload application submission' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create application' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Upload application submission' }))
+
+    expect(await screen.findByText('Upload route')).toBeInTheDocument()
   })
 })
