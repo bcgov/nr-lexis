@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -203,6 +203,37 @@ describe('Provincial Application Search Actions', () => {
         expect.objectContaining({
           filters: expect.objectContaining({
             applicationNumber: '987',
+          }),
+        }),
+      )
+    })
+  })
+
+  it('sends selected region org unit numbers to the application search request', async () => {
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
+      applicationStatuses: [{ value: 'NEW', label: 'New' }],
+      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      regions: [{ value: '1818', label: 'TST' }],
+    })
+
+    renderPage()
+    await screen.findByText('321')
+    await waitFor(() => {
+      expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalledTimes(1)
+    })
+    mockedSearchProvincialApplications.mockClear()
+
+    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'TST' } })
+    await userEvent.click(await screen.findByRole('option', { name: 'TST (1818)' }))
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            region: ['1818'],
           }),
         }),
       )
