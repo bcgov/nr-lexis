@@ -5,6 +5,8 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.util.MultiValueMap;
 
 final class RequestParameterUtils {
@@ -40,6 +42,29 @@ final class RequestParameterUtils {
     } catch (NumberFormatException ex) {
       return null;
     }
+  }
+
+  static List<Long> parsePositiveLongs(MultiValueMap<String, String> parameters, String... names) {
+    if (parameters == null || names == null) {
+      return List.of();
+    }
+
+    List<String> rawValues = new ArrayList<>();
+    for (String name : names) {
+      if (name != null) {
+        rawValues.addAll(parameters.getOrDefault(name, List.of()));
+      }
+    }
+
+    return rawValues.stream()
+        .filter(value -> value != null)
+        .flatMap(value -> List.of(value.split(",")).stream())
+        .map(String::trim)
+        .filter(value -> !value.isBlank())
+        .map(RequestParameterUtils::parsePositiveLong)
+        .filter(value -> value != null && value > 0)
+        .distinct()
+        .toList();
   }
 
   static Long parseNonNegativeLong(String rawValue) {

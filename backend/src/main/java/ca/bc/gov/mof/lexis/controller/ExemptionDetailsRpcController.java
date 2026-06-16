@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLongs;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstTrimmedNonBlank;
 
@@ -13,7 +14,6 @@ import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -676,41 +676,12 @@ public class ExemptionDetailsRpcController {
   }
 
   private List<Long> parseRegions(MultiValueMap<String, String> parameters) {
-    if (parameters == null) {
-      return List.of();
-    }
-    List<String> rawValues = new ArrayList<>();
-    rawValues.addAll(parameters.getOrDefault("region", List.of()));
-    rawValues.addAll(parameters.getOrDefault("regions", List.of()));
-    rawValues.addAll(parameters.getOrDefault("orgUnitNumber", List.of()));
-
-    return rawValues.stream()
-        .flatMap(value -> List.of(value.split(",")).stream())
-        .map(String::trim)
-        .filter(value -> !value.isBlank())
-        .map(RequestParameterUtils::parsePositiveLong)
-        .filter(value -> value != null && value > 0)
-        .distinct()
-        .toList();
+    return parsePositiveLongs(parameters, "region", "regions", "orgUnitNumber");
   }
 
   private List<Long> parseApplicationNumbers(MultiValueMap<String, String> parameters) {
-    if (parameters == null) {
-      return List.of();
-    }
-    List<String> rawValues = new ArrayList<>();
-    rawValues.addAll(parameters.getOrDefault("applicationNumber", List.of()));
-    rawValues.addAll(parameters.getOrDefault("applications", List.of()));
-    rawValues.addAll(parameters.getOrDefault("applicationNumbers", List.of()));
-
-    return rawValues.stream()
-        .flatMap(value -> List.of(value.split(",")).stream())
-        .map(String::trim)
-        .filter(value -> !value.isBlank())
-        .map(RequestParameterUtils::parsePositiveLong)
-        .filter(value -> value != null && value > 0)
-        .distinct()
-        .toList();
+    return parsePositiveLongs(
+        parameters, "applicationNumber", "applications", "applicationNumbers");
   }
 
   public record ExemptionApplicationsResponseDto(

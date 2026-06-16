@@ -50,6 +50,28 @@ class RequestParameterUtilsTest {
   }
 
   @Test
+  void parsePositiveLongsCollectsAliasesAndCsvValues() {
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    parameters.add("applicationNumber", " 100, 101 ");
+    parameters.add("applications", "102");
+    parameters.add("applicationNumbers", "101, abc, 0, -1, 103");
+
+    assertThat(
+            RequestParameterUtils.parsePositiveLongs(
+                parameters, "applicationNumber", "applications", "applicationNumbers"))
+        .containsExactly(100L, 101L, 102L, 103L);
+  }
+
+  @Test
+  void parsePositiveLongsReturnsEmptyListForMissingInputs() {
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+
+    assertThat(RequestParameterUtils.parsePositiveLongs(null, "applicationNumber")).isEmpty();
+    assertThat(RequestParameterUtils.parsePositiveLongs(parameters, (String[]) null)).isEmpty();
+    assertThat(RequestParameterUtils.parsePositiveLongs(parameters, "applicationNumber")).isEmpty();
+  }
+
+  @Test
   void parseNonNegativeLongAllowsZero() {
     assertThat(RequestParameterUtils.parseNonNegativeLong(" 0 ")).isZero();
     assertThat(RequestParameterUtils.parseNonNegativeLong("12")).isEqualTo(12L);
