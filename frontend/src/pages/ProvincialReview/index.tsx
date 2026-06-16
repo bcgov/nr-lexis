@@ -27,6 +27,7 @@ import type {
   ApplicationReviewSearchSortField,
 } from '@/interfaces/ApplicationReviewSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -85,11 +86,6 @@ const EMPTY_RESULTS: ApplicationReviewSearchResponse = {
     totalElements: 0,
     totalPages: 1,
   },
-}
-
-const isValidIsoDate = (value: string): boolean => {
-  if (!value.trim()) return true
-  return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
 }
 
 const normalizeReviewStatus = (status: string): string => status.trim().toUpperCase()

@@ -24,6 +24,7 @@ import type {
   ProvincialPermitSearchSortField,
 } from '@/interfaces/ProvincialPermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   parseCsvParam,
   parseEnumParam,
@@ -66,11 +67,6 @@ const EMPTY_RESULTS: ProvincialPermitSearchResponse = {
     totalElements: 0,
     totalPages: 1,
   },
-}
-
-const isValidIsoDate = (value: string): boolean => {
-  if (!value.trim()) return true
-  return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
 }
 
 const SORT_COLUMNS: {
