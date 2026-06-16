@@ -1,11 +1,13 @@
+import { normalizeFilterText } from '@/utils/text'
+
+export { normalizeFilterText }
+
 export const displayValue = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined || value === '') {
     return 'Not provided'
   }
   return String(value)
 }
-
-export const normalizeFilterText = (value: string): string => value.trim().toLowerCase()
 
 export const matchesFilter = (
   values: Array<string | number | null | undefined>,

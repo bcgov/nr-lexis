@@ -16,6 +16,7 @@ import {
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import { normalizeFilterText as normalizeText } from '@/utils/text'
 
 type LegacyLaunchTool = {
   id: string
@@ -151,8 +152,6 @@ const ROUTE_ACCESS_CHECKS = [
   { label: 'Reports', action: '/applicationReport' },
   { label: 'Admin', action: '/lexisAgentAdmin' },
 ]
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
 
 const AdminPage: FC = () => {
   const navigate = useNavigate()

@@ -21,6 +21,7 @@ import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-util
 import { useAuth } from '@/context/auth/useAuth'
 import { runReport } from '@/service/report-service'
 import { triggerBrowserDownload } from '@/utils/download'
+import { normalizeFilterText as normalizeText } from '@/utils/text'
 import {
   fetchReportOptions,
   fetchProvincialApplicationOptions,
@@ -844,8 +845,6 @@ const buildReportSearchParams = (payload: {
 
   return params
 }
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
 
 const openBlobInNewTab = (blob: Blob): boolean => {
   const objectUrl = URL.createObjectURL(blob)
