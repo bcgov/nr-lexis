@@ -38,6 +38,7 @@ import {
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
@@ -371,21 +372,21 @@ const ProvincialPermitPage: FC = () => {
                 )
               }}
             />
-            <TextInput
+            <IsoDatePicker
               id="issuedFromDate"
               labelText="Issued From Date (YYYY-MM-DD)"
               value={filters.issuedFromDate}
               invalid={!isValidIsoDate(filters.issuedFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('issuedFromDate', event.target.value)}
+              onChange={(value) => updateFilter('issuedFromDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="issuedToDate"
               labelText="Issued To Date (YYYY-MM-DD)"
               value={filters.issuedToDate}
               invalid={!isValidIsoDate(filters.issuedToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('issuedToDate', event.target.value)}
+              onChange={(value) => updateFilter('issuedToDate', value)}
             />
             <SearchableSelect
               id="permitStatus"

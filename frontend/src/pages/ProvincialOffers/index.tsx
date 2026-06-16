@@ -16,6 +16,7 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import type {
   ProvincialOfferSearchFilters,
   ProvincialOfferSearchRequest,
@@ -327,21 +328,21 @@ const ProvincialOffersPage: FC = () => {
               value={filters.clientNumber}
               onChange={(event) => updateFilter('clientNumber', event.target.value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="listingFromDate"
               labelText="Listing From Date (YYYY-MM-DD)"
               value={filters.listingFromDate}
               invalid={!isValidIsoDate(filters.listingFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingFromDate', event.target.value)}
+              onChange={(value) => updateFilter('listingFromDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="listingToDate"
               labelText="Listing To Date (YYYY-MM-DD)"
               value={filters.listingToDate}
               invalid={!isValidIsoDate(filters.listingToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingToDate', event.target.value)}
+              onChange={(value) => updateFilter('listingToDate', value)}
             />
             <FilterableMultiSelect
               id="region"
@@ -359,21 +360,21 @@ const ProvincialOffersPage: FC = () => {
                 )
               }}
             />
-            <TextInput
+            <IsoDatePicker
               id="withdrawalFromDate"
               labelText="Withdrawn From Date (YYYY-MM-DD)"
               value={filters.withdrawalFromDate}
               invalid={!isValidIsoDate(filters.withdrawalFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('withdrawalFromDate', event.target.value)}
+              onChange={(value) => updateFilter('withdrawalFromDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="withdrawalToDate"
               labelText="Withdrawn To Date (YYYY-MM-DD)"
               value={filters.withdrawalToDate}
               invalid={!isValidIsoDate(filters.withdrawalToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('withdrawalToDate', event.target.value)}
+              onChange={(value) => updateFilter('withdrawalToDate', value)}
             />
           </div>
           <div className="legacy-search-actions">

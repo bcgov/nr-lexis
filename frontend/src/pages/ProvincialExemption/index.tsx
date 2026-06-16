@@ -48,6 +48,7 @@ import {
   fetchProvincialExemptionOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import IsoDatePicker from '@/components/IsoDatePicker'
 
 type RegionOption = {
   id: string
@@ -437,21 +438,21 @@ const ProvincialExemptionPage: FC = () => {
                 )
               }}
             />
-            <TextInput
+            <IsoDatePicker
               id="listFromDate"
               labelText="List From Date (YYYY-MM-DD)"
               value={filters.listFromDate}
               invalid={!isValidIsoDate(filters.listFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listFromDate', event.target.value)}
+              onChange={(value) => updateFilter('listFromDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="listToDate"
               labelText="List To Date (YYYY-MM-DD)"
               value={filters.listToDate}
               invalid={!isValidIsoDate(filters.listToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listToDate', event.target.value)}
+              onChange={(value) => updateFilter('listToDate', value)}
             />
             <SearchableSelect
               id="exemptionTypeCode"

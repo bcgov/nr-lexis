@@ -48,6 +48,7 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import IsoDatePicker from '@/components/IsoDatePicker'
 
 type RegionOption = {
   id: string
@@ -487,21 +488,21 @@ const ProvincialApplicationPage: FC = () => {
                 )
               }}
             />
-            <TextInput
+            <IsoDatePicker
               id="listingFromDate"
               labelText="Listing From Date (YYYY-MM-DD)"
               value={filters.listingFromDate}
               invalid={!isValidIsoDate(filters.listingFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingFromDate', event.target.value)}
+              onChange={(value) => updateFilter('listingFromDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="listingToDate"
               labelText="Listing To Date (YYYY-MM-DD)"
               value={filters.listingToDate}
               invalid={!isValidIsoDate(filters.listingToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingToDate', event.target.value)}
+              onChange={(value) => updateFilter('listingToDate', value)}
             />
             <TextInput
               id="applicantClientNumber"
