@@ -618,6 +618,70 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('Upload Application Documents')).toBeInTheDocument()
   })
 
+  it('disables application upload for expired applications', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'EXP',
+      statusDescription: 'Expired',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const [uploadButton] = await screen.findAllByRole('button', {
+      name: 'Upload Application Document',
+    })
+
+    expect(uploadButton).toBeDisabled()
+    expect(
+      await screen.findByText(
+        'Application document upload is unavailable for expired applications.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Upload Application Documents')).not.toBeInTheDocument()
+  })
+
+  it('disables application upload for industry users when a permit is complete', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      industryUser: true,
+    })
+    mockedFetchApplicationPermits.mockResolvedValue([
+      { permitNumber: '900101', permitStatusDescription: 'Complete' },
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Application document upload is unavailable for industry users when the application has a complete permit.',
+      ),
+    ).toBeInTheDocument()
+
+    const [uploadButton] = screen.getAllByRole('button', {
+      name: 'Upload Application Document',
+    })
+    expect(uploadButton).toBeDisabled()
+    expect(screen.queryByText('Upload Application Documents')).not.toBeInTheDocument()
+  })
+
   it('blocks application summary and package edits for exemption approvers', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -878,7 +942,10 @@ describe('Provincial Application Detail Document Actions', () => {
     const uploadButtons = await screen.findAllByRole('button', {
       name: 'Upload Application Document',
     })
-    expect(uploadButtons[0]).toBeEnabled()
+    expect(uploadButtons[0]).toBeDisabled()
+    expect(
+      screen.getByText('Application document upload is unavailable for expired applications.'),
+    ).toBeInTheDocument()
 
     const documentName = await screen.findByText('expired-doc.pdf')
     const documentRow = documentName.closest('tr')

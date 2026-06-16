@@ -277,6 +277,7 @@ const withApplicationSpecies = (
 
 const APPLICATION_STATUS_EXPIRED = 'EXP'
 const APPLICATION_STATUS_PERMITTED = 'PMT'
+const COMPLETE_PERMIT_STATUS_TEXT = 'COMPLETE'
 const APPLICATION_DOCUMENT_DELETE_ROLES = new Set([
   'ADMIN',
   'LEXIS_ADMIN',
@@ -321,6 +322,30 @@ const canDeleteApplicationDocuments = (
 
   const industryUser = detail.industryUser || normalizedRoles.some(isIndustryApplicationRole)
   return industryUser && [APPLICATION_STATUS_PERMITTED, APPLICATION_STATUS_EXPIRED].includes(status)
+}
+
+const isExpiredApplication = (detail: ProvincialApplicationDetail | null): boolean => {
+  const statusCode = detail?.applicationStatusCode?.trim().toUpperCase() ?? ''
+  const statusDescription = detail?.statusDescription?.trim().toUpperCase() ?? ''
+  return statusCode === APPLICATION_STATUS_EXPIRED || statusDescription === 'EXPIRED'
+}
+
+const hasCompletePermit = (permitRows: ApplicationPermitRow[]): boolean =>
+  permitRows.some((row) =>
+    row.permitStatusDescription.trim().toUpperCase().includes(COMPLETE_PERMIT_STATUS_TEXT),
+  )
+
+const applicationDocumentUploadUnavailableMessage = (
+  detail: ProvincialApplicationDetail | null,
+  permitRows: ApplicationPermitRow[],
+): string => {
+  if (isExpiredApplication(detail)) {
+    return 'Application document upload is unavailable for expired applications.'
+  }
+  if (detail?.industryUser && hasCompletePermit(permitRows)) {
+    return 'Application document upload is unavailable for industry users when the application has a complete permit.'
+  }
+  return ''
 }
 
 const reviewEmailCandidate = (
@@ -611,6 +636,12 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
   const canUploadApplicationDocuments = canPerform('/fileApplicationUpload')
   const canDeleteDocuments = canDeleteApplicationDocuments(detail, capabilities?.roles ?? [])
+  const documentUploadUnavailableMessage = applicationDocumentUploadUnavailableMessage(
+    detail,
+    permitRows,
+  )
+  const canAddApplicationDocuments =
+    canUploadApplicationDocuments && !documentUploadUnavailableMessage
   const canManageItems =
     canPerform('createApplication') &&
     !detail?.readOnly &&
@@ -1959,7 +1990,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   kind="secondary"
                   size="sm"
                   renderIcon={Upload}
-                  disabled={!canUploadApplicationDocuments || !detail.applicationNumber}
+                  disabled={!canAddApplicationDocuments || !detail.applicationNumber}
                   onClick={onOpenApplicationUpload}
                 >
                   Upload Application Document
@@ -2714,7 +2745,16 @@ const ProvincialApplicationDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Documents <Tag type="green">API</Tag>
               </h2>
-              {canUploadApplicationDocuments && (
+              {!!documentUploadUnavailableMessage && canUploadApplicationDocuments && (
+                <InlineNotification
+                  kind="info"
+                  title="Upload unavailable"
+                  subtitle={documentUploadUnavailableMessage}
+                  lowContrast
+                  hideCloseButton
+                />
+              )}
+              {canAddApplicationDocuments && (
                 <DetailDocumentUploadPanel
                   workflowType="application"
                   targetNumber={String(detail.applicationNumber ?? '')}
