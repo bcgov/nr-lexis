@@ -1,7 +1,7 @@
 import type { AxiosRequestConfig } from 'axios'
 import { env } from '@/env'
 import apiService from '@/service/api-service'
-import { extractResponseFilename, getResponseHeaderValue } from '@/service/document-service-utils'
+import { extractResponseFilename, getResponseHeaderValue } from '@/service/http-response-utils'
 
 export type RunReportRequest = {
   reportId: string

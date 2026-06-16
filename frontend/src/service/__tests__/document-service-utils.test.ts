@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   documentValueAsBoolean,
   documentValueAsString,
-  extractResponseFilename,
-  getResponseHeaderValue,
   normalizeDocumentRowBase,
   parseDocumentArrayPayload,
   parseRemoveDocumentSuccess,
@@ -62,28 +60,5 @@ describe('document-service-utils', () => {
     expect(parseRemoveDocumentSuccess({ removed: true })).toBe(true)
     expect(parseRemoveDocumentSuccess({ valid: 'false' })).toBe(false)
     expect(parseRemoveDocumentSuccess({ ok: true })).toBe(false)
-  })
-
-  it('reads response headers and extracts filenames', () => {
-    expect(getResponseHeaderValue({ 'content-type': 'application/pdf' }, 'Content-Type')).toBe(
-      'application/pdf',
-    )
-    expect(getResponseHeaderValue({ 'CONTENT-TYPE': ['text/csv'] }, 'content-type')).toBe(
-      'text/csv',
-    )
-
-    expect(
-      extractResponseFilename(
-        { 'content-disposition': "attachment; filename*=UTF-8''permit%20detail.pdf" },
-        'fallback.pdf',
-      ),
-    ).toBe('permit detail.pdf')
-    expect(
-      extractResponseFilename(
-        { 'content-disposition': 'attachment; filename="report.csv"' },
-        'fallback.csv',
-      ),
-    ).toBe('report.csv')
-    expect(extractResponseFilename({}, 'fallback.pdf')).toBe('fallback.pdf')
   })
 })

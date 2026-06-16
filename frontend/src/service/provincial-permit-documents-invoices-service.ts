@@ -2,11 +2,11 @@ import apiService from '@/service/api-service'
 import {
   documentValueAsBoolean as asBoolean,
   documentValueAsString as asString,
-  extractResponseFilename,
   normalizeDocumentRowBase,
   parseDocumentArrayPayload,
   parseRemoveDocumentSuccess,
 } from '@/service/document-service-utils'
+import { extractResponseFilename } from '@/service/http-response-utils'
 
 export type PermitDocumentRow = {
   id: string

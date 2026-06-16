@@ -1,10 +1,10 @@
 import apiService from '@/service/api-service'
 import {
-  extractResponseFilename,
   normalizeDocumentRowBase,
   parseDocumentArrayPayload,
   parseRemoveDocumentSuccess,
 } from '@/service/document-service-utils'
+import { extractResponseFilename } from '@/service/http-response-utils'
 
 export type ProvincialApplicationDocumentRow = {
   id: string
