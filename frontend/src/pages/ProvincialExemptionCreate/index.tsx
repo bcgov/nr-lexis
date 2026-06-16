@@ -10,6 +10,7 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  joinCreateSubmitMessages,
   maxNumericValueFieldError,
   mergeCreateDraftPayload,
   positiveNumericFieldError,
@@ -283,9 +284,7 @@ const ProvincialExemptionCreatePage: FC = () => {
           form.applicationNumber,
         ],
       })
-      const responseMessage = [result.message, ...result.errors, ...result.warnings]
-        .filter((value) => value.trim().length > 0)
-        .join(' ')
+      const responseMessage = joinCreateSubmitMessages(result)
 
       if (result.success) {
         if (result.createdId) {

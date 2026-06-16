@@ -30,6 +30,7 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  joinCreateSubmitMessages,
   maxNumericValueFieldError,
   maxLengthFieldError,
   mergeCreateDraftPayload,
@@ -905,9 +906,7 @@ const ProvincialApplicationCreatePage: FC = () => {
         ...form,
         applicationTermDays: calculatedApplicationTermDays,
       })
-      const responseMessage = [result.message, ...result.errors, ...result.warnings]
-        .filter((value) => value.trim().length > 0)
-        .join(' ')
+      const responseMessage = joinCreateSubmitMessages(result)
 
       if (result.success) {
         if (result.createdId) {

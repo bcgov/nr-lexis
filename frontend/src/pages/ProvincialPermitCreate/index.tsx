@@ -9,6 +9,7 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  joinCreateSubmitMessages,
   mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
@@ -178,9 +179,7 @@ const ProvincialPermitCreatePage: FC = () => {
     setIsSubmitting(true)
     try {
       const result = await submitProvincialPermitCreate(form)
-      const responseMessage = [result.message, ...result.errors, ...result.warnings]
-        .filter((value) => value.trim().length > 0)
-        .join(' ')
+      const responseMessage = joinCreateSubmitMessages(result)
 
       if (result.success) {
         if (result.createdId) {

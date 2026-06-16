@@ -11,6 +11,7 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  joinCreateSubmitMessages,
   mergeCreateDraftPayload,
   requiredFieldError,
   type FieldErrors,
@@ -252,9 +253,7 @@ const IndianReservePermitCreatePage: FC = () => {
     setIsSubmitting(true)
     try {
       const result = await submitIndianReservePermitCreate(form)
-      const responseMessage = [result.message, ...result.errors, ...result.warnings]
-        .filter((value) => value.trim().length > 0)
-        .join(' ')
+      const responseMessage = joinCreateSubmitMessages(result)
 
       if (result.success) {
         if (result.createdId) {

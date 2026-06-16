@@ -9,6 +9,7 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  joinCreateSubmitMessages,
   mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
@@ -172,9 +173,7 @@ const ProvincialOfferCreatePage: FC = () => {
     setIsSubmitting(true)
     try {
       const result = await submitProvincialOfferCreate(form)
-      const responseMessage = [result.message, ...result.errors, ...result.warnings]
-        .filter((value) => value.trim().length > 0)
-        .join(' ')
+      const responseMessage = joinCreateSubmitMessages(result)
 
       if (result.success) {
         if (result.createdId) {

@@ -15,6 +15,12 @@ export type FieldErrors<TField extends string> = Partial<Record<TField, string>>
 
 export type TouchedFields<TField extends string> = Partial<Record<TField, boolean>>
 
+type CreateSubmitMessageSource = {
+  message?: string
+  errors?: string[]
+  warnings?: string[]
+}
+
 export const mergeCreateDraftPayload = <TForm extends object>(
   payload: unknown,
   initialForm: TForm,
@@ -28,6 +34,13 @@ export const mergeCreateDraftPayload = <TForm extends object>(
     ...(payload as Partial<TForm>),
   }
 }
+
+export const joinCreateSubmitMessages = ({
+  message = '',
+  errors = [],
+  warnings = [],
+}: CreateSubmitMessageSource): string =>
+  [message, ...errors, ...warnings].filter((value) => normalizeText(value).length > 0).join(' ')
 
 export const firstValidationError = (
   ...validators: Array<() => string | null>
