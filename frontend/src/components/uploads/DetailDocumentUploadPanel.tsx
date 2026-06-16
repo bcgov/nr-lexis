@@ -472,6 +472,8 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
               ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before upload.`
               : undefined
           }
+          disabled={disabled}
+          disabledDescription={disabledReason}
           onFilesSelected={addFilesToQueue}
         />
       </div>

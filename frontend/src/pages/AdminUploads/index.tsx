@@ -922,6 +922,8 @@ const AdminUploadsPage: FC = () => {
               inputLabel={uploadInputLabel}
               accept={uploadAccept}
               invalidText={fieldError('uploadFile')}
+              disabled={!hasUploadAccess}
+              disabledDescription="Your session does not include the required upload permission."
               onFilesSelected={addFilesToQueue}
             />
           </div>

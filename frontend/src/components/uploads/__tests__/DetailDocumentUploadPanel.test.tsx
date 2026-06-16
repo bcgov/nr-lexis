@@ -11,6 +11,23 @@ vi.mock('@/service/admin-upload-service', () => ({
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 
 describe('DetailDocumentUploadPanel', () => {
+  it('disables file selection when upload access is not available', () => {
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        disabled
+        disabledReason="Upload access is read only."
+      />,
+    )
+
+    expect(screen.getByLabelText('Document File')).toBeDisabled()
+    expect(screen.getByText('Browse files')).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('Upload access is read only.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit Upload' })).toBeDisabled()
+  })
+
   it('shows a visible refresh error after a successful upload when refresh fails', async () => {
     const refreshDocuments = vi.fn().mockRejectedValue(new Error('refresh failed'))
     const file = new File(['document upload'], 'application-document.pdf', {

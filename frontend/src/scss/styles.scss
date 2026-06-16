@@ -901,6 +901,12 @@ body {
   background: var(--cds-layer-selected);
 }
 
+.admin-upload-drop-zone.is-disabled {
+  color: var(--cds-text-disabled);
+  background: var(--cds-layer);
+  border-color: var(--cds-border-disabled);
+}
+
 .admin-upload-drop-zone__icon {
   display: inline-flex;
   align-items: center;
@@ -939,6 +945,10 @@ body {
 
 .admin-upload-browse-button {
   cursor: pointer;
+}
+
+.admin-upload-browse-button[aria-disabled='true'] {
+  cursor: not-allowed;
 }
 
 .admin-upload-file-error {

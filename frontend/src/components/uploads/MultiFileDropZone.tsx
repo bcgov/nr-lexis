@@ -9,6 +9,8 @@ type MultiFileDropZoneProps = {
   inputLabel: string
   accept?: string
   invalidText?: string
+  disabled?: boolean
+  disabledDescription?: string
   onFilesSelected: (files: FileList | null) => void
 }
 
@@ -20,6 +22,8 @@ const MultiFileDropZone: FC<MultiFileDropZoneProps> = ({
   inputLabel,
   accept,
   invalidText,
+  disabled = false,
+  disabledDescription = 'File upload is not available.',
   onFilesSelected,
 }) => {
   const [isDraggingOver, setIsDraggingOver] = useState(false)
@@ -27,8 +31,19 @@ const MultiFileDropZone: FC<MultiFileDropZoneProps> = ({
   const onDropUploadFiles = (event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault()
     setIsDraggingOver(false)
+    if (disabled) {
+      return
+    }
     onFilesSelected(event.dataTransfer.files)
   }
+
+  const dropZoneClassName = [
+    'admin-upload-drop-zone',
+    isDraggingOver ? 'is-dragging' : '',
+    disabled ? 'is-disabled' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <section className="admin-upload-panel" aria-labelledby={`${inputId}-panel-title`}>
@@ -40,13 +55,19 @@ const MultiFileDropZone: FC<MultiFileDropZoneProps> = ({
       </div>
 
       <div
-        className={`admin-upload-drop-zone${isDraggingOver ? ' is-dragging' : ''}`}
+        className={dropZoneClassName}
         onDragEnter={(event) => {
           event.preventDefault()
+          if (disabled) {
+            return
+          }
           setIsDraggingOver(true)
         }}
         onDragOver={(event) => {
           event.preventDefault()
+          if (disabled) {
+            return
+          }
           setIsDraggingOver(true)
         }}
         onDragLeave={() => setIsDraggingOver(false)}
@@ -57,7 +78,7 @@ const MultiFileDropZone: FC<MultiFileDropZoneProps> = ({
         </div>
         <div className="admin-upload-drop-zone__copy">
           <p>Drag and drop files here, or browse for files.</p>
-          <p>{description}</p>
+          <p>{disabled ? disabledDescription : description}</p>
         </div>
         <input
           key={inputKey}
@@ -69,12 +90,25 @@ const MultiFileDropZone: FC<MultiFileDropZoneProps> = ({
           aria-describedby={invalidText ? `${inputId}-error` : undefined}
           accept={accept}
           multiple
+          disabled={disabled}
           onChange={(event) => {
             const target = event.target as HTMLInputElement
+            if (disabled) {
+              return
+            }
             onFilesSelected(target.files)
           }}
         />
-        <label className="cds--btn cds--btn--primary admin-upload-browse-button" htmlFor={inputId}>
+        <label
+          className={`cds--btn cds--btn--primary admin-upload-browse-button${disabled ? ' cds--btn--disabled' : ''}`}
+          htmlFor={disabled ? undefined : inputId}
+          aria-disabled={disabled}
+          onClick={(event) => {
+            if (disabled) {
+              event.preventDefault()
+            }
+          }}
+        >
           Browse files
         </label>
       </div>
