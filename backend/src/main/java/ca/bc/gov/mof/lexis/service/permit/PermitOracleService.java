@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -84,17 +85,10 @@ public class PermitOracleService implements PermitService {
         trimToNull(input.applicantClientNumber()),
         trimToNull(input.ownerClientNumber()),
         input.requireScalePermit(),
-        normalizeRegions(input.regionNumbers()),
+        positiveDistinctLongs(input.regionNumbers()),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
-  }
-
-  private List<Long> normalizeRegions(List<Long> rawRegions) {
-    if (rawRegions == null) {
-      return List.of();
-    }
-    return rawRegions.stream().filter(region -> region != null && region > 0).distinct().toList();
   }
 
 }

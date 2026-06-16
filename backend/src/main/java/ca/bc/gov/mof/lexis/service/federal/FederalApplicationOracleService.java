@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.federal;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -72,7 +73,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
 
   @Override
   public boolean verifyApplicationClients(List<Long> applicationNumbers) {
-    List<Long> validNumbers = normalizeApplicationNumbers(applicationNumbers);
+    List<Long> validNumbers = positiveDistinctLongs(applicationNumbers);
     if (validNumbers.isEmpty()) {
       return false;
     }
@@ -98,13 +99,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
         trimToNull(input.agentClientNumber()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
-  }
-
-  private List<Long> normalizeApplicationNumbers(List<Long> rawValues) {
-    if (rawValues == null) {
-      return List.of();
-    }
-    return rawValues.stream().filter(value -> value != null && value > 0).distinct().toList();
   }
 
 }

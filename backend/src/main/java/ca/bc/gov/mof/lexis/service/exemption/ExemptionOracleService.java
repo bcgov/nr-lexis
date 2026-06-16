@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -87,7 +88,7 @@ public class ExemptionOracleService implements ExemptionService {
     String exemptionStatus = trimToNull(input.exemptionStatus());
     String applicantClientNumber = trimToNull(input.applicantClientNumber());
     String ownerClientNumber = trimToNull(input.ownerClientNumber());
-    List<Long> regionNumbers = normalizeRegions(input.regionNumbers());
+    List<Long> regionNumbers = positiveDistinctLongs(input.regionNumbers());
     int page = Math.max(0, input.page());
     int size = Math.max(1, input.size());
 
@@ -111,13 +112,6 @@ public class ExemptionOracleService implements ExemptionService {
         regionNumbers,
         page,
         size);
-  }
-
-  private List<Long> normalizeRegions(List<Long> rawRegions) {
-    if (rawRegions == null) {
-      return List.of();
-    }
-    return rawRegions.stream().filter(region -> region != null && region > 0).distinct().toList();
   }
 
 }

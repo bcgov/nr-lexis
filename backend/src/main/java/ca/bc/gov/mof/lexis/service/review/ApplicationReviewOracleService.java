@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.review;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -201,17 +202,10 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
         input.receivedToDate(),
         input.listingFromDate(),
         input.listingToDate(),
-        normalizeRegions(input.regionNumbers()),
+        positiveDistinctLongs(input.regionNumbers()),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
-  }
-
-  private List<Long> normalizeRegions(List<Long> rawValues) {
-    if (rawValues == null) {
-      return List.of();
-    }
-    return rawValues.stream().filter(value -> value != null && value > 0).distinct().toList();
   }
 
   private String defaultMutationUser(String userId) {

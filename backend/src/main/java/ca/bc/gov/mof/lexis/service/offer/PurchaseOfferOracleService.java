@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.offer;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -214,7 +215,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         trimToNull(input.offeringClientNumber()),
         input.excludeWithdrawn(),
         input.restrictToProvincialOrNullJurisdiction(),
-        normalizeRegions(input.regionNumbers()),
+        positiveDistinctLongs(input.regionNumbers()),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
@@ -442,13 +443,6 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         || !equalsNullable(current.pickupLocation(), updated.pickupLocation())
         || !equalsNullable(current.offerCondition(), updated.offerCondition())
         || !equalsNullable(current.offerVolume(), updated.offerVolume());
-  }
-
-  private List<Long> normalizeRegions(List<Long> rawRegions) {
-    if (rawRegions == null) {
-      return List.of();
-    }
-    return rawRegions.stream().filter(region -> region != null && region > 0).distinct().toList();
   }
 
   private String normalizePackageNumber(String value) {
