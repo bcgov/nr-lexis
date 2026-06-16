@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
@@ -674,19 +676,6 @@ public class ExemptionDetailsRpcController {
     }
     if (hasParameter(parameters, "feeRate")) {
       return Boolean.FALSE;
-    }
-    return null;
-  }
-
-  private String first(MultiValueMap<String, String> parameters, String... names) {
-    if (parameters == null || names == null) {
-      return null;
-    }
-    for (String name : names) {
-      String value = parameters.getFirst(name);
-      if (value != null && !value.isBlank()) {
-        return value.trim();
-      }
     }
     return null;
   }

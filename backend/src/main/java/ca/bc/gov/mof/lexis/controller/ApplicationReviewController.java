@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -305,22 +306,6 @@ public class ApplicationReviewController {
     } catch (NumberFormatException ex) {
       return null;
     }
-  }
-
-  private String first(MultiValueMap<String, String> parameters, String... names) {
-    if (parameters == null || names == null) {
-      return null;
-    }
-    for (String name : names) {
-      if (name == null) {
-        continue;
-      }
-      String value = trimToNull(parameters.getFirst(name));
-      if (value != null) {
-        return value;
-      }
-    }
-    return null;
   }
 
   private ApplicationReviewSearchCriteria buildCriteria(

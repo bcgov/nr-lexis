@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
@@ -1144,19 +1146,6 @@ public class ApplicationDetailsRpcController {
         parsePositiveLong(first(parameters, "applicationNumber")),
         parseNonNegativeLong(first(parameters, "scalePieces", "pieces")),
         parseDouble(first(parameters, "scaleVolume", "volume")));
-  }
-
-  private String first(MultiValueMap<String, String> parameters, String... names) {
-    if (parameters == null || names == null) {
-      return null;
-    }
-    for (String name : names) {
-      String value = parameters.getFirst(name);
-      if (value != null && !value.isBlank()) {
-        return value.trim();
-      }
-    }
-    return null;
   }
 
   private boolean hasApplicationFormChanges(

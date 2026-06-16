@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
@@ -429,19 +430,6 @@ public class OfferDetailsRpcController {
         result.update(),
         result.errors(),
         result.warnings());
-  }
-
-  private String first(MultiValueMap<String, String> parameters, String... names) {
-    if (parameters == null || names == null) {
-      return null;
-    }
-    for (String name : names) {
-      String value = parameters.getFirst(name);
-      if (value != null && !value.isBlank()) {
-        return value.trim();
-      }
-    }
-    return null;
   }
 
   private String formatLegacyDate(LocalDate value) {
