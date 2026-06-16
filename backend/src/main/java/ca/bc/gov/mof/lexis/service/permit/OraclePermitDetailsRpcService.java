@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
@@ -1636,10 +1638,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private boolean isCanadaCountryCode(String countryCode) {
     return "CA".equalsIgnoreCase(trimToNull(countryCode));
-  }
-
-  private <T> T firstNonNull(T first, T second) {
-    return first != null ? first : second;
   }
 
   private record FeeCalculationContext(

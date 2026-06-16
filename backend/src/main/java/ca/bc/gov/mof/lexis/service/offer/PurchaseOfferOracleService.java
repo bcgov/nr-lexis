@@ -5,6 +5,7 @@ import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
 import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstNonBlank;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
@@ -454,10 +455,6 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
 
   private String defaultMutationUser(String userId) {
     return defaultSystemUser(userId);
-  }
-
-  private <T> T firstNonNull(T value, T fallback) {
-    return value == null ? fallback : value;
   }
 
   private boolean equalsNullable(Object left, Object right) {
