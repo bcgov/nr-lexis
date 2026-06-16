@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.upload;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.upload.LexisXmlImportResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationRequest;
@@ -228,7 +230,7 @@ public class LexisXmlImportService {
     try (ZipInputStream zipInputStream = new ZipInputStream(file.getInputStream())) {
       ZipEntry entry;
       while ((entry = zipInputStream.getNextEntry()) != null) {
-        String entryName = trim(entry.getName());
+        String entryName = trimToNull(entry.getName());
         if (entry.isDirectory() || isIgnoredZipEntry(entryName)) {
           zipInputStream.closeEntry();
           continue;
@@ -498,7 +500,7 @@ public class LexisXmlImportService {
   }
 
   private void validateSchemaLocation(Element root, List<String> errors) {
-    String schemaLocation = trim(root.getAttributeNS(XML_SCHEMA_INSTANCE_NAMESPACE, "schemaLocation"));
+    String schemaLocation = trimToNull(root.getAttributeNS(XML_SCHEMA_INSTANCE_NAMESPACE, "schemaLocation"));
     if (schemaLocation == null) {
       errors.add("The XML file must include an xsi:schemaLocation attribute.");
       return;
@@ -580,7 +582,7 @@ public class LexisXmlImportService {
   }
 
   private String normalizeXmlParseMessage(String message) {
-    String normalized = trim(message);
+    String normalized = trimToNull(message);
     if (normalized == null) {
       return "The submission is not a well-formed XML document.";
     }
@@ -855,7 +857,7 @@ public class LexisXmlImportService {
   }
 
   private String normalizeClientLocation(String value) {
-    String normalized = trim(value);
+    String normalized = trimToNull(value);
     if (normalized == null || normalized.length() != 1) {
       return normalized;
     }
@@ -863,16 +865,8 @@ public class LexisXmlImportService {
   }
 
   private String upper(String value) {
-    String normalized = trim(value);
+    String normalized = trimToNull(value);
     return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
-  }
-
-  private String trim(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private String nullToValue(String value) {
@@ -883,7 +877,7 @@ public class LexisXmlImportService {
     if (errors != null && !errors.isEmpty()) {
       return errors;
     }
-    String normalizedMessage = trim(fallbackMessage);
+    String normalizedMessage = trimToNull(fallbackMessage);
     return List.of(normalizedMessage == null ? "The LEXIS XML import could not be persisted." : normalizedMessage);
   }
 

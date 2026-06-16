@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.upload;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.upload.UploadRepository;
 import java.math.BigDecimal;
@@ -99,7 +101,7 @@ public class OracleLexisUploadService implements LexisUploadService {
   @Override
   public Optional<LexisUploadResultDto> uploadExemption(
       MultipartFile file, String exemptionNumber, String description, String entryUserId) {
-    String normalizedExemptionNumber = trim(exemptionNumber);
+    String normalizedExemptionNumber = trimToNull(exemptionNumber);
     if (!validFile(file) || normalizedExemptionNumber == null) {
       return Optional.empty();
     }
@@ -143,7 +145,7 @@ public class OracleLexisUploadService implements LexisUploadService {
       BigDecimal currencyConversionRate,
       BigDecimal feeInLieu,
       String entryUserId) {
-    String normalizedSalesInvoiceNumber = trim(salesInvoiceNumber);
+    String normalizedSalesInvoiceNumber = trimToNull(salesInvoiceNumber);
     if (!validFile(file)
         || permitNumber == null
         || permitNumber < 1
@@ -163,8 +165,10 @@ public class OracleLexisUploadService implements LexisUploadService {
       return fileTypeRejection;
     }
 
-    String normalizedDescription =
-        trim(description) == null ? "Invoice " + normalizedSalesInvoiceNumber : description.trim();
+    String normalizedDescription = trimToNull(description);
+    if (normalizedDescription == null) {
+      normalizedDescription = "Invoice " + normalizedSalesInvoiceNumber;
+    }
 
     boolean persisted =
         uploadRepository.insertInvoiceFile(
@@ -231,7 +235,7 @@ public class OracleLexisUploadService implements LexisUploadService {
   }
 
   private String resolveFileName(MultipartFile file) {
-    String fileName = trim(file.getOriginalFilename());
+    String fileName = trimToNull(file.getOriginalFilename());
     return fileName == null ? "uploaded-file" : fileName;
   }
 
@@ -245,19 +249,12 @@ public class OracleLexisUploadService implements LexisUploadService {
   }
 
   private String defaultDescription(String description) {
-    return trim(description) == null ? "" : description.trim();
+    String normalizedDescription = trimToNull(description);
+    return normalizedDescription == null ? "" : normalizedDescription;
   }
 
   private String defaultEntryUser(String entryUserId) {
-    String normalizedEntryUserId = trim(entryUserId);
+    String normalizedEntryUserId = trimToNull(entryUserId);
     return normalizedEntryUserId == null ? "system" : normalizedEntryUserId;
-  }
-
-  private String trim(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 }
