@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.upload;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -134,6 +135,50 @@ class LexisXmlImportServiceTest {
     assertThat(result.scaleRows()).isEqualTo(3);
     assertThat(result.warnings()).contains("Imported payload/6-652-7.xml from ZIP archive submission.zip.");
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+  }
+
+  @Test
+  void shouldRejectImportAndSkipScalesWhenPackagePersistenceFails() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                false, null, null, null, null, null, List.of("Package could not be saved."), List.of()));
+
+    LexisXmlImportResultDto result = service().importLexisXml(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.applicationNumber()).isNull();
+    assertThat(result.packageNumber()).isNull();
+    assertThat(result.scaleRows()).isZero();
+    assertThat(result.errors()).containsExactly("Package could not be saved.");
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+  }
+
+  @Test
+  void shouldRejectImportAndStopRemainingScalesWhenScalePersistenceFails() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new ScalePersistenceResult(true, null, List.of(), List.of()),
+            new ScalePersistenceResult(false, null, List.of("Scale could not be saved."), List.of()));
+
+    LexisXmlImportResultDto result = service().importLexisXml(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.applicationNumber()).isNull();
+    assertThat(result.packageNumber()).isNull();
+    assertThat(result.scaleRows()).isZero();
+    assertThat(result.errors()).containsExactly("Scale could not be saved.");
+    verify(applicationDetailsService, times(2)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
   }
 
   @Test
