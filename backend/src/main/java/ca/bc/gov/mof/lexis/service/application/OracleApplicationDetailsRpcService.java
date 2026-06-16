@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.application;
 import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstNonBlank;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong;
 
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.util.TextUtils;
@@ -1315,18 +1316,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         .replace(">", "&gt;")
         .replace("\"", "&quot;")
         .replace("'", "&#39;");
-  }
-
-  private Long parsePositiveLong(String value) {
-    if (value == null) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(value);
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
   }
 
   private CreateApplicationRequest normalizeCreateApplicationRequest(CreateApplicationRequest input) {
