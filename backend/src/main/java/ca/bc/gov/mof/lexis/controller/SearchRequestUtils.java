@@ -53,4 +53,11 @@ final class SearchRequestUtils {
           HttpStatus.BAD_REQUEST, "`applications` must be a comma-separated numeric list", ex);
     }
   }
+
+  static String firstPresent(String primary, String fallback) {
+    if (primary != null && !primary.isBlank()) {
+      return primary;
+    }
+    return fallback;
+  }
 }

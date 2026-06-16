@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.firstPresent;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseApplicationNumbers;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 
@@ -180,7 +181,7 @@ public class FederalApplicationController {
       Integer page,
       Integer size) {
     return new FederalApplicationSearchCriteria(
-        firstNonBlank(federalApplicationNumberAlias, federalApplicationNumber),
+        firstPresent(federalApplicationNumberAlias, federalApplicationNumber),
         packageNumber,
         exemptionNumber,
         applicationStatus,
@@ -192,12 +193,5 @@ public class FederalApplicationController {
         agentClientNumber,
         page,
         size);
-  }
-
-  private String firstNonBlank(String value1, String value2) {
-    if (value1 != null && !value1.trim().isEmpty()) {
-      return value1;
-    }
-    return value2;
   }
 }

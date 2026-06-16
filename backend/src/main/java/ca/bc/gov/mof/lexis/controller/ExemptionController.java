@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.firstPresent;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
@@ -154,13 +155,6 @@ public class ExemptionController {
     return service.findByExemptionNumber(exemptionNumber)
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.notFound().build());
-  }
-
-  private String firstPresent(String primary, String fallback) {
-    if (primary != null && !primary.isBlank()) {
-      return primary;
-    }
-    return fallback;
   }
 
   private ExemptionSearchCriteria buildCriteria(

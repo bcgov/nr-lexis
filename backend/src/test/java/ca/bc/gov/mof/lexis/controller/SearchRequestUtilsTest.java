@@ -56,4 +56,11 @@ class SearchRequestUtilsTest {
         .containsExactly(
             HttpStatus.BAD_REQUEST, "`applications` must be a comma-separated numeric list");
   }
+
+  @Test
+  void firstPresentShouldPreserveRawValues() {
+    assertThat(SearchRequestUtils.firstPresent(" value ", "fallback")).isEqualTo(" value ");
+    assertThat(SearchRequestUtils.firstPresent("   ", " fallback ")).isEqualTo(" fallback ");
+    assertThat(SearchRequestUtils.firstPresent(null, null)).isNull();
+  }
 }
