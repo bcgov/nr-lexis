@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.parseDouble;
@@ -56,7 +57,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -1530,22 +1530,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private LocalDate parseDate(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      return null;
-    }
-
-    try {
-      return LocalDate.parse(normalized);
-    } catch (DateTimeParseException ignored) {
-      // Fall through to legacy parser.
-    }
-
-    try {
-      return LocalDate.parse(normalized, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ignored) {
-      return null;
-    }
+    return parseIsoOrLegacyDate(value);
   }
 
   private String formatVolume(double value) {

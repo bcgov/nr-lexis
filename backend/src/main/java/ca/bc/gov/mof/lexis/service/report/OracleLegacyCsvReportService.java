@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.report;
 
 import static ca.bc.gov.mof.lexis.service.report.ReportParameterUtils.first;
+import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
@@ -15,8 +16,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +32,6 @@ import org.springframework.stereotype.Service;
 public class OracleLegacyCsvReportService {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OracleLegacyCsvReportService.class);
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
   private static final String STRING_ARRAY_TYPE = "CBR_VARCHAR2_ARRAY";
 
   private static final String SPECIES_GRADE_CSV_PROCEDURE =
@@ -702,22 +700,7 @@ public class OracleLegacyCsvReportService {
   }
 
   private LocalDate parseDate(String raw) {
-    String value = trimToNull(raw);
-    if (value == null) {
-      return null;
-    }
-
-    try {
-      return LocalDate.parse(value);
-    } catch (DateTimeParseException ignored) {
-      // Fall through.
-    }
-
-    try {
-      return LocalDate.parse(value, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ignored) {
-      return null;
-    }
+    return parseIsoOrLegacyDate(raw);
   }
 
   private long parseLongOrZero(String raw) {

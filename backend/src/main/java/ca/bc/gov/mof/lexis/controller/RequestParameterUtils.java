@@ -1,18 +1,14 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.util.MultiValueMap;
 
 final class RequestParameterUtils {
-
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private RequestParameterUtils() {}
 
@@ -91,19 +87,7 @@ final class RequestParameterUtils {
   }
 
   static LocalDate parseDate(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    String normalized = rawValue.trim();
-    try {
-      return LocalDate.parse(normalized);
-    } catch (DateTimeParseException ignored) {
-      try {
-        return LocalDate.parse(normalized, LEGACY_DATE_FORMATTER);
-      } catch (DateTimeParseException ex) {
-        return null;
-      }
-    }
+    return parseIsoOrLegacyDate(rawValue);
   }
 
   static String sanitizeFileName(String rawValue) {
