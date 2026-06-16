@@ -50,6 +50,21 @@ describe('lexisXmlPreview', () => {
     ).resolves.toBe('Preview: Region RSC, Species/end use HE/PL, Client 1074, 2 scale rows.')
   })
 
+  it('omits preview values that contain escaped markup text', async () => {
+    const xmlWithEscapedMarkupInPreviewField = XML_PREVIEW_FIXTURE.replace(
+      '<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>',
+      '<lexis:boomNumber>&lt;script&gt;alert(1)&lt;/script&gt;</lexis:boomNumber>',
+    )
+
+    await expect(
+      buildLexisXmlPreviewMessage(
+        new File([xmlWithEscapedMarkupInPreviewField], 'submission.xml', {
+          type: 'application/xml',
+        }),
+      ),
+    ).resolves.toBe('Preview: Region RSC, Species/end use HE/PL, Client 1074, 2 scale rows.')
+  })
+
   it('describes ZIP uploads without reading archive content client-side', async () => {
     await expect(
       buildLexisXmlPreviewMessage(new File(['zip-data'], 'submission.zip')),

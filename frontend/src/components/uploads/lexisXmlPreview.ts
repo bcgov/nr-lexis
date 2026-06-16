@@ -4,6 +4,7 @@ const ESF_NAMESPACE = 'http://www.for.gov.bc.ca/schema/esf'
 const LEXIS_NAMESPACE = 'http://www.for.gov.bc.ca/schema/lexis'
 const XML_QUALIFIED_NAME_PREFIX = String.raw`(?:[A-Za-z_][\w.-]*:)?`
 const XML_PREVIEW_TEXT_MAX_LENGTH = 80
+const XML_PREVIEW_SAFE_TEXT = /^[A-Za-z0-9 ./_-]+$/
 
 export const XML_PREVIEW_UNAVAILABLE =
   'XML preview unavailable; server validation will run on upload.'
@@ -26,15 +27,19 @@ const countXmlElements = (xml: string, localName: string): number => {
   return xml.match(elementPattern)?.length ?? 0
 }
 
+const toSafePreviewText = (value: string | undefined): string => {
+  const trimmedValue = value?.trim()
+  if (!trimmedValue || !XML_PREVIEW_SAFE_TEXT.test(trimmedValue)) {
+    return ''
+  }
+  return trimmedValue.slice(0, XML_PREVIEW_TEXT_MAX_LENGTH)
+}
+
 const firstXmlText = (xml: string, localName: string): string => {
   const elementPattern = new RegExp(
     String.raw`<${XML_QUALIFIED_NAME_PREFIX}${escapeRegExp(localName)}\b[^>]*>([\s\S]*?)</${XML_QUALIFIED_NAME_PREFIX}${escapeRegExp(localName)}>`,
   )
-  const rawValue = elementPattern.exec(xml)?.[1]?.trim()
-  if (!rawValue || rawValue.includes('<') || rawValue.includes('>')) {
-    return ''
-  }
-  return rawValue.slice(0, XML_PREVIEW_TEXT_MAX_LENGTH)
+  return toSafePreviewText(elementPattern.exec(xml)?.[1])
 }
 
 export const buildLexisXmlPreviewMessage = async (file: File): Promise<string> => {
