@@ -27,12 +27,14 @@ import type {
   ProvincialExemptionSearchSortField,
 } from '@/interfaces/ProvincialExemptionSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
+  mapSelectedOptionsById,
   parseCsvParam,
   parseEnumParam,
   parsePositiveIntParam,
@@ -46,6 +48,7 @@ import {
   fetchProvincialExemptionOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import IsoDatePicker from '@/components/IsoDatePicker'
 
 type RegionOption = {
   id: string
@@ -78,11 +81,6 @@ const EMPTY_RESULTS: ProvincialExemptionSearchResponse = {
     totalElements: 0,
     totalPages: 1,
   },
-}
-
-const isValidIsoDate = (value: string): boolean => {
-  if (!value.trim()) return true
-  return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
 }
 
 const SORT_COLUMNS: {
@@ -135,11 +133,6 @@ const buildSearchParams = (
   setSearchParam(params, 'pageSize', pageSize)
 
   return params
-}
-
-const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]): RegionOption[] => {
-  const optionMap = new Map(regionOptions.map((option) => [option.id, option]))
-  return regionIds.map((regionId) => optionMap.get(regionId) ?? { id: regionId, text: regionId })
 }
 
 const ProvincialExemptionPage: FC = () => {
@@ -226,7 +219,7 @@ const ProvincialExemptionPage: FC = () => {
   )
 
   const selectedRegions = useMemo(
-    () => mapSelectedRegions(filters.region, regionOptions),
+    () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
 
@@ -445,21 +438,21 @@ const ProvincialExemptionPage: FC = () => {
                 )
               }}
             />
-            <TextInput
+            <IsoDatePicker
               id="listFromDate"
               labelText="List From Date (YYYY-MM-DD)"
               value={filters.listFromDate}
               invalid={!isValidIsoDate(filters.listFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listFromDate', event.target.value)}
+              onChange={(value) => updateFilter('listFromDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="listToDate"
               labelText="List To Date (YYYY-MM-DD)"
               value={filters.listToDate}
               invalid={!isValidIsoDate(filters.listToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listToDate', event.target.value)}
+              onChange={(value) => updateFilter('listToDate', value)}
             />
             <SearchableSelect
               id="exemptionTypeCode"

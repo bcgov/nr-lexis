@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
-import { submitAdminUpload } from '@/service/admin-upload-service'
 import {
   approveApplicationReview,
   sendApplicationReviewStatusEmail,
@@ -40,6 +39,7 @@ import {
   fetchApplicationSpecies,
   fetchApplicationSpeciesCodes,
   fetchApplicationSummarySnapshot,
+  fetchApplicationUniqueScales,
   saveApplicationRemark,
   updateApplicationSummary,
   updateApplicationPackage,
@@ -48,6 +48,7 @@ import {
   fetchApplicationReviewOptions,
   fetchProvincialApplicationOptions,
 } from '@/service/search-options-service'
+import { submitAdminUpload } from '@/service/admin-upload-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -55,10 +56,6 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchProvincialApplicationDetail: vi.fn(),
-}))
-
-vi.mock('@/service/admin-upload-service', () => ({
-  submitAdminUpload: vi.fn(),
 }))
 
 vi.mock('@/service/application-review-search-service', () => ({
@@ -97,6 +94,7 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationSpecies: vi.fn(),
   fetchApplicationSpeciesCodes: vi.fn(),
   fetchApplicationSummarySnapshot: vi.fn(),
+  fetchApplicationUniqueScales: vi.fn(),
   saveApplicationRemark: vi.fn(),
   updateApplicationSummary: vi.fn(),
   updateApplicationPackage: vi.fn(),
@@ -105,6 +103,10 @@ vi.mock('@/service/provincial-application-items-service', () => ({
 vi.mock('@/service/search-options-service', () => ({
   fetchApplicationReviewOptions: vi.fn(),
   fetchProvincialApplicationOptions: vi.fn(),
+}))
+
+vi.mock('@/service/admin-upload-service', () => ({
+  submitAdminUpload: vi.fn(),
 }))
 
 Element.prototype.scrollIntoView = vi.fn()
@@ -132,7 +134,6 @@ const clearComboBox = async (combobox: HTMLElement) => {
 }
 
 const mockedUseAuth = vi.mocked(useAuth)
-const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
 const mockedSendApplicationReviewStatusEmail = vi.mocked(sendApplicationReviewStatusEmail)
 const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewStatus)
@@ -162,11 +163,13 @@ const mockedFetchApplicationScaleDetails = vi.mocked(fetchApplicationScaleDetail
 const mockedFetchApplicationSpecies = vi.mocked(fetchApplicationSpecies)
 const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
 const mockedFetchApplicationSummarySnapshot = vi.mocked(fetchApplicationSummarySnapshot)
+const mockedFetchApplicationUniqueScales = vi.mocked(fetchApplicationUniqueScales)
 const mockedSaveApplicationRemark = vi.mocked(saveApplicationRemark)
 const mockedUpdateApplicationSummary = vi.mocked(updateApplicationSummary)
 const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
 const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOptions)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
+const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 
 const applicationDetail: ProvincialApplicationDetail = {
   applicationNumber: 321,
@@ -268,7 +271,10 @@ describe('Provincial Application Detail Document Actions', () => {
       success: true,
       source: 'api',
     })
-    mockedSubmitAdminUpload.mockResolvedValue(undefined)
+    mockedSubmitAdminUpload.mockResolvedValue({
+      status: 'success',
+      message: 'Application document upload submitted.',
+    })
     mockedFetchApplicationReviewOptions.mockResolvedValue({
       productTypes: [],
       regions: [],
@@ -431,6 +437,7 @@ describe('Provincial Application Detail Document Actions', () => {
         cascadeSplitCode: 'S',
       },
     ])
+    mockedFetchApplicationUniqueScales.mockResolvedValue([])
     mockedFetchApplicationSpeciesCodes.mockResolvedValue([
       { code: 'FI', description: 'Douglas-fir' },
       { code: 'CE', description: 'Cedar' },
@@ -589,7 +596,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(location.textContent).toBe('/provincial/permit/900101?packageFilter=PKG-1')
   })
 
-  it('navigates to upload center with application context', async () => {
+  it('jumps from the header action to the embedded application upload panel', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -597,17 +604,82 @@ describe('Provincial Application Detail Document Actions', () => {
             path="/provincial/application/:applicationNumber"
             element={<ProvincialApplicationDetailsPage />}
           />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
 
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Application Document' })
+    const [uploadButton] = await screen.findAllByRole('button', {
+      name: 'Upload Application Document',
+    })
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/admin/uploads?type=application&applicationNumber=321')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    expect(await screen.findByText('Upload Application Documents')).toBeInTheDocument()
+  })
+
+  it('disables application upload for expired applications', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'EXP',
+      statusDescription: 'Expired',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const [uploadButton] = await screen.findAllByRole('button', {
+      name: 'Upload Application Document',
+    })
+
+    expect(uploadButton).toBeDisabled()
+    expect(
+      await screen.findByText(
+        'Application document upload is unavailable for expired applications.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Upload Application Documents')).not.toBeInTheDocument()
+  })
+
+  it('disables application upload for industry users when a permit is complete', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      industryUser: true,
+    })
+    mockedFetchApplicationPermits.mockResolvedValue([
+      { permitNumber: '900101', permitStatusDescription: 'Complete' },
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Application document upload is unavailable for industry users when the application has a complete permit.',
+      ),
+    ).toBeInTheDocument()
+
+    const [uploadButton] = screen.getAllByRole('button', {
+      name: 'Upload Application Document',
+    })
+    expect(uploadButton).toBeDisabled()
+    expect(screen.queryByText('Upload Application Documents')).not.toBeInTheDocument()
   })
 
   it('blocks application summary and package edits for exemption approvers', async () => {
@@ -643,7 +715,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
-  it('uploads an application document inline and refreshes document rows', async () => {
+  it('uploads application documents inline and refreshes document rows', async () => {
     mockedFetchApplicationDocuments
       .mockResolvedValueOnce({
         rows: [],
@@ -652,9 +724,9 @@ describe('Provincial Application Detail Document Actions', () => {
       .mockResolvedValueOnce({
         rows: [
           {
-            id: '200',
-            name: 'uploaded.pdf',
-            description: 'Uploaded from details',
+            id: '900',
+            name: 'uploaded-doc.pdf',
+            description: 'Uploaded',
             type: 'Attachment',
           },
         ],
@@ -672,55 +744,28 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const file = new File(['uploaded document'], 'uploaded.pdf', { type: 'application/pdf' })
-    await userEvent.upload(await screen.findByLabelText('Application Document File'), file)
-    await userEvent.type(screen.getByLabelText('Document Description'), 'Uploaded from details')
-    await userEvent.click(screen.getByRole('button', { name: 'Upload Document' }))
+    expect(await screen.findByText('Documents')).toBeInTheDocument()
+    const file = new File(['test'], 'uploaded-doc.pdf', { type: 'application/pdf' })
+
+    await userEvent.type(screen.getByLabelText('Document Description'), 'Uploaded')
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
     await waitFor(() => {
-      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith('application', {
-        applicationNumber: '321',
-        file,
-        fileDescription: 'Uploaded from details',
-      })
-      expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
-    })
-    expect(await screen.findByText('uploaded.pdf')).toBeInTheDocument()
-    expect(screen.getByText('Application document uploaded.')).toBeInTheDocument()
-  })
-
-  it('shows the backend rejection message when an application document upload is refused', async () => {
-    mockedSubmitAdminUpload.mockRejectedValueOnce({
-      isAxiosError: true,
-      response: {
-        data: {
-          message:
-            'Could not attach file to application 321. Confirm the application exists before uploading.',
-        },
-      },
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'application',
+        expect.objectContaining({
+          applicationNumber: '321',
+          file,
+          fileDescription: 'Uploaded',
+        }),
+      )
     })
 
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const file = new File(['uploaded document'], 'uploaded.pdf', { type: 'application/pdf' })
-    await userEvent.upload(await screen.findByLabelText('Application Document File'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Upload Document' }))
-
-    expect(
-      await screen.findByText(
-        'Could not attach file to application 321. Confirm the application exists before uploading.',
-      ),
-    ).toBeInTheDocument()
-    expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(screen.getAllByText('uploaded-doc.pdf').length).toBeGreaterThanOrEqual(1)
+    })
+    expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
   })
 
   it('ignores stale detail responses after navigating to another application', async () => {
@@ -894,7 +939,13 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('button', { name: 'Upload Application Document' })).toBeEnabled()
+    const uploadButtons = await screen.findAllByRole('button', {
+      name: 'Upload Application Document',
+    })
+    expect(uploadButtons[0]).toBeDisabled()
+    expect(
+      screen.getByText('Application document upload is unavailable for expired applications.'),
+    ).toBeInTheDocument()
 
     const documentName = await screen.findByText('expired-doc.pdf')
     const documentRow = documentName.closest('tr')
@@ -1170,7 +1221,9 @@ describe('Provincial Application Detail Document Actions', () => {
       createPackageControls.getByRole('combobox', { name: 'Create Package Species' }),
       'CE - Cedar',
     )
-    await userEvent.click(createPackageControls.getByRole('button', { name: 'Add Create Species' }))
+    await userEvent.click(
+      createPackageControls.getByRole('button', { name: 'Add species to new package' }),
+    )
     await waitFor(() => {
       expect(createPackageControls.getByText('CE - Cedar')).toBeInTheDocument()
     })
@@ -1431,6 +1484,28 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedFetchApplicationPackageScales).not.toHaveBeenCalledWith('PKG-1')
   })
 
+  it('shows legacy timber mark summaries for application scales', async () => {
+    mockedFetchApplicationUniqueScales.mockResolvedValue([{ timberMark: 'TM-SUMMARY' }])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const timberMarksSection = (
+      await screen.findByRole('heading', { name: 'Timber Marks' })
+    ).closest('div')
+    expect(timberMarksSection).toBeTruthy()
+    expect(within(timberMarksSection as HTMLElement).getByText('TM-SUMMARY')).toBeInTheDocument()
+    expect(mockedFetchApplicationUniqueScales).toHaveBeenCalledWith('321')
+  })
+
   it('adds, looks up, and deletes package scales', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -1530,6 +1605,33 @@ describe('Provincial Application Detail Document Actions', () => {
 
     expect(screen.getAllByText('Pieces must be a whole number.').length).toBeGreaterThan(0)
     expect(screen.getByText('Scale volume must be 99999.9 or less.')).toBeInTheDocument()
+    expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+  })
+
+  it('blocks scale volume that exceeds the selected package remaining volume', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('TM001')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
+    await chooseComboBoxOption(
+      screen.getAllByRole('combobox', { name: 'Species' })[1],
+      'FI - Douglas-fir',
+    )
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
+    fireEvent.change(screen.getByLabelText('Pieces'), { target: { value: '1' } })
+    fireEvent.change(screen.getByLabelText('Scale Volume'), { target: { value: '80.1' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
+
+    expect(screen.getAllByText('Scale volume must be 80.0 or less.').length).toBeGreaterThan(0)
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 

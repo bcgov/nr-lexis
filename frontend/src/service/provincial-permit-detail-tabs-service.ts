@@ -1,4 +1,9 @@
 import apiService from '@/service/api-service'
+import {
+  parsePayloadArray,
+  payloadValueAsNumber,
+  payloadValueAsString as asString,
+} from '@/service/payload-utils'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 
 export type ProvincialPermitItemRow = {
@@ -43,6 +48,7 @@ export type ProvincialPermitDetailTabsRequest = {
 }
 
 const PERMIT_TAB_CACHE_TTL_MS = 30_000
+const PERMIT_TAB_ARRAY_KEYS = ['results', 'rows', 'items', 'scaleList', 'data']
 
 export const EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: ProvincialPermitDetailTabsData = {
   items: [],
@@ -52,56 +58,8 @@ export const EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: ProvincialPermitDetailTabsData
   boicItems: [],
 }
 
-const parseArrayPayload = (payload: unknown): unknown[] | null => {
-  if (Array.isArray(payload)) {
-    return payload
-  }
-
-  if (!payload || typeof payload !== 'object') {
-    return null
-  }
-
-  const objectPayload = payload as Record<string, unknown>
-  if (Array.isArray(objectPayload.results)) {
-    return objectPayload.results as unknown[]
-  }
-  if (Array.isArray(objectPayload.rows)) {
-    return objectPayload.rows as unknown[]
-  }
-  if (Array.isArray(objectPayload.items)) {
-    return objectPayload.items as unknown[]
-  }
-  if (Array.isArray(objectPayload.scaleList)) {
-    return objectPayload.scaleList as unknown[]
-  }
-  if (Array.isArray(objectPayload.data)) {
-    return objectPayload.data as unknown[]
-  }
-
-  return null
-}
-
-const asString = (value: unknown): string => {
-  if (typeof value === 'string') {
-    return value
-  }
-  if (typeof value === 'number') {
-    return String(value)
-  }
-  return ''
-}
-
 const asNumber = (value: unknown): number => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value
-  }
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value.replace(/[$,\s]/g, ''))
-    if (Number.isFinite(parsed)) {
-      return parsed
-    }
-  }
-  return 0
+  return payloadValueAsNumber(value, (input) => input.replace(/[$,\s]/g, ''))
 }
 
 const normalizePermitItemRow = (row: unknown, index: number): ProvincialPermitItemRow => {
@@ -183,7 +141,7 @@ const fetchRows = async <TRow>(
       return []
     }
 
-    const payloadRows = parseArrayPayload(response.data)
+    const payloadRows = parsePayloadArray(response.data, PERMIT_TAB_ARRAY_KEYS)
     if (!payloadRows) {
       throw new Error(`Invalid list response from ${path}`)
     }
@@ -247,7 +205,7 @@ const fetchScaleRows = async (permitNumber: string, packageNumber: string): Prom
       return []
     }
 
-    return parseArrayPayload(response.data) ?? []
+    return parsePayloadArray(response.data, PERMIT_TAB_ARRAY_KEYS) ?? []
   } catch {
     return []
   }

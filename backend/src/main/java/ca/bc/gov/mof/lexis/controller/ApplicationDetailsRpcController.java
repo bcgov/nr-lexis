@@ -1,5 +1,14 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseNonNegativeLong;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
+import static ca.bc.gov.mof.lexis.util.TextUtils.firstTrimmedNonBlank;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
@@ -7,6 +16,7 @@ import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.util.TextUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -16,8 +26,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -92,8 +100,6 @@ public class ApplicationDetailsRpcController {
       Set.of("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER");
   private static final Set<String> APPLICATION_DOCUMENT_INDUSTRY_ROLES =
       Set.of("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_FEDERAL_SUBMITTER");
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
@@ -580,7 +586,9 @@ public class ApplicationDetailsRpcController {
     }
 
     return ResponseEntity.ok(
-        service.getGradeCodes(firstNonBlank(orgUnitNumber, region), firstNonBlank(speciesCode, species))
+        service.getGradeCodes(
+            firstTrimmedNonBlank(orgUnitNumber, region),
+            firstTrimmedNonBlank(speciesCode, species))
             .stream()
             .map(this::toCodeResponse)
             .toList());
@@ -607,7 +615,8 @@ public class ApplicationDetailsRpcController {
     }
 
     return ResponseEntity.ok(
-        service.getEndUsesForSpeciesRegion(firstNonBlank(region, orgUnitNumber), parseSpeciesJson(speciesJson))
+        service.getEndUsesForSpeciesRegion(
+            firstTrimmedNonBlank(region, orgUnitNumber), parseSpeciesJson(speciesJson))
             .stream()
             .map(this::toCodeResponse)
             .toList());
@@ -639,8 +648,8 @@ public class ApplicationDetailsRpcController {
     return ResponseEntity.ok(
         service
             .getRemainingSpecies(
-                firstNonBlank(region, orgUnitNumber),
-                firstNonBlank(productType, productTypeCode),
+                firstTrimmedNonBlank(region, orgUnitNumber),
+                firstTrimmedNonBlank(productType, productTypeCode),
                 parseSpeciesJson(speciesJson))
             .stream()
             .map(item -> new ApplicationRemainingSpeciesResponseDto(item.code()))
@@ -834,7 +843,8 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    return ResponseEntity.ok(toScaleDetailResponse(service.getScaleById(firstNonBlank(scaleDetailId, scaleId))));
+    return ResponseEntity.ok(
+        toScaleDetailResponse(service.getScaleById(firstTrimmedNonBlank(scaleDetailId, scaleId))));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_SCALE_BY_ID)
@@ -1043,18 +1053,6 @@ public class ApplicationDetailsRpcController {
         && (APPLICATION_STATUS_PERMITTED.equals(status) || APPLICATION_STATUS_EXPIRED.equals(status));
   }
 
-  private Long parsePositiveLong(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(rawValue.trim());
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
   private ApplicationDetailsRpcService.CreateApplicationRequest toCreateApplicationRequest(
       MultiValueMap<String, String> parameters) {
     return new ApplicationDetailsRpcService.CreateApplicationRequest(
@@ -1146,19 +1144,6 @@ public class ApplicationDetailsRpcController {
         parseDouble(first(parameters, "scaleVolume", "volume")));
   }
 
-  private String first(MultiValueMap<String, String> parameters, String... names) {
-    if (parameters == null || names == null) {
-      return null;
-    }
-    for (String name : names) {
-      String value = parameters.getFirst(name);
-      if (value != null && !value.isBlank()) {
-        return value.trim();
-      }
-    }
-    return null;
-  }
-
   private boolean hasApplicationFormChanges(
       MultiValueMap<String, String> parameters,
       ApplicationDetailsRpcService.ApplicationSummarySnapshot snapshot) {
@@ -1228,57 +1213,6 @@ public class ApplicationDetailsRpcController {
       return Double.toString(doubleValue);
     }
     return value.toString().trim();
-  }
-
-  private LocalDate parseDate(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    String normalized = rawValue.trim();
-    try {
-      return LocalDate.parse(normalized);
-    } catch (DateTimeParseException ignored) {
-      try {
-        return LocalDate.parse(normalized, LEGACY_DATE_FORMATTER);
-      } catch (DateTimeParseException ex) {
-        return null;
-      }
-    }
-  }
-
-  private Double parseDouble(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      return Double.parseDouble(rawValue.trim());
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
-  private Long parseNonNegativeLong(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(rawValue.trim());
-      return parsed >= 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
-  private String sanitizeFileName(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    String normalized = rawValue.trim();
-    int slashIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
-    if (slashIndex >= 0 && slashIndex < normalized.length() - 1) {
-      normalized = normalized.substring(slashIndex + 1);
-    }
-    return normalized;
   }
 
   private boolean isSelectedLocation(
@@ -1358,14 +1292,6 @@ public class ApplicationDetailsRpcController {
         data == null ? null : data.email());
   }
 
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
   private String normalizeClientNumber(String clientNumber) {
     String normalized = trimToNull(clientNumber);
     if (normalized == null) {
@@ -1378,18 +1304,13 @@ public class ApplicationDetailsRpcController {
     return left != null && right != null && left.equalsIgnoreCase(right);
   }
 
-  private String firstNonBlank(String first, String second) {
-    String normalizedFirst = trimToNull(first);
-    return normalizedFirst == null ? trimToNull(second) : normalizedFirst;
-  }
-
   private List<String> parseSpeciesJson(String speciesJson) {
     if (speciesJson == null || speciesJson.isBlank()) {
       return List.of();
     }
     try {
       return OBJECT_MAPPER.readValue(speciesJson, STRING_LIST_TYPE).stream()
-          .map(this::trimToNull)
+          .map(TextUtils::trimToNull)
           .filter(value -> value != null)
           .toList();
     } catch (JsonProcessingException ex) {
@@ -1418,7 +1339,7 @@ public class ApplicationDetailsRpcController {
       return List.of();
     }
     return List.of(normalized.split(",")).stream()
-        .map(this::trimToNull)
+        .map(TextUtils::trimToNull)
         .filter(value -> value != null)
         .toList();
   }

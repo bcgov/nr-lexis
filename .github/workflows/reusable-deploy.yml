@@ -83,7 +83,7 @@ jobs:
         with:
           file: backend/openshift.deploy.yml
           oc_namespace: ${{ secrets.oc_namespace }}
-          oc_server: ${{ vars.OC_SERVER }}
+          oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}
           debug: false
           overwrite: true
@@ -119,7 +119,7 @@ jobs:
         with:
           file: frontend/openshift.deploy.yml
           oc_namespace: ${{ secrets.oc_namespace }}
-          oc_server: ${{ vars.OC_SERVER }}
+          oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}
           debug: false
           overwrite: true

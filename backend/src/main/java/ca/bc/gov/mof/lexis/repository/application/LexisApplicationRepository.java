@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
@@ -324,7 +327,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE")));
     LocalDate listingDate = getLocalDate(rs, "ADVERTISING_DATE");
     Double applicationVolume =
-        firstNonNullDouble(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME"));
+        firstNonNull(
+            getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME"));
     String productTypeCode = getString(rs, "EXPORT_PRODUCT_TYPE_CODE");
 
     String client = "";
@@ -495,7 +499,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         getLocalDate(rs, "RECEIVED_DATE"),
         getLocalDate(rs, "ADVERTISING_DATE"),
         getLong(rs, "TERM_DAYS"),
-        firstNonNullDouble(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME")),
+        firstNonNull(
+            getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME")),
         getDouble(rs, "AVERAGE_LOG_VOLUME"));
   }
 
@@ -544,24 +549,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     return getString(rs, "EXPORT_PURCHASE_OFFER_NUMBER");
   }
 
-  private String firstNonNull(String first, String second) {
-    return first != null ? first : second;
-  }
-
-  private Double firstNonNullDouble(Double first, Double second) {
-    return first != null ? first : second;
-  }
-
   private boolean equalsNullable(String left, String right) {
     return left == null ? right == null : left.equals(right);
-  }
-
-  private double coalesce(Double value, double fallback) {
-    return value == null ? fallback : value;
-  }
-
-  private long coalesce(Long value, long fallback) {
-    return value == null ? fallback : value;
   }
 
   private record ApplicationSnapshot(

@@ -1,4 +1,5 @@
 import apiService from '@/service/api-service'
+import { booleanField, firstStringField, isRecord, stringField } from '@/utils/record'
 
 export type ApplicationClientLocation = {
   locationCode: string
@@ -27,18 +28,12 @@ export type ApplicationClientData = {
 
 const CLIENT_LOCATION_CACHE_TTL_MS = 5 * 60_000
 
-const stringField = (item: Record<string, unknown>, field: string): string => {
-  const value = item[field]
-  return typeof value === 'string' ? value.trim() : ''
-}
-
 const parseClientData = (input: unknown): ApplicationClientData | null => {
-  if (!input || typeof input !== 'object') {
+  if (!isRecord(input)) {
     return null
   }
 
-  const item = input as Record<string, unknown>
-  const clientNumber = stringField(item, 'clientNumber')
+  const clientNumber = stringField(input, 'clientNumber')
 
   if (!clientNumber) {
     return null
@@ -46,16 +41,16 @@ const parseClientData = (input: unknown): ApplicationClientData | null => {
 
   return {
     clientNumber,
-    companyName: stringField(item, 'companyName'),
-    address: stringField(item, 'address'),
-    city: stringField(item, 'city'),
-    province: stringField(item, 'province'),
-    postalCode: stringField(item, 'postalCode'),
-    country: stringField(item, 'country'),
-    phone: stringField(item, 'phone'),
-    fax: stringField(item, 'fax'),
-    email: stringField(item, 'email'),
-    notfound: stringField(item, 'notfound'),
+    companyName: stringField(input, 'companyName'),
+    address: stringField(input, 'address'),
+    city: stringField(input, 'city'),
+    province: stringField(input, 'province'),
+    postalCode: stringField(input, 'postalCode'),
+    country: stringField(input, 'country'),
+    phone: stringField(input, 'phone'),
+    fax: stringField(input, 'fax'),
+    email: stringField(input, 'email'),
+    notfound: stringField(input, 'notfound'),
   }
 }
 
@@ -66,22 +61,12 @@ const parseClientLocations = (input: unknown): ApplicationClientLocation[] => {
 
   return input
     .map((item) => {
-      if (!item || typeof item !== 'object') {
+      if (!isRecord(item)) {
         return null
       }
 
-      const locationCode =
-        typeof (item as any).locationCode === 'string'
-          ? (item as any).locationCode.trim()
-          : typeof (item as any).code === 'string'
-            ? (item as any).code.trim()
-            : ''
-      const locationName =
-        typeof (item as any).locationName === 'string'
-          ? (item as any).locationName.trim()
-          : typeof (item as any).name === 'string'
-            ? (item as any).name.trim()
-            : ''
+      const locationCode = firstStringField(item, ['locationCode', 'code'])
+      const locationName = firstStringField(item, ['locationName', 'name'])
 
       if (!locationCode || !locationName) {
         return null
@@ -90,7 +75,7 @@ const parseClientLocations = (input: unknown): ApplicationClientLocation[] => {
       return {
         locationCode,
         locationName,
-        selected: (item as any).selected === true,
+        selected: booleanField(item, 'selected'),
       }
     })
     .filter((item): item is ApplicationClientLocation => item !== null)
@@ -103,22 +88,12 @@ const parseClientContacts = (input: unknown): ApplicationClientContact[] => {
 
   return input
     .map((item) => {
-      if (!item || typeof item !== 'object') {
+      if (!isRecord(item)) {
         return null
       }
 
-      const contactName =
-        typeof (item as any).contactName === 'string'
-          ? (item as any).contactName.trim()
-          : typeof (item as any).name === 'string'
-            ? (item as any).name.trim()
-            : ''
-      const contactId =
-        typeof (item as any).contactId === 'string'
-          ? (item as any).contactId.trim()
-          : typeof (item as any).id === 'string'
-            ? (item as any).id.trim()
-            : ''
+      const contactName = firstStringField(item, ['contactName', 'name'])
+      const contactId = firstStringField(item, ['contactId', 'id'])
 
       if (!contactName || contactId === '0') {
         return null

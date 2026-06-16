@@ -27,12 +27,14 @@ import type {
   ProvincialApplicationSearchSortField,
 } from '@/interfaces/ProvincialApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
+  mapSelectedOptionsById,
   parseCsvParam,
   parseEnumParam,
   parsePositiveIntParam,
@@ -46,6 +48,7 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import IsoDatePicker from '@/components/IsoDatePicker'
 
 type RegionOption = {
   id: string
@@ -85,11 +88,6 @@ const EMPTY_RESULTS: ProvincialApplicationSearchResponse = {
     totalElements: 0,
     totalPages: 1,
   },
-}
-
-const isValidIsoDate = (value: string): boolean => {
-  if (!value.trim()) return true
-  return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
 }
 
 const SORT_COLUMNS: {
@@ -141,11 +139,6 @@ const buildSearchParams = (
   setSearchParam(params, 'pageSize', pageSize)
 
   return params
-}
-
-const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]): RegionOption[] => {
-  const optionMap = new Map(regionOptions.map((option) => [option.id, option]))
-  return regionIds.map((regionId) => optionMap.get(regionId) ?? { id: regionId, text: regionId })
 }
 
 const ProvincialApplicationPage: FC = () => {
@@ -235,7 +228,7 @@ const ProvincialApplicationPage: FC = () => {
   )
 
   const selectedRegions = useMemo(
-    () => mapSelectedRegions(filters.region, regionOptions),
+    () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
 
@@ -495,21 +488,21 @@ const ProvincialApplicationPage: FC = () => {
                 )
               }}
             />
-            <TextInput
+            <IsoDatePicker
               id="listingFromDate"
               labelText="Listing From Date (YYYY-MM-DD)"
               value={filters.listingFromDate}
               invalid={!isValidIsoDate(filters.listingFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingFromDate', event.target.value)}
+              onChange={(value) => updateFilter('listingFromDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="listingToDate"
               labelText="Listing To Date (YYYY-MM-DD)"
               value={filters.listingToDate}
               invalid={!isValidIsoDate(filters.listingToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingToDate', event.target.value)}
+              onChange={(value) => updateFilter('listingToDate', value)}
             />
             <TextInput
               id="applicantClientNumber"

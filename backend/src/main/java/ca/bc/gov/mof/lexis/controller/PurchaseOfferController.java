@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.firstPresent;
+import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
+
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
@@ -10,14 +13,10 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,7 +24,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/lexis/purchase-offers")
@@ -33,8 +31,6 @@ import org.springframework.web.server.ResponseStatusException;
 public class PurchaseOfferController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PurchaseOfferController.class);
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ObjectProvider<PurchaseOfferService> serviceProvider;
 
@@ -141,13 +137,6 @@ public class PurchaseOfferController {
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
-  private String firstPresent(String primary, String fallback) {
-    if (primary != null && !primary.isBlank()) {
-      return primary;
-    }
-    return fallback;
-  }
-
   private PurchaseOfferSearchCriteria buildCriteria(
       String applicationNumber,
       String packageNumber,
@@ -165,36 +154,14 @@ public class PurchaseOfferController {
     return new PurchaseOfferSearchCriteria(
         applicationNumber,
         packageNumber,
-        parseDate(firstPresent(listingFromDate, listFromDate)),
-        parseDate(firstPresent(listingToDate, listToDate)),
-        parseDate(withdrawalFromDate),
-        parseDate(withdrawalToDate),
+        parseSearchDate(firstPresent(listingFromDate, listFromDate)),
+        parseSearchDate(firstPresent(listingToDate, listToDate)),
+        parseSearchDate(withdrawalFromDate),
+        parseSearchDate(withdrawalToDate),
         clientNumber,
         regionNumbers == null ? List.of() : regionNumbers,
         sortField,
         page,
         size);
-  }
-
-  private LocalDate parseDate(String input) {
-    if (input == null || input.trim().isEmpty()) {
-      return null;
-    }
-
-    String value = input.trim();
-    try {
-      return LocalDate.parse(value);
-    } catch (DateTimeParseException ignored) {
-      // Fallback for legacy date format.
-    }
-
-    try {
-      return LocalDate.parse(value, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ex) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST,
-          "Invalid date value '" + value + "'. Use yyyy-MM-dd or MM/dd/yyyy.",
-          ex);
-    }
   }
 }

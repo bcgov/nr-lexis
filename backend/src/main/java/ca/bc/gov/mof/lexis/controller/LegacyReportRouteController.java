@@ -1,6 +1,9 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
+import ca.bc.gov.mof.lexis.util.TextUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -182,7 +185,7 @@ public class LegacyReportRouteController {
             return;
           }
           List<String> cleaned =
-              values.stream().map(this::trimToNull).filter(v -> v != null).toList();
+              values.stream().map(TextUtils::trimToNull).filter(v -> v != null).toList();
           if (cleaned.isEmpty()) {
             return;
           }
@@ -240,11 +243,4 @@ public class LegacyReportRouteController {
     return "actionMapping".equals(key) || "outputFormat".equals(key);
   }
 
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
 }

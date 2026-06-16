@@ -1,5 +1,9 @@
 package ca.bc.gov.mof.lexis.service.federal;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
@@ -7,10 +11,10 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
-import org.springframework.data.domain.Page;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -69,7 +73,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
 
   @Override
   public boolean verifyApplicationClients(List<Long> applicationNumbers) {
-    List<Long> validNumbers = normalizeApplicationNumbers(applicationNumbers);
+    List<Long> validNumbers = positiveDistinctLongs(applicationNumbers);
     if (validNumbers.isEmpty()) {
       return false;
     }
@@ -97,22 +101,4 @@ public class FederalApplicationOracleService implements FederalApplicationServic
         Math.max(1, input.size()));
   }
 
-  private List<Long> normalizeApplicationNumbers(List<Long> rawValues) {
-    if (rawValues == null) {
-      return List.of();
-    }
-    return rawValues.stream().filter(value -> value != null && value > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseApplicationNumbers;
+import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
+
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationOfferValidationDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
@@ -12,12 +15,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.util.Arrays;
 import java.util.List;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,15 +23,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/lexis/applications")
 @Validated
 public class LexisApplicationController {
-
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final LexisApplicationService service;
 
@@ -144,23 +138,6 @@ public class LexisApplicationController {
     return ResponseEntity.ok(new LexisApplicationOfferValidationDto(service.hasValidOffer(ids)));
   }
 
-  private List<Long> parseApplicationNumbers(String applications) {
-    if (applications == null || applications.trim().isEmpty()) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "`applications` must not be empty");
-    }
-
-    try {
-      return Arrays.stream(applications.split(","))
-          .map(String::trim)
-          .filter(value -> !value.isEmpty())
-          .map(Long::valueOf)
-          .toList();
-    } catch (NumberFormatException ex) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST, "`applications` must be a comma-separated numeric list", ex);
-    }
-  }
-
   private LexisApplicationSearchCriteria buildCriteria(
       String applicationNumber,
       String packageNumber,
@@ -187,35 +164,13 @@ public class LexisApplicationController {
         ownerClientNumber,
         agentClientNumber,
         productTypeCode,
-        parseDate(receivedFromDate),
-        parseDate(receivedToDate),
-        parseDate(listingFromDate),
-        parseDate(listingToDate),
+        parseSearchDate(receivedFromDate),
+        parseSearchDate(receivedToDate),
+        parseSearchDate(listingFromDate),
+        parseSearchDate(listingToDate),
         regionNumbers == null ? List.of() : regionNumbers,
         sortField,
         page,
         size);
-  }
-
-  private LocalDate parseDate(String input) {
-    if (input == null || input.trim().isEmpty()) {
-      return null;
-    }
-
-    String value = input.trim();
-    try {
-      return LocalDate.parse(value);
-    } catch (DateTimeParseException ignored) {
-      // Fallback for legacy display format.
-    }
-
-    try {
-      return LocalDate.parse(value, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ex) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST,
-          "Invalid date value '" + value + "'. Use yyyy-MM-dd or MM/dd/yyyy.",
-          ex);
-    }
   }
 }

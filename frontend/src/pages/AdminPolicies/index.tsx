@@ -19,6 +19,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import {
   firstValidationError,
   getVisibleFieldError,
+  isoDateFieldError,
   numericFieldError,
   requiredFieldError,
   type FieldErrors,
@@ -35,6 +36,7 @@ import {
   upsertFilPolicy as upsertFilPolicyRequest,
 } from '@/service/admin-policy-service'
 import IsoDatePicker from '@/components/IsoDatePicker'
+import { getResponseStatus } from '@/utils/http-error'
 
 type PolicyField =
   | 'feeEffectiveDate'
@@ -73,13 +75,21 @@ const AdminPoliciesPage: FC = () => {
   const filPolicyCount = useMemo(() => filPolicies.length, [filPolicies.length])
   const fieldErrors = useMemo<FieldErrors<PolicyField>>(
     () => ({
-      feeEffectiveDate: requiredFieldError(feeEffectiveDate, 'Policy effective date') ?? undefined,
+      feeEffectiveDate:
+        firstValidationError(
+          () => requiredFieldError(feeEffectiveDate, 'Policy effective date'),
+          () => isoDateFieldError(feeEffectiveDate),
+        ) ?? undefined,
       feeOrgUnitCode: requiredFieldError(feeOrgUnitCode, 'Region code') ?? undefined,
       feePolicyPercentage: firstValidationError(
         () => requiredFieldError(feePolicyPercentage, 'Fee increase percentage'),
         () => numericFieldError(feePolicyPercentage, 'Fee policy percentage'),
       ),
-      filEffectiveDate: requiredFieldError(filEffectiveDate, 'Policy effective date') ?? undefined,
+      filEffectiveDate:
+        firstValidationError(
+          () => requiredFieldError(filEffectiveDate, 'Policy effective date'),
+          () => isoDateFieldError(filEffectiveDate),
+        ) ?? undefined,
       filPolicyPercentage: firstValidationError(
         () => requiredFieldError(filPolicyPercentage, 'FIL percentage'),
         () => numericFieldError(filPolicyPercentage, 'FIL policy percentage'),
@@ -137,7 +147,7 @@ const AdminPoliciesPage: FC = () => {
       setFilPolicies(loadedFilPolicies)
     } catch (error) {
       console.error(error)
-      const status = (error as any)?.response?.status
+      const status = getResponseStatus(error)
       if (status) {
         setErrorMessage(`Unable to load policy data (status ${status}).`)
       } else {
@@ -181,7 +191,7 @@ const AdminPoliciesPage: FC = () => {
       resetFeeForm()
     } catch (error) {
       console.error(error)
-      const status = (error as any)?.response?.status
+      const status = getResponseStatus(error)
       if (status) {
         setErrorMessage(`Fee policy request failed with status ${status}.`)
       } else {
@@ -215,7 +225,7 @@ const AdminPoliciesPage: FC = () => {
       setSuccessMessage('Fee policy deleted.')
     } catch (error) {
       console.error(error)
-      const status = (error as any)?.response?.status
+      const status = getResponseStatus(error)
       if (status) {
         setErrorMessage(`Fee policy delete failed with status ${status}.`)
       } else {
@@ -253,7 +263,7 @@ const AdminPoliciesPage: FC = () => {
       resetFilForm()
     } catch (error) {
       console.error(error)
-      const status = (error as any)?.response?.status
+      const status = getResponseStatus(error)
       if (status) {
         setErrorMessage(`FIL policy request failed with status ${status}.`)
       } else {
@@ -285,7 +295,7 @@ const AdminPoliciesPage: FC = () => {
       setSuccessMessage('FIL policy deleted.')
     } catch (error) {
       console.error(error)
-      const status = (error as any)?.response?.status
+      const status = getResponseStatus(error)
       if (status) {
         setErrorMessage(`FIL policy delete failed with status ${status}.`)
       } else {

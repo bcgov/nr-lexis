@@ -5,7 +5,14 @@ import type {
   ApplicationReviewSearchItem,
 } from '@/interfaces/ApplicationReviewSearch'
 import apiService from '@/service/api-service'
-import { getCachedSearchResponse } from '@/service/cached-search-service'
+import {
+  appendNumericSearchParams,
+  appendSearchParam,
+  appendSearchSortAndPageParams,
+  getCachedSearchResponse,
+  parsePagedSearchResponse,
+  parsePreviewSearchResponse,
+} from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 
@@ -17,20 +24,6 @@ type BackendApplicationReviewSearchResult = {
   status: string
   region: string
   showInfoIcon: boolean
-}
-
-type BackendApplicationReviewSearchResponse = {
-  results: BackendApplicationReviewSearchResult[]
-  total: number
-  page: number
-  size: number
-}
-
-type BackendApplicationReviewPreviewResponse = {
-  results: BackendApplicationReviewSearchResult[]
-  hasNext: boolean
-  page: number
-  size: number
 }
 
 export type ApplicationReviewStatusUpdateResult = {
@@ -56,33 +49,15 @@ export type ApplicationReviewStatusEmailResult = {
 const buildBackendParams = (request: ApplicationReviewSearchRequest): URLSearchParams => {
   const params = new URLSearchParams()
 
-  const appendIfPresent = (key: string, value: string) => {
-    const trimmed = value.trim()
-    if (trimmed.length > 0) {
-      params.append(key, trimmed)
-    }
-  }
-
   const { filters } = request
-  appendIfPresent('applicationNumber', filters.applicationNumber)
-  appendIfPresent('productTypeCode', filters.productTypeCode)
-  appendIfPresent('receivedFromDate', filters.receivedFromDate)
-  appendIfPresent('receivedToDate', filters.receivedToDate)
-  appendIfPresent('listingFromDate', filters.listingFromDate)
-  appendIfPresent('listingToDate', filters.listingToDate)
-
-  filters.region
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value) && value > 0)
-    .forEach((value) => {
-      params.append('region', String(value))
-    })
-
-  const backendSortField =
-    request.sortDirection === 'desc' ? `${request.sortField} DESC` : request.sortField
-  params.append('sortField', backendSortField)
-  params.append('page', String(request.page))
-  params.append('size', String(request.pageSize))
+  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
+  appendSearchParam(params, 'productTypeCode', filters.productTypeCode)
+  appendSearchParam(params, 'receivedFromDate', filters.receivedFromDate)
+  appendSearchParam(params, 'receivedToDate', filters.receivedToDate)
+  appendSearchParam(params, 'listingFromDate', filters.listingFromDate)
+  appendSearchParam(params, 'listingToDate', filters.listingToDate)
+  appendNumericSearchParams(params, 'region', filters.region)
+  appendSearchSortAndPageParams(params, request)
 
   return params
 }
@@ -100,44 +75,17 @@ const mapBackendReviewRow = (
 })
 
 const parseBackendResponse = (payload: unknown): ApplicationReviewSearchResponse | null => {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
-    return null
-  }
-
-  const backendResponse = payload as BackendApplicationReviewSearchResponse
-  const totalElements = Number.isFinite(backendResponse.total) ? backendResponse.total : 0
-  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 10
-  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
-  const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
-
-  return {
-    content: backendResponse.results.map(mapBackendReviewRow),
-    page: {
-      number: pageNumber,
-      size: pageSize,
-      totalElements,
-      totalPages,
-    },
-  }
+  return parsePagedSearchResponse<
+    BackendApplicationReviewSearchResult,
+    ApplicationReviewSearchItem
+  >(payload, mapBackendReviewRow)
 }
 
 const parseBackendPreviewResponse = (payload: unknown): ApplicationReviewPreviewResponse | null => {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
-    return null
-  }
-
-  const backendResponse = payload as BackendApplicationReviewPreviewResponse
-  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 5
-  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
-
-  return {
-    content: backendResponse.results.map(mapBackendReviewRow),
-    page: {
-      number: pageNumber,
-      size: pageSize,
-      hasNext: Boolean(backendResponse.hasNext),
-    },
-  }
+  return parsePreviewSearchResponse<
+    BackendApplicationReviewSearchResult,
+    ApplicationReviewSearchItem
+  >(payload, mapBackendReviewRow)
 }
 
 export const searchApplicationReviews = async (

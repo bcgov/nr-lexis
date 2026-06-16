@@ -17,8 +17,14 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import {
+  displayValue,
+  matchesFilter,
+  normalizeFilterText as normalizeText,
+} from '@/pages/shared/detail-page-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
 import {
@@ -28,55 +34,7 @@ import {
   type ProvincialExemptionDocumentRow,
 } from '@/service/provincial-exemption-documents-service'
 import { runReport } from '@/service/report-service'
-
-const displayValue = (value: string | number | null | undefined): string => {
-  if (value === null || value === undefined || value === '') {
-    return 'Not provided'
-  }
-  return String(value)
-}
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
-
-const triggerBrowserDownload = (blob: Blob, filename: string): void => {
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = objectUrl
-  anchor.download = filename
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(objectUrl)
-}
-
-const openBlobInNewTab = (blob: Blob): boolean => {
-  const objectUrl = URL.createObjectURL(blob)
-  const openedWindow = window.open(
-    objectUrl,
-    'approvedExemptionReportWindow',
-    'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
-  )
-
-  if (!openedWindow) {
-    URL.revokeObjectURL(objectUrl)
-    return false
-  }
-
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-  return true
-}
-
-const matchesFilter = (
-  values: Array<string | number | null | undefined>,
-  filterValue: string,
-): boolean => {
-  if (!filterValue.trim()) {
-    return true
-  }
-
-  const normalizedFilter = normalizeText(filterValue)
-  return values.some((value) => normalizeText(String(value ?? '')).includes(normalizedFilter))
-}
+import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
 
 const ProvincialExemptionDetailsPage: FC = () => {
   const navigate = useNavigate()
@@ -239,7 +197,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
         },
       })
 
-      const opened = openBlobInNewTab(runResult.blob)
+      const opened = openBlobInNewTab(runResult.blob, 'approvedExemptionReportWindow')
       if (!opened) {
         triggerBrowserDownload(runResult.blob, runResult.filename)
         setActionErrorMessage(
@@ -275,6 +233,16 @@ const ProvincialExemptionDetailsPage: FC = () => {
     navigate(query.length > 0 ? `/provincial/permit/create?${query}` : '/provincial/permit/create')
   }, [detail, navigate])
 
+  const refreshExemptionDocuments = useCallback(async () => {
+    if (!exemptionNumber) {
+      return
+    }
+
+    const documentsResult = await fetchExemptionDocuments(exemptionNumber)
+    setDocumentRows(documentsResult.rows)
+    setDocumentsErrorMessage('')
+  }, [exemptionNumber])
+
   const onOpenExemptionUpload = useCallback(() => {
     if (!detail) {
       return
@@ -282,12 +250,8 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
-    const params = new URLSearchParams({
-      type: 'exemption',
-      exemptionNumber: detail.exemptionNumber,
-    })
-    navigate(`/admin/uploads?${params.toString()}`)
-  }, [detail, navigate])
+    document.getElementById('exemptionDocumentUpload')?.scrollIntoView({ block: 'start' })
+  }, [detail])
 
   const onOpenDocument = useCallback(async (row: ProvincialExemptionDocumentRow) => {
     setActionErrorMessage('')
@@ -575,6 +539,15 @@ const ProvincialExemptionDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Documents <Tag type="green">API</Tag>
               </h2>
+              {canManageDocuments && (
+                <DetailDocumentUploadPanel
+                  workflowType="exemption"
+                  targetNumber={detail.exemptionNumber}
+                  inputId="exemptionDocumentUpload"
+                  disabled={!detail.exemptionNumber}
+                  onUploadComplete={refreshExemptionDocuments}
+                />
+              )}
               <TextInput
                 id="exemptionDetailDocumentsFilter"
                 labelText="Filter document rows"

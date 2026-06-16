@@ -17,12 +17,23 @@ import {
   nonNegativeWholeNumberFieldError,
 } from '@/pages/shared/application-term-utils'
 import {
+  isAgentApplicant,
+  isSelectableClientContact,
+  isSelectableClientLocation,
+  productTypeRequiresGrowthType,
+  resolveClientContactName,
+  resolveClientLocationCode,
+  toSearchOption,
+} from '@/pages/shared/application-form-utils'
+import {
   atMostOneDecimalFieldError,
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  joinCreateSubmitMessages,
   maxNumericValueFieldError,
   maxLengthFieldError,
+  mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
@@ -110,17 +121,6 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   comments: '',
 }
 
-const mapDraftPayloadToForm = (payload: unknown): ProvincialApplicationCreateForm => {
-  if (!payload || typeof payload !== 'object') {
-    return INITIAL_FORM
-  }
-
-  return {
-    ...INITIAL_FORM,
-    ...(payload as Partial<ProvincialApplicationCreateForm>),
-  }
-}
-
 const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicationCreateForm => {
   return {
     ...INITIAL_FORM,
@@ -157,70 +157,6 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
     comments: query.get('comments') ?? '',
   }
 }
-
-const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
-  location.locationCode !== '0'
-
-const isSelectableClientContact = (contact: ApplicationClientContact): boolean =>
-  contact.contactId !== '0'
-
-const resolveOwnerClientLocationCode = (
-  locations: ApplicationClientLocation[],
-  currentCode: string,
-): string => {
-  const normalizedCurrentCode = currentCode.trim()
-  if (
-    normalizedCurrentCode &&
-    locations.some(
-      (location) =>
-        isSelectableClientLocation(location) && location.locationCode === normalizedCurrentCode,
-    )
-  ) {
-    return normalizedCurrentCode
-  }
-
-  const selectedLocation = locations.find(
-    (location) => isSelectableClientLocation(location) && location.selected,
-  )
-  if (selectedLocation) {
-    return selectedLocation.locationCode
-  }
-
-  return locations.find(isSelectableClientLocation)?.locationCode ?? ''
-}
-
-const resolveClientContactName = (
-  contacts: ApplicationClientContact[],
-  currentName: string,
-): string => {
-  const normalizedCurrentName = currentName.trim()
-  if (
-    normalizedCurrentName &&
-    contacts.some(
-      (contact) =>
-        isSelectableClientContact(contact) && contact.contactName === normalizedCurrentName,
-    )
-  ) {
-    return normalizedCurrentName
-  }
-
-  return contacts.find(isSelectableClientContact)?.contactName ?? normalizedCurrentName
-}
-
-const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
-  productTypeCode === 'H' || productTypeCode === 'S'
-
-const isAgentApplicant = (applicantTypeCode: string): boolean => applicantTypeCode === 'A'
-
-const codeOptionLabel = (option: ApplicationCodeOption): string =>
-  option.description && option.description !== option.code
-    ? `${option.code} - ${option.description}`
-    : option.code
-
-const toSearchOption = (option: ApplicationCodeOption): SearchOption => ({
-  value: option.code,
-  label: codeOptionLabel(option),
-})
 
 type PageStatus = {
   kind: 'success' | 'error'
@@ -380,7 +316,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             return current
           }
 
-          const nextOwnerClientLocationCode = resolveOwnerClientLocationCode(
+          const nextOwnerClientLocationCode = resolveClientLocationCode(
             locations,
             current.ownerClientLocationCode,
           )
@@ -466,7 +402,7 @@ const ProvincialApplicationCreatePage: FC = () => {
             return current
           }
 
-          const nextAgentClientLocationCode = resolveOwnerClientLocationCode(
+          const nextAgentClientLocationCode = resolveClientLocationCode(
             locations,
             current.agentClientLocationCode,
           )
@@ -970,9 +906,7 @@ const ProvincialApplicationCreatePage: FC = () => {
         ...form,
         applicationTermDays: calculatedApplicationTermDays,
       })
-      const responseMessage = [result.message, ...result.errors, ...result.warnings]
-        .filter((value) => value.trim().length > 0)
-        .join(' ')
+      const responseMessage = joinCreateSubmitMessages(result)
 
       if (result.success) {
         if (result.createdId) {
@@ -1005,7 +939,7 @@ const ProvincialApplicationCreatePage: FC = () => {
   }
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
-    setForm(mapDraftPayloadToForm(record.payload))
+    setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
     setTouchedFields({})
     setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })

@@ -1,4 +1,11 @@
 import apiService from '@/service/api-service'
+import {
+  parsePayloadArrayOrEmpty,
+  payloadValueAsBoolean as asBoolean,
+  payloadValueAsNumber as asNumber,
+  payloadValueAsStringArray as asStringArray,
+  payloadValueAsTrimmedString as asString,
+} from '@/service/payload-utils'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 
 export type ApplicationCodeOption = {
@@ -38,6 +45,10 @@ export type ApplicationPackageScaleRow = {
   volume: string
   id: string
   cascadeSplitCode: string
+}
+
+export type ApplicationScaleSummaryRow = {
+  timberMark: string
 }
 
 export type ApplicationScaleDetails = {
@@ -160,70 +171,6 @@ export type ApplicationSummarySnapshot = ApplicationSummaryMutation & {
 
 const ITEMS_CACHE_TTL_MS = 30_000
 
-const asString = (value: unknown): string => {
-  if (typeof value === 'string') {
-    return value.trim()
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return String(value)
-  }
-  return ''
-}
-
-const asNumber = (value: unknown): number => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value
-  }
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value)
-    if (Number.isFinite(parsed)) {
-      return parsed
-    }
-  }
-  return 0
-}
-
-const asBoolean = (value: unknown): boolean => {
-  if (typeof value === 'boolean') {
-    return value
-  }
-  if (typeof value === 'string') {
-    return value.trim().toLowerCase() === 'true'
-  }
-  return false
-}
-
-const asStringArray = (value: unknown): string[] => {
-  if (!Array.isArray(value)) {
-    return []
-  }
-  return value.map(asString).filter((entry) => entry.length > 0)
-}
-
-const parseArrayPayload = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload
-  }
-  if (!payload || typeof payload !== 'object') {
-    return []
-  }
-
-  const objectPayload = payload as Record<string, unknown>
-  if (Array.isArray(objectPayload.results)) {
-    return objectPayload.results
-  }
-  if (Array.isArray(objectPayload.rows)) {
-    return objectPayload.rows
-  }
-  if (Array.isArray(objectPayload.items)) {
-    return objectPayload.items
-  }
-  if (Array.isArray(objectPayload.data)) {
-    return objectPayload.data
-  }
-  return []
-}
-
 const toUrlEncodedParams = (payload: Record<string, string | undefined>): URLSearchParams => {
   const params = new URLSearchParams()
   Object.entries(payload).forEach(([key, value]) => {
@@ -299,6 +246,13 @@ const normalizePackageScaleRow = (row: unknown): ApplicationPackageScaleRow => {
     volume: asString(source.volume),
     id: asString(source.id || source.scaleId || source.scaleDetailId),
     cascadeSplitCode: asString(source.cascadeSplitCode || source.scaleType || source.type),
+  }
+}
+
+const normalizeApplicationScaleSummaryRow = (row: unknown): ApplicationScaleSummaryRow => {
+  const source = (row ?? {}) as Record<string, unknown>
+  return {
+    timberMark: asString(source.timberMark),
   }
 }
 
@@ -448,7 +402,7 @@ export const fetchApplicationPackageSpecies = async (
       },
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parseArrayPayload(response.data).map(normalizePackageSpeciesRow)
+    return parsePayloadArrayOrEmpty(response.data).map(normalizePackageSpeciesRow)
   } catch (error) {
     throw toSearchServiceError('Unable to load package species.', error)
   }
@@ -465,7 +419,7 @@ export const fetchApplicationSpecies = async (
       },
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parseArrayPayload(response.data).map(normalizePackageSpeciesRow)
+    return parsePayloadArrayOrEmpty(response.data).map(normalizePackageSpeciesRow)
   } catch (error) {
     throw toSearchServiceError('Unable to load application species.', error)
   }
@@ -482,9 +436,28 @@ export const fetchApplicationPackageScales = async (
       },
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parseArrayPayload(response.data).map(normalizePackageScaleRow)
+    return parsePayloadArrayOrEmpty(response.data).map(normalizePackageScaleRow)
   } catch (error) {
     throw toSearchServiceError('Unable to load package scales.', error)
+  }
+}
+
+export const fetchApplicationUniqueScales = async (
+  applicationNumber: string,
+): Promise<ApplicationScaleSummaryRow[]> => {
+  try {
+    const response = await apiService.getCachedResponse<unknown>(
+      '/lexis/rpc/application-details/unique-scales',
+      {
+        params: { applicationNumber },
+      },
+      { ttlMs: ITEMS_CACHE_TTL_MS },
+    )
+    return parsePayloadArrayOrEmpty(response.data)
+      .map(normalizeApplicationScaleSummaryRow)
+      .filter((row) => row.timberMark)
+  } catch (error) {
+    throw toSearchServiceError('Unable to load application timber marks.', error)
   }
 }
 
@@ -499,7 +472,7 @@ export const fetchApplicationPermits = async (
       },
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parseArrayPayload(response.data).map(normalizeApplicationPermitRow)
+    return parsePayloadArrayOrEmpty(response.data).map(normalizeApplicationPermitRow)
   } catch (error) {
     throw toSearchServiceError('Unable to load application permits.', error)
   }
@@ -512,7 +485,7 @@ export const fetchApplicationSpeciesCodes = async (): Promise<ApplicationCodeOpt
       undefined,
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parseArrayPayload(response.data).map(normalizeCodeOption)
+    return parsePayloadArrayOrEmpty(response.data).map(normalizeCodeOption)
   } catch (error) {
     throw toSearchServiceError('Unable to load application species codes.', error)
   }
@@ -525,7 +498,7 @@ export const fetchApplicationPackageStatusCodes = async (): Promise<ApplicationC
       undefined,
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parseArrayPayload(response.data).map(normalizeCodeOption)
+    return parsePayloadArrayOrEmpty(response.data).map(normalizeCodeOption)
   } catch (error) {
     throw toSearchServiceError('Unable to load application package status codes.', error)
   }
@@ -546,7 +519,7 @@ export const fetchApplicationGradeCodes = async (
       },
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parseArrayPayload(response.data).map(normalizeCodeOption)
+    return parsePayloadArrayOrEmpty(response.data).map(normalizeCodeOption)
   } catch (error) {
     throw toSearchServiceError('Unable to load application grade codes.', error)
   }
@@ -569,7 +542,7 @@ export const fetchApplicationRemainingSpecies = async (
       },
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parseArrayPayload(response.data).map(normalizeCodeOption)
+    return parsePayloadArrayOrEmpty(response.data).map(normalizeCodeOption)
   } catch (error) {
     throw toSearchServiceError('Unable to load remaining package species.', error)
   }
@@ -590,7 +563,7 @@ export const fetchApplicationEndUsesForSpeciesRegion = async (
       },
       { ttlMs: ITEMS_CACHE_TTL_MS },
     )
-    return parseArrayPayload(response.data).map(normalizeCodeOption)
+    return parsePayloadArrayOrEmpty(response.data).map(normalizeCodeOption)
   } catch (error) {
     throw toSearchServiceError('Unable to load package end-use codes.', error)
   }

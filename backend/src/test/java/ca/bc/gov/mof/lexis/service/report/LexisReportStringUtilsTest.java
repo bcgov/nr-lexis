@@ -7,16 +7,20 @@ import org.junit.jupiter.api.Test;
 class LexisReportStringUtilsTest {
 
   @Test
-  void chompShouldRemoveTrailingSeparatorOnly() {
-    assertThat(LexisReportStringUtils.chomp("RCB, RKB, ", ", ")).isEqualTo("RCB, RKB");
-    assertThat(LexisReportStringUtils.chomp("RCB, RKB", ", ")).isEqualTo("RCB, RKB");
-    assertThat(LexisReportStringUtils.chomp(null, ", ")).isNull();
+  void chompRemovesTrailingSeparator() {
+    assertThat(LexisReportStringUtils.chomp("A, B, ", ", ")).isEqualTo("A, B");
   }
 
   @Test
-  void chopShouldRemoveFinalCharacter() {
-    assertThat(LexisReportStringUtils.chop("RCB,")).isEqualTo("RCB");
-    assertThat(LexisReportStringUtils.chop("")).isEmpty();
-    assertThat(LexisReportStringUtils.chop(null)).isNull();
+  void chompLeavesValuesWithoutTrailingSeparatorUnchanged() {
+    assertThat(LexisReportStringUtils.chomp("A, B", ", ")).isEqualTo("A, B");
+    assertThat(LexisReportStringUtils.chomp(null, ", ")).isNull();
+    assertThat(LexisReportStringUtils.chomp("A", "")).isEqualTo("A");
+  }
+
+  @Test
+  void chopRemovesLastCharacterOrWindowsLineEnding() {
+    assertThat(LexisReportStringUtils.chop("ABC")).isEqualTo("AB");
+    assertThat(LexisReportStringUtils.chop("ABC\r\n")).isEqualTo("ABC");
   }
 }

@@ -1,10 +1,12 @@
 package ca.bc.gov.mof.lexis.service.admin;
 
+import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcRequestDto;
 import ca.bc.gov.mof.lexis.repository.admin.LexisAdminPolicyRepository;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,7 +25,6 @@ import org.springframework.stereotype.Service;
 public class OracleLexisAdminRpcService implements LexisAdminRpcService {
 
   private static final DateTimeFormatter DISPLAY_DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
   private static final long MAX_RESULTS_PER_PAGE = 10L;
 
   private static final Set<String> FEE_SORT_COLUMNS =
@@ -397,17 +398,7 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
   }
 
   private LocalDate parseDate(String rawValue) {
-    try {
-      return LocalDate.parse(rawValue, DISPLAY_DATE_FORMATTER);
-    } catch (DateTimeParseException ignored) {
-      // Fall through to legacy format.
-    }
-
-    try {
-      return LocalDate.parse(rawValue, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ignored) {
-      return null;
-    }
+    return parseIsoOrLegacyDate(rawValue);
   }
 
   private Long parseRequiredPositiveLong(String rawValue, String requiredMessage, List<String> errors) {
@@ -468,14 +459,6 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
 
   private String formatDate(LocalDate value) {
     return value == null ? "" : value.format(DISPLAY_DATE_FORMATTER);
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private String renderPaginationHtml(

@@ -22,6 +22,7 @@ import type {
   IndianReservePermitSearchSortField,
 } from '@/interfaces/IndianReservePermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -33,6 +34,7 @@ import {
   parseSortDirectionParam,
   setSearchParam,
 } from '@/pages/shared/search-query-utils'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
@@ -95,11 +97,6 @@ const buildSearchParams = (
   setSearchParam(params, 'pageSize', pageSize)
 
   return params
-}
-
-const isValidIsoDate = (value: string): boolean => {
-  if (!value.trim()) return true
-  return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
 }
 
 const IndianReservePage: FC = () => {
@@ -287,37 +284,37 @@ const IndianReservePage: FC = () => {
               value={filters.packageNumber}
               onChange={(event) => updateFilter('packageNumber', event.target.value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="fromPermitIssueDate"
               labelText="Issued From Date (YYYY-MM-DD)"
               value={filters.fromPermitIssueDate}
               invalid={!isValidIsoDate(filters.fromPermitIssueDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('fromPermitIssueDate', event.target.value)}
+              onChange={(value) => updateFilter('fromPermitIssueDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="toPermitIssueDate"
               labelText="Issued To Date (YYYY-MM-DD)"
               value={filters.toPermitIssueDate}
               invalid={!isValidIsoDate(filters.toPermitIssueDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('toPermitIssueDate', event.target.value)}
+              onChange={(value) => updateFilter('toPermitIssueDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="fromEstimatedShippingDate"
               labelText="Shipping From Date (YYYY-MM-DD)"
               value={filters.fromEstimatedShippingDate}
               invalid={!isValidIsoDate(filters.fromEstimatedShippingDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('fromEstimatedShippingDate', event.target.value)}
+              onChange={(value) => updateFilter('fromEstimatedShippingDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="toEstimatedShippingDate"
               labelText="Shipping To Date (YYYY-MM-DD)"
               value={filters.toEstimatedShippingDate}
               invalid={!isValidIsoDate(filters.toEstimatedShippingDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('toEstimatedShippingDate', event.target.value)}
+              onChange={(value) => updateFilter('toEstimatedShippingDate', value)}
             />
           </div>
           <div className="legacy-search-actions">

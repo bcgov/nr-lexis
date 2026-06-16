@@ -1,15 +1,19 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
-import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -81,28 +85,10 @@ public class PermitOracleService implements PermitService {
         trimToNull(input.applicantClientNumber()),
         trimToNull(input.ownerClientNumber()),
         input.requireScalePermit(),
-        normalizeRegions(input.regionNumbers()),
+        positiveDistinctLongs(input.regionNumbers()),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
   }
 
-  private List<Long> normalizeRegions(List<Long> rawRegions) {
-    if (rawRegions == null) {
-      return List.of();
-    }
-    return rawRegions.stream().filter(region -> region != null && region > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

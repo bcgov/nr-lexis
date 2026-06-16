@@ -1,6 +1,12 @@
 package ca.bc.gov.mof.lexis.service.application;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
+import static ca.bc.gov.mof.lexis.util.TextUtils.firstNonBlank;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong;
+
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
+import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -408,7 +414,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
     return repository.findEndUsesByApplicationNumber(applicationNumber).stream()
         .map(ApplicationDetailsRpcRepository.EndUseRow::endUseCode)
-        .map(this::trimToNull)
+        .map(TextUtils::trimToNull)
         .filter(value -> value != null)
         .findFirst();
   }
@@ -421,7 +427,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
     return repository.findEndUsesByPackageNumber(normalizedPackageNumber).stream()
         .map(ApplicationDetailsRpcRepository.EndUseRow::endUseCode)
-        .map(this::trimToNull)
+        .map(TextUtils::trimToNull)
         .filter(value -> value != null)
         .findFirst();
   }
@@ -1148,7 +1154,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         repository
             .findEndUseCode(normalizedCode)
             .map(ApplicationDetailsRpcRepository.CodeRow::description)
-            .map(this::trimToNull)
+            .map(TextUtils::trimToNull)
             .orElse(normalizedCode);
     endUseDescriptionByCode.put(normalizedCode, resolved);
     return resolved;
@@ -1158,7 +1164,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (codes == null || codes.isEmpty()) {
       return List.of();
     }
-    return codes.stream().map(this::trimToNull).filter(value -> value != null).distinct().toList();
+    return codes.stream().map(TextUtils::trimToNull).filter(value -> value != null).distinct().toList();
   }
 
   private boolean containsAllLegacy(String excolCode, List<String> selectedSpeciesCodes) {
@@ -1188,7 +1194,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         repository
             .findSpeciesCode(normalizedCode)
             .map(ApplicationDetailsRpcRepository.CodeRow::description)
-            .map(this::trimToNull)
+            .map(TextUtils::trimToNull)
             .orElse(normalizedCode);
     speciesDescriptionByCode.put(normalizedCode, resolved);
     return resolved;
@@ -1208,7 +1214,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         repository
             .findGradeCode(normalizedCode)
             .map(ApplicationDetailsRpcRepository.CodeRow::description)
-            .map(this::trimToNull)
+            .map(TextUtils::trimToNull)
             .orElse(normalizedCode);
     gradeDescriptionByCode.put(normalizedCode, resolved);
     return resolved;
@@ -1310,26 +1316,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         .replace(">", "&gt;")
         .replace("\"", "&quot;")
         .replace("'", "&#39;");
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
-  private Long parsePositiveLong(String value) {
-    if (value == null) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(value);
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
   }
 
   private CreateApplicationRequest normalizeCreateApplicationRequest(CreateApplicationRequest input) {
@@ -1737,13 +1723,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         || EXPORT_PRODUCT_TYPE_STANDING.equals(normalized);
   }
 
-  private String firstNonBlank(String value, String fallback) {
-    String normalized = trimToNull(value);
-    return normalized == null ? fallback : normalized;
-  }
-
   private String defaultMutationUser(String userId) {
-    String normalized = trimToNull(userId);
-    return normalized == null ? "system" : normalized;
+    return defaultSystemUser(userId);
   }
 }

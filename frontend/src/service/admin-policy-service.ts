@@ -1,4 +1,5 @@
 import apiService from '@/service/api-service'
+import { parsePayloadArray, payloadValueAsString as asString } from '@/service/payload-utils'
 
 export type FeePolicyRow = {
   id: string
@@ -51,42 +52,6 @@ const sortByEffectiveDateDesc = <TRow extends { effectiveDate: string }>(rows: T
   })
 }
 
-const asString = (value: unknown): string => {
-  if (typeof value === 'string') {
-    return value
-  }
-  if (typeof value === 'number') {
-    return String(value)
-  }
-  return ''
-}
-
-const parseArrayPayload = (payload: unknown): unknown[] | null => {
-  if (Array.isArray(payload)) {
-    return payload
-  }
-
-  if (!payload || typeof payload !== 'object') {
-    return null
-  }
-
-  const objectPayload = payload as Record<string, unknown>
-  if (Array.isArray(objectPayload.results)) {
-    return objectPayload.results as unknown[]
-  }
-  if (Array.isArray(objectPayload.rows)) {
-    return objectPayload.rows as unknown[]
-  }
-  if (Array.isArray(objectPayload.items)) {
-    return objectPayload.items as unknown[]
-  }
-  if (Array.isArray(objectPayload.data)) {
-    return objectPayload.data as unknown[]
-  }
-
-  return null
-}
-
 const normalizeFeePolicyRow = (row: unknown): FeePolicyRow => {
   const source = (row ?? {}) as Record<string, unknown>
   return {
@@ -135,7 +100,7 @@ export const fetchFeePolicies = async (): Promise<FeePolicyRow[]> => {
       ttlMs: POLICY_CACHE_TTL_MS,
     },
   )
-  const payloadRows = parseArrayPayload(response.data)
+  const payloadRows = parsePayloadArray(response.data)
   if (!payloadRows) {
     throw new Error('Fee policy response is not a list.')
   }
@@ -173,7 +138,7 @@ export const fetchFilPolicies = async (): Promise<FilPolicyRow[]> => {
       ttlMs: POLICY_CACHE_TTL_MS,
     },
   )
-  const payloadRows = parseArrayPayload(response.data)
+  const payloadRows = parsePayloadArray(response.data)
   if (!payloadRows) {
     throw new Error('FIL policy response is not a list.')
   }

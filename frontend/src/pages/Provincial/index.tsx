@@ -22,6 +22,7 @@ import { countProvincialApplications } from '@/service/provincial-application-se
 import { countProvincialExemptions } from '@/service/provincial-exemption-search-service'
 import { countProvincialOffers } from '@/service/provincial-offer-search-service'
 import { countProvincialPermits } from '@/service/provincial-permit-search-service'
+import { normalizeFilterText as normalizeText } from '@/utils/text'
 
 type WorkflowMetricKey =
   | 'provincialApplications'
@@ -147,8 +148,6 @@ const WORKFLOW_TOTAL_ACTION_REQUIREMENTS: Record<WorkflowMetricKey, string[]> = 
   provincialPermits: ['/permitSearch'],
   reviewQueue: ['/applicationsReview'],
 }
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
 
 const ProvincialPage: FC = () => {
   const navigate = useNavigate()

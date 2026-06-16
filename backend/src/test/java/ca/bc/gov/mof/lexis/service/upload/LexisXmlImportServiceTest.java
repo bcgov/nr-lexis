@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.upload;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -137,6 +138,154 @@ class LexisXmlImportServiceTest {
   }
 
   @Test
+  void shouldImportBareLexisXmlAsApplicationPackageAndScales() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
+
+    LexisXmlImportResultDto result = service().importLexisXml(bareSampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.applicationNumber()).isEqualTo(9001L);
+    assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
+    assertThat(result.scaleRows()).isEqualTo(3);
+    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+  }
+
+  @Test
+  void shouldImportLexisGeoJsonAsApplicationPackageAndScales() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
+
+    LexisXmlImportResultDto result = service().importLexisXml(sampleGeoJson(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.applicationNumber()).isEqualTo(9001L);
+    assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
+    assertThat(result.scaleRows()).isEqualTo(3);
+
+    ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).addApplication(applicationCaptor.capture(), eq("jsmith"));
+    assertThat(applicationCaptor.getValue().ownerClientNumber()).isEqualTo("1074");
+    assertThat(applicationCaptor.getValue().ownerClientLocationCode()).isEqualTo("03");
+    assertThat(applicationCaptor.getValue().orgUnitNumber()).isEqualTo(1909L);
+    assertThat(applicationCaptor.getValue().applicationVolume()).isEqualTo(525.0d);
+
+    ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
+        ArgumentCaptor.forClass(ScaleMutationRequest.class);
+    verify(applicationDetailsService, times(3)).addScaleToPackage(scaleCaptor.capture(), eq("jsmith"));
+    assertThat(scaleCaptor.getAllValues())
+        .extracting(ScaleMutationRequest::timberMark)
+        .containsExactly("NCHWP", "NCHWP", "NCHWP");
+  }
+
+  @Test
+  void shouldImportLexisXmlWhenFileExtensionDoesNotIdentifyFormat() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
+
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "formFile", "submission.dat", "application/octet-stream", SAMPLE_XML.getBytes(StandardCharsets.UTF_8));
+
+    LexisXmlImportResultDto result = service().importLexisXml(file, "jsmith");
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.applicationNumber()).isEqualTo(9001L);
+    assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
+    assertThat(result.scaleRows()).isEqualTo(3);
+    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+  }
+
+  @Test
+  void shouldImportZippedGeoJsonWhenEntryExtensionDoesNotIdentifyFormat() throws Exception {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
+
+    LexisXmlImportResultDto result =
+        service().importLexisXml(zippedFile("payload/submission.dat", SAMPLE_GEOJSON), "jsmith");
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.applicationNumber()).isEqualTo(9001L);
+    assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
+    assertThat(result.scaleRows()).isEqualTo(3);
+    assertThat(result.warnings()).contains("Imported payload/submission.dat from ZIP archive submission.zip.");
+    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+  }
+
+  @Test
+  void shouldRejectImportAndSkipScalesWhenPackagePersistenceFails() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                false, null, null, null, null, null, List.of("Package could not be saved."), List.of()));
+
+    LexisXmlImportResultDto result = service().importLexisXml(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.applicationNumber()).isNull();
+    assertThat(result.packageNumber()).isNull();
+    assertThat(result.scaleRows()).isZero();
+    assertThat(result.errors()).containsExactly("Package could not be saved.");
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+  }
+
+  @Test
+  void shouldRejectImportAndStopRemainingScalesWhenScalePersistenceFails() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new ScalePersistenceResult(true, null, List.of(), List.of()),
+            new ScalePersistenceResult(false, null, List.of("Scale could not be saved."), List.of()));
+
+    LexisXmlImportResultDto result = service().importLexisXml(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.applicationNumber()).isNull();
+    assertThat(result.packageNumber()).isNull();
+    assertThat(result.scaleRows()).isZero();
+    assertThat(result.errors()).containsExactly("Scale could not be saved.");
+    verify(applicationDetailsService, times(2)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+  }
+
+  @Test
   void shouldRejectUnsupportedFileExtensionsBeforePersistence() {
     LexisXmlImportService service = service();
     MockMultipartFile file =
@@ -147,9 +296,9 @@ class LexisXmlImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .contains("The LEXIS import file must be an XML file or a ZIP file containing one XML file.");
+        .contains("The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file.");
     assertThat(result.message())
-        .contains("The LEXIS import file must be an XML file or a ZIP file containing one XML file.");
+        .contains("The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file.");
   }
 
   @Test
@@ -160,7 +309,30 @@ class LexisXmlImportServiceTest {
         service.importLexisXml(zippedFile(List.of("first.xml", "second.xml")), "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("The ZIP file must contain exactly one LEXIS XML file.");
+    assertThat(result.errors()).contains("The ZIP file must contain exactly one LEXIS XML or GeoJSON import file.");
+  }
+
+  @Test
+  void shouldRejectZipFilesWithoutXmlFiles() throws Exception {
+    LexisXmlImportService service = service();
+
+    LexisXmlImportResultDto result = service.importLexisXml(emptyZipFile(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("The ZIP file must contain one LEXIS XML or GeoJSON import file.");
+  }
+
+  @Test
+  void shouldRejectCorruptZipFiles() {
+    LexisXmlImportService service = service();
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "formFile", "submission.zip", "application/zip", "not a zip".getBytes(StandardCharsets.UTF_8));
+
+    LexisXmlImportResultDto result = service.importLexisXml(file, "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("The uploaded Zip file is corrupt, and cannot be read.");
   }
 
   @Test
@@ -203,6 +375,88 @@ class LexisXmlImportServiceTest {
   }
 
   @Test
+  void shouldRejectMalformedXmlWithLineAndColumnDetails() {
+    LexisXmlImportService service = service();
+    String xml = SAMPLE_XML.replace("</lexis:productDetail>", "");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .anySatisfy(
+            error -> {
+              assertThat(error).contains("Line:");
+              assertThat(error)
+                  .contains(
+                      "The tag '<lexis:productDetail>' must be terminated with a matching "
+                          + "'</lexis:productDetail>' tag.");
+            });
+  }
+
+  @Test
+  void shouldRejectLexisPayloadOutsideSubmissionContent() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+                "<esf:submissionContent>",
+                "<esf:submissionContent />")
+            .replace("</esf:submissionContent>", "");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("The XML file must include a LEXIS submission payload.");
+  }
+
+  @Test
+  void shouldRejectDuplicateSingletonSections() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "</lexis:applicationDetail>",
+            "</lexis:applicationDetail>\n"
+                + "<lexis:applicationDetail>\n"
+                + "  <lexis:jurisdictionCode>P</lexis:jurisdictionCode>\n"
+                + "</lexis:applicationDetail>");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Application details must appear only once.");
+  }
+
+  @Test
+  void shouldRejectDuplicateSingletonFields() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:clientNumber>1074</lexis:clientNumber>",
+            "<lexis:clientNumber>1074</lexis:clientNumber>\n"
+                + "<lexis:clientNumber>9999</lexis:clientNumber>");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Applicant client number must appear only once.");
+  }
+
+  @Test
   void shouldRejectUnsupportedLexisSchemaVersion() {
     LexisXmlImportService service = service();
     String xml =
@@ -224,6 +478,48 @@ class LexisXmlImportServiceTest {
   }
 
   @Test
+  void shouldRejectUnsupportedEsfSchemaVersion() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd",
+            "http://www.for.gov.bc.ca/schema/esf/0/xsd/MOF/esf-submission.xsd");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains(
+            "The XML schema location must use supported ESF schema version "
+                + "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd.");
+  }
+
+  @Test
+  void shouldRejectDuplicateSchemaLocationNamespaces() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            SAMPLE_SCHEMA_LOCATION,
+            SAMPLE_SCHEMA_LOCATION
+                + " http://www.for.gov.bc.ca/schema/lexis "
+                + "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains("The XML schema location must include each schema namespace only once.");
+  }
+
+  @Test
   void shouldRejectNonProvincialLexisSubmissions() {
     LexisXmlImportService service = service();
     String xml =
@@ -238,7 +534,7 @@ class LexisXmlImportServiceTest {
             "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("Only provincial LEXIS XML submissions are supported.");
+    assertThat(result.errors()).contains("Only provincial LEXIS submissions are supported.");
   }
 
   @Test
@@ -259,6 +555,59 @@ class LexisXmlImportServiceTest {
     assertThat(result.errors()).contains("Boom/package number must be 20 characters or fewer.");
   }
 
+  @Test
+  void shouldRejectMissingSpeciesEndUseSort() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace("<lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>", "");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Species/end-use sort is required.");
+  }
+
+  @Test
+  void shouldRejectMalformedSpeciesEndUseSort() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>",
+            "<lexis:speciesEndUseSort>HE</lexis:speciesEndUseSort>");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Species/end-use sort must be formatted as species/end use.");
+  }
+
+  @Test
+  void shouldRejectDuplicateScaleCombinationsBeforePersistence() {
+    LexisXmlImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:species>FI</lexis:species>", "<lexis:species>HE</lexis:species>");
+
+    LexisXmlImportResultDto result =
+        service.importLexisXml(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains("A scale with the same Timber Mark/Species/Grade combination already exists.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
   private LexisXmlImportService service() {
     return new LexisXmlImportService(
         applicationDetailsServiceProvider,
@@ -268,6 +617,16 @@ class LexisXmlImportServiceTest {
   private MockMultipartFile sampleXml() {
     return new MockMultipartFile(
         "formFile", "6-652-7.xml", "application/xml", SAMPLE_XML.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private MockMultipartFile bareSampleXml() {
+    return new MockMultipartFile(
+        "formFile", "6-652-7-bare.xml", "application/xml", bareSampleXmlText().getBytes(StandardCharsets.UTF_8));
+  }
+
+  private MockMultipartFile sampleGeoJson() {
+    return new MockMultipartFile(
+        "formFile", "6-652-7.geojson", "application/geo+json", SAMPLE_GEOJSON.getBytes(StandardCharsets.UTF_8));
   }
 
   private MockMultipartFile zippedFile(String entryName, String xml) throws Exception {
@@ -289,6 +648,15 @@ class LexisXmlImportServiceTest {
         zip.write(SAMPLE_XML.getBytes(StandardCharsets.UTF_8));
         zip.closeEntry();
       }
+    }
+    return new MockMultipartFile(
+        "formFile", "submission.zip", "application/zip", bytes.toByteArray());
+  }
+
+  private MockMultipartFile emptyZipFile() throws Exception {
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    try (ZipOutputStream ignored = new ZipOutputStream(bytes)) {
+      // Intentionally empty.
     }
     return new MockMultipartFile(
         "formFile", "submission.zip", "application/zip", bytes.toByteArray());
@@ -359,4 +727,92 @@ class LexisXmlImportServiceTest {
       </esf:ESFSubmission>
       """
           .formatted(SAMPLE_SCHEMA_LOCATION);
+
+  private static final String SAMPLE_GEOJSON =
+      """
+      {
+        "type": "FeatureCollection",
+        "lexis": {
+          "applicant": {
+            "applicantDetails": {
+              "clientNumber": "1074",
+              "clientLocnCode": "03",
+              "name": "Mosaic Forest Management Corporation"
+            },
+            "applicantContact": {
+              "contactSurname": "SERVICE",
+              "contactFirstname": "CUSTOMER"
+            }
+          },
+          "applicationDetail": {
+            "jurisdictionCode": "P",
+            "bcForestRegionCode": "RSC",
+            "applStatusCode": "A",
+            "exemptionRsnCde": "S",
+            "applicantTypeCode": "O"
+          },
+          "productDetail": {
+            "productTypeCode": "H",
+            "boomNumber": "TEST23-652-7D-2",
+            "speciesEndUseSort": "HE/PL",
+            "productLocation": "Port Alberni c/o Pacific Towing",
+            "ageClass": "S",
+            "avgLength": 6.7,
+            "avgDiameter": 12.8
+          }
+        },
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": null,
+            "properties": {
+              "lexisEntityType": "harvestedTimber",
+              "timberMark": "nchwp",
+              "numberOfPieces": 1500,
+              "species": "HE",
+              "grade": "H",
+              "quantityVolume": 500
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": null,
+            "properties": {
+              "lexisEntityType": "HARVESTED_TIMBER",
+              "timberMark": "NCHWP",
+              "numberOfPieces": 50,
+              "species": "HE",
+              "grade": "J",
+              "quantityVolume": 24.5
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": null,
+            "properties": {
+              "lexisEntityType": "HARVESTED_TIMBER",
+              "timberMark": "NCHWP",
+              "numberOfPieces": 1,
+              "species": "FI",
+              "grade": "J",
+              "quantityVolume": 0.5
+            }
+          }
+        ]
+      }
+      """;
+
+  private static String bareSampleXmlText() {
+    String startTag = "<lexis:LexisSubmission>";
+    String endTag = "</lexis:LexisSubmission>";
+    int contentStart = SAMPLE_XML.indexOf(startTag) + startTag.length();
+    int contentEnd = SAMPLE_XML.indexOf(endTag);
+    return """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <lexis:LexisSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd">
+      %s
+      </lexis:LexisSubmission>
+      """
+        .formatted(SAMPLE_XML.substring(contentStart, contentEnd));
+  }
 }

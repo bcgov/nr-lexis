@@ -17,8 +17,10 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
 import {
   firstValidationError,
   getVisibleFieldError,
@@ -47,61 +49,13 @@ import {
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
 import { runReport } from '@/service/report-service'
-
-const displayValue = (value: string | number | null | undefined): string => {
-  if (value === null || value === undefined || value === '') {
-    return 'Not provided'
-  }
-  return String(value)
-}
+import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
 
 const formatAmount = (value: number): string => {
   return value.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-}
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
-
-const triggerBrowserDownload = (blob: Blob, filename: string): void => {
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = objectUrl
-  anchor.download = filename
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(objectUrl)
-}
-
-const openBlobInNewTab = (blob: Blob): boolean => {
-  const objectUrl = URL.createObjectURL(blob)
-  const openedWindow = window.open(
-    objectUrl,
-    'permitReportWindow',
-    'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
-  )
-
-  if (!openedWindow) {
-    URL.revokeObjectURL(objectUrl)
-    return false
-  }
-
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-  return true
-}
-
-const matchesFilter = (
-  values: Array<string | number | null | undefined>,
-  filterValue: string,
-): boolean => {
-  if (!filterValue.trim()) {
-    return true
-  }
-
-  const normalizedFilter = normalizeText(filterValue)
-  return values.some((value) => normalizeText(String(value ?? '')).includes(normalizedFilter))
 }
 
 const isInvoiceDocumentRow = (row: PermitDocumentRow): boolean => {
@@ -138,6 +92,7 @@ const ProvincialPermitDetailsPage: FC = () => {
   const [invoiceDraftNumber, setInvoiceDraftNumber] = useState('')
   const [invoiceDraftExportValue, setInvoiceDraftExportValue] = useState('')
   const [invoiceDraftFeeInLieu, setInvoiceDraftFeeInLieu] = useState('')
+  const [invoiceUploadConversionRate, setInvoiceUploadConversionRate] = useState('1.00')
   const [isAddingInvoice, setIsAddingInvoice] = useState(false)
   const [touchedInvoiceFields, setTouchedInvoiceFields] = useState<
     TouchedFields<PermitInvoiceField>
@@ -411,7 +366,7 @@ const ProvincialPermitDetailsPage: FC = () => {
         },
       })
 
-      const opened = openBlobInNewTab(runResult.blob)
+      const opened = openBlobInNewTab(runResult.blob, 'permitReportWindow')
       if (!opened) {
         triggerBrowserDownload(runResult.blob, runResult.filename)
         setActionErrorMessage(
@@ -426,6 +381,19 @@ const ProvincialPermitDetailsPage: FC = () => {
     }
   }, [detail, permitNumber])
 
+  const refreshPermitDocuments = useCallback(async () => {
+    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    if (!resolvedPermitNumber) {
+      return
+    }
+
+    const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
+    const invoicesResult = await fetchPermitInvoices(resolvedPermitNumber)
+    setDocumentRows(documentsResult.rows)
+    setInvoiceRows(invoicesResult.rows)
+    setDocumentsInvoicesErrorMessage('')
+  }, [detail?.permitNumber, permitNumber])
+
   const onOpenPermitUpload = useCallback(() => {
     if (!detail?.permitNumber) {
       return
@@ -433,12 +401,8 @@ const ProvincialPermitDetailsPage: FC = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
-    const params = new URLSearchParams({
-      type: 'permit',
-      permitNumber: String(detail.permitNumber),
-    })
-    navigate(`/admin/uploads?${params.toString()}`)
-  }, [detail?.permitNumber, navigate])
+    document.getElementById('permitDocumentUpload')?.scrollIntoView({ block: 'start' })
+  }, [detail?.permitNumber])
 
   const onOpenDocument = useCallback(async (row: PermitDocumentRow) => {
     setActionErrorMessage('')
@@ -622,15 +586,11 @@ const ProvincialPermitDetailsPage: FC = () => {
       setActionInfoMessage('Unable to retrieve conversion rate. Using 1.00 for invoice upload.')
     }
 
-    const params = new URLSearchParams({
-      type: 'invoice',
-      permitNumber: String(detail.permitNumber),
-      invoiceConversionRate: conversionRate,
-    })
     if (isLatestRequest()) {
-      navigate(`/admin/uploads?${params.toString()}`)
+      setInvoiceUploadConversionRate(conversionRate)
+      document.getElementById('permitInvoiceUpload')?.scrollIntoView({ block: 'start' })
     }
-  }, [beginInvoiceUploadRequest, detail?.permitNumber, navigate])
+  }, [beginInvoiceUploadRequest, detail?.permitNumber])
 
   return (
     <Grid fullWidth className="default-grid">
@@ -1095,6 +1055,15 @@ const ProvincialPermitDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Permit Documents <Tag type="green">API</Tag>
               </h2>
+              {canDeletePermitDocuments && (
+                <DetailDocumentUploadPanel
+                  workflowType="permit"
+                  targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
+                  inputId="permitDocumentUpload"
+                  disabled={!detail.permitNumber}
+                  onUploadComplete={refreshPermitDocuments}
+                />
+              )}
               <TextInput
                 id="permitDocumentsFilter"
                 labelText="Filter document rows"
@@ -1161,6 +1130,16 @@ const ProvincialPermitDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Invoices <Tag type="green">API</Tag>
               </h2>
+              {canDeleteInvoiceDocuments && (
+                <DetailDocumentUploadPanel
+                  workflowType="invoice"
+                  targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
+                  inputId="permitInvoiceUpload"
+                  disabled={!detail.permitNumber}
+                  initialInvoiceConversionRate={invoiceUploadConversionRate}
+                  onUploadComplete={refreshPermitDocuments}
+                />
+              )}
               <TextInput
                 id="permitInvoicesFilter"
                 labelText="Filter invoice rows"

@@ -20,6 +20,8 @@ import SearchableSelect from '@/components/SearchableSelect'
 import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import { runReport } from '@/service/report-service'
+import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
+import { normalizeFilterText as normalizeText } from '@/utils/text'
 import {
   fetchReportOptions,
   fetchProvincialApplicationOptions,
@@ -844,36 +846,6 @@ const buildReportSearchParams = (payload: {
   return params
 }
 
-const normalizeText = (value: string): string => value.trim().toLowerCase()
-
-const triggerBrowserDownload = (blob: Blob, filename: string): void => {
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = objectUrl
-  anchor.download = filename
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(objectUrl)
-}
-
-const openBlobInNewTab = (blob: Blob): boolean => {
-  const objectUrl = URL.createObjectURL(blob)
-  const openedWindow = window.open(
-    objectUrl,
-    'reportWindow',
-    'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
-  )
-
-  if (!openedWindow) {
-    URL.revokeObjectURL(objectUrl)
-    return false
-  }
-
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-  return true
-}
-
 const isDownloadReportRequest = (
   values: Record<string, string>,
   actionMapping?: string,
@@ -1236,7 +1208,7 @@ const ReportsPage: FC = () => {
         return
       }
 
-      const opened = openBlobInNewTab(runResult.blob)
+      const opened = openBlobInNewTab(runResult.blob, 'reportWindow')
       if (!opened) {
         triggerBrowserDownload(runResult.blob, runResult.filename)
         setLaunchErrorMessage(

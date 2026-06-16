@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.admin;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
+
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -230,17 +232,17 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
         2,
         rs ->
             new OrgUnitRow(
-                defaultLong(getLong(rs, "ORG_UNIT_NO"), orgUnitNo),
+                coalesce(getLong(rs, "ORG_UNIT_NO"), orgUnitNo),
                 defaultString(getString(rs, "ORG_UNIT_CODE")),
                 defaultString(getString(rs, "ORG_UNIT_NAME"))));
   }
 
   private FeePolicyRow mapFeePolicyRow(java.sql.ResultSet rs) {
     return new FeePolicyRow(
-        defaultLong(getLong(rs, "LEXIS_FEE_POLICY_ID"), 0L),
+        coalesce(getLong(rs, "LEXIS_FEE_POLICY_ID"), 0L),
         getLocalDate(rs, "EFFECTIVE_DATE"),
-        defaultLong(getLong(rs, "ORG_UNIT_NO"), 0L),
-        defaultLong(getLong(rs, "PERCENT_INCREASE"), 0L),
+        coalesce(getLong(rs, "ORG_UNIT_NO"), 0L),
+        coalesce(getLong(rs, "PERCENT_INCREASE"), 0L),
         defaultString(getString(rs, "ENTRY_USERID")),
         getLocalDate(rs, "ENTRY_TIMESTAMP"),
         defaultString(getString(rs, "UPDATE_USERID")),
@@ -249,9 +251,9 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
 
   private FilPolicyRow mapFilPolicyRow(java.sql.ResultSet rs) {
     return new FilPolicyRow(
-        defaultLong(getLong(rs, "FEE_IN_LIEU_PERCENT_ID"), 0L),
+        coalesce(getLong(rs, "FEE_IN_LIEU_PERCENT_ID"), 0L),
         getLocalDate(rs, "EFFECTIVE_DATE"),
-        defaultLong(getLong(rs, "FEE_IN_LIEU_PERCENT"), 0L),
+        coalesce(getLong(rs, "FEE_IN_LIEU_PERCENT"), 0L),
         defaultString(getString(rs, "ENTRY_USERID")),
         getLocalDate(rs, "ENTRY_TIMESTAMP"),
         defaultString(getString(rs, "UPDATE_USERID")),
@@ -260,10 +262,6 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
 
   private Timestamp toTimestamp(LocalDate value) {
     return value == null ? null : Timestamp.valueOf(value.atStartOfDay());
-  }
-
-  private long defaultLong(Long value, long fallback) {
-    return value == null ? fallback : value;
   }
 
   private String defaultString(String value) {

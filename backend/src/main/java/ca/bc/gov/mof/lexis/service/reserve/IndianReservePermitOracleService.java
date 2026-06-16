@@ -1,17 +1,20 @@
 package ca.bc.gov.mof.lexis.service.reserve;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong;
+
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitSearchResultDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository;
 import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository.ReservePermitInsertRecord;
 import ca.bc.gov.mof.lexis.repository.reserve.IndianReservePermitRepository.ReservePermitInsertRow;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -22,9 +25,6 @@ import org.springframework.stereotype.Service;
 @Service
 @Profile("oracle")
 public class IndianReservePermitOracleService implements IndianReservePermitService {
-
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final IndianReservePermitRepository repository;
 
@@ -140,7 +140,9 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
     Optional<ReservePermitInsertRow> inserted =
         repository.insertReservePermit(insertRow, normalizedUserId);
     Long insertedPermitNumber =
-        inserted.map(ReservePermitInsertRow::permitNumber).map(this::parsePositiveLong).orElse(null);
+        inserted.map(ReservePermitInsertRow::permitNumber)
+            .map(value -> parsePositiveLong(value))
+            .orElse(null);
     if (insertedPermitNumber == null) {
       return failure(List.of("Unable to save indigenous reserve permit."), submittedPermitNumber);
     }
@@ -174,44 +176,8 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
         Math.max(1, input.size()));
   }
 
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
-  private Long parsePositiveLong(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(normalized);
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
   private LocalDate parseDate(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      return null;
-    }
-
-    try {
-      return LocalDate.parse(normalized);
-    } catch (DateTimeParseException ignored) {
-      // Fallback for legacy date format.
-    }
-
-    try {
-      return LocalDate.parse(normalized, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ignored) {
-      return null;
-    }
+    return parseIsoOrLegacyDate(value);
   }
 
   private PermitMutationRpcResponseDto failure(List<String> errors, Long permitNumber) {
@@ -219,7 +185,4 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
         false, "", errors, List.of(), permitNumber, null, null, null, null, null);
   }
 
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

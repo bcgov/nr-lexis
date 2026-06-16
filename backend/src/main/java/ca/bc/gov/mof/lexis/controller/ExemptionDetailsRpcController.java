@@ -1,15 +1,19 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLongs;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
+import static ca.bc.gov.mof.lexis.util.TextUtils.firstTrimmedNonBlank;
+
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,9 +62,6 @@ public class ExemptionDetailsRpcController {
   private static final String ACTION_SEND_EXEMPTION_APPROVAL_EMAILS = "sendExemptionApprovalEmails";
   private static final String LEGACY_ACTION_APPROVE_EXEMPTION = "approveExemption";
   private static final String LEGACY_ACTION_SAVE_EXEMPTION = "saveExemption";
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
-
   private final ObjectProvider<ExemptionDetailsRpcService> serviceProvider;
   private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
   private final LexisSessionService sessionService;
@@ -458,7 +459,7 @@ public class ExemptionDetailsRpcController {
 
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult result =
         service.sendExemptionApprovalEmail(
-            firstNonBlank(exemptionNumber, legacyExemptionNumber), toEmailAddress);
+            firstTrimmedNonBlank(exemptionNumber, legacyExemptionNumber), toEmailAddress);
     return ResponseEntity.ok(new ExemptionApprovalEmailResponseDto(result.success(), result.message()));
   }
 
@@ -622,18 +623,6 @@ public class ExemptionDetailsRpcController {
         sessionService.parseRolesFromPrincipal(authentication), action);
   }
 
-  private Long parsePositiveLong(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(rawValue.trim());
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
   private ExemptionDetailsRpcService.CreateExemptionRequest toCreateExemptionRequest(
       MultiValueMap<String, String> parameters, List<String> roles) {
     return new ExemptionDetailsRpcService.CreateExemptionRequest(
@@ -678,31 +667,6 @@ public class ExemptionDetailsRpcController {
     return null;
   }
 
-  private String first(MultiValueMap<String, String> parameters, String... names) {
-    if (parameters == null || names == null) {
-      return null;
-    }
-    for (String name : names) {
-      String value = parameters.getFirst(name);
-      if (value != null && !value.isBlank()) {
-        return value.trim();
-      }
-    }
-    return null;
-  }
-
-  private String firstNonBlank(String... values) {
-    if (values == null) {
-      return null;
-    }
-    for (String value : values) {
-      if (value != null && !value.isBlank()) {
-        return value.trim();
-      }
-    }
-    return null;
-  }
-
   private boolean hasParameter(MultiValueMap<String, String> parameters, String name) {
     return parameters != null && parameters.containsKey(name);
   }
@@ -711,81 +675,13 @@ public class ExemptionDetailsRpcController {
     return principalService.resolvePrincipalName(authentication);
   }
 
-  private LocalDate parseDate(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    String normalized = rawValue.trim();
-    try {
-      return LocalDate.parse(normalized);
-    } catch (DateTimeParseException ignored) {
-      try {
-        return LocalDate.parse(normalized, LEGACY_DATE_FORMATTER);
-      } catch (DateTimeParseException ex) {
-        return null;
-      }
-    }
-  }
-
-  private Double parseDouble(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      return Double.parseDouble(rawValue.trim());
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
   private List<Long> parseRegions(MultiValueMap<String, String> parameters) {
-    if (parameters == null) {
-      return List.of();
-    }
-    List<String> rawValues = new ArrayList<>();
-    rawValues.addAll(parameters.getOrDefault("region", List.of()));
-    rawValues.addAll(parameters.getOrDefault("regions", List.of()));
-    rawValues.addAll(parameters.getOrDefault("orgUnitNumber", List.of()));
-
-    return rawValues.stream()
-        .flatMap(value -> List.of(value.split(",")).stream())
-        .map(String::trim)
-        .filter(value -> !value.isBlank())
-        .map(this::parsePositiveLong)
-        .filter(value -> value != null && value > 0)
-        .distinct()
-        .toList();
+    return parsePositiveLongs(parameters, "region", "regions", "orgUnitNumber");
   }
 
   private List<Long> parseApplicationNumbers(MultiValueMap<String, String> parameters) {
-    if (parameters == null) {
-      return List.of();
-    }
-    List<String> rawValues = new ArrayList<>();
-    rawValues.addAll(parameters.getOrDefault("applicationNumber", List.of()));
-    rawValues.addAll(parameters.getOrDefault("applications", List.of()));
-    rawValues.addAll(parameters.getOrDefault("applicationNumbers", List.of()));
-
-    return rawValues.stream()
-        .flatMap(value -> List.of(value.split(",")).stream())
-        .map(String::trim)
-        .filter(value -> !value.isBlank())
-        .map(this::parsePositiveLong)
-        .filter(value -> value != null && value > 0)
-        .distinct()
-        .toList();
-  }
-
-  private String sanitizeFileName(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    String normalized = rawValue.trim();
-    int slashIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
-    if (slashIndex >= 0 && slashIndex < normalized.length() - 1) {
-      normalized = normalized.substring(slashIndex + 1);
-    }
-    return normalized;
+    return parsePositiveLongs(
+        parameters, "applicationNumber", "applications", "applicationNumbers");
   }
 
   public record ExemptionApplicationsResponseDto(

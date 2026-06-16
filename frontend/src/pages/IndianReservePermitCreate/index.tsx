@@ -4,9 +4,15 @@ import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } f
 import SearchableSelect from '@/components/SearchableSelect'
 import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
 import {
+  isSelectableClientLocation,
+  resolveClientLocationCode,
+} from '@/pages/shared/application-form-utils'
+import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  joinCreateSubmitMessages,
+  mergeCreateDraftPayload,
   requiredFieldError,
   type FieldErrors,
   type TouchedFields,
@@ -63,17 +69,6 @@ const INITIAL_FORM: IndianReservePermitCreateForm = {
   remarks: '',
 }
 
-const mapDraftPayloadToForm = (payload: unknown): IndianReservePermitCreateForm => {
-  if (!payload || typeof payload !== 'object') {
-    return INITIAL_FORM
-  }
-
-  return {
-    ...INITIAL_FORM,
-    ...(payload as Partial<IndianReservePermitCreateForm>),
-  }
-}
-
 const buildInitialFormFromQuery = (query: URLSearchParams): IndianReservePermitCreateForm => {
   return {
     ...INITIAL_FORM,
@@ -92,34 +87,6 @@ const buildInitialFormFromQuery = (query: URLSearchParams): IndianReservePermitC
     otherPortOfExport: query.get('otherPortOfExport') ?? '',
     remarks: query.get('remarks') ?? '',
   }
-}
-
-const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
-  location.locationCode !== '0'
-
-const resolveClientLocationCode = (
-  locations: ApplicationClientLocation[],
-  currentCode: string,
-): string => {
-  const normalizedCurrentCode = currentCode.trim()
-  if (
-    normalizedCurrentCode &&
-    locations.some(
-      (location) =>
-        isSelectableClientLocation(location) && location.locationCode === normalizedCurrentCode,
-    )
-  ) {
-    return normalizedCurrentCode
-  }
-
-  const selectedLocation = locations.find(
-    (location) => isSelectableClientLocation(location) && location.selected,
-  )
-  if (selectedLocation) {
-    return selectedLocation.locationCode
-  }
-
-  return locations.find(isSelectableClientLocation)?.locationCode ?? ''
 }
 
 type PageStatus = {
@@ -286,9 +253,7 @@ const IndianReservePermitCreatePage: FC = () => {
     setIsSubmitting(true)
     try {
       const result = await submitIndianReservePermitCreate(form)
-      const responseMessage = [result.message, ...result.errors, ...result.warnings]
-        .filter((value) => value.trim().length > 0)
-        .join(' ')
+      const responseMessage = joinCreateSubmitMessages(result)
 
       if (result.success) {
         if (result.createdId) {
@@ -321,7 +286,7 @@ const IndianReservePermitCreatePage: FC = () => {
   }
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
-    setForm(mapDraftPayloadToForm(record.payload))
+    setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
     setTouchedFields({})
     setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })

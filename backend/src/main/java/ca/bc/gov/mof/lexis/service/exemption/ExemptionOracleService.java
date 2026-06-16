@@ -1,15 +1,19 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionRepository;
-import org.springframework.data.domain.Page;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -84,7 +88,7 @@ public class ExemptionOracleService implements ExemptionService {
     String exemptionStatus = trimToNull(input.exemptionStatus());
     String applicantClientNumber = trimToNull(input.applicantClientNumber());
     String ownerClientNumber = trimToNull(input.ownerClientNumber());
-    List<Long> regionNumbers = normalizeRegions(input.regionNumbers());
+    List<Long> regionNumbers = positiveDistinctLongs(input.regionNumbers());
     int page = Math.max(0, input.page());
     int size = Math.max(1, input.size());
 
@@ -110,22 +114,4 @@ public class ExemptionOracleService implements ExemptionService {
         size);
   }
 
-  private List<Long> normalizeRegions(List<Long> rawRegions) {
-    if (rawRegions == null) {
-      return List.of();
-    }
-    return rawRegions.stream().filter(region -> region != null && region > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

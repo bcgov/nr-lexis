@@ -1,3 +1,5 @@
+import { isRecord } from '@/utils/record'
+
 export type CreateDraftRecord<TData> = {
   id: string
   module: string
@@ -19,14 +21,14 @@ const parseRecords = <TData>(rawValue: string | null): CreateDraftRecord<TData>[
     }
 
     return parsed.filter((item): item is CreateDraftRecord<TData> => {
-      if (!item || typeof item !== 'object') {
+      if (!isRecord(item)) {
         return false
       }
       return (
-        typeof (item as any).id === 'string' &&
-        typeof (item as any).module === 'string' &&
-        typeof (item as any).savedAt === 'string' &&
-        typeof (item as any).payload === 'object'
+        typeof item.id === 'string' &&
+        typeof item.module === 'string' &&
+        typeof item.savedAt === 'string' &&
+        typeof item.payload === 'object'
       )
     })
   } catch (error) {

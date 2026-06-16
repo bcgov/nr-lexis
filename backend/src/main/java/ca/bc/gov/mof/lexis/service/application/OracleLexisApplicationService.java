@@ -1,5 +1,9 @@
 package ca.bc.gov.mof.lexis.service.application;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
@@ -83,7 +87,7 @@ public class OracleLexisApplicationService implements LexisApplicationService {
 
   @Override
   public boolean verifyApplicationClients(List<Long> applicationNumbers) {
-    List<Long> normalized = normalizeApplicationNumbers(applicationNumbers);
+    List<Long> normalized = positiveDistinctLongs(applicationNumbers);
     if (normalized.isEmpty()) {
       return false;
     }
@@ -92,7 +96,7 @@ public class OracleLexisApplicationService implements LexisApplicationService {
 
   @Override
   public boolean hasValidOffer(List<Long> applicationNumbers) {
-    List<Long> normalized = normalizeApplicationNumbers(applicationNumbers);
+    List<Long> normalized = positiveDistinctLongs(applicationNumbers);
     if (normalized.isEmpty()) {
       return false;
     }
@@ -118,36 +122,10 @@ public class OracleLexisApplicationService implements LexisApplicationService {
         input.receivedToDate(),
         input.listingFromDate(),
         input.listingToDate(),
-        normalizeRegions(input.regionNumbers()),
+        positiveDistinctLongs(input.regionNumbers()),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
-  }
-
-  private List<Long> normalizeApplicationNumbers(List<Long> input) {
-    if (input == null) {
-      return List.of();
-    }
-    return input.stream().filter(number -> number != null && number > 0).distinct().toList();
-  }
-
-  private List<Long> normalizeRegions(List<Long> input) {
-    if (input == null) {
-      return List.of();
-    }
-    return input.stream().filter(number -> number != null && number > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
   }
 
   private List<CodeNameDto> currentScheduleOptions() {

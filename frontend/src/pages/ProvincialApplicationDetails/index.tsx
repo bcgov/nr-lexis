@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
-import axios from 'axios'
 import {
   Button,
   Column,
@@ -22,6 +21,11 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
+import {
+  displayValue,
+  matchesFilter,
+  normalizeFilterText as normalizeText,
+} from '@/pages/shared/detail-page-utils'
 import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
@@ -43,7 +47,6 @@ import {
   type ApplicationPackageSpeciesRow,
   type ApplicationSummarySnapshot,
 } from '@/service/provincial-application-items-service'
-import { submitAdminUpload } from '@/service/admin-upload-service'
 import {
   approveApplicationReview,
   sendApplicationReviewStatusEmail,
@@ -62,9 +65,20 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import SearchableSelect from '@/components/SearchableSelect'
 import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
+import {
+  isAgentApplicant,
+  isSelectableClientContact,
+  isSelectableClientLocation,
+  productTypeRequiresGrowthType,
+  resolveClientContactName,
+  resolveClientLocationCode,
+  toApplicationCodeOption,
+  toSearchOption,
+} from '@/pages/shared/application-form-utils'
 import {
   atMostOneDecimalFieldError,
   firstValidationError,
@@ -75,50 +89,14 @@ import {
   requiredFieldError,
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
+import { triggerBrowserDownload } from '@/utils/download'
+import {
+  isValidEmail,
+  normalizeTrimmedText as normalizeEmail,
+  normalizeUpperText as normalizeReviewStatus,
+} from '@/utils/text'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
-const displayValue = (value: string | number | null | undefined): string => {
-  if (value === null || value === undefined || value === '') {
-    return 'Not provided'
-  }
-  return String(value)
-}
-
-const uploadFailureMessage = (error: unknown, fallbackMessage: string): string => {
-  if (!axios.isAxiosError(error)) {
-    return fallbackMessage
-  }
-
-  const payload = error.response?.data
-  if (typeof payload === 'string' && payload.trim()) {
-    return payload.trim()
-  }
-
-  if (!payload || typeof payload !== 'object') {
-    return fallbackMessage
-  }
-
-  const { message, errors } = payload as { message?: unknown; errors?: unknown }
-  if (typeof message === 'string' && message.trim()) {
-    return message.trim()
-  }
-
-  if (Array.isArray(errors)) {
-    const firstError = errors.find(
-      (entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()),
-    )
-    if (firstError) {
-      return firstError.trim()
-    }
-  }
-
-  return fallbackMessage
-}
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
-const normalizeReviewStatus = (status: string): string => status.trim().toUpperCase()
-const normalizeEmail = (email: string): string => email.trim()
-const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
 const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['REJ', 'WDN'])
 const APPLICANT_TYPE_OPTIONS: SearchOption[] = [
@@ -134,72 +112,8 @@ const OIC_INDICATOR_OPTIONS: SearchOption[] = [
   { value: 'Y', label: 'Yes' },
 ]
 
-const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
-  location.locationCode !== '0'
-
-const isSelectableClientContact = (contact: ApplicationClientContact): boolean =>
-  contact.contactId !== '0'
-
-const resolveClientLocationCode = (
-  locations: ApplicationClientLocation[],
-  currentCode: string,
-): string => {
-  const normalizedCurrentCode = currentCode.trim()
-  if (
-    normalizedCurrentCode &&
-    locations.some(
-      (location) =>
-        isSelectableClientLocation(location) && location.locationCode === normalizedCurrentCode,
-    )
-  ) {
-    return normalizedCurrentCode
-  }
-
-  const selectedLocation = locations.find(
-    (location) => isSelectableClientLocation(location) && location.selected,
-  )
-  if (selectedLocation) {
-    return selectedLocation.locationCode
-  }
-
-  return locations.find(isSelectableClientLocation)?.locationCode ?? ''
-}
-
-const resolveClientContactName = (
-  contacts: ApplicationClientContact[],
-  currentName: string,
-): string => {
-  const normalizedCurrentName = currentName.trim()
-  if (
-    normalizedCurrentName &&
-    contacts.some(
-      (contact) =>
-        isSelectableClientContact(contact) && contact.contactName === normalizedCurrentName,
-    )
-  ) {
-    return normalizedCurrentName
-  }
-
-  return contacts.find(isSelectableClientContact)?.contactName ?? normalizedCurrentName
-}
-
 const optionLabel = (option: SearchOption): string =>
   option.label === option.value ? option.label : `${option.value} - ${option.label}`
-
-const codeOptionLabel = (option: ApplicationCodeOption): string =>
-  option.description && option.description !== option.code
-    ? `${option.code} - ${option.description}`
-    : option.code
-
-const toSearchOption = (option: ApplicationCodeOption): SearchOption => ({
-  value: option.code,
-  label: codeOptionLabel(option),
-})
-
-const toApplicationCodeOption = (option: SearchOption): ApplicationCodeOption => ({
-  code: option.value,
-  description: option.label,
-})
 
 type ClientDataSummaryProps = {
   title: string
@@ -260,29 +174,6 @@ const optionsWithCurrentValue = (options: SearchOption[], currentValue: string):
   }
 
   return [{ value: normalizedCurrentValue, label: normalizedCurrentValue }, ...options]
-}
-
-const triggerBrowserDownload = (blob: Blob, filename: string): void => {
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = objectUrl
-  anchor.download = filename
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(objectUrl)
-}
-
-const matchesFilter = (
-  values: Array<string | number | null | undefined>,
-  filterValue: string,
-): boolean => {
-  if (!filterValue.trim()) {
-    return true
-  }
-
-  const normalizedFilter = normalizeText(filterValue)
-  return values.some((value) => normalizeText(String(value ?? '')).includes(normalizedFilter))
 }
 
 type ApplicationSummaryFormState = {
@@ -384,12 +275,9 @@ const withApplicationSpecies = (
   return { ...form, speciesCodes, endUseCode }
 }
 
-const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
-  productTypeCode === 'H' || productTypeCode === 'S'
-
-const isAgentApplicant = (applicantTypeCode: string): boolean => applicantTypeCode === 'A'
 const APPLICATION_STATUS_EXPIRED = 'EXP'
 const APPLICATION_STATUS_PERMITTED = 'PMT'
+const COMPLETE_PERMIT_STATUS_TEXT = 'COMPLETE'
 const APPLICATION_DOCUMENT_DELETE_ROLES = new Set([
   'ADMIN',
   'LEXIS_ADMIN',
@@ -436,6 +324,30 @@ const canDeleteApplicationDocuments = (
   return industryUser && [APPLICATION_STATUS_PERMITTED, APPLICATION_STATUS_EXPIRED].includes(status)
 }
 
+const isExpiredApplication = (detail: ProvincialApplicationDetail | null): boolean => {
+  const statusCode = detail?.applicationStatusCode?.trim().toUpperCase() ?? ''
+  const statusDescription = detail?.statusDescription?.trim().toUpperCase() ?? ''
+  return statusCode === APPLICATION_STATUS_EXPIRED || statusDescription === 'EXPIRED'
+}
+
+const hasCompletePermit = (permitRows: ApplicationPermitRow[]): boolean =>
+  permitRows.some((row) =>
+    row.permitStatusDescription.trim().toUpperCase().includes(COMPLETE_PERMIT_STATUS_TEXT),
+  )
+
+const applicationDocumentUploadUnavailableMessage = (
+  detail: ProvincialApplicationDetail | null,
+  permitRows: ApplicationPermitRow[],
+): string => {
+  if (isExpiredApplication(detail)) {
+    return 'Application document upload is unavailable for expired applications.'
+  }
+  if (detail?.industryUser && hasCompletePermit(permitRows)) {
+    return 'Application document upload is unavailable for industry users when the application has a complete permit.'
+  }
+  return ''
+}
+
 const reviewEmailCandidate = (
   applicantTypeCode: string,
   ownerClientData: ApplicationClientData | null,
@@ -466,13 +378,6 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [actionWarningMessage, setActionWarningMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
-  const [selectedApplicationDocumentFile, setSelectedApplicationDocumentFile] =
-    useState<File | null>(null)
-  const [applicationDocumentDescription, setApplicationDocumentDescription] = useState('')
-  const [applicationDocumentValidationMessage, setApplicationDocumentValidationMessage] =
-    useState('')
-  const [isUploadingApplicationDocument, setIsUploadingApplicationDocument] = useState(false)
-  const [applicationDocumentUploadInputKey, setApplicationDocumentUploadInputKey] = useState(0)
   const [remarkBody, setRemarkBody] = useState('')
   const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null)
   const [isSavingRemark, setIsSavingRemark] = useState(false)
@@ -603,9 +508,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
         if (isLatestRequest()) {
           setPermitRows(permitsResult)
         }
-      } catch (error) {
+      } catch {
         if (isLatestRequest()) {
-          console.error(error)
           setPermitRows([])
           setActionErrorMessage('Unable to retrieve application permits.')
         }
@@ -624,9 +528,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
             setSummaryForm(editableSummaryForm)
             setSummaryBaselineForm(editableSummaryForm)
           }
-        } catch (error) {
+        } catch {
           if (isLatestRequest()) {
-            console.error(error)
             setActionErrorMessage('Unable to retrieve editable application summary fields.')
           }
         }
@@ -642,9 +545,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
           setSummaryForm(summaryFormWithSpecies)
           setSummaryBaselineForm(summaryFormWithSpecies)
         }
-      } catch (error) {
+      } catch {
         if (isLatestRequest()) {
-          console.error(error)
           setActionErrorMessage('Unable to retrieve application species fields.')
         }
       }
@@ -654,16 +556,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
         if (isLatestRequest()) {
           setDocumentRows(documentsResult.rows)
         }
-      } catch (error) {
+      } catch {
         if (isLatestRequest()) {
-          console.error(error)
           setDocumentRows([])
           setDocumentsErrorMessage('Unable to retrieve application documents.')
         }
       }
-    } catch (error) {
+    } catch {
       if (isLatestRequest()) {
-        console.error(error)
         setErrorMessage('Unable to retrieve provincial application detail.')
         setDetail(null)
         setSummaryForm(null)
@@ -736,6 +636,12 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
   const canUploadApplicationDocuments = canPerform('/fileApplicationUpload')
   const canDeleteDocuments = canDeleteApplicationDocuments(detail, capabilities?.roles ?? [])
+  const documentUploadUnavailableMessage = applicationDocumentUploadUnavailableMessage(
+    detail,
+    permitRows,
+  )
+  const canAddApplicationDocuments =
+    canUploadApplicationDocuments && !documentUploadUnavailableMessage
   const canManageItems =
     canPerform('createApplication') &&
     !detail?.readOnly &&
@@ -1387,12 +1293,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setSummaryRegionOptions(options.regions)
         setSummaryScheduleOptions(options.currentSchedules)
       })
-      .catch((error) => {
+      .catch(() => {
         if (!isActive) {
           return
         }
 
-        console.warn('Unable to load application summary options.', error)
         setSummaryExemptionReasonOptions([])
         setSummaryApplicationStatusOptions([])
         setSummaryProductTypeOptions([])
@@ -1443,11 +1348,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
             : (options[0]?.code ?? ''),
         )
       })
-      .catch((error) => {
+      .catch(() => {
         if (!isActive) {
           return
         }
-        console.warn('Unable to load remaining application species.', error)
         setApplicationSpeciesOptions([])
         setApplicationSpeciesCandidate('')
       })
@@ -1493,11 +1397,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
           return { ...current, endUseCode: options[0]?.code ?? current.endUseCode }
         })
       })
-      .catch((error) => {
+      .catch(() => {
         if (!isActive) {
           return
         }
-        console.warn('Unable to load application end-use options.', error)
         setApplicationEndUseOptions([])
       })
 
@@ -1515,8 +1418,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       try {
         const options = await fetchApplicationReviewOptions()
         setReviewStatusOptions(options.reviewStatuses)
-      } catch (error) {
-        console.warn('Unable to load application review status options.', error)
+      } catch {
         setReviewStatusOptions([])
       }
     }
@@ -1545,18 +1447,24 @@ const ProvincialApplicationDetailsPage: FC = () => {
     navigate(query.length > 0 ? `/provincial/offers/create?${query}` : '/provincial/offers/create')
   }, [detail, navigate])
 
+  const refreshApplicationDocuments = useCallback(async () => {
+    if (!applicationNumber) {
+      return
+    }
+
+    const documentsResult = await fetchApplicationDocuments(applicationNumber)
+    setDocumentRows(documentsResult.rows)
+    setDocumentsErrorMessage('')
+  }, [applicationNumber])
+
   const onOpenApplicationUpload = useCallback(() => {
     if (!detail) {
       return
     }
     setActionErrorMessage('')
     setActionInfoMessage('')
-    const params = new URLSearchParams({
-      type: 'application',
-      applicationNumber: String(detail.applicationNumber),
-    })
-    navigate(`/admin/uploads?${params.toString()}`)
-  }, [detail, navigate])
+    document.getElementById('applicationDocumentUpload')?.scrollIntoView({ block: 'start' })
+  }, [detail])
 
   const onOpenDocument = useCallback(async (row: ProvincialApplicationDocumentRow) => {
     setActionErrorMessage('')
@@ -1565,8 +1473,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
     try {
       const result = await openApplicationDocument(row.id, row.name)
       triggerBrowserDownload(result.blob, result.filename || row.name)
-    } catch (error) {
-      console.error(error)
+    } catch {
       setActionErrorMessage('Unable to open the selected document.')
     }
   }, [])
@@ -1596,9 +1503,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
         if (isLatestRequest()) {
           setDocumentRows(documentsResult.rows)
         }
-      } catch (error) {
+      } catch {
         if (isLatestRequest()) {
-          console.error(error)
           setActionErrorMessage('Unable to remove the selected document.')
         }
       } finally {
@@ -1609,42 +1515,6 @@ const ProvincialApplicationDetailsPage: FC = () => {
     },
     [applicationNumber, beginDetailRequest],
   )
-
-  const onUploadApplicationDocument = useCallback(async () => {
-    if (!applicationNumber || !detail) {
-      return
-    }
-
-    if (!selectedApplicationDocumentFile) {
-      setApplicationDocumentValidationMessage('Choose a file to upload.')
-      return
-    }
-
-    setApplicationDocumentValidationMessage('')
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    setIsUploadingApplicationDocument(true)
-
-    try {
-      await submitAdminUpload('application', {
-        applicationNumber: String(detail.applicationNumber),
-        file: selectedApplicationDocumentFile,
-        fileDescription: applicationDocumentDescription.trim(),
-      })
-
-      const documentsResult = await fetchApplicationDocuments(applicationNumber)
-      setDocumentRows(documentsResult.rows)
-      setSelectedApplicationDocumentFile(null)
-      setApplicationDocumentDescription('')
-      setApplicationDocumentUploadInputKey((current) => current + 1)
-      setActionInfoMessage('Application document uploaded.')
-    } catch (error) {
-      console.error(error)
-      setActionErrorMessage(uploadFailureMessage(error, 'Unable to upload application document.'))
-    } finally {
-      setIsUploadingApplicationDocument(false)
-    }
-  }, [applicationDocumentDescription, applicationNumber, detail, selectedApplicationDocumentFile])
 
   const onSaveRemark = useCallback(async () => {
     if (!applicationNumber || !detail) {
@@ -1678,8 +1548,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setActionInfoMessage(
         editingRemarkId ? 'Application remark updated.' : 'Application remark saved.',
       )
-    } catch (error) {
-      console.error(error)
+    } catch {
       setActionErrorMessage('Unable to save application remark.')
     } finally {
       setIsSavingRemark(false)
@@ -1794,8 +1663,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setShowSummaryValidationErrors(false)
       setSummaryVolumeWarningAccepted(false)
       setActionInfoMessage(result.message || 'Application summary saved.')
-    } catch (error) {
-      console.error(error)
+    } catch {
       setActionErrorMessage('Unable to save application summary.')
     } finally {
       setIsSavingSummary(false)
@@ -1892,8 +1760,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
       await loadApplicationDetail()
       setActionInfoMessage(result.message || 'Application approved.')
-    } catch (error) {
-      console.error(error)
+    } catch {
       setActionErrorMessage('Unable to approve application.')
     } finally {
       setIsSubmittingReviewAction(false)
@@ -1946,8 +1813,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
             ? 'Application status updated and email sent.'
             : updateResult.message || 'Application status updated.',
         )
-      } catch (error) {
-        console.error(error)
+      } catch {
         setActionErrorMessage('Unable to update application status.')
       } finally {
         setIsSubmittingReviewAction(false)
@@ -2124,7 +1990,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   kind="secondary"
                   size="sm"
                   renderIcon={Upload}
-                  disabled={!canUploadApplicationDocuments || !detail.applicationNumber}
+                  disabled={!canAddApplicationDocuments || !detail.applicationNumber}
                   onClick={onOpenApplicationUpload}
                 >
                   Upload Application Document
@@ -2879,53 +2745,23 @@ const ProvincialApplicationDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Documents <Tag type="green">API</Tag>
               </h2>
-              {canUploadApplicationDocuments && (
-                <div className="legacy-search-grid">
-                  <TextInput
-                    key={applicationDocumentUploadInputKey}
-                    id="applicationDocumentUploadFile"
-                    type="file"
-                    labelText="Application Document File"
-                    invalid={!!applicationDocumentValidationMessage}
-                    invalidText={applicationDocumentValidationMessage}
-                    onChange={(event) => {
-                      const target = event.target as HTMLInputElement
-                      setSelectedApplicationDocumentFile(target.files?.[0] ?? null)
-                      if (applicationDocumentValidationMessage) {
-                        setApplicationDocumentValidationMessage('')
-                      }
-                    }}
-                  />
-                  <TextArea
-                    id="applicationDocumentUploadDescription"
-                    labelText="Document Description"
-                    value={applicationDocumentDescription}
-                    onChange={(event) => setApplicationDocumentDescription(event.target.value)}
-                  />
-                  <div className="legacy-search-actions">
-                    <Button
-                      kind="primary"
-                      size="sm"
-                      disabled={isUploadingApplicationDocument}
-                      onClick={() => void onUploadApplicationDocument()}
-                    >
-                      {isUploadingApplicationDocument ? 'Uploading...' : 'Upload Document'}
-                    </Button>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      disabled={isUploadingApplicationDocument}
-                      onClick={() => {
-                        setSelectedApplicationDocumentFile(null)
-                        setApplicationDocumentDescription('')
-                        setApplicationDocumentValidationMessage('')
-                        setApplicationDocumentUploadInputKey((current) => current + 1)
-                      }}
-                    >
-                      Reset Upload
-                    </Button>
-                  </div>
-                </div>
+              {!!documentUploadUnavailableMessage && canUploadApplicationDocuments && (
+                <InlineNotification
+                  kind="info"
+                  title="Upload unavailable"
+                  subtitle={documentUploadUnavailableMessage}
+                  lowContrast
+                  hideCloseButton
+                />
+              )}
+              {canAddApplicationDocuments && (
+                <DetailDocumentUploadPanel
+                  workflowType="application"
+                  targetNumber={String(detail.applicationNumber ?? '')}
+                  inputId="applicationDocumentUpload"
+                  disabled={!detail.applicationNumber}
+                  onUploadComplete={refreshApplicationDocuments}
+                />
               )}
               <TextInput
                 id="applicationDetailDocumentsFilter"

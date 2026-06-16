@@ -337,6 +337,36 @@ describe('Provincial Review Action State Smoke', () => {
     ).toBeInTheDocument()
   })
 
+  it('sends selected region org unit numbers to the review search request', async () => {
+    mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
+      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      regions: [{ value: '1818', label: 'TST' }],
+      reviewStatuses: [{ value: 'REJ', label: 'Rejected' }],
+    })
+
+    renderPage()
+    await screen.findByText('1000123')
+    await waitFor(() => {
+      expect(mockedFetchApplicationReviewOptions).toHaveBeenCalledTimes(1)
+    })
+    mockedSearchApplicationReviews.mockClear()
+
+    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'TST' } })
+    await userEvent.click(await screen.findByRole('option', { name: 'TST (1818)' }))
+
+    await waitFor(() => {
+      expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            region: ['1818'],
+          }),
+        }),
+      )
+    })
+  })
+
   it('disables selection and action buttons when user lacks review permission', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) =>

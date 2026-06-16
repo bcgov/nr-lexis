@@ -1,5 +1,10 @@
 package ca.bc.gov.mof.lexis.service.review;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewPreviewResponseDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchOptionsDto;
@@ -9,11 +14,11 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Slice;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -198,33 +203,14 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
         input.receivedToDate(),
         input.listingFromDate(),
         input.listingToDate(),
-        normalizeRegions(input.regionNumbers()),
+        positiveDistinctLongs(input.regionNumbers()),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
   }
 
-  private List<Long> normalizeRegions(List<Long> rawValues) {
-    if (rawValues == null) {
-      return List.of();
-    }
-    return rawValues.stream().filter(value -> value != null && value > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
   private String defaultMutationUser(String userId) {
-    String normalized = trimToNull(userId);
-    return normalized == null ? "system" : normalized;
+    return defaultSystemUser(userId);
   }
 
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

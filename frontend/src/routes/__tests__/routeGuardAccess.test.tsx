@@ -42,7 +42,7 @@ describe('Protected route guard access', () => {
     expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
   })
 
-  it('allows upload center when one matching upload action is granted', async () => {
+  it('allows upload page when one matching upload action is granted', async () => {
     mockedUseAuth.mockReturnValue({
       capabilities: {
         authenticated: true,
@@ -59,6 +59,6 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/admin/uploads?type=application')
 
-    expect(await screen.findByRole('heading', { name: 'Upload Center' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Data Upload' })).toBeInTheDocument()
   })
 })

@@ -1,5 +1,9 @@
 package ca.bc.gov.mof.lexis.repository.exemption;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
+
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.io.InputStream;
 import java.sql.CallableStatement;
@@ -393,9 +397,9 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
 
   private ApplicationSummaryRow mapApplicationSummaryRow(ResultSet rs) {
     return new ApplicationSummaryRow(
-        defaultLong(getLong(rs, "APPLICATION_NUMBER"), 0L),
-        defaultDouble(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), 0.0d),
-        defaultDouble(
+        coalesce(getLong(rs, "APPLICATION_NUMBER"), 0L),
+        coalesce(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), 0.0d),
+        coalesce(
             Optional.ofNullable(getDouble(rs, "TOTAL_SCALE_VOLUME"))
                 .orElse(getDouble(rs, "SCALE_VOLUME")),
             0.0d),
@@ -409,9 +413,9 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         Optional.ofNullable(getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"))
             .orElse(getLong(rs, "EXPORT_PERMIT_NUMBER"));
     return new PermitSummaryRow(
-        defaultLong(permitNumber, 0L),
-        defaultDouble(getDouble(rs, "PERMIT_VOLUME"), 0.0d),
-        defaultDouble(getDouble(rs, "OIC_REQUEST_VOLUME"), 0.0d),
+        coalesce(permitNumber, 0L),
+        coalesce(getDouble(rs, "PERMIT_VOLUME"), 0.0d),
+        coalesce(getDouble(rs, "OIC_REQUEST_VOLUME"), 0.0d),
         valueOrEmpty(getString(rs, "STATUS_DESCRIPTION")),
         valueOrEmpty(getString(rs, "EXPORT_PERMIT_STATUS_CODE")),
         getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
@@ -422,7 +426,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
   private DocumentRow mapDocumentRow(ResultSet rs) {
     Long attachmentId = getLong(rs, "EXPORT_ATTACHMENT_ID");
     return new DocumentRow(
-        defaultLong(attachmentId, 0L),
+        coalesce(attachmentId, 0L),
         safeFileName(valueOrEmpty(getString(rs, "FILE_NAME"))),
         valueOrEmpty(getString(rs, "DESCRIPTION")),
         valueOrEmpty(getString(rs, "EXPORT_ATTACHMENT_TYPE_CODE")));
@@ -464,7 +468,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         getLocalDate(rs, "APPLICATION_DATE"),
         getLong(rs, "TERM_DAYS"),
         getLocalDate(rs, "RECEIVED_DATE"),
-        firstNonNullDouble(
+        firstNonNull(
             getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
             getDouble(rs, "APPLICATION_VOLUME")),
         getDouble(rs, "AVERAGE_LOG_VOLUME"),
@@ -495,7 +499,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     ApplicationLinkRecord app = record.application();
     int index = 1;
     setLongOrNull(cs, index++, app.applicationNumber());
-    setLongOrNull(cs, index++, emptyToNull(app.federalApplicationNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(app.federalApplicationNumber()));
     setDateOrNull(cs, index++, app.applicationDate());
     setLongOrNull(cs, index++, app.termDays());
     setDateOrNull(cs, index++, app.receivedDate());
@@ -524,24 +528,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index, app.oicIndicator());
   }
 
-  private long defaultLong(Long value, long fallback) {
-    return value == null ? fallback : value;
-  }
-
-  private double defaultDouble(Double value, double fallback) {
-    return value == null ? fallback : value;
-  }
-
   private String valueOrEmpty(String value) {
     return value == null ? "" : value;
-  }
-
-  private Double firstNonNullDouble(Double first, Double second) {
-    return first == null ? second : first;
-  }
-
-  private Long emptyToNull(Long value) {
-    return value == null || value <= 0 ? null : value;
   }
 
   private String safeFileName(String value) {

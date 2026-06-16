@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.session;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionWelcomeDto;
 import java.util.Arrays;
 import java.util.Collection;
@@ -66,7 +68,7 @@ public class LexisSessionService {
 
     return new LexisSessionWelcomeDto(
         principalName != null && !principalName.isBlank(),
-        blankToNull(principalName),
+        trimToNull(principalName),
         roles,
         target.forwardName,
         target.legacyPath);
@@ -232,14 +234,6 @@ public class LexisSessionService {
 
   private boolean isForestClientScopedRole(String role) {
     return ROLE_PROVINCIAL_SUBMITTER.equals(role);
-  }
-
-  private String blankToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private enum WelcomeTarget {

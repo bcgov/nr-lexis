@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.federal;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
@@ -246,7 +248,4 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
     }
   }
 
-  private String firstNonNull(String first, String second) {
-    return first != null ? first : second;
-  }
 }

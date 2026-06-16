@@ -1,6 +1,13 @@
-import { getCachedSearchResponse } from '@/service/cached-search-service'
+import {
+  appendNumericSearchParams,
+  appendSearchParam,
+  appendSearchSortAndPageParams,
+  getCachedSearchResponse,
+  parsePagedSearchResponse,
+} from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
+import { joinNonBlankText } from '@/utils/text'
 import type {
   ProvincialPermitSearchRequest,
   ProvincialPermitSearchResponse,
@@ -17,83 +24,66 @@ type BackendProvincialPermitSearchResult = {
   region: string
 }
 
-type BackendProvincialPermitSearchResponse = {
-  results: BackendProvincialPermitSearchResult[]
-  total: number
-  page: number
-  size: number
-}
-
 type ProvincialPermitSearchOptions = {
   knownTotal?: number
+}
+
+export type ProvincialPermitNumberOption = {
+  value: string
+  label: string
+  status: ProvincialPermitStatus
+  applicantClientNumber: string
+  ownerClientNumber: string
+  totalVolume: number
+  issueDate: string
+  region: string
+}
+
+const DEFAULT_PERMIT_SEARCH_FILTERS = {
+  applicationNumber: '',
+  packageNumber: '',
+  region: [],
+  issuedFromDate: '',
+  issuedToDate: '',
+  permitStatus: '',
+  permitNumber: '',
+  ownerClientNumber: '',
+  applicantClientNumber: '',
 }
 
 const buildBackendParams = (request: ProvincialPermitSearchRequest): URLSearchParams => {
   const params = new URLSearchParams()
 
-  const appendIfPresent = (key: string, value: string) => {
-    const trimmed = value.trim()
-    if (trimmed.length > 0) {
-      params.append(key, trimmed)
-    }
-  }
-
   const { filters } = request
-  appendIfPresent('applicationNumber', filters.applicationNumber)
-  appendIfPresent('packageNumber', filters.packageNumber)
-  appendIfPresent('permitNumber', filters.permitNumber)
-  appendIfPresent('issuedFromDate', filters.issuedFromDate)
-  appendIfPresent('issuedToDate', filters.issuedToDate)
-  appendIfPresent('permitStatus', filters.permitStatus)
-  appendIfPresent('applicantClientNumber', filters.applicantClientNumber)
-  appendIfPresent('ownerClientNumber', filters.ownerClientNumber)
-
-  filters.region
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value) && value > 0)
-    .forEach((value) => {
-      params.append('region', String(value))
-    })
-
-  const backendSortField =
-    request.sortDirection === 'desc' ? `${request.sortField} DESC` : request.sortField
-  params.append('sortField', backendSortField)
-  params.append('page', String(request.page))
-  params.append('size', String(request.pageSize))
+  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
+  appendSearchParam(params, 'packageNumber', filters.packageNumber)
+  appendSearchParam(params, 'permitNumber', filters.permitNumber)
+  appendSearchParam(params, 'issuedFromDate', filters.issuedFromDate)
+  appendSearchParam(params, 'issuedToDate', filters.issuedToDate)
+  appendSearchParam(params, 'permitStatus', filters.permitStatus)
+  appendSearchParam(params, 'applicantClientNumber', filters.applicantClientNumber)
+  appendSearchParam(params, 'ownerClientNumber', filters.ownerClientNumber)
+  appendNumericSearchParams(params, 'region', filters.region)
+  appendSearchSortAndPageParams(params, request)
 
   return params
 }
 
 const parseBackendResponse = (payload: unknown): ProvincialPermitSearchResponse | null => {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
-    return null
-  }
-
-  const backendResponse = payload as BackendProvincialPermitSearchResponse
-  const totalElements = Number.isFinite(backendResponse.total) ? backendResponse.total : 0
-  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 10
-  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
-  const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
-
-  return {
-    content: backendResponse.results.map((row) => ({
-      applicationNumber: '',
-      packageNumber: '',
-      permitNumber: String(row.permitNumber ?? ''),
-      status: (row.statusDescription ?? 'Active') as ProvincialPermitStatus,
-      applicantClientNumber: row.applicantClientNumber ?? '',
-      ownerClientNumber: row.ownerClientNumber ?? '',
-      totalVolume: row.totalVolume ?? 0,
-      issueDate: row.issueDate ?? '',
-      region: row.region ?? '',
-    })),
-    page: {
-      number: pageNumber,
-      size: pageSize,
-      totalElements,
-      totalPages,
-    },
-  }
+  return parsePagedSearchResponse<
+    BackendProvincialPermitSearchResult,
+    ProvincialPermitSearchResponse['content'][number]
+  >(payload, (row) => ({
+    applicationNumber: '',
+    packageNumber: '',
+    permitNumber: String(row.permitNumber ?? ''),
+    status: (row.statusDescription ?? 'Active') as ProvincialPermitStatus,
+    applicantClientNumber: row.applicantClientNumber ?? '',
+    ownerClientNumber: row.ownerClientNumber ?? '',
+    totalVolume: row.totalVolume ?? 0,
+    issueDate: row.issueDate ?? '',
+    region: row.region ?? '',
+  }))
 }
 
 export const searchProvincialPermits = async (
@@ -127,3 +117,50 @@ export const countProvincialPermits = async (
     buildBackendParams(request),
     'Unable to count provincial permit search results.',
   )
+
+const permitNumberOptionLabel = (item: ProvincialPermitSearchResponse['content'][number]): string =>
+  joinNonBlankText(
+    [
+      item.permitNumber,
+      item.status,
+      item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
+      item.region ? `Region ${item.region}` : '',
+      item.issueDate,
+    ],
+    ' - ',
+  )
+
+export const searchProvincialPermitNumberOptions = async (
+  query: string,
+): Promise<ProvincialPermitNumberOption[]> => {
+  const response = await searchProvincialPermits({
+    filters: {
+      ...DEFAULT_PERMIT_SEARCH_FILTERS,
+      permitNumber: query,
+    },
+    page: 0,
+    pageSize: 20,
+    sortField: 'permitNumber',
+    sortDirection: 'desc',
+  })
+
+  const seen = new Set<string>()
+  return response.content
+    .filter((item) => {
+      if (!item.permitNumber || seen.has(item.permitNumber)) {
+        return false
+      }
+      seen.add(item.permitNumber)
+      return true
+    })
+    .map((item) => ({
+      value: item.permitNumber,
+      label: permitNumberOptionLabel(item),
+      status: item.status,
+      applicantClientNumber: item.applicantClientNumber,
+      ownerClientNumber: item.ownerClientNumber,
+      totalVolume: item.totalVolume,
+      issueDate: item.issueDate,
+      region: item.region,
+    }))
+}

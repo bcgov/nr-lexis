@@ -17,8 +17,14 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import {
+  displayValue,
+  matchesFilter,
+  normalizeFilterText as normalizeText,
+} from '@/pages/shared/detail-page-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchFederalApplicationDetail } from '@/service/lexis-detail-service'
 import {
@@ -27,38 +33,7 @@ import {
   removeFederalApplicationDocument,
   type FederalApplicationDocumentRow,
 } from '@/service/federal-application-documents-service'
-
-const displayValue = (value: string | number | null | undefined): string => {
-  if (value === null || value === undefined || value === '') {
-    return 'Not provided'
-  }
-  return String(value)
-}
-
-const normalizeText = (value: string): string => value.trim().toLowerCase()
-
-const triggerBrowserDownload = (blob: Blob, filename: string): void => {
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = objectUrl
-  anchor.download = filename
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(objectUrl)
-}
-
-const matchesFilter = (
-  values: Array<string | number | null | undefined>,
-  filterValue: string,
-): boolean => {
-  if (!filterValue.trim()) {
-    return true
-  }
-
-  const normalizedFilter = normalizeText(filterValue)
-  return values.some((value) => normalizeText(String(value ?? '')).includes(normalizedFilter))
-}
+import { triggerBrowserDownload } from '@/utils/download'
 
 const FederalApplicationDetailsPage: FC = () => {
   const navigate = useNavigate()
@@ -202,6 +177,16 @@ const FederalApplicationDetailsPage: FC = () => {
     canPerform('/federalApplicationSearch') || canPerform('viewFederalApplication')
   const canManageDocuments = canPerform('/fileApplicationUpload')
 
+  const refreshFederalApplicationDocuments = useCallback(async () => {
+    if (!applicationNumber) {
+      return
+    }
+
+    const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
+    setDocumentRows(documentsResult.rows)
+    setDocumentsErrorMessage('')
+  }, [applicationNumber])
+
   const onOpenApplicationUpload = useCallback(() => {
     if (!detail) {
       return
@@ -215,12 +200,8 @@ const FederalApplicationDetailsPage: FC = () => {
     }
     setActionErrorMessage('')
     setActionInfoMessage('')
-    const params = new URLSearchParams({
-      type: 'application',
-      applicationNumber: resolvedApplicationNumber,
-    })
-    navigate(`/admin/uploads?${params.toString()}`)
-  }, [applicationNumber, detail, navigate])
+    document.getElementById('federalApplicationDocumentUpload')?.scrollIntoView({ block: 'start' })
+  }, [applicationNumber, detail])
 
   const onOpenDocument = useCallback(async (row: FederalApplicationDocumentRow) => {
     setActionErrorMessage('')
@@ -539,6 +520,15 @@ const FederalApplicationDetailsPage: FC = () => {
               <h2 className="detail-tile-title">
                 Documents <Tag type="green">API</Tag>
               </h2>
+              {canManageDocuments && (
+                <DetailDocumentUploadPanel
+                  workflowType="application"
+                  targetNumber={String(detail.applicationNumber ?? applicationNumber ?? '')}
+                  inputId="federalApplicationDocumentUpload"
+                  disabled={!detail.applicationNumber && !applicationNumber}
+                  onUploadComplete={refreshFederalApplicationDocuments}
+                />
+              )}
               <TextInput
                 id="federalDetailDocumentsFilter"
                 labelText="Filter document rows"

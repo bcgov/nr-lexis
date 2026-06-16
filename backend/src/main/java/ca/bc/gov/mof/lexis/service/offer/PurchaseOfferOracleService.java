@@ -1,11 +1,17 @@
 package ca.bc.gov.mof.lexis.service.offer;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
+import static ca.bc.gov.mof.lexis.util.TextUtils.firstNonBlank;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.offer.PurchaseOfferRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -13,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -211,7 +218,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         trimToNull(input.offeringClientNumber()),
         input.excludeWithdrawn(),
         input.restrictToProvincialOrNullJurisdiction(),
-        normalizeRegions(input.regionNumbers()),
+        positiveDistinctLongs(input.regionNumbers()),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
@@ -441,38 +448,13 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         || !equalsNullable(current.offerVolume(), updated.offerVolume());
   }
 
-  private List<Long> normalizeRegions(List<Long> rawRegions) {
-    if (rawRegions == null) {
-      return List.of();
-    }
-    return rawRegions.stream().filter(region -> region != null && region > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
   private String normalizePackageNumber(String value) {
     String normalized = trimToNull(value);
     return "No Packages".equalsIgnoreCase(normalized) ? null : normalized;
   }
 
-  private String firstNonBlank(String value, String fallback) {
-    String normalized = trimToNull(value);
-    return normalized == null ? fallback : normalized;
-  }
-
   private String defaultMutationUser(String userId) {
-    String normalized = trimToNull(userId);
-    return normalized == null ? "system" : normalized;
-  }
-
-  private <T> T firstNonNull(T value, T fallback) {
-    return value == null ? fallback : value;
+    return defaultSystemUser(userId);
   }
 
   private boolean equalsNullable(Object left, Object right) {
@@ -490,7 +472,4 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     return "A valid " + fieldName + " is required.";
   }
 
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

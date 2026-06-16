@@ -18,6 +18,7 @@ import {
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
 import SearchableSelect from '@/components/SearchableSelect'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import type {
   FederalApplicationSearchFilters,
   FederalApplicationSearchItem,
@@ -26,6 +27,7 @@ import type {
   FederalApplicationSearchSortField,
 } from '@/interfaces/FederalApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -106,11 +108,6 @@ const buildSearchParams = (
   setSearchParam(params, 'pageSize', pageSize)
 
   return params
-}
-
-const isValidIsoDate = (value: string): boolean => {
-  if (!value.trim()) return true
-  return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
 }
 
 type ExemptionSelectionStatus = {
@@ -424,37 +421,37 @@ const FederalPage: FC = () => {
               value={filters.clientNumber}
               onChange={(event) => updateFilter('clientNumber', event.target.value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="receivedFromDate"
               labelText="Received From Date (YYYY-MM-DD)"
               value={filters.receivedFromDate}
               invalid={!isValidIsoDate(filters.receivedFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('receivedFromDate', event.target.value)}
+              onChange={(value) => updateFilter('receivedFromDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="receivedToDate"
               labelText="Received To Date (YYYY-MM-DD)"
               value={filters.receivedToDate}
               invalid={!isValidIsoDate(filters.receivedToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('receivedToDate', event.target.value)}
+              onChange={(value) => updateFilter('receivedToDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="listingFromDate"
               labelText="Listing From Date (YYYY-MM-DD)"
               value={filters.listingFromDate}
               invalid={!isValidIsoDate(filters.listingFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingFromDate', event.target.value)}
+              onChange={(value) => updateFilter('listingFromDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="listingToDate"
               labelText="Listing To Date (YYYY-MM-DD)"
               value={filters.listingToDate}
               invalid={!isValidIsoDate(filters.listingToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingToDate', event.target.value)}
+              onChange={(value) => updateFilter('listingToDate', value)}
             />
           </div>
           <div className="legacy-search-actions">

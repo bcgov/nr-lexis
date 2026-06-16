@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
+
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitDetailDto;
@@ -13,9 +15,6 @@ import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -30,7 +29,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/lexis/indian-reserve/permits")
@@ -38,8 +36,6 @@ import org.springframework.web.server.ResponseStatusException;
 public class IndianReservePermitController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(IndianReservePermitController.class);
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
   private static final String LEGACY_ACTION_SAVE_PERMIT = "savePermit";
   private static final String LEGACY_ACTION_VIEW_OIC_APPLICATION = "viewOICApplication";
 
@@ -174,34 +170,12 @@ public class IndianReservePermitController {
     return new IndianReservePermitSearchCriteria(
         permitNumber,
         packageNumber,
-        parseDate(issuedFromDate),
-        parseDate(issuedToDate),
-        parseDate(shippingFromDate),
-        parseDate(shippingToDate),
+        parseSearchDate(issuedFromDate),
+        parseSearchDate(issuedToDate),
+        parseSearchDate(shippingFromDate),
+        parseSearchDate(shippingToDate),
         page,
         size);
-  }
-
-  private LocalDate parseDate(String input) {
-    if (input == null || input.trim().isEmpty()) {
-      return null;
-    }
-
-    String value = input.trim();
-    try {
-      return LocalDate.parse(value);
-    } catch (DateTimeParseException ignored) {
-      // Fallback for legacy date format.
-    }
-
-    try {
-      return LocalDate.parse(value, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ex) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST,
-          "Invalid date value '" + value + "'. Use yyyy-MM-dd or MM/dd/yyyy.",
-          ex);
-    }
   }
 
   private CreatePermitRequest toCreatePermitRequest(MultiValueMap<String, String> parameters) {

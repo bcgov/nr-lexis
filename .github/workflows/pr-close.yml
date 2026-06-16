@@ -5,6 +5,8 @@ on:
     types: [closed]
 
 concurrency:
+  # PR open and close use the same group, allowing only one to mutate a
+  # preview environment at a time.
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
@@ -20,40 +22,6 @@ jobs:
       oc_namespace: ${{ secrets.oc_namespace }}
       oc_token: ${{ secrets.oc_token }}
     with:
-      environment: dev
       cleanup: label
       packages: backend frontend
-      # Use explicit backend/frontend labels so PR cleanup removes both stacks.
-      cleanup_name: ${{ github.event.repository.name }}-backend-${{ github.event.number }} ${{ github.event.repository.name }}-frontend-${{ github.event.number }}
-
-  cleanup-preview-resources:
-    name: Cleanup Preview Resources
-    needs: [cleanup]
-    if: always()
-    runs-on: ubuntu-24.04
-    environment: dev
-    timeout-minutes: 10
-    steps:
-      - name: Delete PR OpenShift resources
-        uses: bcgov/action-oc-runner@d2fc921aaa9d70684c186dbb7754e6985d44d86f # v1.4.1
-        with:
-          oc_namespace: ${{ secrets.oc_namespace }}
-          oc_token: ${{ secrets.oc_token }}
-          oc_server: ${{ vars.OC_SERVER || 'https://api.silver.devops.gov.bc.ca:6443' }}
-          commands: |
-            set -euo pipefail
-
-            APP="${{ github.event.repository.name }}"
-            PR="${{ github.event.number }}"
-            RESOURCE_TYPES="deploy,rs,pod,svc,route,hpa,networkpolicy,secret,pvc,cm"
-
-            echo "Deleting preview resources for PR ${PR}"
-
-            for component in backend frontend; do
-              label="${APP}-${component}-${PR}"
-              echo "Deleting resources labelled app=${label}"
-              oc delete "${RESOURCE_TYPES}" -l "app=${label}" --ignore-not-found
-            done
-
-            echo "Deleting generated backend serving cert secret, if present"
-            oc delete secret "${APP}-backend-cert-${PR}" --ignore-not-found
+      cleanup_name: nr-lexis-backend-${{ github.event.number }} nr-lexis-frontend-${{ github.event.number }}

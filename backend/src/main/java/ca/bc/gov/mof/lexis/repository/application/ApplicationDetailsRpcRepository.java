@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
+
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.io.InputStream;
 import java.sql.CallableStatement;
@@ -779,7 +781,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       throws SQLException {
     int index = 1;
     setDateOrNull(cs, index++, record.applicationDate());
-    setLongOrNull(cs, index++, emptyToNull(record.federalApplicationNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(record.federalApplicationNumber()));
     setLongOrNull(cs, index++, record.termDays());
     setDateOrNull(cs, index++, record.receivedDate());
     setDoubleOrNull(cs, index++, record.applicationVolume());
@@ -811,7 +813,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       throws SQLException {
     int index = 1;
     setLongOrNull(cs, index++, record.applicationNumber());
-    setLongOrNull(cs, index++, emptyToNull(record.federalApplicationNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(record.federalApplicationNumber()));
     setDateOrNull(cs, index++, record.applicationDate());
     setLongOrNull(cs, index++, record.termDays());
     setDateOrNull(cs, index++, record.receivedDate());
@@ -844,15 +846,15 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       throws SQLException {
     int index = 1;
     setStringOrNull(cs, index++, record.packageNumber());
-    setLongOrNull(cs, index++, emptyToNull(record.applicationNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(record.applicationNumber()));
     setStringOrNull(cs, index++, record.reprocessedIndicator());
     setDoubleOrNull(cs, index++, record.packageVolume());
     setDoubleOrNull(cs, index++, record.averageLength());
     setDoubleOrNull(cs, index++, record.averageDiameter());
     setStringOrNull(cs, index++, record.comments());
     setDoubleOrNull(cs, index++, record.packageFee());
-    setLongOrNull(cs, index++, emptyToNull(record.federalPermitNumber()));
-    setLongOrNull(cs, index++, emptyToNull(record.reservePermitNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(record.federalPermitNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(record.reservePermitNumber()));
     setStringOrNull(cs, index++, record.packageStatusCode());
     setStringOrNull(cs, index++, record.growthTypeCode());
     setStringOrNull(cs, index++, record.productTypeCode());
@@ -873,8 +875,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setDoubleOrNull(cs, index++, record.averageDiameter());
     setStringOrNull(cs, index++, record.comments());
     setDoubleOrNull(cs, index++, record.packageFee());
-    setLongOrNull(cs, index++, emptyToNull(record.federalPermitNumber()));
-    setLongOrNull(cs, index++, emptyToNull(record.reservePermitNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(record.federalPermitNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(record.reservePermitNumber()));
     setStringOrNull(cs, index++, record.packageStatusCode());
     setStringOrNull(cs, index++, record.growthTypeCode());
     setStringOrNull(cs, index++, record.productTypeCode());
@@ -897,7 +899,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.packageNumber());
     setStringOrNull(cs, index++, record.speciesCode());
     setStringOrNull(cs, index++, record.gradeCode());
-    setLongOrNull(cs, index++, emptyToNull(record.exportPermitDetailNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(record.exportPermitDetailNumber()));
     setDoubleOrNull(cs, index, record.exemptionOverrideRate());
   }
 
@@ -905,7 +907,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       throws SQLException {
     int index = 1;
     setLongOrNull(cs, index++, parsePositiveLong(record.scaleDetailId()));
-    setLongOrNull(cs, index++, emptyToNull(record.exportPermitDetailNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(record.exportPermitDetailNumber()));
     setStringOrNull(cs, index++, record.timberMark());
     setLongOrNull(cs, index++, record.piecesCount());
     setDoubleOrNull(cs, index++, record.speciesGradeVolume());
@@ -1378,7 +1380,4 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     }
   }
 
-  private Long emptyToNull(Long value) {
-    return value == null || value <= 0 ? null : value;
-  }
 }

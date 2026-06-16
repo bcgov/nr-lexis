@@ -1,0 +1,71 @@
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
+import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
+import { submitAdminUpload } from '@/service/admin-upload-service'
+
+vi.mock('@/service/admin-upload-service', () => ({
+  submitAdminUpload: vi.fn(),
+}))
+
+const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+
+describe('DetailDocumentUploadPanel', () => {
+  it('disables file selection when upload access is not available', () => {
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        disabled
+        disabledReason="Upload access is read only."
+      />,
+    )
+
+    expect(screen.getByLabelText('Document File')).toBeDisabled()
+    expect(screen.getByText('Browse files')).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('Upload access is read only.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit Upload' })).toBeDisabled()
+  })
+
+  it('shows a visible refresh error after a successful upload when refresh fails', async () => {
+    const refreshDocuments = vi.fn().mockRejectedValue(new Error('refresh failed'))
+    const file = new File(['document upload'], 'application-document.pdf', {
+      type: 'application/pdf',
+    })
+    mockedSubmitAdminUpload.mockResolvedValue({
+      status: 'success',
+      message: 'Application document upload submitted.',
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        onUploadComplete={refreshDocuments}
+      />,
+    )
+
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'application',
+        expect.objectContaining({
+          applicationNumber: '321',
+          file,
+        }),
+      )
+    })
+    await waitFor(() => {
+      expect(refreshDocuments).toHaveBeenCalledTimes(1)
+    })
+
+    expect(await screen.findByText('Upload Error')).toBeInTheDocument()
+    expect(
+      screen.getByText('Documents uploaded, but the document list could not refresh.'),
+    ).toBeInTheDocument()
+  })
+})

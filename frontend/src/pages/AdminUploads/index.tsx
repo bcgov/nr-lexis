@@ -1,26 +1,36 @@
-import { useMemo, useState, type FC } from 'react'
-import {
-  Button,
-  Column,
-  Grid,
-  InlineNotification,
-  Tag,
-  TextArea,
-  TextInput,
-  Tile,
-} from '@carbon/react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
+import { Column, ComboBox, Grid, InlineNotification, Tag, TextArea, TextInput } from '@carbon/react'
+import { Link, useSearchParams } from 'react-router-dom'
+import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
 import SearchableSelect from '@/components/SearchableSelect'
+import MultiFileDropZone from '@/components/uploads/MultiFileDropZone'
+import UploadQueuePreview from '@/components/uploads/UploadQueuePreview'
+import { buildLexisXmlPreviewMessage } from '@/components/uploads/lexisXmlPreview'
+import {
+  buildUploadResultMessage,
+  buildUploadReviewDetails,
+  extractUploadErrorDetails,
+  getFileExtension,
+} from '@/components/uploads/uploadQueueHelpers'
+import type {
+  UploadQueueItem,
+  UploadQueueReviewDetails,
+  UploadQueueStatus,
+} from '@/components/uploads/uploadQueueTypes'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   firstValidationError,
   getVisibleFieldError,
+  maxLengthFieldError,
   numericFieldError,
+  positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
 import { submitAdminUpload, type UploadWorkflowType } from '@/service/admin-upload-service'
+import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
+import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -33,7 +43,7 @@ type UploadWorkflowDefinition = {
 const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   {
     type: 'lexisXml',
-    label: 'LEXIS XML Upload',
+    label: 'LEXIS Import',
     requiredAction: 'createApplication',
     numberFieldLabel: '',
     numberFieldPlaceholder: '',
@@ -81,6 +91,29 @@ type UploadFormState = {
 
 type UploadField = keyof UploadFormState | 'uploadFile'
 
+type QueuedUploadResult = {
+  message: string
+  applicationNumber?: number
+  details?: UploadQueueReviewDetails
+}
+
+type UploadTargetNumberOption = {
+  value: string
+  label: string
+}
+
+type UploadTargetNumberSelectProps = {
+  id: string
+  labelText: ReactNode
+  value: string
+  invalid?: boolean
+  invalidText?: ReactNode
+  searchOptions: (query: string) => Promise<UploadTargetNumberOption[]>
+  normalizeInput?: (input: string) => string
+  onBlur?: () => void
+  onChange: (value: string) => void
+}
+
 const INITIAL_FORM_STATE: UploadFormState = {
   applicationNumber: '',
   exemptionNumber: '',
@@ -127,27 +160,184 @@ const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState
   }
 }
 
-const extractUploadErrorMessage = (error: unknown): string => {
-  const response = (error as any)?.response
-  const data = response?.data
-  const status = response?.status
+const trimTargetNumberInput = (input: string): string => input.trim()
 
-  if (Array.isArray(data?.errors) && data.errors.length > 0) {
-    return data.errors.join(' ')
+const targetNumberFromNumericInput = (input: string): string => input.match(/^\d+/)?.[0] ?? ''
+
+const uploadTargetItemToString = (
+  item: UploadTargetNumberOption | string | null | undefined,
+): string => {
+  if (typeof item === 'string') {
+    return item
   }
-  if (typeof data?.errors === 'string' && data.errors.trim()) {
-    return data.errors
+  return item?.label ?? ''
+}
+
+const shouldFilterUploadTargetItem = ({
+  item,
+  inputValue,
+}: {
+  item: UploadTargetNumberOption
+  inputValue: string | null
+}): boolean => {
+  const query = inputValue?.trim().toLowerCase()
+  if (!query) {
+    return true
   }
-  if (typeof data?.message === 'string' && data.message.trim()) {
-    return data.message
+
+  return item.label.toLowerCase().includes(query) || item.value.toLowerCase().includes(query)
+}
+
+const UploadTargetNumberSelect: FC<UploadTargetNumberSelectProps> = ({
+  id,
+  labelText,
+  value,
+  invalid = false,
+  invalidText,
+  searchOptions,
+  normalizeInput = trimTargetNumberInput,
+  onBlur,
+  onChange,
+}) => {
+  const [options, setOptions] = useState<UploadTargetNumberOption[]>([])
+  const [inputText, setInputText] = useState(value)
+  const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    let ignore = false
+    const timeout = window.setTimeout(() => {
+      setIsLoading(true)
+      void searchOptions(normalizeInput(inputText))
+        .then((items) => {
+          if (!ignore) {
+            setOptions(items)
+          }
+        })
+        .catch(() => {
+          if (!ignore) {
+            setOptions([])
+          }
+        })
+        .finally(() => {
+          if (!ignore) {
+            setIsLoading(false)
+          }
+        })
+    }, 250)
+
+    return () => {
+      ignore = true
+      window.clearTimeout(timeout)
+    }
+  }, [inputText, normalizeInput, searchOptions])
+
+  const selectedItem = useMemo<UploadTargetNumberOption | null>(() => {
+    const matchingOption = options.find((option) => option.value === value)
+    if (matchingOption) {
+      return matchingOption
+    }
+    return value ? { value, label: value } : null
+  }, [options, value])
+
+  return (
+    <ComboBox
+      id={id}
+      titleText={labelText}
+      items={options}
+      selectedItem={selectedItem}
+      itemToString={uploadTargetItemToString}
+      shouldFilterItem={shouldFilterUploadTargetItem}
+      placeholder={isLoading ? 'Loading matches...' : 'Search by number'}
+      allowCustomValue
+      invalid={invalid}
+      invalidText={invalidText}
+      onBlur={onBlur}
+      onInputChange={(inputValue) => {
+        setInputText(inputValue)
+        onChange(normalizeInput(inputValue))
+      }}
+      onChange={({ selectedItem, inputValue }) => {
+        if (typeof selectedItem === 'string') {
+          onChange(normalizeInput(selectedItem))
+          return
+        }
+        onChange(selectedItem?.value ?? normalizeInput(inputValue ?? ''))
+      }}
+    />
+  )
+}
+
+const validateQueuedFile = (file: File, workflowType: UploadWorkflowType): string => {
+  if (!file.name.trim()) {
+    return 'File name is required.'
   }
-  if (typeof data === 'string' && data.trim()) {
-    return data
+
+  if (file.size === 0) {
+    return 'File is empty.'
   }
-  if (status) {
-    return `Upload request failed with status ${status}.`
+
+  const extension = getFileExtension(file.name)
+
+  if (workflowType === 'lexisXml') {
+    return extension === '.xml' ||
+      extension === '.zip' ||
+      extension === '.geojson' ||
+      extension === '.json'
+      ? ''
+      : 'LEXIS imports must use a .xml, .zip, .geojson, or .json file.'
   }
-  return 'Upload request failed. Please try again or contact support.'
+
+  if (!extension) {
+    return 'Document uploads need a file extension so LEXIS can resolve the file type.'
+  }
+
+  return ''
+}
+
+const workflowDescription = (workflowType: UploadWorkflowType): string => {
+  if (workflowType === 'lexisXml') {
+    return 'Import LEXIS XML or GeoJSON submissions and create the application, package, species, and scale rows in LEXIS.'
+  }
+  if (workflowType === 'invoice') {
+    return 'Attach an invoice file and invoice values to an existing permit.'
+  }
+  if (workflowType === 'application') {
+    return 'Attach one or more documents to an existing provincial application.'
+  }
+  if (workflowType === 'exemption') {
+    return 'Attach one or more documents to an existing exemption.'
+  }
+  return 'Attach one or more documents to an existing permit.'
+}
+
+const uploadTargetSummary = (
+  workflowType: UploadWorkflowType,
+  formState: UploadFormState,
+): string => {
+  if (workflowType === 'lexisXml') {
+    return 'Creates application, package, species, and scales'
+  }
+  if (workflowType === 'application') {
+    return formState.applicationNumber
+      ? `Application ${formState.applicationNumber}`
+      : 'Application not selected'
+  }
+  if (workflowType === 'exemption') {
+    return formState.exemptionNumber
+      ? `Exemption ${formState.exemptionNumber}`
+      : 'Exemption not selected'
+  }
+  if (workflowType === 'permit') {
+    return formState.permitNumber ? `Permit ${formState.permitNumber}` : 'Permit not selected'
+  }
+
+  const permitTarget = formState.permitNumber
+    ? `Permit ${formState.permitNumber}`
+    : 'Permit not selected'
+  const invoiceTarget = formState.salesInvoiceNumber
+    ? `invoice ${formState.salesInvoiceNumber}`
+    : 'invoice not selected'
+  return `${permitTarget}; ${invoiceTarget}`
 }
 
 const AdminUploadsPage: FC = () => {
@@ -159,7 +349,8 @@ const AdminUploadsPage: FC = () => {
   const [formState, setFormState] = useState<UploadFormState>(() =>
     buildInitialFormStateFromQuery(searchParams),
   )
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
+  const [fileInputKey, setFileInputKey] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -175,13 +366,32 @@ const AdminUploadsPage: FC = () => {
 
   const hasUploadAccess = canPerform(selectedWorkflow.requiredAction)
 
+  const invalidUploadCount = useMemo(
+    () => uploadQueue.filter((item) => item.status === 'invalid').length,
+    [uploadQueue],
+  )
+  const uploadInputLabel =
+    selectedWorkflowType === 'lexisXml' ? 'LEXIS Import File' : 'Document File'
+  const uploadAccept =
+    selectedWorkflowType === 'lexisXml'
+      ? '.xml,.zip,.geojson,.json,application/xml,text/xml,application/zip,application/json,application/geo+json'
+      : undefined
+  const uploadFormatText =
+    selectedWorkflowType === 'lexisXml'
+      ? 'Supported formats: .xml, .zip, .geojson, and .json'
+      : 'Supported files: any document with a file extension'
+  const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
+
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
-      uploadFile: selectedFile
-        ? undefined
-        : selectedWorkflowType === 'lexisXml'
-          ? 'Choose a LEXIS XML or ZIP file to import.'
-          : 'Choose a file to upload.',
+      uploadFile:
+        invalidUploadCount > 0
+          ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before upload.`
+          : uploadQueue.length > 0
+            ? undefined
+            : selectedWorkflowType === 'lexisXml'
+              ? 'Choose at least one LEXIS import file.'
+              : 'Choose at least one file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
           ? (requiredFieldError(formState.applicationNumber, 'Application number') ?? undefined)
@@ -196,26 +406,37 @@ const AdminUploadsPage: FC = () => {
           : undefined,
       salesInvoiceNumber:
         selectedWorkflowType === 'invoice'
-          ? (requiredFieldError(formState.salesInvoiceNumber, 'Invoice number') ?? undefined)
+          ? firstValidationError(
+              () => requiredFieldError(formState.salesInvoiceNumber, 'Invoice number'),
+              () => maxLengthFieldError(formState.salesInvoiceNumber, 9, 'Invoice number'),
+            )
           : undefined,
       invoiceExportValue:
         selectedWorkflowType === 'invoice'
           ? firstValidationError(
               () => requiredFieldError(formState.invoiceExportValue, 'Invoice export value'),
               () => numericFieldError(formState.invoiceExportValue, 'Invoice export value'),
+              () => positiveNumericFieldError(formState.invoiceExportValue),
             )
           : undefined,
       invoiceConversionRate:
         selectedWorkflowType === 'invoice'
-          ? (numericFieldError(formState.invoiceConversionRate, 'Invoice conversion rate') ??
-            undefined)
+          ? firstValidationError(
+              () => requiredFieldError(formState.invoiceConversionRate, 'Invoice conversion rate'),
+              () => numericFieldError(formState.invoiceConversionRate, 'Invoice conversion rate'),
+              () => positiveNumericFieldError(formState.invoiceConversionRate),
+            )
           : undefined,
       invoiceFeeInLieu:
         selectedWorkflowType === 'invoice'
-          ? (numericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu') ?? undefined)
+          ? firstValidationError(
+              () => requiredFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu'),
+              () => numericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu'),
+              () => positiveNumericFieldError(formState.invoiceFeeInLieu),
+            )
           : undefined,
     }),
-    [formState, selectedFile, selectedWorkflowType],
+    [formState, invalidUploadCount, uploadQueue.length, selectedWorkflowType],
   )
 
   const validationErrors = useMemo(
@@ -232,10 +453,183 @@ const AdminUploadsPage: FC = () => {
 
   const setWorkflowType = (workflowType: UploadWorkflowType): void => {
     setSelectedWorkflowType(workflowType)
+    setUploadQueue([])
+    setFileInputKey((current) => current + 1)
     setErrorMessage('')
     setSuccessMessage('')
     setShowValidationErrors(false)
     setSearchParams({ type: workflowType }, { replace: true })
+  }
+
+  const addFilesToQueue = (files: FileList | null): void => {
+    if (!files || files.length === 0) {
+      return
+    }
+
+    const queuedAt = Date.now()
+    const nextItems = Array.from(files).map((file, index) => {
+      const validationMessage = validateQueuedFile(file, selectedWorkflowType)
+
+      return {
+        id: `${queuedAt}-${index}-${file.name}-${file.size}`,
+        file,
+        workflowLabel: selectedWorkflow.label,
+        queuedAt,
+        status: validationMessage ? ('invalid' as const) : ('queued' as const),
+        message: validationMessage,
+        details: validationMessage
+          ? { summary: validationMessage, errors: [validationMessage] }
+          : undefined,
+      }
+    })
+
+    setUploadQueue((current) => [...current, ...nextItems])
+    if (selectedWorkflowType === 'lexisXml') {
+      nextItems
+        .filter((item) => item.status === 'queued')
+        .forEach((item) => {
+          void buildLexisXmlPreviewMessage(item.file).then((message) => {
+            if (!message) {
+              return
+            }
+            setUploadQueue((current) =>
+              current.map((currentItem) =>
+                currentItem.id === item.id &&
+                currentItem.status === 'queued' &&
+                !currentItem.message
+                  ? {
+                      ...currentItem,
+                      message,
+                      details: { ...currentItem.details, summary: message },
+                    }
+                  : currentItem,
+              ),
+            )
+          })
+        })
+    }
+    setErrorMessage('')
+    setSuccessMessage('')
+    markFieldTouched('uploadFile')
+    setFileInputKey((current) => current + 1)
+  }
+
+  const removeQueuedFile = (id: string): void => {
+    setUploadQueue((current) => current.filter((item) => item.id !== id))
+  }
+
+  const clearQueuedFiles = (): void => {
+    setUploadQueue([])
+    setFileInputKey((current) => current + 1)
+  }
+
+  const setQueueItemStatus = (
+    id: string,
+    status: UploadQueueStatus,
+    message = '',
+    resultApplicationNumber?: number,
+    targetSummary?: string,
+    details?: UploadQueueReviewDetails,
+  ): void => {
+    setUploadQueue((current) =>
+      current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status,
+              message,
+              details: details ?? item.details,
+              resultApplicationNumber,
+              targetSummary: targetSummary ?? item.targetSummary,
+            }
+          : item,
+      ),
+    )
+  }
+
+  const submitQueuedFile = async (file: File): Promise<QueuedUploadResult> => {
+    if (selectedWorkflowType === 'lexisXml') {
+      const result = await submitAdminUpload('lexisXml', {
+        file,
+        fileDescription: formState.fileDescription.trim(),
+      })
+      const message = buildUploadResultMessage(
+        'lexisXml',
+        'LEXIS import submitted. Verify the created application and package details.',
+        result,
+      )
+      return {
+        message,
+        applicationNumber: result.applicationNumber,
+        details: buildUploadReviewDetails(message, result),
+      }
+    }
+
+    if (selectedWorkflowType === 'application') {
+      const result = await submitAdminUpload('application', {
+        applicationNumber: formState.applicationNumber.trim(),
+        file,
+        fileDescription: formState.fileDescription.trim(),
+      })
+      const message = buildUploadResultMessage(
+        'application',
+        'Application document upload submitted.',
+        result,
+      )
+      return {
+        message,
+        details: buildUploadReviewDetails(message, result),
+      }
+    }
+
+    if (selectedWorkflowType === 'exemption') {
+      const result = await submitAdminUpload('exemption', {
+        exemptionNumber: formState.exemptionNumber.trim(),
+        file,
+        fileDescription: formState.fileDescription.trim(),
+      })
+      const message = buildUploadResultMessage(
+        'exemption',
+        'Exemption document upload submitted.',
+        result,
+      )
+      return {
+        message,
+        details: buildUploadReviewDetails(message, result),
+      }
+    }
+
+    if (selectedWorkflowType === 'permit') {
+      const result = await submitAdminUpload('permit', {
+        permitNumber: formState.permitNumber.trim(),
+        file,
+        fileDescription: formState.fileDescription.trim(),
+      })
+      const message = buildUploadResultMessage(
+        'permit',
+        'Permit document upload submitted.',
+        result,
+      )
+      return {
+        message,
+        details: buildUploadReviewDetails(message, result),
+      }
+    }
+
+    const result = await submitAdminUpload('invoice', {
+      permitNumber: formState.permitNumber.trim(),
+      salesInvoiceNumber: formState.salesInvoiceNumber.trim(),
+      invoiceExportValue: formState.invoiceExportValue.trim(),
+      invoiceConversionRate: formState.invoiceConversionRate.trim(),
+      invoiceFeeInLieu: formState.invoiceFeeInLieu.trim(),
+      file,
+      fileDescription: formState.fileDescription.trim(),
+    })
+    const message = buildUploadResultMessage('invoice', 'Invoice upload submitted.', result)
+    return {
+      message,
+      details: buildUploadReviewDetails(message, result),
+    }
   }
 
   const onSubmitUpload = async (): Promise<void> => {
@@ -253,269 +647,83 @@ const AdminUploadsPage: FC = () => {
       return
     }
 
-    if (!selectedFile) {
-      setErrorMessage('Choose a file to upload.')
+    if (uploadQueue.length === 0) {
+      setErrorMessage('Choose at least one file to upload.')
       return
     }
 
     setIsSubmitting(true)
 
-    try {
-      if (selectedWorkflowType === 'lexisXml') {
-        const result = await submitAdminUpload('lexisXml', {
-          file: selectedFile,
-          fileDescription: formState.fileDescription.trim(),
-        })
-        setSuccessMessage(
-          result.message ??
-            'LEXIS XML import submitted. Verify the created application and package details.',
-        )
-      } else if (selectedWorkflowType === 'application') {
-        await submitAdminUpload('application', {
-          applicationNumber: formState.applicationNumber.trim(),
-          file: selectedFile,
-          fileDescription: formState.fileDescription.trim(),
-        })
-      } else if (selectedWorkflowType === 'exemption') {
-        await submitAdminUpload('exemption', {
-          exemptionNumber: formState.exemptionNumber.trim(),
-          file: selectedFile,
-          fileDescription: formState.fileDescription.trim(),
-        })
-      } else if (selectedWorkflowType === 'permit') {
-        await submitAdminUpload('permit', {
-          permitNumber: formState.permitNumber.trim(),
-          file: selectedFile,
-          fileDescription: formState.fileDescription.trim(),
-        })
-      } else {
-        await submitAdminUpload('invoice', {
-          permitNumber: formState.permitNumber.trim(),
-          salesInvoiceNumber: formState.salesInvoiceNumber.trim(),
-          invoiceExportValue: formState.invoiceExportValue.trim(),
-          invoiceConversionRate: formState.invoiceConversionRate.trim(),
-          invoiceFeeInLieu: formState.invoiceFeeInLieu.trim(),
-          file: selectedFile,
-          fileDescription: formState.fileDescription.trim(),
-        })
+    let successCount = 0
+    let failureCount = 0
+    let lastSuccessMessage = ''
+
+    for (const item of uploadQueue) {
+      if (item.status === 'complete' || item.status === 'invalid') {
+        continue
       }
 
-      if (selectedWorkflowType !== 'lexisXml') {
-        setSuccessMessage(
-          'Upload request submitted. Verify document and invoice updates in the target details view.',
+      setQueueItemStatus(item.id, 'uploading', '', undefined, currentUploadTargetSummary)
+
+      try {
+        const result = await submitQueuedFile(item.file)
+        successCount += 1
+        lastSuccessMessage = result.message
+        setQueueItemStatus(
+          item.id,
+          'complete',
+          result.message,
+          result.applicationNumber,
+          currentUploadTargetSummary,
+          result.details,
+        )
+      } catch (error) {
+        failureCount += 1
+        const uploadError = extractUploadErrorDetails(error)
+        setQueueItemStatus(
+          item.id,
+          'failed',
+          uploadError.message,
+          undefined,
+          currentUploadTargetSummary,
+          uploadError.details,
         )
       }
-      setSelectedFile(null)
-    } catch (error) {
-      setErrorMessage(extractUploadErrorMessage(error))
-    } finally {
-      setIsSubmitting(false)
     }
+
+    if (successCount > 0) {
+      setSuccessMessage(
+        successCount === 1
+          ? lastSuccessMessage
+          : `${successCount} files uploaded. Verify updates in the target details view.`,
+      )
+    }
+
+    if (failureCount > 0) {
+      setErrorMessage(
+        `${failureCount} file${failureCount === 1 ? '' : 's'} failed. Review the queue for details.`,
+      )
+    }
+
+    setIsSubmitting(false)
   }
 
   const onReset = (): void => {
     setFormState(INITIAL_FORM_STATE)
-    setSelectedFile(null)
+    clearQueuedFiles()
     setErrorMessage('')
     setSuccessMessage('')
     setShowValidationErrors(false)
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid admin-upload-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Upload Center</h1>
+        <h1>Data Upload</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <div className="legacy-search-grid">
-            <SearchableSelect
-              id="uploadWorkflowType"
-              labelText="Upload Type"
-              value={selectedWorkflowType}
-              options={UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
-                value: workflow.type,
-                label: workflow.label,
-              }))}
-              onChange={(value) => setWorkflowType(getWorkflowFromQuery(value))}
-            />
-
-            <div>
-              <p>
-                Required action: <code>{selectedWorkflow.requiredAction}</code>
-              </p>
-              <Tag type={hasUploadAccess ? 'green' : 'red'}>
-                {hasUploadAccess ? 'Allowed' : 'Not Granted'}
-              </Tag>
-            </div>
-
-            {selectedWorkflowType === 'application' && (
-              <TextInput
-                id="applicationNumber"
-                labelText={selectedWorkflow.numberFieldLabel}
-                value={formState.applicationNumber}
-                placeholder={selectedWorkflow.numberFieldPlaceholder}
-                invalid={!!fieldError('applicationNumber')}
-                invalidText={fieldError('applicationNumber')}
-                onBlur={() => markFieldTouched('applicationNumber')}
-                onChange={(event) =>
-                  setFormState((current) => ({
-                    ...current,
-                    applicationNumber: event.target.value,
-                  }))
-                }
-              />
-            )}
-
-            {selectedWorkflowType === 'exemption' && (
-              <TextInput
-                id="exemptionNumber"
-                labelText={selectedWorkflow.numberFieldLabel}
-                value={formState.exemptionNumber}
-                placeholder={selectedWorkflow.numberFieldPlaceholder}
-                invalid={!!fieldError('exemptionNumber')}
-                invalidText={fieldError('exemptionNumber')}
-                onBlur={() => markFieldTouched('exemptionNumber')}
-                onChange={(event) =>
-                  setFormState((current) => ({
-                    ...current,
-                    exemptionNumber: event.target.value,
-                  }))
-                }
-              />
-            )}
-
-            {(selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') && (
-              <TextInput
-                id="permitNumber"
-                labelText={selectedWorkflow.numberFieldLabel}
-                value={formState.permitNumber}
-                placeholder={selectedWorkflow.numberFieldPlaceholder}
-                invalid={!!fieldError('permitNumber')}
-                invalidText={fieldError('permitNumber')}
-                onBlur={() => markFieldTouched('permitNumber')}
-                onChange={(event) =>
-                  setFormState((current) => ({
-                    ...current,
-                    permitNumber: event.target.value,
-                  }))
-                }
-              />
-            )}
-
-            {selectedWorkflowType === 'invoice' && (
-              <>
-                <TextInput
-                  id="salesInvoiceNumber"
-                  labelText="Invoice Number"
-                  value={formState.salesInvoiceNumber}
-                  invalid={!!fieldError('salesInvoiceNumber')}
-                  invalidText={fieldError('salesInvoiceNumber')}
-                  onBlur={() => markFieldTouched('salesInvoiceNumber')}
-                  onChange={(event) =>
-                    setFormState((current) => ({
-                      ...current,
-                      salesInvoiceNumber: event.target.value,
-                    }))
-                  }
-                />
-                <TextInput
-                  id="invoiceExportValue"
-                  labelText="Export Value (CAD)"
-                  value={formState.invoiceExportValue}
-                  invalid={!!fieldError('invoiceExportValue')}
-                  invalidText={fieldError('invoiceExportValue')}
-                  onBlur={() => markFieldTouched('invoiceExportValue')}
-                  onChange={(event) =>
-                    setFormState((current) => ({
-                      ...current,
-                      invoiceExportValue: event.target.value,
-                    }))
-                  }
-                />
-                <TextInput
-                  id="invoiceConversionRate"
-                  labelText="Conversion Rate"
-                  value={formState.invoiceConversionRate}
-                  invalid={!!fieldError('invoiceConversionRate')}
-                  invalidText={fieldError('invoiceConversionRate')}
-                  onBlur={() => markFieldTouched('invoiceConversionRate')}
-                  onChange={(event) =>
-                    setFormState((current) => ({
-                      ...current,
-                      invoiceConversionRate: event.target.value,
-                    }))
-                  }
-                />
-                <TextInput
-                  id="invoiceFeeInLieu"
-                  labelText="Fee In Lieu"
-                  value={formState.invoiceFeeInLieu}
-                  invalid={!!fieldError('invoiceFeeInLieu')}
-                  invalidText={fieldError('invoiceFeeInLieu')}
-                  onBlur={() => markFieldTouched('invoiceFeeInLieu')}
-                  onChange={(event) =>
-                    setFormState((current) => ({
-                      ...current,
-                      invoiceFeeInLieu: event.target.value,
-                    }))
-                  }
-                />
-              </>
-            )}
-
-            <TextInput
-              id="uploadFile"
-              type="file"
-              labelText={
-                selectedWorkflowType === 'lexisXml' ? 'LEXIS XML or ZIP File' : 'Document File'
-              }
-              accept={
-                selectedWorkflowType === 'lexisXml'
-                  ? '.xml,.zip,application/xml,text/xml,application/zip'
-                  : undefined
-              }
-              invalid={!!fieldError('uploadFile')}
-              invalidText={fieldError('uploadFile')}
-              onChange={(event) => {
-                const target = event.target as HTMLInputElement
-                setSelectedFile(target.files?.[0] ?? null)
-                markFieldTouched('uploadFile')
-              }}
-            />
-            <TextArea
-              id="fileDescription"
-              labelText="Document Description"
-              value={formState.fileDescription}
-              onChange={(event) =>
-                setFormState((current) => ({
-                  ...current,
-                  fileDescription: event.target.value,
-                }))
-              }
-              rows={4}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={() => void onSubmitUpload()}
-              disabled={isSubmitting || !hasUploadAccess}
-            >
-              {isSubmitting ? 'Submitting Upload...' : 'Submit Upload'}
-            </Button>
-            <Button kind="ghost" onClick={onReset} disabled={isSubmitting}>
-              Reset
-            </Button>
-          </div>
-
-          {selectedFile && (
-            <p className="landing-help-text">
-              Selected file: <strong>{selectedFile.name}</strong>
-            </p>
-          )}
-
+        <div className="admin-upload-workflow">
           {successMessage && (
             <InlineNotification
               kind="success"
@@ -534,7 +742,212 @@ const AdminUploadsPage: FC = () => {
               onCloseButtonClick={() => setErrorMessage('')}
             />
           )}
-        </Tile>
+
+          <div className="admin-upload-workspace">
+            <section className="admin-upload-panel" aria-labelledby="admin-upload-settings-title">
+              <div className="admin-upload-panel__header">
+                <div>
+                  <h2 id="admin-upload-settings-title">{selectedWorkflow.label}</h2>
+                  <p>{workflowDescription(selectedWorkflowType)}</p>
+                </div>
+                <Tag type={hasUploadAccess ? 'green' : 'red'}>
+                  {hasUploadAccess ? 'Allowed' : 'Not Granted'}
+                </Tag>
+              </div>
+
+              <div className="admin-upload-summary-strip" aria-label="Upload batch summary">
+                <div>
+                  <span>Target</span>
+                  <strong>{currentUploadTargetSummary}</strong>
+                </div>
+                <div>
+                  <span>Queued Files</span>
+                  <strong>{uploadQueue.length}</strong>
+                </div>
+                <div>
+                  <span>Format</span>
+                  <strong>{selectedWorkflowType === 'lexisXml' ? 'LEXIS' : 'Document'}</strong>
+                </div>
+              </div>
+
+              <div className="legacy-search-grid admin-upload-settings-grid">
+                <SearchableSelect
+                  id="uploadWorkflowType"
+                  labelText="Upload Type"
+                  value={selectedWorkflowType}
+                  options={UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
+                    value: workflow.type,
+                    label: workflow.label,
+                  }))}
+                  onChange={(value) => setWorkflowType(getWorkflowFromQuery(value))}
+                />
+
+                {selectedWorkflowType === 'application' && (
+                  <ApplicationNumberSelect
+                    id="applicationNumber"
+                    labelText={selectedWorkflow.numberFieldLabel}
+                    value={formState.applicationNumber}
+                    invalid={!!fieldError('applicationNumber')}
+                    invalidText={fieldError('applicationNumber')}
+                    onBlur={() => markFieldTouched('applicationNumber')}
+                    onChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        applicationNumber: value,
+                      }))
+                    }
+                  />
+                )}
+
+                {selectedWorkflowType === 'exemption' && (
+                  <UploadTargetNumberSelect
+                    id="exemptionNumber"
+                    labelText={selectedWorkflow.numberFieldLabel}
+                    value={formState.exemptionNumber}
+                    invalid={!!fieldError('exemptionNumber')}
+                    invalidText={fieldError('exemptionNumber')}
+                    searchOptions={searchProvincialExemptionNumberOptions}
+                    onBlur={() => markFieldTouched('exemptionNumber')}
+                    onChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        exemptionNumber: value,
+                      }))
+                    }
+                  />
+                )}
+
+                {(selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') && (
+                  <UploadTargetNumberSelect
+                    id="permitNumber"
+                    labelText={selectedWorkflow.numberFieldLabel}
+                    value={formState.permitNumber}
+                    invalid={!!fieldError('permitNumber')}
+                    invalidText={fieldError('permitNumber')}
+                    searchOptions={searchProvincialPermitNumberOptions}
+                    normalizeInput={targetNumberFromNumericInput}
+                    onBlur={() => markFieldTouched('permitNumber')}
+                    onChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        permitNumber: value,
+                      }))
+                    }
+                  />
+                )}
+
+                {selectedWorkflowType === 'invoice' && (
+                  <>
+                    <TextInput
+                      id="salesInvoiceNumber"
+                      labelText="Invoice Number"
+                      value={formState.salesInvoiceNumber}
+                      invalid={!!fieldError('salesInvoiceNumber')}
+                      invalidText={fieldError('salesInvoiceNumber')}
+                      onBlur={() => markFieldTouched('salesInvoiceNumber')}
+                      onChange={(event) =>
+                        setFormState((current) => ({
+                          ...current,
+                          salesInvoiceNumber: event.target.value,
+                        }))
+                      }
+                    />
+                    <TextInput
+                      id="invoiceExportValue"
+                      labelText="Export Value (CAD)"
+                      value={formState.invoiceExportValue}
+                      invalid={!!fieldError('invoiceExportValue')}
+                      invalidText={fieldError('invoiceExportValue')}
+                      onBlur={() => markFieldTouched('invoiceExportValue')}
+                      onChange={(event) =>
+                        setFormState((current) => ({
+                          ...current,
+                          invoiceExportValue: event.target.value,
+                        }))
+                      }
+                    />
+                    <TextInput
+                      id="invoiceConversionRate"
+                      labelText="Conversion Rate"
+                      value={formState.invoiceConversionRate}
+                      invalid={!!fieldError('invoiceConversionRate')}
+                      invalidText={fieldError('invoiceConversionRate')}
+                      onBlur={() => markFieldTouched('invoiceConversionRate')}
+                      onChange={(event) =>
+                        setFormState((current) => ({
+                          ...current,
+                          invoiceConversionRate: event.target.value,
+                        }))
+                      }
+                    />
+                    <TextInput
+                      id="invoiceFeeInLieu"
+                      labelText="Fee In Lieu"
+                      value={formState.invoiceFeeInLieu}
+                      invalid={!!fieldError('invoiceFeeInLieu')}
+                      invalidText={fieldError('invoiceFeeInLieu')}
+                      onBlur={() => markFieldTouched('invoiceFeeInLieu')}
+                      onChange={(event) =>
+                        setFormState((current) => ({
+                          ...current,
+                          invoiceFeeInLieu: event.target.value,
+                        }))
+                      }
+                    />
+                  </>
+                )}
+
+                <TextArea
+                  id="fileDescription"
+                  labelText="Document Description"
+                  value={formState.fileDescription}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      fileDescription: event.target.value,
+                    }))
+                  }
+                  rows={4}
+                />
+              </div>
+            </section>
+
+            <MultiFileDropZone
+              title={
+                selectedWorkflowType === 'lexisXml'
+                  ? 'Upload LEXIS Submissions'
+                  : 'Upload Documents'
+              }
+              description={uploadFormatText}
+              inputId="uploadFile"
+              inputKey={fileInputKey}
+              inputLabel={uploadInputLabel}
+              accept={uploadAccept}
+              invalidText={fieldError('uploadFile')}
+              disabled={!hasUploadAccess}
+              disabledDescription="Your session does not include the required upload permission."
+              onFilesSelected={addFilesToQueue}
+            />
+          </div>
+
+          <UploadQueuePreview
+            items={uploadQueue}
+            targetSummary={currentUploadTargetSummary}
+            canSubmit={hasUploadAccess}
+            isSubmitting={isSubmitting}
+            onSubmit={() => void onSubmitUpload()}
+            onReset={onReset}
+            onClear={clearQueuedFiles}
+            onRemove={removeQueuedFile}
+            renderCompleteAction={(item) =>
+              item.status === 'complete' && item.resultApplicationNumber ? (
+                <Link to={`/provincial/application/${item.resultApplicationNumber}`}>
+                  Open Application
+                </Link>
+              ) : null
+            }
+          />
+        </div>
       </Column>
     </Grid>
   )

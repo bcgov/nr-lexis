@@ -149,7 +149,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/admin/uploads',
-        label: 'Upload Center',
+        label: 'Data Upload',
         requiredActions: [
           '/lexisAgentAdmin',
           '/fileApplicationUpload',

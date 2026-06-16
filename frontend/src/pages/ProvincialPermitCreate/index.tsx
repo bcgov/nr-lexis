@@ -9,6 +9,8 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
+  joinCreateSubmitMessages,
+  mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
@@ -57,17 +59,6 @@ const INITIAL_FORM: ProvincialPermitCreateForm = {
   estimatedShippingDate: '',
   permitVolume: '',
   remarks: '',
-}
-
-const mapDraftPayloadToForm = (payload: unknown): ProvincialPermitCreateForm => {
-  if (!payload || typeof payload !== 'object') {
-    return INITIAL_FORM
-  }
-
-  return {
-    ...INITIAL_FORM,
-    ...(payload as Partial<ProvincialPermitCreateForm>),
-  }
 }
 
 const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialPermitCreateForm => {
@@ -188,9 +179,7 @@ const ProvincialPermitCreatePage: FC = () => {
     setIsSubmitting(true)
     try {
       const result = await submitProvincialPermitCreate(form)
-      const responseMessage = [result.message, ...result.errors, ...result.warnings]
-        .filter((value) => value.trim().length > 0)
-        .join(' ')
+      const responseMessage = joinCreateSubmitMessages(result)
 
       if (result.success) {
         if (result.createdId) {
@@ -223,7 +212,7 @@ const ProvincialPermitCreatePage: FC = () => {
   }
 
   const onUseDraft = (record: CreateDraftRecord<unknown>) => {
-    setForm(mapDraftPayloadToForm(record.payload))
+    setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
     setTouchedFields({})
     setShowAllValidationErrors(false)
     setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })

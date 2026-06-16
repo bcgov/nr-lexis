@@ -24,7 +24,9 @@ import type {
   ProvincialPermitSearchSortField,
 } from '@/interfaces/ProvincialPermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
+  mapSelectedOptionsById,
   parseCsvParam,
   parseEnumParam,
   parsePositiveIntParam,
@@ -36,6 +38,7 @@ import {
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
@@ -66,11 +69,6 @@ const EMPTY_RESULTS: ProvincialPermitSearchResponse = {
     totalElements: 0,
     totalPages: 1,
   },
-}
-
-const isValidIsoDate = (value: string): boolean => {
-  if (!value.trim()) return true
-  return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
 }
 
 const SORT_COLUMNS: {
@@ -140,11 +138,6 @@ const buildSearchParams = (
   setSearchParam(params, 'pageSize', pageSize)
 
   return params
-}
-
-const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]): RegionOption[] => {
-  const optionMap = new Map(regionOptions.map((option) => [option.id, option]))
-  return regionIds.map((regionId) => optionMap.get(regionId) ?? { id: regionId, text: regionId })
 }
 
 const ProvincialPermitPage: FC = () => {
@@ -219,7 +212,7 @@ const ProvincialPermitPage: FC = () => {
   )
 
   const selectedRegions = useMemo(
-    () => mapSelectedRegions(filters.region, regionOptions),
+    () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
 
@@ -379,21 +372,21 @@ const ProvincialPermitPage: FC = () => {
                 )
               }}
             />
-            <TextInput
+            <IsoDatePicker
               id="issuedFromDate"
               labelText="Issued From Date (YYYY-MM-DD)"
               value={filters.issuedFromDate}
               invalid={!isValidIsoDate(filters.issuedFromDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('issuedFromDate', event.target.value)}
+              onChange={(value) => updateFilter('issuedFromDate', value)}
             />
-            <TextInput
+            <IsoDatePicker
               id="issuedToDate"
               labelText="Issued To Date (YYYY-MM-DD)"
               value={filters.issuedToDate}
               invalid={!isValidIsoDate(filters.issuedToDate)}
               invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('issuedToDate', event.target.value)}
+              onChange={(value) => updateFilter('issuedToDate', value)}
             />
             <SearchableSelect
               id="permitStatus"

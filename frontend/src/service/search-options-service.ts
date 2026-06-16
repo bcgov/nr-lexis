@@ -1,4 +1,5 @@
 import apiService from '@/service/api-service'
+import { isRecord, stringField } from '@/utils/record'
 
 export type SearchOption = {
   value: string
@@ -12,12 +13,12 @@ const parseOptions = (input: unknown, allowEmptyCode = false): SearchOption[] =>
 
   return input
     .map((item) => {
-      if (!item || typeof item !== 'object') {
+      if (!isRecord(item)) {
         return null
       }
 
-      const code = typeof (item as any).code === 'string' ? (item as any).code.trim() : ''
-      const name = typeof (item as any).name === 'string' ? (item as any).name.trim() : ''
+      const code = stringField(item, 'code')
+      const name = stringField(item, 'name')
       if ((!code && !allowEmptyCode) || !name) {
         return null
       }
@@ -36,11 +37,11 @@ const fetchOptions = async (path: string): Promise<Record<string, unknown> | nul
       cacheKey: `search-options:${path}`,
       ttlMs: 5 * 60_000,
     })
-    if (!data || typeof data !== 'object') {
+    if (!isRecord(data)) {
       return null
     }
 
-    return data as Record<string, unknown>
+    return data
   } catch (error) {
     console.warn(`Unable to load search options from ${path}.`, error)
     return null
@@ -159,7 +160,7 @@ export const fetchReportOptions = async (): Promise<{
 
   return {
     currentSchedules: parseOptions(data.currentSchedules),
-    defaultRegion: typeof data.defaultRegion === 'string' ? data.defaultRegion.trim() : '',
+    defaultRegion: stringField(data, 'defaultRegion'),
     regions: parseOptions(data.regions),
     reportJurisdictions: parseOptions(data.reportJurisdictions, true),
     biweeklyJurisdictions: parseOptions(data.biweeklyJurisdictions, true),

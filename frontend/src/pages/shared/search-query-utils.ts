@@ -9,6 +9,23 @@ export const parseCsvParam = (value: string | null): string[] => {
     .filter((item) => item.length > 0)
 }
 
+export type IdTextOption = {
+  id: string
+  text: string
+}
+
+export const mapSelectedOptionsById = <TOption extends IdTextOption>(
+  selectedIds: string[],
+  options: TOption[],
+  fallbackText = (selectedId: string): string => selectedId,
+): TOption[] => {
+  const optionMap = new Map(options.map((option) => [option.id, option]))
+  return selectedIds.map(
+    (selectedId) =>
+      optionMap.get(selectedId) ?? ({ id: selectedId, text: fallbackText(selectedId) } as TOption),
+  )
+}
+
 export const parsePositiveIntParam = (value: string | null, fallback: number): number => {
   if (!value) {
     return fallback
