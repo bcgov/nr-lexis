@@ -138,6 +138,27 @@ class LexisXmlImportServiceTest {
   }
 
   @Test
+  void shouldImportBareLexisXmlAsApplicationPackageAndScales() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
+
+    LexisXmlImportResultDto result = service().importLexisXml(bareSampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.applicationNumber()).isEqualTo(9001L);
+    assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
+    assertThat(result.scaleRows()).isEqualTo(3);
+    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+  }
+
+  @Test
   void shouldRejectImportAndSkipScalesWhenPackagePersistenceFails() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
@@ -515,6 +536,11 @@ class LexisXmlImportServiceTest {
         "formFile", "6-652-7.xml", "application/xml", SAMPLE_XML.getBytes(StandardCharsets.UTF_8));
   }
 
+  private MockMultipartFile bareSampleXml() {
+    return new MockMultipartFile(
+        "formFile", "6-652-7-bare.xml", "application/xml", bareSampleXmlText().getBytes(StandardCharsets.UTF_8));
+  }
+
   private MockMultipartFile zippedFile(String entryName, String xml) throws Exception {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
@@ -613,4 +639,18 @@ class LexisXmlImportServiceTest {
       </esf:ESFSubmission>
       """
           .formatted(SAMPLE_SCHEMA_LOCATION);
+
+  private static String bareSampleXmlText() {
+    String startTag = "<lexis:LexisSubmission>";
+    String endTag = "</lexis:LexisSubmission>";
+    int contentStart = SAMPLE_XML.indexOf(startTag) + startTag.length();
+    int contentEnd = SAMPLE_XML.indexOf(endTag);
+    return """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <lexis:LexisSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd">
+      %s
+      </lexis:LexisSubmission>
+      """
+        .formatted(SAMPLE_XML.substring(contentStart, contentEnd));
+  }
 }

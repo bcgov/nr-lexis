@@ -316,34 +316,7 @@ public class LexisXmlImportService {
     }
     Element root = document.getDocumentElement();
     List<String> errors = new ArrayList<>();
-    if (root == null
-        || !"ESFSubmission".equals(root.getLocalName())
-        || !ESF_NAMESPACE.equals(root.getNamespaceURI())) {
-      errors.add("The XML root must be the expected LEXIS submission envelope.");
-    } else {
-      validateSchemaLocation(root, errors);
-    }
-
-    Element submissionContent =
-        root == null
-            ? null
-            : requiredChild(
-                root,
-                ESF_NAMESPACE,
-                "submissionContent",
-                "The XML file must include ESF submission content.",
-                "The XML file must include only one ESF submission content section.",
-                errors);
-    Element lexisSubmission =
-        submissionContent == null
-            ? null
-            : requiredChild(
-                submissionContent,
-                LEXIS_NAMESPACE,
-                "LexisSubmission",
-                "The XML file must include a LEXIS submission payload.",
-                "The XML file must include only one LEXIS submission payload.",
-                errors);
+    Element lexisSubmission = resolveLexisSubmissionPayload(root, errors);
     if (lexisSubmission == null) {
       throw new LexisXmlImportException(errors);
     }
@@ -499,7 +472,40 @@ public class LexisXmlImportService {
         scaleLines);
   }
 
-  private void validateSchemaLocation(Element root, List<String> errors) {
+  private Element resolveLexisSubmissionPayload(Element root, List<String> errors) {
+    if (root == null) {
+      errors.add("The XML root must be a LEXIS submission payload or ESF submission envelope.");
+      return null;
+    }
+    if ("LexisSubmission".equals(root.getLocalName()) && LEXIS_NAMESPACE.equals(root.getNamespaceURI())) {
+      validateSchemaLocation(root, false, errors);
+      return root;
+    }
+    if ("ESFSubmission".equals(root.getLocalName()) && ESF_NAMESPACE.equals(root.getNamespaceURI())) {
+      validateSchemaLocation(root, true, errors);
+      Element submissionContent =
+          requiredChild(
+              root,
+              ESF_NAMESPACE,
+              "submissionContent",
+              "The XML file must include ESF submission content.",
+              "The XML file must include only one ESF submission content section.",
+              errors);
+      return submissionContent == null
+          ? null
+          : requiredChild(
+              submissionContent,
+              LEXIS_NAMESPACE,
+              "LexisSubmission",
+              "The XML file must include a LEXIS submission payload.",
+              "The XML file must include only one LEXIS submission payload.",
+              errors);
+    }
+    errors.add("The XML root must be a LEXIS submission payload or ESF submission envelope.");
+    return null;
+  }
+
+  private void validateSchemaLocation(Element root, boolean requireEsfSchema, List<String> errors) {
     String schemaLocation = trimToNull(root.getAttributeNS(XML_SCHEMA_INSTANCE_NAMESPACE, "schemaLocation"));
     if (schemaLocation == null) {
       errors.add("The XML file must include an xsi:schemaLocation attribute.");
@@ -520,12 +526,14 @@ public class LexisXmlImportService {
         schemaLocationsByNamespace.put(tokens[index], tokens[index + 1]);
       }
     }
-    validateExpectedSchemaLocation(
-        schemaLocationsByNamespace,
-        ESF_NAMESPACE,
-        EXPECTED_ESF_SCHEMA_LOCATION,
-        "ESF",
-        errors);
+    if (requireEsfSchema) {
+      validateExpectedSchemaLocation(
+          schemaLocationsByNamespace,
+          ESF_NAMESPACE,
+          EXPECTED_ESF_SCHEMA_LOCATION,
+          "ESF",
+          errors);
+    }
     validateExpectedSchemaLocation(
         schemaLocationsByNamespace,
         LEXIS_NAMESPACE,
