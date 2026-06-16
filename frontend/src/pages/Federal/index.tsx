@@ -409,7 +409,8 @@ const FederalPage: FC = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
+        <section className="legacy-search-section legacy-search-section--filters">
+          <Tile>
           <div className="legacy-search-grid">
             <TextInput
               id="applicationNumber"
@@ -502,16 +503,19 @@ const FederalPage: FC = () => {
               onCloseButtonClick={() => setExemptionSelectionStatus(null)}
             />
           )}
-        </Tile>
+          </Tile>
+        </section>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <h2 className="dashboard-title">Search Results</h2>
-        {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        <SearchResultsTableFrame
-          loading={loading}
-          loadingDescription="Loading federal application search results..."
-        >
+        <section className="legacy-search-section legacy-search-section--results">
+          <h2 className="dashboard-title">Search Results</h2>
+          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+          <SearchResultsTableFrame
+            loading={loading}
+            loadingDescription="Loading federal application search results..."
+            totalItems={results.page.totalElements}
+          >
           <Table useZebraStyles>
             <TableHead>
               <TableRow>
@@ -603,7 +607,8 @@ const FederalPage: FC = () => {
               )
             }}
           />
-        </SearchResultsTableFrame>
+          </SearchResultsTableFrame>
+        </section>
       </Column>
     </Grid>
   )

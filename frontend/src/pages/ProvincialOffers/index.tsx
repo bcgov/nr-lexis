@@ -302,11 +302,20 @@ const ProvincialOffersPage: FC = () => {
     if (!isOptionsLoaded) {
       return
     }
+
+    if (regionOptions.length === 0) {
+      return
+    }
+
     const hasSearchQuery = searchParams.toString().length > 0
     if (!hasSearchQuery) {
       setSearchParams(
         buildSearchParams(
-          { ...INITIAL_FILTERS, listingToDate: defaultListingToDate },
+          {
+            ...INITIAL_FILTERS,
+            listingToDate: defaultListingToDate,
+            region: regionOptions.map((option) => option.id),
+          },
           DEFAULT_SORT_FIELD,
           DEFAULT_SORT_DIRECTION,
           DEFAULT_PAGE,
@@ -315,7 +324,7 @@ const ProvincialOffersPage: FC = () => {
         { replace: true },
       )
     }
-  }, [defaultListingToDate, isOptionsLoaded, searchParams, setSearchParams])
+  }, [defaultListingToDate, isOptionsLoaded, regionOptions, searchParams, setSearchParams])
 
   const onSearch = () => {
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
@@ -345,7 +354,8 @@ const ProvincialOffersPage: FC = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
+        <section className="legacy-search-section legacy-search-section--filters">
+          <Tile>
           <div className="legacy-search-grid">
             <TextInput
               id="applicationNumber"
@@ -432,16 +442,19 @@ const ProvincialOffersPage: FC = () => {
               </Link>
             )}
           </div>
-        </Tile>
+          </Tile>
+        </section>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <h2 className="dashboard-title">Search Results</h2>
-        {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        <SearchResultsTableFrame
-          loading={loading}
-          loadingDescription="Loading offer search results..."
-        >
+        <section className="legacy-search-section legacy-search-section--results">
+          <h2 className="dashboard-title">Search Results</h2>
+          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+          <SearchResultsTableFrame
+            loading={loading}
+            loadingDescription="Loading offer search results..."
+            totalItems={results.page.totalElements}
+          >
           <Table useZebraStyles>
             <TableHead>
               <TableRow>
@@ -495,7 +508,8 @@ const ProvincialOffersPage: FC = () => {
               )
             }}
           />
-        </SearchResultsTableFrame>
+          </SearchResultsTableFrame>
+        </section>
       </Column>
     </Grid>
   )

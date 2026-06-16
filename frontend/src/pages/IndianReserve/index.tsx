@@ -270,7 +270,8 @@ const IndianReservePage: FC = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
+        <section className="legacy-search-section legacy-search-section--filters">
+          <Tile>
           <div className="legacy-search-grid">
             <TextInput
               id="permitNumber"
@@ -335,70 +336,74 @@ const IndianReservePage: FC = () => {
               </Link>
             )}
           </div>
-        </Tile>
+          </Tile>
+        </section>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <h2 className="dashboard-title">Search Results</h2>
-        {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        <SearchResultsTableFrame
-          loading={loading}
-          loadingDescription="Loading indigenous reserve permit search results..."
-        >
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                {SORT_COLUMNS.map((column) => (
-                  <TableHeader key={column.id}>
-                    <button
-                      type="button"
-                      className="legacy-sort-button"
-                      onClick={() => onHeaderClick(column.id)}
-                    >
-                      {column.label}
-                      {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                    </button>
-                  </TableHeader>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {results.content.map((row) => (
-                <TableRow key={row.permitNumber}>
-                  <TableCell>
-                    <Link
-                      className="cds--link"
-                      to={withCurrentSearch(`/indian-reserve/permit/${row.permitNumber}`)}
-                    >
-                      {row.permitNumber}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{row.clientNumber}</TableCell>
-                  <TableCell>{row.issueDate}</TableCell>
-                  <TableCell>{row.shippingDate}</TableCell>
-                </TableRow>
-              ))}
-              {results.content.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4}>
-                    No indigenous reserve permits found for the selected criteria.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <Pagination
-            page={results.page.number + 1}
-            pageSize={results.page.size}
-            pageSizes={[10, 20, 30]}
+        <section className="legacy-search-section legacy-search-section--results">
+          <h2 className="dashboard-title">Search Results</h2>
+          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+          <SearchResultsTableFrame
+            loading={loading}
+            loadingDescription="Loading indigenous reserve permit search results..."
             totalItems={results.page.totalElements}
-            onChange={({ page, pageSize: nextPageSize }) => {
-              setSearchParams(
-                buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-              )
-            }}
-          />
-        </SearchResultsTableFrame>
+          >
+            <Table useZebraStyles>
+              <TableHead>
+                <TableRow>
+                  {SORT_COLUMNS.map((column) => (
+                    <TableHeader key={column.id}>
+                      <button
+                        type="button"
+                        className="legacy-sort-button"
+                        onClick={() => onHeaderClick(column.id)}
+                      >
+                        {column.label}
+                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                      </button>
+                    </TableHeader>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {results.content.map((row) => (
+                  <TableRow key={row.permitNumber}>
+                    <TableCell>
+                      <Link
+                        className="cds--link"
+                        to={withCurrentSearch(`/indian-reserve/permit/${row.permitNumber}`)}
+                      >
+                        {row.permitNumber}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{row.clientNumber}</TableCell>
+                    <TableCell>{row.issueDate}</TableCell>
+                    <TableCell>{row.shippingDate}</TableCell>
+                  </TableRow>
+                ))}
+                {results.content.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      No indigenous reserve permits found for the selected criteria.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            <Pagination
+              page={results.page.number + 1}
+              pageSize={results.page.size}
+              pageSizes={[10, 20, 30]}
+              totalItems={results.page.totalElements}
+              onChange={({ page, pageSize: nextPageSize }) => {
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                )
+              }}
+            />
+          </SearchResultsTableFrame>
+        </section>
       </Column>
     </Grid>
   )

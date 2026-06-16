@@ -110,7 +110,7 @@ const SORT_COLUMNS: {
 ]
 
 const DEFAULT_SORT_FIELD: ApplicationReviewSearchSortField = 'applicationNumber'
-const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
+const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc'
 const DEFAULT_PAGE = 1
 const DEFAULT_PAGE_SIZE = 10
 const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
@@ -367,6 +367,28 @@ const ProvincialReviewPage: FC = () => {
 
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    if (regionOptions.length === 0) {
+      return
+    }
+
+    const hasSearchQuery = searchParams.toString().length > 0
+    if (hasSearchQuery) {
+      return
+    }
+
+    setSearchParams(
+      buildSearchParams(
+        { ...INITIAL_FILTERS, region: regionOptions.map((option) => option.id) },
+        DEFAULT_SORT_FIELD,
+        DEFAULT_SORT_DIRECTION,
+        DEFAULT_PAGE,
+        DEFAULT_PAGE_SIZE,
+      ),
+      { replace: true },
+    )
+  }, [regionOptions, searchParams, setSearchParams])
 
   const onSearch = () => {
     clearSelection()
@@ -630,7 +652,8 @@ const ProvincialReviewPage: FC = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
+        <section className="legacy-search-section legacy-search-section--filters">
+          <Tile>
           <div className="legacy-search-grid">
             <TextInput
               id="applicationNumber"
@@ -796,13 +819,19 @@ const ProvincialReviewPage: FC = () => {
               onCloseButtonClick={() => setReviewActionStatus(null)}
             />
           )}
-        </Tile>
+          </Tile>
+        </section>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <h2 className="dashboard-title">Review Queue</h2>
-        {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue...">
+        <section className="legacy-search-section legacy-search-section--results">
+          <h2 className="dashboard-title">Review Queue</h2>
+          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+          <SearchResultsTableFrame
+            loading={loading}
+            loadingDescription="Loading review queue..."
+            totalItems={results.page.totalElements}
+          >
           <Table useZebraStyles>
             <TableHead>
               <TableRow>
@@ -887,7 +916,8 @@ const ProvincialReviewPage: FC = () => {
               )
             }}
           />
-        </SearchResultsTableFrame>
+          </SearchResultsTableFrame>
+        </section>
       </Column>
     </Grid>
   )

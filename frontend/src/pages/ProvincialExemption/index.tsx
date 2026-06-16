@@ -425,7 +425,8 @@ const ProvincialExemptionPage: FC = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
+        <section className="legacy-search-section legacy-search-section--filters">
+          <Tile>
           <div className="legacy-search-grid">
             <TextInput
               id="applicationNumber"
@@ -541,16 +542,19 @@ const ProvincialExemptionPage: FC = () => {
               onCloseButtonClick={() => setApprovalStatus(null)}
             />
           )}
-        </Tile>
+          </Tile>
+        </section>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <h2 className="dashboard-title">Search Results</h2>
-        {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        <SearchResultsTableFrame
-          loading={loading}
-          loadingDescription="Loading exemption search results..."
-        >
+        <section className="legacy-search-section legacy-search-section--results">
+          <h2 className="dashboard-title">Search Results</h2>
+          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+          <SearchResultsTableFrame
+            loading={loading}
+            loadingDescription="Loading exemption search results..."
+            totalItems={results.page.totalElements}
+          >
           <Table useZebraStyles>
             <TableHead>
               <TableRow>
@@ -637,7 +641,8 @@ const ProvincialExemptionPage: FC = () => {
               )
             }}
           />
-        </SearchResultsTableFrame>
+          </SearchResultsTableFrame>
+        </section>
       </Column>
     </Grid>
   )
