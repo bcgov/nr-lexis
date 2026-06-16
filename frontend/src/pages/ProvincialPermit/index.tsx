@@ -26,6 +26,7 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
+  mapSelectedOptionsById,
   parseCsvParam,
   parseEnumParam,
   parsePositiveIntParam,
@@ -138,11 +139,6 @@ const buildSearchParams = (
   return params
 }
 
-const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]): RegionOption[] => {
-  const optionMap = new Map(regionOptions.map((option) => [option.id, option]))
-  return regionIds.map((regionId) => optionMap.get(regionId) ?? { id: regionId, text: regionId })
-}
-
 const ProvincialPermitPage: FC = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -215,7 +211,7 @@ const ProvincialPermitPage: FC = () => {
   )
 
   const selectedRegions = useMemo(
-    () => mapSelectedRegions(filters.region, regionOptions),
+    () => mapSelectedOptionsById(filters.region, regionOptions),
     [filters.region, regionOptions],
   )
 

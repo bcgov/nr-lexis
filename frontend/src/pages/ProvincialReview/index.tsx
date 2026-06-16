@@ -34,6 +34,7 @@ import {
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
+  mapSelectedOptionsById,
   parseCsvParam,
   parseEnumParam,
   parsePositiveIntParam,
@@ -138,11 +139,6 @@ const buildSearchParams = (
   setSearchParam(params, 'pageSize', pageSize)
 
   return params
-}
-
-const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]): RegionOption[] => {
-  const optionMap = new Map(regionOptions.map((option) => [option.id, option]))
-  return regionIds.map((regionId) => optionMap.get(regionId) ?? { id: regionId, text: regionId })
 }
 
 const ProvincialReviewPage: FC = () => {
@@ -255,7 +251,7 @@ const ProvincialReviewPage: FC = () => {
   )
 
   const selectedRegions = useMemo(
-    () => mapSelectedRegions(filters.region, regionOptions),
+    () => mapSelectedOptionsById(filters.region, regionOptions),
     [filters.region, regionOptions],
   )
 
