@@ -1,6 +1,9 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
@@ -15,7 +18,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -350,45 +352,6 @@ public class OfferDetailsRpcController {
       return Long.parseLong(applicationNumber);
     } catch (NumberFormatException ex) {
       return null;
-    }
-  }
-
-  private Long parsePositiveLong(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(rawValue.trim());
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
-  private Double parseDouble(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      return Double.parseDouble(rawValue.trim());
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
-  private LocalDate parseDate(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    String normalized = rawValue.trim();
-    try {
-      return LocalDate.parse(normalized);
-    } catch (DateTimeParseException ignored) {
-      try {
-        return LocalDate.parse(normalized, LEGACY_DATE_FORMATTER);
-      } catch (DateTimeParseException ex) {
-        return null;
-      }
     }
   }
 

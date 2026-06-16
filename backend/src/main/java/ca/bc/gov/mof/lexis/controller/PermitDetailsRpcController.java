@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
+
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
@@ -619,18 +621,6 @@ public class PermitDetailsRpcController {
       }
     }
     return null;
-  }
-
-  private Long parsePositiveLong(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(rawValue.trim());
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
   }
 
   private String sanitizeFileName(String rawValue) {

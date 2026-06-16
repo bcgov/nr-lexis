@@ -1,6 +1,10 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseNonNegativeLong;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
@@ -18,8 +22,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -94,8 +96,6 @@ public class ApplicationDetailsRpcController {
       Set.of("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER");
   private static final Set<String> APPLICATION_DOCUMENT_INDUSTRY_ROLES =
       Set.of("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_FEDERAL_SUBMITTER");
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
@@ -1045,18 +1045,6 @@ public class ApplicationDetailsRpcController {
         && (APPLICATION_STATUS_PERMITTED.equals(status) || APPLICATION_STATUS_EXPIRED.equals(status));
   }
 
-  private Long parsePositiveLong(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(rawValue.trim());
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
   private ApplicationDetailsRpcService.CreateApplicationRequest toCreateApplicationRequest(
       MultiValueMap<String, String> parameters) {
     return new ApplicationDetailsRpcService.CreateApplicationRequest(
@@ -1217,45 +1205,6 @@ public class ApplicationDetailsRpcController {
       return Double.toString(doubleValue);
     }
     return value.toString().trim();
-  }
-
-  private LocalDate parseDate(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    String normalized = rawValue.trim();
-    try {
-      return LocalDate.parse(normalized);
-    } catch (DateTimeParseException ignored) {
-      try {
-        return LocalDate.parse(normalized, LEGACY_DATE_FORMATTER);
-      } catch (DateTimeParseException ex) {
-        return null;
-      }
-    }
-  }
-
-  private Double parseDouble(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      return Double.parseDouble(rawValue.trim());
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
-  private Long parseNonNegativeLong(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(rawValue.trim());
-      return parsed >= 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
   }
 
   private String sanitizeFileName(String rawValue) {

@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -293,19 +294,6 @@ public class ApplicationReviewController {
   private String legacyClientEmail(String clientEmail) {
     String normalized = trimToNull(clientEmail);
     return normalized == null ? "none" : normalized;
-  }
-
-  private Long parsePositiveLong(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(normalized);
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
   }
 
   private ApplicationReviewSearchCriteria buildCriteria(
