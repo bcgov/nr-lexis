@@ -22,49 +22,13 @@ jobs:
       oc_namespace: ${{ secrets.oc_namespace }}
       oc_token: ${{ secrets.oc_token }}
     with:
-      environment: dev
       cleanup: label
       packages: backend frontend
-      # The helper's default cleanup label is `app=<repo>-<PR#>`, but the
-      # templates label backend/frontend resources independently:
-      # `app=nr-lexis-backend-<PR#>` and `app=nr-lexis-frontend-<PR#>`.
-      # These labels are also the selectors for each component, so they cannot
-      # be flattened into one PR-wide label without mixing backend/frontend pods.
-      # `cleanup_name` is the helper's escape hatch: a space-separated list of
-      # app label values to delete.
-      cleanup_name: ${{ github.event.repository.name }}-backend-${{ github.event.number }} ${{ github.event.repository.name }}-frontend-${{ github.event.number }}
-
-  cleanup-preview-resources:
-    name: Cleanup Preview Resources
-    needs: [cleanup]
-    if: always()
-    runs-on: ubuntu-24.04
-    environment: dev
-    timeout-minutes: 10
-    steps:
-      - name: Delete PR OpenShift resources
-        uses: bcgov/action-oc-runner@d2fc921aaa9d70684c186dbb7754e6985d44d86f # v1.4.1
-        with:
-          oc_namespace: ${{ secrets.oc_namespace }}
-          oc_token: ${{ secrets.oc_token }}
-          oc_server: ${{ vars.oc_server }}
-          commands: |
-            set -euo pipefail
-
-            APP="${{ github.event.repository.name }}"
-            PR="${{ github.event.number }}"
-            # The quickstart helper deletes the common `all,cm,pvc,secret`
-            # set. This explicit sweep also covers routes, HPAs, replica sets,
-            # pods, and per-PR NetworkPolicies.
-            RESOURCE_TYPES="deploy,rs,pod,svc,route,hpa,networkpolicy,secret,pvc,cm"
-
-            echo "Deleting preview resources for PR ${PR}"
-
-            for component in backend frontend; do
-              label="${APP}-${component}-${PR}"
-              echo "Deleting resources labelled app=${label}"
-              oc delete "${RESOURCE_TYPES}" -l "app=${label}" --ignore-not-found
-            done
-
-            echo "Deleting generated backend serving cert secret, if present"
-            oc delete secret "${APP}-backend-cert-${PR}" --ignore-not-found
+      # The helper's default cleanup label is `app=<repo-name>-<target>`
+      # (i.e. `app=nr-lexis-<PR#>`), but every object in our templates is
+      # labelled `app=nr-lexis-{backend,frontend}-<PR#>`. Those labels are
+      # also the selectors for each component, so they cannot be flattened
+      # into one PR-wide value without mixing backend and frontend pods.
+      # `cleanup_name` is the helper's escape hatch: a space-separated list
+      # of label values it iterates over.
+      cleanup_name: nr-lexis-backend-${{ github.event.number }} nr-lexis-frontend-${{ github.event.number }}
