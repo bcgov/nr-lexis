@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
 import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
@@ -78,7 +79,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
               && !previousOwnerClientNumber.equals(row.ownerClientNumber()))) {
         blanketOic = true;
       } else {
-        previousOwnerClientNumber = blankToNull(row.ownerClientNumber());
+        previousOwnerClientNumber = trimToNull(row.ownerClientNumber());
       }
 
       if (EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equalsIgnoreCase(row.productTypeCode())) {
@@ -112,7 +113,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             row -> {
               boolean canViewPermit =
                   resolveCanViewPermit(
-                      row, oicLike, ministryUser, privilegedUser, blankToNull(forestClientNumber));
+                      row, oicLike, ministryUser, privilegedUser, trimToNull(forestClientNumber));
               double displayedVolume = oicLike ? row.oicRequestVolume() : row.permitVolume();
               return new PermitItem(
                   row.permitNumber(),
@@ -180,7 +181,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     List<String> errors = validateCreateExemption(normalized);
     List<String> warnings = List.of();
 
-    if (blankToNull(normalized.exemptionNumber()) != null
+    if (trimToNull(normalized.exemptionNumber()) != null
         && repository.existsByExemptionNumber(normalized.exemptionNumber())) {
       errors.add(EXEMPTION_NUMBER_ASSIGNED_MESSAGE);
     }
@@ -197,7 +198,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     String exemptionNumber =
         inserted.map(ExemptionDetailsRpcRepository.ExemptionInsertRow::exemptionNumber).orElse(null);
 
-    if (blankToNull(exemptionNumber) == null) {
+    if (trimToNull(exemptionNumber) == null) {
       return new CreateExemptionResult(
           false,
           null,
@@ -228,13 +229,13 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       UpdateExemptionRequest request, String userId, boolean canApproveExemption) {
     UpdateExemptionRequest normalized = normalizeUpdateExemptionRequest(request);
     String lookupNumber =
-        blankToNull(normalized.exemptionNumber()) == null
+        trimToNull(normalized.exemptionNumber()) == null
             ? normalized.previousExemptionNumber()
             : normalized.exemptionNumber();
     Optional<ExemptionDetailsRpcRepository.ExemptionRecord> existing =
         repository.findExemptionRecord(lookupNumber);
 
-    if (existing.isEmpty() && blankToNull(normalized.previousExemptionNumber()) != null) {
+    if (existing.isEmpty() && trimToNull(normalized.previousExemptionNumber()) != null) {
       existing = repository.findExemptionRecord(normalized.previousExemptionNumber());
     }
     if (existing.isEmpty()) {
@@ -277,7 +278,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   @Override
   public ExemptionNumberValidationResult checkExemptionNumber(String exemptionNumber) {
-    String normalized = blankToNull(exemptionNumber);
+    String normalized = trimToNull(exemptionNumber);
     boolean valid = normalized == null || !repository.existsByExemptionNumber(normalized);
     return new ExemptionNumberValidationResult(
         valid, valid ? null : EXEMPTION_NUMBER_ASSIGNED_MESSAGE);
@@ -290,7 +291,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       String userId,
       boolean canViewFederalApplications,
       boolean canViewReserveApplications) {
-    String normalizedExemptionNumber = blankToNull(exemptionNumber);
+    String normalizedExemptionNumber = trimToNull(exemptionNumber);
     List<String> errors = new ArrayList<>();
 
     Optional<ExemptionDetailsRpcRepository.ApplicationLinkRecord> candidate =
@@ -314,7 +315,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
     if (!APPLICATION_STATUS_APPROVED.equalsIgnoreCase(application.applicationStatusCode())) {
       errors.add("Applications must have a status of approved.");
-    } else if (blankToNull(application.exemptionNumber()) != null) {
+    } else if (trimToNull(application.exemptionNumber()) != null) {
       errors.add("This application is already assigned to an exemption.");
     } else if (repository.hasActiveValidOffers(application.applicationNumber())) {
       errors.add("Application has valid offers and cannot be added to an exemption.");
@@ -453,7 +454,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   private String resolveAttachmentTypeDescription(
       String attachmentTypeCode, Map<String, String> attachmentTypeByCode) {
-    String normalizedCode = blankToNull(attachmentTypeCode);
+    String normalizedCode = trimToNull(attachmentTypeCode);
     if (normalizedCode == null) {
       return "";
     }
@@ -468,7 +469,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   }
 
   private String normalizeDescription(String description) {
-    String normalized = blankToNull(description);
+    String normalized = trimToNull(description);
     return normalized == null ? "Not on file" : normalized;
   }
 
@@ -490,14 +491,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return BigDecimal.valueOf(value).stripTrailingZeros().scale() <= 1;
   }
 
-  private String blankToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
   private boolean appNotPastListingDate(ExemptionDetailsRpcRepository.ApplicationLinkRecord application) {
     if (application.exportScheduleId() == null || application.listingDate() == null) {
       return false;
@@ -509,13 +502,13 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private boolean assignedOwnerMismatch(
       List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> assignedApplications,
       String candidateOwnerClientNumber) {
-    String normalizedCandidateOwner = blankToNull(candidateOwnerClientNumber);
+    String normalizedCandidateOwner = trimToNull(candidateOwnerClientNumber);
     if (assignedApplications == null || assignedApplications.isEmpty() || normalizedCandidateOwner == null) {
       return false;
     }
     return assignedApplications.stream()
         .map(ExemptionDetailsRpcRepository.ApplicationSummaryRow::ownerClientNumber)
-        .map(this::blankToNull)
+        .map(value -> trimToNull(value))
         .filter(owner -> owner != null)
         .findFirst()
         .map(owner -> !owner.equals(normalizedCandidateOwner))
@@ -545,7 +538,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             "Application "
                 + displayApplicationNumber(applicationNumber)
                 + " must have a status of approved.");
-      } else if (blankToNull(application.exemptionNumber()) != null) {
+      } else if (trimToNull(application.exemptionNumber()) != null) {
         errors.add(
             "Application "
                 + displayApplicationNumber(applicationNumber)
@@ -631,8 +624,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   }
 
   private String defaultUpdateUser(String userId, String fallback) {
-    String normalized = blankToNull(userId);
-    return normalized == null ? blankToNull(fallback) : normalized;
+    String normalized = trimToNull(userId);
+    return normalized == null ? trimToNull(fallback) : normalized;
   }
 
   private String displayApplicationNumber(Long applicationNumber) {
@@ -702,7 +695,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       errors.add("Insufficient privileges to set this Exemption as Active.");
     }
     validateApprovedVolume(record.approvedVolume(), errors);
-    if (blankToNull(record.exemptionTypeCode()) == null) {
+    if (trimToNull(record.exemptionTypeCode()) == null) {
       errors.add(required("exemption type code"));
     }
     if (record.expiryDate() == null) {
@@ -729,35 +722,35 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         .findFirst()
         .flatMap(row -> repository.findApplicationLinkRecord(row.applicationNumber()))
         .flatMap(this::resolveApplicationClientEmail)
-        .map(this::blankToNull);
+        .map(value -> trimToNull(value));
   }
 
   private Optional<String> resolveApplicationClientEmail(
       ExemptionDetailsRpcRepository.ApplicationLinkRecord application) {
-    String clientNumber = blankToNull(application.agentClientNumber());
-    String locationCode = blankToNull(application.agentClientLocationCode());
+    String clientNumber = trimToNull(application.agentClientNumber());
+    String locationCode = trimToNull(application.agentClientLocationCode());
     if (clientNumber == null) {
-      clientNumber = blankToNull(application.ownerClientNumber());
-      locationCode = blankToNull(application.ownerClientLocationCode());
+      clientNumber = trimToNull(application.ownerClientNumber());
+      locationCode = trimToNull(application.ownerClientLocationCode());
     }
     if (clientNumber == null || locationCode == null) {
       return Optional.empty();
     }
     return clientLookupService.getClientData(clientNumber, locationCode)
         .map(ClientLookupService.ClientData::email)
-        .map(this::blankToNull);
+        .map(value -> trimToNull(value));
   }
 
   private boolean stageExemptionApprovalEmail(String exemptionNumber, String toEmailAddress) {
-    String normalizedExemptionNumber = blankToNull(exemptionNumber);
+    String normalizedExemptionNumber = trimToNull(exemptionNumber);
     if (normalizedExemptionNumber == null) {
       return false;
     }
-    String email = blankToNull(toEmailAddress);
+    String email = trimToNull(toEmailAddress);
     if (email == null) {
       email = resolveClientEmail(normalizedExemptionNumber).orElse(null);
     }
-    if (blankToNull(email) == null) {
+    if (trimToNull(email) == null) {
       return false;
     }
     if (repository.findApplicationSummariesByExemptionNumber(normalizedExemptionNumber).isEmpty()) {
@@ -772,12 +765,12 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   }
 
   private List<String> parseCsv(String rawValue) {
-    String normalized = blankToNull(rawValue);
+    String normalized = trimToNull(rawValue);
     if (normalized == null) {
       return List.of();
     }
     return List.of(normalized.split(",")).stream()
-        .map(this::blankToNull)
+        .map(value -> trimToNull(value))
         .filter(value -> value != null)
         .distinct()
         .toList();
@@ -787,7 +780,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     Map<String, String> emailByExemption = new LinkedHashMap<>();
     for (String entry : parseCsv(sendGrid)) {
       String[] pair = entry.split(":", 2);
-      if (pair.length == 2 && blankToNull(pair[0]) != null && blankToNull(pair[1]) != null) {
+      if (pair.length == 2 && trimToNull(pair[0]) != null && trimToNull(pair[1]) != null) {
         emailByExemption.put(pair[0].trim(), pair[1].trim());
       }
     }
@@ -824,13 +817,13 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                 .distinct()
                 .toList();
     return new CreateExemptionRequest(
-        blankToNull(input.exemptionNumber()),
+        trimToNull(input.exemptionNumber()),
         input.approvedVolume(),
         input.approvalDate(),
         input.expiryDate(),
         input.otherConditions() == null ? "" : input.otherConditions().trim(),
-        blankToNull(input.exemptionTypeCode()),
-        blankToNull(input.exemptionStatusCode()),
+        trimToNull(input.exemptionTypeCode()),
+        trimToNull(input.exemptionStatusCode()),
         input.feeRate(),
         input.enableRateOverride(),
         applicationNumbers,
@@ -851,14 +844,14 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                 .distinct()
                 .toList();
     return new UpdateExemptionRequest(
-        blankToNull(input.exemptionNumber()),
-        blankToNull(input.previousExemptionNumber()),
+        trimToNull(input.exemptionNumber()),
+        trimToNull(input.previousExemptionNumber()),
         input.approvedVolume(),
         input.approvalDate(),
         input.expiryDate(),
         input.otherConditions() == null ? "" : input.otherConditions().trim(),
-        blankToNull(input.exemptionTypeCode()),
-        blankToNull(input.exemptionStatusCode()),
+        trimToNull(input.exemptionTypeCode()),
+        trimToNull(input.exemptionStatusCode()),
         input.feeRate(),
         input.enableRateOverride(),
         regions);
@@ -866,14 +859,14 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   private List<String> validateCreateExemption(CreateExemptionRequest request) {
     List<String> errors = new ArrayList<>();
-    if (blankToNull(request.exemptionNumber()) == null) {
+    if (trimToNull(request.exemptionNumber()) == null) {
       errors.add(required("exemption number"));
     }
     validateApprovedVolume(request.approvedVolume(), errors);
-    if (blankToNull(request.exemptionTypeCode()) == null) {
+    if (trimToNull(request.exemptionTypeCode()) == null) {
       errors.add(required("exemption type code"));
     }
-    if (blankToNull(request.exemptionStatusCode()) == null) {
+    if (trimToNull(request.exemptionStatusCode()) == null) {
       errors.add(required("exemption status code"));
     }
     if (EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(request.exemptionStatusCode())
@@ -939,14 +932,14 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       String exemptionStatusCode,
       List<Long> regionNumbers) {
     List<String> errors = new ArrayList<>();
-    if (blankToNull(exemptionNumber) == null) {
+    if (trimToNull(exemptionNumber) == null) {
       errors.add(required("exemption number"));
     }
     validateApprovedVolume(approvedVolume, errors);
-    if (blankToNull(exemptionTypeCode) == null) {
+    if (trimToNull(exemptionTypeCode) == null) {
       errors.add(required("exemption type code"));
     }
-    if (blankToNull(exemptionStatusCode) == null) {
+    if (trimToNull(exemptionStatusCode) == null) {
       errors.add(required("exemption status code"));
     }
     if (EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(exemptionStatusCode) && expiryDate == null) {
@@ -997,10 +990,10 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       ExemptionDetailsRpcRepository.ExemptionRecord previous,
       String updateUserId) {
     boolean previousCancelled = EXEMPTION_STATUS_CANCELLED.equalsIgnoreCase(previous.exemptionStatusCode());
-    String exemptionNumber = Optional.ofNullable(blankToNull(request.exemptionNumber())).orElse(previous.exemptionNumber());
+    String exemptionNumber = Optional.ofNullable(trimToNull(request.exemptionNumber())).orElse(previous.exemptionNumber());
     String previousExemptionNumber =
-        Optional.ofNullable(blankToNull(request.previousExemptionNumber())).orElse(previous.exemptionNumber());
-    String statusCode = Optional.ofNullable(blankToNull(request.exemptionStatusCode())).orElse(previous.exemptionStatusCode());
+        Optional.ofNullable(trimToNull(request.previousExemptionNumber())).orElse(previous.exemptionNumber());
+    String statusCode = Optional.ofNullable(trimToNull(request.exemptionStatusCode())).orElse(previous.exemptionStatusCode());
 
     if (previousCancelled) {
       return new ExemptionDetailsRpcRepository.ExemptionUpdateRecord(
@@ -1018,7 +1011,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
           request.regionNumbers());
     }
 
-    String typeCode = Optional.ofNullable(blankToNull(request.exemptionTypeCode())).orElse(previous.exemptionTypeCode());
+    String typeCode = Optional.ofNullable(trimToNull(request.exemptionTypeCode())).orElse(previous.exemptionTypeCode());
     LocalDate approvalDate =
         request.approvalDate() == null ? previous.approvalDate() : request.approvalDate();
     return new ExemptionDetailsRpcRepository.ExemptionUpdateRecord(
@@ -1080,8 +1073,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   }
 
   private boolean statusChangedTo(String previousStatus, String currentStatus, String targetStatus) {
-    return !targetStatus.equalsIgnoreCase(blankToNull(previousStatus))
-        && targetStatus.equalsIgnoreCase(blankToNull(currentStatus));
+    return !targetStatus.equalsIgnoreCase(trimToNull(previousStatus))
+        && targetStatus.equalsIgnoreCase(trimToNull(currentStatus));
   }
 
   private boolean canEditExpiryDate(String previousStatusCode, String exemptionTypeCode) {
