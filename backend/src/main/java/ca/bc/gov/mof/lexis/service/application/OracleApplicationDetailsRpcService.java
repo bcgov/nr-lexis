@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.application;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.firstNonBlank;
+
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -1735,11 +1737,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     String normalized = trimToNull(productTypeCode);
     return EXPORT_PRODUCT_TYPE_HARVESTED.equals(normalized)
         || EXPORT_PRODUCT_TYPE_STANDING.equals(normalized);
-  }
-
-  private String firstNonBlank(String value, String fallback) {
-    String normalized = trimToNull(value);
-    return normalized == null ? fallback : normalized;
   }
 
   private String defaultMutationUser(String userId) {

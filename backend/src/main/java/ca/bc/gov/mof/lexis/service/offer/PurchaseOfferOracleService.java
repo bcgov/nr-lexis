@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.offer;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.firstNonBlank;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
@@ -448,11 +449,6 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   private String normalizePackageNumber(String value) {
     String normalized = trimToNull(value);
     return "No Packages".equalsIgnoreCase(normalized) ? null : normalized;
-  }
-
-  private String firstNonBlank(String value, String fallback) {
-    String normalized = trimToNull(value);
-    return normalized == null ? fallback : normalized;
   }
 
   private String defaultMutationUser(String userId) {

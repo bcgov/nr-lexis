@@ -17,4 +17,14 @@ class TextUtilsTest {
   void trimToNullShouldReturnTrimmedText() {
     assertThat(TextUtils.trimToNull("  value  ")).isEqualTo("value");
   }
+
+  @Test
+  void firstNonBlankShouldReturnTrimmedPrimaryText() {
+    assertThat(TextUtils.firstNonBlank("  value  ", "fallback")).isEqualTo("value");
+  }
+
+  @Test
+  void firstNonBlankShouldReturnFallbackWhenPrimaryIsBlank() {
+    assertThat(TextUtils.firstNonBlank("  ", "fallback")).isEqualTo("fallback");
+  }
 }

@@ -11,4 +11,9 @@ public final class TextUtils {
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
   }
+
+  public static String firstNonBlank(String value, String fallback) {
+    String normalized = trimToNull(value);
+    return normalized == null ? fallback : normalized;
+  }
 }
