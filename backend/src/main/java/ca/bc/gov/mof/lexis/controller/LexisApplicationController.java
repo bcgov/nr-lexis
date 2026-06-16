@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseApplicationNumbers;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
@@ -14,9 +15,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
-import java.util.Arrays;
 import java.util.List;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,7 +23,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/lexis/applications")
@@ -138,23 +136,6 @@ public class LexisApplicationController {
       @RequestParam(name = "applications") String applications) {
     List<Long> ids = parseApplicationNumbers(applications);
     return ResponseEntity.ok(new LexisApplicationOfferValidationDto(service.hasValidOffer(ids)));
-  }
-
-  private List<Long> parseApplicationNumbers(String applications) {
-    if (applications == null || applications.trim().isEmpty()) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "`applications` must not be empty");
-    }
-
-    try {
-      return Arrays.stream(applications.split(","))
-          .map(String::trim)
-          .filter(value -> !value.isEmpty())
-          .map(Long::valueOf)
-          .toList();
-    } catch (NumberFormatException ex) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST, "`applications` must be a comma-separated numeric list", ex);
-    }
   }
 
   private LexisApplicationSearchCriteria buildCriteria(
