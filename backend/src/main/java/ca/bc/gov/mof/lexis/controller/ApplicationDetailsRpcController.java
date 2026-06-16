@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseNonNegativeLong;
@@ -360,7 +361,13 @@ public class ApplicationDetailsRpcController {
 
   @PostMapping("/rpc/application-details/application")
   public ResponseEntity<ApplicationPersistenceResponseDto> addApplication(
-      @RequestParam MultiValueMap<String, String> parameters,
+      HttpServletRequest request,
+      Authentication authentication) {
+    return addApplication(fromRequest(request), authentication);
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> addApplication(
+      MultiValueMap<String, String> parameters,
       Authentication authentication) {
     if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -386,7 +393,13 @@ public class ApplicationDetailsRpcController {
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_ADD_APPLICATION)
   public ResponseEntity<ApplicationPersistenceResponseDto> addApplicationLegacy(
-      @RequestParam MultiValueMap<String, String> parameters,
+      HttpServletRequest request,
+      Authentication authentication) {
+    return addApplication(fromRequest(request), authentication);
+  }
+
+  public ResponseEntity<ApplicationPersistenceResponseDto> addApplicationLegacy(
+      MultiValueMap<String, String> parameters,
       Authentication authentication) {
     return addApplication(parameters, authentication);
   }

@@ -1,4 +1,13 @@
-export type UploadQueueStatus = 'queued' | 'invalid' | 'uploading' | 'complete' | 'failed'
+import type { LexisXmlSubmissionSummary } from '@/service/admin-upload-service'
+
+export type UploadQueueStatus =
+  | 'queued'
+  | 'invalid'
+  | 'validating'
+  | 'validated'
+  | 'uploading'
+  | 'complete'
+  | 'failed'
 
 export type UploadQueueReviewDetails = {
   summary?: string
@@ -7,6 +16,8 @@ export type UploadQueueReviewDetails = {
   applicationNumber?: number
   packageNumber?: string
   scaleRows?: number
+  userReference?: string
+  submissionSummary?: LexisXmlSubmissionSummary
 }
 
 export type UploadQueueItem = {

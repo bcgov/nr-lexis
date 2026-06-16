@@ -1,4 +1,8 @@
-import type { AdminUploadResult, UploadWorkflowType } from '@/service/admin-upload-service'
+import type {
+  AdminUploadResult,
+  LexisXmlSubmissionSummary,
+  UploadWorkflowType,
+} from '@/service/admin-upload-service'
 import { getResponseStatus } from '@/utils/http-error'
 import { isRecord, stringField } from '@/utils/record'
 import type { UploadQueueReviewDetails, UploadQueueStatus } from './uploadQueueTypes'
@@ -46,6 +50,10 @@ export const extractUploadErrorDetails = (
       summary: responseMessage || message,
       errors,
       warnings,
+      userReference: dataRecord ? stringField(dataRecord, 'userReference') : '',
+      submissionSummary: isRecord(dataRecord?.submissionSummary)
+        ? (dataRecord.submissionSummary as LexisXmlSubmissionSummary)
+        : undefined,
     },
   }
 }
@@ -67,10 +75,10 @@ export const uploadQueueStatusTagType = (
   if (status === 'invalid' || status === 'failed') {
     return 'red'
   }
-  if (status === 'uploading') {
+  if (status === 'uploading' || status === 'validating') {
     return 'blue'
   }
-  if (status === 'complete') {
+  if (status === 'complete' || status === 'validated') {
     return 'green'
   }
   return 'gray'
@@ -82,6 +90,12 @@ export const uploadQueueStatusLabel = (status: UploadQueueStatus): string => {
   }
   if (status === 'uploading') {
     return 'Uploading'
+  }
+  if (status === 'validating') {
+    return 'Validating'
+  }
+  if (status === 'validated') {
+    return 'Validated'
   }
   if (status === 'complete') {
     return 'Complete'
@@ -115,10 +129,12 @@ export const buildUploadResultMessage = (
   workflowType: UploadWorkflowType,
   resultMessage: string,
   result?: {
+    status?: string
     message?: string
     applicationNumber?: number
     packageNumber?: string
     scaleRows?: number
+    userReference?: string
     warnings?: string[]
   },
 ): string => {
@@ -137,9 +153,12 @@ export const buildUploadResultMessage = (
     details.push(formatScaleRows(result.scaleRows))
   }
 
+  const isValidationResult =
+    result?.status?.toLowerCase() === 'validated' ||
+    resultMessage.toLowerCase().includes('validated')
   const summary =
     details.length > 0
-      ? `LEXIS import created ${details.join(', ')}.`
+      ? `${isValidationResult ? 'LEXIS application submission validated' : 'LEXIS import created'} ${details.join(', ')}.`
       : result?.message?.trim() || resultMessage
 
   const warnings =
@@ -160,4 +179,6 @@ export const buildUploadReviewDetails = (
   applicationNumber: result?.applicationNumber,
   packageNumber: result?.packageNumber,
   scaleRows: result?.scaleRows,
+  userReference: result?.userReference,
+  submissionSummary: result?.submissionSummary,
 })

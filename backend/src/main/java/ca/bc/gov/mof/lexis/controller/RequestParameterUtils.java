@@ -3,14 +3,64 @@ package ca.bc.gov.mof.lexis.controller;
 import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import org.springframework.http.MediaType;
+import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
 final class RequestParameterUtils {
 
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  private static final TypeReference<Map<String, Object>> JSON_OBJECT_TYPE = new TypeReference<>() {};
+
   private RequestParameterUtils() {}
+
+  static MultiValueMap<String, String> fromRequest(HttpServletRequest request) {
+    LinkedMultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    if (request == null) {
+      return parameters;
+    }
+
+    request.getParameterMap()
+        .forEach((key, values) -> {
+          if (values == null) {
+            return;
+          }
+          for (String value : values) {
+            parameters.add(key, value);
+          }
+        });
+
+    if (!isJsonRequest(request)) {
+      return parameters;
+    }
+
+    try {
+      parameters.addAll(fromJsonBody(OBJECT_MAPPER.readValue(request.getInputStream(), JSON_OBJECT_TYPE)));
+    } catch (IOException ex) {
+      // Fall through with query/form parameters only.
+    }
+    return parameters;
+  }
+
+  static MultiValueMap<String, String> fromJsonBody(Map<String, ?> payload) {
+    LinkedMultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    if (payload == null) {
+      return parameters;
+    }
+
+    payload.forEach((key, value) -> appendJsonValue(parameters, key, value));
+    return parameters;
+  }
 
   static String first(MultiValueMap<String, String> parameters, String... names) {
     if (parameters == null || names == null) {
@@ -26,6 +76,24 @@ final class RequestParameterUtils {
       }
     }
     return null;
+  }
+
+  private static boolean isJsonRequest(HttpServletRequest request) {
+    String contentType = request.getContentType();
+    return contentType != null
+        && contentType.toLowerCase(Locale.ROOT).contains(MediaType.APPLICATION_JSON_VALUE);
+  }
+
+  private static void appendJsonValue(
+      LinkedMultiValueMap<String, String> parameters, String key, Object value) {
+    if (key == null || value == null) {
+      return;
+    }
+    if (value instanceof Collection<?> collection) {
+      collection.forEach(item -> appendJsonValue(parameters, key, item));
+      return;
+    }
+    parameters.add(key, String.valueOf(value));
   }
 
   static Long parsePositiveLong(String rawValue) {

@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
@@ -15,6 +16,7 @@ import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -134,7 +136,13 @@ public class IndianReservePermitController {
 
   @PostMapping
   public ResponseEntity<PermitMutationRpcResponseDto> addPermit(
-      @RequestParam MultiValueMap<String, String> parameters,
+      HttpServletRequest request,
+      Authentication authentication) {
+    return addPermit(fromRequest(request), authentication);
+  }
+
+  ResponseEntity<PermitMutationRpcResponseDto> addPermit(
+      MultiValueMap<String, String> parameters,
       Authentication authentication) {
     if (!canSaveIndianReservePermit(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();

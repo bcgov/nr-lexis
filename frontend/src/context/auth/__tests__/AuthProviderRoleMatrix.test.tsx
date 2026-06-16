@@ -122,12 +122,13 @@ describe('Auth Provider Role Matrix', () => {
       grantedActions: [],
     })
 
-    renderProbe(['/lexisAgentAdmin'])
+    renderProbe(['/lexisAgentAdmin', '/fileApplicationUpload'])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN')
     expect(screen.getByTestId('default-route')).toHaveTextContent('/admin')
-    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/fileApplicationUpload')).toHaveTextContent('true')
   })
 
   it('does not use legacyPath for default route routing anymore', async () => {

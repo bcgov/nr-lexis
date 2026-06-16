@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.upload;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisXmlImportResultDto;
+import ca.bc.gov.mof.lexis.dto.upload.LexisXmlSubmissionSummaryDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationResult;
@@ -62,6 +63,7 @@ public class LexisXmlImportService {
   private static final String UPLOAD_TYPE = "lexisXml";
   private static final String ACCEPTED = "accepted";
   private static final String REJECTED = "rejected";
+  private static final String VALIDATED = "validated";
   private static final String XML_EXTENSION = ".xml";
   private static final String ZIP_EXTENSION = ".zip";
   private static final String GEOJSON_EXTENSION = ".geojson";
@@ -75,6 +77,8 @@ public class LexisXmlImportService {
   private static final String DEFAULT_REPROCESSED_INDICATOR = "N";
   private static final String DEFAULT_OIC_INDICATOR = "N";
   private static final String PROVINCIAL_JURISDICTION = "P";
+  private static final int MAX_USER_REFERENCE_LENGTH = 50;
+  private static final String DEFAULT_IMPORT_REMARK = "Imported from LEXIS upload.";
   private static final Pattern UNTERMINATED_XML_TAG_PATTERN =
       Pattern.compile("The element type \"([^\"]+)\" must be terminated by the matching end-tag \"</([^\"]+)>\"\\.");
   private static final Pattern INCOMPLETE_XML_TAG_PATTERN =
@@ -121,28 +125,96 @@ public class LexisXmlImportService {
     this.objectMapper = objectMapper;
   }
 
-  @Transactional
-  public LexisXmlImportResultDto importLexisXml(MultipartFile file, String userId) {
+  public LexisXmlImportResultDto validateLexisXml(MultipartFile file) {
+    return validateLexisXml(file, null);
+  }
+
+  public LexisXmlImportResultDto validateLexisXml(MultipartFile file, String userReference) {
     String fileName = resolveFileName(file);
     long fileSize = file == null ? 0L : file.getSize();
-    if (file == null || file.isEmpty()) {
-      return rejected(fileName, fileSize, List.of("Choose a LEXIS import file."), List.of());
+    String normalizedUserReference = normalizeUserReference(userReference);
+    List<String> userReferenceErrors = validateUserReference(normalizedUserReference);
+    if (!userReferenceErrors.isEmpty()) {
+      return rejected(fileName, fileSize, userReferenceErrors, List.of(), null, normalizedUserReference);
     }
 
-    ParsedSubmission submission;
-    UploadedLexisSubmission uploadedSubmission;
-    try {
-      uploadedSubmission = readUploadedLexisSubmission(file);
-      submission =
-          uploadedSubmission.format() == UploadFormat.GEOJSON
-              ? parseGeoJson(uploadedSubmission.bytes())
-              : parse(uploadedSubmission.bytes());
-    } catch (LexisXmlImportException ex) {
-      return rejected(fileName, fileSize, ex.errors(), List.of());
-    } catch (Exception ex) {
-      LOGGER.warn("LEXIS import failed while parsing [{}]: {}", fileName, ex.getMessage());
-      return rejected(fileName, fileSize, List.of("The LEXIS import file could not be parsed."), List.of());
+    ParsedUpload parsedUpload = parseUploadedLexisSubmission(file, fileName, fileSize);
+    if (parsedUpload.rejection() != null) {
+      return withUserReference(parsedUpload.rejection(), normalizedUserReference);
     }
+
+    ParsedSubmission submission = parsedUpload.submission();
+    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission);
+    LexisXmlSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
+    ApplicationDetailsRpcService applicationDetailsService =
+        applicationDetailsServiceProvider.getIfAvailable();
+    if (applicationDetailsService == null) {
+      return rejected(
+          fileName,
+          fileSize,
+          List.of("Application validation is unavailable for LEXIS import."),
+          warnings,
+          submissionSummary,
+          normalizedUserReference);
+    }
+
+    ApplicationDetailsRpcService.PackageValidityItem packageValidity =
+        applicationDetailsService.isPackageValid(submission.packageNumber());
+    if (!packageValidity.valid()) {
+      return rejected(
+          fileName,
+          fileSize,
+          List.of(
+              packageValidity.message() == null
+                  ? "Package " + submission.packageNumber() + " already exists."
+                  : packageValidity.message()),
+          warnings,
+          submissionSummary,
+          normalizedUserReference);
+    }
+
+    return new LexisXmlImportResultDto(
+        UPLOAD_TYPE,
+        fileName,
+        fileSize,
+        VALIDATED,
+        "LEXIS application submission validated for package "
+            + submission.packageNumber()
+            + " with "
+            + submission.scaleLines().size()
+            + " scale rows.",
+        null,
+        submission.packageNumber(),
+        submission.scaleLines().size(),
+        List.of(),
+        warnings,
+        normalizedUserReference,
+        submissionSummary);
+  }
+
+  @Transactional
+  public LexisXmlImportResultDto importLexisXml(MultipartFile file, String userId) {
+    return importLexisXml(file, userId, null);
+  }
+
+  @Transactional
+  public LexisXmlImportResultDto importLexisXml(MultipartFile file, String userId, String userReference) {
+    String fileName = resolveFileName(file);
+    long fileSize = file == null ? 0L : file.getSize();
+    String normalizedUserReference = normalizeUserReference(userReference);
+    List<String> userReferenceErrors = validateUserReference(normalizedUserReference);
+    if (!userReferenceErrors.isEmpty()) {
+      return rejected(fileName, fileSize, userReferenceErrors, List.of(), null, normalizedUserReference);
+    }
+
+    ParsedUpload parsedUpload = parseUploadedLexisSubmission(file, fileName, fileSize);
+    if (parsedUpload.rejection() != null) {
+      return withUserReference(parsedUpload.rejection(), normalizedUserReference);
+    }
+
+    ParsedSubmission submission = parsedUpload.submission();
+    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission);
+    LexisXmlSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
 
     ApplicationDetailsRpcService applicationDetailsService =
         applicationDetailsServiceProvider.getIfAvailable();
@@ -151,36 +223,55 @@ public class LexisXmlImportService {
           fileName,
           fileSize,
           List.of("Application persistence is unavailable for LEXIS import."),
-          List.of());
+          List.of(),
+          submissionSummary,
+          normalizedUserReference);
+    }
+
+    ApplicationDetailsRpcService.PackageValidityItem packageValidity =
+        applicationDetailsService.isPackageValid(submission.packageNumber());
+    if (packageValidity != null && !packageValidity.valid()) {
+      return rejected(
+          fileName,
+          fileSize,
+          List.of(
+              packageValidity.message() == null
+                  ? "Package " + submission.packageNumber() + " already exists."
+                  : packageValidity.message()),
+          warnings,
+          submissionSummary,
+          normalizedUserReference);
     }
 
     LocalDate importDate = LocalDate.now(clock);
-    List<String> warnings = new ArrayList<>(uploadedSubmission.warnings());
-    if (submission.applicationStatusCode() != null) {
-      warnings.add(
-          "Source application status "
-              + submission.applicationStatusCode()
-              + " was ignored; imported applications are created as new.");
-    }
 
     CreateApplicationResult applicationResult =
         applicationDetailsService.addApplication(
-            toCreateApplicationRequest(submission, importDate), userId);
+            toCreateApplicationRequest(submission, importDate, normalizedUserReference), userId);
     if (!applicationResult.valid() || applicationResult.applicationNumber() == null) {
       markRollbackOnly();
       return rejected(
           fileName,
           fileSize,
           resultErrors(applicationResult.errors(), applicationResult.message()),
-          warnings);
+          warnings,
+          submissionSummary,
+          normalizedUserReference);
     }
 
     Long applicationNumber = applicationResult.applicationNumber();
     PackagePersistenceResult packageResult =
-        applicationDetailsService.addPackage(toPackageMutationRequest(submission, applicationNumber), userId);
+        applicationDetailsService.addPackage(
+            toPackageMutationRequest(submission, applicationNumber, normalizedUserReference), userId);
     if (!packageResult.valid()) {
       markRollbackOnly();
-      return rejected(fileName, fileSize, resultErrors(packageResult.errors(), null), warnings);
+      return rejected(
+          fileName,
+          fileSize,
+          resultErrors(packageResult.errors(), null),
+          warnings,
+          submissionSummary,
+          normalizedUserReference);
     }
 
     int importedScales = 0;
@@ -198,7 +289,13 @@ public class LexisXmlImportService {
               userId);
       if (!scaleResult.valid()) {
         markRollbackOnly();
-        return rejected(fileName, fileSize, resultErrors(scaleResult.errors(), null), warnings);
+        return rejected(
+            fileName,
+            fileSize,
+            resultErrors(scaleResult.errors(), null),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
       }
       importedScales++;
     }
@@ -219,7 +316,47 @@ public class LexisXmlImportService {
         submission.packageNumber(),
         importedScales,
         List.of(),
-        warnings);
+        warnings,
+        normalizedUserReference,
+        submissionSummary);
+  }
+
+  private ParsedUpload parseUploadedLexisSubmission(MultipartFile file, String fileName, long fileSize) {
+    if (file == null || file.isEmpty()) {
+      return ParsedUpload.rejected(
+          rejected(fileName, fileSize, List.of("Choose a LEXIS import file."), List.of()));
+    }
+
+    try {
+      UploadedLexisSubmission uploadedSubmission = readUploadedLexisSubmission(file);
+      ParsedSubmission submission =
+          uploadedSubmission.format() == UploadFormat.GEOJSON
+              ? parseGeoJson(uploadedSubmission.bytes())
+              : parse(uploadedSubmission.bytes());
+      return ParsedUpload.valid(uploadedSubmission, submission);
+    } catch (LexisXmlImportException ex) {
+      return ParsedUpload.rejected(rejected(fileName, fileSize, ex.errors(), List.of()));
+    } catch (Exception ex) {
+      LOGGER.warn("LEXIS import failed while parsing [{}]: {}", fileName, ex.getMessage());
+      return ParsedUpload.rejected(
+          rejected(
+              fileName,
+              fileSize,
+              List.of("The LEXIS import file could not be parsed."),
+              List.of()));
+    }
+  }
+
+  private List<String> buildImportWarnings(
+      UploadedLexisSubmission uploadedSubmission, ParsedSubmission submission) {
+    List<String> warnings = new ArrayList<>(uploadedSubmission.warnings());
+    if (submission.applicationStatusCode() != null) {
+      warnings.add(
+          "Source application status "
+              + submission.applicationStatusCode()
+              + " was ignored; imported applications are created as new.");
+    }
+    return warnings;
   }
 
   private UploadedLexisSubmission readUploadedLexisSubmission(MultipartFile file) throws Exception {
@@ -975,7 +1112,8 @@ public class LexisXmlImportService {
     }
   }
 
-  private CreateApplicationRequest toCreateApplicationRequest(ParsedSubmission submission, LocalDate importDate) {
+  private CreateApplicationRequest toCreateApplicationRequest(
+      ParsedSubmission submission, LocalDate importDate, String userReference) {
     return new CreateApplicationRequest(
         null,
         importDate,
@@ -1001,12 +1139,12 @@ public class LexisXmlImportService {
         DEFAULT_OIC_INDICATOR,
         submission.endUseCode(),
         submission.speciesCodes(),
-        "Imported from LEXIS upload.",
+        importRemark(userReference),
         true);
   }
 
   private PackageMutationRequest toPackageMutationRequest(
-      ParsedSubmission submission, Long applicationNumber) {
+      ParsedSubmission submission, Long applicationNumber, String userReference) {
     return new PackageMutationRequest(
         submission.packageNumber(),
         null,
@@ -1015,12 +1153,35 @@ public class LexisXmlImportService {
         submission.averageLength(),
         submission.averageDiameter(),
         DEFAULT_PACKAGE_STATUS,
-        "Imported from LEXIS upload.",
+        importRemark(userReference),
         DEFAULT_REPROCESSED_INDICATOR,
         submission.ageClass(),
         submission.productTypeCode(),
         submission.endUseCode(),
         submission.speciesCodes());
+  }
+
+  private LexisXmlSubmissionSummaryDto toSubmissionSummary(ParsedSubmission submission) {
+    return new LexisXmlSubmissionSummaryDto(
+        submission.ownerClientNumber(),
+        submission.ownerClientLocationCode(),
+        submission.ownerContactName(),
+        submission.jurisdictionCode(),
+        submission.orgUnitNumber(),
+        submission.applicationStatusCode(),
+        submission.exemptionReasonCode(),
+        submission.applicantTypeCode(),
+        submission.productTypeCode(),
+        submission.packageNumber(),
+        submission.productLocation(),
+        submission.ageClass(),
+        submission.averageLength(),
+        submission.averageDiameter(),
+        submission.applicationVolume(),
+        submission.averageLogVolume(),
+        submission.endUseCode(),
+        submission.speciesCodes(),
+        submission.scaleLines().size());
   }
 
   private Element requiredChild(
@@ -1211,6 +1372,45 @@ public class LexisXmlImportService {
     return List.of(normalizedMessage == null ? "The LEXIS import could not be persisted." : normalizedMessage);
   }
 
+  private String normalizeUserReference(String userReference) {
+    return trimToNull(userReference);
+  }
+
+  private List<String> validateUserReference(String userReference) {
+    if (userReference != null && userReference.length() > MAX_USER_REFERENCE_LENGTH) {
+      return List.of("User reference must be " + MAX_USER_REFERENCE_LENGTH + " characters or fewer.");
+    }
+    return List.of();
+  }
+
+  private String importRemark(String userReference) {
+    String normalizedUserReference = normalizeUserReference(userReference);
+    if (normalizedUserReference == null) {
+      return DEFAULT_IMPORT_REMARK;
+    }
+    return DEFAULT_IMPORT_REMARK + "\nUser reference: " + normalizedUserReference;
+  }
+
+  private LexisXmlImportResultDto withUserReference(
+      LexisXmlImportResultDto result, String userReference) {
+    if (userReference == null || result == null) {
+      return result;
+    }
+    return new LexisXmlImportResultDto(
+        result.uploadType(),
+        result.fileName(),
+        result.fileSize(),
+        result.status(),
+        result.message(),
+        result.applicationNumber(),
+        result.packageNumber(),
+        result.scaleRows(),
+        result.errors(),
+        result.warnings(),
+        userReference,
+        result.submissionSummary());
+  }
+
   private void markRollbackOnly() {
     try {
       TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
@@ -1221,6 +1421,25 @@ public class LexisXmlImportService {
 
   private LexisXmlImportResultDto rejected(
       String fileName, long fileSize, List<String> errors, List<String> warnings) {
+    return rejected(fileName, fileSize, errors, warnings, null);
+  }
+
+  private LexisXmlImportResultDto rejected(
+      String fileName,
+      long fileSize,
+      List<String> errors,
+      List<String> warnings,
+      LexisXmlSubmissionSummaryDto submissionSummary) {
+    return rejected(fileName, fileSize, errors, warnings, submissionSummary, null);
+  }
+
+  private LexisXmlImportResultDto rejected(
+      String fileName,
+      long fileSize,
+      List<String> errors,
+      List<String> warnings,
+      LexisXmlSubmissionSummaryDto submissionSummary,
+      String userReference) {
     List<String> normalizedErrors = errors == null ? List.of() : errors;
     List<String> normalizedWarnings = warnings == null ? List.of() : warnings;
     String detail =
@@ -1236,7 +1455,9 @@ public class LexisXmlImportService {
         null,
         0,
         normalizedErrors,
-        normalizedWarnings);
+        normalizedWarnings,
+        userReference,
+        submissionSummary);
   }
 
   private String resolveFileName(MultipartFile file) {
@@ -1244,6 +1465,19 @@ public class LexisXmlImportService {
       return "lexis-submission.xml";
     }
     return file.getOriginalFilename().trim();
+  }
+
+  private record ParsedUpload(
+      UploadedLexisSubmission uploadedSubmission,
+      ParsedSubmission submission,
+      LexisXmlImportResultDto rejection) {
+    static ParsedUpload valid(UploadedLexisSubmission uploadedSubmission, ParsedSubmission submission) {
+      return new ParsedUpload(uploadedSubmission, submission, null);
+    }
+
+    static ParsedUpload rejected(LexisXmlImportResultDto rejection) {
+      return new ParsedUpload(null, null, rejection);
+    }
   }
 
   private record ParsedSubmission(

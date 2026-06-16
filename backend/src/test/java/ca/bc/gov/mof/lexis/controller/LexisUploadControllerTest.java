@@ -257,14 +257,14 @@ class LexisUploadControllerTest {
             3,
             List.of(),
             List.of());
-    when(xmlImportService.importLexisXml(file, "jsmith")).thenReturn(payload);
+    when(xmlImportService.importLexisXml(file, "jsmith", "CLIENT-REF-1")).thenReturn(payload);
 
     ResponseEntity<LexisXmlImportResultDto> response =
-        controller.lexisXmlUpload(file, null, authentication);
+        controller.lexisXmlUpload(file, null, "CLIENT-REF-1", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(xmlImportService).importLexisXml(file, "jsmith");
+    verify(xmlImportService).importLexisXml(file, "jsmith", "CLIENT-REF-1");
   }
 
   @Test
@@ -284,10 +284,63 @@ class LexisUploadControllerTest {
             0,
             List.of("Invalid XML"),
             List.of());
-    when(xmlImportService.importLexisXml(file, null)).thenReturn(payload);
+    when(xmlImportService.importLexisXml(file, null, null)).thenReturn(payload);
 
     ResponseEntity<LexisXmlImportResultDto> response =
-        controller.lexisXmlUpload(file, null, null);
+        controller.lexisXmlUpload(file, null, null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(response.getBody()).isEqualTo(payload);
+  }
+
+  @Test
+  void lexisXmlValidationShouldDelegateToValidationService() {
+    when(xmlImportServiceProvider.getIfAvailable()).thenReturn(xmlImportService);
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+    LexisXmlImportResultDto payload =
+        new LexisXmlImportResultDto(
+            "lexisXml",
+            "submission.xml",
+            file.getSize(),
+            "validated",
+            "validated",
+            null,
+            "PKG-1",
+            3,
+            List.of(),
+            List.of());
+    when(xmlImportService.validateLexisXml(file, "CLIENT-REF-1")).thenReturn(payload);
+
+    ResponseEntity<LexisXmlImportResultDto> response =
+        controller.lexisXmlValidation(file, null, "CLIENT-REF-1");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(payload);
+    verify(xmlImportService).validateLexisXml(file, "CLIENT-REF-1");
+  }
+
+  @Test
+  void lexisXmlValidationShouldReturnUnprocessableEntityForRejectedValidation() {
+    when(xmlImportServiceProvider.getIfAvailable()).thenReturn(xmlImportService);
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleXmlFile();
+    LexisXmlImportResultDto payload =
+        new LexisXmlImportResultDto(
+            "lexisXml",
+            "submission.xml",
+            file.getSize(),
+            "rejected",
+            "rejected",
+            null,
+            null,
+            0,
+            List.of("Invalid XML"),
+            List.of());
+    when(xmlImportService.validateLexisXml(file, null)).thenReturn(payload);
+
+    ResponseEntity<LexisXmlImportResultDto> response =
+        controller.lexisXmlValidation(file, null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
     assertThat(response.getBody()).isEqualTo(payload);

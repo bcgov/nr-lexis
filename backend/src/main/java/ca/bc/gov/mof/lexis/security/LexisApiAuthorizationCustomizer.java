@@ -1,11 +1,14 @@
 package ca.bc.gov.mof.lexis.security;
 
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
-import java.util.Set;
+import java.util.List;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -15,11 +18,9 @@ public class LexisApiAuthorizationCustomizer
         AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry> {
 
   private final LexisAuthorizationService authorizationService;
-  private final String[] knownRoles;
 
   public LexisApiAuthorizationCustomizer(LexisAuthorizationService authorizationService) {
     this.authorizationService = authorizationService;
-    this.knownRoles = authorizationService.getConfiguredRoles().stream().toArray(String[]::new);
   }
 
   @Override
@@ -358,7 +359,9 @@ public class LexisApiAuthorizationCustomizer
         HttpMethod.POST,
         new String[] {
           "/api/lexis/uploads/lexis-xml",
-          "/api/lexis/admin/uploads/lexis-xml"
+          "/api/lexis/admin/uploads/lexis-xml",
+          "/api/lexis/uploads/lexis-xml/validation",
+          "/api/lexis/admin/uploads/lexis-xml/validation"
         },
         "createApplication");
 
@@ -626,11 +629,12 @@ public class LexisApiAuthorizationCustomizer
       AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
           authorize,
       String... paths) {
-    if (knownRoles.length == 0) {
-      authorize.requestMatchers(paths).denyAll();
-      return;
-    }
-    authorize.requestMatchers(paths).hasAnyAuthority(knownRoles);
+    authorize
+        .requestMatchers(paths)
+        .access(
+            (authentication, context) ->
+                new AuthorizationDecision(
+                    authorizationService.hasKnownRole(getAuthorities(authentication.get()))));
   }
 
   private void authorizeAction(
@@ -639,11 +643,19 @@ public class LexisApiAuthorizationCustomizer
       HttpMethod method,
       String[] paths,
       String legacyAction) {
-    Set<String> roles = authorizationService.resolveRolesForAction(legacyAction);
-    if (roles.isEmpty()) {
-      authorize.requestMatchers(method, paths).denyAll();
-      return;
+    authorize
+        .requestMatchers(method, paths)
+        .access(
+            (authentication, context) ->
+                new AuthorizationDecision(
+                    authorizationService.canPerformAction(
+                        getAuthorities(authentication.get()), legacyAction)));
+  }
+
+  private List<String> getAuthorities(Authentication authentication) {
+    if (authentication == null || authentication.getAuthorities() == null) {
+      return List.of();
     }
-    authorize.requestMatchers(method, paths).hasAnyAuthority(roles.toArray(String[]::new));
+    return authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
   }
 }

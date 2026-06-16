@@ -11,8 +11,32 @@ export type AdminUploadResult = {
   applicationNumber?: number
   packageNumber?: string
   scaleRows?: number
+  userReference?: string
   errors?: string[]
   warnings?: string[]
+  submissionSummary?: LexisXmlSubmissionSummary
+}
+
+export type LexisXmlSubmissionSummary = {
+  ownerClientNumber?: string
+  ownerClientLocationCode?: string
+  ownerContactName?: string
+  jurisdictionCode?: string
+  orgUnitNumber?: number
+  sourceApplicationStatusCode?: string
+  exemptionReasonCode?: string
+  applicantTypeCode?: string
+  productTypeCode?: string
+  packageNumber?: string
+  productLocation?: string
+  ageClass?: string
+  averageLength?: number
+  averageDiameter?: number
+  applicationVolume?: number
+  averageLogVolume?: number
+  endUseCode?: string
+  speciesCodes?: string[]
+  scaleRows?: number
 }
 
 type UploadRequestBase = {
@@ -40,7 +64,9 @@ export type InvoiceUploadRequest = UploadRequestBase & {
   invoiceFeeInLieu: string
 }
 
-export type LexisXmlUploadRequest = UploadRequestBase
+export type LexisXmlUploadRequest = UploadRequestBase & {
+  userReference?: string
+}
 
 type UploadRequestByType = {
   application: ApplicationUploadRequest
@@ -57,6 +83,8 @@ const MODERN_UPLOAD_ENDPOINTS: Record<UploadWorkflowType, string> = {
   invoice: '/lexis/admin/uploads/invoices',
   lexisXml: '/lexis/admin/uploads/lexis-xml',
 }
+
+const LEXIS_XML_VALIDATION_ENDPOINT = '/lexis/admin/uploads/lexis-xml/validation'
 
 const appendBaseFormData = (formData: FormData, request: UploadRequestBase): void => {
   formData.append('formFile', request.file)
@@ -90,6 +118,13 @@ const buildModernPayload = <TType extends UploadWorkflowType>(
     formData.append('invoiceFeeInLieu', request.invoiceFeeInLieu)
   }
 
+  if (workflowType === 'lexisXml' && 'userReference' in request) {
+    const userReference = request.userReference?.trim()
+    if (userReference) {
+      formData.append('userReference', userReference)
+    }
+  }
+
   return formData
 }
 
@@ -102,6 +137,20 @@ export const submitAdminUpload = async <TType extends UploadWorkflowType>(
   const response = await apiService
     .getAxiosInstance()
     .post<AdminUploadResult>(modernEndpoint, modernPayload, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  return response.data ?? {}
+}
+
+export const validateLexisXmlUpload = async (
+  request: LexisXmlUploadRequest,
+): Promise<AdminUploadResult> => {
+  const payload = buildModernPayload('lexisXml', request)
+  const response = await apiService
+    .getAxiosInstance()
+    .post<AdminUploadResult>(LEXIS_XML_VALIDATION_ENDPOINT, payload, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

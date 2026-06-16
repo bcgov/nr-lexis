@@ -54,10 +54,10 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
 const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
   {
     id: 'lexisXmlUpload',
-    label: 'LEXIS import',
+    label: 'LEXIS application import',
     requiredAction: 'createApplication',
-    description: 'Import LEXIS application XML or GeoJSON.',
-    reactUploadType: 'lexisXml',
+    description: 'Create applications from ESF LEXIS XML or GeoJSON submissions.',
+    reactPath: '/provincial/application/upload',
   },
   {
     id: 'fileApplicationUpload',

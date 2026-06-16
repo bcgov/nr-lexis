@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminUploadsPage from '@/pages/AdminUploads'
-import { submitAdminUpload } from '@/service/admin-upload-service'
+import { submitAdminUpload, validateLexisXmlUpload } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
@@ -15,6 +15,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
+  validateLexisXmlUpload: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-application-search-service', () => ({
@@ -31,6 +32,7 @@ vi.mock('@/service/provincial-permit-search-service', () => ({
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+const mockedValidateLexisXmlUpload = vi.mocked(validateLexisXmlUpload)
 const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
   searchProvincialApplicationNumberOptions,
 )
@@ -44,6 +46,15 @@ const renderPage = (path = '/admin/uploads?type=permit') => {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/admin/uploads" element={<AdminUploadsPage />} />
+        <Route
+          path="/provincial/application/upload"
+          element={
+            <AdminUploadsPage
+              lockedWorkflowType="lexisXml"
+              pageTitle="Upload Application Submission"
+            />
+          }
+        />
       </Routes>
     </MemoryRouter>,
   )
@@ -75,6 +86,7 @@ describe('Admin upload workflow smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedSubmitAdminUpload.mockResolvedValue({})
+    mockedValidateLexisXmlUpload.mockResolvedValue({})
     mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([])
     mockedSearchProvincialExemptionNumberOptions.mockResolvedValue([])
     mockedSearchProvincialPermitNumberOptions.mockResolvedValue([])
@@ -87,7 +99,7 @@ describe('Admin upload workflow smoke', () => {
 
     renderPage('/admin/uploads?type=permit&permitNumber=5001')
 
-    expect(screen.getByRole('combobox', { name: 'Permit Number' })).toHaveValue('5001')
+    expect(screen.getByRole('combobox', { name: 'Permit number' })).toHaveValue('5001')
     expect(screen.getByText('Allowed')).toBeInTheDocument()
 
     const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
@@ -95,7 +107,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByRole('columnheader', { name: 'Target' })).toBeInTheDocument()
     expect(screen.getAllByText('Permit 5001').length).toBeGreaterThan(0)
     expect(screen.getByText(/PDF \| 13 B \| Added/)).toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('Document Description'), 'Permit evidence')
+    await userEvent.type(screen.getByLabelText('Document description'), 'Permit evidence')
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
     await waitFor(() => {
@@ -109,7 +121,7 @@ describe('Admin upload workflow smoke', () => {
       )
     })
 
-    expect(screen.getByText('Upload Submitted')).toBeInTheDocument()
+    expect(screen.getByText('Upload submitted')).toBeInTheDocument()
   })
 
   it('searches application numbers for application document uploads', async () => {
@@ -132,7 +144,7 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=application')
 
     const applicationNumberInput = screen.getByRole('combobox', {
-      name: 'Application Number',
+      name: 'Application number',
     })
     await userEvent.type(applicationNumberInput, '45963')
 
@@ -181,7 +193,7 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=exemption')
 
     const exemptionNumberInput = screen.getByRole('combobox', {
-      name: 'Exemption Number',
+      name: 'Exemption number',
     })
     await userEvent.type(exemptionNumberInput, 'EX-555')
 
@@ -230,7 +242,7 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=invoice')
 
     const permitNumberInput = screen.getByRole('combobox', {
-      name: 'Permit Number',
+      name: 'Permit number',
     })
     await userEvent.type(permitNumberInput, '7000123')
 
@@ -246,8 +258,8 @@ describe('Admin upload workflow smoke', () => {
 
     const file = new File(['invoice upload'], 'invoice.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
-    await userEvent.type(screen.getByLabelText('Invoice Number'), 'INV123')
-    await userEvent.type(screen.getByLabelText('Export Value (CAD)'), '1000')
+    await userEvent.type(screen.getByLabelText('Invoice number'), 'INV123')
+    await userEvent.type(screen.getByLabelText('Export value (CAD)'), '1000')
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
     await waitFor(() => {
@@ -283,7 +295,7 @@ describe('Admin upload workflow smoke', () => {
 
     renderPage('/admin/uploads?type=permit&permitNumber=5001')
 
-    expect(screen.getByRole('heading', { name: 'Data Preview' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Data preview' })).toBeInTheDocument()
     expect(screen.getByText('No data uploaded yet')).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'File' })).not.toBeInTheDocument()
   })
@@ -339,12 +351,12 @@ describe('Admin upload workflow smoke', () => {
 
     const file = new File(['invoice upload'], 'invoice.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
-    await userEvent.type(screen.getByLabelText('Invoice Number'), '1234567890')
-    await userEvent.type(screen.getByLabelText('Export Value (CAD)'), '0')
-    await userEvent.clear(screen.getByLabelText('Conversion Rate'))
-    await userEvent.type(screen.getByLabelText('Conversion Rate'), '0')
-    await userEvent.clear(screen.getByLabelText('Fee In Lieu'))
-    await userEvent.type(screen.getByLabelText('Fee In Lieu'), '0')
+    await userEvent.type(screen.getByLabelText('Invoice number'), '1234567890')
+    await userEvent.type(screen.getByLabelText('Export value (CAD)'), '0')
+    await userEvent.clear(screen.getByLabelText('Conversion rate'))
+    await userEvent.type(screen.getByLabelText('Conversion rate'), '0')
+    await userEvent.clear(screen.getByLabelText('Fee in lieu'))
+    await userEvent.type(screen.getByLabelText('Fee in lieu'), '0')
 
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
@@ -353,44 +365,91 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
-  it('submits LEXIS XML import without a target number', async () => {
+  it('validates LEXIS XML before submitting an application import', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
     } as any)
+    mockedValidateLexisXmlUpload.mockResolvedValue({
+      message:
+        'LEXIS application submission validated for package TEST23-652-7D-2 with 3 scale rows.',
+      packageNumber: 'TEST23-652-7D-2',
+      scaleRows: 3,
+      submissionSummary: {
+        ownerClientNumber: '1074',
+        ownerClientLocationCode: '03',
+        ownerContactName: 'CUSTOMER SERVICE',
+        jurisdictionCode: 'P',
+        orgUnitNumber: 1909,
+        productTypeCode: 'H',
+        productLocation: 'Ten Mile Lake',
+        applicationVolume: 525,
+        averageLogVolume: 0.3,
+        averageLength: 6.7,
+        averageDiameter: 12.8,
+        speciesCodes: ['HE', 'FI'],
+        endUseCode: 'PL',
+      },
+      userReference: 'CLIENT-REF-1',
+    })
     mockedSubmitAdminUpload.mockResolvedValue({
       message:
         'LEXIS import created application 9001 with package TEST23-652-7D-2 and 3 scale rows.',
       applicationNumber: 9001,
       packageNumber: 'TEST23-652-7D-2',
       scaleRows: 3,
+      userReference: 'CLIENT-REF-1',
     })
 
     renderPage('/admin/uploads?type=lexisXml')
 
     expect(screen.getByText('Allowed')).toBeInTheDocument()
-    expect(screen.getByText('Upload LEXIS Submissions')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Application Number')).not.toBeInTheDocument()
+    expect(screen.getByText('Upload Application Submissions')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Submission summary' })).toBeInTheDocument()
+    expect(screen.getByText('No application submissions selected')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Application number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
 
+    await userEvent.type(screen.getByLabelText('User reference'), 'CLIENT-REF-1')
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
-    await userEvent.upload(screen.getByLabelText('LEXIS Import File'), file)
-    expect(
-      screen.getAllByText('Creates application, package, species, and scales').length,
-    ).toBeGreaterThan(0)
+    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
+    expect(screen.getAllByText('Creates a new application').length).toBeGreaterThan(0)
     expect(screen.getByText(/XML \| 7 B \| Added/)).toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('Document Description'), 'LEXIS XML')
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Validate submissions' }))
+
+    await waitFor(() => {
+      expect(mockedValidateLexisXmlUpload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          file,
+          fileDescription: '',
+          userReference: 'CLIENT-REF-1',
+        }),
+      )
+    })
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+    expect(screen.getByText('Submission validated')).toBeInTheDocument()
+    expect(screen.getByText('Application Summary')).toBeInTheDocument()
+    expect(screen.getByText('1074-03')).toBeInTheDocument()
+    expect(screen.getByText('CUSTOMER SERVICE')).toBeInTheDocument()
+    expect(screen.getAllByText('525.0').length).toBeGreaterThan(0)
+    expect(screen.getByText('HE, FI')).toBeInTheDocument()
+    expect(screen.getAllByText('CLIENT-REF-1').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit applications' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
         'lexisXml',
         expect.objectContaining({
           file,
-          fileDescription: 'LEXIS XML',
+          fileDescription: '',
+          userReference: 'CLIENT-REF-1',
         }),
       )
     })
 
-    expect(screen.getByText('Upload Submitted')).toBeInTheDocument()
+    expect(screen.getByText('Application submission complete')).toBeInTheDocument()
     expect(screen.getAllByText(/Application 9001/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
@@ -404,8 +463,7 @@ describe('Admin upload workflow smoke', () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
     } as any)
-    mockedSubmitAdminUpload.mockResolvedValue({
-      applicationNumber: 9001,
+    mockedValidateLexisXmlUpload.mockResolvedValue({
       packageNumber: 'TEST23-652-7D-2',
       scaleRows: 3,
       warnings: ['Imported payload/6-652-7.xml from ZIP archive submission.zip.'],
@@ -414,14 +472,14 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=lexisXml')
 
     const file = new File(['zip-data'], 'submission.zip', { type: 'application/zip' })
-    await userEvent.upload(screen.getByLabelText('LEXIS Import File'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Validate submissions' }))
 
-    expect(await screen.findByText('Upload Submitted')).toBeInTheDocument()
-    expect(screen.getAllByText(/Application 9001/).length).toBeGreaterThan(0)
+    expect(await screen.findByText('Submission validated')).toBeInTheDocument()
     expect(
       screen.getAllByText(/Imported payload\/6-652-7.xml from ZIP archive submission.zip/).length,
     ).toBeGreaterThan(0)
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
   it('previews safe structure from queued LEXIS XML files before submit', async () => {
@@ -432,7 +490,7 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=lexisXml')
 
     const file = new File([XML_PREVIEW_FIXTURE], 'submission.xml', { type: 'application/xml' })
-    await userEvent.upload(screen.getByLabelText('LEXIS Import File'), file)
+    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
 
     expect(
       (await screen.findAllByText('Preview: LEXIS XML structure detected, 2 scale rows.')).length,
@@ -463,7 +521,7 @@ describe('Admin upload workflow smoke', () => {
       'submission.geojson',
       { type: 'application/geo+json' },
     )
-    await userEvent.upload(screen.getByLabelText('LEXIS Import File'), file)
+    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
 
     expect(
       (await screen.findAllByText('Preview: LEXIS GeoJSON structure detected, 1 scale row.'))
@@ -485,7 +543,7 @@ describe('Admin upload workflow smoke', () => {
     const file = new File([xmlWithMarkupInPreviewField], 'submission.xml', {
       type: 'application/xml',
     })
-    await userEvent.upload(screen.getByLabelText('LEXIS Import File'), file)
+    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
 
     expect(
       (await screen.findAllByText('Preview: LEXIS XML structure detected, 2 scale rows.')).length,
@@ -502,7 +560,7 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=lexisXml')
 
     const file = new File(['zip-data'], 'submission.zip', { type: 'application/zip' })
-    await userEvent.upload(screen.getByLabelText('LEXIS Import File'), file)
+    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
 
     expect(
       (await screen.findAllByText('ZIP archive will be unpacked and validated on upload.')).length,
@@ -513,6 +571,17 @@ describe('Admin upload workflow smoke', () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
     } as any)
+    mockedValidateLexisXmlUpload
+      .mockResolvedValueOnce({
+        message: 'First XML validated.',
+        packageNumber: 'FIRST-PKG',
+        scaleRows: 1,
+      })
+      .mockResolvedValueOnce({
+        message: 'Second XML validated.',
+        packageNumber: 'SECOND-PKG',
+        scaleRows: 1,
+      })
     mockedSubmitAdminUpload
       .mockResolvedValueOnce({
         message: 'First XML import created application 9001.',
@@ -525,8 +594,23 @@ describe('Admin upload workflow smoke', () => {
 
     const firstFile = new File(['<xml />'], 'first.xml', { type: 'application/xml' })
     const secondFile = new File(['<xml />'], 'second.xml', { type: 'application/xml' })
-    await userEvent.upload(screen.getByLabelText('LEXIS Import File'), [firstFile, secondFile])
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.upload(screen.getByLabelText('Application submission file'), [
+      firstFile,
+      secondFile,
+    ])
+    await userEvent.click(screen.getByRole('button', { name: 'Validate submissions' }))
+
+    await waitFor(() => {
+      expect(mockedValidateLexisXmlUpload).toHaveBeenCalledTimes(2)
+    })
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+    expect(
+      screen.getByText(
+        '2 application submissions validated. Review the file summary and submit applications.',
+      ),
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit applications' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
@@ -543,7 +627,9 @@ describe('Admin upload workflow smoke', () => {
       expect.objectContaining({ file: secondFile }),
     )
     expect(
-      screen.getByText('2 files uploaded. Verify updates in the target details view.'),
+      screen.getByText(
+        '2 application submissions imported. Verify the created application and package details.',
+      ),
     ).toBeInTheDocument()
     expect(
       screen.getAllByText('First XML import created application 9001.').length,
@@ -557,6 +643,15 @@ describe('Admin upload workflow smoke', () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
     } as any)
+    mockedValidateLexisXmlUpload
+      .mockResolvedValueOnce({
+        packageNumber: 'TEST23-652-7D-2',
+        scaleRows: 3,
+      })
+      .mockResolvedValueOnce({
+        packageNumber: 'SECOND-PKG',
+        scaleRows: 1,
+      })
     mockedSubmitAdminUpload
       .mockResolvedValueOnce({
         applicationNumber: 9001,
@@ -578,8 +673,17 @@ describe('Admin upload workflow smoke', () => {
 
     const firstFile = new File(['<xml />'], 'first.xml', { type: 'application/xml' })
     const secondFile = new File(['<xml />'], 'second.xml', { type: 'application/xml' })
-    await userEvent.upload(screen.getByLabelText('LEXIS Import File'), [firstFile, secondFile])
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.upload(screen.getByLabelText('Application submission file'), [
+      firstFile,
+      secondFile,
+    ])
+    await userEvent.click(screen.getByRole('button', { name: 'Validate submissions' }))
+
+    await waitFor(() => {
+      expect(mockedValidateLexisXmlUpload).toHaveBeenCalledTimes(2)
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit applications' }))
 
     await waitFor(() => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
@@ -610,14 +714,16 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=lexisXml')
 
     const file = new File(['not xml'], 'submission.pdf', { type: 'application/pdf' })
-    await user.upload(screen.getByLabelText('LEXIS Import File'), file)
+    await user.upload(screen.getByLabelText('Application submission file'), file)
 
     expect(screen.getAllByText('Invalid').length).toBeGreaterThan(0)
     expect(
-      screen.getAllByText('LEXIS imports must use a .xml, .zip, .geojson, or .json file.').length,
+      screen.getAllByText(
+        'LEXIS application submissions must use a .xml, .zip, .geojson, or .json file.',
+      ).length,
     ).toBeGreaterThan(0)
 
-    await user.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await user.click(screen.getByRole('button', { name: 'Validate submissions' }))
 
     expect(
       screen.getAllByText('1 queued file needs attention before upload.').length,
@@ -658,12 +764,12 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=lexisXml')
 
     const file = new File([], 'empty.xml', { type: 'application/xml' })
-    await userEvent.upload(screen.getByLabelText('LEXIS Import File'), file)
+    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
 
     expect(screen.getAllByText('Invalid').length).toBeGreaterThan(0)
     expect(screen.getAllByText('File is empty.').length).toBeGreaterThan(0)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Validate submissions' }))
 
     expect(
       screen.getAllByText('1 queued file needs attention before upload.').length,
@@ -671,11 +777,11 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
-  it('shows LEXIS XML import rejection details from a 422 response', async () => {
+  it('shows LEXIS XML validation rejection details from a 422 response', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
     } as any)
-    mockedSubmitAdminUpload.mockRejectedValue({
+    mockedValidateLexisXmlUpload.mockRejectedValue({
       response: {
         status: 422,
         data: {
@@ -688,10 +794,29 @@ describe('Admin upload workflow smoke', () => {
     renderPage('/admin/uploads?type=lexisXml')
 
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
-    await userEvent.upload(screen.getByLabelText('LEXIS Import File'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Validate submissions' }))
 
-    expect(await screen.findByText('Upload Error')).toBeInTheDocument()
+    expect(await screen.findByText('Upload error')).toBeInTheDocument()
     expect(screen.getAllByText('Package TEST23-652-7D-2 already exists.').length).toBeGreaterThan(0)
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('opens LEXIS application import as a locked application upload route', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+
+    renderPage('/provincial/application/upload')
+
+    expect(
+      screen.getByRole('heading', { name: 'Upload Application Submission' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('Upload type')).not.toBeInTheDocument()
+    expect(screen.getByText('Upload Application Submissions')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Submission summary' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Validate submissions' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+    expect(screen.getByLabelText('User reference')).toBeInTheDocument()
   })
 })

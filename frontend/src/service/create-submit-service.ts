@@ -83,14 +83,6 @@ const getCreateSubmitRequestMode = (): CreateSubmitRequestMode => {
   return configured === 'json' ? 'json' : 'form'
 }
 
-const isCreateSubmitDebugEnabled = (): boolean => {
-  const configured = (env.VITE_LEXIS_CREATE_SUBMIT_DEBUG ?? '')
-    .toString()
-    .trim()
-    .toLowerCase()
-  return configured === '1' || configured === 'true' || configured === 'yes'
-}
-
 const shouldIncludeCreateSubmitActionMapping = (): boolean => {
   const configured = (env.VITE_LEXIS_CREATE_SUBMIT_INCLUDE_ACTION_MAPPING ?? 'true')
     .toString()
@@ -190,14 +182,6 @@ const postLegacyForm = async (
     requestMode === 'json' ? withQueryParam(path, 'actionMapping', payload.actionMapping) : path
   const contentType =
     requestMode === 'json' ? 'application/json' : 'application/x-www-form-urlencoded'
-
-  if (isCreateSubmitDebugEnabled()) {
-    console.debug('[LEXIS create-submit]', {
-      path: requestPath,
-      mode: requestMode,
-      payload,
-    })
-  }
 
   const response = await apiService
     .getAxiosInstance()

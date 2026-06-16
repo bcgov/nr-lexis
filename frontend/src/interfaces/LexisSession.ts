@@ -5,6 +5,7 @@ export type LexisSessionCapabilities = {
   welcomeTarget: string | null
   legacyPath: string | null
   grantedActions: string[]
+  orgUnitNo?: string | null
 }
 
 export type LexisSessionLogoutResponse = {

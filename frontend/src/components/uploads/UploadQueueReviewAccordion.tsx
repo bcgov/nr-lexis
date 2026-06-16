@@ -15,6 +15,12 @@ type UploadQueueReviewAccordionProps = {
 
 const asList = (value: string[] | undefined): string[] => value?.filter(Boolean) ?? []
 
+const formatOptional = (value: string | number | undefined | null): string =>
+  value === undefined || value === null || value === '' ? 'Not provided' : String(value)
+
+const formatDecimal = (value: number | undefined): string =>
+  typeof value === 'number' ? value.toFixed(1) : 'Not provided'
+
 const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
   items,
   targetSummary,
@@ -44,16 +50,21 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
           const hasMetadata =
             !!applicationNumber ||
             !!details?.packageNumber ||
+            !!details?.userReference ||
             typeof details?.scaleRows === 'number'
           const summary = details?.summary || item.message || 'Waiting for upload.'
           const target = item.targetSummary ?? targetSummary
+          const submissionSummary = details?.submissionSummary
 
           return (
             <details
               key={item.id}
               className={`admin-upload-review__item admin-upload-review__item--${item.status}`}
               open={
-                item.status === 'complete' || item.status === 'failed' || item.status === 'invalid'
+                item.status === 'validated' ||
+                item.status === 'complete' ||
+                item.status === 'failed' ||
+                item.status === 'invalid'
               }
             >
               <summary className="admin-upload-review__summary">
@@ -90,6 +101,12 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                       <dd>Package {details.packageNumber}</dd>
                     </div>
                   )}
+                  {details?.userReference && (
+                    <div>
+                      <dt>User Reference</dt>
+                      <dd>{details.userReference}</dd>
+                    </div>
+                  )}
                   {typeof details?.scaleRows === 'number' && (
                     <div>
                       <dt>Scale Rows</dt>
@@ -97,6 +114,71 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                     </div>
                   )}
                 </dl>
+
+                {submissionSummary && (
+                  <div className="admin-upload-review__issue-group">
+                    <h4>Application Summary</h4>
+                    <dl className="admin-upload-review__meta">
+                      <div>
+                        <dt>Owner Client</dt>
+                        <dd>
+                          {formatOptional(submissionSummary.ownerClientNumber)}
+                          {submissionSummary.ownerClientLocationCode
+                            ? `-${submissionSummary.ownerClientLocationCode}`
+                            : ''}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Owner Contact</dt>
+                        <dd>{formatOptional(submissionSummary.ownerContactName)}</dd>
+                      </div>
+                      <div>
+                        <dt>Region</dt>
+                        <dd>{formatOptional(submissionSummary.orgUnitNumber)}</dd>
+                      </div>
+                      <div>
+                        <dt>Jurisdiction</dt>
+                        <dd>{formatOptional(submissionSummary.jurisdictionCode)}</dd>
+                      </div>
+                      <div>
+                        <dt>Product Type</dt>
+                        <dd>{formatOptional(submissionSummary.productTypeCode)}</dd>
+                      </div>
+                      <div>
+                        <dt>Product Location</dt>
+                        <dd>{formatOptional(submissionSummary.productLocation)}</dd>
+                      </div>
+                      <div>
+                        <dt>Application Volume</dt>
+                        <dd>{formatDecimal(submissionSummary.applicationVolume)}</dd>
+                      </div>
+                      <div>
+                        <dt>Average Log Volume</dt>
+                        <dd>{formatDecimal(submissionSummary.averageLogVolume)}</dd>
+                      </div>
+                      <div>
+                        <dt>Average Length</dt>
+                        <dd>{formatDecimal(submissionSummary.averageLength)}</dd>
+                      </div>
+                      <div>
+                        <dt>Average Diameter</dt>
+                        <dd>{formatDecimal(submissionSummary.averageDiameter)}</dd>
+                      </div>
+                      <div>
+                        <dt>Species</dt>
+                        <dd>
+                          {submissionSummary.speciesCodes?.length
+                            ? submissionSummary.speciesCodes.join(', ')
+                            : 'Not provided'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>End Use</dt>
+                        <dd>{formatOptional(submissionSummary.endUseCode)}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                )}
 
                 {errors.length > 0 && (
                   <div className="admin-upload-review__issue-group">
@@ -120,11 +202,13 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                   </div>
                 )}
 
-                {item.status === 'complete' && errors.length === 0 && warnings.length === 0 && (
+                {(item.status === 'validated' || item.status === 'complete') &&
+                  errors.length === 0 &&
+                  warnings.length === 0 && (
                   <p className="admin-upload-review__empty-result">
                     {hasMetadata ? 'No validation issues returned.' : summary}
                   </p>
-                )}
+                  )}
               </div>
             </details>
           )

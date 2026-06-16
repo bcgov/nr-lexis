@@ -561,9 +561,14 @@ const ProvincialApplicationPage: FC = () => {
               Create exemption for Selected Applications
             </Button>
             {canCreateApplication && (
-              <Link className="cds--link" to="/provincial/application/create">
-                Add Application
-              </Link>
+              <>
+                <Link className="cds--link" to="/provincial/application/create">
+                  Add Application
+                </Link>
+                <Link className="cds--link" to="/provincial/application/upload">
+                  Upload Application Submission
+                </Link>
+              </>
             )}
           </div>
           {exemptionStatus && (

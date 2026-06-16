@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { submitAdminUpload } from '@/service/admin-upload-service'
+import { submitAdminUpload, validateLexisXmlUpload } from '@/service/admin-upload-service'
 
 const postMock = vi.fn()
 
@@ -93,6 +93,7 @@ describe('admin-upload-service', () => {
     await submitAdminUpload('lexisXml', {
       file,
       fileDescription: 'LEXIS XML submission',
+      userReference: 'CLIENT-REF-1',
     })
 
     const [path, payload] = postMock.mock.calls[0]
@@ -100,6 +101,25 @@ describe('admin-upload-service', () => {
     expect(path).toBe('/lexis/admin/uploads/lexis-xml')
     const formData = payload as FormData
     expect(formData.get('fileDescription')).toBe('LEXIS XML submission')
+    expect(formData.get('userReference')).toBe('CLIENT-REF-1')
+    const uploadedFile = formData.get('formFile') as File
+    expect(uploadedFile.name).toBe('submission.xml')
+  })
+
+  it('posts LEXIS XML validation to the XML validation endpoint', async () => {
+    const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
+
+    await validateLexisXmlUpload({
+      file,
+      fileDescription: '',
+      userReference: 'CLIENT-REF-1',
+    })
+
+    const [path, payload] = postMock.mock.calls[0]
+
+    expect(path).toBe('/lexis/admin/uploads/lexis-xml/validation')
+    const formData = payload as FormData
+    expect(formData.get('userReference')).toBe('CLIENT-REF-1')
     const uploadedFile = formData.get('formFile') as File
     expect(uploadedFile.name).toBe('submission.xml')
   })

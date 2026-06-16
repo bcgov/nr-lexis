@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/esf http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd">
+  <esf:submissionContent>
+    <lexis:LexisSubmission>
+      <lexis:applicant>
+        <lexis:applicantDetails>
+          <lexis:clientNumber>2044</lexis:clientNumber>
+          <lexis:clientLocnCode>01</lexis:clientLocnCode>
+          <lexis:name>Island Cedar Products Ltd.</lexis:name>
+        </lexis:applicantDetails>
+        <lexis:applicantContact>
+          <lexis:contactSurname>DOE</lexis:contactSurname>
+          <lexis:contactFirstname>JORDAN</lexis:contactFirstname>
+        </lexis:applicantContact>
+      </lexis:applicant>
+      <lexis:applicationDetail>
+        <lexis:jurisdictionCode>P</lexis:jurisdictionCode>
+        <lexis:bcForestRegionCode>RSI</lexis:bcForestRegionCode>
+        <lexis:applStatusCode>A</lexis:applStatusCode>
+        <lexis:exemptionRsnCde>S</lexis:exemptionRsnCde>
+        <lexis:applicantTypeCode>O</lexis:applicantTypeCode>
+      </lexis:applicationDetail>
+      <lexis:productDetail>
+        <lexis:productTypeCode>H</lexis:productTypeCode>
+        <lexis:boomNumber>QA26-RSI-002</lexis:boomNumber>
+        <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+        <lexis:productLocation>Campbell River dryland sort</lexis:productLocation>
+        <lexis:ageClass>S</lexis:ageClass>
+        <lexis:avgLength>5.4</lexis:avgLength>
+        <lexis:avgDiameter>10.2</lexis:avgDiameter>
+        <lexis:harvestedTimber>
+          <lexis:timberMark>ISLQA</lexis:timberMark>
+          <lexis:numberOfPieces>260</lexis:numberOfPieces>
+          <lexis:species>HE</lexis:species>
+          <lexis:grade>H</lexis:grade>
+          <lexis:quantityVolume>88.5</lexis:quantityVolume>
+        </lexis:harvestedTimber>
+        <lexis:harvestedTimber>
+          <lexis:timberMark>ISLQA</lexis:timberMark>
+          <lexis:numberOfPieces>72</lexis:numberOfPieces>
+          <lexis:species>FI</lexis:species>
+          <lexis:grade>J</lexis:grade>
+          <lexis:quantityVolume>31.2</lexis:quantityVolume>
+        </lexis:harvestedTimber>
+      </lexis:productDetail>
+    </lexis:LexisSubmission>
+  </esf:submissionContent>
+</esf:ESFSubmission>

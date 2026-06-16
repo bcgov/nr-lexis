@@ -19,6 +19,13 @@ type UploadQueuePreviewProps = {
   onClear: () => void
   onRemove: (id: string) => void
   idPrefix?: string
+  previewTitle?: string
+  emptyDescription?: string
+  emptyStateTitle?: string
+  emptyStateDescription?: string
+  itemNoun?: string
+  submitLabel?: string
+  submittingLabel?: string
   renderCompleteAction?: (item: UploadQueueItem) => ReactNode
 }
 
@@ -57,11 +64,19 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
   onClear,
   onRemove,
   idPrefix = 'adminUpload',
+  previewTitle = 'Data preview',
+  emptyDescription = 'Upload files to view them before submitting.',
+  emptyStateTitle = 'No data uploaded yet',
+  emptyStateDescription = 'Upload files to see them here.',
+  itemNoun = 'file',
+  submitLabel = 'Submit Upload',
+  submittingLabel = 'Submitting...',
   renderCompleteAction,
 }) => {
   const [queueFilter, setQueueFilter] = useState('')
   const readyCount = items.filter((item) => item.status === 'queued').length
   const invalidCount = items.filter((item) => item.status === 'invalid').length
+  const validatedCount = items.filter((item) => item.status === 'validated').length
   const completeCount = items.filter((item) => item.status === 'complete').length
   const failedCount = items.filter((item) => item.status === 'failed').length
 
@@ -102,16 +117,20 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
   }
   const previewTitleId = `${idPrefix}PreviewTitle`
   const queueFilterId = `${idPrefix}QueueFilter`
+  const itemNounPlural = `${itemNoun}s`
+  const selectedItemLabel = `${items.length} selected ${
+    items.length === 1 ? itemNoun : itemNounPlural
+  }`
 
   return (
     <section className="admin-upload-panel" aria-labelledby={previewTitleId}>
       <div className="admin-upload-panel__header">
         <div>
-          <h2 id={previewTitleId}>Data preview</h2>
+          <h2 id={previewTitleId}>{previewTitle}</h2>
           <p>
             {items.length === 0
-              ? 'Upload files to view them before submitting.'
-              : `Review ${items.length} selected file${items.length === 1 ? '' : 's'} before submitting.`}
+              ? emptyDescription
+              : `Review ${selectedItemLabel} before submitting.`}
           </p>
         </div>
         <div className="admin-upload-preview-actions">
@@ -119,6 +138,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
             <div className="admin-upload-queue-summary" aria-label="Upload preview summary">
               <Tag type="gray">Ready {readyCount}</Tag>
               <Tag type="red">Invalid {invalidCount}</Tag>
+              <Tag type="green">Validated {validatedCount}</Tag>
               <Tag type="green">Complete {completeCount}</Tag>
               <Tag type="red">Failed {failedCount}</Tag>
             </div>
@@ -129,7 +149,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
             </Button>
           )}
           <Button kind="primary" size="sm" onClick={onSubmit} disabled={isSubmitting || !canSubmit}>
-            {isSubmitting ? 'Submitting...' : 'Submit Upload'}
+            {isSubmitting ? submittingLabel : submitLabel}
           </Button>
           <Button kind="ghost" size="sm" onClick={resetUpload} disabled={isSubmitting}>
             Reset
@@ -142,8 +162,8 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
           <div className="admin-upload-empty-state__icon" aria-hidden="true">
             <Upload size={32} />
           </div>
-          <p>No data uploaded yet</p>
-          <p>Upload files to see them here.</p>
+          <p>{emptyStateTitle}</p>
+          <p>{emptyStateDescription}</p>
         </div>
       ) : (
         <>
@@ -212,11 +232,12 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
           </table>
           <div className="admin-upload-preview-footer">
             <span>
-              Showing {filteredItems.length} of {items.length} file{items.length === 1 ? '' : 's'}
+              Showing {filteredItems.length} of {items.length}{' '}
+              {items.length === 1 ? itemNoun : itemNounPlural}
             </span>
             <span>
-              Ready {readyCount} | Invalid {invalidCount} | Complete {completeCount} | Failed{' '}
-              {failedCount}
+              Ready {readyCount} | Invalid {invalidCount} | Validated {validatedCount} | Complete{' '}
+              {completeCount} | Failed {failedCount}
             </span>
           </div>
           <UploadQueueReviewAccordion

@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
@@ -14,6 +15,7 @@ import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -281,7 +283,13 @@ public class OfferDetailsRpcController {
 
   @PostMapping("/offer")
   public ResponseEntity<OfferPersistenceResponseDto> addOffer(
-      @RequestParam MultiValueMap<String, String> parameters,
+      HttpServletRequest request,
+      Authentication authentication) {
+    return addOffer(fromRequest(request), authentication);
+  }
+
+  private ResponseEntity<OfferPersistenceResponseDto> addOffer(
+      MultiValueMap<String, String> parameters,
       Authentication authentication) {
     if (!canPerform(authentication, LEGACY_ACTION_CREATE_OFFER)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();

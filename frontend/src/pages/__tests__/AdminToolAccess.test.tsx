@@ -41,10 +41,20 @@ describe('Admin tool access smoke', () => {
         roles: ['ADMIN'],
         welcomeTarget: '/admin',
         legacyPath: null,
-        grantedActions: ['/lexisAgentAdmin', '/fileApplicationUpload', '/lexisPolicyAdmin'],
+        grantedActions: [
+          '/lexisAgentAdmin',
+          '/fileApplicationUpload',
+          '/lexisPolicyAdmin',
+          'createApplication',
+        ],
       },
       canPerform: (action: string) =>
-        ['/lexisAgentAdmin', '/fileApplicationUpload', '/lexisPolicyAdmin'].includes(action),
+        [
+          '/lexisAgentAdmin',
+          '/fileApplicationUpload',
+          '/lexisPolicyAdmin',
+          'createApplication',
+        ].includes(action),
       refresh: vi.fn().mockResolvedValue(undefined),
     } as any)
   })
@@ -52,7 +62,7 @@ describe('Admin tool access smoke', () => {
   it('opens policy and upload workflows when required actions are granted', async () => {
     renderPage()
 
-    const policyRow = screen.getByText('Fee Policy Administration').closest('tr')
+    const policyRow = screen.getByText('Fee policy administration').closest('tr')
     expect(policyRow).not.toBeNull()
 
     await userEvent.click(
@@ -60,13 +70,21 @@ describe('Admin tool access smoke', () => {
     )
     expect(mockNavigate).toHaveBeenCalledWith('/admin/policies')
 
-    const uploadRow = screen.getByText('Application Upload').closest('tr')
+    const uploadRow = screen.getByText('Application upload').closest('tr')
     expect(uploadRow).not.toBeNull()
 
     await userEvent.click(
       within(uploadRow as HTMLTableRowElement).getByRole('button', { name: 'Open' }),
     )
     expect(mockNavigate).toHaveBeenCalledWith('/admin/uploads?type=application')
+
+    const lexisImportRow = screen.getByText('LEXIS application import').closest('tr')
+    expect(lexisImportRow).not.toBeNull()
+
+    await userEvent.click(
+      within(lexisImportRow as HTMLTableRowElement).getByRole('button', { name: 'Open' }),
+    )
+    expect(mockNavigate).toHaveBeenLastCalledWith('/provincial/application/upload')
   })
 
   it('disables tool actions when permissions are denied', () => {
@@ -85,13 +103,13 @@ describe('Admin tool access smoke', () => {
 
     renderPage()
 
-    const uploadRow = screen.getByText('Application Upload').closest('tr')
+    const uploadRow = screen.getByText('Application upload').closest('tr')
     expect(uploadRow).not.toBeNull()
     expect(
       within(uploadRow as HTMLTableRowElement).getByRole('button', { name: 'Open' }),
     ).toBeDisabled()
 
-    const adminRow = screen.getByText('LEXIS Administration').closest('tr')
+    const adminRow = screen.getByText('LEXIS administration').closest('tr')
     expect(adminRow).not.toBeNull()
     expect(within(adminRow as HTMLTableRowElement).getByText('Denied')).toBeInTheDocument()
   })

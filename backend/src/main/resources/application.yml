@@ -128,6 +128,10 @@ lexis:
       LEXIS_PROVINCIAL_SUBMITTER:
         - "/createExemption"
         - "/applicationRemarks"
+        - "/fileApplicationUpload"
+        - "/fileExemptionUpload"
+        - "/fileInvoiceUpload"
+        - "/filePermitUpload"
         - "createApplication"
         - "createOffer"
         - "createPermit"

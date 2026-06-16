@@ -407,6 +407,20 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
+    path: '/provincial/application/upload',
+    id: 'Upload Application Submission',
+    requiredActions: ['createApplication'],
+    element: (
+      <Layout>
+        <AdminUploadsPage
+          lockedWorkflowType="lexisXml"
+          pageTitle="Upload Application Submission"
+        />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
     path: '/admin/policies',
     id: 'Policy Center',
     requiredActions: ['/lexisAgentAdmin'],

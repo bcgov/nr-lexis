@@ -716,6 +716,24 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void adminApplicationUploadShouldAllowScopedProvincialSubmitterRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "application.pdf", "application/pdf", "content".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/applications")
+                .file(file)
+                .param("applicationNumber", "1000123")
+                .param("fileDescription", "Application evidence")
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority(
+                                "LEXIS_PROVINCIAL_SUBMITTER_00012345"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
   void adminPermitUploadShouldRejectReadOnlyRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "permit.pdf", "application/pdf", "content".getBytes());
@@ -754,6 +772,30 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void lexisXmlValidationShouldAllowCreateApplicationRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/lexis-xml/validation")
+                .file(file)
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isUnprocessableEntity());
+  }
+
+  @Test
+  void lexisXmlValidationShouldRejectReadOnlyRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/admin/uploads/lexis-xml/validation")
+                .file(file)
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void sessionWelcomeShouldUseTokenAuthoritiesForRoleResolution() throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/welcome")
@@ -777,6 +819,30 @@ class LexisRouteAuthorizationIntegrationTest {
             get("/api/lexis/session/canPerformAction")
                 .param("action", "/createExemption")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(true));
+  }
+
+  @Test
+  void sessionCanPerformActionShouldAllowUploadsForProvincialSubmitter() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "/fileApplicationUpload")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(true));
+  }
+
+  @Test
+  void sessionCanPerformActionShouldAllowUploadsForScopedProvincialSubmitter() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "/filePermitUpload")
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority(
+                                "LEXIS_PROVINCIAL_SUBMITTER_00012345"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.granted").value(true));
   }

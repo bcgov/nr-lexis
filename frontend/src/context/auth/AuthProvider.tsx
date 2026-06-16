@@ -23,6 +23,7 @@ const DEFAULT_CAPABILITIES: LexisSessionCapabilities = {
   welcomeTarget: null,
   legacyPath: null,
   grantedActions: [],
+  orgUnitNo: null,
 }
 
 const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
@@ -120,8 +121,18 @@ const isIndustryRole = (role: string): boolean => {
   return role.startsWith('PROVINCIAL_SUBMITTER_')
 }
 
+const asNonBlankString = (value: unknown): string | null => {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return null
+  }
+
+  const normalized = String(value).trim()
+  return normalized.length > 0 ? normalized : null
+}
+
 const sanitizeCapabilities = (
   payload: Partial<LexisSessionCapabilities>,
+  orgUnitNo: string | null = null,
 ): LexisSessionCapabilities => {
   return {
     authenticated: Boolean(payload.authenticated),
@@ -132,6 +143,7 @@ const sanitizeCapabilities = (
     grantedActions: (payload.grantedActions ?? []).filter(
       (action): action is string => typeof action === 'string',
     ),
+    orgUnitNo: orgUnitNo ?? payload.orgUnitNo ?? null,
   }
 }
 
@@ -197,12 +209,14 @@ export const AuthProvider: FC<Props> = ({ children }) => {
 
     const refreshPromise = (async () => {
       try {
+        let orgUnitNo: string | null = null
         if (isCognitoConfigured) {
           let tokenReady = false
           const retryCount = hasOauthCallbackParams() ? 6 : 1
           for (let attempt = 0; attempt < retryCount; attempt += 1) {
             try {
               const { tokens } = (await fetchAuthSession({ forceRefresh: false })) ?? {}
+              orgUnitNo = asNonBlankString(tokens?.idToken?.payload?.['custom:org_unit_no'])
               if (tokens?.accessToken) {
                 tokenReady = true
                 break
@@ -223,7 +237,7 @@ export const AuthProvider: FC<Props> = ({ children }) => {
 
         const data = await fetchSessionCapabilities()
         if (sessionGenerationRef.current === refreshGeneration) {
-          setCapabilities(sanitizeCapabilities(data))
+          setCapabilities(sanitizeCapabilities(data, orgUnitNo))
         }
       } catch (error) {
         if (sessionGenerationRef.current === refreshGeneration) {
@@ -287,11 +301,18 @@ export const AuthProvider: FC<Props> = ({ children }) => {
     return new Set(capabilities.grantedActions.map(normalizeAction))
   }, [capabilities.grantedActions])
 
+  const roleSet = useMemo(() => {
+    return new Set(capabilities.roles)
+  }, [capabilities.roles])
+
   const canPerform = useCallback(
     (action: string): boolean => {
+      if (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN')) {
+        return true
+      }
       return grantedActionSet.has(normalizeAction(action))
     },
-    [grantedActionSet],
+    [grantedActionSet, roleSet],
   )
 
   const hasAnyRole = capabilities.roles.length > 0

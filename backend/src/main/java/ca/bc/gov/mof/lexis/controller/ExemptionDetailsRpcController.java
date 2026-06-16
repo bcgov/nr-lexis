@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
@@ -13,6 +14,7 @@ import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.slf4j.Logger;
@@ -340,7 +342,13 @@ public class ExemptionDetailsRpcController {
 
   @PostMapping("/rpc/exemption-details/exemption")
   public ResponseEntity<ExemptionPersistenceResponseDto> addExemption(
-      @RequestParam MultiValueMap<String, String> parameters,
+      HttpServletRequest request,
+      Authentication authentication) {
+    return addExemption(fromRequest(request), authentication);
+  }
+
+  private ResponseEntity<ExemptionPersistenceResponseDto> addExemption(
+      MultiValueMap<String, String> parameters,
       Authentication authentication) {
     if (!canPerform(authentication, LEGACY_ACTION_SAVE_EXEMPTION)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -369,7 +377,13 @@ public class ExemptionDetailsRpcController {
 
   @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_ADD_EXEMPTION)
   public ResponseEntity<ExemptionPersistenceResponseDto> addExemptionLegacy(
-      @RequestParam MultiValueMap<String, String> parameters,
+      HttpServletRequest request,
+      Authentication authentication) {
+    return addExemption(fromRequest(request), authentication);
+  }
+
+  public ResponseEntity<ExemptionPersistenceResponseDto> addExemptionLegacy(
+      MultiValueMap<String, String> parameters,
       Authentication authentication) {
     return addExemption(parameters, authentication);
   }

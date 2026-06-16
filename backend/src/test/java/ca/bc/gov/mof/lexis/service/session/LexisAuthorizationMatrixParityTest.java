@@ -17,6 +17,13 @@ import org.springframework.boot.test.context.SpringBootTest;
     })
 class LexisAuthorizationMatrixParityTest {
 
+  private static final List<String> PROVINCIAL_UPLOAD_ACTIONS =
+      List.of(
+          "/fileApplicationUpload",
+          "/fileExemptionUpload",
+          "/fileInvoiceUpload",
+          "/filePermitUpload");
+
   @Autowired
   private LexisAuthorizationService authorizationService;
 
@@ -40,6 +47,42 @@ class LexisAuthorizationMatrixParityTest {
             "LEXIS_EXEMPTION_APPROVER",
             "LEXIS_PROVINCIAL_SUBMITTER",
             "LEXIS_FEDERAL_SUBMITTER");
+  }
+
+  @Test
+  void adminRoleShouldHaveEveryKnownAction() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_ADMIN")))
+        .containsExactlyElementsOf(authorizationService.getKnownActions());
+
+    assertThat(authorizationService.getKnownActions())
+        .allSatisfy(
+            action ->
+                assertThat(authorizationService.resolveRolesForAction(action))
+                    .contains("LEXIS_ADMIN"));
+  }
+
+  @Test
+  void provincialSubmitterShouldHaveProvincialUploadActions() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
+        .containsAll(PROVINCIAL_UPLOAD_ACTIONS)
+        .contains("createApplication");
+  }
+
+  @Test
+  void scopedProvincialSubmitterShouldHaveProvincialUploadActions() {
+    assertThat(
+            authorizationService.resolveGrantedActions(
+                List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
+        .containsAll(PROVINCIAL_UPLOAD_ACTIONS)
+        .contains("createApplication");
+  }
+
+  @Test
+  void knownRoleDetectionShouldNormalizeScopedProvincialSubmitters() {
+    assertThat(authorizationService.hasKnownRole(List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
+        .isTrue();
+    assertThat(authorizationService.hasKnownRole(List.of("LEXIS_DELEGATED_ADMIN"))).isTrue();
+    assertThat(authorizationService.hasKnownRole(List.of("LEXIS_UNKNOWN"))).isFalse();
   }
 
   @Test

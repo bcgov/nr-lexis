@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.upload;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -14,9 +15,11 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.Crea
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationResult;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackageMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackagePersistenceResult;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackageValidityItem;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScaleMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScalePersistenceResult;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
@@ -55,12 +58,14 @@ class LexisXmlImportServiceTest {
 
     LexisXmlImportService service = service();
 
-    LexisXmlImportResultDto result = service.importLexisXml(sampleXml(), "jsmith");
+    LexisXmlImportResultDto result =
+        service.importLexisXml(sampleXml(), "jsmith", "CLIENT-REF-1");
 
     assertThat(result.status()).isEqualTo("accepted");
     assertThat(result.applicationNumber()).isEqualTo(9001L);
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
+    assertThat(result.userReference()).isEqualTo("CLIENT-REF-1");
 
     ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
         ArgumentCaptor.forClass(CreateApplicationRequest.class);
@@ -81,6 +86,8 @@ class LexisXmlImportServiceTest {
     assertThat(application.growthTypeCode()).isEqualTo("S");
     assertThat(application.endUseCode()).isEqualTo("PL");
     assertThat(application.speciesCodes()).containsExactly("HE", "FI");
+    assertThat(application.remarkBody())
+        .isEqualTo("Imported from LEXIS upload.\nUser reference: CLIENT-REF-1");
 
     ArgumentCaptor<PackageMutationRequest> packageCaptor =
         ArgumentCaptor.forClass(PackageMutationRequest.class);
@@ -92,6 +99,8 @@ class LexisXmlImportServiceTest {
     assertThat(packageRequest.averageLength()).isEqualTo(6.7d);
     assertThat(packageRequest.averageDiameter()).isEqualTo(12.8d);
     assertThat(packageRequest.status()).isEqualTo("ACT");
+    assertThat(packageRequest.comments())
+        .isEqualTo("Imported from LEXIS upload.\nUser reference: CLIENT-REF-1");
     assertThat(packageRequest.endUseCode()).isEqualTo("PL");
     assertThat(packageRequest.speciesCodes()).containsExactly("HE", "FI");
 
@@ -110,6 +119,102 @@ class LexisXmlImportServiceTest {
     assertThat(scaleCaptor.getAllValues())
         .extracting(ScaleMutationRequest::volume)
         .containsExactly(500.0d, 24.5d, 0.5d);
+  }
+
+  @Test
+  void shouldValidateLexisXmlWithoutPersistingApplication() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(new PackageValidityItem(true, null));
+
+    LexisXmlImportResultDto result = service().validateLexisXml(sampleXml(), "CLIENT-REF-1");
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.applicationNumber()).isNull();
+    assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
+    assertThat(result.scaleRows()).isEqualTo(3);
+    assertThat(result.userReference()).isEqualTo("CLIENT-REF-1");
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().ownerClientNumber()).isEqualTo("1074");
+    assertThat(result.submissionSummary().ownerClientLocationCode()).isEqualTo("03");
+    assertThat(result.submissionSummary().ownerContactName()).isEqualTo("CUSTOMER SERVICE");
+    assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(1909L);
+    assertThat(result.submissionSummary().productTypeCode()).isEqualTo("H");
+    assertThat(result.submissionSummary().applicationVolume()).isEqualTo(525.0d);
+    assertThat(result.submissionSummary().speciesCodes()).containsExactly("HE", "FI");
+    assertThat(result.message()).contains("validated");
+    verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
+    verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), any());
+  }
+
+  @Test
+  void shouldRejectLexisXmlValidationWhenPackageAlreadyExists() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(new PackageValidityItem(false, "Package TEST23-652-7D-2 already exists."));
+
+    LexisXmlImportResultDto result = service().validateLexisXml(sampleXml());
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
+    verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
+  }
+
+  @Test
+  void shouldRejectLexisXmlValidationWhenUserReferenceIsTooLong() {
+    LexisXmlImportResultDto result = service().validateLexisXml(sampleXml(), "R".repeat(51));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("User reference must be 50 characters or fewer.");
+  }
+
+  @Test
+  void shouldValidateManualUploadSampleFiles() throws Exception {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid(anyString()))
+        .thenReturn(new PackageValidityItem(true, null));
+
+    for (String fileName :
+        List.of(
+            "pass-application-rsc.xml",
+            "pass-application-rsi.xml",
+            "pass-application-rkb.xml")) {
+      LexisXmlImportResultDto result = service().validateLexisXml(sampleResourceXml(fileName));
+
+      assertThat(result.status()).as(fileName).isEqualTo("validated");
+      assertThat(result.packageNumber()).as(fileName).startsWith("QA26-");
+      assertThat(result.submissionSummary()).as(fileName).isNotNull();
+      assertThat(result.scaleRows()).as(fileName).isPositive();
+    }
+
+    LexisXmlImportResultDto missingBoom =
+        service().validateLexisXml(sampleResourceXml("fail-missing-boom-number.xml"));
+    assertThat(missingBoom.status()).isEqualTo("rejected");
+    assertThat(missingBoom.errors()).contains("Boom/package number is required.");
+
+    LexisXmlImportResultDto federalJurisdiction =
+        service().validateLexisXml(sampleResourceXml("fail-federal-jurisdiction.xml"));
+    assertThat(federalJurisdiction.status()).isEqualTo("rejected");
+    assertThat(federalJurisdiction.errors()).contains("Only provincial LEXIS submissions are supported.");
+  }
+
+  @Test
+  void shouldRejectLexisXmlImportWhenPackageExistsBeforeApplicationPersistence() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(new PackageValidityItem(false, "Package TEST23-652-7D-2 already exists."));
+
+    LexisXmlImportResultDto result = service().importLexisXml(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
+    assertThat(result.submissionSummary()).isNotNull();
+    verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
+    verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
   }
 
   @Test
@@ -617,6 +722,14 @@ class LexisXmlImportServiceTest {
   private MockMultipartFile sampleXml() {
     return new MockMultipartFile(
         "formFile", "6-652-7.xml", "application/xml", SAMPLE_XML.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private MockMultipartFile sampleResourceXml(String fileName) throws Exception {
+    String resourceName = "/lexis-upload-samples/" + fileName;
+    try (InputStream input = getClass().getResourceAsStream(resourceName)) {
+      assertThat(input).as(resourceName).isNotNull();
+      return new MockMultipartFile("formFile", fileName, "application/xml", input.readAllBytes());
+    }
   }
 
   private MockMultipartFile bareSampleXml() {

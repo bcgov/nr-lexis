@@ -183,6 +183,7 @@ public class LexisUploadController {
   public ResponseEntity<LexisXmlImportResultDto> lexisXmlUpload(
       @RequestParam(name = "file", required = false) MultipartFile file,
       @RequestParam(name = "formFile", required = false) MultipartFile formFile,
+      @RequestParam(name = "userReference", required = false) String userReference,
       Authentication authentication) {
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null || uploadFile.isEmpty()) {
@@ -195,10 +196,31 @@ public class LexisUploadController {
       return ResponseEntity.noContent().build();
     }
 
-    LexisXmlImportResultDto result = service.importLexisXml(uploadFile, resolveEntryUserId(authentication));
-    HttpStatus status =
-        "accepted".equalsIgnoreCase(result.status()) ? HttpStatus.OK : HttpStatus.UNPROCESSABLE_ENTITY;
-    return ResponseEntity.status(status).body(result);
+    LexisXmlImportResultDto result =
+        service.importLexisXml(uploadFile, resolveEntryUserId(authentication), userReference);
+    return ResponseEntity.status(xmlImportResponseStatus(result)).body(result);
+  }
+
+  @PostMapping(
+      value = {"/uploads/lexis-xml/validation", "/admin/uploads/lexis-xml/validation"},
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity<LexisXmlImportResultDto> lexisXmlValidation(
+      @RequestParam(name = "file", required = false) MultipartFile file,
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
+      @RequestParam(name = "userReference", required = false) String userReference) {
+    MultipartFile uploadFile = firstNonNull(file, formFile);
+    if (uploadFile == null || uploadFile.isEmpty()) {
+      return ResponseEntity.badRequest().build();
+    }
+
+    LexisXmlImportService service = xmlImportServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("LEXIS XML import service unavailable - returning no content for lexisXmlValidation");
+      return ResponseEntity.noContent().build();
+    }
+
+    LexisXmlImportResultDto result = service.validateLexisXml(uploadFile, userReference);
+    return ResponseEntity.status(xmlImportResponseStatus(result)).body(result);
   }
 
   private String resolveEntryUserId(Authentication authentication) {
@@ -220,6 +242,12 @@ public class LexisUploadController {
     HttpStatus status =
         "accepted".equalsIgnoreCase(result.status()) ? HttpStatus.OK : HttpStatus.UNPROCESSABLE_ENTITY;
     return ResponseEntity.status(status).body(result);
+  }
+
+  private HttpStatus xmlImportResponseStatus(LexisXmlImportResultDto result) {
+    return "accepted".equalsIgnoreCase(result.status()) || "validated".equalsIgnoreCase(result.status())
+        ? HttpStatus.OK
+        : HttpStatus.UNPROCESSABLE_ENTITY;
   }
 
   private String firstNonBlank(String primary, String alias) {
