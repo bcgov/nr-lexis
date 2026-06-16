@@ -223,6 +223,22 @@ const lessThanOrEqualFieldError = (
   return parsed <= maximum ? null : `${label} must be ${maximum} or less.`
 }
 
+const roundOneDecimal = (value: number): number => Math.round(value * 10) / 10
+
+const scaleVolumeWithinPackageFieldError = (
+  value: string,
+  remainingVolume: number | null,
+): string | null => {
+  const parsed = numberValue(value)
+  if (parsed === null || remainingVolume === null) {
+    return null
+  }
+
+  return parsed <= remainingVolume
+    ? null
+    : `Scale volume must be ${remainingVolume.toFixed(1)} or less.`
+}
+
 const integerFieldError = (value: string, label: string): string | null => {
   if (!value.trim() || !/^\d+$/.test(value.trim())) {
     return `${label} must be a whole number.`
@@ -364,6 +380,15 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   const [showCreatePackageValidationErrors, setShowCreatePackageValidationErrors] = useState(false)
   const [showScaleValidationErrors, setShowScaleValidationErrors] = useState(false)
   const beginItemsRequest = useLatestRequestGuard()
+  const selectedPackageScaleVolume = scales.reduce(
+    (total, row) => total + (numberValue(row.volume) ?? 0),
+    0,
+  )
+  const selectedPackageVolume = numberValue(packageForm.volume)
+  const selectedPackageRemainingScaleVolume =
+    selectedPackageVolume === null
+      ? null
+      : Math.max(0, roundOneDecimal(selectedPackageVolume - selectedPackageScaleVolume))
 
   const itemFieldErrors = useMemo<FieldErrors<ApplicationItemField>>(
     () => ({
@@ -429,9 +454,11 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         () => numericFieldError(scaleForm.volume, 'Scale volume'),
         () => greaterThanOrEqualFieldError(scaleForm.volume, 'Scale volume', 0),
         () => lessThanOrEqualFieldError(scaleForm.volume, 'Scale volume', 99999.9),
+        () =>
+          scaleVolumeWithinPackageFieldError(scaleForm.volume, selectedPackageRemainingScaleVolume),
       ),
     }),
-    [createPackageForm, packageForm, scaleForm],
+    [createPackageForm, packageForm, scaleForm, selectedPackageRemainingScaleVolume],
   )
 
   const hasPackageValidationError = Boolean(

@@ -1515,6 +1515,33 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
+  it('blocks scale volume that exceeds the selected package remaining volume', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('TM001')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
+    await chooseComboBoxOption(
+      screen.getAllByRole('combobox', { name: 'Species' })[1],
+      'FI - Douglas-fir',
+    )
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
+    fireEvent.change(screen.getByLabelText('Pieces'), { target: { value: '1' } })
+    fireEvent.change(screen.getByLabelText('Scale Volume'), { target: { value: '80.1' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
+
+    expect(screen.getAllByText('Scale volume must be 80.0 or less.').length).toBeGreaterThan(0)
+    expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+  })
+
   it('saves application remarks and refreshes detail', async () => {
     const detailAfterRemark: ProvincialApplicationDetail = {
       ...applicationDetail,
