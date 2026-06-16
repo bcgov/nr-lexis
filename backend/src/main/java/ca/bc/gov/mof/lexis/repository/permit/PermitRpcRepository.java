@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -915,10 +917,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         new CountryCodeRow("CN", "China", 2L, 3L),
         new CountryCodeRow("NZ", "New Zealand", 2L, 4L),
         new CountryCodeRow("GB", "United Kingdom", 2L, 5L));
-  }
-
-  private String firstNonNull(String first, String second) {
-    return first != null ? first : second;
   }
 
   private String nonNull(String value) {

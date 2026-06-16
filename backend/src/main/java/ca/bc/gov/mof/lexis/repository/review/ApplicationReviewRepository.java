@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.review;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
@@ -301,10 +303,6 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     } catch (SQLException ex) {
       return null;
     }
-  }
-
-  private String firstNonNull(String first, String second) {
-    return first != null ? first : second;
   }
 
   private Double firstNonNullDouble(Double first, Double second) {

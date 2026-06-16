@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.offer;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
@@ -304,10 +306,6 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     cs.setString(index++, auditUserOrDefault(record.updateUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     setDoubleOrNull(cs, index, record.offerVolume());
-  }
-
-  private String firstNonNull(String first, String second) {
-    return first != null ? first : second;
   }
 
   private double coalesce(Double value, double fallback) {

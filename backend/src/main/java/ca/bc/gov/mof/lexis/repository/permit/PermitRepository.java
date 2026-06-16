@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
@@ -163,10 +165,6 @@ public class PermitRepository extends OracleRepositorySupport {
                 getString(rs, "EXPORT_SALES_INVOICE_NUMBER"),
                 getString(rs, "REMARKS"),
                 firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
-  }
-
-  private String firstNonNull(String first, String second) {
-    return first != null ? first : second;
   }
 
   private double coalesce(Double value, double fallback) {

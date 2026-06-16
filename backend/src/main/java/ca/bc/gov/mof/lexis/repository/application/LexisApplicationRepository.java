@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
@@ -542,10 +544,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       return numeric.toString();
     }
     return getString(rs, "EXPORT_PURCHASE_OFFER_NUMBER");
-  }
-
-  private String firstNonNull(String first, String second) {
-    return first != null ? first : second;
   }
 
   private Double firstNonNullDouble(Double first, Double second) {
