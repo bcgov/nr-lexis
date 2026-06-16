@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.reserve;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.reserve.IndianReservePermitDetailDto;
@@ -174,14 +175,6 @@ public class IndianReservePermitOracleService implements IndianReservePermitServ
         input.shippingToDate(),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private Long parsePositiveLong(String value) {

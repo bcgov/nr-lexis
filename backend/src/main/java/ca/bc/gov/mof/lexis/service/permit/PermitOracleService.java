@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
@@ -94,14 +95,6 @@ public class PermitOracleService implements PermitService {
       return List.of();
     }
     return rawRegions.stream().filter(region -> region != null && region > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
 }

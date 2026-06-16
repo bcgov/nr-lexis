@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.offer;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
@@ -448,14 +449,6 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       return List.of();
     }
     return rawRegions.stream().filter(region -> region != null && region > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private String normalizePackageNumber(String value) {

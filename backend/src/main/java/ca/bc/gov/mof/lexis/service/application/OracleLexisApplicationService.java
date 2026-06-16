@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.application;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
@@ -138,14 +139,6 @@ public class OracleLexisApplicationService implements LexisApplicationService {
       return List.of();
     }
     return input.stream().filter(number -> number != null && number > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private List<CodeNameDto> currentScheduleOptions() {

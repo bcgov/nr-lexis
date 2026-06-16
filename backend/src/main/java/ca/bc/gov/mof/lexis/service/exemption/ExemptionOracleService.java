@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
@@ -117,14 +118,6 @@ public class ExemptionOracleService implements ExemptionService {
       return List.of();
     }
     return rawRegions.stream().filter(region -> region != null && region > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
 }

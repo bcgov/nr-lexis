@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.federal;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
@@ -104,14 +105,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       return List.of();
     }
     return rawValues.stream().filter(value -> value != null && value > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
 }
