@@ -483,9 +483,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
         if (isLatestRequest()) {
           setPermitRows(permitsResult)
         }
-      } catch (error) {
+      } catch {
         if (isLatestRequest()) {
-          console.error(error)
           setPermitRows([])
           setActionErrorMessage('Unable to retrieve application permits.')
         }
@@ -504,9 +503,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
             setSummaryForm(editableSummaryForm)
             setSummaryBaselineForm(editableSummaryForm)
           }
-        } catch (error) {
+        } catch {
           if (isLatestRequest()) {
-            console.error(error)
             setActionErrorMessage('Unable to retrieve editable application summary fields.')
           }
         }
@@ -522,9 +520,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
           setSummaryForm(summaryFormWithSpecies)
           setSummaryBaselineForm(summaryFormWithSpecies)
         }
-      } catch (error) {
+      } catch {
         if (isLatestRequest()) {
-          console.error(error)
           setActionErrorMessage('Unable to retrieve application species fields.')
         }
       }
@@ -534,16 +531,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
         if (isLatestRequest()) {
           setDocumentRows(documentsResult.rows)
         }
-      } catch (error) {
+      } catch {
         if (isLatestRequest()) {
-          console.error(error)
           setDocumentRows([])
           setDocumentsErrorMessage('Unable to retrieve application documents.')
         }
       }
-    } catch (error) {
+    } catch {
       if (isLatestRequest()) {
-        console.error(error)
         setErrorMessage('Unable to retrieve provincial application detail.')
         setDetail(null)
         setSummaryForm(null)
@@ -1267,12 +1262,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setSummaryRegionOptions(options.regions)
         setSummaryScheduleOptions(options.currentSchedules)
       })
-      .catch((error) => {
+      .catch(() => {
         if (!isActive) {
           return
         }
 
-        console.warn('Unable to load application summary options.', error)
         setSummaryExemptionReasonOptions([])
         setSummaryApplicationStatusOptions([])
         setSummaryProductTypeOptions([])
@@ -1323,11 +1317,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
             : (options[0]?.code ?? ''),
         )
       })
-      .catch((error) => {
+      .catch(() => {
         if (!isActive) {
           return
         }
-        console.warn('Unable to load remaining application species.', error)
         setApplicationSpeciesOptions([])
         setApplicationSpeciesCandidate('')
       })
@@ -1373,11 +1366,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
           return { ...current, endUseCode: options[0]?.code ?? current.endUseCode }
         })
       })
-      .catch((error) => {
+      .catch(() => {
         if (!isActive) {
           return
         }
-        console.warn('Unable to load application end-use options.', error)
         setApplicationEndUseOptions([])
       })
 
@@ -1395,8 +1387,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       try {
         const options = await fetchApplicationReviewOptions()
         setReviewStatusOptions(options.reviewStatuses)
-      } catch (error) {
-        console.warn('Unable to load application review status options.', error)
+      } catch {
         setReviewStatusOptions([])
       }
     }
@@ -1451,8 +1442,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
     try {
       const result = await openApplicationDocument(row.id, row.name)
       triggerBrowserDownload(result.blob, result.filename || row.name)
-    } catch (error) {
-      console.error(error)
+    } catch {
       setActionErrorMessage('Unable to open the selected document.')
     }
   }, [])
@@ -1482,9 +1472,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
         if (isLatestRequest()) {
           setDocumentRows(documentsResult.rows)
         }
-      } catch (error) {
+      } catch {
         if (isLatestRequest()) {
-          console.error(error)
           setActionErrorMessage('Unable to remove the selected document.')
         }
       } finally {
@@ -1528,8 +1517,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setActionInfoMessage(
         editingRemarkId ? 'Application remark updated.' : 'Application remark saved.',
       )
-    } catch (error) {
-      console.error(error)
+    } catch {
       setActionErrorMessage('Unable to save application remark.')
     } finally {
       setIsSavingRemark(false)
@@ -1644,8 +1632,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setShowSummaryValidationErrors(false)
       setSummaryVolumeWarningAccepted(false)
       setActionInfoMessage(result.message || 'Application summary saved.')
-    } catch (error) {
-      console.error(error)
+    } catch {
       setActionErrorMessage('Unable to save application summary.')
     } finally {
       setIsSavingSummary(false)
@@ -1742,8 +1729,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
       await loadApplicationDetail()
       setActionInfoMessage(result.message || 'Application approved.')
-    } catch (error) {
-      console.error(error)
+    } catch {
       setActionErrorMessage('Unable to approve application.')
     } finally {
       setIsSubmittingReviewAction(false)
@@ -1796,8 +1782,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
             ? 'Application status updated and email sent.'
             : updateResult.message || 'Application status updated.',
         )
-      } catch (error) {
-        console.error(error)
+      } catch {
         setActionErrorMessage('Unable to update application status.')
       } finally {
         setIsSubmittingReviewAction(false)

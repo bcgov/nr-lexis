@@ -503,8 +503,10 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           setSpeciesOptions(species)
           setPackageStatusOptions(packageStatuses)
         }
-      } catch (error) {
-        console.error(error)
+      } catch {
+        if (!cancelled) {
+          setItemsErrorMessage('Unable to load application item code lists.')
+        }
       }
     }
 
@@ -548,9 +550,8 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         setPackageSpeciesRows(speciesResult)
         setSpeciesDraft(nextSpeciesDraft)
         setScales(scalesResult)
-      } catch (error) {
+      } catch {
         if (isLatestRequest()) {
-          console.error(error)
           setItemsErrorMessage('Unable to retrieve application item details.')
         }
       } finally {
@@ -581,8 +582,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         if (!cancelled) {
           setRemainingSpeciesOptions(remaining.length > 0 ? remaining : speciesOptions)
         }
-      } catch (error) {
-        console.error(error)
+      } catch {
         if (!cancelled) {
           setRemainingSpeciesOptions(speciesOptions)
         }
@@ -614,8 +614,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         if (!cancelled) {
           setCreateRemainingSpeciesOptions(remaining.length > 0 ? remaining : speciesOptions)
         }
-      } catch (error) {
-        console.error(error)
+      } catch {
         if (!cancelled) {
           setCreateRemainingSpeciesOptions(speciesOptions)
         }
@@ -655,8 +654,10 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 : (options[0]?.code ?? current.endUseCode),
           }))
         }
-      } catch (error) {
-        console.error(error)
+      } catch {
+        if (!cancelled) {
+          setEndUseOptions([])
+        }
       }
     }
 
@@ -687,8 +688,10 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 : (options[0]?.code ?? current.endUseCode),
           }))
         }
-      } catch (error) {
-        console.error(error)
+      } catch {
+        if (!cancelled) {
+          setCreateEndUseOptions([])
+        }
       }
     }
 
@@ -719,8 +722,10 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 : (options[0]?.code ?? current.gradeCode),
           }))
         }
-      } catch (error) {
-        console.error(error)
+      } catch {
+        if (!cancelled) {
+          setGradeOptions([])
+        }
       }
     }
 
@@ -844,8 +849,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       setItemsInfoMessage(`Package ${nextPackageNumber} saved.`)
       await onDetailChanged()
       await loadPackageItems(nextPackageNumber)
-    } catch (error) {
-      console.error(error)
+    } catch {
       setItemsErrorMessage('Unable to save package details.')
     } finally {
       setIsSavingPackage(false)
@@ -901,8 +905,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       setItemsInfoMessage(`Package ${nextPackageNumber} created.`)
       await onDetailChanged()
       await loadPackageItems(nextPackageNumber)
-    } catch (error) {
-      console.error(error)
+    } catch {
       setItemsErrorMessage('Unable to create package.')
     } finally {
       setIsSavingPackage(false)
@@ -938,8 +941,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       dispatchPackageSelection({ type: 'delete', packageNumber: deletedPackageNumber })
       setItemsInfoMessage(`Package ${deletedPackageNumber} deleted.`)
       await onDetailChanged()
-    } catch (error) {
-      console.error(error)
+    } catch {
       setItemsErrorMessage('Unable to delete package.')
     } finally {
       setIsSavingPackage(false)
@@ -989,8 +991,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       setItemsInfoMessage(`Scale ${result.result.id} added.`)
       await onDetailChanged()
       await loadPackageItems(selectedPackageNumber)
-    } catch (error) {
-      console.error(error)
+    } catch {
       setItemsErrorMessage('Unable to add scale.')
     } finally {
       setIsSavingScale(false)
@@ -1011,8 +1012,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       setItemsInfoMessage(`Scale ${scaleId} deleted.`)
       await onDetailChanged()
       await loadPackageItems(selectedPackageNumber)
-    } catch (error) {
-      console.error(error)
+    } catch {
       setItemsErrorMessage('Unable to delete scale.')
     } finally {
       setDeletingScaleId('')
@@ -1035,8 +1035,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       setScaleLookupResult(
         `${result.timberMark} ${result.species}/${result.grade} ${result.pieces} pcs ${result.volume} m3`,
       )
-    } catch (error) {
-      console.error(error)
+    } catch {
       setItemsErrorMessage('Unable to look up scale.')
     }
   }
