@@ -1,4 +1,5 @@
 import type { AdminUploadResult, UploadWorkflowType } from '@/service/admin-upload-service'
+import { getResponseStatus } from '@/utils/http-error'
 import { isRecord, stringField } from '@/utils/record'
 import type { UploadQueueReviewDetails, UploadQueueStatus } from './uploadQueueTypes'
 
@@ -22,7 +23,7 @@ export const extractUploadErrorDetails = (
   const response = isRecord(error) && isRecord(error.response) ? error.response : undefined
   const data = response?.data
   const dataRecord = isRecord(data) ? data : undefined
-  const status = typeof response?.status === 'number' ? response.status : undefined
+  const status = getResponseStatus(error)
   const errors = asStringArray(dataRecord?.errors)
   const warnings = asStringArray(dataRecord?.warnings)
   const responseMessage = dataRecord ? stringField(dataRecord, 'message') : ''

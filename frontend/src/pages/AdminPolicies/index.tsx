@@ -35,6 +35,7 @@ import {
   upsertFilPolicy as upsertFilPolicyRequest,
 } from '@/service/admin-policy-service'
 import IsoDatePicker from '@/components/IsoDatePicker'
+import { getResponseStatus } from '@/utils/http-error'
 
 type PolicyField =
   | 'feeEffectiveDate'
@@ -137,7 +138,7 @@ const AdminPoliciesPage: FC = () => {
       setFilPolicies(loadedFilPolicies)
     } catch (error) {
       console.error(error)
-      const status = (error as any)?.response?.status
+      const status = getResponseStatus(error)
       if (status) {
         setErrorMessage(`Unable to load policy data (status ${status}).`)
       } else {
@@ -181,7 +182,7 @@ const AdminPoliciesPage: FC = () => {
       resetFeeForm()
     } catch (error) {
       console.error(error)
-      const status = (error as any)?.response?.status
+      const status = getResponseStatus(error)
       if (status) {
         setErrorMessage(`Fee policy request failed with status ${status}.`)
       } else {
@@ -215,7 +216,7 @@ const AdminPoliciesPage: FC = () => {
       setSuccessMessage('Fee policy deleted.')
     } catch (error) {
       console.error(error)
-      const status = (error as any)?.response?.status
+      const status = getResponseStatus(error)
       if (status) {
         setErrorMessage(`Fee policy delete failed with status ${status}.`)
       } else {
@@ -253,7 +254,7 @@ const AdminPoliciesPage: FC = () => {
       resetFilForm()
     } catch (error) {
       console.error(error)
-      const status = (error as any)?.response?.status
+      const status = getResponseStatus(error)
       if (status) {
         setErrorMessage(`FIL policy request failed with status ${status}.`)
       } else {
@@ -285,7 +286,7 @@ const AdminPoliciesPage: FC = () => {
       setSuccessMessage('FIL policy deleted.')
     } catch (error) {
       console.error(error)
-      const status = (error as any)?.response?.status
+      const status = getResponseStatus(error)
       if (status) {
         setErrorMessage(`FIL policy delete failed with status ${status}.`)
       } else {
