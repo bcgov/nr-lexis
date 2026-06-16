@@ -17,10 +17,12 @@ export type IdTextOption = {
 export const mapSelectedOptionsById = <TOption extends IdTextOption>(
   selectedIds: string[],
   options: TOption[],
+  fallbackText = (selectedId: string): string => selectedId,
 ): TOption[] => {
   const optionMap = new Map(options.map((option) => [option.id, option]))
   return selectedIds.map(
-    (selectedId) => optionMap.get(selectedId) ?? ({ id: selectedId, text: selectedId } as TOption),
+    (selectedId) =>
+      optionMap.get(selectedId) ?? ({ id: selectedId, text: fallbackText(selectedId) } as TOption),
   )
 }
 

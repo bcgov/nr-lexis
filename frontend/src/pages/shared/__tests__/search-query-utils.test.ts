@@ -44,4 +44,10 @@ describe('search-query-utils', () => {
       { id: 'RSC', text: 'RSC' },
     ])
   })
+
+  it('uses custom fallback labels for selected ids before options load', () => {
+    expect(mapSelectedOptionsById(['1818'], [], (id) => `Region ${id}`)).toEqual([
+      { id: '1818', text: 'Region 1818' },
+    ])
+  })
 })

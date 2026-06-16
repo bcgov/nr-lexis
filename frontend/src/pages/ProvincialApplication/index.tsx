@@ -228,7 +228,7 @@ const ProvincialApplicationPage: FC = () => {
   )
 
   const selectedRegions = useMemo(
-    () => mapSelectedOptionsById(filters.region, regionOptions),
+    () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
 
