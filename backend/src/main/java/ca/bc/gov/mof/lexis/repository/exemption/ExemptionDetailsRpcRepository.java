@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.exemption;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.io.InputStream;
 import java.sql.CallableStatement;
@@ -464,7 +466,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         getLocalDate(rs, "APPLICATION_DATE"),
         getLong(rs, "TERM_DAYS"),
         getLocalDate(rs, "RECEIVED_DATE"),
-        firstNonNullDouble(
+        firstNonNull(
             getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
             getDouble(rs, "APPLICATION_VOLUME")),
         getDouble(rs, "AVERAGE_LOG_VOLUME"),
@@ -534,10 +536,6 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
 
   private String valueOrEmpty(String value) {
     return value == null ? "" : value;
-  }
-
-  private Double firstNonNullDouble(Double first, Double second) {
-    return first == null ? second : first;
   }
 
   private Long emptyToNull(Long value) {

@@ -326,7 +326,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE")));
     LocalDate listingDate = getLocalDate(rs, "ADVERTISING_DATE");
     Double applicationVolume =
-        firstNonNullDouble(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME"));
+        firstNonNull(
+            getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME"));
     String productTypeCode = getString(rs, "EXPORT_PRODUCT_TYPE_CODE");
 
     String client = "";
@@ -497,7 +498,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         getLocalDate(rs, "RECEIVED_DATE"),
         getLocalDate(rs, "ADVERTISING_DATE"),
         getLong(rs, "TERM_DAYS"),
-        firstNonNullDouble(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME")),
+        firstNonNull(
+            getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME")),
         getDouble(rs, "AVERAGE_LOG_VOLUME"));
   }
 
@@ -544,10 +546,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       return numeric.toString();
     }
     return getString(rs, "EXPORT_PURCHASE_OFFER_NUMBER");
-  }
-
-  private Double firstNonNullDouble(Double first, Double second) {
-    return first != null ? first : second;
   }
 
   private boolean equalsNullable(String left, String right) {

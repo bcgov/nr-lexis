@@ -199,7 +199,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   private ApplicationReviewSearchResultDto toSearchResult(ResultSet rs) {
     return new ApplicationReviewSearchResultDto(
         getLong(rs, "APPLICATION_NUMBER"),
-        firstNonNullDouble(
+        firstNonNull(
             getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
             getDouble(rs, "APPLICATION_VOLUME")),
         firstNonNull(getString(rs, "END_USE_SORT"), getString(rs, "EXPORT_PRODUCT_TYPE_CODE")),
@@ -221,7 +221,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
                 getLocalDate(rs, "APPLICATION_DATE"),
                 getLong(rs, "TERM_DAYS"),
                 getLocalDate(rs, "RECEIVED_DATE"),
-                firstNonNullDouble(
+                firstNonNull(
                     getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
                     getDouble(rs, "APPLICATION_VOLUME")),
                 getDouble(rs, "AVERAGE_LOG_VOLUME"),
@@ -303,10 +303,6 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     } catch (SQLException ex) {
       return null;
     }
-  }
-
-  private Double firstNonNullDouble(Double first, Double second) {
-    return first != null ? first : second;
   }
 
   private Long emptyToNull(Long value) {
