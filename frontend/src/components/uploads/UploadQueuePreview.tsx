@@ -2,6 +2,7 @@ import { useMemo, useState, type FC, type ReactNode } from 'react'
 import { Button, Tag, TextInput } from '@carbon/react'
 import { Upload } from '@carbon/icons-react'
 import UploadQueueReviewAccordion from './UploadQueueReviewAccordion'
+import { getFileExtension } from './uploadQueueHelpers'
 import type { UploadQueueItem, UploadQueueStatus } from './uploadQueueTypes'
 
 type UploadQueuePreviewProps = {
@@ -15,17 +16,6 @@ type UploadQueuePreviewProps = {
   onRemove: (id: string) => void
   idPrefix?: string
   renderCompleteAction?: (item: UploadQueueItem) => ReactNode
-}
-
-const getFileExtension = (fileName: string): string => {
-  const normalizedName = fileName.trim().toLowerCase()
-  const extensionStart = normalizedName.lastIndexOf('.')
-
-  if (extensionStart <= 0 || extensionStart === normalizedName.length - 1) {
-    return ''
-  }
-
-  return normalizedName.slice(extensionStart)
 }
 
 const formatFileSize = (size: number): string => {
