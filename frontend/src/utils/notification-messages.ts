@@ -14,7 +14,7 @@ const TECHNICAL_ERROR_PATTERNS = [
   /"timestamp"\s*:/i,
   /"path"\s*:/i,
   /"error"\s*:/i,
-  /\/(?:api|lexis)\//i,
+  /(?:^|\s|")\/(?:api|lexis)\//i,
 ]
 
 export const isTechnicalErrorText = (value: string): boolean => {

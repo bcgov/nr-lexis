@@ -931,6 +931,44 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
+  it('shows resolved validation rejection details for unsupported schema versions', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+    mockedValidateApplicationSubmissionUpload.mockResolvedValue({
+      status: 'rejected',
+      message: 'LEXIS application submission rejected.',
+      errors: [
+        'The XML schema location must use supported LEXIS schema version http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd.',
+      ],
+    })
+
+    renderPage('/provincial/application/upload')
+
+    const file = new File(['<xml />'], '06-fail-unsupported-schema-version.xml', {
+      type: 'application/xml',
+    })
+    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Validate submission' }))
+
+    await waitFor(() => {
+      expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          file,
+        }),
+      )
+    })
+
+    expect(screen.getAllByText('Failed').length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText(
+        'The XML schema location must use supported LEXIS schema version http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd.',
+      ).length,
+    ).toBeGreaterThan(0)
+    expect(screen.queryByText('Submission validated')).not.toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
   it('blocks document uploads without a file extension', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === '/filePermitUpload',

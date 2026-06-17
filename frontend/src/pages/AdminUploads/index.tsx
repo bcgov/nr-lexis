@@ -34,6 +34,7 @@ import {
 import {
   submitAdminUpload,
   validateApplicationSubmissionUpload,
+  type AdminUploadResult,
   type UploadWorkflowType,
 } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
@@ -112,6 +113,18 @@ type QueuedUploadResult = {
   message: string
   applicationNumber?: number
   details?: UploadQueueReviewDetails
+  failed?: boolean
+}
+
+const isApplicationSubmissionValidationFailure = (result: AdminUploadResult): boolean => {
+  const status = result.status?.trim().toLowerCase()
+  if (status === 'rejected' || status === 'failed' || status === 'invalid') {
+    return true
+  }
+  if (status && status !== 'validated') {
+    return true
+  }
+  return Array.isArray(result.errors) && result.errors.length > 0
 }
 
 type UploadTargetNumberOption = {
@@ -719,6 +732,18 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
       file,
       userReference: formState.userReference.trim(),
     })
+    if (isApplicationSubmissionValidationFailure(result)) {
+      const uploadError = extractUploadErrorDetails(
+        { response: { data: result } },
+        'Submission validation failed. Please try again. If the problem persists, contact your administrator.',
+      )
+      return {
+        message: uploadError.message,
+        details: uploadError.details,
+        failed: true,
+      }
+    }
+
     const message = buildUploadResultMessage(
       'applicationSubmission',
       'LEXIS application submission validated. Review the summary before finalizing application submissions.',
@@ -744,6 +769,19 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
 
       try {
         const result = await validateQueuedLexisFile(item.file)
+        if (result.failed) {
+          failureCount += 1
+          setQueueItemStatus(
+            item.id,
+            'failed',
+            result.message,
+            undefined,
+            currentUploadTargetSummary,
+            result.details,
+          )
+          continue
+        }
+
         successCount += 1
         lastSuccessMessage = result.message
         setQueueItemStatus(

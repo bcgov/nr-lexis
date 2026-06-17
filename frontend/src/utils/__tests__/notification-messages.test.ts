@@ -20,6 +20,23 @@ describe('notification message sanitization', () => {
     )
   })
 
+  it('preserves XML schema URLs but still hides application API paths', () => {
+    expect(
+      sanitizeNotificationText(
+        'The XML schema location must use supported LEXIS schema version http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd.',
+      ),
+    ).toBe(
+      'The XML schema location must use supported LEXIS schema version http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd.',
+    )
+
+    expect(
+      sanitizeNotificationText(
+        'Submission failed at /api/lexis/application-submissions.',
+        'Submission failed. Try again later.',
+      ),
+    ).toBe('Submission failed. Try again later.')
+  })
+
   it('deduplicates sanitized message lists', () => {
     expect(
       sanitizeNotificationTextList(
