@@ -70,10 +70,6 @@ spec:
               value: oracle
             - name: SERVER_PORT
               value: "8080"
-            - name: HOME
-              value: /tmp
-            - name: XDG_CACHE_HOME
-              value: /tmp/.cache
             - name: AWS_COGNITO_ISSUER_URI
               value: ${AWS_COGNITO_ISSUER_URI}
             - name: COGNITO_USERINFO_URI

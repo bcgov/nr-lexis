@@ -201,8 +201,6 @@ objects:
       labels:
         app: ${NAME}-frontend-${ZONE}
         app.kubernetes.io/instance: ${ZONE}
-      annotations:
-        haproxy.router.openshift.io/timeout: 120s
     spec:
       host: ${NAME}-${SLOT}.${DOMAIN}
       to:
