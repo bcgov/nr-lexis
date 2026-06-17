@@ -62,6 +62,9 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_PACKAGE_STATUS_CODES(?)";
   private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
   private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
+  private static final String FIND_TIMBER_MARK = LEXIS_CODES_PACKAGE + "FIND_TIMBER_MARK(?,?)";
+  private static final String FIND_TIMBER_MARK_BY_ORG_UNIT =
+      LEXIS_CODES_PACKAGE + "FIND_TIMBER_MARK_BY_ORG_UNITS(?,?,?)";
   private static final String FIND_END_USE_CODE = LEXIS_CODES_PACKAGE + "FIND_END_USE_CODE(?,?)";
   private static final String FIND_GROWTH_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_GROWTH_TYPE_CODE(?,?)";
@@ -77,6 +80,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_END_USES(?,?,?,?)";
   private static final String FIND_CANDIDATE_EXCOL_COMBINATIONS =
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_COMBOS(?,?,?,?)";
+  private static final String FIND_VALID_BOIC_TIMBER_MARK =
+      LEXIS_CODES_PACKAGE + "FIND_VALID_BOIC_TIMBER_MARK(?,?,?)";
   private static final String DELETE_APPLICATION_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "DELETE_APPL_FILE_ATTACHMENT(?)";
   private static final String FIND_REMARK_BY_NUMBER =
@@ -637,6 +642,49 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
                 zeroIfNull(getLong(rs, "ORDER_BY"))));
   }
 
+  public Optional<TimberMarkRow> findTimberMark(String timberMark) {
+    String normalized = trim(timberMark);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_TIMBER_MARK,
+        cs -> cs.setString(1, normalized),
+        2,
+        this::mapTimberMarkRow);
+  }
+
+  public Optional<TimberMarkRow> findTimberMarkByOrgUnit(String timberMark, Long orgUnitNumber) {
+    String normalized = trim(timberMark);
+    if (normalized == null || orgUnitNumber == null || orgUnitNumber < 1) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_TIMBER_MARK_BY_ORG_UNIT,
+        cs -> {
+          cs.setString(1, normalized);
+          cs.setString(2, orgUnitNumber.toString());
+        },
+        3,
+        this::mapTimberMarkRow);
+  }
+
+  public Optional<TimberMarkRow> findValidBoicTimberMark(String timberMark, String exemptionNumber) {
+    String normalized = trim(timberMark);
+    String normalizedExemptionNumber = trim(exemptionNumber);
+    if (normalized == null || normalizedExemptionNumber == null) {
+      return Optional.empty();
+    }
+    return queryCursorSingle(
+        FIND_VALID_BOIC_TIMBER_MARK,
+        cs -> {
+          cs.setString(1, normalized);
+          cs.setString(2, normalizedExemptionNumber);
+        },
+        3,
+        this::mapTimberMarkRow);
+  }
+
   public Optional<CodeRow> findEndUseCode(String endUseCode) {
     String normalized = trim(endUseCode);
     if (normalized == null) {
@@ -1096,6 +1144,14 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         getInstant(rs, "ENTRY_TIMESTAMP"));
   }
 
+  private TimberMarkRow mapTimberMarkRow(ResultSet rs) {
+    return new TimberMarkRow(
+        getString(rs, "TIMBER_MARK"),
+        getString(rs, "MARK_STATUS_ST"),
+        getString(rs, "FOREST_FILE_ID"),
+        getString(rs, "FILE_TYPE_CODE"));
+  }
+
   private Instant getInstant(ResultSet rs, String column) {
     try {
       Timestamp value = rs.getTimestamp(column);
@@ -1215,6 +1271,12 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   public record CodeRow(String code, String description, long groupBy, long orderBy) {}
 
   public record EndUseRow(String speciesCode, String endUseCode) {}
+
+  public record TimberMarkRow(
+      String timberMark,
+      String markStatus,
+      String forestFileId,
+      String fileTypeCode) {}
 
   public record SpeciesGradeEndUseRow(
       String speciesCode,

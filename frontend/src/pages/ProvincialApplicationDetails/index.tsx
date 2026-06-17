@@ -50,6 +50,7 @@ import {
   approveApplicationReview,
   sendApplicationReviewStatusEmail,
   updateApplicationReviewStatus,
+  type ApplicationReviewStatusUpdateResult,
 } from '@/service/application-review-search-service'
 import {
   fetchApplicationClientData,
@@ -100,6 +101,22 @@ import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
 const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['REJ', 'WDN'])
+const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before updating review status.'
+const REVIEW_REMARK_REQUIRED_MESSAGE =
+  'Review remark is required when rejecting or withdrawing an application.'
+const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
+  'Status email is only supported for rejected or withdrawn applications.'
+const REVIEW_EMAIL_REQUIRED_MESSAGE =
+  'Enter a valid client email address before sending status email.'
+const REVIEW_EMAIL_INVALID_MESSAGE = 'Enter a valid client email address.'
+const APPLICATION_STATUS_LABELS: Record<string, string> = {
+  APP: 'Approved',
+  EXP: 'Expired',
+  NEW: 'New',
+  PND: 'Pending',
+  REJ: 'Rejected',
+  WDN: 'Withdrawn',
+}
 const APPLICANT_TYPE_OPTIONS: SearchOption[] = [
   { value: 'O', label: 'Owner' },
   { value: 'A', label: 'Agent' },
@@ -673,6 +690,16 @@ const ProvincialApplicationDetailsPage: FC = () => {
     [reviewStatusCode],
   )
   const canSendReviewStatusEmail = EMAIL_SUPPORTED_STATUS_CODES.has(normalizedReviewStatusCode)
+  const isReviewStatusInvalid = reviewValidationMessage === REVIEW_STATUS_REQUIRED_MESSAGE
+  const isReviewRemarkInvalid = reviewValidationMessage === REVIEW_REMARK_REQUIRED_MESSAGE
+  const isReviewEmailInvalid =
+    reviewValidationMessage === REVIEW_EMAIL_REQUIRED_MESSAGE ||
+    reviewValidationMessage === REVIEW_EMAIL_INVALID_MESSAGE
+  const showReviewValidationNotification =
+    !!reviewValidationMessage &&
+    !isReviewStatusInvalid &&
+    !isReviewRemarkInvalid &&
+    !isReviewEmailInvalid
   const hasSummaryForm = summaryForm !== null
   const summaryOwnerClientNumber = summaryForm?.ownerClientNumber.trim() ?? ''
   const summaryAgentClientNumber = summaryForm?.agentClientNumber.trim() ?? ''
@@ -737,6 +764,76 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const regionOptions = optionsWithCurrentValue(
     summaryRegionOptions,
     summaryForm?.orgUnitNumber ?? '',
+  )
+  const resolveApplicationStatusDescription = useCallback(
+    (statusCode: string) => {
+      const normalizedStatusCode = normalizeReviewStatus(statusCode)
+      if (!normalizedStatusCode) {
+        return null
+      }
+
+      const statusOption = [...summaryApplicationStatusOptions, ...reviewStatusOptions].find(
+        (option) => normalizeReviewStatus(option.value) === normalizedStatusCode,
+      )
+      return statusOption?.label ?? APPLICATION_STATUS_LABELS[normalizedStatusCode] ?? normalizedStatusCode
+    },
+    [reviewStatusOptions, summaryApplicationStatusOptions],
+  )
+  const applyReviewStatusResult = useCallback(
+    (
+      result: ApplicationReviewStatusUpdateResult,
+      fallbackClientEmail = '',
+      fallbackRemark = '',
+    ) => {
+      const statusCode = result.statusCode ? normalizeReviewStatus(result.statusCode) : ''
+      if (!statusCode) {
+        return
+      }
+
+      const statusDescription = resolveApplicationStatusDescription(statusCode)
+      const clientEmail = result.clientEmail ?? fallbackClientEmail
+      const remark = result.remark ?? fallbackRemark
+      const insertedRemark =
+        remark.trim() && result.remarkId
+          ? {
+              remarkId: result.remarkId,
+              title: remark,
+              remark,
+              user: result.remarkUser ?? null,
+              date: result.remarkDate ? result.remarkDate.slice(0, 10) : null,
+            }
+          : null
+
+      setDetail((current) => {
+        if (!current) {
+          return current
+        }
+
+        const remarks = insertedRemark
+          ? [
+              insertedRemark,
+              ...current.remarks.filter((item) => item.remarkId !== insertedRemark.remarkId),
+            ]
+          : current.remarks
+
+        return {
+          ...current,
+          applicationStatusCode: statusCode,
+          statusDescription,
+          remarks,
+        }
+      })
+      setSummaryForm((current) =>
+        current ? { ...current, applicationStatusCode: statusCode } : current,
+      )
+      setSummaryBaselineForm((current) =>
+        current ? { ...current, applicationStatusCode: statusCode } : current,
+      )
+      setReviewStatusCode(statusCode)
+      setReviewStatusEmailAddress(clientEmail)
+      setReviewStatusRemark(remark)
+    },
+    [resolveApplicationStatusDescription],
   )
   const summarySpeciesCodes = useMemo(
     () => summaryForm?.speciesCodes ?? [],
@@ -1705,7 +1802,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       if (!statusCode) {
         return {
           valid: false,
-          message: 'Choose an application status before updating review status.',
+          message: REVIEW_STATUS_REQUIRED_MESSAGE,
           payload: null,
         }
       }
@@ -1713,7 +1810,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
       if (REVIEW_STATUSES_REQUIRING_REMARK.has(statusCode) && !remark) {
         return {
           valid: false,
-          message: 'Review remark is required when rejecting or withdrawing an application.',
+          message: REVIEW_REMARK_REQUIRED_MESSAGE,
           payload: null,
         }
       }
@@ -1722,7 +1819,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
         if (!canSendReviewStatusEmail) {
           return {
             valid: false,
-            message: 'Status email is only supported for rejected or withdrawn applications.',
+            message: REVIEW_EMAIL_UNSUPPORTED_MESSAGE,
             payload: null,
           }
         }
@@ -1730,14 +1827,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
         if (!clientEmailAddress || !isValidEmail(clientEmailAddress)) {
           return {
             valid: false,
-            message: 'Enter a valid client email address before sending status email.',
+            message: REVIEW_EMAIL_REQUIRED_MESSAGE,
             payload: null,
           }
         }
       } else if (clientEmailAddress && !isValidEmail(clientEmailAddress)) {
         return {
           valid: false,
-          message: 'Enter a valid client email address.',
+          message: REVIEW_EMAIL_INVALID_MESSAGE,
           payload: null,
         }
       }
@@ -1776,14 +1873,20 @@ const ProvincialApplicationDetailsPage: FC = () => {
         return
       }
 
-      await loadApplicationDetail()
+      applyReviewStatusResult(result, reviewStatusEmailAddress, reviewStatusRemark)
       setActionInfoMessage(result.message || 'Application approved.')
     } catch {
       setActionErrorMessage('Unable to approve application.')
     } finally {
       setIsSubmittingReviewAction(false)
     }
-  }, [canReviewApplication, detail, loadApplicationDetail])
+  }, [
+    applyReviewStatusResult,
+    canReviewApplication,
+    detail,
+    reviewStatusEmailAddress,
+    reviewStatusRemark,
+  ])
 
   const onUpdateReviewStatus = useCallback(
     async (sendEmail: boolean) => {
@@ -1817,15 +1920,23 @@ const ProvincialApplicationDetailsPage: FC = () => {
             payloadResult.payload,
           )
           if (!emailResult.success) {
+            applyReviewStatusResult(
+              updateResult,
+              payloadResult.payload.clientEmailAddress,
+              payloadResult.payload.remark,
+            )
             setActionErrorMessage(
               emailResult.message || 'Application status updated; email failed.',
             )
-            await loadApplicationDetail()
             return
           }
         }
 
-        await loadApplicationDetail()
+        applyReviewStatusResult(
+          updateResult,
+          payloadResult.payload.clientEmailAddress,
+          payloadResult.payload.remark,
+        )
         setActionInfoMessage(
           sendEmail
             ? 'Application status updated and email sent.'
@@ -1837,7 +1948,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
         setIsSubmittingReviewAction(false)
       }
     },
-    [buildReviewStatusPayload, canReviewApplication, detail, loadApplicationDetail],
+    [applyReviewStatusResult, buildReviewStatusPayload, canReviewApplication, detail],
   )
 
   const clientSummaryContent =
@@ -2539,7 +2650,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     value={reviewStatusCode}
                     placeholder="Select status"
                     options={reviewStatusOptions}
-                    invalid={!!reviewValidationMessage && !normalizedReviewStatusCode}
+                    invalid={isReviewStatusInvalid}
                     invalidText={reviewValidationMessage}
                     onChange={(value) => {
                       setReviewStatusCode(value)
@@ -2550,10 +2661,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     id="applicationDetailReviewEmail"
                     labelText="Client email address"
                     value={reviewStatusEmailAddress}
-                    invalid={
-                      !!reviewValidationMessage &&
-                      reviewValidationMessage.toLowerCase().includes('email')
-                    }
+                    invalid={isReviewEmailInvalid}
                     invalidText={reviewValidationMessage}
                     onChange={(event) => {
                       setReviewStatusEmailAddress(event.target.value)
@@ -2566,11 +2674,16 @@ const ProvincialApplicationDetailsPage: FC = () => {
                     id="applicationDetailReviewRemark"
                     labelText="Review remark"
                     maxCount={250}
+                    invalid={isReviewRemarkInvalid}
+                    invalidText={reviewValidationMessage}
                     value={reviewStatusRemark}
-                    onChange={(event) => setReviewStatusRemark(event.target.value.slice(0, 250))}
+                    onChange={(event) => {
+                      setReviewStatusRemark(event.target.value.slice(0, 250))
+                      setReviewValidationMessage('')
+                    }}
                   />
                 </div>
-                {!!reviewValidationMessage && normalizedReviewStatusCode && (
+                {showReviewValidationNotification && (
                   <AppNotification
                     kind="error"
                     title="Review validation"

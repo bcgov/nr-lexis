@@ -6,4 +6,7 @@ public record ApplicationReviewStatusUpdateResultDto(
     String statusCode,
     String clientEmail,
     String remark,
+    Long remarkId,
+    String remarkUser,
+    java.time.Instant remarkDate,
     String message) {}

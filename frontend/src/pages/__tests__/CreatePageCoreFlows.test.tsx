@@ -349,7 +349,7 @@ describe('Create Page Core Flows', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Save Draft' }))
 
-    expect(await screen.findByText('Draft Saved')).toBeInTheDocument()
+    expect(await screen.findByText('Draft saved')).toBeInTheDocument()
     expect(screen.queryByText('Owner client number is required.')).not.toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
     const drafts = JSON.parse(
@@ -382,7 +382,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const ownerNameInput = await screen.findByLabelText('Owner Name (required)')
+    const ownerNameInput = await screen.findByLabelText('Owner name (required)')
     await userEvent.type(ownerNameInput, 'Typed Owner')
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
 
@@ -494,18 +494,18 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Create Provincial Exemption')
-    await userEvent.type(screen.getByLabelText('Exemption Number (required)'), 'EX-777')
+    await screen.findByText('Create provincial exemption')
+    await userEvent.type(screen.getByLabelText('Exemption number (required)'), 'EX-777')
     await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption Type (required)' }),
+      screen.getByRole('combobox', { name: 'Exemption type (required)' }),
       'Section 1',
     )
     await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption Status (required)' }),
+      screen.getByRole('combobox', { name: 'Exemption status (required)' }),
       'New',
     )
-    await userEvent.type(screen.getByLabelText('Approval Date (YYYY-MM-DD)'), '2026-02-01')
-    await userEvent.type(screen.getByLabelText('Expiry Date (YYYY-MM-DD)'), '2026-12-31')
+    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-02-01')
+    await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2026-12-31')
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
 
     const submitButton = screen.getByRole('button', { name: 'Submit' })
@@ -541,10 +541,10 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Create Provincial Exemption')
-    await userEvent.type(screen.getByLabelText('Exemption Number (required)'), 'EX-778')
+    await screen.findByText('Create provincial exemption')
+    await userEvent.type(screen.getByLabelText('Exemption number (required)'), 'EX-778')
     await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption Type (required)' }),
+      screen.getByRole('combobox', { name: 'Exemption type (required)' }),
       'Section 1',
     )
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
@@ -567,14 +567,14 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Create Provincial Exemption')
-    await userEvent.type(screen.getByLabelText('Exemption Number (required)'), 'EX-779')
+    await screen.findByText('Create provincial exemption')
+    await userEvent.type(screen.getByLabelText('Exemption number (required)'), 'EX-779')
     await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption Type (required)' }),
+      screen.getByRole('combobox', { name: 'Exemption type (required)' }),
       'Section 1',
     )
     await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption Status (required)' }),
+      screen.getByRole('combobox', { name: 'Exemption status (required)' }),
       'New',
     )
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '121212122')
@@ -601,19 +601,19 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Create Provincial Offer')
-    await userEvent.type(screen.getByLabelText('Offer Number (required)'), '8080')
-    await userEvent.type(screen.getByLabelText('Company Name (required)'), 'Example Lumber')
-    await userEvent.type(screen.getByLabelText('Contact Name (required)'), 'Alex Example')
-    await userEvent.type(screen.getByLabelText('Offer Amount (required)'), '25000')
-    await userEvent.type(screen.getByLabelText('Offer Date (YYYY-MM-DD) (required)'), '2026-03-10')
-    await userEvent.type(screen.getByLabelText('Withdrawal Date (YYYY-MM-DD)'), '2026-03-20')
+    await screen.findByText('Create provincial offer')
+    await userEvent.type(screen.getByLabelText('Offer number (required)'), '8080')
+    await userEvent.type(screen.getByLabelText('Company name (required)'), 'Example Lumber')
+    await userEvent.type(screen.getByLabelText('Contact name (required)'), 'Alex Example')
+    await userEvent.type(screen.getByLabelText('Offer amount (required)'), '25000')
+    await userEvent.type(screen.getByLabelText('Offer date (YYYY-MM-DD) (required)'), '2026-03-10')
+    await userEvent.type(screen.getByLabelText('Withdrawal date (YYYY-MM-DD)'), '2026-03-20')
     await userEvent.type(
-      screen.getByLabelText('Withdraw Reason (required when withdrawn)'),
+      screen.getByLabelText('Withdraw reason (required when withdrawn)'),
       'Withdrawn by buyer',
     )
-    await userEvent.type(screen.getByLabelText('Pickup Location (required)'), 'Yard A')
-    await userEvent.type(screen.getByLabelText('Offer Conditions / Remarks'), 'No partial loads')
+    await userEvent.type(screen.getByLabelText('Pickup location (required)'), 'Yard A')
+    await userEvent.type(screen.getByLabelText('Offer conditions / remarks'), 'No partial loads')
 
     const submitButton = screen.getByRole('button', { name: 'Submit' })
     expect(submitButton).toBeEnabled()

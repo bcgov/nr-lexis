@@ -956,7 +956,7 @@ const ProvincialApplicationCreatePage: FC = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid create-page-grid provincial-application-create-page">
       <Column sm={4} md={8} lg={16}>
         <h1>Create provincial application</h1>
       </Column>
@@ -988,8 +988,8 @@ const ProvincialApplicationCreatePage: FC = () => {
       )}
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <div className="legacy-search-grid">
+        <Tile className="create-form-tile">
+          <div className="legacy-search-grid create-form-grid">
             <TextInput
               id="ownerClientNumber"
               labelText="Owner client number (required)"
@@ -1422,7 +1422,7 @@ const ProvincialApplicationCreatePage: FC = () => {
               Back to Search
             </Link>
           </div>
-          <div className="legacy-search-actions">
+          <div className="legacy-search-actions create-form-comments">
             <TextArea
               id="applicationComments"
               labelText="Comments"

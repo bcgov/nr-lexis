@@ -221,14 +221,14 @@ const NavigateButton = ({ to }: { to: string }) => {
 }
 
 const getApplicationReviewTile = (): HTMLElement => {
-  const reviewTitle = screen.getByText('Application Review')
+  const reviewTitle = screen.getByRole('heading', { name: /application review/i })
   const reviewTile = reviewTitle.closest('.cds--tile')
   expect(reviewTile).toBeTruthy()
   return reviewTile as HTMLElement
 }
 
 const getApplicationSummaryTile = (): HTMLElement => {
-  const summaryTitle = screen.getByText('Application Summary')
+  const summaryTitle = screen.getByRole('heading', { name: /application summary/i })
   const summaryTile = summaryTitle.closest('.cds--tile')
   expect(summaryTile).toBeTruthy()
   return summaryTile as HTMLElement
@@ -326,8 +326,11 @@ describe('Provincial Application Detail Document Actions', () => {
       updated: true,
       valid: true,
       statusCode: 'REJ',
-      clientEmail: '',
+      clientEmail: 'agent@example.test',
       remark: 'Needs correction',
+      remarkId: 99,
+      remarkUser: 'idir\\reviewer',
+      remarkDate: '2026-01-05T10:15:00Z',
       message: 'Application status updated.',
     })
     mockedFetchApplicationClientLocations.mockImplementation((clientNumber, applicantType) => {
@@ -2045,12 +2048,12 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Approve Application' }))
 
     await waitFor(() => {
       expect(mockedApproveApplicationReview).toHaveBeenCalledWith('321')
-      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
     expect(await screen.findByText('Application approved.')).toBeInTheDocument()
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
@@ -2068,10 +2071,10 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     const reviewTile = getApplicationReviewTile()
     await waitFor(() => {
-      expect(within(reviewTile).getByLabelText('Client Email Address')).toHaveValue(
+      expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
         'agent@example.test',
       )
     })
@@ -2098,18 +2101,18 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     const reviewTile = getApplicationReviewTile()
     await waitFor(() => {
-      expect(within(reviewTile).getByLabelText('Client Email Address')).toHaveValue(
+      expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
         'agent@example.test',
       )
     })
     await chooseComboBoxOption(
-      within(reviewTile).getByRole('combobox', { name: 'Application Status' }),
+      within(reviewTile).getByRole('combobox', { name: /application status/i }),
       'Rejected',
     )
-    await userEvent.type(within(reviewTile).getByLabelText('Review Remark'), 'Needs correction')
+    await userEvent.type(within(reviewTile).getByLabelText(/review remark/i), 'Needs correction')
     await userEvent.click(
       within(reviewTile).getByRole('button', { name: 'Update Status and Send Email' }),
     )
@@ -2125,12 +2128,17 @@ describe('Provincial Application Detail Document Actions', () => {
         remark: 'Needs correction',
         clientEmailAddress: 'agent@example.test',
       })
-      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
     expect(
       await screen.findByText('Application status updated and email sent.'),
     ).toBeInTheDocument()
+    expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
+      'agent@example.test',
+    )
+    expect(within(reviewTile).getByLabelText(/review remark/i)).toHaveValue('Needs correction')
     expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Needs correction').length).toBeGreaterThan(0)
   })
 
   it('validates application review status before updating from detail', async () => {
@@ -2145,9 +2153,9 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     const reviewTile = getApplicationReviewTile()
-    await clearComboBox(within(reviewTile).getByRole('combobox', { name: 'Application Status' }))
+    await clearComboBox(within(reviewTile).getByRole('combobox', { name: /application status/i }))
     await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update Review Status' }))
 
     expect(
@@ -2168,14 +2176,15 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     const reviewTile = getApplicationReviewTile()
     await chooseComboBoxOption(
-      within(reviewTile).getByRole('combobox', { name: 'Application Status' }),
+      within(reviewTile).getByRole('combobox', { name: /application status/i }),
       'Rejected',
     )
     await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update Review Status' }))
 
+    expect(within(reviewTile).getByLabelText(/review remark/i)).toBeInvalid()
     expect(
       screen.getByText('Review remark is required when rejecting or withdrawing an application.'),
     ).toBeInTheDocument()

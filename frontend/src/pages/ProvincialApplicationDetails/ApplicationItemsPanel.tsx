@@ -370,6 +370,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   const [scaleForm, setScaleForm] = useState<ScaleFormState>(emptyScaleForm)
   const [scaleLookupId, setScaleLookupId] = useState('')
   const [scaleLookupResult, setScaleLookupResult] = useState('')
+  const [scaleActionErrorMessage, setScaleActionErrorMessage] = useState('')
   const [itemsLoading, setItemsLoading] = useState(false)
   const [itemsErrorMessage, setItemsErrorMessage] = useState('')
   const [itemsInfoMessage, setItemsInfoMessage] = useState('')
@@ -999,17 +1000,19 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       return
     }
 
+    setScaleActionErrorMessage('')
     if (hasScaleValidationError) {
-      setShowScaleValidationErrors(true)
-      setItemsErrorMessage(
+      const message =
         firstItemError(
           'scaleTimberMark',
           'scaleSpeciesCode',
           'scaleGradeCode',
           'scalePieces',
           'scaleVolume',
-        ) ?? 'Please fix validation errors before adding the scale.',
-      )
+        ) ?? 'Please fix validation errors before adding the scale.'
+      setShowScaleValidationErrors(true)
+      setItemsErrorMessage(message)
+      setScaleActionErrorMessage(message)
       return
     }
 
@@ -1027,12 +1030,15 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         volume: scaleForm.volume,
       })
       if (!result.valid || !result.result) {
-        setItemsErrorMessage(result.errors.join(' ') || 'Scale creation failed.')
+        const message = result.errors.join(' ') || 'Scale creation failed.'
+        setItemsErrorMessage(message)
+        setScaleActionErrorMessage(message)
         return
       }
 
       setScales((current) => [...current, result.result as ApplicationPackageScaleRow])
       setScaleForm(emptyScaleForm)
+      setScaleActionErrorMessage('')
       setShowScaleValidationErrors(false)
       setItemsInfoMessage(`Scale ${result.result.id} added.`)
       await onDetailChanged()
@@ -1040,6 +1046,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       await loadPackageItems(selectedPackageNumber)
     } catch {
       setItemsErrorMessage('Unable to add scale.')
+      setScaleActionErrorMessage('Unable to add scale.')
     } finally {
       setIsSavingScale(false)
     }
@@ -1158,10 +1165,10 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
 
       <dl className="application-items-metric-strip" aria-label="Application item summary">
         {[
-          ['Application total pieces', applicationTotalPieces.toLocaleString()],
+          ['Application Total Pieces', applicationTotalPieces.toLocaleString()],
           ['Packages', packageNumbers.length.toLocaleString()],
-          ['Selected package', selectedPackageNumber || 'None selected'],
-          ['Selected scale volume', packageForm.scaledVolume || 'Not provided'],
+          ['Selected Package', selectedPackageNumber || 'None selected'],
+          ['Selected Scale Volume', packageForm.scaledVolume || 'Not provided'],
         ].map(([label, value]) => (
           <div key={label} className="application-items-metric">
             <dt>{label}</dt>
@@ -1176,7 +1183,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             <h3>Package Details</h3>
             <SearchableSelect
               id="applicationItemsPackageSelect"
-              labelText="Selected package"
+              labelText="Selected Package"
               value={selectedPackageNumber}
               placeholder="Select package"
               options={packageNumbers.map((packageNumber) => ({
@@ -1190,8 +1197,8 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           </div>
           <dl className="detail-field-grid application-items-summary">
             {[
-              ['Package volume', packageForm.volume || 'Not provided'],
-              ['Total Scale volume', packageForm.scaledVolume || 'Not provided'],
+              ['Package Volume', packageForm.volume || 'Not provided'],
+              ['Total Scale Volume', packageForm.scaledVolume || 'Not provided'],
               ['Total Pieces', selectedPackageTotalPieces.toLocaleString()],
             ].map(([label, value]) => (
               <div key={label} className="detail-field-item">
@@ -1205,7 +1212,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               <div className="application-items-form">
                 <TextInput
                   id="applicationItemsPackageNumber"
-                  labelText="Package number"
+                  labelText="Package Number"
                   value={packageForm.newPackageNumber}
                   disabled={!canSaveSelectedPackage}
                   invalid={!!packageFieldError('packageNewPackageNumber')}
@@ -1215,7 +1222,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 />
                 <TextInput
                   id="applicationItemsPackageVolume"
-                  labelText="Package volume"
+                  labelText="Package Volume"
                   value={packageForm.volume}
                   disabled={!canSaveSelectedPackage}
                   invalid={!!packageFieldError('packageVolume')}
@@ -1225,7 +1232,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 />
                 <TextInput
                   id="applicationItemsPackageLength"
-                  labelText="Average length"
+                  labelText="Average Length"
                   value={packageForm.averageLength}
                   disabled={!canSaveSelectedPackage}
                   invalid={!!packageFieldError('packageAverageLength')}
@@ -1235,7 +1242,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 />
                 <TextInput
                   id="applicationItemsPackageDiameter"
-                  labelText="Average diameter"
+                  labelText="Average Diameter"
                   value={packageForm.averageDiameter}
                   disabled={!canSaveSelectedPackage}
                   invalid={!!packageFieldError('packageAverageDiameter')}
@@ -1245,7 +1252,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 />
                 <SearchableSelect
                   id="applicationItemsPackageStatus"
-                  labelText="Status code"
+                  labelText="Status Code"
                   value={packageForm.status}
                   disabled={!canSaveSelectedPackage}
                   invalid={!!packageFieldError('packageStatus')}
@@ -1257,7 +1264,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 />
                 <SearchableSelect
                   id="applicationItemsPackageProductType"
-                  labelText="Product type"
+                  labelText="Product Type"
                   value={packageForm.productType}
                   disabled={!canSaveSelectedPackage}
                   invalid={!!packageFieldError('packageProductType')}
@@ -1275,7 +1282,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 />
                 <SearchableSelect
                   id="applicationItemsPackageAgeClass"
-                  labelText="Age class"
+                  labelText="Age Class"
                   value={packageForm.ageClass}
                   disabled={
                     !canSaveSelectedPackage || !packageRequiresAgeClass(packageForm.productType)
@@ -1301,7 +1308,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 />
                 <TextInput
                   id="applicationItemsPackageEndUse"
-                  labelText="End use"
+                  labelText="End Use"
                   value={packageForm.endUseCode}
                   disabled={!canSaveSelectedPackage || endUseOptions.length > 0}
                   onChange={(event) => setPackageField('endUseCode', event.target.value)}
@@ -1309,7 +1316,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 {endUseOptions.length > 0 && (
                   <SearchableSelect
                     id="applicationItemsPackageEndUseSelect"
-                    labelText="End use options"
+                    labelText="End Use Options"
                     value={packageForm.endUseCode}
                     disabled={!canSaveSelectedPackage}
                     placeholder="Select end use"
@@ -1320,7 +1327,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               </div>
               <TextArea
                 id="applicationItemsPackageComments"
-                labelText="Package comments"
+                labelText="Package Comments"
                 value={packageForm.comments}
                 disabled={!canSaveSelectedPackage}
                 onChange={(event) => setPackageField('comments', event.target.value)}
@@ -1410,7 +1417,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             </div>
 
             <div className="application-items-timber-marks-panel">
-              <h4>Timber marks</h4>
+              <h4>Timber Marks</h4>
               <div className="application-items-table-scroll">
                 <Table useZebraStyles>
                   <TableHead>
@@ -1441,7 +1448,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           <div className="application-items-form">
             <TextInput
               id="applicationItemsCreatePackageNumber"
-              labelText="Package number"
+              labelText="Package Number"
               value={createPackageForm.packageNumber}
               disabled={!canManageItems}
               invalid={!!createPackageFieldError('createPackageNumber')}
@@ -1451,7 +1458,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             />
             <TextInput
               id="applicationItemsCreatePackageVolume"
-              labelText="Package volume"
+              labelText="Package Volume"
               value={createPackageForm.volume}
               disabled={!canManageItems}
               invalid={!!createPackageFieldError('createPackageVolume')}
@@ -1461,7 +1468,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             />
             <TextInput
               id="applicationItemsCreatePackageLength"
-              labelText="Average length"
+              labelText="Average Length"
               value={createPackageForm.averageLength}
               disabled={!canManageItems}
               invalid={!!createPackageFieldError('createPackageAverageLength')}
@@ -1471,7 +1478,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             />
             <TextInput
               id="applicationItemsCreatePackageDiameter"
-              labelText="Average diameter"
+              labelText="Average Diameter"
               value={createPackageForm.averageDiameter}
               disabled={!canManageItems}
               invalid={!!createPackageFieldError('createPackageAverageDiameter')}
@@ -1481,7 +1488,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             />
             <SearchableSelect
               id="applicationItemsCreatePackageStatus"
-              labelText="Status code"
+              labelText="Status Code"
               value={createPackageForm.status}
               disabled={!canManageItems}
               invalid={!!createPackageFieldError('createPackageStatus')}
@@ -1493,7 +1500,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             />
             <SearchableSelect
               id="applicationItemsCreatePackageProductType"
-              labelText="Product type"
+              labelText="Product Type"
               value={createPackageForm.productType}
               disabled={!canManageItems}
               invalid={!!createPackageFieldError('createPackageProductType')}
@@ -1511,7 +1518,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             />
             <SearchableSelect
               id="applicationItemsCreatePackageAgeClass"
-              labelText="Age class"
+              labelText="Age Class"
               value={createPackageForm.ageClass}
               disabled={!canManageItems || !packageRequiresAgeClass(createPackageForm.productType)}
               invalid={!!createPackageFieldError('createPackageAgeClass')}
@@ -1523,7 +1530,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             />
             <TextInput
               id="applicationItemsCreatePackageEndUse"
-              labelText="End use"
+              labelText="End Use"
               value={createPackageForm.endUseCode}
               disabled={!canManageItems || createEndUseOptions.length > 0}
               onChange={(event) => setCreatePackageField('endUseCode', event.target.value)}
@@ -1531,7 +1538,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             {createEndUseOptions.length > 0 && (
               <SearchableSelect
                 id="applicationItemsCreatePackageEndUseSelect"
-                labelText="End use options"
+                labelText="End Use Options"
                 value={createPackageForm.endUseCode}
                 disabled={!canManageItems}
                 placeholder="Select end use"
@@ -1543,7 +1550,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           <div className="application-items-inline-form">
             <SearchableSelect
               id="applicationItemsCreateSpeciesToAdd"
-              labelText="Create package species"
+              labelText="Create Package Species"
               value={createSpeciesToAdd}
               disabled={!canManageItems}
               placeholder="Select species"
@@ -1611,7 +1618,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           <div className="application-items-form">
             <TextInput
               id="applicationItemsScaleTimberMark"
-              labelText="Timber mark"
+              labelText="Timber Mark"
               value={scaleForm.timberMark}
               disabled={!canManageItems || !selectedPackageNumber}
               invalid={!!scaleFieldError('scaleTimberMark')}
@@ -1655,7 +1662,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             />
             <TextInput
               id="applicationItemsScaleVolume"
-              labelText="Scale volume"
+              labelText="Scale Volume"
               value={scaleForm.volume}
               disabled={!canManageItems || !selectedPackageNumber}
               invalid={!!scaleFieldError('scaleVolume')}
@@ -1674,6 +1681,11 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               Add Scale
             </Button>
           </div>
+          {!!scaleActionErrorMessage && (
+            <p className="application-items-inline-error" role="alert">
+              {scaleActionErrorMessage}
+            </p>
+          )}
           <div className="application-items-inline-form">
             <TextInput
               id="applicationItemsScaleLookup"
