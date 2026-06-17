@@ -1,7 +1,8 @@
 import { useState, type FC } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Column, Grid, InlineNotification } from '@carbon/react'
+import { Button, Column, Grid } from '@carbon/react'
 import { Login } from '@carbon/icons-react'
+import { AppNotification } from '@/components/AppNotification'
 import type { LoginProvider } from '@/context/auth/types'
 import { useAuth } from '@/context/auth/useAuth'
 import logo from '@/assets/gov-bc-logo-horiz.png'
@@ -78,9 +79,9 @@ const LandingPage: FC = () => {
             </div>
 
             {errorMessage && (
-              <InlineNotification
+              <AppNotification
                 kind="error"
-                title="Session Error"
+                title="Session error"
                 subtitle={errorMessage}
                 lowContrast
                 onCloseButtonClick={() => setErrorMessage('')}

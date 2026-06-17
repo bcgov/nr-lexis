@@ -170,7 +170,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.click(uploadButton)
 
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
-    expect(await screen.findByText('Upload Exemption Documents')).toBeInTheDocument()
+    expect(await screen.findByText('Upload exemption documents')).toBeInTheDocument()
   })
 
   it('opens exemption document from API response', async () => {
@@ -345,7 +345,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.click(uploadButton)
 
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
-    expect(await screen.findByText('Upload Application Documents')).toBeInTheDocument()
+    expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
   })
 
   it('opens federal document from API response', async () => {

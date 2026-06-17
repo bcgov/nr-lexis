@@ -2,6 +2,8 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
 
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
@@ -46,6 +48,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -578,50 +581,41 @@ public class PermitDetailsRpcController {
   }
 
   private PermitMutationRequestDto buildPermitMutationRequest(HttpServletRequest request) {
+    MultiValueMap<String, String> parameters = fromRequest(request);
     return new PermitMutationRequestDto(
-        firstParam(request, "permitNumber"),
-        firstParam(request, "permitStatus"),
-        firstParam(request, "permitSubmitDate"),
-        firstParam(request, "permitIssueDate"),
-        firstParam(request, "permitExpiryDate"),
-        firstParam(request, "permitRequestDate"),
-        firstParam(request, "exemptionNumber"),
-        firstParam(request, "destinationCompanyName"),
-        firstParam(request, "destinationCountry"),
-        firstParam(request, "transportType"),
-        firstParam(request, "transportName"),
-        firstParam(request, "estimatedShippingDate"),
-        firstParam(request, "portOfExport"),
-        firstParam(request, "otherPortOfExport"),
-        firstParam(request, "permitReceiptNo", "receiptNumber"),
-        firstParam(request, "permitRemarks"),
-        firstParam(request, "permitGrowthType", "growthType"),
-        firstParam(request, "permitTotalVolume"),
-        firstParam(request, "permitNumberOfPieces", "permitTotalPieces"),
-        firstParam(request, "orgUnitNo", "region"),
-        firstParam(request, "ownerClientNumber"),
-        firstParam(request, "ownerClientLocation"),
-        firstParam(request, "agentClientNumber"),
-        firstParam(request, "agentClientLocation"),
-        firstParam(request, "oicApplicationNumber"),
-        firstParam(request, "oicRegion"),
-        firstParam(request, "oicPermitTotalPieces"),
-        firstParam(request, "oicPermitTotalVolume"),
-        firstParam(request, "packageAgeClass"),
-        firstParam(request, "packageProductType"),
-        firstParam(request, "overrideInd"),
-        firstParam(request, "overrideFee"),
-        firstParam(request, "overrideComment"));
-  }
-
-  private String firstParam(HttpServletRequest request, String... names) {
-    for (String name : names) {
-      String value = request.getParameter(name);
-      if (value != null && !value.isBlank()) {
-        return value;
-      }
-    }
-    return null;
+        first(parameters, "permitNumber"),
+        first(parameters, "permitStatus"),
+        first(parameters, "permitSubmitDate"),
+        first(parameters, "permitIssueDate"),
+        first(parameters, "permitExpiryDate"),
+        first(parameters, "permitRequestDate"),
+        first(parameters, "exemptionNumber"),
+        first(parameters, "destinationCompanyName"),
+        first(parameters, "destinationCountry"),
+        first(parameters, "transportType"),
+        first(parameters, "transportName"),
+        first(parameters, "estimatedShippingDate"),
+        first(parameters, "portOfExport"),
+        first(parameters, "otherPortOfExport"),
+        first(parameters, "permitReceiptNo", "receiptNumber"),
+        first(parameters, "permitRemarks"),
+        first(parameters, "permitGrowthType", "growthType"),
+        first(parameters, "permitTotalVolume"),
+        first(parameters, "permitNumberOfPieces", "permitTotalPieces"),
+        first(parameters, "orgUnitNo", "region"),
+        first(parameters, "ownerClientNumber"),
+        first(parameters, "ownerClientLocation"),
+        first(parameters, "agentClientNumber"),
+        first(parameters, "agentClientLocation"),
+        first(parameters, "oicApplicationNumber"),
+        first(parameters, "oicRegion"),
+        first(parameters, "oicPermitTotalPieces"),
+        first(parameters, "oicPermitTotalVolume"),
+        first(parameters, "packageAgeClass"),
+        first(parameters, "packageProductType"),
+        first(parameters, "overrideInd"),
+        first(parameters, "overrideFee"),
+        first(parameters, "overrideComment"));
   }
 
   private boolean isMinistryUser(Authentication authentication) {

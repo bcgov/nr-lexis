@@ -79,7 +79,7 @@ describe('Auth Provider Role Matrix', () => {
       roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345', 'LEXIS_FEDERAL_SUBMITTER'],
       welcomeTarget: null,
       legacyPath: null,
-      grantedActions: [],
+      grantedActions: ['/summary'],
     })
 
     renderProbe(['/summary'])
@@ -89,6 +89,24 @@ describe('Auth Provider Role Matrix', () => {
       'PROVINCIAL_SUBMITTER_00012345,FEDERAL_SUBMITTER',
     )
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/summary')
+    expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
+  })
+
+  it('does not route modern submitter roles to summary without a summary grant', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\submitter',
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: [],
+    })
+
+    renderProbe(['/summary'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('PROVINCIAL_SUBMITTER_00012345')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/dashboard')
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('false')
   })
 
@@ -122,12 +140,14 @@ describe('Auth Provider Role Matrix', () => {
       grantedActions: [],
     })
 
-    renderProbe(['/lexisAgentAdmin'])
+    renderProbe(['/lexisAgentAdmin', '/fileApplicationUpload', 'createApplication'])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN')
     expect(screen.getByTestId('default-route')).toHaveTextContent('/admin')
-    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/fileApplicationUpload')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
   })
 
   it('does not use legacyPath for default route routing anymore', async () => {
@@ -180,6 +200,24 @@ describe('Auth Provider Role Matrix', () => {
 
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+  })
+
+  it('routes create-application-only users to the application submission upload flow', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\submitter',
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['createApplication'],
+    })
+
+    renderProbe(['createApplication', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application/upload')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 

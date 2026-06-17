@@ -61,4 +61,70 @@ describe('Protected route guard access', () => {
 
     expect(await screen.findByRole('heading', { name: 'Data Upload' })).toBeInTheDocument()
   })
+
+  it('does not allow generic data upload route for create application only users', async () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'bceid\\submitter',
+        roles: ['PROVINCIAL_SUBMITTER'],
+        welcomeTarget: '/provincial/application/upload',
+        legacyPath: null,
+        grantedActions: ['createApplication'],
+      },
+      defaultRoute: '/provincial/application/upload',
+      canPerform: (action: string) => action === 'createApplication',
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderWithPath('/admin/uploads?type=lexisXml')
+
+    expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
+  })
+
+  it('allows application submission upload route when create application is granted', async () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'bceid\\submitter',
+        roles: ['PROVINCIAL_SUBMITTER'],
+        welcomeTarget: '/provincial/application/upload',
+        legacyPath: null,
+        grantedActions: ['createApplication'],
+      },
+      defaultRoute: '/provincial/application/upload',
+      canPerform: (action: string) => action === 'createApplication',
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderWithPath('/provincial/application/upload')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Upload Application Submission' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+  })
+
+  it('allows admin users to open the application submission upload route', async () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'idir\\admin',
+        roles: ['ADMIN'],
+        welcomeTarget: '/admin',
+        legacyPath: null,
+        grantedActions: [],
+      },
+      defaultRoute: '/admin',
+      canPerform: () => true,
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderWithPath('/provincial/application/upload')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Upload Application Submission' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+  })
 })

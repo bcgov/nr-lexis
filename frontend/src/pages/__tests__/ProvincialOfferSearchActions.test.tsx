@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import ProvincialOffersPage from '@/pages/ProvincialOffers'
 import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
-import { fetchProvincialOfferOptions } from '@/service/search-options-service'
+import {
+  fetchProvincialApplicationOptions,
+  fetchProvincialOfferOptions,
+} from '@/service/search-options-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -16,11 +19,13 @@ vi.mock('@/service/provincial-offer-search-service', () => ({
 }))
 
 vi.mock('@/service/search-options-service', () => ({
+  fetchProvincialApplicationOptions: vi.fn(),
   fetchProvincialOfferOptions: vi.fn(),
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearchProvincialOffers = vi.mocked(searchProvincialOffers)
+const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialOfferOptions = vi.mocked(fetchProvincialOfferOptions)
 
 const renderPage = () => {
@@ -38,6 +43,15 @@ describe('Provincial Offer Search Actions', () => {
     vi.clearAllMocks()
     mockedFetchProvincialOfferOptions.mockResolvedValue({
       regions: [{ value: '11', label: 'Cariboo' }],
+    })
+    mockedFetchProvincialApplicationOptions.mockResolvedValue({
+      exemptionTypes: [],
+      exemptionReasons: [],
+      applicationStatuses: [],
+      productTypes: [],
+      growthTypes: [],
+      regions: [],
+      currentSchedules: [],
     })
     mockedSearchProvincialOffers.mockResolvedValue({
       content: [
@@ -96,18 +110,18 @@ describe('Provincial Offer Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Listing From Date (YYYY-MM-DD)'), '2026-50-99')
+    await userEvent.type(screen.getByLabelText('Listing from date (YYYY-MM-DD)'), '2026-50-99')
     await waitFor(() => {
       expect(searchButton).toBeDisabled()
     })
 
-    await userEvent.clear(screen.getByLabelText('Listing From Date (YYYY-MM-DD)'))
-    await userEvent.type(screen.getByLabelText('Listing From Date (YYYY-MM-DD)'), '2026-02-01')
+    await userEvent.clear(screen.getByLabelText('Listing from date (YYYY-MM-DD)'))
+    await userEvent.type(screen.getByLabelText('Listing from date (YYYY-MM-DD)'), '2026-02-01')
     await waitFor(() => {
       expect(searchButton).toBeEnabled()
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Listing Date (ASC)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Listing date (ASC)' }))
 
     await waitFor(() => {
       expect(mockedSearchProvincialOffers).toHaveBeenCalledWith(

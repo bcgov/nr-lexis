@@ -1291,6 +1291,9 @@ class OracleApplicationDetailsRpcServiceTest {
   void addScaleToPackageShouldInsertScaleAndReturnLegacyResult() {
     when(repository.packageExists("PKG-903")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findTimberMark("TM001")).thenReturn(Optional.of(validTimberMarkRow()));
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L)).thenReturn(Optional.of(validTimberMarkRow()));
     when(repository.findPackageDetailsByPackageNumber("PKG-903"))
         .thenReturn(
             Optional.of(
@@ -1324,6 +1327,26 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository).insertScaleDetail(recordCaptor.capture());
     assertThat(recordCaptor.getValue().entryUserId()).isEqualTo("idir\\jsmith");
     assertThat(recordCaptor.getValue().speciesGradeVolume()).isEqualTo(12.5d);
+  }
+
+  @Test
+  void addScaleToPackageShouldRejectMissingTimberMarkBeforeInsert() {
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findTimberMark("NOPE")).thenReturn(Optional.empty());
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackageDetailsByPackageNumber("PKG-903"))
+        .thenReturn(Optional.of(packageDetailsRow("PKG-903", 100.0d)));
+
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addScaleToPackage(
+            new ApplicationDetailsRpcService.ScaleMutationRequest(
+                "NOPE", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("Timber mark NOPE does not exist.");
+    verify(repository, never()).insertScaleDetail(any());
   }
 
   @Test
@@ -1841,6 +1864,10 @@ class OracleApplicationDetailsRpcServiceTest {
       String packageNumber, double packageVolume) {
     return new ApplicationDetailsRpcRepository.PackageDetailsRow(
         packageNumber, packageVolume, 0.0d, 0.0d, "ACT", null, "N", "S", "H");
+  }
+
+  private ApplicationDetailsRpcRepository.TimberMarkRow validTimberMarkRow() {
+    return new ApplicationDetailsRpcRepository.TimberMarkRow("TM001", "ACT", "FF-1", "A01");
   }
 
   private ApplicationDetailsRpcRepository.ApplicationScaleDetailRow scaleDetailsRow(

@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -37,10 +38,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String APPLICANT_TYPE_OWNER = "O";
   private static final String APPLICANT_TYPE_AGENT = "A";
   private static final String JURISDICTION_PROVINCIAL = "P";
+  private static final String JURISDICTION_FEDERAL = "F";
   private static final String OIC_INDICATOR_NO = "N";
   private static final String EXPORT_PRODUCT_TYPE_HARVESTED = "H";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
+  private static final String UNMANUFACTURED_TIMBER_MARK = "UNMANU";
+  private static final Set<String> VALID_TIMBER_MARK_STATUSES =
+      Set.of("HI", "HA", "HB", "HC", "HN", "HP", "LC", "HX", "ACT");
   private static final String SPECIES_TYPE_CEDAR = "CE";
   private static final String EXPORT_SPECIES_ENDUSE_OTHER = "OT";
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
@@ -1036,6 +1041,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     if (trimToNull(request.timberMark()) == null) {
       errors.add(required("timber mark"));
+    } else {
+      validateTimberMark(request, errors);
     }
     if (trimToNull(request.gradeCode()) == null) {
       errors.add(required("grade code"));
@@ -1094,6 +1101,65 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     return errors;
+  }
+
+  private void validateTimberMark(ScaleMutationRequest request, List<String> errors) {
+    String timberMark = trimToNull(request.timberMark());
+    if (timberMark == null) {
+      return;
+    }
+
+    Optional<ApplicationDetailsRpcRepository.TimberMarkRow> baseMark =
+        repository.findTimberMark(timberMark);
+    Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> application =
+        request.applicationNumber() == null
+            ? Optional.empty()
+            : repository.findApplicationUpdateRecord(request.applicationNumber());
+
+    if (application
+        .map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::productTypeCode)
+        .map(TextUtils::trimToNull)
+        .map(EXPORT_PRODUCT_TYPE_UNMANUFACTURED::equals)
+        .orElse(false)
+        && UNMANUFACTURED_TIMBER_MARK.equalsIgnoreCase(timberMark)) {
+      return;
+    }
+
+    if (baseMark.isEmpty()) {
+      errors.add("Timber mark " + timberMark + " does not exist.");
+      return;
+    }
+
+    ApplicationDetailsRpcRepository.TimberMarkRow mark = baseMark.get();
+    if (application.isPresent()) {
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord app = application.get();
+      Optional<ApplicationDetailsRpcRepository.TimberMarkRow> regionalMark =
+          repository.findTimberMarkByOrgUnit(timberMark, app.orgUnitNumber());
+      if (regionalMark.isEmpty()) {
+        errors.add("Timber mark " + timberMark + " is not valid for this region.");
+        return;
+      }
+      mark = regionalMark.get();
+
+      String fileTypeCode = trimToNull(mark.fileTypeCode());
+      String jurisdictionCode = trimToNull(app.jurisdictionCode());
+      if (JURISDICTION_PROVINCIAL.equals(jurisdictionCode)
+          && ("B08".equals(fileTypeCode) || "B14".equals(fileTypeCode))) {
+        errors.add("Timber mark " + timberMark + " is not valid for provincial applications.");
+        return;
+      }
+      if (JURISDICTION_FEDERAL.equals(jurisdictionCode) && !"B08".equals(fileTypeCode)) {
+        errors.add("Timber mark " + timberMark + " is not valid for federal applications.");
+        return;
+      }
+    }
+
+    String status = trimToNull(mark.markStatus());
+    if (status == null || !VALID_TIMBER_MARK_STATUSES.contains(status.toUpperCase(Locale.ROOT))) {
+      errors.add(
+          "Timber mark " + timberMark + " is not valid for this scale"
+              + (status == null ? "." : " due to a status of " + status + "."));
+    }
   }
 
   private boolean hasPermittedScale(List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows) {

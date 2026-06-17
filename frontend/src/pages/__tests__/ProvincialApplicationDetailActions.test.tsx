@@ -221,14 +221,14 @@ const NavigateButton = ({ to }: { to: string }) => {
 }
 
 const getApplicationReviewTile = (): HTMLElement => {
-  const reviewTitle = screen.getByText('Application Review')
+  const reviewTitle = screen.getByRole('heading', { name: /application review/i })
   const reviewTile = reviewTitle.closest('.cds--tile')
   expect(reviewTile).toBeTruthy()
   return reviewTile as HTMLElement
 }
 
 const getApplicationSummaryTile = (): HTMLElement => {
-  const summaryTitle = screen.getByText('Application Summary')
+  const summaryTitle = screen.getByRole('heading', { name: /application summary/i })
   const summaryTile = summaryTitle.closest('.cds--tile')
   expect(summaryTile).toBeTruthy()
   return summaryTile as HTMLElement
@@ -326,8 +326,11 @@ describe('Provincial Application Detail Document Actions', () => {
       updated: true,
       valid: true,
       statusCode: 'REJ',
-      clientEmail: '',
+      clientEmail: 'agent@example.test',
       remark: 'Needs correction',
+      remarkId: 99,
+      remarkUser: 'idir\\reviewer',
+      remarkDate: '2026-01-05T10:15:00Z',
       message: 'Application status updated.',
     })
     mockedFetchApplicationClientLocations.mockImplementation((clientNumber, applicantType) => {
@@ -615,7 +618,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.click(uploadButton)
 
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
-    expect(await screen.findByText('Upload Application Documents')).toBeInTheDocument()
+    expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
   })
 
   it('disables application upload for expired applications', async () => {
@@ -646,7 +649,7 @@ describe('Provincial Application Detail Document Actions', () => {
         'Application document upload is unavailable for expired applications.',
       ),
     ).toBeInTheDocument()
-    expect(screen.queryByText('Upload Application Documents')).not.toBeInTheDocument()
+    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
   })
 
   it('disables application upload for industry users when a permit is complete', async () => {
@@ -679,7 +682,7 @@ describe('Provincial Application Detail Document Actions', () => {
       name: 'Upload Application Document',
     })
     expect(uploadButton).toBeDisabled()
-    expect(screen.queryByText('Upload Application Documents')).not.toBeInTheDocument()
+    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
   })
 
   it('blocks application summary and package edits for exemption approvers', async () => {
@@ -699,10 +702,10 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Application Summary')).toBeInTheDocument()
+    expect(await screen.findByText('Application summary')).toBeInTheDocument()
     expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
     const summaryTile = getApplicationSummaryTile()
-    expect(within(summaryTile).queryByLabelText('Exemption Reason')).not.toBeInTheDocument()
+    expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
 
     expect(await screen.findByText('Package Details')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
@@ -747,7 +750,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('Documents')).toBeInTheDocument()
     const file = new File(['test'], 'uploaded-doc.pdf', { type: 'application/pdf' })
 
-    await userEvent.type(screen.getByLabelText('Document Description'), 'Uploaded')
+    await userEvent.type(screen.getByLabelText('Document description'), 'Uploaded')
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
 
@@ -1475,7 +1478,7 @@ describe('Provincial Application Detail Document Actions', () => {
       })
     })
 
-    expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue('PKG-2')
+    expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-2')
     expect(screen.getByLabelText('Package Comments')).toHaveValue('Second package')
     expect(screen.queryByDisplayValue('First package stale')).not.toBeInTheDocument()
     expect(screen.getByText('TM002')).toBeInTheDocument()
@@ -1502,7 +1505,9 @@ describe('Provincial Application Detail Document Actions', () => {
       await screen.findByRole('heading', { name: 'Timber Marks' })
     ).closest('div')
     expect(timberMarksSection).toBeTruthy()
-    expect(within(timberMarksSection as HTMLElement).getByText('TM-SUMMARY')).toBeInTheDocument()
+    expect(
+      await within(timberMarksSection as HTMLElement).findByText('TM-SUMMARY'),
+    ).toBeInTheDocument()
     expect(mockedFetchApplicationUniqueScales).toHaveBeenCalledWith('321')
   })
 
@@ -1778,7 +1783,7 @@ describe('Provincial Application Detail Document Actions', () => {
     fireEvent.change(screen.getByLabelText('Term (months)'), { target: { value: '2' } })
     fireEvent.change(screen.getByLabelText('Term (years)'), { target: { value: '1' } })
 
-    const volumeInput = screen.getByLabelText('Application Volume (m³)')
+    const volumeInput = screen.getByLabelText('Application volume (m³)')
     fireEvent.change(volumeInput, { target: { value: '125.5' } })
 
     await waitFor(() => {
@@ -1805,25 +1810,28 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
     const summaryTile = getApplicationSummaryTile()
     const summaryControls = within(summaryTile)
-    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Exemption Reason'), 'Surplus')
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Exemption reason'), 'Surplus')
     await chooseComboBoxOption(
-      getSummaryComboBox(summaryControls, 'Application Status'),
+      getSummaryComboBox(summaryControls, 'Application status'),
       'Approved',
     )
     await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Region'), 'Interior')
-    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Product Type'), 'Timber')
-    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Growth Type'), 'Second Growth')
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Product type'), 'Timber')
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Growth type'), 'Second Growth')
     await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Jurisdiction'), 'F - Federal')
-    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'OIC Indicator'), 'Y - Yes')
     await chooseComboBoxOption(
-      getSummaryComboBox(summaryControls, 'Owner Client Location'),
+      getSummaryComboBox(summaryControls, 'Order in Council indicator'),
+      'Y - Yes',
+    )
+    await chooseComboBoxOption(
+      getSummaryComboBox(summaryControls, 'Owner client location'),
       'Owner Alternate Location',
     )
     await chooseComboBoxOption(
-      getSummaryComboBox(summaryControls, 'Owner Contact Name'),
+      getSummaryComboBox(summaryControls, 'Owner contact name'),
       'Owner Alternate Contact',
     )
-    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Listing Date'), '2026-01-25')
+    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Listing date'), '2026-01-25')
 
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
@@ -1873,7 +1881,7 @@ describe('Provincial Application Detail Document Actions', () => {
 
     const summaryTile = await waitFor(() => getApplicationSummaryTile())
     const summaryControls = within(summaryTile)
-    const productLocationInput = await summaryControls.findByLabelText('Location of Logs')
+    const productLocationInput = await summaryControls.findByLabelText('Location of logs')
 
     await waitFor(() => {
       expect(productLocationInput).toHaveValue('BC')
@@ -1900,8 +1908,8 @@ describe('Provincial Application Detail Document Actions', () => {
 
     const summaryTile = await waitFor(() => getApplicationSummaryTile())
     const summaryControls = within(summaryTile)
-    const applicationVolumeInput = await summaryControls.findByLabelText('Application Volume (m³)')
-    const averageLogVolumeInput = await summaryControls.findByLabelText('Average Log Volume')
+    const applicationVolumeInput = await summaryControls.findByLabelText('Application volume (m³)')
+    const averageLogVolumeInput = await summaryControls.findByLabelText('Average log volume')
 
     await waitFor(() => {
       expect(applicationVolumeInput).toHaveValue(100)
@@ -1936,7 +1944,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByLabelText('Application Volume (m³)')
+    await screen.findByLabelText('Application volume (m³)')
 
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
@@ -1968,11 +1976,11 @@ describe('Provincial Application Detail Document Actions', () => {
 
     const summaryTile = await waitFor(() => getApplicationSummaryTile())
     const summaryControls = within(summaryTile)
-    const productLocationInput = await summaryControls.findByLabelText('Location of Logs')
+    const productLocationInput = await summaryControls.findByLabelText('Location of logs')
 
     await waitFor(() => {
       expect(productLocationInput).toHaveValue('BC')
-      expect(getSummaryComboBox(summaryControls, 'Owner Client Location')).toHaveValue(
+      expect(getSummaryComboBox(summaryControls, 'Owner client location')).toHaveValue(
         'Owner Main Location',
       )
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue('Coast')
@@ -1981,15 +1989,15 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.clear(productLocationInput)
     await userEvent.type(productLocationInput, 'Changed location')
     await chooseComboBoxOption(
-      getSummaryComboBox(summaryControls, 'Owner Client Location'),
+      getSummaryComboBox(summaryControls, 'Owner client location'),
       'Owner Alternate Location',
     )
     await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Region'), 'Interior')
     await userEvent.click(summaryControls.getByRole('button', { name: 'Reset Summary' }))
 
     await waitFor(() => {
-      expect(summaryControls.getByLabelText('Location of Logs')).toHaveValue('BC')
-      expect(getSummaryComboBox(summaryControls, 'Owner Client Location')).toHaveValue(
+      expect(summaryControls.getByLabelText('Location of logs')).toHaveValue('BC')
+      expect(getSummaryComboBox(summaryControls, 'Owner client location')).toHaveValue(
         'Owner Main Location',
       )
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue('Coast')
@@ -2010,7 +2018,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const ownerContactInput = await screen.findByLabelText('Owner Contact Name')
+    const ownerContactInput = await screen.findByLabelText('Owner contact name')
     await userEvent.clear(ownerContactInput)
     await userEvent.type(ownerContactInput, 'Typed Owner')
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
@@ -2045,12 +2053,12 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Approve Application' }))
 
     await waitFor(() => {
       expect(mockedApproveApplicationReview).toHaveBeenCalledWith('321')
-      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
     expect(await screen.findByText('Application approved.')).toBeInTheDocument()
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
@@ -2068,10 +2076,10 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     const reviewTile = getApplicationReviewTile()
     await waitFor(() => {
-      expect(within(reviewTile).getByLabelText('Client Email Address')).toHaveValue(
+      expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
         'agent@example.test',
       )
     })
@@ -2098,18 +2106,18 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     const reviewTile = getApplicationReviewTile()
     await waitFor(() => {
-      expect(within(reviewTile).getByLabelText('Client Email Address')).toHaveValue(
+      expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
         'agent@example.test',
       )
     })
     await chooseComboBoxOption(
-      within(reviewTile).getByRole('combobox', { name: 'Application Status' }),
+      within(reviewTile).getByRole('combobox', { name: /application status/i }),
       'Rejected',
     )
-    await userEvent.type(within(reviewTile).getByLabelText('Review Remark'), 'Needs correction')
+    await userEvent.type(within(reviewTile).getByLabelText(/review remark/i), 'Needs correction')
     await userEvent.click(
       within(reviewTile).getByRole('button', { name: 'Update Status and Send Email' }),
     )
@@ -2125,12 +2133,17 @@ describe('Provincial Application Detail Document Actions', () => {
         remark: 'Needs correction',
         clientEmailAddress: 'agent@example.test',
       })
-      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
     expect(
       await screen.findByText('Application status updated and email sent.'),
     ).toBeInTheDocument()
+    expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
+      'agent@example.test',
+    )
+    expect(within(reviewTile).getByLabelText(/review remark/i)).toHaveValue('Needs correction')
     expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Needs correction').length).toBeGreaterThan(0)
   })
 
   it('validates application review status before updating from detail', async () => {
@@ -2145,9 +2158,9 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     const reviewTile = getApplicationReviewTile()
-    await clearComboBox(within(reviewTile).getByRole('combobox', { name: 'Application Status' }))
+    await clearComboBox(within(reviewTile).getByRole('combobox', { name: /application status/i }))
     await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update Review Status' }))
 
     expect(
@@ -2168,14 +2181,15 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Application Review')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     const reviewTile = getApplicationReviewTile()
     await chooseComboBoxOption(
-      within(reviewTile).getByRole('combobox', { name: 'Application Status' }),
+      within(reviewTile).getByRole('combobox', { name: /application status/i }),
       'Rejected',
     )
     await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update Review Status' }))
 
+    expect(within(reviewTile).getByLabelText(/review remark/i)).toBeInvalid()
     expect(
       screen.getByText('Review remark is required when rejecting or withdrawing an application.'),
     ).toBeInTheDocument()

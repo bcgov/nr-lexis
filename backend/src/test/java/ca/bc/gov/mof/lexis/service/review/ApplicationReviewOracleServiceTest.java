@@ -19,6 +19,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
+import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository.ApplicationStatusUpdateRow;
+import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository.ReviewRemarkRow;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -119,7 +122,7 @@ class ApplicationReviewOracleServiceTest {
 
     assertThat(result.valid()).isTrue();
     assertThat(result.updated()).isTrue();
-    assertThat(result.statusCode()).isEqualTo("APR");
+    assertThat(result.statusCode()).isEqualTo("APP");
     verify(repository).approve(1000456L, "idir\\jsmith");
   }
 
@@ -175,7 +178,11 @@ class ApplicationReviewOracleServiceTest {
   void updateStatusShouldNormalizeValuesBeforeRepositoryCall() {
     ApplicationReviewStatusUpdateRequestDto request =
         new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");
-    when(repository.updateStatus(1000456L, "REJ", "Missing docs", "idir\\jsmith")).thenReturn(true);
+    Instant remarkDate = Instant.parse("2026-01-05T10:15:00Z");
+    when(repository.updateStatusWithRemark(1000456L, "REJ", "Missing docs", "idir\\jsmith"))
+        .thenReturn(
+            new ApplicationStatusUpdateRow(
+                true, new ReviewRemarkRow(99L, "Missing docs", "idir\\jsmith", remarkDate)));
 
     ApplicationReviewStatusUpdateResultDto result =
         service.updateStatus(1000456L, request, " idir\\jsmith ");
@@ -185,21 +192,25 @@ class ApplicationReviewOracleServiceTest {
     assertThat(result.statusCode()).isEqualTo("REJ");
     assertThat(result.clientEmail()).isEqualTo("client@gov.bc.ca");
     assertThat(result.remark()).isEqualTo("Missing docs");
-    verify(repository).updateStatus(1000456L, "REJ", "Missing docs", "idir\\jsmith");
+    assertThat(result.remarkId()).isEqualTo(99L);
+    assertThat(result.remarkUser()).isEqualTo("idir\\jsmith");
+    assertThat(result.remarkDate()).isEqualTo(remarkDate);
+    verify(repository).updateStatusWithRemark(1000456L, "REJ", "Missing docs", "idir\\jsmith");
   }
 
   @Test
   void updateStatusShouldDefaultUpdateUserWhenPrincipalIsMissing() {
     ApplicationReviewStatusUpdateRequestDto request =
         new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");
-    when(repository.updateStatus(1000456L, "REJ", "Missing docs", "system")).thenReturn(true);
+    when(repository.updateStatusWithRemark(1000456L, "REJ", "Missing docs", "system"))
+        .thenReturn(new ApplicationStatusUpdateRow(true, null));
 
     ApplicationReviewStatusUpdateResultDto result =
         service.updateStatus(1000456L, request, null);
 
     assertThat(result.valid()).isTrue();
     assertThat(result.updated()).isTrue();
-    verify(repository).updateStatus(1000456L, "REJ", "Missing docs", "system");
+    verify(repository).updateStatusWithRemark(1000456L, "REJ", "Missing docs", "system");
   }
 
   @Test

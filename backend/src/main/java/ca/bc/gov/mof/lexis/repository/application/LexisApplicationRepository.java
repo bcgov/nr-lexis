@@ -33,6 +33,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   private static final String JURISDICTION_FEDERAL = "F";
   private static final String OIC_INDICATOR_NO = "N";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
+  private static final String EXPORT_EXEMPTION_APPL_REMARK_NUMBER =
+      "EXPORT_EXMPTN_APPL_REMARK_NMBR";
   private static final String INDICATOR_YES = "Y";
 
   private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
@@ -433,15 +435,17 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         FIND_REMARKS_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
-        rs -> {
-          String remark = getString(rs, "REMARK");
-          return new LexisApplicationDetailDto.LexisRemarkDto(
-              getLong(rs, "EXEMPTION_APPL_REMARK_NUMBER"),
-              remark,
-              remark,
-              getString(rs, "ENTRY_USERID"),
-              getLocalDate(rs, "ENTRY_TIMESTAMP"));
-        });
+        this::mapRemarkRow);
+  }
+
+  LexisApplicationDetailDto.LexisRemarkDto mapRemarkRow(ResultSet rs) {
+    String remark = getString(rs, "REMARK");
+    return new LexisApplicationDetailDto.LexisRemarkDto(
+        getLong(rs, EXPORT_EXEMPTION_APPL_REMARK_NUMBER),
+        remark,
+        remark,
+        getString(rs, "ENTRY_USERID"),
+        getLocalDate(rs, "ENTRY_TIMESTAMP"));
   }
 
   private List<LexisApplicationDetailDto.LexisOfferDto> loadOffersByApplication(Long applicationNumber) {

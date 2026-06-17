@@ -124,6 +124,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       '/summary',
       '/applicationsReview',
       '/applicationSearch',
+      'createApplication',
       '/exemptionSearch',
       '/offersSearch',
       '/permitSearch',
@@ -397,11 +398,24 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       '/fileExemptionUpload',
       '/filePermitUpload',
       '/fileInvoiceUpload',
-      'createApplication',
     ],
     element: (
       <Layout>
         <AdminUploadsPage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/provincial/application/upload',
+    id: 'Upload Application Submission',
+    requiredActions: ['createApplication'],
+    element: (
+      <Layout>
+        <AdminUploadsPage
+          lockedWorkflowType="applicationSubmission"
+          pageTitle="Upload Application Submission"
+        />
       </Layout>
     ),
     isNavigation: false,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
-import { Button, Column, Grid, InlineLoading, InlineNotification, Tag, Tile } from '@carbon/react'
+import { Button, Column, Grid, InlineLoading, Tag, Tile } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
+import { AppNotification } from '@/components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   buildPageDataCacheKey,
@@ -39,7 +40,7 @@ type DashboardCounts = Record<DashboardCountKey, number>
 const DASHBOARD_MODULES: DashboardModule[] = [
   {
     id: 'provincialReview',
-    title: 'Provincial Review',
+    title: 'Provincial review',
     description: 'Approval and triage queue for applications.',
     path: '/provincial/review',
     requiredActions: ['/applicationsReview'],
@@ -47,7 +48,7 @@ const DASHBOARD_MODULES: DashboardModule[] = [
   },
   {
     id: 'provincialApplications',
-    title: 'Provincial Applications',
+    title: 'Provincial applications',
     description: 'Search and manage provincial applications.',
     path: '/provincial/application',
     requiredActions: ['/applicationSearch'],
@@ -55,7 +56,7 @@ const DASHBOARD_MODULES: DashboardModule[] = [
   },
   {
     id: 'provincialExemptions',
-    title: 'Provincial Exemptions',
+    title: 'Provincial exemptions',
     description: 'Search and maintain exemption files.',
     path: '/provincial/exemption',
     requiredActions: ['/exemptionSearch'],
@@ -63,7 +64,7 @@ const DASHBOARD_MODULES: DashboardModule[] = [
   },
   {
     id: 'provincialOffers',
-    title: 'Provincial Offers',
+    title: 'Provincial offers',
     description: 'Search and inspect offer activity.',
     path: '/provincial/offers',
     requiredActions: ['/offersSearch'],
@@ -71,7 +72,7 @@ const DASHBOARD_MODULES: DashboardModule[] = [
   },
   {
     id: 'provincialPermits',
-    title: 'Provincial Permits',
+    title: 'Provincial permits',
     description: 'Search and inspect permit details.',
     path: '/provincial/permit',
     requiredActions: ['/permitSearch'],
@@ -79,7 +80,7 @@ const DASHBOARD_MODULES: DashboardModule[] = [
   },
   {
     id: 'federalApplications',
-    title: 'Federal Applications',
+    title: 'Federal applications',
     description: 'Search federal applications.',
     path: '/federal',
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
@@ -87,7 +88,7 @@ const DASHBOARD_MODULES: DashboardModule[] = [
   },
   {
     id: 'indianReservePermits',
-    title: 'Indigenous Reserve Permits',
+    title: 'Indigenous reserve permits',
     description: 'Search reserve permits.',
     path: '/indian-reserve',
     requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
@@ -105,14 +106,22 @@ const DASHBOARD_QUICK_ACTIONS: DashboardModule[] = [
       '/summary',
       '/applicationsReview',
       '/applicationSearch',
+      'createApplication',
       '/exemptionSearch',
       '/offersSearch',
       '/permitSearch',
     ],
   },
   {
+    id: 'uploadApplicationSubmission',
+    title: 'Upload Application Submission',
+    description: '',
+    path: '/provincial/application/upload',
+    requiredActions: ['createApplication'],
+  },
+  {
     id: 'openReviewQueue',
-    title: 'Open Review Queue',
+    title: 'Open review queue',
     description: '',
     path: '/provincial/review',
     requiredActions: ['/applicationsReview'],
@@ -406,7 +415,7 @@ const Dashboard: FC = () => {
       {visibleQuickActions.length > 0 && (
         <Column sm={4} md={8} lg={16}>
           <Tile>
-            <h2 className="dashboard-title">Quick Actions</h2>
+            <h2 className="dashboard-title">Quick actions</h2>
             <div className="legacy-search-actions">
               {visibleQuickActions.map((action) => (
                 <Button
@@ -431,9 +440,9 @@ const Dashboard: FC = () => {
 
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind="warning"
-            title="Dashboard Warning"
+            title="Dashboard warning"
             subtitle={errorMessage}
             lowContrast
             onCloseButtonClick={() => setErrorMessage('')}

@@ -4,7 +4,6 @@ import {
   Column,
   Grid,
   InlineLoading,
-  InlineNotification,
   Table,
   TableBody,
   TableCell,
@@ -17,6 +16,8 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import { ApiSourceTag } from '@/components/AbbreviatedSourceTag'
+import { AppNotification } from '@/components/AppNotification'
 import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
@@ -308,7 +309,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <h1>Provincial Exemption Details</h1>
+        <h1>Provincial exemption details</h1>
         <p>
           Exemption <code>{exemptionNumber}</code>
         </p>
@@ -322,11 +323,12 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <InlineNotification
+          <AppNotification
             kind="error"
             title="Detail unavailable"
             subtitle={errorMessage}
             lowContrast
+            onCloseButtonClick={() => setErrorMessage('')}
           />
         </Column>
       )}
@@ -335,31 +337,35 @@ const ProvincialExemptionDetailsPage: FC = () => {
         <>
           {!!documentsErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="warning"
                 title="Documents unavailable"
                 subtitle={documentsErrorMessage}
                 lowContrast
+                onCloseButtonClick={() => setDocumentsErrorMessage('')}
               />
             </Column>
           )}
           {!!actionErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="error"
                 title="Action failed"
                 subtitle={actionErrorMessage}
                 lowContrast
+                onCloseButtonClick={() => setActionErrorMessage('')}
               />
             </Column>
           )}
           {!!actionInfoMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <InlineNotification
+              <AppNotification
                 kind="info"
                 title="Action completed"
                 subtitle={actionInfoMessage}
                 lowContrast
+                autoDismissMs={8000}
+                onCloseButtonClick={() => setActionInfoMessage('')}
               />
             </Column>
           )}
@@ -374,7 +380,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
                   disabled={!canPerform('/exemptionSearch')}
                   onClick={() => navigate(withCurrentSearch('/provincial/exemption'))}
                 >
-                  Back to Exemption Search Results
+                  Back to Exemption search Results
                 </Button>
                 <Button
                   kind="secondary"
@@ -400,7 +406,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
                   disabled={!canPerform('/permitSearch')}
                   onClick={() => navigate(withCurrentSearch('/provincial/permit'))}
                 >
-                  Open Permit Search
+                  Open Permit search
                 </Button>
                 <Button
                   kind="secondary"
@@ -434,7 +440,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
                   }
                   onClick={onCreatePermit}
                 >
-                  Create Permit
+                  Create permit
                 </Button>
               </div>
             </Tile>
@@ -442,9 +448,9 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
           <Column sm={4} md={8} lg={16}>
             <DetailFieldTile
-              title="Exemption Summary"
+              title="Exemption summary"
               fields={[
-                { label: 'Exemption Number', value: displayValue(detail.exemptionNumber) },
+                { label: 'Exemption number', value: displayValue(detail.exemptionNumber) },
                 {
                   label: 'Type',
                   value: displayValue(detail.exemptionTypeDescription ?? detail.exemptionTypeCode),
@@ -455,23 +461,23 @@ const ProvincialExemptionDetailsPage: FC = () => {
                     detail.exemptionStatusDescription ?? detail.exemptionStatusCode,
                   ),
                 },
-                { label: 'Application Number', value: displayValue(detail.applicationNumber) },
-                { label: 'Application Status', value: displayValue(detail.applicationStatus) },
-                { label: 'Owner Client Number', value: displayValue(detail.ownerClientNumber) },
-                { label: 'Agent Client Number', value: displayValue(detail.agentClientNumber) },
-                { label: 'Approval Date', value: displayValue(detail.approvalDate) },
-                { label: 'Expiry Date', value: displayValue(detail.expiryDate) },
+                { label: 'Application number', value: displayValue(detail.applicationNumber) },
+                { label: 'Application status', value: displayValue(detail.applicationStatus) },
+                { label: 'Owner client number', value: displayValue(detail.ownerClientNumber) },
+                { label: 'Agent client number', value: displayValue(detail.agentClientNumber) },
+                { label: 'Approval date', value: displayValue(detail.approvalDate) },
+                { label: 'Expiry date', value: displayValue(detail.expiryDate) },
                 {
-                  label: 'Approved Volume (m³)',
+                  label: 'Approved volume (m³)',
                   value: displayValue(detail.approvedVolume),
                 },
-                { label: 'Used Volume (m³)', value: displayValue(detail.usedVolume) },
+                { label: 'Used volume (m³)', value: displayValue(detail.usedVolume) },
                 {
-                  label: 'Remaining Volume (m³)',
+                  label: 'Remaining volume (m³)',
                   value: displayValue(detail.remainingVolume),
                 },
                 {
-                  label: 'Blanket OIC',
+                  label: 'Blanket Order in Council',
                   value: (
                     <Tag type={detail.blanketOic ? 'green' : 'gray'}>
                       {detail.blanketOic ? 'Yes' : 'No'}
@@ -484,14 +490,14 @@ const ProvincialExemptionDetailsPage: FC = () => {
 
           <Column sm={4} md={8} lg={16}>
             <DetailFieldTile
-              title="Other Conditions"
+              title="Other conditions"
               fields={[{ label: 'Conditions', value: displayValue(detail.otherConditions) }]}
             />
           </Column>
 
           <Column sm={4} md={8} lg={8}>
             <Tile>
-              <h2 className="detail-tile-title">Related Permits</h2>
+              <h2 className="detail-tile-title">Related permits</h2>
               <TextInput
                 id="exemptionDetailPermitFilter"
                 labelText="Filter permits"
@@ -502,7 +508,7 @@ const ProvincialExemptionDetailsPage: FC = () => {
               <Table useZebraStyles>
                 <TableHead>
                   <TableRow>
-                    <TableHeader>Permit Number</TableHeader>
+                    <TableHeader>Permit number</TableHeader>
                     <TableHeader>Open</TableHeader>
                   </TableRow>
                 </TableHead>
@@ -537,7 +543,8 @@ const ProvincialExemptionDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Documents <Tag type="green">API</Tag>
+                Documents{' '}
+                <ApiSourceTag context="Exemption documents are returned from the exemption documents service." />
               </h2>
               {canManageDocuments && (
                 <DetailDocumentUploadPanel

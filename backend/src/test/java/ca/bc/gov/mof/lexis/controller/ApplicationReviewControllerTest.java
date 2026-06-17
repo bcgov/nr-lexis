@@ -147,7 +147,7 @@ class ApplicationReviewControllerTest {
     request.setUserPrincipal(() -> "idir\\jsmith");
     ApplicationReviewStatusUpdateResultDto dto =
         new ApplicationReviewStatusUpdateResultDto(
-            true, true, "APR", null, null, "Application approved.");
+            true, true, "APP", null, null, null, null, null, "Application approved.");
     when(service.approve(1000456L, "idir\\jsmith")).thenReturn(dto);
 
     ResponseEntity<ApplicationReviewStatusUpdateResultDto> response =
@@ -167,7 +167,15 @@ class ApplicationReviewControllerTest {
         new ApplicationReviewStatusUpdateRequestDto("REJ", "Missing docs", "client@gov.bc.ca");
     ApplicationReviewStatusUpdateResultDto dto =
         new ApplicationReviewStatusUpdateResultDto(
-            true, true, "REJ", "client@gov.bc.ca", "Missing docs", "Application status updated.");
+            true,
+            true,
+            "REJ",
+            "client@gov.bc.ca",
+            "Missing docs",
+            99L,
+            "idir\\jsmith",
+            null,
+            "Application status updated.");
     when(service.updateStatus(1000456L, body, "idir\\jsmith")).thenReturn(dto);
 
     ResponseEntity<ApplicationReviewStatusUpdateResultDto> response =
@@ -204,7 +212,7 @@ class ApplicationReviewControllerTest {
     parameters.add("applicationNumber", "1000456");
     ApplicationReviewStatusUpdateResultDto dto =
         new ApplicationReviewStatusUpdateResultDto(
-            true, true, "APP", null, null, "Application approved.");
+            true, true, "APP", null, null, null, null, null, "Application approved.");
     when(service.approve(1000456L, "idir\\jsmith")).thenReturn(dto);
 
     ResponseEntity<Map<String, Object>> response = controller.approveLegacy(parameters, request);
@@ -247,7 +255,15 @@ class ApplicationReviewControllerTest {
     parameters.add("remarkBody", "Missing documents");
     ApplicationReviewStatusUpdateResultDto dto =
         new ApplicationReviewStatusUpdateResultDto(
-            true, true, "REJ", null, "Missing documents", "Application status updated.");
+            true,
+            true,
+            "REJ",
+            null,
+            "Missing documents",
+            99L,
+            "idir\\jsmith",
+            null,
+            "Application status updated.");
     ArgumentCaptor<ApplicationReviewStatusUpdateRequestDto> requestCaptor =
         ArgumentCaptor.forClass(ApplicationReviewStatusUpdateRequestDto.class);
     when(service.updateStatus(any(), any(), any())).thenReturn(dto);

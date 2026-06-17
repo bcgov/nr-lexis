@@ -2,21 +2,24 @@ package ca.bc.gov.mof.lexis.service.upload;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import ca.bc.gov.mof.lexis.dto.upload.LexisXmlImportResultDto;
+import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationResult;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackageMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackagePersistenceResult;
+import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackageValidityItem;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScaleMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScalePersistenceResult;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
@@ -35,8 +38,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("Unit Test | LexisXmlImportService")
-class LexisXmlImportServiceTest {
+@DisplayName("Unit Test | ApplicationSubmissionImportService")
+class ApplicationSubmissionImportServiceTest {
 
   @Mock private ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   @Mock private ApplicationDetailsRpcService applicationDetailsService;
@@ -53,14 +56,17 @@ class LexisXmlImportServiceTest {
     when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
 
-    LexisXmlImportResultDto result = service.importLexisXml(sampleXml(), "jsmith");
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(sampleXml(), "jsmith", "CLIENT-REF-1");
 
+    assertThat(result.uploadType()).isEqualTo("applicationSubmission");
     assertThat(result.status()).isEqualTo("accepted");
     assertThat(result.applicationNumber()).isEqualTo(9001L);
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
+    assertThat(result.userReference()).isEqualTo("CLIENT-REF-1");
 
     ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
         ArgumentCaptor.forClass(CreateApplicationRequest.class);
@@ -81,6 +87,8 @@ class LexisXmlImportServiceTest {
     assertThat(application.growthTypeCode()).isEqualTo("S");
     assertThat(application.endUseCode()).isEqualTo("PL");
     assertThat(application.speciesCodes()).containsExactly("HE", "FI");
+    assertThat(application.remarkBody())
+        .isEqualTo("Created from LEXIS application submission.\nUser reference: CLIENT-REF-1");
 
     ArgumentCaptor<PackageMutationRequest> packageCaptor =
         ArgumentCaptor.forClass(PackageMutationRequest.class);
@@ -92,6 +100,8 @@ class LexisXmlImportServiceTest {
     assertThat(packageRequest.averageLength()).isEqualTo(6.7d);
     assertThat(packageRequest.averageDiameter()).isEqualTo(12.8d);
     assertThat(packageRequest.status()).isEqualTo("ACT");
+    assertThat(packageRequest.comments())
+        .isEqualTo("Created from LEXIS application submission.\nUser reference: CLIENT-REF-1");
     assertThat(packageRequest.endUseCode()).isEqualTo("PL");
     assertThat(packageRequest.speciesCodes()).containsExactly("HE", "FI");
 
@@ -113,6 +123,104 @@ class LexisXmlImportServiceTest {
   }
 
   @Test
+  void shouldValidateLexisXmlWithoutPersistingApplication() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(new PackageValidityItem(true, null));
+
+    ApplicationSubmissionImportResultDto result = service().validateApplicationSubmission(sampleXml(), "CLIENT-REF-1");
+
+    assertThat(result.uploadType()).isEqualTo("applicationSubmission");
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.applicationNumber()).isNull();
+    assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
+    assertThat(result.scaleRows()).isEqualTo(3);
+    assertThat(result.userReference()).isEqualTo("CLIENT-REF-1");
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().ownerClientNumber()).isEqualTo("1074");
+    assertThat(result.submissionSummary().ownerClientLocationCode()).isEqualTo("03");
+    assertThat(result.submissionSummary().ownerContactName()).isEqualTo("CUSTOMER SERVICE");
+    assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(1909L);
+    assertThat(result.submissionSummary().productTypeCode()).isEqualTo("H");
+    assertThat(result.submissionSummary().applicationVolume()).isEqualTo(525.0d);
+    assertThat(result.submissionSummary().speciesCodes()).containsExactly("HE", "FI");
+    assertThat(result.message()).contains("validated");
+    verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
+    verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), any());
+  }
+
+  @Test
+  void shouldRejectLexisXmlValidationWhenPackageAlreadyExists() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(new PackageValidityItem(false, "Package TEST23-652-7D-2 already exists."));
+
+    ApplicationSubmissionImportResultDto result = service().validateApplicationSubmission(sampleXml());
+
+    assertThat(result.uploadType()).isEqualTo("applicationSubmission");
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
+    verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
+  }
+
+  @Test
+  void shouldRejectLexisXmlValidationWhenUserReferenceIsTooLong() {
+    ApplicationSubmissionImportResultDto result = service().validateApplicationSubmission(sampleXml(), "R".repeat(51));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("User reference must be 50 characters or fewer.");
+  }
+
+  @Test
+  void shouldValidateManualUploadSampleFiles() throws Exception {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid(anyString()))
+        .thenReturn(new PackageValidityItem(true, null));
+
+    for (String fileName :
+        List.of(
+            "pass-application-rsc.xml",
+            "pass-application-rsi.xml",
+            "pass-application-rkb.xml")) {
+      ApplicationSubmissionImportResultDto result = service().validateApplicationSubmission(sampleResourceXml(fileName));
+
+      assertThat(result.status()).as(fileName).isEqualTo("validated");
+      assertThat(result.packageNumber()).as(fileName).startsWith("QA26-");
+      assertThat(result.submissionSummary()).as(fileName).isNotNull();
+      assertThat(result.scaleRows()).as(fileName).isPositive();
+    }
+
+    ApplicationSubmissionImportResultDto missingBoom =
+        service().validateApplicationSubmission(sampleResourceXml("fail-missing-boom-number.xml"));
+    assertThat(missingBoom.status()).isEqualTo("rejected");
+    assertThat(missingBoom.errors()).contains("Boom/package number is required.");
+
+    ApplicationSubmissionImportResultDto federalJurisdiction =
+        service().validateApplicationSubmission(sampleResourceXml("fail-federal-jurisdiction.xml"));
+    assertThat(federalJurisdiction.status()).isEqualTo("rejected");
+    assertThat(federalJurisdiction.errors()).contains("Only provincial LEXIS submissions are supported.");
+  }
+
+  @Test
+  void shouldRejectLexisXmlImportWhenPackageExistsBeforeApplicationPersistence() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(new PackageValidityItem(false, "Package TEST23-652-7D-2 already exists."));
+
+    ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
+    assertThat(result.submissionSummary()).isNotNull();
+    verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
+    verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
+  }
+
+  @Test
   void shouldImportZippedLexisXmlAsApplicationPackageAndScales() throws Exception {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
@@ -124,16 +232,16 @@ class LexisXmlImportServiceTest {
     when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(zippedFile("payload/6-652-7.xml", SAMPLE_XML), "jsmith");
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(zippedFile("payload/6-652-7.xml", SAMPLE_XML), "jsmith");
 
     assertThat(result.status()).isEqualTo("accepted");
     assertThat(result.applicationNumber()).isEqualTo(9001L);
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
-    assertThat(result.warnings()).contains("Imported payload/6-652-7.xml from ZIP archive submission.zip.");
+    assertThat(result.warnings()).contains("Loaded payload/6-652-7.xml from ZIP archive submission.zip.");
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
   }
 
@@ -149,7 +257,7 @@ class LexisXmlImportServiceTest {
     when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
-    LexisXmlImportResultDto result = service().importLexisXml(bareSampleXml(), "jsmith");
+    ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(bareSampleXml(), "jsmith");
 
     assertThat(result.status()).isEqualTo("accepted");
     assertThat(result.applicationNumber()).isEqualTo(9001L);
@@ -170,7 +278,7 @@ class LexisXmlImportServiceTest {
     when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
-    LexisXmlImportResultDto result = service().importLexisXml(sampleGeoJson(), "jsmith");
+    ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(sampleGeoJson(), "jsmith");
 
     assertThat(result.status()).isEqualTo("accepted");
     assertThat(result.applicationNumber()).isEqualTo(9001L);
@@ -209,7 +317,7 @@ class LexisXmlImportServiceTest {
         new MockMultipartFile(
             "formFile", "submission.dat", "application/octet-stream", SAMPLE_XML.getBytes(StandardCharsets.UTF_8));
 
-    LexisXmlImportResultDto result = service().importLexisXml(file, "jsmith");
+    ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(file, "jsmith");
 
     assertThat(result.status()).isEqualTo("accepted");
     assertThat(result.applicationNumber()).isEqualTo(9001L);
@@ -230,14 +338,14 @@ class LexisXmlImportServiceTest {
     when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
-    LexisXmlImportResultDto result =
-        service().importLexisXml(zippedFile("payload/submission.dat", SAMPLE_GEOJSON), "jsmith");
+    ApplicationSubmissionImportResultDto result =
+        service().importApplicationSubmission(zippedFile("payload/submission.dat", SAMPLE_GEOJSON), "jsmith");
 
     assertThat(result.status()).isEqualTo("accepted");
     assertThat(result.applicationNumber()).isEqualTo(9001L);
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
-    assertThat(result.warnings()).contains("Imported payload/submission.dat from ZIP archive submission.zip.");
+    assertThat(result.warnings()).contains("Loaded payload/submission.dat from ZIP archive submission.zip.");
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
   }
 
@@ -251,13 +359,36 @@ class LexisXmlImportServiceTest {
             new PackagePersistenceResult(
                 false, null, null, null, null, null, List.of("Package could not be saved."), List.of()));
 
-    LexisXmlImportResultDto result = service().importLexisXml(sampleXml(), "jsmith");
+    ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(sampleXml(), "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.applicationNumber()).isNull();
     assertThat(result.packageNumber()).isNull();
     assertThat(result.scaleRows()).isZero();
     assertThat(result.errors()).containsExactly("Package could not be saved.");
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+  }
+
+  @Test
+  void shouldRejectDuplicatePackageWhenPackageAppearsDuringImportFinalization() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(
+            new PackageValidityItem(true, null),
+            new PackageValidityItem(false, "Package TEST23-652-7D-2 already exists."));
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(new PackagePersistenceResult(false, null, null, null, null, null, List.of(), List.of()));
+
+    ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.applicationNumber()).isNull();
+    assertThat(result.packageNumber()).isNull();
+    assertThat(result.scaleRows()).isZero();
+    assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
+    verify(applicationDetailsService, times(2)).isPackageValid("TEST23-652-7D-2");
     verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
   }
 
@@ -275,7 +406,7 @@ class LexisXmlImportServiceTest {
             new ScalePersistenceResult(true, null, List.of(), List.of()),
             new ScalePersistenceResult(false, null, List.of("Scale could not be saved."), List.of()));
 
-    LexisXmlImportResultDto result = service().importLexisXml(sampleXml(), "jsmith");
+    ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(sampleXml(), "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.applicationNumber()).isNull();
@@ -287,49 +418,54 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectUnsupportedFileExtensionsBeforePersistence() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     MockMultipartFile file =
         new MockMultipartFile(
             "formFile", "submission.txt", "text/plain", "not xml".getBytes(StandardCharsets.UTF_8));
 
-    LexisXmlImportResultDto result = service.importLexisXml(file, "jsmith");
+    ApplicationSubmissionImportResultDto result = service.importApplicationSubmission(file, "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .contains("The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file.");
+        .contains(
+            "The LEXIS application submission file must be an XML, GeoJSON, JSON, or ZIP file.");
     assertThat(result.message())
-        .contains("The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file.");
+        .contains(
+            "The LEXIS application submission file must be an XML, GeoJSON, JSON, or ZIP file.");
   }
 
   @Test
   void shouldRejectZipFilesWithMultipleXmlFiles() throws Exception {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(zippedFile(List.of("first.xml", "second.xml")), "jsmith");
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(zippedFile(List.of("first.xml", "second.xml")), "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("The ZIP file must contain exactly one LEXIS XML or GeoJSON import file.");
+    assertThat(result.errors())
+        .contains(
+            "The ZIP file must contain exactly one LEXIS XML or GeoJSON application submission file.");
   }
 
   @Test
   void shouldRejectZipFilesWithoutXmlFiles() throws Exception {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
 
-    LexisXmlImportResultDto result = service.importLexisXml(emptyZipFile(), "jsmith");
+    ApplicationSubmissionImportResultDto result = service.importApplicationSubmission(emptyZipFile(), "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("The ZIP file must contain one LEXIS XML or GeoJSON import file.");
+    assertThat(result.errors())
+        .contains("The ZIP file must contain one LEXIS XML or GeoJSON application submission file.");
   }
 
   @Test
   void shouldRejectCorruptZipFiles() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     MockMultipartFile file =
         new MockMultipartFile(
             "formFile", "submission.zip", "application/zip", "not a zip".getBytes(StandardCharsets.UTF_8));
 
-    LexisXmlImportResultDto result = service.importLexisXml(file, "jsmith");
+    ApplicationSubmissionImportResultDto result = service.importApplicationSubmission(file, "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors()).contains("The uploaded Zip file is corrupt, and cannot be read.");
@@ -337,14 +473,14 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectUnmappedForestRegion() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
             "<lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>",
             "<lexis:bcForestRegionCode>BAD</lexis:bcForestRegionCode>");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -355,7 +491,7 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectXmlWithoutSchemaLocation() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
             " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
@@ -364,8 +500,8 @@ class LexisXmlImportServiceTest {
                 + "\"",
             "");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -376,11 +512,11 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectMalformedXmlWithLineAndColumnDetails() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml = SAMPLE_XML.replace("</lexis:productDetail>", "");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -399,15 +535,15 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectLexisPayloadOutsideSubmissionContent() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
                 "<esf:submissionContent>",
                 "<esf:submissionContent />")
             .replace("</esf:submissionContent>", "");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -418,7 +554,7 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectDuplicateSingletonSections() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
             "</lexis:applicationDetail>",
@@ -427,8 +563,8 @@ class LexisXmlImportServiceTest {
                 + "  <lexis:jurisdictionCode>P</lexis:jurisdictionCode>\n"
                 + "</lexis:applicationDetail>");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -439,15 +575,15 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectDuplicateSingletonFields() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
             "<lexis:clientNumber>1074</lexis:clientNumber>",
             "<lexis:clientNumber>1074</lexis:clientNumber>\n"
                 + "<lexis:clientNumber>9999</lexis:clientNumber>");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -458,14 +594,14 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectUnsupportedLexisSchemaVersion() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
             "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd",
             "http://www.for.gov.bc.ca/schema/lexis/1/xsd/MOF/mof-lexis.xsd");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -479,14 +615,14 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectUnsupportedEsfSchemaVersion() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
             "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd",
             "http://www.for.gov.bc.ca/schema/esf/0/xsd/MOF/esf-submission.xsd");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -500,7 +636,7 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectDuplicateSchemaLocationNamespaces() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
             SAMPLE_SCHEMA_LOCATION,
@@ -508,8 +644,8 @@ class LexisXmlImportServiceTest {
                 + " http://www.for.gov.bc.ca/schema/lexis "
                 + "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -521,14 +657,14 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectNonProvincialLexisSubmissions() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
             "<lexis:jurisdictionCode>P</lexis:jurisdictionCode>",
             "<lexis:jurisdictionCode>F</lexis:jurisdictionCode>");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -539,14 +675,14 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectPackageNumbersLongerThanTwentyCharacters() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
             "<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>",
             "<lexis:boomNumber>123456789012345678901</lexis:boomNumber>");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -557,12 +693,12 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectMissingSpeciesEndUseSort() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace("<lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>", "");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -573,14 +709,14 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectMalformedSpeciesEndUseSort() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
             "<lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>",
             "<lexis:speciesEndUseSort>HE</lexis:speciesEndUseSort>");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -591,13 +727,13 @@ class LexisXmlImportServiceTest {
 
   @Test
   void shouldRejectDuplicateScaleCombinationsBeforePersistence() {
-    LexisXmlImportService service = service();
+    ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
             "<lexis:species>FI</lexis:species>", "<lexis:species>HE</lexis:species>");
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
             new MockMultipartFile(
                 "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
             "jsmith");
@@ -608,8 +744,8 @@ class LexisXmlImportServiceTest {
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
-  private LexisXmlImportService service() {
-    return new LexisXmlImportService(
+  private ApplicationSubmissionImportService service() {
+    return new ApplicationSubmissionImportService(
         applicationDetailsServiceProvider,
         Clock.fixed(Instant.parse("2026-06-12T12:00:00Z"), ZoneOffset.UTC));
   }
@@ -617,6 +753,14 @@ class LexisXmlImportServiceTest {
   private MockMultipartFile sampleXml() {
     return new MockMultipartFile(
         "formFile", "6-652-7.xml", "application/xml", SAMPLE_XML.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private MockMultipartFile sampleResourceXml(String fileName) throws Exception {
+    String resourceName = "/lexis-upload-samples/" + fileName;
+    try (InputStream input = getClass().getResourceAsStream(resourceName)) {
+      assertThat(input).as(resourceName).isNotNull();
+      return new MockMultipartFile("formFile", fileName, "application/xml", input.readAllBytes());
+    }
   }
 
   private MockMultipartFile bareSampleXml() {

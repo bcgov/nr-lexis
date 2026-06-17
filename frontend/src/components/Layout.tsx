@@ -44,45 +44,50 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       { to: '/provincial/summary', label: 'Summary', requiredActions: ['/summary'] },
       {
         to: '/provincial/review',
-        label: 'Application Review',
+        label: 'Application review',
         requiredActions: ['/applicationsReview'],
       },
       {
         to: '/provincial/application/create',
-        label: 'Create/Edit Application',
+        label: 'Create/edit application',
         requiredActions: ['/applicationSearch', 'createApplication'],
         requiredActionsMatch: 'all',
       },
       {
+        to: '/provincial/application/upload',
+        label: 'Upload application submission',
+        requiredActions: ['createApplication'],
+      },
+      {
         to: '/provincial/application',
-        label: 'Application Search',
+        label: 'Application search',
         requiredActions: ['/applicationSearch'],
       },
       {
         to: '/provincial/exemption/create',
-        label: 'Create/Edit Exemption',
+        label: 'Create/edit exemption',
         requiredActions: ['/exemptionSearch', '/createExemption'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/exemption',
-        label: 'Exemption Search',
+        label: 'Exemption search',
         requiredActions: ['/exemptionSearch'],
       },
       {
         to: '/provincial/offers/create',
-        label: 'Create/Edit Offer',
+        label: 'Create/edit offer',
         requiredActions: ['/offersSearch', 'createOffer'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/offers',
-        label: 'Offer Search',
+        label: 'Offer search',
         requiredActions: ['/offersSearch'],
       },
       {
         to: '/provincial/permit',
-        label: 'Permit Search',
+        label: 'Permit search',
         requiredActions: ['/permitSearch'],
       },
     ],
@@ -92,23 +97,23 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/federal',
-        label: 'Application Search',
+        label: 'Application search',
         requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
       },
     ],
   },
   {
-    label: 'Indian Reserve',
+    label: 'Indian reserve',
     links: [
       {
         to: '/indian-reserve/permit/create',
-        label: 'Create/Edit Permit',
+        label: 'Create/edit permit',
         requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/indian-reserve',
-        label: 'Permit Search',
+        label: 'Permit search',
         requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
       },
     ],
@@ -118,7 +123,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/reports',
-        label: 'Reports Menu',
+        label: 'Reports menu',
         requiredActions: [
           '/applicationReport',
           '/offerReport',
@@ -139,24 +144,23 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/admin',
-        label: 'LEXIS Administration',
+        label: 'LEXIS administration',
         requiredActions: ['/lexisAgentAdmin'],
       },
       {
         to: '/admin/policies',
-        label: 'Fee Policy Administration',
+        label: 'Fee policy administration',
         requiredActions: ['/lexisAgentAdmin'],
       },
       {
         to: '/admin/uploads',
-        label: 'Data Upload',
+        label: 'Data upload',
         requiredActions: [
           '/lexisAgentAdmin',
           '/fileApplicationUpload',
           '/fileExemptionUpload',
           '/filePermitUpload',
           '/fileInvoiceUpload',
-          'createApplication',
         ],
       },
     ],
@@ -168,6 +172,7 @@ const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
   { path: '/provincial/summary', section: 'Provincial' },
   { path: '/provincial/review', section: 'Provincial' },
   { path: '/provincial/application/create', section: 'Provincial' },
+  { path: '/provincial/application/upload', section: 'Provincial' },
   { path: '/provincial/application', section: 'Provincial' },
   { path: '/provincial/exemption/create', section: 'Provincial' },
   { path: '/provincial/exemption', section: 'Provincial' },
@@ -177,8 +182,8 @@ const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
   { path: '/provincial/permit', section: 'Provincial' },
   { path: '/provincial', section: 'Provincial' },
   { path: '/federal', section: 'Federal' },
-  { path: '/indian-reserve/permit/create', section: 'Indian Reserve' },
-  { path: '/indian-reserve', section: 'Indian Reserve' },
+  { path: '/indian-reserve/permit/create', section: 'Indian reserve' },
+  { path: '/indian-reserve', section: 'Indian reserve' },
   { path: '/reports', section: 'Reports' },
   { path: '/admin/uploads', section: 'Administration' },
   { path: '/admin/policies', section: 'Administration' },

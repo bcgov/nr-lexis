@@ -274,7 +274,8 @@ public class ApplicationReviewController {
   }
 
   private ApplicationReviewStatusUpdateResultDto invalidStatusUpdate(String message) {
-    return new ApplicationReviewStatusUpdateResultDto(false, false, null, null, null, message);
+    return new ApplicationReviewStatusUpdateResultDto(
+        false, false, null, null, null, null, null, null, message);
   }
 
   private Map<String, Object> legacyStatusUpdatePayload(

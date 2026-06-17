@@ -4,7 +4,6 @@ import {
   Column,
   Grid,
   InlineLoading,
-  InlineNotification,
   Table,
   TableBody,
   TableCell,
@@ -16,6 +15,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { useAuth } from '@/context/auth/useAuth'
+import { AppNotification } from '@/components/AppNotification'
 import {
   firstValidationError,
   getVisibleFieldError,
@@ -91,8 +91,8 @@ const AdminPoliciesPage: FC = () => {
           () => isoDateFieldError(filEffectiveDate),
         ) ?? undefined,
       filPolicyPercentage: firstValidationError(
-        () => requiredFieldError(filPolicyPercentage, 'FIL percentage'),
-        () => numericFieldError(filPolicyPercentage, 'FIL policy percentage'),
+        () => requiredFieldError(filPolicyPercentage, 'Fee in lieu percentage'),
+        () => numericFieldError(filPolicyPercentage, 'Fee in lieu policy percentage'),
       ),
     }),
     [feeEffectiveDate, feeOrgUnitCode, feePolicyPercentage, filEffectiveDate, filPolicyPercentage],
@@ -149,7 +149,9 @@ const AdminPoliciesPage: FC = () => {
       console.error(error)
       const status = getResponseStatus(error)
       if (status) {
-        setErrorMessage(`Unable to load policy data (status ${status}).`)
+        setErrorMessage(
+          'Policy data is currently unavailable. Refresh the page or contact support if this keeps happening.',
+        )
       } else {
         setErrorMessage('Unable to load policy data.')
       }
@@ -193,9 +195,11 @@ const AdminPoliciesPage: FC = () => {
       console.error(error)
       const status = getResponseStatus(error)
       if (status) {
-        setErrorMessage(`Fee policy request failed with status ${status}.`)
+        setErrorMessage(
+          'Unable to save the fee policy right now. Please check your entry and try again. If this continues, contact support.',
+        )
       } else {
-        setErrorMessage('Fee policy request failed.')
+        setErrorMessage('Unable to save the fee policy. Please try again or contact support.')
       }
     } finally {
       setIsMutatingPolicies(false)
@@ -227,7 +231,9 @@ const AdminPoliciesPage: FC = () => {
       console.error(error)
       const status = getResponseStatus(error)
       if (status) {
-        setErrorMessage(`Fee policy delete failed with status ${status}.`)
+        setErrorMessage(
+          'Unable to delete the fee policy. Refresh and try again, or contact support if the issue persists.',
+        )
       } else {
         setErrorMessage('Fee policy delete failed.')
       }
@@ -246,7 +252,7 @@ const AdminPoliciesPage: FC = () => {
 
     if (filHasValidationError) {
       setShowFilValidationErrors(true)
-      setErrorMessage('FIL policy requires effective date and percentage.')
+      setErrorMessage('Fee in lieu policy requires an effective date and percentage.')
       return
     }
 
@@ -259,15 +265,21 @@ const AdminPoliciesPage: FC = () => {
         filPercentage: filPolicyPercentage,
       })
       setFilPolicies(updatedRows)
-      setSuccessMessage(editingFilPolicyId ? 'FIL policy updated.' : 'FIL policy added.')
+      setSuccessMessage(
+        editingFilPolicyId ? 'Fee in lieu policy updated.' : 'Fee in lieu policy added.',
+      )
       resetFilForm()
     } catch (error) {
       console.error(error)
       const status = getResponseStatus(error)
       if (status) {
-        setErrorMessage(`FIL policy request failed with status ${status}.`)
+        setErrorMessage(
+          'Unable to save the fee in lieu policy right now. Please check your entry and try again. If this continues, contact support.',
+        )
       } else {
-        setErrorMessage('FIL policy request failed.')
+        setErrorMessage(
+          'Unable to save the fee in lieu policy. Please try again or contact support.',
+        )
       }
     } finally {
       setIsMutatingPolicies(false)
@@ -292,14 +304,18 @@ const AdminPoliciesPage: FC = () => {
       if (editingFilPolicyId === rowId) {
         resetFilForm()
       }
-      setSuccessMessage('FIL policy deleted.')
+      setSuccessMessage('Fee in lieu policy deleted.')
     } catch (error) {
       console.error(error)
       const status = getResponseStatus(error)
       if (status) {
-        setErrorMessage(`FIL policy delete failed with status ${status}.`)
+        setErrorMessage(
+          'Unable to delete the fee in lieu policy. Refresh and try again, or contact support if the issue persists.',
+        )
       } else {
-        setErrorMessage('FIL policy delete failed.')
+        setErrorMessage(
+          'Unable to delete the fee in lieu policy. Please try again or contact support.',
+        )
       }
     } finally {
       setIsMutatingPolicies(false)
@@ -309,7 +325,7 @@ const AdminPoliciesPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Policy Center</h1>
+        <h1>Policy center</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
@@ -321,25 +337,26 @@ const AdminPoliciesPage: FC = () => {
             </Tag>
           </div>
           <div>
-            FIL policy access:{' '}
+            Fee in lieu policy access:{' '}
             <Tag type={canManageFilPolicy ? 'green' : 'red'}>
               {canManageFilPolicy ? 'Allowed' : 'Not Granted'}
             </Tag>
           </div>
           {isLoadingPolicies && <InlineLoading description="Loading policy data..." />}
           {successMessage && (
-            <InlineNotification
+            <AppNotification
               kind="success"
-              title="Policy Update"
+              title="Policy update"
               subtitle={successMessage}
               lowContrast
+              autoDismissMs={8000}
               onCloseButtonClick={() => setSuccessMessage('')}
             />
           )}
           {errorMessage && (
-            <InlineNotification
+            <AppNotification
               kind="error"
-              title="Policy Error"
+              title="Policy error"
               subtitle={errorMessage}
               lowContrast
               onCloseButtonClick={() => setErrorMessage('')}
@@ -350,14 +367,14 @@ const AdminPoliciesPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <h2 className="dashboard-title">Fee Policy Administration</h2>
+          <h2 className="dashboard-title">Fee policy administration</h2>
           <p>
             Records: <strong>{feePolicyCount}</strong>
           </p>
           <div className="legacy-search-grid">
             <IsoDatePicker
               id="feeEffectiveDate"
-              labelText="Policy Effective Date"
+              labelText="Policy effective date"
               value={feeEffectiveDate}
               invalid={!!feeFieldError('feeEffectiveDate')}
               invalidText={feeFieldError('feeEffectiveDate')}
@@ -366,7 +383,7 @@ const AdminPoliciesPage: FC = () => {
             />
             <TextInput
               id="feeOrgUnitCode"
-              labelText="Region Code"
+              labelText="Region code"
               value={feeOrgUnitCode}
               invalid={!!feeFieldError('feeOrgUnitCode')}
               invalidText={feeFieldError('feeOrgUnitCode')}
@@ -375,13 +392,13 @@ const AdminPoliciesPage: FC = () => {
             />
             <TextInput
               id="feeOrgUnitName"
-              labelText="Region Name"
+              labelText="Region name"
               value={feeOrgUnitName}
               onChange={(event) => setFeeOrgUnitName(event.target.value)}
             />
             <TextInput
               id="feePolicyPercentage"
-              labelText="Fee Increase Percentage"
+              labelText="Fee increase percentage"
               value={feePolicyPercentage}
               invalid={!!feeFieldError('feePolicyPercentage')}
               invalidText={feeFieldError('feePolicyPercentage')}
@@ -461,14 +478,14 @@ const AdminPoliciesPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <h2 className="dashboard-title">FIL Percent Policy Administration</h2>
+          <h2 className="dashboard-title">Fee in lieu percent policy administration</h2>
           <p>
             Records: <strong>{filPolicyCount}</strong>
           </p>
           <div className="legacy-search-grid">
             <IsoDatePicker
               id="filEffectiveDate"
-              labelText="Policy Effective Date"
+              labelText="Policy effective date"
               value={filEffectiveDate}
               invalid={!!filFieldError('filEffectiveDate')}
               invalidText={filFieldError('filEffectiveDate')}
@@ -477,7 +494,7 @@ const AdminPoliciesPage: FC = () => {
             />
             <TextInput
               id="filPolicyPercentage"
-              labelText="FIL Percentage"
+              labelText="Fee in lieu percentage"
               value={filPolicyPercentage}
               invalid={!!filFieldError('filPolicyPercentage')}
               invalidText={filFieldError('filPolicyPercentage')}
@@ -491,7 +508,7 @@ const AdminPoliciesPage: FC = () => {
               onClick={() => void upsertFilPolicy()}
               disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
             >
-              {editingFilPolicyId ? 'Update FIL Policy' : 'Add FIL Policy'}
+              {editingFilPolicyId ? 'Update fee in lieu policy' : 'Add fee in lieu policy'}
             </Button>
             <Button
               kind="ghost"
@@ -505,12 +522,12 @@ const AdminPoliciesPage: FC = () => {
           <Table useZebraStyles>
             <TableHead>
               <TableRow>
-                <TableHeader>Effective Date</TableHeader>
-                <TableHeader>FIL %</TableHeader>
-                <TableHeader>Entry User</TableHeader>
-                <TableHeader>Entry Timestamp</TableHeader>
-                <TableHeader>Update User</TableHeader>
-                <TableHeader>Update Timestamp</TableHeader>
+                <TableHeader>Effective date</TableHeader>
+                <TableHeader>Fee in lieu %</TableHeader>
+                <TableHeader>Entry user</TableHeader>
+                <TableHeader>Entry timestamp</TableHeader>
+                <TableHeader>Update user</TableHeader>
+                <TableHeader>Update timestamp</TableHeader>
                 <TableHeader>Actions</TableHeader>
               </TableRow>
             </TableHead>
@@ -545,7 +562,7 @@ const AdminPoliciesPage: FC = () => {
               ))}
               {filPolicies.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7}>No FIL policy rows yet.</TableCell>
+                  <TableCell colSpan={7}>No fee in lieu policy rows yet.</TableCell>
                 </TableRow>
               )}
             </TableBody>

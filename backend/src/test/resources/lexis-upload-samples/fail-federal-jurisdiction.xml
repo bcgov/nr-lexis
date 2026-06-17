@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/esf http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd">
+  <esf:submissionContent>
+    <lexis:LexisSubmission>
+      <lexis:applicant>
+        <lexis:applicantDetails>
+          <lexis:clientNumber>99887766</lexis:clientNumber>
+          <lexis:clientLocnCode>99</lexis:clientLocnCode>
+          <lexis:name>Sample Federal Applicant Ltd.</lexis:name>
+        </lexis:applicantDetails>
+        <lexis:applicantContact>
+          <lexis:contactSurname>SAMPLE</lexis:contactSurname>
+          <lexis:contactFirstname>CONTACT</lexis:contactFirstname>
+        </lexis:applicantContact>
+      </lexis:applicant>
+      <lexis:applicationDetail>
+        <lexis:jurisdictionCode>F</lexis:jurisdictionCode>
+        <lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>
+        <lexis:applStatusCode>A</lexis:applStatusCode>
+        <lexis:exemptionRsnCde>S</lexis:exemptionRsnCde>
+        <lexis:applicantTypeCode>O</lexis:applicantTypeCode>
+      </lexis:applicationDetail>
+      <lexis:productDetail>
+        <lexis:productTypeCode>H</lexis:productTypeCode>
+        <lexis:boomNumber>FED-SAMPLE-001</lexis:boomNumber>
+        <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+        <lexis:productLocation>Generic Federal Sample Location</lexis:productLocation>
+        <lexis:ageClass>S</lexis:ageClass>
+        <lexis:avgLength>6.7</lexis:avgLength>
+        <lexis:avgDiameter>12.8</lexis:avgDiameter>
+        <lexis:harvestedTimber>
+          <lexis:timberMark>ZZ999</lexis:timberMark>
+          <lexis:numberOfPieces>321</lexis:numberOfPieces>
+          <lexis:species>HE</lexis:species>
+          <lexis:grade>H</lexis:grade>
+          <lexis:quantityVolume>123</lexis:quantityVolume>
+        </lexis:harvestedTimber>
+      </lexis:productDetail>
+    </lexis:LexisSubmission>
+  </esf:submissionContent>
+</esf:ESFSubmission>

@@ -124,8 +124,8 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Reports' })
-    expect(screen.getByRole('heading', { name: 'No Reports Available' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('Report Variant')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'No reports available' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Generate Report' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Accessible reports:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
@@ -199,8 +199,8 @@ describe('Reports Page Actions', () => {
     expect(mockedFetchProvincialExemptionOptions).not.toHaveBeenCalled()
     expect(mockedFetchProvincialPermitOptions).not.toHaveBeenCalled()
     expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
-    await chooseComboBoxOption('Exemption Reason', 'Section 128')
-    await chooseComboBoxOption('Growth Type', 'Old Growth')
+    await chooseComboBoxOption('Exemption reason', 'Section 128')
+    await chooseComboBoxOption('Growth type', 'Old Growth')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -241,14 +241,16 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'TEAC Package Report' })
+    await screen.findByRole('heading', {
+      name: 'Timber Export Advisory Committee package report',
+    })
     await waitFor(() => {
       expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
     })
     expect(screen.queryByRole('option', { name: 'Reserve' })).not.toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'All values' })).not.toBeInTheDocument()
     await chooseComboBoxOption('Jurisdiction', 'Federal Legacy')
-    await chooseComboBoxOption('Advertising Date', '2026-06-29')
+    await chooseComboBoxOption('Advertising date', '2026-06-29')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -263,7 +265,7 @@ describe('Reports Page Actions', () => {
         },
       })
     })
-    expect(getComboBox('Advertising Date')).toHaveValue('2026-06-29')
+    expect(getComboBox('Advertising date')).toHaveValue('2026-06-29')
   })
 
   it('submits first TEAC select options when unchanged like legacy browser forms', async () => {
@@ -286,9 +288,11 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'TEAC Package Report' })
+    await screen.findByRole('heading', {
+      name: 'Timber Export Advisory Committee package report',
+    })
     await waitFor(() => {
-      expect(getComboBox('Advertising Date')).toHaveValue('2026-06-15')
+      expect(getComboBox('Advertising date')).toHaveValue('2026-06-15')
     })
     expect(getComboBox('Jurisdiction')).toHaveValue('Provincial')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
@@ -328,9 +332,11 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'TEAC Package Report' })
+    await screen.findByRole('heading', {
+      name: 'Timber Export Advisory Committee package report',
+    })
     await waitFor(() => {
-      expect(getComboBox('Advertising Date')).toHaveValue('2026-06-15')
+      expect(getComboBox('Advertising date')).toHaveValue('2026-06-15')
     })
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
@@ -453,7 +459,7 @@ describe('Reports Page Actions', () => {
 
     await screen.findByRole('heading', { name: 'Species and Grade Report' })
     await waitFor(() => {
-      expect(getComboBox('Permit Status')).toHaveValue('Complete')
+      expect(getComboBox('Permit status')).toHaveValue('Complete')
     })
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
@@ -495,7 +501,7 @@ describe('Reports Page Actions', () => {
 
     await screen.findByRole('heading', { name: 'Species and Grade Report' })
     await waitFor(() => {
-      expect(getComboBox('Permit Status')).toHaveValue('Complete')
+      expect(getComboBox('Permit status')).toHaveValue('Complete')
     })
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
@@ -525,12 +531,12 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Species and Grade Report' })
-    await userEvent.type(screen.getByLabelText('Timber Mark'), 'tm123')
-    expect(screen.getByLabelText('Forest File ID')).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Timber mark'), 'tm123')
+    expect(screen.getByLabelText('Forest file ID')).toBeDisabled()
 
-    await userEvent.clear(screen.getByLabelText('Timber Mark'))
-    await userEvent.type(screen.getByLabelText('Forest File ID'), 'ff456')
-    expect(screen.getByLabelText('Timber Mark')).toBeDisabled()
+    await userEvent.clear(screen.getByLabelText('Timber mark'))
+    await userEvent.type(screen.getByLabelText('Forest file ID'), 'ff456')
+    expect(screen.getByLabelText('Timber mark')).toBeDisabled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
@@ -585,14 +591,14 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Transport Report' })
-    await userEvent.click(getComboBox('Final Destination Country'))
+    await userEvent.click(getComboBox('Final destination country'))
     expect(screen.queryByRole('option', { name: 'New Zealand' })).not.toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
     await userEvent.click(screen.getByRole('button', { name: 'More...' }))
     await chooseComboBoxOption('Jurisdiction', 'Federal Legacy')
-    await chooseComboBoxOption('Final Destination Country', 'New Zealand')
-    await chooseComboBoxOption('Customs Port of Export', 'Vancouver')
-    await chooseComboBoxOption('Permit Status', 'Complete')
+    await chooseComboBoxOption('Final destination country', 'New Zealand')
+    await chooseComboBoxOption('Customs port of export', 'Vancouver')
+    await chooseComboBoxOption('Permit status', 'Complete')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -636,13 +642,13 @@ describe('Reports Page Actions', () => {
 
     await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
     await waitFor(() => {
-      expect(getComboBox('Exemption Type')).toHaveValue('Ministerial')
+      expect(getComboBox('Exemption type')).toHaveValue('Ministerial')
     })
-    expect(screen.getByLabelText('Issued From Date')).toHaveValue(defaultDates.fromDate)
-    expect(screen.getByLabelText('Issued To Date')).toHaveValue(defaultDates.toDate)
-    expect(getComboBox('Client Type')).toHaveValue('Permit Holder')
-    await chooseComboBoxOption('Exemption Type', 'Ministerial')
-    await chooseComboBoxOption('Output Format', 'XLS')
+    expect(screen.getByLabelText('Issued from date')).toHaveValue(defaultDates.fromDate)
+    expect(screen.getByLabelText('Issued to date')).toHaveValue(defaultDates.toDate)
+    expect(getComboBox('Client type')).toHaveValue('Permit holder')
+    await chooseComboBoxOption('Exemption type', 'Ministerial')
+    await chooseComboBoxOption('Output format', 'XLS')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -654,7 +660,7 @@ describe('Reports Page Actions', () => {
           exemptionType: 'M',
           exemptionTypeLabel: 'Ministerial',
           clientType: 'P',
-          clientTypeLabel: 'Permit Holder',
+          clientTypeLabel: 'Permit holder',
           outputFormat: 'CSV',
         },
       })
@@ -675,10 +681,10 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
-    await userEvent.clear(screen.getByLabelText('Issued From Date'))
-    await userEvent.type(screen.getByLabelText('Issued From Date'), '2026-02-15')
+    await userEvent.clear(screen.getByLabelText('Issued from date'))
+    await userEvent.type(screen.getByLabelText('Issued from date'), '2026-02-15')
 
-    expect(screen.getByLabelText('Issued To Date')).toHaveValue('2027-02-14')
+    expect(screen.getByLabelText('Issued to date')).toHaveValue('2027-02-14')
 
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
@@ -690,7 +696,7 @@ describe('Reports Page Actions', () => {
           fromDate: '2026-02-15',
           toDate: '2027-02-14',
           clientType: 'P',
-          clientTypeLabel: 'Permit Holder',
+          clientTypeLabel: 'Permit holder',
         },
       })
     })
@@ -711,16 +717,16 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
-    expect(screen.getByLabelText('Tenure Type 1')).toBeInTheDocument()
-    expect(screen.getByLabelText('Tenure Type 6')).toBeInTheDocument()
-    expect(screen.getByLabelText('Timber Mark 1')).toBeInTheDocument()
-    expect(screen.getByLabelText('Timber Mark 6')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Tenure Types')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Timber Marks')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Tenure type 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Tenure type 6')).toBeInTheDocument()
+    expect(screen.getByLabelText('Timber mark 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Timber mark 6')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Tenure types')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Timber marks')).not.toBeInTheDocument()
 
-    await chooseComboBoxOption('Report Variant', 'Timber Marks Report')
-    await userEvent.type(screen.getByLabelText('Timber Mark 1'), 'tm-a')
-    await userEvent.type(screen.getByLabelText('Timber Mark 2'), 'tm-b')
+    await chooseComboBoxOption('Report variant', 'Timber marks report')
+    await userEvent.type(screen.getByLabelText('Timber mark 1'), 'tm-a')
+    await userEvent.type(screen.getByLabelText('Timber mark 2'), 'tm-b')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -730,7 +736,7 @@ describe('Reports Page Actions', () => {
         values: {
           ...defaultDates,
           clientType: 'P',
-          clientTypeLabel: 'Permit Holder',
+          clientTypeLabel: 'Permit holder',
           timberMark1: 'tm-a',
           timberMark2: 'tm-b',
         },
@@ -820,7 +826,7 @@ describe('Reports Page Actions', () => {
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
     )
 
-    await chooseComboBoxOption('Report Variant', 'Advertising List CSV')
+    await chooseComboBoxOption('Report variant', 'Advertising list CSV')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -864,7 +870,7 @@ describe('Reports Page Actions', () => {
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
     )
 
-    await chooseComboBoxOption('Report Variant', 'Advertising List PDF')
+    await chooseComboBoxOption('Report variant', 'Advertising list PDF')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -909,10 +915,10 @@ describe('Reports Page Actions', () => {
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
     )
 
-    expect(getComboBox('Report Variant')).toHaveValue('Generate With Filters')
+    expect(getComboBox('Report variant')).toHaveValue('Generate with filters')
     await chooseComboBoxOption('Jurisdiction', 'Federal')
-    await userEvent.type(screen.getByLabelText('Listing From Date'), '2026-06-01')
-    await userEvent.type(screen.getByLabelText('Listing To Date'), '2026-06-30')
+    await userEvent.type(screen.getByLabelText('Listing from date'), '2026-06-01')
+    await userEvent.type(screen.getByLabelText('Listing to date'), '2026-06-30')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -945,8 +951,8 @@ describe('Reports Page Actions', () => {
     await screen.findByRole('heading', { name: 'Exemption Report' })
     expect(screen.queryByLabelText('Approval From Date')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Approval To Date')).not.toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('Listing From Date'), '2026-01-01')
-    await userEvent.type(screen.getByLabelText('Listing To Date'), '2026-01-31')
+    await userEvent.type(screen.getByLabelText('Listing from date'), '2026-01-01')
+    await userEvent.type(screen.getByLabelText('Listing to date'), '2026-01-31')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -978,8 +984,8 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Reports' })
-    await userEvent.type(screen.getByLabelText('Received From Date'), '2026-01-01')
-    await chooseComboBoxOption('Output Format', 'CSV')
+    await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
+    await chooseComboBoxOption('Output format', 'CSV')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
@@ -1016,7 +1022,7 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Reports' })
-    await userEvent.type(screen.getByLabelText('Received From Date'), '2026-01-01')
+    await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {

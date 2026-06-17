@@ -40,10 +40,11 @@ const asString = (value: unknown): string | undefined => {
 }
 
 const asStringArray = (value: unknown): string[] => {
-  if (!Array.isArray(value)) {
-    return []
+  if (Array.isArray(value)) {
+    return value.map((item) => asString(item)).filter((item): item is string => Boolean(item))
   }
-  return value.map((item) => asString(item)).filter((item): item is string => Boolean(item))
+  const singleValue = asString(value)
+  return singleValue ? [singleValue] : []
 }
 
 const toUrlEncodedParams = (payload: Record<string, string | undefined>): URLSearchParams => {
@@ -54,6 +55,15 @@ const toUrlEncodedParams = (payload: Record<string, string | undefined>): URLSea
     }
   })
   return params
+}
+
+const withQueryParam = (path: string, key: string, value: string | undefined): string => {
+  if (!value) {
+    return path
+  }
+
+  const separator = path.includes('?') ? '&' : '?'
+  return `${path}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`
 }
 
 const getConfiguredPath = (configured: unknown, fallback: string): string => {
@@ -130,46 +140,37 @@ const parseCreateResponse = (
   createdIdKeyCandidates: Array<keyof LegacyCreateResponse>,
 ): CreateSubmissionResult => {
   const success = payload.success ?? payload.valid ?? false
-  const errors = asStringArray(payload.errors)
-  const warnings = asStringArray(payload.warnings)
-  const message =
-    asString(payload.message) ??
-    (success ? 'Saved successfully.' : errors.length > 0 ? '' : 'Save failed.')
   const createdId = createdIdKeyCandidates
     .map((key) => asString(payload[key]))
     .find((value) => Boolean(value))
 
   return {
     success,
-    message,
+    message: asString(payload.message) ?? '',
     createdId,
-    errors,
-    warnings,
+    errors: asStringArray(payload.errors),
+    warnings: asStringArray(payload.warnings),
   }
 }
 
-const buildFailureResult = (defaultMessage: string, error: unknown): CreateSubmissionResult => {
+const buildFailureResult = (
+  defaultMessage: string,
+  error: unknown,
+  unavailableMessage?: string,
+): CreateSubmissionResult => {
   if (axios.isAxiosError(error)) {
+    const payload = error.response?.data as LegacyCreateResponse | undefined
     const status = error.response?.status
-    const responsePayload = (error.response?.data ?? null) as LegacyCreateResponse | null
-    const responseMessage = asString(responsePayload?.message)
-    const responseErrors = asStringArray(responsePayload?.errors)
-
-    let message = defaultMessage
-    if (status === 404 || status === 405) {
-      message = `${defaultMessage} Submit endpoint is unavailable in this environment (status ${status}).`
-    } else if (responseMessage) {
-      message = responseMessage
-    } else if (status) {
-      message = `${defaultMessage} (status ${status}).`
-    }
+    const message =
+      asString(payload?.message) ??
+      (status === 404 && unavailableMessage ? unavailableMessage : defaultMessage)
 
     return {
       success: false,
       message,
       createdId: undefined,
-      errors: responseErrors,
-      warnings: [],
+      errors: asStringArray(payload?.errors),
+      warnings: asStringArray(payload?.warnings),
     }
   }
 
@@ -188,12 +189,14 @@ const postLegacyForm = async (
 ): Promise<LegacyCreateResponse> => {
   const requestMode = getCreateSubmitRequestMode()
   const requestBody = requestMode === 'json' ? payload : toUrlEncodedParams(payload)
+  const requestPath =
+    requestMode === 'json' ? withQueryParam(path, 'actionMapping', payload.actionMapping) : path
   const contentType =
     requestMode === 'json' ? 'application/json' : 'application/x-www-form-urlencoded'
 
   const response = await apiService
     .getAxiosInstance()
-    .post<LegacyCreateResponse>(path, requestBody, {
+    .post<LegacyCreateResponse>(requestPath, requestBody, {
       headers: {
         'Content-Type': contentType,
       },
@@ -279,7 +282,10 @@ export const submitProvincialApplicationCreate = async (
     )
     return parseCreateResponse(payload, ['applicationNumber'])
   } catch (error) {
-    return buildFailureResult('Unable to submit provincial application create request.', error)
+    return buildFailureResult(
+      'Application submission failed. Please review the form and try again. If the problem persists, contact support.',
+      error,
+    )
   }
 }
 
@@ -320,7 +326,10 @@ export const submitProvincialExemptionCreate = async (
     )
     return parseCreateResponse(payload, ['exemptionNumber'])
   } catch (error) {
-    return buildFailureResult('Unable to submit provincial exemption create request.', error)
+    return buildFailureResult(
+      'Exemption submission failed. Please review the form and try again. If the problem persists, contact support.',
+      error,
+    )
   }
 }
 
@@ -367,7 +376,10 @@ export const submitProvincialOfferCreate = async (
     )
     return parseCreateResponse(payload, ['exportPurchaseOfferNumber', 'offerNumber'])
   } catch (error) {
-    return buildFailureResult('Unable to submit provincial offer create request.', error)
+    return buildFailureResult(
+      'Offer submission failed. Please review the form and try again. If the problem persists, contact support.',
+      error,
+    )
   }
 }
 
@@ -412,7 +424,11 @@ export const submitProvincialPermitCreate = async (
     )
     return parseCreateResponse(payload, ['permitNumber'])
   } catch (error) {
-    return buildFailureResult('Unable to submit provincial permit create request.', error)
+    return buildFailureResult(
+      'Permit submission failed. Please review the form and try again. If the problem persists, contact support.',
+      error,
+      'Unable to submit provincial permit create request. Submit endpoint is unavailable in this environment (status 404).',
+    )
   }
 }
 
@@ -459,6 +475,9 @@ export const submitIndianReservePermitCreate = async (
     )
     return parseCreateResponse(payload, ['permitNumber'])
   } catch (error) {
-    return buildFailureResult('Unable to submit indigenous reserve permit create request.', error)
+    return buildFailureResult(
+      'Indigenous reserve permit submission failed. Please review the form and try again. If the problem persists, contact support.',
+      error,
+    )
   }
 }

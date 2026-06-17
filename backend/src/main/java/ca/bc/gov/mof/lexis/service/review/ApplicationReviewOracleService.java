@@ -77,9 +77,10 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
   @Override
   public ApplicationReviewStatusUpdateResultDto approve(Long applicationNumber, String updateUserId) {
     if (applicationNumber == null || applicationNumber < 1) {
-      return new ApplicationReviewStatusUpdateResultDto(
+      return statusUpdateResult(
           false,
           false,
+          null,
           null,
           null,
           null,
@@ -88,18 +89,20 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
 
     boolean updated = repository.approve(applicationNumber, defaultMutationUser(updateUserId));
     if (updated) {
-      return new ApplicationReviewStatusUpdateResultDto(
+      return statusUpdateResult(
           true,
           true,
-          "APR",
+          "APP",
+          null,
           null,
           null,
           "Application approved.");
     }
-    return new ApplicationReviewStatusUpdateResultDto(
+    return statusUpdateResult(
         false,
         true,
-        "APR",
+        "APP",
+        null,
         null,
         null,
         "Application was not updated.");
@@ -111,9 +114,10 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
       ApplicationReviewStatusUpdateRequestDto request,
       String updateUserId) {
     if (applicationNumber == null || applicationNumber < 1) {
-      return new ApplicationReviewStatusUpdateResultDto(
+      return statusUpdateResult(
           false,
           false,
+          null,
           null,
           null,
           null,
@@ -121,9 +125,10 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     }
     String statusCode = request == null ? null : trimToNull(request.statusCode());
     if (statusCode == null) {
-      return new ApplicationReviewStatusUpdateResultDto(
+      return statusUpdateResult(
           false,
           false,
+          null,
           null,
           null,
           null,
@@ -132,35 +137,58 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
 
     String remark = request == null ? null : trimToNull(request.remark());
     if (STATUSES_REQUIRING_REMARK.contains(statusCode) && remark == null) {
-      return new ApplicationReviewStatusUpdateResultDto(
+      return statusUpdateResult(
           false,
           false,
           statusCode,
           request == null ? null : trimToNull(request.clientEmailAddress()),
           null,
+          null,
           "Remark is required when rejecting or withdrawing an application.");
     }
 
     String clientEmail = request == null ? null : trimToNull(request.clientEmailAddress());
-    boolean updated =
-        repository.updateStatus(applicationNumber, statusCode, remark, defaultMutationUser(updateUserId));
+    ApplicationReviewRepository.ApplicationStatusUpdateRow updateRow =
+        repository.updateStatusWithRemark(applicationNumber, statusCode, remark, defaultMutationUser(updateUserId));
 
-    if (updated) {
-      return new ApplicationReviewStatusUpdateResultDto(
+    if (updateRow.updated()) {
+      return statusUpdateResult(
           true,
           true,
           statusCode,
           clientEmail,
           remark,
+          updateRow.remark(),
           "Application status updated.");
     }
-    return new ApplicationReviewStatusUpdateResultDto(
+    return statusUpdateResult(
         false,
         true,
         statusCode,
         clientEmail,
         remark,
+        null,
         "Application status update did not persist.");
+  }
+
+  private ApplicationReviewStatusUpdateResultDto statusUpdateResult(
+      boolean updated,
+      boolean valid,
+      String statusCode,
+      String clientEmail,
+      String remark,
+      ApplicationReviewRepository.ReviewRemarkRow remarkRow,
+      String message) {
+    return new ApplicationReviewStatusUpdateResultDto(
+        updated,
+        valid,
+        statusCode,
+        clientEmail,
+        remark,
+        remarkRow == null ? null : remarkRow.remarkId(),
+        remarkRow == null ? null : remarkRow.user(),
+        remarkRow == null ? null : remarkRow.date(),
+        message);
   }
 
   @Override

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useReducer, useState, type FC } from '
 import {
   Button,
   InlineLoading,
-  InlineNotification,
   Table,
   TableBody,
   TableCell,
@@ -13,6 +12,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import {
@@ -370,6 +370,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   const [scaleForm, setScaleForm] = useState<ScaleFormState>(emptyScaleForm)
   const [scaleLookupId, setScaleLookupId] = useState('')
   const [scaleLookupResult, setScaleLookupResult] = useState('')
+  const [scaleActionErrorMessage, setScaleActionErrorMessage] = useState('')
   const [itemsLoading, setItemsLoading] = useState(false)
   const [itemsErrorMessage, setItemsErrorMessage] = useState('')
   const [itemsInfoMessage, setItemsInfoMessage] = useState('')
@@ -999,17 +1000,19 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       return
     }
 
+    setScaleActionErrorMessage('')
     if (hasScaleValidationError) {
-      setShowScaleValidationErrors(true)
-      setItemsErrorMessage(
+      const message =
         firstItemError(
           'scaleTimberMark',
           'scaleSpeciesCode',
           'scaleGradeCode',
           'scalePieces',
           'scaleVolume',
-        ) ?? 'Please fix validation errors before adding the scale.',
-      )
+        ) ?? 'Please fix validation errors before adding the scale.'
+      setShowScaleValidationErrors(true)
+      setItemsErrorMessage(message)
+      setScaleActionErrorMessage(message)
       return
     }
 
@@ -1027,12 +1030,15 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         volume: scaleForm.volume,
       })
       if (!result.valid || !result.result) {
-        setItemsErrorMessage(result.errors.join(' ') || 'Scale creation failed.')
+        const message = result.errors.join(' ') || 'Scale creation failed.'
+        setItemsErrorMessage(message)
+        setScaleActionErrorMessage(message)
         return
       }
 
       setScales((current) => [...current, result.result as ApplicationPackageScaleRow])
       setScaleForm(emptyScaleForm)
+      setScaleActionErrorMessage('')
       setShowScaleValidationErrors(false)
       setItemsInfoMessage(`Scale ${result.result.id} added.`)
       await onDetailChanged()
@@ -1040,6 +1046,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       await loadPackageItems(selectedPackageNumber)
     } catch {
       setItemsErrorMessage('Unable to add scale.')
+      setScaleActionErrorMessage('Unable to add scale.')
     } finally {
       setIsSavingScale(false)
     }
@@ -1138,19 +1145,21 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       <h2 className="detail-tile-title">Items</h2>
       {itemsLoading && <InlineLoading description="Loading item data..." />}
       {!!itemsErrorMessage && (
-        <InlineNotification
+        <AppNotification
           kind="error"
           title="Item action failed"
           subtitle={itemsErrorMessage}
           lowContrast
+          onCloseButtonClick={() => setItemsErrorMessage('')}
         />
       )}
       {!!itemsInfoMessage && (
-        <InlineNotification
+        <AppNotification
           kind="success"
           title="Item action completed"
           subtitle={itemsInfoMessage}
           lowContrast
+          onCloseButtonClick={() => setItemsInfoMessage('')}
         />
       )}
 
@@ -1174,7 +1183,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             <h3>Package Details</h3>
             <SearchableSelect
               id="applicationItemsPackageSelect"
-              labelText="Selected package"
+              labelText="Selected Package"
               value={selectedPackageNumber}
               placeholder="Select package"
               options={packageNumbers.map((packageNumber) => ({
@@ -1371,7 +1380,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                   <TableHead>
                     <TableRow>
                       <TableHeader>Species</TableHeader>
-                      <TableHeader>End Use</TableHeader>
+                      <TableHeader>End use</TableHeader>
                       <TableHeader>Action</TableHeader>
                     </TableRow>
                   </TableHead>
@@ -1413,7 +1422,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                 <Table useZebraStyles>
                   <TableHead>
                     <TableRow>
-                      <TableHeader>Timber Mark</TableHeader>
+                      <TableHeader>Timber mark</TableHeader>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -1672,6 +1681,11 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
               Add Scale
             </Button>
           </div>
+          {!!scaleActionErrorMessage && (
+            <p className="application-items-inline-error" role="alert">
+              {scaleActionErrorMessage}
+            </p>
+          )}
           <div className="application-items-inline-form">
             <TextInput
               id="applicationItemsScaleLookup"
@@ -1688,7 +1702,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
-                  <TableHeader>Timber Mark</TableHeader>
+                  <TableHeader>Timber mark</TableHeader>
                   <TableHeader>Scale Type</TableHeader>
                   <TableHeader>Species</TableHeader>
                   <TableHeader>Grade</TableHeader>

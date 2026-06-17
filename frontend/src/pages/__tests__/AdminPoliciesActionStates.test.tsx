@@ -101,13 +101,13 @@ describe('Admin policy action states', () => {
 
     renderPage()
 
-    await screen.findByText('Fee Policy Administration')
+    await screen.findByText('Fee policy administration')
 
-    const policyDateInputs = screen.getAllByLabelText('Policy Effective Date')
+    const policyDateInputs = screen.getAllByLabelText('Policy effective date')
     fireEvent.change(policyDateInputs[0], { target: { value: '2026-02-01' } })
-    await userEvent.type(screen.getByLabelText('Region Code'), '11')
-    await userEvent.type(screen.getByLabelText('Region Name'), 'Cariboo')
-    await userEvent.type(screen.getByLabelText('Fee Increase Percentage'), '4.2')
+    await userEvent.type(screen.getByLabelText('Region code'), '11')
+    await userEvent.type(screen.getByLabelText('Region name'), 'Cariboo')
+    await userEvent.type(screen.getByLabelText('Fee increase percentage'), '4.2')
     await userEvent.click(screen.getByRole('button', { name: 'Add Fee Policy' }))
 
     await waitFor(() => {
@@ -120,7 +120,7 @@ describe('Admin policy action states', () => {
       })
     })
 
-    expect(screen.getByText('Policy Update')).toBeInTheDocument()
+    expect(screen.getByText('Policy update')).toBeInTheDocument()
     expect(screen.getByText('Fee policy added.')).toBeInTheDocument()
   })
 
@@ -158,21 +158,21 @@ describe('Admin policy action states', () => {
 
     renderPage()
 
-    await screen.findByText('Policy Center')
+    await screen.findByText('Policy center')
 
     expect(screen.getAllByText('Not Granted')).toHaveLength(2)
     expect(screen.getByRole('button', { name: 'Add Fee Policy' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Add FIL Policy' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add fee in lieu policy' })).toBeDisabled()
   })
 
   it('shows validation contract when fee policy fields are incomplete', async () => {
     renderPage()
 
-    await screen.findByText('Fee Policy Administration')
+    await screen.findByText('Fee policy administration')
     await userEvent.click(screen.getByRole('button', { name: 'Add Fee Policy' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Policy Error')).toBeInTheDocument()
+      expect(screen.getByText('Policy error')).toBeInTheDocument()
       expect(
         screen.getByText('Fee policy requires effective date, region code, and percentage.'),
       ).toBeInTheDocument()
@@ -186,20 +186,20 @@ describe('Admin policy action states', () => {
   it('blocks typed policy dates that are not valid ISO dates', async () => {
     renderPage()
 
-    await screen.findByText('Fee Policy Administration')
+    await screen.findByText('Fee policy administration')
 
-    const policyDateInputs = screen.getAllByLabelText('Policy Effective Date')
+    const policyDateInputs = screen.getAllByLabelText('Policy effective date')
     fireEvent.change(policyDateInputs[0], { target: { value: '2026-99-99' } })
-    await userEvent.type(screen.getByLabelText('Region Code'), '11')
-    await userEvent.type(screen.getByLabelText('Fee Increase Percentage'), '4.2')
+    await userEvent.type(screen.getByLabelText('Region code'), '11')
+    await userEvent.type(screen.getByLabelText('Fee increase percentage'), '4.2')
     await userEvent.click(screen.getByRole('button', { name: 'Add Fee Policy' }))
 
     expect(await screen.findByText('Date must be YYYY-MM-DD.')).toBeInTheDocument()
     expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
 
     fireEvent.change(policyDateInputs[1], { target: { value: 'not-a-date' } })
-    await userEvent.type(screen.getByLabelText('FIL Percentage'), '2.5')
-    await userEvent.click(screen.getByRole('button', { name: 'Add FIL Policy' }))
+    await userEvent.type(screen.getByLabelText('Fee in lieu percentage'), '2.5')
+    await userEvent.click(screen.getByRole('button', { name: 'Add fee in lieu policy' }))
 
     expect(await screen.findAllByText('Date must be YYYY-MM-DD.')).toHaveLength(2)
     expect(mockedUpsertFilPolicy).not.toHaveBeenCalled()

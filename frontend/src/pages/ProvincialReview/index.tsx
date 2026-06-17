@@ -5,7 +5,6 @@ import {
   Checkbox,
   Column,
   Grid,
-  InlineNotification,
   FilterableMultiSelect,
   Pagination,
   Table,
@@ -19,6 +18,7 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import type {
@@ -103,14 +103,14 @@ const SORT_COLUMNS: {
 }[] = [
   { id: 'applicationNumber', label: 'Application' },
   { id: 'volume', label: 'Volume (m³)' },
-  { id: 'speciesEndUse', label: 'Species / End Use' },
-  { id: 'listingDate', label: 'Listing Date' },
+  { id: 'speciesEndUse', label: 'Species / end use' },
+  { id: 'listingDate', label: 'Listing date' },
   { id: 'status', label: 'Status' },
   { id: 'region', label: 'Region' },
 ]
 
 const DEFAULT_SORT_FIELD: ApplicationReviewSearchSortField = 'applicationNumber'
-const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
+const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc'
 const DEFAULT_PAGE = 1
 const DEFAULT_PAGE_SIZE = 10
 const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
@@ -367,6 +367,28 @@ const ProvincialReviewPage: FC = () => {
 
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    if (regionOptions.length === 0) {
+      return
+    }
+
+    const hasSearchQuery = searchParams.toString().length > 0
+    if (hasSearchQuery) {
+      return
+    }
+
+    setSearchParams(
+      buildSearchParams(
+        { ...INITIAL_FILTERS, region: regionOptions.map((option) => option.id) },
+        DEFAULT_SORT_FIELD,
+        DEFAULT_SORT_DIRECTION,
+        DEFAULT_PAGE,
+        DEFAULT_PAGE_SIZE,
+      ),
+      { replace: true },
+    )
+  }, [regionOptions, searchParams, setSearchParams])
 
   const onSearch = () => {
     clearSelection()
@@ -626,268 +648,283 @@ const ProvincialReviewPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial Review</h1>
+        <h1>Provincial review</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <div className="legacy-search-grid">
-            <TextInput
-              id="applicationNumber"
-              labelText="Application Number"
-              value={filters.applicationNumber}
-              onChange={(event) => updateFilter('applicationNumber', event.target.value)}
-            />
-            <SearchableSelect
-              id="productTypeCode"
-              labelText="Product Type"
-              value={filters.productTypeCode}
-              placeholder="All product types"
-              options={productTypeOptions}
-              onChange={(value) => updateFilter('productTypeCode', value)}
-            />
-            <FilterableMultiSelect
-              id="region"
-              titleText="Region"
-              items={regionOptions}
-              itemToString={(item) => (item ? item.text : '')}
-              label="Select region(s)"
-              selectionFeedback="fixed"
-              selectedItems={selectedRegions}
-              onChange={(event) => {
-                const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                updateFilter(
-                  'region',
-                  nextSelected.map((item) => item.id),
+        <section className="legacy-search-section legacy-search-section--filters">
+          <Tile>
+            <div className="legacy-search-grid">
+              <TextInput
+                id="applicationNumber"
+                labelText="Application number"
+                value={filters.applicationNumber}
+                onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+              />
+              <SearchableSelect
+                id="productTypeCode"
+                labelText="Product type"
+                value={filters.productTypeCode}
+                placeholder="All product types"
+                options={productTypeOptions}
+                onChange={(value) => updateFilter('productTypeCode', value)}
+              />
+              <FilterableMultiSelect
+                id="region"
+                titleText="Region"
+                items={regionOptions}
+                itemToString={(item) => (item ? item.text : '')}
+                label="Select region(s)"
+                selectionFeedback="fixed"
+                selectedItems={selectedRegions}
+                onChange={(event) => {
+                  const nextSelected = (event.selectedItems ?? []) as RegionOption[]
+                  updateFilter(
+                    'region',
+                    nextSelected.map((item) => item.id),
+                  )
+                }}
+              />
+              <IsoDatePicker
+                id="receivedFromDate"
+                labelText="Received from date (YYYY-MM-DD)"
+                value={filters.receivedFromDate}
+                invalid={!isValidIsoDate(filters.receivedFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('receivedFromDate', value)}
+              />
+              <IsoDatePicker
+                id="receivedToDate"
+                labelText="Received to date (YYYY-MM-DD)"
+                value={filters.receivedToDate}
+                invalid={!isValidIsoDate(filters.receivedToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('receivedToDate', value)}
+              />
+              <IsoDatePicker
+                id="listingFromDate"
+                labelText="Listing from date (YYYY-MM-DD)"
+                value={filters.listingFromDate}
+                invalid={!isValidIsoDate(filters.listingFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingFromDate', value)}
+              />
+              <IsoDatePicker
+                id="listingToDate"
+                labelText="Listing to date (YYYY-MM-DD)"
+                value={filters.listingToDate}
+                invalid={!isValidIsoDate(filters.listingToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingToDate', value)}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={onSearch}
+                disabled={loading || hasDateValidationError}
+              >
+                Search
+              </Button>
+              <Button kind="tertiary" onClick={onClearFilters} disabled={loading}>
+                Clear Filters
+              </Button>
+              <Button
+                kind="secondary"
+                onClick={() => void onApproveSelectedClick()}
+                disabled={
+                  loading ||
+                  submittingApproval ||
+                  submittingStatusUpdate ||
+                  selectedRowsCount === 0 ||
+                  !canApproveApplications
+                }
+              >
+                Approve Selected Applications
+              </Button>
+            </div>
+            <div className="legacy-search-grid">
+              <SearchableSelect
+                id="reviewStatusCode"
+                labelText="Update status code"
+                value={selectedStatusCode}
+                placeholder="Select status"
+                options={reviewStatusOptions}
+                onChange={(value) => {
+                  setReviewActionStatus(null)
+                  setShowStatusValidationErrors(false)
+                  setSelectedStatusCode(value)
+                }}
+                invalid={!!statusFieldError('reviewStatusCode')}
+                invalidText={statusFieldError('reviewStatusCode')}
+                onBlur={() => markStatusFieldTouched('reviewStatusCode')}
+              />
+              <TextInput
+                id="reviewStatusEmail"
+                labelText="Client email address (required for status email)"
+                value={statusEmailAddress}
+                invalid={
+                  !!statusFieldError('reviewStatusEmail') ||
+                  (Boolean(statusEmailAddress) && !isValidEmail(statusEmailAddress))
+                }
+                invalidText={
+                  statusFieldError('reviewStatusEmail') ?? 'Enter a valid email address.'
+                }
+                onBlur={() => markStatusFieldTouched('reviewStatusEmail')}
+                onChange={(event) => {
+                  setReviewActionStatus(null)
+                  setStatusEmailAddress(event.target.value)
+                }}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="tertiary"
+                onClick={() => void onUpdateSelectedStatusClick(false)}
+                disabled={
+                  loading ||
+                  submittingApproval ||
+                  submittingStatusUpdate ||
+                  selectedRowsCount === 0 ||
+                  !canApproveApplications
+                }
+              >
+                Update Selected Status
+              </Button>
+              <Button
+                kind="tertiary"
+                onClick={() => void onUpdateSelectedStatusClick(true)}
+                disabled={
+                  loading ||
+                  submittingApproval ||
+                  submittingStatusUpdate ||
+                  selectedRowsCount === 0 ||
+                  !canApproveApplications
+                }
+              >
+                Update Status and Send Email
+              </Button>
+            </div>
+            <div className="legacy-search-actions">
+              <TextArea
+                id="reviewStatusRemark"
+                labelText="Status remark"
+                value={statusRemark}
+                onChange={(event) => {
+                  setReviewActionStatus(null)
+                  setStatusRemark(event.target.value)
+                }}
+              />
+            </div>
+            {!!reviewActionStatus && (
+              <AppNotification
+                className="legacy-inline-notification"
+                kind={reviewActionStatus.kind}
+                title={reviewActionStatus.kind === 'success' ? 'Action complete' : 'Action failed'}
+                subtitle={reviewActionStatus.message}
+                autoDismissMs={reviewActionStatus.kind === 'success' ? 8000 : undefined}
+                onCloseButtonClick={() => setReviewActionStatus(null)}
+              />
+            )}
+          </Tile>
+        </section>
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
+        <section className="legacy-search-section legacy-search-section--results">
+          <h2 className="dashboard-title">Review queue</h2>
+          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+          <SearchResultsTableFrame
+            loading={loading}
+            loadingDescription="Loading review queue..."
+            totalItems={results.page.totalElements}
+          >
+            <Table useZebraStyles>
+              <TableHead>
+                <TableRow>
+                  <TableHeader>
+                    <Checkbox
+                      id="selectAllCurrentPageRows"
+                      hideLabel
+                      labelText="Select all rows on this page"
+                      checked={allSelectableRowsAreSelected}
+                      disabled={selectableRows.length === 0 || !canApproveApplications}
+                      onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
+                    />
+                  </TableHeader>
+                  {SORT_COLUMNS.map((column) => (
+                    <TableHeader key={column.id}>
+                      <button
+                        type="button"
+                        className="legacy-sort-button"
+                        onClick={() => onHeaderClick(column.id)}
+                      >
+                        {column.label}
+                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                      </button>
+                    </TableHeader>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {results.content.map((row) => (
+                  <TableRow key={row.applicationNumber}>
+                    <TableCell>
+                      <Checkbox
+                        id={`selectRow-${row.applicationNumber}`}
+                        hideLabel
+                        labelText={`Select ${row.applicationNumber}`}
+                        checked={Boolean(selectedRowsById[row.applicationNumber])}
+                        disabled={
+                          !canApproveApplications || normalizeReviewStatus(row.status) !== 'NEW'
+                        }
+                        onChange={(_, payload) =>
+                          toggleRowSelection(row.applicationNumber, Boolean(payload.checked))
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {canOpenApplicationDetails ? (
+                        <Link
+                          className="cds--link"
+                          to={withCurrentSearch(`/provincial/application/${row.applicationNumber}`)}
+                        >
+                          {row.applicationNumber}
+                        </Link>
+                      ) : (
+                        row.applicationNumber
+                      )}
+                    </TableCell>
+                    <TableCell>{row.volume}</TableCell>
+                    <TableCell>{row.speciesEndUse}</TableCell>
+                    <TableCell>{row.listingDate}</TableCell>
+                    <TableCell>{row.status}</TableCell>
+                    <TableCell>{row.region}</TableCell>
+                  </TableRow>
+                ))}
+                {results.content.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7}>
+                      No review records found for the selected criteria.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            <Pagination
+              page={results.page.number + 1}
+              pageSize={results.page.size}
+              pageSizes={[10, 20, 30]}
+              totalItems={results.page.totalElements}
+              onChange={({ page, pageSize: nextPageSize }) => {
+                clearSelection()
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
                 )
               }}
             />
-            <IsoDatePicker
-              id="receivedFromDate"
-              labelText="Received From Date (YYYY-MM-DD)"
-              value={filters.receivedFromDate}
-              invalid={!isValidIsoDate(filters.receivedFromDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('receivedFromDate', value)}
-            />
-            <IsoDatePicker
-              id="receivedToDate"
-              labelText="Received To Date (YYYY-MM-DD)"
-              value={filters.receivedToDate}
-              invalid={!isValidIsoDate(filters.receivedToDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('receivedToDate', value)}
-            />
-            <IsoDatePicker
-              id="listingFromDate"
-              labelText="Listing From Date (YYYY-MM-DD)"
-              value={filters.listingFromDate}
-              invalid={!isValidIsoDate(filters.listingFromDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('listingFromDate', value)}
-            />
-            <IsoDatePicker
-              id="listingToDate"
-              labelText="Listing To Date (YYYY-MM-DD)"
-              value={filters.listingToDate}
-              invalid={!isValidIsoDate(filters.listingToDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('listingToDate', value)}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button kind="primary" onClick={onSearch} disabled={loading || hasDateValidationError}>
-              Search
-            </Button>
-            <Button kind="tertiary" onClick={onClearFilters} disabled={loading}>
-              Clear Filters
-            </Button>
-            <Button
-              kind="secondary"
-              onClick={() => void onApproveSelectedClick()}
-              disabled={
-                loading ||
-                submittingApproval ||
-                submittingStatusUpdate ||
-                selectedRowsCount === 0 ||
-                !canApproveApplications
-              }
-            >
-              Approve Selected Applications
-            </Button>
-          </div>
-          <div className="legacy-search-grid">
-            <SearchableSelect
-              id="reviewStatusCode"
-              labelText="Update Status Code"
-              value={selectedStatusCode}
-              placeholder="Select status"
-              options={reviewStatusOptions}
-              onChange={(value) => {
-                setReviewActionStatus(null)
-                setShowStatusValidationErrors(false)
-                setSelectedStatusCode(value)
-              }}
-              invalid={!!statusFieldError('reviewStatusCode')}
-              invalidText={statusFieldError('reviewStatusCode')}
-              onBlur={() => markStatusFieldTouched('reviewStatusCode')}
-            />
-            <TextInput
-              id="reviewStatusEmail"
-              labelText="Client Email Address (required for status email)"
-              value={statusEmailAddress}
-              invalid={
-                !!statusFieldError('reviewStatusEmail') ||
-                (Boolean(statusEmailAddress) && !isValidEmail(statusEmailAddress))
-              }
-              invalidText={statusFieldError('reviewStatusEmail') ?? 'Enter a valid email address.'}
-              onBlur={() => markStatusFieldTouched('reviewStatusEmail')}
-              onChange={(event) => {
-                setReviewActionStatus(null)
-                setStatusEmailAddress(event.target.value)
-              }}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="tertiary"
-              onClick={() => void onUpdateSelectedStatusClick(false)}
-              disabled={
-                loading ||
-                submittingApproval ||
-                submittingStatusUpdate ||
-                selectedRowsCount === 0 ||
-                !canApproveApplications
-              }
-            >
-              Update Selected Status
-            </Button>
-            <Button
-              kind="tertiary"
-              onClick={() => void onUpdateSelectedStatusClick(true)}
-              disabled={
-                loading ||
-                submittingApproval ||
-                submittingStatusUpdate ||
-                selectedRowsCount === 0 ||
-                !canApproveApplications
-              }
-            >
-              Update Status and Send Email
-            </Button>
-          </div>
-          <div className="legacy-search-actions">
-            <TextArea
-              id="reviewStatusRemark"
-              labelText="Status Remark"
-              value={statusRemark}
-              onChange={(event) => {
-                setReviewActionStatus(null)
-                setStatusRemark(event.target.value)
-              }}
-            />
-          </div>
-          {!!reviewActionStatus && (
-            <InlineNotification
-              className="legacy-inline-notification"
-              kind={reviewActionStatus.kind}
-              title={reviewActionStatus.kind === 'success' ? 'Action complete' : 'Action failed'}
-              subtitle={reviewActionStatus.message}
-              onCloseButtonClick={() => setReviewActionStatus(null)}
-            />
-          )}
-        </Tile>
-      </Column>
-
-      <Column sm={4} md={8} lg={16}>
-        <h2 className="dashboard-title">Review Queue</h2>
-        {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue...">
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>
-                  <Checkbox
-                    id="selectAllCurrentPageRows"
-                    hideLabel
-                    labelText="Select all rows on this page"
-                    checked={allSelectableRowsAreSelected}
-                    disabled={selectableRows.length === 0 || !canApproveApplications}
-                    onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
-                  />
-                </TableHeader>
-                {SORT_COLUMNS.map((column) => (
-                  <TableHeader key={column.id}>
-                    <button
-                      type="button"
-                      className="legacy-sort-button"
-                      onClick={() => onHeaderClick(column.id)}
-                    >
-                      {column.label}
-                      {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                    </button>
-                  </TableHeader>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {results.content.map((row) => (
-                <TableRow key={row.applicationNumber}>
-                  <TableCell>
-                    <Checkbox
-                      id={`selectRow-${row.applicationNumber}`}
-                      hideLabel
-                      labelText={`Select ${row.applicationNumber}`}
-                      checked={Boolean(selectedRowsById[row.applicationNumber])}
-                      disabled={
-                        !canApproveApplications || normalizeReviewStatus(row.status) !== 'NEW'
-                      }
-                      onChange={(_, payload) =>
-                        toggleRowSelection(row.applicationNumber, Boolean(payload.checked))
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {canOpenApplicationDetails ? (
-                      <Link
-                        className="cds--link"
-                        to={withCurrentSearch(`/provincial/application/${row.applicationNumber}`)}
-                      >
-                        {row.applicationNumber}
-                      </Link>
-                    ) : (
-                      row.applicationNumber
-                    )}
-                  </TableCell>
-                  <TableCell>{row.volume}</TableCell>
-                  <TableCell>{row.speciesEndUse}</TableCell>
-                  <TableCell>{row.listingDate}</TableCell>
-                  <TableCell>{row.status}</TableCell>
-                  <TableCell>{row.region}</TableCell>
-                </TableRow>
-              ))}
-              {results.content.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7}>
-                    No review records found for the selected criteria.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <Pagination
-            page={results.page.number + 1}
-            pageSize={results.page.size}
-            pageSizes={[10, 20, 30]}
-            totalItems={results.page.totalElements}
-            onChange={({ page, pageSize: nextPageSize }) => {
-              clearSelection()
-              setSearchParams(
-                buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-              )
-            }}
-          />
-        </SearchResultsTableFrame>
+          </SearchResultsTableFrame>
+        </section>
       </Column>
     </Grid>
   )

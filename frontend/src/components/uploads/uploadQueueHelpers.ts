@@ -1,7 +1,21 @@
-import type { AdminUploadResult, UploadWorkflowType } from '@/service/admin-upload-service'
+import type {
+  AdminUploadResult,
+  LexisXmlSubmissionSummary,
+  UploadWorkflowType,
+} from '@/service/admin-upload-service'
+import {
+  sanitizeNotificationText,
+  sanitizeNotificationTextList,
+} from '@/utils/notification-messages'
 import { getResponseStatus } from '@/utils/http-error'
 import { isRecord, stringField } from '@/utils/record'
 import type { UploadQueueReviewDetails, UploadQueueStatus } from './uploadQueueTypes'
+
+export const GENERIC_UPLOAD_FAILURE_MESSAGE =
+  'Upload failed. Please try again. If the problem persists, contact your administrator.'
+
+export const GENERIC_SUBMISSION_FAILURE_MESSAGE =
+  'Submission failed. Please try again. If the problem persists, contact your administrator.'
 
 export const asStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -19,6 +33,7 @@ export const asStringArray = (value: unknown): string[] => {
 
 export const extractUploadErrorDetails = (
   error: unknown,
+  fallbackMessage = GENERIC_UPLOAD_FAILURE_MESSAGE,
 ): { message: string; details: UploadQueueReviewDetails } => {
   const response = isRecord(error) && isRecord(error.response) ? error.response : undefined
   const data = response?.data
@@ -28,24 +43,32 @@ export const extractUploadErrorDetails = (
   const warnings = asStringArray(dataRecord?.warnings)
   const responseMessage = dataRecord ? stringField(dataRecord, 'message') : ''
   const textResponseMessage = typeof data === 'string' ? data.trim() : ''
+  const sanitizedErrors = sanitizeNotificationTextList(errors, fallbackMessage)
+  const sanitizedWarnings = sanitizeNotificationTextList(warnings, '')
+  const sanitizedResponseMessage = responseMessage
+    ? sanitizeNotificationText(responseMessage, fallbackMessage)
+    : ''
+  const sanitizedTextResponseMessage = textResponseMessage
+    ? sanitizeNotificationText(textResponseMessage, fallbackMessage)
+    : ''
 
   const message =
-    errors.length > 0
-      ? errors.join(' ')
-      : responseMessage
-        ? responseMessage
-        : textResponseMessage
-          ? textResponseMessage
-          : status
-            ? `Upload request failed with status ${status}.`
-            : 'Upload request failed. Please try again or contact support.'
+    sanitizedErrors.length > 0
+      ? sanitizedErrors.join(' ')
+      : sanitizedResponseMessage
+        ? sanitizedResponseMessage
+        : sanitizedTextResponseMessage || (status ? fallbackMessage : fallbackMessage)
 
   return {
     message,
     details: {
-      summary: responseMessage || message,
-      errors,
-      warnings,
+      summary: sanitizedResponseMessage || message,
+      errors: sanitizedErrors.length > 0 ? sanitizedErrors : message ? [message] : [],
+      warnings: sanitizedWarnings,
+      userReference: dataRecord ? stringField(dataRecord, 'userReference') : '',
+      submissionSummary: isRecord(dataRecord?.submissionSummary)
+        ? (dataRecord.submissionSummary as LexisXmlSubmissionSummary)
+        : undefined,
     },
   }
 }
@@ -67,10 +90,10 @@ export const uploadQueueStatusTagType = (
   if (status === 'invalid' || status === 'failed') {
     return 'red'
   }
-  if (status === 'uploading') {
+  if (status === 'uploading' || status === 'validating') {
     return 'blue'
   }
-  if (status === 'complete') {
+  if (status === 'complete' || status === 'validated') {
     return 'green'
   }
   return 'gray'
@@ -83,6 +106,12 @@ export const uploadQueueStatusLabel = (status: UploadQueueStatus): string => {
   if (status === 'uploading') {
     return 'Uploading'
   }
+  if (status === 'validating') {
+    return 'Validating'
+  }
+  if (status === 'validated') {
+    return 'Validated'
+  }
   if (status === 'complete') {
     return 'Complete'
   }
@@ -94,6 +123,23 @@ export const uploadQueueStatusLabel = (status: UploadQueueStatus): string => {
 
 export const formatScaleRows = (scaleRows: number): string =>
   `${scaleRows} scale row${scaleRows === 1 ? '' : 's'}`
+
+export const formatUploadFileSize = (size: number): string => {
+  if (size < 1024) {
+    return `${size} B`
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`
+  }
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export const formatUploadQueuedAt = (timestamp: number): string => {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(timestamp)
+}
 
 export const validateDocumentUploadFile = (file: File): string => {
   if (!file.name.trim()) {
@@ -115,15 +161,19 @@ export const buildUploadResultMessage = (
   workflowType: UploadWorkflowType,
   resultMessage: string,
   result?: {
+    status?: string
     message?: string
     applicationNumber?: number
     packageNumber?: string
     scaleRows?: number
+    userReference?: string
     warnings?: string[]
   },
 ): string => {
-  if (workflowType !== 'lexisXml') {
-    return result?.message?.trim() || resultMessage
+  if (workflowType !== 'applicationSubmission') {
+    return result?.message?.trim()
+      ? sanitizeNotificationText(result.message, resultMessage)
+      : resultMessage
   }
 
   const details: string[] = []
@@ -137,15 +187,20 @@ export const buildUploadResultMessage = (
     details.push(formatScaleRows(result.scaleRows))
   }
 
+  const isValidationResult =
+    result?.status?.toLowerCase() === 'validated' ||
+    resultMessage.toLowerCase().includes('validated')
   const summary =
     details.length > 0
-      ? `LEXIS import created ${details.join(', ')}.`
-      : result?.message?.trim() || resultMessage
+      ? `${isValidationResult ? 'LEXIS application submission validated' : 'LEXIS application submission created'} ${details.join(', ')}.`
+      : result?.message?.trim()
+        ? sanitizeNotificationText(result.message, resultMessage)
+        : resultMessage
 
-  const warnings =
-    Array.isArray(result?.warnings) && result.warnings.length > 0
-      ? ` Warnings: ${result.warnings.join(' ')}`
-      : ''
+  const sanitizedWarnings = Array.isArray(result?.warnings)
+    ? sanitizeNotificationTextList(result.warnings, '')
+    : []
+  const warnings = sanitizedWarnings.length > 0 ? ` Warnings: ${sanitizedWarnings.join(' ')}` : ''
 
   return `${summary}${warnings}`
 }
@@ -155,9 +210,14 @@ export const buildUploadReviewDetails = (
   result?: AdminUploadResult,
 ): UploadQueueReviewDetails => ({
   summary: message,
-  errors: asStringArray(result?.errors),
-  warnings: asStringArray(result?.warnings),
+  errors: sanitizeNotificationTextList(
+    asStringArray(result?.errors),
+    GENERIC_UPLOAD_FAILURE_MESSAGE,
+  ),
+  warnings: sanitizeNotificationTextList(asStringArray(result?.warnings), ''),
   applicationNumber: result?.applicationNumber,
   packageNumber: result?.packageNumber,
   scaleRows: result?.scaleRows,
+  userReference: result?.userReference,
+  submissionSummary: result?.submissionSummary,
 })

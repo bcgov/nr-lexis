@@ -29,9 +29,12 @@ type BackendApplicationReviewSearchResult = {
 export type ApplicationReviewStatusUpdateResult = {
   updated: boolean
   valid: boolean
-  statusCode: string
-  clientEmail: string
-  remark: string
+  statusCode: string | null
+  clientEmail: string | null
+  remark: string | null
+  remarkId?: number | null
+  remarkUser?: string | null
+  remarkDate?: string | null
   message: string
 }
 

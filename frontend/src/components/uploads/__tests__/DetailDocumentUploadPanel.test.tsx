@@ -63,7 +63,7 @@ describe('DetailDocumentUploadPanel', () => {
       expect(refreshDocuments).toHaveBeenCalledTimes(1)
     })
 
-    expect(await screen.findByText('Upload Error')).toBeInTheDocument()
+    expect(await screen.findByText('Upload error')).toBeInTheDocument()
     expect(
       screen.getByText('Documents uploaded, but the document list could not refresh.'),
     ).toBeInTheDocument()

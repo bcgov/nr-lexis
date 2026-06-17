@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -33,9 +33,9 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearchProvincialApplications = vi.mocked(searchProvincialApplications)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 
-const renderPage = () => {
+const renderPage = (path = '/provincial/application') => {
   render(
-    <MemoryRouter initialEntries={['/provincial/application']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/provincial/application" element={<ProvincialApplicationPage />} />
       </Routes>
@@ -103,12 +103,16 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
 
     const createExemptionButton = screen.getByRole('button', {
-      name: 'Create Exemption for Selected Applications',
+      name: 'Create exemption for Selected Applications',
     })
     expect(createExemptionButton).toBeDisabled()
 
     expect(screen.getByRole('checkbox', { name: 'Select 321' })).toBeEnabled()
     expect(screen.getByRole('checkbox', { name: 'Select 654' })).toBeDisabled()
+    expect(screen.getByRole('link', { name: 'Upload Application Submission' })).toHaveAttribute(
+      'href',
+      '/provincial/application/upload',
+    )
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
     expect(createExemptionButton).toBeEnabled()
@@ -151,7 +155,7 @@ describe('Provincial Application Search Actions', () => {
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
     await userEvent.click(
-      screen.getByRole('button', { name: 'Create Exemption for Selected Applications' }),
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
     )
 
     await waitFor(() => {
@@ -170,13 +174,13 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
 
     const createExemptionButton = screen.getByRole('button', {
-      name: 'Create Exemption for Selected Applications',
+      name: 'Create exemption for Selected Applications',
     })
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
     expect(createExemptionButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Application Number'), '9')
+    await userEvent.type(screen.getByLabelText('Application number'), '9')
 
     await waitFor(() => {
       expect(createExemptionButton).toBeDisabled()
@@ -195,7 +199,7 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
     mockedSearchProvincialApplications.mockClear()
 
-    await userEvent.type(screen.getByLabelText('Application Number'), '987')
+    await userEvent.type(screen.getByLabelText('Application number'), '987')
 
     await waitFor(() => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
@@ -217,17 +221,7 @@ describe('Provincial Application Search Actions', () => {
       regions: [{ value: '1818', label: 'TST' }],
     })
 
-    renderPage()
-    await screen.findByText('321')
-    await waitFor(() => {
-      expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalledTimes(1)
-    })
-    mockedSearchProvincialApplications.mockClear()
-
-    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
-    await userEvent.click(regionComboBox)
-    fireEvent.change(regionComboBox, { target: { value: 'TST' } })
-    await userEvent.click(await screen.findByRole('option', { name: 'TST (1818)' }))
+    renderPage('/provincial/application?region=1818')
 
     await waitFor(() => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
@@ -263,7 +257,7 @@ describe('Provincial Application Search Actions', () => {
         }),
       )
 
-    const applicationNumberInput = screen.getByLabelText('Application Number')
+    const applicationNumberInput = screen.getByLabelText('Application number')
     await userEvent.type(applicationNumberInput, '1')
     await waitFor(() => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)

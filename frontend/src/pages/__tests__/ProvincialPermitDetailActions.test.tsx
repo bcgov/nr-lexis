@@ -198,8 +198,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    const invoiceNumberInput = await screen.findByLabelText('Invoice Number')
-    const exportValueInput = await screen.findByLabelText('Export Value')
+    const invoiceNumberInput = await screen.findByLabelText('Invoice number')
+    const exportValueInput = await screen.findByLabelText('Export value')
     const addInvoiceButton = await screen.findByRole('button', { name: 'Add Invoice' })
     await userEvent.type(invoiceNumberInput, 'INV-NEW')
     await userEvent.type(exportValueInput, '100')
@@ -255,7 +255,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(uploadButton)
 
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
-    expect(await screen.findByText('Upload Permit Documents')).toBeInTheDocument()
+    expect(await screen.findByText('Upload permit documents')).toBeInTheDocument()
   })
 
   it('jumps to embedded invoice upload with conversion rate lookup', async () => {
@@ -281,7 +281,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await waitFor(() => {
       expect(mockedFetchPermitInvoiceConversionRate).toHaveBeenCalledTimes(1)
-      expect(screen.getByLabelText('Upload Invoice Conversion Rate')).toHaveValue('1.37')
+      expect(screen.getByLabelText('Upload invoice conversion rate')).toHaveValue('1.37')
     })
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
@@ -298,15 +298,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    const invoicePanel = (await screen.findByText('Upload Invoices')).closest(
+    const invoicePanel = (await screen.findByText('Upload invoices')).closest(
       '.detail-document-upload',
     )
     expect(invoicePanel).toBeTruthy()
     const invoiceControls = within(invoicePanel as HTMLElement)
     const file = new File(['invoice upload'], 'invoice.pdf', { type: 'application/pdf' })
 
-    await userEvent.type(invoiceControls.getByLabelText('Upload Invoice Number'), 'INV123')
-    await userEvent.type(invoiceControls.getByLabelText('Upload Invoice Export Value'), '1000')
+    await userEvent.type(invoiceControls.getByLabelText('Upload invoice number'), 'INV123')
+    await userEvent.type(invoiceControls.getByLabelText('Upload invoice export value'), '1000')
     await userEvent.upload(invoiceControls.getByLabelText('Document File'), file)
     await userEvent.click(invoiceControls.getByRole('button', { name: 'Submit Upload' }))
 
@@ -593,7 +593,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: /Permit Items/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Permit items/ })).toBeInTheDocument()
     expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
       permitNumber: '777',
       receiptNumber: 'R-1',

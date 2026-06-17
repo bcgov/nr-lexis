@@ -182,7 +182,7 @@ describe('Landing auth flow smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Log in with IDIR' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Session Error')).toBeInTheDocument()
+      expect(screen.getByText('Session error')).toBeInTheDocument()
       expect(screen.getByText('Unable to start the login flow.')).toBeInTheDocument()
     })
   })

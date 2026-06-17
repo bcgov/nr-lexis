@@ -129,10 +129,15 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   }
 
   public boolean approve(Long applicationNumber, String updateUserId) {
-    return updateApplicationStatus(applicationNumber, "APP", null, updateUserId);
+    return updateApplicationStatus(applicationNumber, "APP", null, updateUserId).updated();
   }
 
   public boolean updateStatus(
+      Long applicationNumber, String statusCode, String remark, String updateUserId) {
+    return updateStatusWithRemark(applicationNumber, statusCode, remark, updateUserId).updated();
+  }
+
+  public ApplicationStatusUpdateRow updateStatusWithRemark(
       Long applicationNumber, String statusCode, String remark, String updateUserId) {
     return updateApplicationStatus(applicationNumber, statusCode, remark, updateUserId);
   }
@@ -158,20 +163,20 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     return true;
   }
 
-  private boolean updateApplicationStatus(
+  private ApplicationStatusUpdateRow updateApplicationStatus(
       Long applicationNumber, String statusCode, String remark, String updateUserId) {
     if (applicationNumber == null || applicationNumber < 1) {
-      return false;
+      return ApplicationStatusUpdateRow.notUpdated();
     }
 
     String normalizedStatus = trim(statusCode);
     if (normalizedStatus == null) {
-      return false;
+      return ApplicationStatusUpdateRow.notUpdated();
     }
 
     Optional<ApplicationUpdateRecord> application = loadApplicationUpdateRecord(applicationNumber);
     if (application.isEmpty()) {
-      return false;
+      return ApplicationStatusUpdateRow.notUpdated();
     }
 
     ApplicationUpdateRecord record = application.get();
@@ -186,15 +191,16 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
             UPDATE_EXEMPTION_APPLICATION,
             cs -> bindApplicationUpdate(cs, record, normalizedStatus, finalUpdateUser));
     if (!updated) {
-      return false;
+      return ApplicationStatusUpdateRow.notUpdated();
     }
 
     String normalizedRemark = trim(remark);
+    Optional<ReviewRemarkRow> insertedRemark = Optional.empty();
     if (normalizedRemark != null) {
-      insertRemark(applicationNumber, normalizedRemark, finalUpdateUser);
+      insertedRemark = insertRemark(applicationNumber, normalizedRemark, finalUpdateUser);
     }
 
-    return true;
+    return new ApplicationStatusUpdateRow(true, insertedRemark.orElse(null));
   }
 
   private ApplicationReviewSearchResultDto toSearchResult(ResultSet rs) {
@@ -284,8 +290,8 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index, record.oicIndicator());
   }
 
-  private void insertRemark(Long applicationNumber, String remark, String updateUserId) {
-    queryCursorProcedure(
+  private Optional<ReviewRemarkRow> insertRemark(Long applicationNumber, String remark, String updateUserId) {
+    return queryCursorSingle(
         INSERT_EXEMPTION_APP_REMARK,
         cs -> {
           cs.setTimestamp(1, new Timestamp(System.currentTimeMillis()));
@@ -295,7 +301,20 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
           cs.setString(5, applicationNumber.toString());
         },
         6,
-        rs -> null);
+        this::mapReviewRemarkRow);
+  }
+
+  private ReviewRemarkRow mapReviewRemarkRow(ResultSet rs) {
+    Long remarkId = getLong(rs, "EXPORT_EXMPTN_APPL_REMARK_NMBR");
+    String remark = getString(rs, "REMARK");
+    String user = getString(rs, "ENTRY_USERID");
+    Timestamp entryTimestamp = safeTimestamp(rs, "ENTRY_TIMESTAMP");
+    java.time.Instant date = entryTimestamp == null ? null : entryTimestamp.toInstant();
+    return new ReviewRemarkRow(
+        remarkId == null ? 0L : remarkId,
+        remark == null ? "" : remark,
+        user,
+        date);
   }
 
   private Timestamp safeTimestamp(java.sql.ResultSet rs, String columnName) {
@@ -372,4 +391,12 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       String agentCompanyContact,
       String ownerCompanyContact,
       String oicIndicator) {}
+
+  public record ApplicationStatusUpdateRow(boolean updated, ReviewRemarkRow remark) {
+    public static ApplicationStatusUpdateRow notUpdated() {
+      return new ApplicationStatusUpdateRow(false, null);
+    }
+  }
+
+  public record ReviewRemarkRow(long remarkId, String remark, String user, java.time.Instant date) {}
 }

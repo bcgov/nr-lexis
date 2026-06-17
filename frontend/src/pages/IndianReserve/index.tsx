@@ -67,8 +67,8 @@ const SORT_COLUMNS: {
 }[] = [
   { id: 'permitNumber', label: 'Permit' },
   { id: 'clientNumber', label: 'Client' },
-  { id: 'issueDate', label: 'Issue Date' },
-  { id: 'shippingDate', label: 'Shipping Date' },
+  { id: 'issueDate', label: 'Issue date' },
+  { id: 'shippingDate', label: 'Shipping date' },
 ]
 const DEFAULT_SORT_FIELD: IndianReservePermitSearchSortField = 'permitNumber'
 const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
@@ -266,139 +266,144 @@ const IndianReservePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Indigenous Reserve Permit Search</h1>
+        <h1>Indigenous reserve permit search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <div className="legacy-search-grid">
-            <TextInput
-              id="permitNumber"
-              labelText="Permit Number"
-              value={filters.permitNumber}
-              onChange={(event) => updateFilter('permitNumber', event.target.value)}
-            />
-            <TextInput
-              id="packageNumber"
-              labelText="Package Number"
-              value={filters.packageNumber}
-              onChange={(event) => updateFilter('packageNumber', event.target.value)}
-            />
-            <IsoDatePicker
-              id="fromPermitIssueDate"
-              labelText="Issued From Date (YYYY-MM-DD)"
-              value={filters.fromPermitIssueDate}
-              invalid={!isValidIsoDate(filters.fromPermitIssueDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('fromPermitIssueDate', value)}
-            />
-            <IsoDatePicker
-              id="toPermitIssueDate"
-              labelText="Issued To Date (YYYY-MM-DD)"
-              value={filters.toPermitIssueDate}
-              invalid={!isValidIsoDate(filters.toPermitIssueDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('toPermitIssueDate', value)}
-            />
-            <IsoDatePicker
-              id="fromEstimatedShippingDate"
-              labelText="Shipping From Date (YYYY-MM-DD)"
-              value={filters.fromEstimatedShippingDate}
-              invalid={!isValidIsoDate(filters.fromEstimatedShippingDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('fromEstimatedShippingDate', value)}
-            />
-            <IsoDatePicker
-              id="toEstimatedShippingDate"
-              labelText="Shipping To Date (YYYY-MM-DD)"
-              value={filters.toEstimatedShippingDate}
-              invalid={!isValidIsoDate(filters.toEstimatedShippingDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('toEstimatedShippingDate', value)}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={onSearch}
-              disabled={loading || hasDateValidationError}
-              size="md"
-            >
-              Search
-            </Button>
-            <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-              Clear Filters
-            </Button>
-            {canCreatePermit && (
-              <Link className="cds--link" to="/indian-reserve/permit/create">
-                Add Permit
-              </Link>
-            )}
-          </div>
-        </Tile>
-      </Column>
-
-      <Column sm={4} md={8} lg={16}>
-        <h2 className="dashboard-title">Search Results</h2>
-        {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        <SearchResultsTableFrame
-          loading={loading}
-          loadingDescription="Loading indigenous reserve permit search results..."
-        >
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                {SORT_COLUMNS.map((column) => (
-                  <TableHeader key={column.id}>
-                    <button
-                      type="button"
-                      className="legacy-sort-button"
-                      onClick={() => onHeaderClick(column.id)}
-                    >
-                      {column.label}
-                      {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                    </button>
-                  </TableHeader>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {results.content.map((row) => (
-                <TableRow key={row.permitNumber}>
-                  <TableCell>
-                    <Link
-                      className="cds--link"
-                      to={withCurrentSearch(`/indian-reserve/permit/${row.permitNumber}`)}
-                    >
-                      {row.permitNumber}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{row.clientNumber}</TableCell>
-                  <TableCell>{row.issueDate}</TableCell>
-                  <TableCell>{row.shippingDate}</TableCell>
-                </TableRow>
-              ))}
-              {results.content.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4}>
-                    No indigenous reserve permits found for the selected criteria.
-                  </TableCell>
-                </TableRow>
+        <section className="legacy-search-section legacy-search-section--filters">
+          <Tile>
+            <div className="legacy-search-grid">
+              <TextInput
+                id="permitNumber"
+                labelText="Permit number"
+                value={filters.permitNumber}
+                onChange={(event) => updateFilter('permitNumber', event.target.value)}
+              />
+              <TextInput
+                id="packageNumber"
+                labelText="Package number"
+                value={filters.packageNumber}
+                onChange={(event) => updateFilter('packageNumber', event.target.value)}
+              />
+              <IsoDatePicker
+                id="fromPermitIssueDate"
+                labelText="Issued from date (YYYY-MM-DD)"
+                value={filters.fromPermitIssueDate}
+                invalid={!isValidIsoDate(filters.fromPermitIssueDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('fromPermitIssueDate', value)}
+              />
+              <IsoDatePicker
+                id="toPermitIssueDate"
+                labelText="Issued to date (YYYY-MM-DD)"
+                value={filters.toPermitIssueDate}
+                invalid={!isValidIsoDate(filters.toPermitIssueDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('toPermitIssueDate', value)}
+              />
+              <IsoDatePicker
+                id="fromEstimatedShippingDate"
+                labelText="Shipping from date (YYYY-MM-DD)"
+                value={filters.fromEstimatedShippingDate}
+                invalid={!isValidIsoDate(filters.fromEstimatedShippingDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('fromEstimatedShippingDate', value)}
+              />
+              <IsoDatePicker
+                id="toEstimatedShippingDate"
+                labelText="Shipping to date (YYYY-MM-DD)"
+                value={filters.toEstimatedShippingDate}
+                invalid={!isValidIsoDate(filters.toEstimatedShippingDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('toEstimatedShippingDate', value)}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={onSearch}
+                disabled={loading || hasDateValidationError}
+                size="md"
+              >
+                Search
+              </Button>
+              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
+                Clear Filters
+              </Button>
+              {canCreatePermit && (
+                <Link className="cds--link" to="/indian-reserve/permit/create">
+                  Add Permit
+                </Link>
               )}
-            </TableBody>
-          </Table>
-          <Pagination
-            page={results.page.number + 1}
-            pageSize={results.page.size}
-            pageSizes={[10, 20, 30]}
+            </div>
+          </Tile>
+        </section>
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
+        <section className="legacy-search-section legacy-search-section--results">
+          <h2 className="dashboard-title">Search results</h2>
+          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+          <SearchResultsTableFrame
+            loading={loading}
+            loadingDescription="Loading indigenous reserve permit search results..."
             totalItems={results.page.totalElements}
-            onChange={({ page, pageSize: nextPageSize }) => {
-              setSearchParams(
-                buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-              )
-            }}
-          />
-        </SearchResultsTableFrame>
+          >
+            <Table useZebraStyles>
+              <TableHead>
+                <TableRow>
+                  {SORT_COLUMNS.map((column) => (
+                    <TableHeader key={column.id}>
+                      <button
+                        type="button"
+                        className="legacy-sort-button"
+                        onClick={() => onHeaderClick(column.id)}
+                      >
+                        {column.label}
+                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                      </button>
+                    </TableHeader>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {results.content.map((row) => (
+                  <TableRow key={row.permitNumber}>
+                    <TableCell>
+                      <Link
+                        className="cds--link"
+                        to={withCurrentSearch(`/indian-reserve/permit/${row.permitNumber}`)}
+                      >
+                        {row.permitNumber}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{row.clientNumber}</TableCell>
+                    <TableCell>{row.issueDate}</TableCell>
+                    <TableCell>{row.shippingDate}</TableCell>
+                  </TableRow>
+                ))}
+                {results.content.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      No indigenous reserve permits found for the selected criteria.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            <Pagination
+              page={results.page.number + 1}
+              pageSize={results.page.size}
+              pageSizes={[10, 20, 30]}
+              totalItems={results.page.totalElements}
+              onChange={({ page, pageSize: nextPageSize }) => {
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                )
+              }}
+            />
+          </SearchResultsTableFrame>
+        </section>
       </Column>
     </Grid>
   )

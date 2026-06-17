@@ -154,7 +154,7 @@ describe('Provincial Summary action smoke', () => {
     expect(screen.getByText('1,107')).toBeInTheDocument()
     expect(screen.queryByText(/Accessible modules:/)).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Open Review Queue' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open review queue' }))
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/review')
 
     const reviewRow = screen.getByText('901').closest('tr')
@@ -217,7 +217,7 @@ describe('Provincial Summary action smoke', () => {
     expect(mockedCountFederalApplications).not.toHaveBeenCalled()
     expect(mockedCountIndianReservePermits).not.toHaveBeenCalled()
 
-    expect(screen.queryByRole('button', { name: 'Open Review Queue' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Open review queue' })).not.toBeInTheDocument()
     expect(screen.queryByText('No review queue data available.')).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
     expect(screen.queryAllByRole('button', { name: 'Open' })).toHaveLength(0)

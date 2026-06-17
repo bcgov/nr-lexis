@@ -37,6 +37,10 @@ public class LexisAuthorizationService {
     List<String> roles = normalizeRoles(rawRoles);
     Set<String> granted = new LinkedHashSet<>();
 
+    if (roles.contains(ROLE_ADMIN)) {
+      granted.addAll(LexisLegacyActionCatalog.ACTIONS);
+    }
+
     for (String role : roles) {
       appendRoleActions(granted, role);
       if (configuredIndustryRoles.contains(role)) {
@@ -68,8 +72,18 @@ public class LexisAuthorizationService {
     return false;
   }
 
+  public boolean hasKnownRole(List<String> rawRoles) {
+    List<String> roles = normalizeRoles(rawRoles);
+    if (roles.isEmpty()) {
+      return false;
+    }
+    Set<String> configuredRoles = getConfiguredRoles();
+    return roles.stream().anyMatch(configuredRoles::contains);
+  }
+
   public Set<String> getConfiguredRoles() {
     Set<String> roles = new LinkedHashSet<>(configuredRoleActions.keySet());
+    roles.add(ROLE_ADMIN);
     if (roles.contains(INDUSTRY_ROLE_KEY)) {
       roles.addAll(configuredIndustryRoles);
     }
@@ -83,6 +97,10 @@ public class LexisAuthorizationService {
     }
 
     Set<String> roles = new LinkedHashSet<>();
+    if (LexisLegacyActionCatalog.ACTIONS.contains(action)) {
+      roles.add(ROLE_ADMIN);
+    }
+
     for (Map.Entry<String, List<String>> entry : configuredRoleActions.entrySet()) {
       String role = entry.getKey();
       List<String> actions = entry.getValue();

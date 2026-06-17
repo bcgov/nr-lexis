@@ -1,15 +1,20 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
-import org.springframework.data.domain.Page;
+import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Page;
 
 @DisplayName("Unit Test | LexisApplicationRepository")
 class LexisApplicationRepositoryTest {
@@ -109,6 +114,26 @@ class LexisApplicationRepositoryTest {
         .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
     assertThat(results.getTotalElements()).isEqualTo(11);
     assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @Test
+  void mapRemarkRowShouldUseLegacyRemarkNumberColumn() throws Exception {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+    ResultSet rs = org.mockito.Mockito.mock(ResultSet.class);
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-06-17 08:30:00");
+    when(rs.getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR")).thenReturn(88L);
+    when(rs.wasNull()).thenReturn(false);
+    when(rs.getString("REMARK")).thenReturn("Admin note");
+    when(rs.getString("ENTRY_USERID")).thenReturn("idir\\admin");
+    when(rs.getTimestamp("ENTRY_TIMESTAMP")).thenReturn(entryTimestamp);
+
+    LexisApplicationDetailDto.LexisRemarkDto remark = repository.mapRemarkRow(rs);
+
+    assertThat(remark.remarkId()).isEqualTo(88L);
+    assertThat(remark.remark()).isEqualTo("Admin note");
+    assertThat(remark.user()).isEqualTo("idir\\admin");
+    assertThat(remark.date()).isEqualTo(LocalDate.of(2026, 6, 17));
+    verify(rs).getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR");
   }
 
   private static LexisApplicationSearchResultDto applicationResult(long applicationNumber) {

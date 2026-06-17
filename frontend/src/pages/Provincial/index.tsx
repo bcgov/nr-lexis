@@ -4,7 +4,6 @@ import {
   Column,
   Grid,
   InlineLoading,
-  InlineNotification,
   Table,
   TableBody,
   TableCell,
@@ -15,6 +14,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
+import { AppNotification } from '@/components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { countApplicationReviews } from '@/service/application-review-search-service'
@@ -84,7 +84,7 @@ const WORKFLOWS: ProvincialWorkflowDefinition[] = [
   },
   {
     id: 'applicationsReview',
-    title: 'Review Queue',
+    title: 'Review queue',
     description: 'Application approval queue.',
     path: '/provincial/review',
     requiredActions: ['/applicationsReview'],
@@ -111,31 +111,37 @@ const EMPTY_TOTALS: WorkflowTotals = {
 const QUICK_ACTIONS: ProvincialQuickAction[] = [
   {
     id: 'createApplication',
-    label: 'Create Application',
+    label: 'Create application',
     path: '/provincial/application/create',
     requiredActions: ['/applicationSearch', 'createApplication'],
   },
   {
+    id: 'uploadApplicationSubmission',
+    label: 'Upload application submission',
+    path: '/provincial/application/upload',
+    requiredActions: ['createApplication'],
+  },
+  {
     id: 'createExemption',
-    label: 'Create Exemption',
+    label: 'Create exemption',
     path: '/provincial/exemption/create',
     requiredActions: ['/exemptionSearch', '/createExemption'],
   },
   {
     id: 'createOffer',
-    label: 'Create Offer',
+    label: 'Create offer',
     path: '/provincial/offers/create',
     requiredActions: ['/offersSearch', 'createOffer'],
   },
   {
     id: 'createPermit',
-    label: 'Create Permit',
+    label: 'Create permit',
     path: '/provincial/permit/create',
     requiredActions: ['/permitSearch', 'createPermit'],
   },
   {
     id: 'openReviewQueue',
-    label: 'Open Review Queue',
+    label: 'Open review queue',
     path: '/provincial/review',
     requiredActions: ['/applicationsReview'],
   },
@@ -360,7 +366,7 @@ const ProvincialPage: FC = () => {
       {visibleQuickActions.length > 0 && (
         <Column sm={4} md={8} lg={16}>
           <Tile>
-            <h2 className="dashboard-title">Quick Actions</h2>
+            <h2 className="dashboard-title">Quick actions</h2>
             <div className="legacy-search-actions">
               {visibleQuickActions.map((action) => (
                 <Button
@@ -385,9 +391,9 @@ const ProvincialPage: FC = () => {
 
       {!loadingTotals && !!totalsError && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind="warning"
-            title="Totals Warning"
+            title="Totals warning"
             subtitle={totalsError}
             lowContrast
             onCloseButtonClick={() => setTotalsError('')}

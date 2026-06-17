@@ -4,7 +4,6 @@ import {
   Column,
   Grid,
   InlineLoading,
-  InlineNotification,
   Table,
   TableBody,
   TableCell,
@@ -15,6 +14,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
+import { AppNotification } from '@/components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   buildPageDataCacheKey,
@@ -100,43 +100,43 @@ const SUMMARY_ROUTE_CONFIG: Record<SummaryMetricKey, SummaryRouteConfig> = {
 const INITIAL_METRICS: SummaryMetric[] = [
   {
     key: 'provincialApplications',
-    label: 'Provincial Applications',
+    label: 'Provincial applications',
     description: 'Total matched by current base search defaults.',
     total: 0,
   },
   {
     key: 'provincialExemptions',
-    label: 'Provincial Exemptions',
+    label: 'Provincial exemptions',
     description: 'Total exemption files in search scope.',
     total: 0,
   },
   {
     key: 'provincialOffers',
-    label: 'Provincial Offers',
+    label: 'Provincial offers',
     description: 'Total purchase offers in search scope.',
     total: 0,
   },
   {
     key: 'provincialPermits',
-    label: 'Provincial Permits',
+    label: 'Provincial permits',
     description: 'Total permit files in search scope.',
     total: 0,
   },
   {
     key: 'reviewQueue',
-    label: 'Provincial Review Queue',
+    label: 'Provincial review queue',
     description: 'Total applications in review queue.',
     total: 0,
   },
   {
     key: 'federalApplications',
-    label: 'Federal Applications',
+    label: 'Federal applications',
     description: 'Total federal application files in scope.',
     total: 0,
   },
   {
     key: 'indianReservePermits',
-    label: 'Indigenous Reserve Permits',
+    label: 'Indigenous reserve permits',
     description: 'Total reserve permit files in scope.',
     total: 0,
   },
@@ -410,7 +410,7 @@ const ProvincialSummaryPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial Summary</h1>
+        <h1>Provincial summary</h1>
         <p>Drill-down dashboard for operational totals and review queue triage.</p>
       </Column>
 
@@ -426,7 +426,7 @@ const ProvincialSummaryPage: FC = () => {
             </Button>
             {canAccessSummaryRoute('reviewQueue') && (
               <Button kind="ghost" onClick={() => navigate(SUMMARY_ROUTE_CONFIG.reviewQueue.path)}>
-                Open Review Queue
+                Open review queue
               </Button>
             )}
           </div>
@@ -441,9 +441,9 @@ const ProvincialSummaryPage: FC = () => {
 
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind="error"
-            title="Summary Error"
+            title="Summary error"
             subtitle={errorMessage}
             lowContrast
             onCloseButtonClick={() => setErrorMessage('')}
@@ -479,13 +479,13 @@ const ProvincialSummaryPage: FC = () => {
       {canAccessSummaryRoute('reviewQueue') && (
         <Column sm={4} md={8} lg={16}>
           <Tile>
-            <h2 className="dashboard-title">Review Queue Preview</h2>
+            <h2 className="dashboard-title">Review queue preview</h2>
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
                   <TableHeader>Application</TableHeader>
                   <TableHeader>Status</TableHeader>
-                  <TableHeader>Listing Date</TableHeader>
+                  <TableHeader>Listing date</TableHeader>
                   <TableHeader>Region</TableHeader>
                   {canOpenReviewApplication && <TableHeader>Open</TableHeader>}
                 </TableRow>

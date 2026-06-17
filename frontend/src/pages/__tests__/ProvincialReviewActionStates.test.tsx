@@ -92,9 +92,9 @@ const twoNewReviewResponse = {
   },
 }
 
-const renderPage = () => {
+const renderPage = (initialEntry = '/provincial/review') => {
   render(
-    <MemoryRouter initialEntries={['/provincial/review']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/provincial/review" element={<ProvincialReviewPage />} />
       </Routes>
@@ -184,7 +184,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByText('Update status code is required.')).toBeInTheDocument()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
 
-    await chooseComboBoxOption('Update Status Code', 'Rejected')
+    await chooseComboBoxOption('Update status code', 'Rejected')
 
     expect(updateStatusButton).toBeEnabled()
     expect(updateAndEmailButton).toBeEnabled()
@@ -195,7 +195,7 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000123' }))
-    await chooseComboBoxOption('Update Status Code', 'Withdrawn')
+    await chooseComboBoxOption('Update status code', 'Withdrawn')
     await userEvent.click(screen.getByRole('button', { name: 'Update Status and Send Email' }))
 
     await waitFor(() => {
@@ -292,9 +292,9 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('2000001')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await chooseComboBoxOption('Update Status Code', 'Rejected')
+    await chooseComboBoxOption('Update status code', 'Rejected')
     await userEvent.type(
-      screen.getByLabelText('Client Email Address (required for status email)'),
+      screen.getByLabelText('Client email address (required for status email)'),
       'client@example.com',
     )
     await userEvent.click(screen.getByRole('button', { name: 'Update Status and Send Email' }))
@@ -340,11 +340,14 @@ describe('Provincial Review Action State Smoke', () => {
   it('sends selected region org unit numbers to the review search request', async () => {
     mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
       productTypes: [{ value: 'LOG', label: 'Logs' }],
-      regions: [{ value: '1818', label: 'TST' }],
+      regions: [
+        { value: '1818', label: 'TST' },
+        { value: '1919', label: 'OTHER' },
+      ],
       reviewStatuses: [{ value: 'REJ', label: 'Rejected' }],
     })
 
-    renderPage()
+    renderPage('/provincial/review?applicationNumber=1000123')
     await screen.findByText('1000123')
     await waitFor(() => {
       expect(mockedFetchApplicationReviewOptions).toHaveBeenCalledTimes(1)
@@ -360,6 +363,7 @@ describe('Provincial Review Action State Smoke', () => {
       expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
         expect.objectContaining({
           filters: expect.objectContaining({
+            applicationNumber: '1000123',
             region: ['1818'],
           }),
         }),

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
+import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
+import { AppNotification } from '@/components/AppNotification'
 import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import SearchableSelect from '@/components/SearchableSelect'
@@ -9,7 +10,6 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
-  joinCreateSubmitMessages,
   mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
@@ -23,6 +23,13 @@ import {
   type CreateDraftRecord,
 } from '@/service/create-draft-service'
 import { submitProvincialOfferCreate } from '@/service/create-submit-service'
+import {
+  fetchOfferApplicationDetails,
+  fetchOfferApplicationVolume,
+  fetchOfferPackageList,
+  fetchOfferPackageVolume,
+  type OfferApplicationDetails,
+} from '@/service/provincial-offer-create-service'
 import { fetchProvincialOfferOptions, type SearchOption } from '@/service/search-options-service'
 
 type ProvincialOfferCreateForm = {
@@ -61,6 +68,20 @@ const INITIAL_FORM: ProvincialOfferCreateForm = {
   offerCondition: '',
 }
 
+const packageOptionsFromQuery = (query: URLSearchParams): SearchOption[] => {
+  const packageNumbers = [
+    query.get('packageNumber') ?? '',
+    ...(query.get('packageNumbers') ?? '').split(','),
+  ]
+    .map((packageNumber) => packageNumber.trim())
+    .filter((packageNumber) => packageNumber.length > 0)
+
+  return Array.from(new Set(packageNumbers)).map((packageNumber) => ({
+    value: packageNumber,
+    label: packageNumber,
+  }))
+}
+
 const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialOfferCreateForm => {
   return {
     ...INITIAL_FORM,
@@ -70,7 +91,12 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialOfferCreat
     companyName: query.get('companyName') ?? '',
     contactName: query.get('contactName') ?? '',
     region: query.get('region') ?? '',
+    purchaseOfferAmount: query.get('purchaseOfferAmount') ?? '',
+    purchaseOfferDate: query.get('purchaseOfferDate') ?? '',
+    offerEndDate: query.get('offerEndDate') ?? '',
     withdrawReason: query.get('withdrawReason') ?? '',
+    pickupLocation: query.get('pickupLocation') ?? '',
+    offerCondition: query.get('offerCondition') ?? '',
   }
 }
 
@@ -83,9 +109,22 @@ type PageStatus = {
 const ProvincialOfferCreatePage: FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const initialForm = useMemo(() => buildInitialFormFromQuery(searchParams), [searchParams])
+  const searchParamsKey = searchParams.toString()
+  const initialForm = useMemo(
+    () => buildInitialFormFromQuery(new URLSearchParams(searchParamsKey)),
+    [searchParamsKey],
+  )
+  const queryPackageOptions = useMemo(
+    () => packageOptionsFromQuery(new URLSearchParams(searchParamsKey)),
+    [searchParamsKey],
+  )
   const [form, setForm] = useState<ProvincialOfferCreateForm>(() => initialForm)
   const [regions, setRegions] = useState<SearchOption[]>([])
+  const [packageOptions, setPackageOptions] = useState<SearchOption[]>(() => queryPackageOptions)
+  const [applicationDetails, setApplicationDetails] = useState<OfferApplicationDetails | null>(null)
+  const [applicationVolume, setApplicationVolume] = useState('')
+  const [packageVolume, setPackageVolume] = useState('')
+  const [isLoadingApplicationContext, setIsLoadingApplicationContext] = useState(false)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -103,6 +142,108 @@ const ProvincialOfferCreatePage: FC = () => {
     void loadOptions()
   }, [])
 
+  useEffect(() => {
+    const applicationNumber = form.applicationNumber.trim()
+    if (!applicationNumber) {
+      setApplicationDetails(null)
+      setApplicationVolume('')
+      setPackageVolume('')
+      setPackageOptions(queryPackageOptions)
+      return
+    }
+
+    let isActive = true
+    setIsLoadingApplicationContext(true)
+    void Promise.allSettled([
+      fetchOfferApplicationDetails(applicationNumber),
+      fetchOfferPackageList(applicationNumber),
+      fetchOfferApplicationVolume(applicationNumber),
+    ])
+      .then(([detailsResult, packagesResult, volumeResult]) => {
+        if (!isActive) {
+          return
+        }
+
+        setApplicationDetails(
+          detailsResult.status === 'fulfilled' && detailsResult.value.success
+            ? detailsResult.value
+            : null,
+        )
+        const packageNumbers = packagesResult.status === 'fulfilled' ? packagesResult.value : []
+        const nextPackageOptions = packageNumbers.map((packageNumber) => ({
+          value: packageNumber,
+          label: packageNumber,
+        }))
+        setPackageOptions(nextPackageOptions)
+        setApplicationVolume(volumeResult.status === 'fulfilled' ? volumeResult.value : '')
+        setForm((current) => {
+          if (current.applicationNumber.trim() !== applicationNumber) {
+            return current
+          }
+          const firstPackageNumber = nextPackageOptions[0]?.value
+          if (!firstPackageNumber) {
+            return current.packageNumber ? { ...current, packageNumber: '' } : current
+          }
+          const selectedPackageNumber = current.packageNumber.trim()
+          const hasSelectedPackage = nextPackageOptions.some(
+            (option) => option.value === selectedPackageNumber,
+          )
+          if (hasSelectedPackage) {
+            return current
+          }
+          return { ...current, packageNumber: firstPackageNumber }
+        })
+      })
+      .catch(() => {
+        if (isActive) {
+          setApplicationDetails(null)
+          setApplicationVolume('')
+          setPackageOptions([])
+          setForm((current) =>
+            current.applicationNumber.trim() === applicationNumber
+              ? { ...current, packageNumber: '' }
+              : current,
+          )
+        }
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingApplicationContext(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.applicationNumber, queryPackageOptions])
+
+  useEffect(() => {
+    const packageNumber = form.packageNumber.trim()
+    if (!packageNumber) {
+      setPackageVolume('')
+      return
+    }
+
+    let isActive = true
+    void fetchOfferPackageVolume(packageNumber)
+      .then((volume) => {
+        if (isActive) {
+          setPackageVolume(volume)
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setPackageVolume('')
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.packageNumber])
+
+  const contextVolume = form.packageNumber.trim() ? packageVolume : applicationVolume
+
   const fieldErrors = useMemo<FieldErrors<ProvincialOfferCreateField>>(
     () => ({
       offerNumber: firstValidationError(
@@ -113,7 +254,15 @@ const ProvincialOfferCreatePage: FC = () => {
         () => requiredFieldError(form.applicationNumber, 'Application number'),
         () => positiveNumericFieldError(form.applicationNumber),
       ),
-      packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
+      packageNumber: firstValidationError(
+        () => (isLoadingApplicationContext ? 'Wait for package list to load.' : null),
+        () => requiredFieldError(form.packageNumber, 'Package number'),
+        () =>
+          packageOptions.length > 0 &&
+          !packageOptions.some((option) => option.value === form.packageNumber.trim())
+            ? 'Select a package from this application.'
+            : null,
+      ),
       offeringClientNumber:
         requiredFieldError(form.offeringClientNumber, 'Offering client number') ?? undefined,
       companyName: requiredFieldError(form.companyName, 'Company name') ?? undefined,
@@ -133,7 +282,7 @@ const ProvincialOfferCreatePage: FC = () => {
           : undefined,
       pickupLocation: requiredFieldError(form.pickupLocation, 'Pickup location') ?? undefined,
     }),
-    [form],
+    [form, isLoadingApplicationContext, packageOptions],
   )
   const hasValidationError = useMemo(
     () => Object.values(fieldErrors).some((error) => !!error),
@@ -152,7 +301,7 @@ const ProvincialOfferCreatePage: FC = () => {
     const saved = saveCreateDraft(MODULE_KEY, form)
     setDrafts(listCreateDrafts(MODULE_KEY))
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
+    setStatus({ kind: 'success', title: 'Draft saved', message: `Draft ${saved.id} saved.` })
   }
 
   const onSubmit = async () => {
@@ -163,7 +312,7 @@ const ProvincialOfferCreatePage: FC = () => {
       setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
-        title: 'Validation Error',
+        title: 'Validation error',
         message: validationMessage,
       })
       return
@@ -173,8 +322,6 @@ const ProvincialOfferCreatePage: FC = () => {
     setIsSubmitting(true)
     try {
       const result = await submitProvincialOfferCreate(form)
-      const responseMessage = joinCreateSubmitMessages(result)
-
       if (result.success) {
         if (result.createdId) {
           navigate(`/provincial/offers/${encodeURIComponent(result.createdId)}`)
@@ -182,23 +329,25 @@ const ProvincialOfferCreatePage: FC = () => {
         }
         setStatus({
           kind: 'success',
-          title: 'Offer Submitted',
-          message: responseMessage || 'Offer submitted successfully.',
+          title: 'Offer submitted',
+          message: 'Offer submitted successfully.',
         })
         return
       }
 
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
-        message: responseMessage || 'Unable to submit provincial offer create request.',
+        title: 'Submit failed',
+        message:
+          'Offer submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } catch (error) {
       console.error(error)
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
-        message: 'Unable to submit provincial offer create request.',
+        title: 'Submit failed',
+        message:
+          'Offer submission failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } finally {
       setIsSubmitting(false)
@@ -209,7 +358,7 @@ const ProvincialOfferCreatePage: FC = () => {
     setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
     setTouchedFields({})
     setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
+    setStatus({ kind: 'success', title: 'Draft loaded', message: `Draft ${record.id} loaded.` })
   }
 
   const onDeleteDraft = (draftId: string) => {
@@ -217,7 +366,7 @@ const ProvincialOfferCreatePage: FC = () => {
     setDrafts(listCreateDrafts(MODULE_KEY))
     setStatus({
       kind: wasDeleted ? 'success' : 'error',
-      title: wasDeleted ? 'Draft Deleted' : 'Draft Delete Failed',
+      title: wasDeleted ? 'Draft deleted' : 'Draft delete failed',
       message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
     })
   }
@@ -225,16 +374,17 @@ const ProvincialOfferCreatePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create Provincial Offer</h1>
+        <h1>Create provincial offer</h1>
       </Column>
 
       {!!status && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind={status.kind}
             title={status.title}
             subtitle={status.message}
             lowContrast
+            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
             onCloseButtonClick={() => setStatus(null)}
           />
         </Column>
@@ -245,7 +395,7 @@ const ProvincialOfferCreatePage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="offerNumber"
-              labelText="Offer Number (required)"
+              labelText="Offer number (required)"
               value={form.offerNumber}
               invalid={!!fieldError('offerNumber')}
               invalidText={fieldError('offerNumber')}
@@ -256,27 +406,67 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <ApplicationNumberSelect
               id="applicationNumber"
-              labelText="Application Number (required)"
+              labelText="Application number (required)"
               value={form.applicationNumber}
               invalid={!!fieldError('applicationNumber')}
               invalidText={fieldError('applicationNumber')}
               onBlur={() => markFieldTouched('applicationNumber')}
               onChange={(value) => setForm((current) => ({ ...current, applicationNumber: value }))}
             />
-            <TextInput
-              id="packageNumber"
-              labelText="Package Number (required)"
-              value={form.packageNumber}
-              invalid={!!fieldError('packageNumber')}
-              invalidText={fieldError('packageNumber')}
-              onBlur={() => markFieldTouched('packageNumber')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, packageNumber: event.target.value }))
-              }
-            />
+            {packageOptions.length > 0 ? (
+              <SearchableSelect
+                id="packageNumber"
+                labelText="Package number (required)"
+                value={form.packageNumber}
+                options={packageOptions}
+                placeholder={
+                  isLoadingApplicationContext ? 'Loading packages' : 'Select package number'
+                }
+                invalid={!!fieldError('packageNumber')}
+                invalidText={fieldError('packageNumber')}
+                onBlur={() => markFieldTouched('packageNumber')}
+                onChange={(value) => setForm((current) => ({ ...current, packageNumber: value }))}
+              />
+            ) : (
+              <TextInput
+                id="packageNumber"
+                labelText="Package number (required)"
+                value={form.packageNumber}
+                invalid={!!fieldError('packageNumber')}
+                invalidText={fieldError('packageNumber')}
+                onBlur={() => markFieldTouched('packageNumber')}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, packageNumber: event.target.value }))
+                }
+              />
+            )}
+            {contextVolume && (
+              <TextInput
+                id="applicationPackageVolume"
+                labelText="Application/package volume (m3)"
+                value={contextVolume}
+                readOnly
+              />
+            )}
+            {applicationDetails?.speciesGradeCode && (
+              <TextInput
+                id="speciesGradeCode"
+                labelText="Species/grade"
+                value={applicationDetails.speciesGradeCode}
+                readOnly
+              />
+            )}
+            {applicationDetails?.advertisingDate && (
+              <TextInput
+                id="advertisingDate"
+                labelText="Listing date"
+                value={applicationDetails.advertisingDate}
+                readOnly
+              />
+            )}
             <TextInput
               id="offeringClientNumber"
-              labelText="Offering Client Number (required)"
+              labelText="Offering client number (required)"
               value={form.offeringClientNumber}
               invalid={!!fieldError('offeringClientNumber')}
               invalidText={fieldError('offeringClientNumber')}
@@ -287,7 +477,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="companyName"
-              labelText="Company Name (required)"
+              labelText="Company name (required)"
               value={form.companyName}
               invalid={!!fieldError('companyName')}
               invalidText={fieldError('companyName')}
@@ -298,7 +488,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="contactName"
-              labelText="Contact Name (required)"
+              labelText="Contact name (required)"
               value={form.contactName}
               invalid={!!fieldError('contactName')}
               invalidText={fieldError('contactName')}
@@ -317,7 +507,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="purchaseOfferAmount"
-              labelText="Offer Amount (required)"
+              labelText="Offer amount (required)"
               value={form.purchaseOfferAmount}
               invalid={!!fieldError('purchaseOfferAmount')}
               invalidText={fieldError('purchaseOfferAmount')}
@@ -328,7 +518,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="purchaseOfferDate"
-              labelText="Offer Date (YYYY-MM-DD) (required)"
+              labelText="Offer date (YYYY-MM-DD) (required)"
               value={form.purchaseOfferDate}
               invalid={!!fieldError('purchaseOfferDate')}
               invalidText={fieldError('purchaseOfferDate')}
@@ -337,7 +527,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <IsoDatePicker
               id="offerEndDate"
-              labelText="Withdrawal Date (YYYY-MM-DD)"
+              labelText="Withdrawal date (YYYY-MM-DD)"
               value={form.offerEndDate}
               invalid={!!fieldError('offerEndDate')}
               invalidText={fieldError('offerEndDate')}
@@ -346,7 +536,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="withdrawReason"
-              labelText="Withdraw Reason (required when withdrawn)"
+              labelText="Withdraw reason (required when withdrawn)"
               value={form.withdrawReason}
               invalid={!!fieldError('withdrawReason')}
               invalidText={fieldError('withdrawReason')}
@@ -357,7 +547,7 @@ const ProvincialOfferCreatePage: FC = () => {
             />
             <TextInput
               id="pickupLocation"
-              labelText="Pickup Location (required)"
+              labelText="Pickup location (required)"
               value={form.pickupLocation}
               invalid={!!fieldError('pickupLocation')}
               invalidText={fieldError('pickupLocation')}
@@ -371,7 +561,11 @@ const ProvincialOfferCreatePage: FC = () => {
             <Button kind="primary" onClick={onSaveDraft}>
               Save Draft
             </Button>
-            <Button kind="primary" onClick={() => void onSubmit()} disabled={isSubmitting}>
+            <Button
+              kind="primary"
+              onClick={() => void onSubmit()}
+              disabled={isSubmitting || isLoadingApplicationContext}
+            >
               Submit
             </Button>
             <Button
@@ -391,7 +585,7 @@ const ProvincialOfferCreatePage: FC = () => {
           <div className="legacy-search-actions">
             <TextArea
               id="offerCondition"
-              labelText="Offer Conditions / Remarks"
+              labelText="Offer conditions / remarks"
               value={form.offerCondition}
               onChange={(event) =>
                 setForm((current) => ({ ...current, offerCondition: event.target.value }))
@@ -403,7 +597,7 @@ const ProvincialOfferCreatePage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <CreateDraftHistory
-          title="Recent Offer Drafts"
+          title="Recent offer drafts"
           drafts={drafts}
           onUseDraft={onUseDraft}
           onDeleteDraft={onDeleteDraft}

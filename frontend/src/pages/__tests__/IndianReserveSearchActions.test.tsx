@@ -97,13 +97,13 @@ describe('Indigenous Reserve Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Issued From Date (YYYY-MM-DD)'), '2026-13-50')
+    await userEvent.type(screen.getByLabelText('Issued from date (YYYY-MM-DD)'), '2026-13-50')
     await waitFor(() => {
       expect(searchButton).toBeDisabled()
     })
 
-    await userEvent.clear(screen.getByLabelText('Issued From Date (YYYY-MM-DD)'))
-    await userEvent.type(screen.getByLabelText('Issued From Date (YYYY-MM-DD)'), '2026-03-10')
+    await userEvent.clear(screen.getByLabelText('Issued from date (YYYY-MM-DD)'))
+    await userEvent.type(screen.getByLabelText('Issued from date (YYYY-MM-DD)'), '2026-03-10')
     await waitFor(() => {
       expect(searchButton).toBeEnabled()
     })

@@ -38,4 +38,24 @@ describe('SearchResultsTableFrame', () => {
     expect(screen.queryByText('Loading search results...')).not.toBeInTheDocument()
     expect(screen.getByText('Loaded rows')).toBeInTheDocument()
   })
+
+  it('renders a result count label when total items are provided', () => {
+    render(
+      <SearchResultsTableFrame
+        loading={false}
+        loadingDescription="Loading search results..."
+        totalItems={12}
+      >
+        <table>
+          <tbody>
+            <tr>
+              <td>Rows</td>
+            </tr>
+          </tbody>
+        </table>
+      </SearchResultsTableFrame>,
+    )
+
+    expect(screen.getByText('12 results found')).toBeInTheDocument()
+  })
 })

@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
+
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.validation.constraints.Max;
@@ -383,9 +385,9 @@ public class LegacyRouteController {
       method = RequestMethod.POST,
       params = "actionMapping=saveReservePermit")
   public ResponseEntity<?> saveIndianReservePermit(
-      @RequestParam MultiValueMap<String, String> parameters,
+      HttpServletRequest request,
       Authentication authentication) {
-    return indianReservePermitController.addPermit(parameters, authentication);
+    return indianReservePermitController.addPermit(fromRequest(request), authentication);
   }
 
   @GetMapping({"/offersSearch", "/offersSearch.do"})
@@ -544,8 +546,9 @@ public class LegacyRouteController {
       method = {RequestMethod.GET, RequestMethod.POST})
   public ResponseEntity<?> offerDetailsRpc(
       @RequestParam(name = "actionMapping", required = false) String actionMapping,
-      @RequestParam MultiValueMap<String, String> requestParameters,
+      HttpServletRequest request,
       Authentication authentication) {
+    MultiValueMap<String, String> requestParameters = fromRequest(request);
     String applicationNumber = first(requestParameters, "applicationNumber");
     String packageNumber = first(requestParameters, "packageNumber");
     String clientNumber = first(requestParameters, "clientNumber");

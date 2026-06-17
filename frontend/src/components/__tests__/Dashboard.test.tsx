@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import Dashboard from '@/components/Dashboard'
 import { useAuth } from '@/context/auth/useAuth'
@@ -43,6 +43,12 @@ vi.mock('@/service/federal-application-search-service', () => ({
 vi.mock('@/service/indian-reserve-permit-search-service', () => ({
   countIndianReservePermits: vi.fn(),
 }))
+
+const LocationProbe = () => {
+  const location = useLocation()
+
+  return <span data-testid="current-path">{location.pathname}</span>
+}
 
 describe('Dashboard', () => {
   const mockedUseAuth = vi.mocked(useAuth)
@@ -122,7 +128,9 @@ describe('Dashboard', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Provincial Applications')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: /Provincial applications/i }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Provincial Hub' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Reports' })).toBeInTheDocument()
     expect(
@@ -130,13 +138,36 @@ describe('Dashboard', () => {
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open Review Queue' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open Admin' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Provincial Summary' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Provincial Review')).not.toBeInTheDocument()
-    expect(screen.queryByText('Federal Applications')).not.toBeInTheDocument()
-    expect(screen.queryByText('Indigenous Reserve Permits')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Upload Application Submission' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /Provincial summary/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Provincial review/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Federal applications/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Indigenous reserve permits/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Admin')).not.toBeInTheDocument()
     expect(screen.queryByText(/Accessible modules:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
+  })
+
+  test('shows application submission upload quick action for create application access', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'createApplication',
+    } as any)
+
+    render(
+      <MemoryRouter>
+        <Dashboard />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('button', { name: 'Open Provincial Hub' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Upload Application Submission' }))
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/provincial/application/upload')
+    expect(
+      screen.queryByRole('heading', { name: /Provincial applications/i }),
+    ).not.toBeInTheDocument()
   })
 
   test('reserves dashboard cards for count-backed modules', async () => {
@@ -151,12 +182,12 @@ describe('Dashboard', () => {
     )
 
     expect(
-      await screen.findByRole('heading', { name: 'Provincial Applications' }),
+      await screen.findByRole('heading', { name: /Provincial applications/i }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Provincial Review' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Federal Applications' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Indigenous Reserve Permits' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Provincial Summary' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Provincial review/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Federal applications/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Indigenous reserve permits/i })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /Provincial summary/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Reports' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Admin' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Reports' })).toBeInTheDocument()
