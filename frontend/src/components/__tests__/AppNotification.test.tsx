@@ -7,6 +7,20 @@ describe('AppNotification', () => {
     vi.useRealTimers()
   })
 
+  it('renders in the global toast notification region', () => {
+    const { container } = render(
+      <main>
+        <AppNotification kind="error" title="Upload error" subtitle="Upload failed." />
+      </main>,
+    )
+
+    const notificationRegion = document.getElementById('lexis-toast-notification-region')
+
+    expect(notificationRegion).toBeTruthy()
+    expect(container.querySelector('main')).toBeEmptyDOMElement()
+    expect(notificationRegion).toContainElement(screen.getByText('Upload error'))
+  })
+
   it('auto-dismisses success notifications after at least 8 seconds by default', () => {
     vi.useFakeTimers()
     const onClose = vi.fn()

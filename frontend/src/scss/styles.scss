@@ -920,6 +920,40 @@ body {
   margin-top: 1rem;
 }
 
+.app-notification-region {
+  position: fixed;
+  z-index: 9000;
+  inset-block-start: calc(var(--csp-header-height) + 1rem);
+  inset-inline-end: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  inline-size: min(28rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.app-notification {
+  pointer-events: auto;
+}
+
+.app-notification__toast {
+  inline-size: 100%;
+  max-inline-size: none;
+  margin: 0;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 20%);
+}
+
+.app-notification__toast.legacy-inline-notification {
+  margin-top: 0;
+}
+
+@media (max-width: 42rem) {
+  .app-notification-region {
+    inset-inline: 1rem;
+    inline-size: auto;
+  }
+}
+
 .admin-upload-workflow {
   display: grid;
   gap: 1rem;

@@ -1,5 +1,6 @@
 import { type FC, useCallback, useEffect, useRef, useState, type PropsWithChildren } from 'react'
-import { InlineNotification, type InlineNotificationProps } from '@carbon/react'
+import { createPortal } from 'react-dom'
+import { ToastNotification, type ToastNotificationProps } from '@carbon/react'
 import {
   genericActionFailureMessage,
   sanitizeNotificationText,
@@ -7,14 +8,33 @@ import {
 
 const MINIMUM_SUCCESS_AUTO_DISMISS_MS = 8000
 const PERSISTENT_NOTIFICATION_KINDS = new Set(['error', 'warning', 'warning-alt'])
+const NOTIFICATION_REGION_ID = 'lexis-toast-notification-region'
 
 type AppNotificationProps = PropsWithChildren<
-  Omit<InlineNotificationProps, 'onCloseButtonClick' | 'hideCloseButton'> & {
+  Omit<ToastNotificationProps, 'onCloseButtonClick' | 'hideCloseButton' | 'timeout'> & {
     onCloseButtonClick?: () => void
     autoDismissMs?: number
     pauseAutoDismissOnInteraction?: boolean
   }
 >
+
+const getNotificationRegion = (): HTMLElement | null => {
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  const existingRegion = document.getElementById(NOTIFICATION_REGION_ID)
+  if (existingRegion) {
+    return existingRegion
+  }
+
+  const region = document.createElement('div')
+  region.id = NOTIFICATION_REGION_ID
+  region.className = 'app-notification-region'
+  region.setAttribute('aria-live', 'polite')
+  document.body.appendChild(region)
+  return region
+}
 
 export const AppNotification: FC<AppNotificationProps> = ({
   onCloseButtonClick,
@@ -24,8 +44,10 @@ export const AppNotification: FC<AppNotificationProps> = ({
   kind,
   subtitle,
   title,
+  className,
   ...notificationProps
 }) => {
+  const [notificationRegion, setNotificationRegion] = useState<HTMLElement | null>(null)
   const [isPaused, setIsPaused] = useState(false)
   const timeoutRef = useRef<number | null>(null)
   const normalizedKind = typeof kind === 'string' ? kind : ''
@@ -48,6 +70,10 @@ export const AppNotification: FC<AppNotificationProps> = ({
     typeof subtitle === 'string'
       ? sanitizeNotificationText(subtitle, genericActionFailureMessage)
       : subtitle
+
+  useEffect(() => {
+    setNotificationRegion(getNotificationRegion())
+  }, [])
 
   const clearAutoDismiss = useCallback(() => {
     if (timeoutRef.current !== null) {
@@ -97,23 +123,28 @@ export const AppNotification: FC<AppNotificationProps> = ({
     }
   }, [pauseAutoDismissOnInteraction])
 
-  return (
+  const notification = (
     <div
+      className="app-notification"
       onBlur={handleBlur}
       onFocus={handleFocus}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <InlineNotification
+      <ToastNotification
+        className={['app-notification__toast', className].filter(Boolean).join(' ')}
         hideCloseButton={false}
         kind={kind}
         onCloseButtonClick={onCloseButtonClick}
         subtitle={resolvedSubtitle}
+        timeout={0}
         title={resolvedTitle}
         {...notificationProps}
       >
         {children}
-      </InlineNotification>
+      </ToastNotification>
     </div>
   )
+
+  return notificationRegion ? createPortal(notification, notificationRegion) : null
 }
