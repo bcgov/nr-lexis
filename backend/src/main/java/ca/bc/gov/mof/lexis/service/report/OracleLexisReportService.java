@@ -50,6 +50,8 @@ import org.springframework.stereotype.Service;
 public class OracleLexisReportService implements LexisReportService {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OracleLexisReportService.class);
+  private static final String BIWEEKLY_DATE_RANGE_MESSAGE =
+      "Choose a Listing from date and Listing to date before generating the Advertising List.";
   private static final String TEMPLATE_CLASSPATH_DIRECTORY = "reports/lexis";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
@@ -125,7 +127,7 @@ public class OracleLexisReportService implements LexisReportService {
     LexisReportRequestDto effectiveRequest = applyLegacyReportDefaults(definition, request);
     if (isUnboundedBiweeklyReport(definition, effectiveRequest)) {
       LOGGER.warn("Biweekly listing requested without a bounded date range");
-      return Optional.empty();
+      throw new LexisReportValidationException(BIWEEKLY_DATE_RANGE_MESSAGE);
     }
 
     Optional<LexisGeneratedReport> legacyCsvReport =

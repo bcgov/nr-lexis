@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import ReportsPage from '@/pages/Reports'
-import { runReport } from '@/service/report-service'
+import { ReportRequestError, runReport } from '@/service/report-service'
 import {
   fetchReportOptions,
   fetchProvincialApplicationOptions,
@@ -17,6 +17,12 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/report-service', () => ({
+  ReportRequestError: class ReportRequestError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = 'ReportRequestError'
+    }
+  },
   runReport: vi.fn(),
 }))
 
@@ -932,6 +938,35 @@ describe('Reports Page Actions', () => {
           toDate: '2026-06-30',
         },
       })
+    })
+  })
+
+  it('shows backend report validation messages when generation is rejected', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => true,
+    } as any)
+    const error = new ReportRequestError(
+      'Choose a Listing from date and Listing to date before generating the Advertising List.',
+    )
+    mockedRunReport.mockRejectedValueOnce(error)
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=biweeklyListing']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Advertising List' })
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Choose a Listing from date and Listing to date before generating the Advertising List.',
+        ),
+      ).toBeInTheDocument()
     })
   })
 

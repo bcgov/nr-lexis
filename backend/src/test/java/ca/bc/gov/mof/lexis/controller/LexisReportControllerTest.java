@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.service.report.LexisGeneratedReport;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
+import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -78,6 +79,25 @@ class LexisReportControllerTest {
     assertThat(new String(response.getBody()))
         .contains("Choose at least one Application Report filter before generating");
     verifyNoInteractions(reportService);
+  }
+
+  @Test
+  void reportValidationErrorShouldReturnPlainTextBadRequest() {
+    when(reportServiceProvider.getIfAvailable()).thenReturn(reportService);
+    LexisReportController controller = new LexisReportController(reportServiceProvider);
+    when(reportService.generateReport(eq("biweeklyListing"), any(LexisReportRequestDto.class)))
+        .thenThrow(
+            new LexisReportValidationException(
+                "Choose a Listing from date and Listing to date before generating the Advertising List."));
+
+    ResponseEntity<byte[]> response =
+        controller.biweeklyListing(new LexisReportRequestDto(Map.of(), "PDF"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.TEXT_PLAIN);
+    assertThat(new String(response.getBody()))
+        .contains("Listing from date")
+        .contains("Listing to date");
   }
 
   @Test

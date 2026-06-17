@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -389,9 +390,11 @@ class OracleLexisReportServiceFormatSupportTest {
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("legacyActionMapping", "generate"), "PDF");
 
-    Optional<LexisGeneratedReport> result = service.generateReport("biweeklyListing", request);
+    assertThatThrownBy(() -> service.generateReport("biweeklyListing", request))
+        .isInstanceOf(LexisReportValidationException.class)
+        .hasMessageContaining("Listing from date")
+        .hasMessageContaining("Listing to date");
 
-    assertThat(result).isEmpty();
     Mockito.verify(scheduleRepository).findCurrentSchedules();
     verifyNoInteractions(dataSource, legacyCsvReportService, legacyJasperTableReportService);
   }

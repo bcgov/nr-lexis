@@ -224,6 +224,29 @@ describe('report-service', () => {
     expect(payload).toEqual({ parameters: {}, format: 'CSV' })
   })
 
+  it('surfaces plain text report validation errors from blob responses', async () => {
+    postMock.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        data: new Blob([
+          'Choose a Listing from date and Listing to date before generating the Advertising List.',
+        ]),
+      },
+    })
+
+    await expect(
+      runReport({
+        reportId: 'biweeklyListing',
+        actionMapping: 'generate',
+        values: {},
+      }),
+    ).rejects.toMatchObject({
+      name: 'ReportRequestError',
+      message:
+        'Choose a Listing from date and Listing to date before generating the Advertising List.',
+    })
+  })
+
   it('expands tenure and timber mark csv values into modern and legacy fields', async () => {
     postMock.mockResolvedValue({
       data: new Blob(['report']),

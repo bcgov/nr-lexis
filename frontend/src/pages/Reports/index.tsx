@@ -19,7 +19,7 @@ import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
-import { runReport } from '@/service/report-service'
+import { ReportRequestError, runReport } from '@/service/report-service'
 import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
 import { normalizeFilterText as normalizeText } from '@/utils/text'
 import {
@@ -1217,7 +1217,11 @@ const ReportsPage: FC = () => {
       }
     } catch (error) {
       console.error(error)
-      setLaunchErrorMessage('Unable to generate report. Check values and try again.')
+      setLaunchErrorMessage(
+        error instanceof ReportRequestError
+          ? error.message
+          : 'Unable to generate report. Check values and try again.',
+      )
     } finally {
       setIsGenerating(false)
     }
