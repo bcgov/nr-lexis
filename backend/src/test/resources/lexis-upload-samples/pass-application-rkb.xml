@@ -29,14 +29,14 @@
         <lexis:avgLength>7.1</lexis:avgLength>
         <lexis:avgDiameter>13.4</lexis:avgDiameter>
         <lexis:harvestedTimber>
-          <lexis:timberMark>KBYQA</lexis:timberMark>
+          <lexis:timberMark>NCHWP</lexis:timberMark>
           <lexis:numberOfPieces>90</lexis:numberOfPieces>
           <lexis:species>HE</lexis:species>
           <lexis:grade>H</lexis:grade>
           <lexis:quantityVolume>47.75</lexis:quantityVolume>
         </lexis:harvestedTimber>
         <lexis:harvestedTimber>
-          <lexis:timberMark>KBYQA</lexis:timberMark>
+          <lexis:timberMark>NCHWP</lexis:timberMark>
           <lexis:numberOfPieces>34</lexis:numberOfPieces>
           <lexis:species>HE</lexis:species>
           <lexis:grade>J</lexis:grade>
