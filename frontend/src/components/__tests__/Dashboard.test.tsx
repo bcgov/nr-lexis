@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import Dashboard from '@/components/Dashboard'
 import { useAuth } from '@/context/auth/useAuth'
@@ -43,6 +43,12 @@ vi.mock('@/service/federal-application-search-service', () => ({
 vi.mock('@/service/indian-reserve-permit-search-service', () => ({
   countIndianReservePermits: vi.fn(),
 }))
+
+const LocationProbe = () => {
+  const location = useLocation()
+
+  return <span data-testid="current-path">{location.pathname}</span>
+}
 
 describe('Dashboard', () => {
   const mockedUseAuth = vi.mocked(useAuth)
@@ -132,6 +138,9 @@ describe('Dashboard', () => {
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open Review Queue' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open Admin' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Upload Application Submission' }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /Provincial summary/i })).not.toBeInTheDocument()
     expect(screen.queryByText(/Provincial review/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Federal applications/i)).not.toBeInTheDocument()
@@ -141,7 +150,7 @@ describe('Dashboard', () => {
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
   })
 
-  test('shows provincial hub quick action for application submission upload access', () => {
+  test('shows application submission upload quick action for create application access', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) => action === 'createApplication',
     } as any)
@@ -149,10 +158,13 @@ describe('Dashboard', () => {
     render(
       <MemoryRouter>
         <Dashboard />
+        <LocationProbe />
       </MemoryRouter>,
     )
 
     expect(screen.getByRole('button', { name: 'Open Provincial Hub' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Upload Application Submission' }))
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/provincial/application/upload')
     expect(
       screen.queryByRole('heading', { name: /Provincial applications/i }),
     ).not.toBeInTheDocument()

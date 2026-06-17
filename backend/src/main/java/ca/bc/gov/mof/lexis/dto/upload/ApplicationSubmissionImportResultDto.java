@@ -2,7 +2,7 @@ package ca.bc.gov.mof.lexis.dto.upload;
 
 import java.util.List;
 
-public record LexisXmlImportResultDto(
+public record ApplicationSubmissionImportResultDto(
     String uploadType,
     String fileName,
     long fileSize,
@@ -14,8 +14,8 @@ public record LexisXmlImportResultDto(
     List<String> errors,
     List<String> warnings,
     String userReference,
-    LexisXmlSubmissionSummaryDto submissionSummary) {
-  public LexisXmlImportResultDto(
+    ApplicationSubmissionSummaryDto submissionSummary) {
+  public ApplicationSubmissionImportResultDto(
       String uploadType,
       String fileName,
       long fileSize,
@@ -41,7 +41,7 @@ public record LexisXmlImportResultDto(
         null);
   }
 
-  public LexisXmlImportResultDto(
+  public ApplicationSubmissionImportResultDto(
       String uploadType,
       String fileName,
       long fileSize,
@@ -52,7 +52,7 @@ public record LexisXmlImportResultDto(
       int scaleRows,
       List<String> errors,
       List<String> warnings,
-      LexisXmlSubmissionSummaryDto submissionSummary) {
+      ApplicationSubmissionSummaryDto submissionSummary) {
     this(
         uploadType,
         fileName,

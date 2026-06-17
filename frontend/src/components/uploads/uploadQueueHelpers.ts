@@ -155,7 +155,7 @@ export const buildUploadResultMessage = (
     warnings?: string[]
   },
 ): string => {
-  if (workflowType !== 'lexisXml') {
+  if (workflowType !== 'applicationSubmission') {
     return result?.message?.trim() || resultMessage
   }
 

@@ -68,6 +68,7 @@ describe('Layout shell', () => {
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
 
     expect(screen.getByRole('link', { name: 'Dashboard' })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Upload application submission/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /LEXIS administration/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /Data upload/i })).toBeVisible()
     expect(document.querySelector('.csp-side-nav__icon')).not.toBeInTheDocument()

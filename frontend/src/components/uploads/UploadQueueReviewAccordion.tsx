@@ -24,6 +24,19 @@ const formatOptional = (value: string | number | undefined | null): string =>
 const formatDecimal = (value: number | undefined): string =>
   typeof value === 'number' ? value.toFixed(1) : 'Not provided'
 
+const reviewEmptyResultMessage = (
+  item: UploadQueueItem,
+  itemNoun: string,
+  hasMetadata: boolean,
+  summary: string,
+): string => {
+  if (itemNoun === 'submission' && item.status === 'complete') {
+    return 'Application submission finalized successfully.'
+  }
+
+  return hasMetadata ? 'No validation issues returned.' : summary
+}
+
 const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
   items,
   targetSummary,
@@ -37,6 +50,7 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
   const titleId = `${idPrefix}Title`
   const itemNounTitle = `${itemNoun.charAt(0).toUpperCase()}${itemNoun.slice(1)}`
   const itemNounPlural = `${itemNoun}s`
+  const typeLabel = itemNoun === 'submission' ? 'Submission type' : 'Upload type'
 
   return (
     <section className="admin-upload-review" aria-labelledby={titleId}>
@@ -85,7 +99,7 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
               <div className="admin-upload-review__content">
                 <dl className="admin-upload-review__meta">
                   <div>
-                    <dt>Upload type</dt>
+                    <dt>{typeLabel}</dt>
                     <dd>{item.workflowLabel}</dd>
                   </div>
                   <div>
@@ -160,8 +174,24 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                         <dd>{formatOptional(submissionSummary.jurisdictionCode)}</dd>
                       </div>
                       <div>
+                        <dt>Source status</dt>
+                        <dd>{formatOptional(submissionSummary.sourceApplicationStatusCode)}</dd>
+                      </div>
+                      <div>
+                        <dt>Exemption reason</dt>
+                        <dd>{formatOptional(submissionSummary.exemptionReasonCode)}</dd>
+                      </div>
+                      <div>
+                        <dt>Applicant type</dt>
+                        <dd>{formatOptional(submissionSummary.applicantTypeCode)}</dd>
+                      </div>
+                      <div>
                         <dt>Product type</dt>
                         <dd>{formatOptional(submissionSummary.productTypeCode)}</dd>
+                      </div>
+                      <div>
+                        <dt>Age class</dt>
+                        <dd>{formatOptional(submissionSummary.ageClass)}</dd>
                       </div>
                       <div>
                         <dt>Product location</dt>
@@ -225,7 +255,7 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                   errors.length === 0 &&
                   warnings.length === 0 && (
                     <p className="admin-upload-review__empty-result">
-                      {hasMetadata ? 'No validation issues returned.' : summary}
+                      {reviewEmptyResultMessage(item, itemNoun, hasMetadata, summary)}
                     </p>
                   )}
               </div>

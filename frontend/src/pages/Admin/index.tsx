@@ -53,7 +53,7 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
 
 const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
   {
-    id: 'lexisXmlUpload',
+    id: 'applicationSubmissionUpload',
     label: 'Application submission upload',
     requiredAction: 'createApplication',
     description: 'Create applications from ESF LEXIS XML or GeoJSON submissions.',

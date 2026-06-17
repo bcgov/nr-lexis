@@ -2,7 +2,7 @@ package ca.bc.gov.mof.lexis.dto.upload;
 
 import java.util.List;
 
-public record LexisXmlSubmissionSummaryDto(
+public record ApplicationSubmissionSummaryDto(
     String ownerClientNumber,
     String ownerClientLocationCode,
     String ownerContactName,

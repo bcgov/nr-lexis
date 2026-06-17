@@ -113,6 +113,13 @@ const DASHBOARD_QUICK_ACTIONS: DashboardModule[] = [
     ],
   },
   {
+    id: 'uploadApplicationSubmission',
+    title: 'Upload Application Submission',
+    description: '',
+    path: '/provincial/application/upload',
+    requiredActions: ['createApplication'],
+  },
+  {
     id: 'openReviewQueue',
     title: 'Open review queue',
     description: '',

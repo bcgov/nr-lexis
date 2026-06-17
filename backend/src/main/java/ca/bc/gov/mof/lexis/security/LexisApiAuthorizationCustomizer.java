@@ -358,8 +358,10 @@ public class LexisApiAuthorizationCustomizer
         authorize,
         HttpMethod.POST,
         new String[] {
+          "/api/lexis/application-submissions",
           "/api/lexis/uploads/lexis-xml",
           "/api/lexis/admin/uploads/lexis-xml",
+          "/api/lexis/application-submissions/validation",
           "/api/lexis/uploads/lexis-xml/validation",
           "/api/lexis/admin/uploads/lexis-xml/validation"
         },

@@ -2,8 +2,8 @@ package ca.bc.gov.mof.lexis.service.upload;
 
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
-import ca.bc.gov.mof.lexis.dto.upload.LexisXmlImportResultDto;
-import ca.bc.gov.mof.lexis.dto.upload.LexisXmlSubmissionSummaryDto;
+import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
+import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionSummaryDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.CreateApplicationResult;
@@ -50,9 +50,9 @@ import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 
 @Service
-public class LexisXmlImportService {
+public class ApplicationSubmissionImportService {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(LexisXmlImportService.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(ApplicationSubmissionImportService.class);
 
   private static final String ESF_NAMESPACE = "http://www.for.gov.bc.ca/schema/esf";
   private static final String LEXIS_NAMESPACE = "http://www.for.gov.bc.ca/schema/lexis";
@@ -61,7 +61,7 @@ public class LexisXmlImportService {
       "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd";
   private static final String EXPECTED_LEXIS_SCHEMA_LOCATION =
       "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd";
-  private static final String UPLOAD_TYPE = "lexisXml";
+  private static final String UPLOAD_TYPE = "applicationSubmission";
   private static final String ACCEPTED = "accepted";
   private static final String REJECTED = "rejected";
   private static final String VALIDATED = "validated";
@@ -106,18 +106,18 @@ public class LexisXmlImportService {
   private final ObjectMapper objectMapper;
 
   @Autowired
-  public LexisXmlImportService(
+  public ApplicationSubmissionImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       ObjectMapper objectMapper) {
     this(applicationDetailsServiceProvider, Clock.systemDefaultZone(), objectMapper);
   }
 
-  LexisXmlImportService(
+  ApplicationSubmissionImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider, Clock clock) {
     this(applicationDetailsServiceProvider, clock, new ObjectMapper());
   }
 
-  LexisXmlImportService(
+  ApplicationSubmissionImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       Clock clock,
       ObjectMapper objectMapper) {
@@ -126,11 +126,11 @@ public class LexisXmlImportService {
     this.objectMapper = objectMapper;
   }
 
-  public LexisXmlImportResultDto validateLexisXml(MultipartFile file) {
-    return validateLexisXml(file, null);
+  public ApplicationSubmissionImportResultDto validateApplicationSubmission(MultipartFile file) {
+    return validateApplicationSubmission(file, null);
   }
 
-  public LexisXmlImportResultDto validateLexisXml(MultipartFile file, String userReference) {
+  public ApplicationSubmissionImportResultDto validateApplicationSubmission(MultipartFile file, String userReference) {
     String fileName = resolveFileName(file);
     long fileSize = file == null ? 0L : file.getSize();
     String normalizedUserReference = normalizeUserReference(userReference);
@@ -146,7 +146,7 @@ public class LexisXmlImportService {
 
     ParsedSubmission submission = parsedUpload.submission();
     List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission);
-    LexisXmlSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
+    ApplicationSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
     ApplicationDetailsRpcService applicationDetailsService =
         applicationDetailsServiceProvider.getIfAvailable();
     if (applicationDetailsService == null) {
@@ -174,7 +174,7 @@ public class LexisXmlImportService {
           normalizedUserReference);
     }
 
-    return new LexisXmlImportResultDto(
+    return new ApplicationSubmissionImportResultDto(
         UPLOAD_TYPE,
         fileName,
         fileSize,
@@ -194,12 +194,12 @@ public class LexisXmlImportService {
   }
 
   @Transactional
-  public LexisXmlImportResultDto importLexisXml(MultipartFile file, String userId) {
-    return importLexisXml(file, userId, null);
+  public ApplicationSubmissionImportResultDto importApplicationSubmission(MultipartFile file, String userId) {
+    return importApplicationSubmission(file, userId, null);
   }
 
   @Transactional
-  public LexisXmlImportResultDto importLexisXml(MultipartFile file, String userId, String userReference) {
+  public ApplicationSubmissionImportResultDto importApplicationSubmission(MultipartFile file, String userId, String userReference) {
     String fileName = resolveFileName(file);
     long fileSize = file == null ? 0L : file.getSize();
     String normalizedUserReference = normalizeUserReference(userReference);
@@ -215,7 +215,7 @@ public class LexisXmlImportService {
 
     ParsedSubmission submission = parsedUpload.submission();
     List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission);
-    LexisXmlSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
+    ApplicationSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
 
     ApplicationDetailsRpcService applicationDetailsService =
         applicationDetailsServiceProvider.getIfAvailable();
@@ -301,7 +301,7 @@ public class LexisXmlImportService {
       importedScales++;
     }
 
-    return new LexisXmlImportResultDto(
+    return new ApplicationSubmissionImportResultDto(
         UPLOAD_TYPE,
         fileName,
         fileSize,
@@ -339,7 +339,7 @@ public class LexisXmlImportService {
               ? parseGeoJson(uploadedSubmission.bytes())
               : parse(uploadedSubmission.bytes());
       return ParsedUpload.valid(uploadedSubmission, submission);
-    } catch (LexisXmlImportException ex) {
+    } catch (ApplicationSubmissionImportException ex) {
       return ParsedUpload.rejected(rejected(fileName, fileSize, ex.errors(), List.of()));
     } catch (Exception ex) {
       LOGGER.warn(
@@ -378,13 +378,13 @@ public class LexisXmlImportService {
         return new UploadedLexisSubmission(bytes, format, List.of());
       }
     }
-    throw new LexisXmlImportException(
+    throw new ApplicationSubmissionImportException(
         List.of("The LEXIS application submission file must be an XML, GeoJSON, JSON, or ZIP file."));
   }
 
   private UploadedLexisSubmission readZippedLexisSubmission(MultipartFile file, String fileName) throws Exception {
     if (!hasZipHeader(file)) {
-      throw new LexisXmlImportException(List.of("The uploaded Zip file is corrupt, and cannot be read."));
+      throw new ApplicationSubmissionImportException(List.of("The uploaded Zip file is corrupt, and cannot be read."));
     }
 
     List<String> importEntryNames = new ArrayList<>();
@@ -415,19 +415,19 @@ public class LexisXmlImportService {
         zipInputStream.closeEntry();
       }
     } catch (ZipException ex) {
-      throw new LexisXmlImportException(List.of("The uploaded Zip file is corrupt, and cannot be read."));
+      throw new ApplicationSubmissionImportException(List.of("The uploaded Zip file is corrupt, and cannot be read."));
     }
 
     if (!unexpectedEntryNames.isEmpty()) {
-      throw new LexisXmlImportException(
+      throw new ApplicationSubmissionImportException(
           List.of("The ZIP file must contain only one LEXIS XML or GeoJSON application submission file."));
     }
     if (importEntryNames.isEmpty() || importBytes == null || importFormat == null) {
-      throw new LexisXmlImportException(
+      throw new ApplicationSubmissionImportException(
           List.of("The ZIP file must contain one LEXIS XML or GeoJSON application submission file."));
     }
     if (importEntryNames.size() > 1) {
-      throw new LexisXmlImportException(
+      throw new ApplicationSubmissionImportException(
           List.of("The ZIP file must contain exactly one LEXIS XML or GeoJSON application submission file."));
     }
 
@@ -510,13 +510,13 @@ public class LexisXmlImportService {
     while ((bytesRead = inputStream.read(buffer)) >= 0) {
       totalBytes += bytesRead;
       if (totalBytes > MAX_IMPORT_BYTES) {
-        throw new LexisXmlImportException(
+        throw new ApplicationSubmissionImportException(
             List.of("The LEXIS application submission file must be 20 MB or smaller."));
       }
       outputStream.write(buffer, 0, bytesRead);
     }
     if (totalBytes == 0L) {
-      throw new LexisXmlImportException(List.of("The LEXIS application submission file is empty."));
+      throw new ApplicationSubmissionImportException(List.of("The LEXIS application submission file is empty."));
     }
     return outputStream.toByteArray();
   }
@@ -529,17 +529,17 @@ public class LexisXmlImportService {
       builder.setErrorHandler(new QuietXmlErrorHandler());
       document = builder.parse(inputStream);
     } catch (SAXParseException ex) {
-      throw new LexisXmlImportException(List.of(formatXmlParseError(ex)));
+      throw new ApplicationSubmissionImportException(List.of(formatXmlParseError(ex)));
     }
     return parseDocument(document);
   }
 
-  private ParsedSubmission parseDocument(Document document) throws LexisXmlImportException {
+  private ParsedSubmission parseDocument(Document document) throws ApplicationSubmissionImportException {
     Element root = document.getDocumentElement();
     List<String> errors = new ArrayList<>();
     Element lexisSubmission = resolveLexisSubmissionPayload(root, errors);
     if (lexisSubmission == null) {
-      throw new LexisXmlImportException(errors);
+      throw new ApplicationSubmissionImportException(errors);
     }
 
     Element applicant =
@@ -668,7 +668,7 @@ public class LexisXmlImportService {
             .toList();
 
     if (!errors.isEmpty()) {
-      throw new LexisXmlImportException(errors);
+      throw new ApplicationSubmissionImportException(errors);
     }
 
     return new ParsedSubmission(
@@ -693,18 +693,18 @@ public class LexisXmlImportService {
         scaleLines);
   }
 
-  private ParsedSubmission parseGeoJson(byte[] geoJsonBytes) throws LexisXmlImportException {
+  private ParsedSubmission parseGeoJson(byte[] geoJsonBytes) throws ApplicationSubmissionImportException {
     JsonNode root;
     try {
       root = objectMapper.readTree(geoJsonBytes);
     } catch (Exception ex) {
-      throw new LexisXmlImportException(List.of("The GeoJSON file is not well-formed JSON."));
+      throw new ApplicationSubmissionImportException(List.of("The GeoJSON file is not well-formed JSON."));
     }
 
     List<String> errors = new ArrayList<>();
     if (root == null || !root.isObject()) {
       errors.add("The GeoJSON file must contain a FeatureCollection object.");
-      throw new LexisXmlImportException(errors);
+      throw new ApplicationSubmissionImportException(errors);
     }
     if (!GEOJSON_FEATURE_COLLECTION.equals(jsonScalarText(root.get("type")))) {
       errors.add("The GeoJSON type must be FeatureCollection.");
@@ -713,7 +713,7 @@ public class LexisXmlImportService {
     JsonNode lexis = requiredJsonObject(root, "lexis", "GeoJSON lexis metadata", errors);
     JsonNode features = requiredJsonArray(root, "features", "GeoJSON features", errors);
     if (!errors.isEmpty()) {
-      throw new LexisXmlImportException(errors);
+      throw new ApplicationSubmissionImportException(errors);
     }
 
     try {
@@ -721,14 +721,14 @@ public class LexisXmlImportService {
       Element lexisSubmission = document.getDocumentElement();
       appendGeoJsonSubmissionContent(document, lexisSubmission, lexis, features, errors);
       if (!errors.isEmpty()) {
-        throw new LexisXmlImportException(errors);
+        throw new ApplicationSubmissionImportException(errors);
       }
       return parseDocument(document);
-    } catch (LexisXmlImportException ex) {
+    } catch (ApplicationSubmissionImportException ex) {
       throw ex;
     } catch (Exception ex) {
       LOGGER.warn("LEXIS GeoJSON import failed while preparing validation: {}", ex.getMessage());
-      throw new LexisXmlImportException(List.of("The GeoJSON file could not be parsed."));
+      throw new ApplicationSubmissionImportException(List.of("The GeoJSON file could not be parsed."));
     }
   }
 
@@ -1168,8 +1168,8 @@ public class LexisXmlImportService {
         submission.speciesCodes());
   }
 
-  private LexisXmlSubmissionSummaryDto toSubmissionSummary(ParsedSubmission submission) {
-    return new LexisXmlSubmissionSummaryDto(
+  private ApplicationSubmissionSummaryDto toSubmissionSummary(ParsedSubmission submission) {
+    return new ApplicationSubmissionSummaryDto(
         submission.ownerClientNumber(),
         submission.ownerClientLocationCode(),
         submission.ownerContactName(),
@@ -1415,12 +1415,12 @@ public class LexisXmlImportService {
     return DEFAULT_IMPORT_REMARK + "\nUser reference: " + normalizedUserReference;
   }
 
-  private LexisXmlImportResultDto withUserReference(
-      LexisXmlImportResultDto result, String userReference) {
+  private ApplicationSubmissionImportResultDto withUserReference(
+      ApplicationSubmissionImportResultDto result, String userReference) {
     if (userReference == null || result == null) {
       return result;
     }
-    return new LexisXmlImportResultDto(
+    return new ApplicationSubmissionImportResultDto(
         result.uploadType(),
         result.fileName(),
         result.fileSize(),
@@ -1443,33 +1443,33 @@ public class LexisXmlImportService {
     }
   }
 
-  private LexisXmlImportResultDto rejected(
+  private ApplicationSubmissionImportResultDto rejected(
       String fileName, long fileSize, List<String> errors, List<String> warnings) {
     return rejected(fileName, fileSize, errors, warnings, null);
   }
 
-  private LexisXmlImportResultDto rejected(
+  private ApplicationSubmissionImportResultDto rejected(
       String fileName,
       long fileSize,
       List<String> errors,
       List<String> warnings,
-      LexisXmlSubmissionSummaryDto submissionSummary) {
+      ApplicationSubmissionSummaryDto submissionSummary) {
     return rejected(fileName, fileSize, errors, warnings, submissionSummary, null);
   }
 
-  private LexisXmlImportResultDto rejected(
+  private ApplicationSubmissionImportResultDto rejected(
       String fileName,
       long fileSize,
       List<String> errors,
       List<String> warnings,
-      LexisXmlSubmissionSummaryDto submissionSummary,
+      ApplicationSubmissionSummaryDto submissionSummary,
       String userReference) {
     List<String> normalizedErrors = errors == null ? List.of() : errors;
     List<String> normalizedWarnings = warnings == null ? List.of() : warnings;
     String detail =
         normalizedErrors.isEmpty() ? "No rejection reason was returned." : normalizedErrors.get(0);
     LOGGER.warn("LEXIS application submission rejected for [{}]: {}", fileName, detail);
-    return new LexisXmlImportResultDto(
+    return new ApplicationSubmissionImportResultDto(
         UPLOAD_TYPE,
         fileName,
         fileSize,
@@ -1494,12 +1494,12 @@ public class LexisXmlImportService {
   private record ParsedUpload(
       UploadedLexisSubmission uploadedSubmission,
       ParsedSubmission submission,
-      LexisXmlImportResultDto rejection) {
+      ApplicationSubmissionImportResultDto rejection) {
     static ParsedUpload valid(UploadedLexisSubmission uploadedSubmission, ParsedSubmission submission) {
       return new ParsedUpload(uploadedSubmission, submission, null);
     }
 
-    static ParsedUpload rejected(LexisXmlImportResultDto rejection) {
+    static ParsedUpload rejected(ApplicationSubmissionImportResultDto rejection) {
       return new ParsedUpload(null, null, rejection);
     }
   }
@@ -1551,10 +1551,10 @@ public class LexisXmlImportService {
     }
   }
 
-  private static class LexisXmlImportException extends Exception {
+  private static class ApplicationSubmissionImportException extends Exception {
     private final List<String> errors;
 
-    LexisXmlImportException(List<String> errors) {
+    ApplicationSubmissionImportException(List<String> errors) {
       this.errors = List.copyOf(errors);
     }
 

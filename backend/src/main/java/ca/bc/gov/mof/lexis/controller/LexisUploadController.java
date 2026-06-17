@@ -1,9 +1,9 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
-import ca.bc.gov.mof.lexis.dto.upload.LexisXmlImportResultDto;
+import ca.bc.gov.mof.lexis.service.upload.ApplicationSubmissionImportService;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
-import ca.bc.gov.mof.lexis.service.upload.LexisXmlImportService;
 import java.math.BigDecimal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,13 +27,13 @@ public class LexisUploadController {
   private static final Logger LOGGER = LoggerFactory.getLogger(LexisUploadController.class);
 
   private final ObjectProvider<LexisUploadService> uploadServiceProvider;
-  private final ObjectProvider<LexisXmlImportService> xmlImportServiceProvider;
+  private final ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider;
 
   public LexisUploadController(
       ObjectProvider<LexisUploadService> uploadServiceProvider,
-      ObjectProvider<LexisXmlImportService> xmlImportServiceProvider) {
+      ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider) {
     this.uploadServiceProvider = uploadServiceProvider;
-    this.xmlImportServiceProvider = xmlImportServiceProvider;
+    this.applicationSubmissionImportServiceProvider = applicationSubmissionImportServiceProvider;
   }
 
   @PostMapping(
@@ -178,9 +178,13 @@ public class LexisUploadController {
   }
 
   @PostMapping(
-      value = {"/uploads/lexis-xml", "/admin/uploads/lexis-xml"},
+      value = {
+        "/application-submissions",
+        "/uploads/lexis-xml",
+        "/admin/uploads/lexis-xml"
+      },
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public ResponseEntity<LexisXmlImportResultDto> lexisXmlUpload(
+  public ResponseEntity<ApplicationSubmissionImportResultDto> applicationSubmissionUpload(
       @RequestParam(name = "file", required = false) MultipartFile file,
       @RequestParam(name = "formFile", required = false) MultipartFile formFile,
       @RequestParam(name = "userReference", required = false) String userReference,
@@ -190,21 +194,28 @@ public class LexisUploadController {
       return ResponseEntity.badRequest().build();
     }
 
-    LexisXmlImportService service = xmlImportServiceProvider.getIfAvailable();
+    ApplicationSubmissionImportService service =
+        applicationSubmissionImportServiceProvider.getIfAvailable();
     if (service == null) {
-      LOGGER.warn("LEXIS XML import service unavailable - returning no content for lexisXmlUpload");
+      LOGGER.warn(
+          "LEXIS application submission import service unavailable - returning no content for applicationSubmissionUpload");
       return ResponseEntity.noContent().build();
     }
 
-    LexisXmlImportResultDto result =
-        service.importLexisXml(uploadFile, resolveEntryUserId(authentication), userReference);
-    return ResponseEntity.status(xmlImportResponseStatus(result)).body(result);
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
+            uploadFile, resolveEntryUserId(authentication), userReference);
+    return ResponseEntity.status(applicationSubmissionResponseStatus(result)).body(result);
   }
 
   @PostMapping(
-      value = {"/uploads/lexis-xml/validation", "/admin/uploads/lexis-xml/validation"},
+      value = {
+        "/application-submissions/validation",
+        "/uploads/lexis-xml/validation",
+        "/admin/uploads/lexis-xml/validation"
+      },
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public ResponseEntity<LexisXmlImportResultDto> lexisXmlValidation(
+  public ResponseEntity<ApplicationSubmissionImportResultDto> applicationSubmissionValidation(
       @RequestParam(name = "file", required = false) MultipartFile file,
       @RequestParam(name = "formFile", required = false) MultipartFile formFile,
       @RequestParam(name = "userReference", required = false) String userReference) {
@@ -213,14 +224,17 @@ public class LexisUploadController {
       return ResponseEntity.badRequest().build();
     }
 
-    LexisXmlImportService service = xmlImportServiceProvider.getIfAvailable();
+    ApplicationSubmissionImportService service =
+        applicationSubmissionImportServiceProvider.getIfAvailable();
     if (service == null) {
-      LOGGER.warn("LEXIS XML import service unavailable - returning no content for lexisXmlValidation");
+      LOGGER.warn(
+          "LEXIS application submission import service unavailable - returning no content for applicationSubmissionValidation");
       return ResponseEntity.noContent().build();
     }
 
-    LexisXmlImportResultDto result = service.validateLexisXml(uploadFile, userReference);
-    return ResponseEntity.status(xmlImportResponseStatus(result)).body(result);
+    ApplicationSubmissionImportResultDto result =
+        service.validateApplicationSubmission(uploadFile, userReference);
+    return ResponseEntity.status(applicationSubmissionResponseStatus(result)).body(result);
   }
 
   private String resolveEntryUserId(Authentication authentication) {
@@ -244,7 +258,7 @@ public class LexisUploadController {
     return ResponseEntity.status(status).body(result);
   }
 
-  private HttpStatus xmlImportResponseStatus(LexisXmlImportResultDto result) {
+  private HttpStatus applicationSubmissionResponseStatus(ApplicationSubmissionImportResultDto result) {
     return "accepted".equalsIgnoreCase(result.status()) || "validated".equalsIgnoreCase(result.status())
         ? HttpStatus.OK
         : HttpStatus.UNPROCESSABLE_ENTITY;

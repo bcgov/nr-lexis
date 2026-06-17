@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { submitAdminUpload, validateLexisXmlUpload } from '@/service/admin-upload-service'
+import {
+  submitAdminUpload,
+  validateApplicationSubmissionUpload,
+} from '@/service/admin-upload-service'
 
 const postMock = vi.fn()
 
@@ -87,38 +90,37 @@ describe('admin-upload-service', () => {
     expect(formData.get('fileDescription')).toBe('Invoice attachment')
   })
 
-  it('posts LEXIS XML imports to the XML import endpoint', async () => {
+  it('posts application submissions to the application submission endpoint', async () => {
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
 
-    await submitAdminUpload('lexisXml', {
+    await submitAdminUpload('applicationSubmission', {
       file,
-      fileDescription: 'LEXIS XML submission',
       userReference: 'CLIENT-REF-1',
     })
 
     const [path, payload] = postMock.mock.calls[0]
 
-    expect(path).toBe('/lexis/admin/uploads/lexis-xml')
+    expect(path).toBe('/lexis/application-submissions')
     const formData = payload as FormData
-    expect(formData.get('fileDescription')).toBe('LEXIS XML submission')
+    expect(formData.has('fileDescription')).toBe(false)
     expect(formData.get('userReference')).toBe('CLIENT-REF-1')
     const uploadedFile = formData.get('formFile') as File
     expect(uploadedFile.name).toBe('submission.xml')
   })
 
-  it('posts LEXIS XML validation to the XML validation endpoint', async () => {
+  it('posts application submission validation to the validation endpoint', async () => {
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
 
-    await validateLexisXmlUpload({
+    await validateApplicationSubmissionUpload({
       file,
-      fileDescription: '',
       userReference: 'CLIENT-REF-1',
     })
 
     const [path, payload] = postMock.mock.calls[0]
 
-    expect(path).toBe('/lexis/admin/uploads/lexis-xml/validation')
+    expect(path).toBe('/lexis/application-submissions/validation')
     const formData = payload as FormData
+    expect(formData.has('fileDescription')).toBe(false)
     expect(formData.get('userReference')).toBe('CLIENT-REF-1')
     const uploadedFile = formData.get('formFile') as File
     expect(uploadedFile.name).toBe('submission.xml')

@@ -748,7 +748,31 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void lexisXmlUploadShouldAllowCreateApplicationRole() throws Exception {
+  void applicationSubmissionUploadShouldAllowCreateApplicationRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/application-submissions")
+                .file(file)
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isUnprocessableEntity());
+  }
+
+  @Test
+  void applicationSubmissionUploadShouldAllowAdminRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/application-submissions")
+                .file(file)
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isUnprocessableEntity());
+  }
+
+  @Test
+  void legacyApplicationSubmissionUploadAliasShouldAllowCreateApplicationRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
@@ -760,60 +784,48 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void lexisXmlUploadShouldAllowAdminRole() throws Exception {
+  void applicationSubmissionUploadShouldRejectReadOnlyRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
     mockMvc.perform(
-            multipart("/api/lexis/admin/uploads/lexis-xml")
-                .file(file)
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
-        .andExpect(status().isUnprocessableEntity());
-  }
-
-  @Test
-  void lexisXmlUploadShouldRejectReadOnlyRole() throws Exception {
-    MockMultipartFile file =
-        new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
-
-    mockMvc.perform(
-            multipart("/api/lexis/admin/uploads/lexis-xml")
+            multipart("/api/lexis/application-submissions")
                 .file(file)
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
   }
 
   @Test
-  void lexisXmlValidationShouldAllowCreateApplicationRole() throws Exception {
+  void applicationSubmissionValidationShouldAllowCreateApplicationRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
     mockMvc.perform(
-            multipart("/api/lexis/admin/uploads/lexis-xml/validation")
+            multipart("/api/lexis/application-submissions/validation")
                 .file(file)
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isUnprocessableEntity());
   }
 
   @Test
-  void lexisXmlValidationShouldAllowAdminRole() throws Exception {
+  void applicationSubmissionValidationShouldAllowAdminRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
     mockMvc.perform(
-            multipart("/api/lexis/admin/uploads/lexis-xml/validation")
+            multipart("/api/lexis/application-submissions/validation")
                 .file(file)
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
         .andExpect(status().isUnprocessableEntity());
   }
 
   @Test
-  void lexisXmlValidationShouldRejectReadOnlyRole() throws Exception {
+  void applicationSubmissionValidationShouldRejectReadOnlyRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
     mockMvc.perform(
-            multipart("/api/lexis/admin/uploads/lexis-xml/validation")
+            multipart("/api/lexis/application-submissions/validation")
                 .file(file)
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());

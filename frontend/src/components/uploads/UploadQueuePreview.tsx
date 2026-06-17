@@ -30,6 +30,7 @@ type UploadQueuePreviewProps = {
   submittingLabel?: string
   removeLabel?: string
   pendingMessage?: string
+  canRemoveItem?: (item: UploadQueueItem) => boolean
   renderCompleteAction?: (item: UploadQueueItem) => ReactNode
 }
 
@@ -60,6 +61,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
   submittingLabel = 'Submitting...',
   removeLabel = 'Remove',
   pendingMessage = 'Not submitted yet.',
+  canRemoveItem = () => true,
   renderCompleteAction,
 }) => {
   const [queueFilter, setQueueFilter] = useState('')
@@ -123,7 +125,9 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
           <p>
             {items.length === 0
               ? emptyDescription
-              : `Review ${selectedItemLabel} before submitting.`}
+              : `Review ${selectedItemLabel} before ${
+                  isSubmissionQueue ? 'finalizing' : 'submitting'
+                }.`}
           </p>
         </div>
         <div className="admin-upload-preview-actions">
@@ -208,14 +212,16 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
                     <td>
                       <div className="admin-upload-row-actions">
                         {renderCompleteAction?.(item)}
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          onClick={() => onRemove(item.id)}
-                          disabled={isSubmitting && item.status === 'uploading'}
-                        >
-                          {removeLabel}
-                        </Button>
+                        {canRemoveItem(item) && (
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            onClick={() => onRemove(item.id)}
+                            disabled={isSubmitting && item.status === 'uploading'}
+                          >
+                            {removeLabel}
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

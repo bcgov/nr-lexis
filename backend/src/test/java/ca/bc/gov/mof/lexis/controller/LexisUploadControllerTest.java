@@ -6,9 +6,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
-import ca.bc.gov.mof.lexis.dto.upload.LexisXmlImportResultDto;
+import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
-import ca.bc.gov.mof.lexis.service.upload.LexisXmlImportService;
+import ca.bc.gov.mof.lexis.service.upload.ApplicationSubmissionImportService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -30,9 +30,9 @@ import org.springframework.web.multipart.MultipartFile;
 class LexisUploadControllerTest {
 
   @Mock private ObjectProvider<LexisUploadService> uploadServiceProvider;
-  @Mock private ObjectProvider<LexisXmlImportService> xmlImportServiceProvider;
+  @Mock private ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider;
   @Mock private LexisUploadService uploadService;
-  @Mock private LexisXmlImportService xmlImportService;
+  @Mock private ApplicationSubmissionImportService applicationSubmissionImportService;
 
   @Test
   void uploadShouldReturnBadRequestForEmptyFile() {
@@ -239,15 +239,15 @@ class LexisUploadControllerTest {
   }
 
   @Test
-  void lexisXmlUploadShouldDelegateToImportService() {
-    when(xmlImportServiceProvider.getIfAvailable()).thenReturn(xmlImportService);
+  void applicationSubmissionUploadShouldDelegateToImportService() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
     LexisUploadController controller = controller();
     MultipartFile file = sampleXmlFile();
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
-    LexisXmlImportResultDto payload =
-        new LexisXmlImportResultDto(
-            "lexisXml",
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
             "submission.xml",
             file.getSize(),
             "accepted",
@@ -257,24 +257,24 @@ class LexisUploadControllerTest {
             3,
             List.of(),
             List.of());
-    when(xmlImportService.importLexisXml(file, "jsmith", "CLIENT-REF-1")).thenReturn(payload);
+    when(applicationSubmissionImportService.importApplicationSubmission(file, "jsmith", "CLIENT-REF-1")).thenReturn(payload);
 
-    ResponseEntity<LexisXmlImportResultDto> response =
-        controller.lexisXmlUpload(file, null, "CLIENT-REF-1", authentication);
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.applicationSubmissionUpload(file, null, "CLIENT-REF-1", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(xmlImportService).importLexisXml(file, "jsmith", "CLIENT-REF-1");
+    verify(applicationSubmissionImportService).importApplicationSubmission(file, "jsmith", "CLIENT-REF-1");
   }
 
   @Test
-  void lexisXmlUploadShouldReturnUnprocessableEntityForRejectedImport() {
-    when(xmlImportServiceProvider.getIfAvailable()).thenReturn(xmlImportService);
+  void applicationSubmissionUploadShouldReturnUnprocessableEntityForRejectedImport() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
     LexisUploadController controller = controller();
     MultipartFile file = sampleXmlFile();
-    LexisXmlImportResultDto payload =
-        new LexisXmlImportResultDto(
-            "lexisXml",
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
             "submission.xml",
             file.getSize(),
             "rejected",
@@ -284,23 +284,23 @@ class LexisUploadControllerTest {
             0,
             List.of("Invalid XML"),
             List.of());
-    when(xmlImportService.importLexisXml(file, null, null)).thenReturn(payload);
+    when(applicationSubmissionImportService.importApplicationSubmission(file, null, null)).thenReturn(payload);
 
-    ResponseEntity<LexisXmlImportResultDto> response =
-        controller.lexisXmlUpload(file, null, null, null);
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.applicationSubmissionUpload(file, null, null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
     assertThat(response.getBody()).isEqualTo(payload);
   }
 
   @Test
-  void lexisXmlValidationShouldDelegateToValidationService() {
-    when(xmlImportServiceProvider.getIfAvailable()).thenReturn(xmlImportService);
+  void applicationSubmissionValidationShouldDelegateToValidationService() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
     LexisUploadController controller = controller();
     MultipartFile file = sampleXmlFile();
-    LexisXmlImportResultDto payload =
-        new LexisXmlImportResultDto(
-            "lexisXml",
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
             "submission.xml",
             file.getSize(),
             "validated",
@@ -310,24 +310,24 @@ class LexisUploadControllerTest {
             3,
             List.of(),
             List.of());
-    when(xmlImportService.validateLexisXml(file, "CLIENT-REF-1")).thenReturn(payload);
+    when(applicationSubmissionImportService.validateApplicationSubmission(file, "CLIENT-REF-1")).thenReturn(payload);
 
-    ResponseEntity<LexisXmlImportResultDto> response =
-        controller.lexisXmlValidation(file, null, "CLIENT-REF-1");
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.applicationSubmissionValidation(file, null, "CLIENT-REF-1");
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(xmlImportService).validateLexisXml(file, "CLIENT-REF-1");
+    verify(applicationSubmissionImportService).validateApplicationSubmission(file, "CLIENT-REF-1");
   }
 
   @Test
-  void lexisXmlValidationShouldReturnUnprocessableEntityForRejectedValidation() {
-    when(xmlImportServiceProvider.getIfAvailable()).thenReturn(xmlImportService);
+  void applicationSubmissionValidationShouldReturnUnprocessableEntityForRejectedValidation() {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
     LexisUploadController controller = controller();
     MultipartFile file = sampleXmlFile();
-    LexisXmlImportResultDto payload =
-        new LexisXmlImportResultDto(
-            "lexisXml",
+    ApplicationSubmissionImportResultDto payload =
+        new ApplicationSubmissionImportResultDto(
+            "applicationSubmission",
             "submission.xml",
             file.getSize(),
             "rejected",
@@ -337,10 +337,10 @@ class LexisUploadControllerTest {
             0,
             List.of("Invalid XML"),
             List.of());
-    when(xmlImportService.validateLexisXml(file, null)).thenReturn(payload);
+    when(applicationSubmissionImportService.validateApplicationSubmission(file, null)).thenReturn(payload);
 
-    ResponseEntity<LexisXmlImportResultDto> response =
-        controller.lexisXmlValidation(file, null, null);
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.applicationSubmissionValidation(file, null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
     assertThat(response.getBody()).isEqualTo(payload);
@@ -364,6 +364,6 @@ class LexisUploadControllerTest {
   }
 
   private LexisUploadController controller() {
-    return new LexisUploadController(uploadServiceProvider, xmlImportServiceProvider);
+    return new LexisUploadController(uploadServiceProvider, applicationSubmissionImportServiceProvider);
   }
 }
