@@ -227,6 +227,18 @@ const lessThanOrEqualFieldError = (
 
 const roundOneDecimal = (value: number): number => Math.round(value * 10) / 10
 
+const formatPieceCount = (value: number | string): string =>
+  typeof value === 'number' ? value.toLocaleString() : value
+
+const formatScaleLookupResult = (row: {
+  timberMark: string
+  species: string
+  grade: string
+  pieces: number | string
+  volume: string
+}): string =>
+  `${row.timberMark} ${row.species}/${row.grade} ${formatPieceCount(row.pieces)} pcs ${row.volume} m3`
+
 const scaleVolumeWithinPackageFieldError = (
   value: string,
   remainingVolume: number | null,
@@ -1041,7 +1053,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       setScaleActionErrorMessage('')
       setShowScaleValidationErrors(false)
       setItemsInfoMessage(`Scale ${result.result.id} added.`)
-      await onDetailChanged()
+      setScaleLookupResult('')
       await loadApplicationScaleSummary()
       await loadPackageItems(selectedPackageNumber)
     } catch {
@@ -1064,7 +1076,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
       }
       setScales((current) => current.filter((item) => item.id !== scaleId))
       setItemsInfoMessage(`Scale ${scaleId} deleted.`)
-      await onDetailChanged()
+      setScaleLookupResult('')
       await loadApplicationScaleSummary()
       await loadPackageItems(selectedPackageNumber)
     } catch {
@@ -1075,21 +1087,36 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   }
 
   const onLookupScale = async () => {
-    if (!scaleLookupId.trim()) {
+    const lookupValue = scaleLookupId.trim()
+    if (!lookupValue) {
       return
     }
     setItemsErrorMessage('')
     setItemsInfoMessage('')
     setScaleLookupResult('')
+
+    const normalizedLookupValue = lookupValue.toUpperCase()
+    const matchingTimberMarkRows = scales.filter(
+      (row) => row.timberMark.trim().toUpperCase() === normalizedLookupValue,
+    )
+    if (matchingTimberMarkRows.length > 0) {
+      setScaleLookupResult(
+        `Found ${matchingTimberMarkRows.length} scale row${
+          matchingTimberMarkRows.length === 1 ? '' : 's'
+        } for timber mark ${lookupValue}: ${matchingTimberMarkRows
+          .map(formatScaleLookupResult)
+          .join('; ')}`,
+      )
+      return
+    }
+
     try {
-      const result = await fetchApplicationScaleDetails(scaleLookupId)
+      const result = await fetchApplicationScaleDetails(lookupValue)
       if (!result.success) {
         setScaleLookupResult('Scale not found.')
         return
       }
-      setScaleLookupResult(
-        `${result.timberMark} ${result.species}/${result.grade} ${result.pieces} pcs ${result.volume} m3`,
-      )
+      setScaleLookupResult(formatScaleLookupResult(result))
     } catch {
       setItemsErrorMessage('Unable to look up scale.')
     }
@@ -1673,6 +1700,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           </div>
           <div className="legacy-search-actions">
             <Button
+              type="button"
               kind="secondary"
               size="sm"
               disabled={!canManageItems || !selectedPackageNumber || isSavingScale}
@@ -1689,11 +1717,14 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           <div className="application-items-inline-form">
             <TextInput
               id="applicationItemsScaleLookup"
-              labelText="Scale ID"
+              labelText="Scale ID or timber mark"
               value={scaleLookupId}
-              onChange={(event) => setScaleLookupId(event.target.value)}
+              onChange={(event) => {
+                setScaleLookupId(event.target.value)
+                setScaleLookupResult('')
+              }}
             />
-            <Button kind="ghost" size="sm" onClick={() => void onLookupScale()}>
+            <Button type="button" kind="ghost" size="sm" onClick={() => void onLookupScale()}>
               Lookup Scale
             </Button>
           </div>
@@ -1722,6 +1753,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
                     <TableCell>{row.volume}</TableCell>
                     <TableCell>
                       <Button
+                        type="button"
                         kind="danger--ghost"
                         size="sm"
                         disabled={!canManageItems || deletingScaleId === row.id || row.permitted}
