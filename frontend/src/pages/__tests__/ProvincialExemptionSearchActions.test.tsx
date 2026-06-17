@@ -143,7 +143,7 @@ describe('Provincial Exemption Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('List From Date (YYYY-MM-DD)'), '2026-99-99')
+    await userEvent.type(screen.getByLabelText('List from date (YYYY-MM-DD)'), '2026-99-99')
 
     await waitFor(() => {
       expect(searchButton).toBeDisabled()

@@ -100,7 +100,7 @@ describe('Federal Search Actions', () => {
     await screen.findByText('FED-1001')
 
     const createExemptionButton = screen.getByRole('button', {
-      name: 'Create Exemption for Selected Applications',
+      name: 'Create exemption for Selected Applications',
     })
     expect(createExemptionButton).toBeDisabled()
 
@@ -148,7 +148,7 @@ describe('Federal Search Actions', () => {
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
     await userEvent.click(
-      screen.getByRole('button', { name: 'Create Exemption for Selected Applications' }),
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
     )
 
     await waitFor(() => {
@@ -169,7 +169,7 @@ describe('Federal Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Received From Date (YYYY-MM-DD)'), '2026-13-99')
+    await userEvent.type(screen.getByLabelText('Received from date (YYYY-MM-DD)'), '2026-13-99')
 
     await waitFor(() => {
       expect(searchButton).toBeDisabled()

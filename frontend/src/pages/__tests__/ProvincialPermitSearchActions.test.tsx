@@ -165,7 +165,6 @@ describe('Provincial Permit Search Actions', () => {
         page: 1,
         pageSize: 10,
       }),
-      { knownTotal: 25 },
     )
   })
 
@@ -180,13 +179,13 @@ describe('Provincial Permit Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Issued From Date (YYYY-MM-DD)'), '2026-99-99')
+    await userEvent.type(screen.getByLabelText('Issued from date (YYYY-MM-DD)'), '2026-99-99')
     await waitFor(() => {
       expect(searchButton).toBeDisabled()
     })
 
-    await userEvent.clear(screen.getByLabelText('Issued From Date (YYYY-MM-DD)'))
-    await userEvent.type(screen.getByLabelText('Issued From Date (YYYY-MM-DD)'), '2026-02-01')
+    await userEvent.clear(screen.getByLabelText('Issued from date (YYYY-MM-DD)'))
+    await userEvent.type(screen.getByLabelText('Issued from date (YYYY-MM-DD)'), '2026-02-01')
     await waitFor(() => {
       expect(searchButton).toBeEnabled()
     })

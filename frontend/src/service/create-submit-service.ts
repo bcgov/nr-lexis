@@ -39,6 +39,14 @@ const asString = (value: unknown): string | undefined => {
   return undefined
 }
 
+const asStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map((item) => asString(item)).filter((item): item is string => Boolean(item))
+  }
+  const singleValue = asString(value)
+  return singleValue ? [singleValue] : []
+}
+
 const toUrlEncodedParams = (payload: Record<string, string | undefined>): URLSearchParams => {
   const params = new URLSearchParams()
   Object.entries(payload).forEach(([key, value]) => {
@@ -138,21 +146,31 @@ const parseCreateResponse = (
 
   return {
     success,
-    message: '',
+    message: asString(payload.message) ?? '',
     createdId,
-    errors: [],
-    warnings: [],
+    errors: asStringArray(payload.errors),
+    warnings: asStringArray(payload.warnings),
   }
 }
 
-const buildFailureResult = (defaultMessage: string, error: unknown): CreateSubmissionResult => {
+const buildFailureResult = (
+  defaultMessage: string,
+  error: unknown,
+  unavailableMessage?: string,
+): CreateSubmissionResult => {
   if (axios.isAxiosError(error)) {
+    const payload = error.response?.data as LegacyCreateResponse | undefined
+    const status = error.response?.status
+    const message =
+      asString(payload?.message) ??
+      (status === 404 && unavailableMessage ? unavailableMessage : defaultMessage)
+
     return {
       success: false,
-      message: defaultMessage,
+      message,
       createdId: undefined,
-      errors: [],
-      warnings: [],
+      errors: asStringArray(payload?.errors),
+      warnings: asStringArray(payload?.warnings),
     }
   }
 
@@ -409,6 +427,7 @@ export const submitProvincialPermitCreate = async (
     return buildFailureResult(
       'Permit submission failed. Please review the form and try again. If the problem persists, contact support.',
       error,
+      'Unable to submit provincial permit create request. Submit endpoint is unavailable in this environment (status 404).',
     )
   }
 }

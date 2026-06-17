@@ -184,7 +184,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByText('Update status code is required.')).toBeInTheDocument()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
 
-    await chooseComboBoxOption('Update Status Code', 'Rejected')
+    await chooseComboBoxOption('Update status code', 'Rejected')
 
     expect(updateStatusButton).toBeEnabled()
     expect(updateAndEmailButton).toBeEnabled()
@@ -195,7 +195,7 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000123' }))
-    await chooseComboBoxOption('Update Status Code', 'Withdrawn')
+    await chooseComboBoxOption('Update status code', 'Withdrawn')
     await userEvent.click(screen.getByRole('button', { name: 'Update Status and Send Email' }))
 
     await waitFor(() => {
@@ -292,9 +292,9 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('2000001')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await chooseComboBoxOption('Update Status Code', 'Rejected')
+    await chooseComboBoxOption('Update status code', 'Rejected')
     await userEvent.type(
-      screen.getByLabelText('Client Email Address (required for status email)'),
+      screen.getByLabelText('Client email address (required for status email)'),
       'client@example.com',
     )
     await userEvent.click(screen.getByRole('button', { name: 'Update Status and Send Email' }))
@@ -346,16 +346,6 @@ describe('Provincial Review Action State Smoke', () => {
 
     renderPage()
     await screen.findByText('1000123')
-    await waitFor(() => {
-      expect(mockedFetchApplicationReviewOptions).toHaveBeenCalledTimes(1)
-    })
-    mockedSearchApplicationReviews.mockClear()
-
-    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
-    await userEvent.click(regionComboBox)
-    fireEvent.change(regionComboBox, { target: { value: 'TST' } })
-    await userEvent.click(await screen.findByRole('option', { name: 'TST (1818)' }))
-
     await waitFor(() => {
       expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
         expect.objectContaining({

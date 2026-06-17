@@ -290,10 +290,10 @@ const ProvincialExemptionPage: FC = () => {
 
   useEffect(() => {
     const isExemptionApprover =
-      capabilities.roles.includes('EXEMPTION_APPROVER') ||
-      capabilities.roles.includes('LEXIS_EXEMPTION_APPROVER')
+      capabilities?.roles.includes('EXEMPTION_APPROVER') ||
+      capabilities?.roles.includes('LEXIS_EXEMPTION_APPROVER')
     const hasSearchQuery = searchParams.toString().length > 0
-    const orgUnitNo = capabilities.orgUnitNo
+    const orgUnitNo = capabilities?.orgUnitNo
     const defaultRegion =
       orgUnitNo && regionOptions.some((option) => option.id === orgUnitNo) ? [orgUnitNo] : []
     if (
@@ -323,8 +323,8 @@ const ProvincialExemptionPage: FC = () => {
       )
     }
   }, [
-    capabilities.orgUnitNo,
-    capabilities.roles,
+    capabilities?.orgUnitNo,
+    capabilities?.roles,
     isLoading,
     regionOptions,
     searchParams,
