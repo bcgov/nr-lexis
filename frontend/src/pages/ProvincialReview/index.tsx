@@ -73,7 +73,7 @@ type ReviewActionStatus = {
   message: string
 }
 
-type ReviewStatusField = 'reviewStatusCode' | 'reviewStatusEmail'
+type ReviewStatusField = 'reviewStatusCode' | 'reviewStatusEmail' | 'reviewStatusRemark'
 
 const INITIAL_FILTERS: ApplicationReviewSearchFilters = {
   applicationNumber: '',
@@ -96,6 +96,7 @@ const EMPTY_RESULTS: ApplicationReviewSearchResponse = {
 }
 
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
+const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['REJ', 'WDN'])
 
 const SORT_COLUMNS: {
   id: ApplicationReviewSearchSortField
@@ -177,15 +178,21 @@ const ProvincialReviewPage: FC = () => {
     [selectedStatusCode],
   )
   const canSendStatusEmail = EMAIL_SUPPORTED_STATUS_CODES.has(normalizedStatusCode)
+  const selectedStatusRequiresRemark = REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedStatusCode)
+  const normalizedStatusRemark = statusRemark.trim()
+  const normalizedStatusEmailAddress = normalizeEmail(statusEmailAddress)
   const statusFieldErrors = useMemo<FieldErrors<ReviewStatusField>>(
     () => ({
       reviewStatusCode: requiredFieldError(selectedStatusCode, 'Update status code') ?? undefined,
+      reviewStatusRemark: selectedStatusRequiresRemark
+        ? requiredFieldError(statusRemark, 'Status remark')
+        : undefined,
       reviewStatusEmail:
         statusEmailAddress.trim() && !isValidEmail(statusEmailAddress)
           ? 'Enter a valid email address.'
           : undefined,
     }),
-    [selectedStatusCode, statusEmailAddress],
+    [selectedStatusCode, selectedStatusRequiresRemark, statusEmailAddress, statusRemark],
   )
 
   const markStatusFieldTouched = (field: ReviewStatusField): void => {
@@ -194,6 +201,18 @@ const ProvincialReviewPage: FC = () => {
 
   const statusFieldError = (field: ReviewStatusField): string | undefined =>
     getVisibleFieldError(field, statusFieldErrors, touchedStatusFields, showStatusValidationErrors)
+
+  const visibleStatusRemarkError =
+    statusFieldError('reviewStatusRemark') ??
+    (selectedStatusRequiresRemark && !normalizedStatusRemark
+      ? statusFieldErrors.reviewStatusRemark
+      : undefined)
+  const statusUpdateInputsReady = Boolean(normalizedStatusCode) && !visibleStatusRemarkError
+  const statusEmailInputsReady =
+    statusUpdateInputsReady &&
+    canSendStatusEmail &&
+    Boolean(normalizedStatusEmailAddress) &&
+    isValidEmail(normalizedStatusEmailAddress)
 
   const urlState = useMemo(() => {
     const urlFilters: ApplicationReviewSearchFilters = {
@@ -541,7 +560,16 @@ const ProvincialReviewPage: FC = () => {
       return
     }
 
-    const normalizedEmail = normalizeEmail(statusEmailAddress)
+    if (selectedStatusRequiresRemark && !normalizedStatusRemark) {
+      setShowStatusValidationErrors(true)
+      setReviewActionStatus({
+        kind: 'error',
+        message: 'Enter a status remark before rejecting or withdrawing applications.',
+      })
+      return
+    }
+
+    const normalizedEmail = normalizedStatusEmailAddress
     if (sendEmail) {
       if (!canSendStatusEmail) {
         setReviewActionStatus({
@@ -570,7 +598,7 @@ const ProvincialReviewPage: FC = () => {
         try {
           const updateResponse = await updateApplicationReviewStatus(applicationNumber, {
             statusCode: normalizedStatusCode,
-            remark: statusRemark,
+            remark: normalizedStatusRemark,
             clientEmailAddress: normalizedEmail,
           })
 
@@ -581,7 +609,7 @@ const ProvincialReviewPage: FC = () => {
           if (sendEmail && updateSuccess) {
             const emailResponse = await sendApplicationReviewStatusEmail(applicationNumber, {
               statusCode: normalizedStatusCode,
-              remark: statusRemark,
+              remark: normalizedStatusRemark,
               clientEmailAddress: normalizedEmail,
             })
             emailSuccess = emailResponse.success
@@ -786,7 +814,8 @@ const ProvincialReviewPage: FC = () => {
                   submittingApproval ||
                   submittingStatusUpdate ||
                   selectedRowsCount === 0 ||
-                  !canApproveApplications
+                  !canApproveApplications ||
+                  !statusUpdateInputsReady
                 }
               >
                 Update Selected Status
@@ -799,7 +828,8 @@ const ProvincialReviewPage: FC = () => {
                   submittingApproval ||
                   submittingStatusUpdate ||
                   selectedRowsCount === 0 ||
-                  !canApproveApplications
+                  !canApproveApplications ||
+                  !statusEmailInputsReady
                 }
               >
                 Update Status and Send Email
@@ -808,8 +838,12 @@ const ProvincialReviewPage: FC = () => {
             <div className="legacy-search-actions">
               <TextArea
                 id="reviewStatusRemark"
-                labelText="Status remark"
+                labelText="Status remark (required for rejected or withdrawn)"
                 value={statusRemark}
+                invalid={Boolean(visibleStatusRemarkError)}
+                invalidText={visibleStatusRemarkError}
+                helperText="Required when rejecting or withdrawing applications."
+                onBlur={() => markStatusFieldTouched('reviewStatusRemark')}
                 onChange={(event) => {
                   setReviewActionStatus(null)
                   setStatusRemark(event.target.value)
