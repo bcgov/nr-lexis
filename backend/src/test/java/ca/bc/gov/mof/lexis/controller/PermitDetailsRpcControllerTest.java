@@ -38,6 +38,7 @@ import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import jakarta.servlet.http.HttpServletRequest;
@@ -463,16 +464,18 @@ class PermitDetailsRpcControllerTest {
   @Test
   void addPermitShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(request.getParameter(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
-    when(request.getParameter("permitNumber")).thenReturn("7000123");
-    when(request.getParameter("permitStatus")).thenReturn("ACT");
-    when(request.getParameter("permitSubmitDate")).thenReturn("2026-05-27");
-    when(request.getParameter("permitIssueDate")).thenReturn("2026-05-27");
-    when(request.getParameter("permitExpiryDate")).thenReturn("2026-06-27");
-    when(request.getParameter("exemptionNumber")).thenReturn("EX-700");
-    when(request.getParameter("region")).thenReturn("1835");
-    when(request.getParameter("permitTotalVolume")).thenReturn("100.0");
-    when(request.getParameter("permitTotalPieces")).thenReturn("25");
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitStatus", new String[] {"ACT"},
+                "permitSubmitDate", new String[] {"2026-05-27"},
+                "permitIssueDate", new String[] {"2026-05-27"},
+                "permitExpiryDate", new String[] {"2026-06-27"},
+                "exemptionNumber", new String[] {"EX-700"},
+                "region", new String[] {"1835"},
+                "permitTotalVolume", new String[] {"100.0"},
+                "permitTotalPieces", new String[] {"25"}));
 
     PermitMutationRpcResponseDto dto =
         new PermitMutationRpcResponseDto(
@@ -496,18 +499,31 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
+    org.mockito.ArgumentCaptor<PermitMutationRequestDto> requestCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRequestDto.class);
     verify(service)
         .addPermit(
-            org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class),
+            requestCaptor.capture(),
             org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().permitNumber()).isEqualTo("7000123");
+    assertThat(requestCaptor.getValue().permitStatus()).isEqualTo("ACT");
+    assertThat(requestCaptor.getValue().permitSubmitDate()).isEqualTo("2026-05-27");
+    assertThat(requestCaptor.getValue().permitIssueDate()).isEqualTo("2026-05-27");
+    assertThat(requestCaptor.getValue().permitExpiryDate()).isEqualTo("2026-06-27");
+    assertThat(requestCaptor.getValue().exemptionNumber()).isEqualTo("EX-700");
+    assertThat(requestCaptor.getValue().orgUnitNumber()).isEqualTo("1835");
+    assertThat(requestCaptor.getValue().permitTotalVolume()).isEqualTo("100.0");
+    assertThat(requestCaptor.getValue().permitNumberOfPieces()).isEqualTo("25");
   }
 
   @Test
   void updatePermitShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(request.getParameter(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
-    when(request.getParameter("permitNumber")).thenReturn("7000123");
-    when(request.getParameter("permitStatus")).thenReturn("PPD");
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitStatus", new String[] {"PPD"}));
 
     PermitMutationRpcResponseDto dto =
         new PermitMutationRpcResponseDto(
@@ -531,18 +547,24 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
+    org.mockito.ArgumentCaptor<PermitMutationRequestDto> requestCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRequestDto.class);
     verify(service)
         .updatePermit(
-            org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class),
+            requestCaptor.capture(),
             org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().permitNumber()).isEqualTo("7000123");
+    assertThat(requestCaptor.getValue().permitStatus()).isEqualTo("PPD");
   }
 
   @Test
   void updateShippingShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(request.getParameter(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
-    when(request.getParameter("permitNumber")).thenReturn("7000123");
-    when(request.getParameter("estimatedShippingDate")).thenReturn("2026-06-10");
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "estimatedShippingDate", new String[] {"2026-06-10"}));
 
     PermitMutationRpcResponseDto dto =
         new PermitMutationRpcResponseDto(
@@ -566,10 +588,14 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
+    org.mockito.ArgumentCaptor<PermitMutationRequestDto> requestCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRequestDto.class);
     verify(service)
         .updateShipping(
-            org.mockito.ArgumentMatchers.any(PermitMutationRequestDto.class),
+            requestCaptor.capture(),
             org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().permitNumber()).isEqualTo("7000123");
+    assertThat(requestCaptor.getValue().estimatedShippingDate()).isEqualTo("2026-06-10");
   }
 
   @Test

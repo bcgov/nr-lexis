@@ -58,10 +58,13 @@ class LexisAuthorizationServiceTest {
                 "LEXIS_READ_ONLY", List.of("/applicationSearch"),
                 "LEXIS_ADMIN", List.of("/lexisAgentAdmin")));
 
-    List<String> granted =
-        service.resolveGrantedActions(List.of("lexis_read_only", "READ_ONLY", "lexis_admin", "LEXIS_ADMIN"));
+    List<String> readOnlyGranted = service.resolveGrantedActions(List.of("lexis_read_only"));
+    List<String> adminGranted = service.resolveGrantedActions(List.of("lexis_admin", "LEXIS_ADMIN"));
+    List<String> legacyAliasGranted = service.resolveGrantedActions(List.of("READ_ONLY", "ADMIN"));
 
-    assertThat(granted).containsExactly("/applicationSearch", "/lexisAgentAdmin");
+    assertThat(readOnlyGranted).containsExactly("/applicationSearch");
+    assertThat(adminGranted).containsExactlyElementsOf(service.getKnownActions());
+    assertThat(legacyAliasGranted).isEmpty();
   }
 
   @Test
