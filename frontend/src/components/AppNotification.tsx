@@ -1,5 +1,12 @@
 import { type FC, useCallback, useEffect, useRef, useState, type PropsWithChildren } from 'react'
 import { InlineNotification, type InlineNotificationProps } from '@carbon/react'
+import {
+  genericActionFailureMessage,
+  sanitizeNotificationText,
+} from '@/utils/notification-messages'
+
+const MINIMUM_SUCCESS_AUTO_DISMISS_MS = 8000
+const PERSISTENT_NOTIFICATION_KINDS = new Set(['error', 'warning', 'warning-alt'])
 
 type AppNotificationProps = PropsWithChildren<
   Omit<InlineNotificationProps, 'onCloseButtonClick' | 'hideCloseButton'> & {
@@ -13,10 +20,34 @@ export const AppNotification: FC<AppNotificationProps> = ({
   onCloseButtonClick,
   autoDismissMs,
   pauseAutoDismissOnInteraction = true,
+  children,
+  kind,
+  subtitle,
+  title,
   ...notificationProps
 }) => {
   const [isPaused, setIsPaused] = useState(false)
   const timeoutRef = useRef<number | null>(null)
+  const normalizedKind = typeof kind === 'string' ? kind : ''
+  const isPersistentNotification = PERSISTENT_NOTIFICATION_KINDS.has(normalizedKind)
+  const hasNotificationAction = Boolean(
+    (notificationProps as { actionButtonLabel?: unknown; onActionButtonClick?: unknown })
+      .actionButtonLabel ||
+    (notificationProps as { actionButtonLabel?: unknown; onActionButtonClick?: unknown })
+      .onActionButtonClick,
+  )
+  const requestedAutoDismissMs =
+    autoDismissMs ?? (normalizedKind === 'success' ? MINIMUM_SUCCESS_AUTO_DISMISS_MS : undefined)
+  const effectiveAutoDismissMs =
+    !isPersistentNotification && !hasNotificationAction && requestedAutoDismissMs
+      ? Math.max(requestedAutoDismissMs, MINIMUM_SUCCESS_AUTO_DISMISS_MS)
+      : undefined
+  const resolvedTitle =
+    typeof title === 'string' ? sanitizeNotificationText(title, 'Notification') : title
+  const resolvedSubtitle =
+    typeof subtitle === 'string'
+      ? sanitizeNotificationText(subtitle, genericActionFailureMessage)
+      : subtitle
 
   const clearAutoDismiss = useCallback(() => {
     if (timeoutRef.current !== null) {
@@ -26,7 +57,7 @@ export const AppNotification: FC<AppNotificationProps> = ({
   }, [])
 
   useEffect(() => {
-    if (!onCloseButtonClick || !autoDismissMs) {
+    if (!onCloseButtonClick || !effectiveAutoDismissMs) {
       clearAutoDismiss()
       return
     }
@@ -37,10 +68,10 @@ export const AppNotification: FC<AppNotificationProps> = ({
 
     timeoutRef.current = window.setTimeout(() => {
       onCloseButtonClick()
-    }, autoDismissMs)
+    }, effectiveAutoDismissMs)
 
     return () => clearAutoDismiss()
-  }, [autoDismissMs, clearAutoDismiss, isPaused, onCloseButtonClick])
+  }, [clearAutoDismiss, effectiveAutoDismissMs, isPaused, onCloseButtonClick])
 
   const handleMouseEnter = useCallback(() => {
     if (pauseAutoDismissOnInteraction) {
@@ -75,9 +106,14 @@ export const AppNotification: FC<AppNotificationProps> = ({
     >
       <InlineNotification
         hideCloseButton={false}
+        kind={kind}
         onCloseButtonClick={onCloseButtonClick}
+        subtitle={resolvedSubtitle}
+        title={resolvedTitle}
         {...notificationProps}
-      />
+      >
+        {children}
+      </InlineNotification>
     </div>
   )
 }

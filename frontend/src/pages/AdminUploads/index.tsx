@@ -11,6 +11,8 @@ import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
   extractUploadErrorDetails,
+  GENERIC_SUBMISSION_FAILURE_MESSAGE,
+  GENERIC_UPLOAD_FAILURE_MESSAGE,
   getFileExtension,
 } from '@/components/uploads/uploadQueueHelpers'
 import type {
@@ -395,7 +397,9 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
     [uploadQueue],
   )
   const uploadInputLabel =
-    selectedWorkflowType === 'applicationSubmission' ? 'Application submission file' : 'Document File'
+    selectedWorkflowType === 'applicationSubmission'
+      ? 'Application submission file'
+      : 'Document File'
   const uploadAccept =
     selectedWorkflowType === 'applicationSubmission'
       ? '.xml,.zip,.geojson,.json,application/xml,text/xml,application/zip,application/json,application/geo+json'
@@ -407,11 +411,15 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
   const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
   const resolvedPageTitle =
     pageTitle ??
-    (selectedWorkflowType === 'applicationSubmission' ? 'Upload Application Submission' : 'Data Upload')
+    (selectedWorkflowType === 'applicationSubmission'
+      ? 'Upload Application Submission'
+      : 'Data Upload')
   const hasQueuedLexisSubmissions =
-    selectedWorkflowType === 'applicationSubmission' && uploadQueue.some((item) => item.status === 'queued')
+    selectedWorkflowType === 'applicationSubmission' &&
+    uploadQueue.some((item) => item.status === 'queued')
   const hasValidatedLexisSubmissions =
-    selectedWorkflowType === 'applicationSubmission' && uploadQueue.some((item) => item.status === 'validated')
+    selectedWorkflowType === 'applicationSubmission' &&
+    uploadQueue.some((item) => item.status === 'validated')
   const hasLockedLexisSubmissions =
     selectedWorkflowType === 'applicationSubmission' &&
     uploadQueue.some(
@@ -423,7 +431,8 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
       ? 'submission'
       : 'submissions'
   const isUploadInputLocked =
-    !hasUploadAccess || (selectedWorkflowType === 'applicationSubmission' && hasLockedLexisSubmissions)
+    !hasUploadAccess ||
+    (selectedWorkflowType === 'applicationSubmission' && hasLockedLexisSubmissions)
   const submitButtonLabel =
     selectedWorkflowType === 'applicationSubmission'
       ? hasQueuedLexisSubmissions || !hasValidatedLexisSubmissions
@@ -435,7 +444,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
       ? `Validating ${applicationSubmissionActionNoun}...`
       : selectedWorkflowType === 'applicationSubmission'
         ? `Finalizing ${applicationSubmissionActionNoun}...`
-      : 'Submitting...'
+        : 'Submitting...'
 
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
@@ -747,7 +756,10 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
         )
       } catch (error) {
         failureCount += 1
-        const uploadError = extractUploadErrorDetails(error)
+        const uploadError = extractUploadErrorDetails(
+          error,
+          'Submission validation failed. Please try again. If the problem persists, contact your administrator.',
+        )
         setQueueItemStatus(
           item.id,
           'failed',
@@ -801,7 +813,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
         )
       } catch (error) {
         failureCount += 1
-        const uploadError = extractUploadErrorDetails(error)
+        const uploadError = extractUploadErrorDetails(error, GENERIC_SUBMISSION_FAILURE_MESSAGE)
         setQueueItemStatus(
           item.id,
           'failed',
@@ -895,7 +907,12 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
         )
       } catch (error) {
         failureCount += 1
-        const uploadError = extractUploadErrorDetails(error)
+        const uploadError = extractUploadErrorDetails(
+          error,
+          selectedWorkflowType === 'applicationSubmission'
+            ? GENERIC_SUBMISSION_FAILURE_MESSAGE
+            : GENERIC_UPLOAD_FAILURE_MESSAGE,
+        )
         setQueueItemStatus(
           item.id,
           'failed',
@@ -982,13 +999,17 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
                 </div>
                 <div>
                   <span>
-                    {selectedWorkflowType === 'applicationSubmission' ? 'Queued submissions' : 'Queued files'}
+                    {selectedWorkflowType === 'applicationSubmission'
+                      ? 'Queued submissions'
+                      : 'Queued files'}
                   </span>
                   <strong>{uploadQueue.length}</strong>
                 </div>
                 <div>
                   <span>Format</span>
-                  <strong>{selectedWorkflowType === 'applicationSubmission' ? 'LEXIS' : 'Document'}</strong>
+                  <strong>
+                    {selectedWorkflowType === 'applicationSubmission' ? 'LEXIS' : 'Document'}
+                  </strong>
                 </div>
               </div>
 
@@ -1186,7 +1207,9 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
             targetSummary={currentUploadTargetSummary}
             canSubmit={hasUploadAccess}
             isSubmitting={isSubmitting}
-            previewTitle={selectedWorkflowType === 'applicationSubmission' ? 'Submission summary' : undefined}
+            previewTitle={
+              selectedWorkflowType === 'applicationSubmission' ? 'Submission summary' : undefined
+            }
             emptyDescription={
               selectedWorkflowType === 'applicationSubmission'
                 ? 'Choose application submission files to validate.'
@@ -1205,8 +1228,12 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
             itemNoun={selectedWorkflowType === 'applicationSubmission' ? 'submission' : undefined}
             submitLabel={submitButtonLabel}
             submittingLabel={submittingButtonLabel}
-            removeLabel={selectedWorkflowType === 'applicationSubmission' ? 'Cancel submission' : undefined}
-            pendingMessage={selectedWorkflowType === 'applicationSubmission' ? 'Not validated yet.' : undefined}
+            removeLabel={
+              selectedWorkflowType === 'applicationSubmission' ? 'Cancel submission' : undefined
+            }
+            pendingMessage={
+              selectedWorkflowType === 'applicationSubmission' ? 'Not validated yet.' : undefined
+            }
             canRemoveItem={(item) =>
               selectedWorkflowType !== 'applicationSubmission' || item.status !== 'complete'
             }

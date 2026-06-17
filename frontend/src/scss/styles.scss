@@ -924,6 +924,11 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
   gap: 1rem;
   align-items: start;
+  min-inline-size: 0;
+}
+
+.admin-upload-workspace > * {
+  min-inline-size: 0;
 }
 
 .admin-upload-settings-grid {
@@ -968,6 +973,7 @@ body {
 }
 
 .admin-upload-panel {
+  min-inline-size: 0;
   border: 1px solid var(--cds-border-subtle);
   background: var(--cds-layer);
 }
@@ -981,16 +987,22 @@ body {
   border-bottom: 1px solid var(--cds-border-subtle);
 }
 
+.admin-upload-panel__header > div {
+  min-inline-size: 0;
+}
+
 .admin-upload-panel__header p {
   margin: 0;
   color: var(--csp-text-primary);
+  overflow-wrap: anywhere;
 }
 
 .admin-upload-drop-zone {
   display: grid;
-  grid-template-columns: auto minmax(16rem, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) max-content;
   gap: 1rem;
   align-items: center;
+  min-inline-size: 0;
   margin: 1rem;
   padding: 1.5rem;
   background: var(--cds-layer-accent);
@@ -1020,8 +1032,13 @@ body {
   border-radius: 50%;
 }
 
+.admin-upload-drop-zone__copy {
+  min-inline-size: 0;
+}
+
 .admin-upload-drop-zone__copy p {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .admin-upload-drop-zone__copy p:first-child {
@@ -1046,6 +1063,7 @@ body {
 
 .admin-upload-browse-button {
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .admin-upload-browse-button[aria-disabled='true'] {
@@ -1267,7 +1285,7 @@ body {
 }
 
 .detail-document-upload__workspace {
-  grid-template-columns: minmax(min(100%, 26rem), 0.85fr) minmax(min(100%, 32rem), 1.15fr);
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
 }
 
 .detail-document-upload .admin-upload-panel__header h2 {
@@ -1275,7 +1293,14 @@ body {
 }
 
 .detail-document-upload .admin-upload-panel .cds--text-area__wrapper {
+  inline-size: auto;
+  max-inline-size: none;
   margin: 1rem;
+}
+
+.detail-document-upload .admin-upload-panel .cds--text-area {
+  inline-size: 100%;
+  max-inline-size: 100%;
 }
 
 .detail-document-upload__invoice-fields {
@@ -1284,6 +1309,10 @@ body {
 
 @media (max-width: 671px) {
   .admin-upload-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-document-upload__workspace {
     grid-template-columns: 1fr;
   }
 

@@ -5,6 +5,7 @@ import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
   extractUploadErrorDetails,
+  GENERIC_UPLOAD_FAILURE_MESSAGE,
   validateDocumentUploadFile,
 } from './uploadQueueHelpers'
 import MultiFileDropZone from './MultiFileDropZone'
@@ -337,7 +338,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
         setQueueItemStatus(item.id, 'complete', result.message, lockedTargetSummary, result.details)
       } catch (error) {
         failureCount += 1
-        const uploadError = extractUploadErrorDetails(error)
+        const uploadError = extractUploadErrorDetails(error, GENERIC_UPLOAD_FAILURE_MESSAGE)
         setQueueItemStatus(
           item.id,
           'failed',

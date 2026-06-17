@@ -3,9 +3,19 @@ import type {
   LexisXmlSubmissionSummary,
   UploadWorkflowType,
 } from '@/service/admin-upload-service'
+import {
+  sanitizeNotificationText,
+  sanitizeNotificationTextList,
+} from '@/utils/notification-messages'
 import { getResponseStatus } from '@/utils/http-error'
 import { isRecord, stringField } from '@/utils/record'
 import type { UploadQueueReviewDetails, UploadQueueStatus } from './uploadQueueTypes'
+
+export const GENERIC_UPLOAD_FAILURE_MESSAGE =
+  'Upload failed. Please try again. If the problem persists, contact your administrator.'
+
+export const GENERIC_SUBMISSION_FAILURE_MESSAGE =
+  'Submission failed. Please try again. If the problem persists, contact your administrator.'
 
 export const asStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -23,6 +33,7 @@ export const asStringArray = (value: unknown): string[] => {
 
 export const extractUploadErrorDetails = (
   error: unknown,
+  fallbackMessage = GENERIC_UPLOAD_FAILURE_MESSAGE,
 ): { message: string; details: UploadQueueReviewDetails } => {
   const response = isRecord(error) && isRecord(error.response) ? error.response : undefined
   const data = response?.data
@@ -32,24 +43,28 @@ export const extractUploadErrorDetails = (
   const warnings = asStringArray(dataRecord?.warnings)
   const responseMessage = dataRecord ? stringField(dataRecord, 'message') : ''
   const textResponseMessage = typeof data === 'string' ? data.trim() : ''
+  const sanitizedErrors = sanitizeNotificationTextList(errors, fallbackMessage)
+  const sanitizedWarnings = sanitizeNotificationTextList(warnings, '')
+  const sanitizedResponseMessage = responseMessage
+    ? sanitizeNotificationText(responseMessage, fallbackMessage)
+    : ''
+  const sanitizedTextResponseMessage = textResponseMessage
+    ? sanitizeNotificationText(textResponseMessage, fallbackMessage)
+    : ''
 
   const message =
-    errors.length > 0
-      ? errors.join(' ')
-      : responseMessage
-        ? responseMessage
-        : textResponseMessage
-          ? textResponseMessage
-          : status
-            ? 'Upload request failed. Verify the file format and retry. If the issue continues, contact support.'
-            : 'Upload request failed. Please try again or contact support.'
+    sanitizedErrors.length > 0
+      ? sanitizedErrors.join(' ')
+      : sanitizedResponseMessage
+        ? sanitizedResponseMessage
+        : sanitizedTextResponseMessage || (status ? fallbackMessage : fallbackMessage)
 
   return {
     message,
     details: {
-      summary: responseMessage || message,
-      errors,
-      warnings,
+      summary: sanitizedResponseMessage || message,
+      errors: sanitizedErrors.length > 0 ? sanitizedErrors : message ? [message] : [],
+      warnings: sanitizedWarnings,
       userReference: dataRecord ? stringField(dataRecord, 'userReference') : '',
       submissionSummary: isRecord(dataRecord?.submissionSummary)
         ? (dataRecord.submissionSummary as LexisXmlSubmissionSummary)
@@ -156,7 +171,9 @@ export const buildUploadResultMessage = (
   },
 ): string => {
   if (workflowType !== 'applicationSubmission') {
-    return result?.message?.trim() || resultMessage
+    return result?.message?.trim()
+      ? sanitizeNotificationText(result.message, resultMessage)
+      : resultMessage
   }
 
   const details: string[] = []
@@ -176,12 +193,14 @@ export const buildUploadResultMessage = (
   const summary =
     details.length > 0
       ? `${isValidationResult ? 'LEXIS application submission validated' : 'LEXIS application submission created'} ${details.join(', ')}.`
-      : result?.message?.trim() || resultMessage
+      : result?.message?.trim()
+        ? sanitizeNotificationText(result.message, resultMessage)
+        : resultMessage
 
-  const warnings =
-    Array.isArray(result?.warnings) && result.warnings.length > 0
-      ? ` Warnings: ${result.warnings.join(' ')}`
-      : ''
+  const sanitizedWarnings = Array.isArray(result?.warnings)
+    ? sanitizeNotificationTextList(result.warnings, '')
+    : []
+  const warnings = sanitizedWarnings.length > 0 ? ` Warnings: ${sanitizedWarnings.join(' ')}` : ''
 
   return `${summary}${warnings}`
 }
@@ -191,8 +210,11 @@ export const buildUploadReviewDetails = (
   result?: AdminUploadResult,
 ): UploadQueueReviewDetails => ({
   summary: message,
-  errors: asStringArray(result?.errors),
-  warnings: asStringArray(result?.warnings),
+  errors: sanitizeNotificationTextList(
+    asStringArray(result?.errors),
+    GENERIC_UPLOAD_FAILURE_MESSAGE,
+  ),
+  warnings: sanitizeNotificationTextList(asStringArray(result?.warnings), ''),
   applicationNumber: result?.applicationNumber,
   packageNumber: result?.packageNumber,
   scaleRows: result?.scaleRows,
