@@ -1505,7 +1505,9 @@ describe('Provincial Application Detail Document Actions', () => {
       await screen.findByRole('heading', { name: 'Timber Marks' })
     ).closest('div')
     expect(timberMarksSection).toBeTruthy()
-    expect(within(timberMarksSection as HTMLElement).getByText('TM-SUMMARY')).toBeInTheDocument()
+    expect(
+      await within(timberMarksSection as HTMLElement).findByText('TM-SUMMARY'),
+    ).toBeInTheDocument()
     expect(mockedFetchApplicationUniqueScales).toHaveBeenCalledWith('321')
   })
 
