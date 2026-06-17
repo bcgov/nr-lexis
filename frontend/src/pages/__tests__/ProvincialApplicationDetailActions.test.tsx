@@ -1515,7 +1515,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedFetchApplicationUniqueScales).toHaveBeenCalledWith('321')
   })
 
-  it('adds, looks up, and deletes package scales', async () => {
+  it('adds and deletes package scales', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -1541,7 +1541,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
     fireEvent.change(screen.getByLabelText('Pieces'), { target: { value: '2' } })
     fireEvent.change(screen.getByLabelText('Scale Volume'), { target: { value: '8.0' } })
-    await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
 
     await waitFor(() => {
       expect(mockedAddApplicationScaleToPackage).toHaveBeenCalledWith(
@@ -1557,11 +1557,35 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(
       detailFetchCountAfterInitialLoad,
     )
+    expect(await screen.findByText('Scale 56 added.')).toBeInTheDocument()
+
+    const scaleRow = screen.getByText('TM001').closest('tr')
+    expect(scaleRow).toBeTruthy()
+    expect(within(scaleRow as HTMLElement).getByText('S')).toBeInTheDocument()
+    fireEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => {
+      expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55')
+    })
+  })
+
+  it('looks up package scales by timber mark and scale id', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('TM001')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Scale ID or timber mark'), {
       target: { value: 'TM001' },
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
     expect(
       await screen.findByText(
         'Found 1 scale row for timber mark TM001: TM001 Douglas-fir/Sawlog 5 pcs 20.0 m3',
@@ -1570,17 +1594,9 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedFetchApplicationScaleDetails).not.toHaveBeenCalled()
 
     fireEvent.change(screen.getByLabelText('Scale ID or timber mark'), { target: { value: '55' } })
-    await userEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
     expect(await screen.findByText('TM001 FI/1 5 pcs 20.0 m3')).toBeInTheDocument()
     expect(mockedFetchApplicationScaleDetails).toHaveBeenCalledWith('55')
-
-    const scaleRow = screen.getByText('TM001').closest('tr')
-    expect(scaleRow).toBeTruthy()
-    expect(within(scaleRow as HTMLElement).getByText('S')).toBeInTheDocument()
-    await userEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
-    await waitFor(() => {
-      expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55')
-    })
   })
 
   it('shows field validation before adding an empty scale', async () => {
