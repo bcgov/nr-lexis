@@ -8,10 +8,6 @@ Pass cases:
 - `pass-application-rsi.xml`
 - `pass-application-rkb.xml`
 
-The pass files use the known-valid test client `00001074/03`, RSC region, and `HE/PL`
-species/end-use sort. The filenames retain their original scenario labels, but the data is
-kept conservative so the files survive Oracle-backed smoke tests.
-
 Failure cases:
 
 - `fail-missing-boom-number.xml` should fail because the package/boom number is missing.
