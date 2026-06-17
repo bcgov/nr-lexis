@@ -39,13 +39,6 @@ const asString = (value: unknown): string | undefined => {
   return undefined
 }
 
-const asStringArray = (value: unknown): string[] => {
-  if (!Array.isArray(value)) {
-    return []
-  }
-  return value.map((item) => asString(item)).filter((item): item is string => Boolean(item))
-}
-
 const toUrlEncodedParams = (payload: Record<string, string | undefined>): URLSearchParams => {
   const params = new URLSearchParams()
   Object.entries(payload).forEach(([key, value]) => {

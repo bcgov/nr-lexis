@@ -524,7 +524,8 @@ const FederalApplicationDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Documents <ApiSourceTag context="Federal application documents are returned from the document service." />
+                Documents{' '}
+                <ApiSourceTag context="Federal application documents are returned from the document service." />
               </h2>
               {canManageDocuments && (
                 <DetailDocumentUploadPanel

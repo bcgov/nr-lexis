@@ -272,70 +272,70 @@ const IndianReservePage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters">
           <Tile>
-          <div className="legacy-search-grid">
-            <TextInput
-              id="permitNumber"
-              labelText="Permit number"
-              value={filters.permitNumber}
-              onChange={(event) => updateFilter('permitNumber', event.target.value)}
-            />
-            <TextInput
-              id="packageNumber"
-              labelText="Package number"
-              value={filters.packageNumber}
-              onChange={(event) => updateFilter('packageNumber', event.target.value)}
-            />
-            <IsoDatePicker
-              id="fromPermitIssueDate"
-              labelText="Issued from date (YYYY-MM-DD)"
-              value={filters.fromPermitIssueDate}
-              invalid={!isValidIsoDate(filters.fromPermitIssueDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('fromPermitIssueDate', value)}
-            />
-            <IsoDatePicker
-              id="toPermitIssueDate"
-              labelText="Issued to date (YYYY-MM-DD)"
-              value={filters.toPermitIssueDate}
-              invalid={!isValidIsoDate(filters.toPermitIssueDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('toPermitIssueDate', value)}
-            />
-            <IsoDatePicker
-              id="fromEstimatedShippingDate"
-              labelText="Shipping from date (YYYY-MM-DD)"
-              value={filters.fromEstimatedShippingDate}
-              invalid={!isValidIsoDate(filters.fromEstimatedShippingDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('fromEstimatedShippingDate', value)}
-            />
-            <IsoDatePicker
-              id="toEstimatedShippingDate"
-              labelText="Shipping to date (YYYY-MM-DD)"
-              value={filters.toEstimatedShippingDate}
-              invalid={!isValidIsoDate(filters.toEstimatedShippingDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('toEstimatedShippingDate', value)}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={onSearch}
-              disabled={loading || hasDateValidationError}
-              size="md"
-            >
-              Search
-            </Button>
-            <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-              Clear Filters
-            </Button>
-            {canCreatePermit && (
-              <Link className="cds--link" to="/indian-reserve/permit/create">
-                Add Permit
-              </Link>
-            )}
-          </div>
+            <div className="legacy-search-grid">
+              <TextInput
+                id="permitNumber"
+                labelText="Permit number"
+                value={filters.permitNumber}
+                onChange={(event) => updateFilter('permitNumber', event.target.value)}
+              />
+              <TextInput
+                id="packageNumber"
+                labelText="Package number"
+                value={filters.packageNumber}
+                onChange={(event) => updateFilter('packageNumber', event.target.value)}
+              />
+              <IsoDatePicker
+                id="fromPermitIssueDate"
+                labelText="Issued from date (YYYY-MM-DD)"
+                value={filters.fromPermitIssueDate}
+                invalid={!isValidIsoDate(filters.fromPermitIssueDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('fromPermitIssueDate', value)}
+              />
+              <IsoDatePicker
+                id="toPermitIssueDate"
+                labelText="Issued to date (YYYY-MM-DD)"
+                value={filters.toPermitIssueDate}
+                invalid={!isValidIsoDate(filters.toPermitIssueDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('toPermitIssueDate', value)}
+              />
+              <IsoDatePicker
+                id="fromEstimatedShippingDate"
+                labelText="Shipping from date (YYYY-MM-DD)"
+                value={filters.fromEstimatedShippingDate}
+                invalid={!isValidIsoDate(filters.fromEstimatedShippingDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('fromEstimatedShippingDate', value)}
+              />
+              <IsoDatePicker
+                id="toEstimatedShippingDate"
+                labelText="Shipping to date (YYYY-MM-DD)"
+                value={filters.toEstimatedShippingDate}
+                invalid={!isValidIsoDate(filters.toEstimatedShippingDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('toEstimatedShippingDate', value)}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={onSearch}
+                disabled={loading || hasDateValidationError}
+                size="md"
+              >
+                Search
+              </Button>
+              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
+                Clear Filters
+              </Button>
+              {canCreatePermit && (
+                <Link className="cds--link" to="/indian-reserve/permit/create">
+                  Add Permit
+                </Link>
+              )}
+            </div>
           </Tile>
         </section>
       </Column>

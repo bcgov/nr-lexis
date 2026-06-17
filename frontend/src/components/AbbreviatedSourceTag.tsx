@@ -13,11 +13,7 @@ export const ApiSourceTag: FC<ApiSourceTagProps> = ({
   align = 'top',
 }) => {
   return (
-    <Tooltip
-      align={align}
-      label="Application Programming Interface (API)"
-      description={context}
-    >
+    <Tooltip align={align} label="Application Programming Interface (API)" description={context}>
       <Tag type={tagType}>API</Tag>
     </Tooltip>
   )

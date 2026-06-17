@@ -543,7 +543,8 @@ const ProvincialExemptionDetailsPage: FC = () => {
           <Column sm={4} md={8} lg={16}>
             <Tile>
               <h2 className="detail-tile-title">
-                Documents <ApiSourceTag context="Exemption documents are returned from the exemption documents service." />
+                Documents{' '}
+                <ApiSourceTag context="Exemption documents are returned from the exemption documents service." />
               </h2>
               {canManageDocuments && (
                 <DetailDocumentUploadPanel

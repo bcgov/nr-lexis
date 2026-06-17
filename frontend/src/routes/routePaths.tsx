@@ -412,7 +412,10 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     requiredActions: ['createApplication'],
     element: (
       <Layout>
-        <AdminUploadsPage lockedWorkflowType="applicationSubmission" pageTitle="Upload Application Submission" />
+        <AdminUploadsPage
+          lockedWorkflowType="applicationSubmission"
+          pageTitle="Upload Application Submission"
+        />
       </Layout>
     ),
     isNavigation: false,

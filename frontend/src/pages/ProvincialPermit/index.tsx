@@ -366,96 +366,96 @@ const ProvincialPermitPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters">
           <Tile>
-          <div className="legacy-search-grid">
-            <TextInput
-              id="applicationNumber"
-              labelText="Application number"
-              value={filters.applicationNumber}
-              onChange={(event) => updateFilter('applicationNumber', event.target.value)}
-            />
-            <TextInput
-              id="packageNumber"
-              labelText="Package number"
-              value={filters.packageNumber}
-              onChange={(event) => updateFilter('packageNumber', event.target.value)}
-            />
-            <FilterableMultiSelect
-              id="region"
-              titleText="Region"
-              items={regionOptions}
-              itemToString={(item) => (item ? item.text : '')}
-              label="Select region(s)"
-              selectionFeedback="fixed"
-              selectedItems={selectedRegions}
-              onChange={(event) => {
-                const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                updateFilter(
-                  'region',
-                  nextSelected.map((item) => item.id),
-                )
-              }}
-            />
-            <IsoDatePicker
-              id="issuedFromDate"
-              labelText="Issued from date (YYYY-MM-DD)"
-              value={filters.issuedFromDate}
-              invalid={!isValidIsoDate(filters.issuedFromDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('issuedFromDate', value)}
-            />
-            <IsoDatePicker
-              id="issuedToDate"
-              labelText="Issued to date (YYYY-MM-DD)"
-              value={filters.issuedToDate}
-              invalid={!isValidIsoDate(filters.issuedToDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('issuedToDate', value)}
-            />
-            <SearchableSelect
-              id="permitStatus"
-              labelText="Permit status"
-              value={filters.permitStatus}
-              placeholder="All statuses"
-              options={permitStatusOptions}
-              onChange={(value) => updateFilter('permitStatus', value)}
-            />
-            <TextInput
-              id="permitNumber"
-              labelText="Permit number"
-              value={filters.permitNumber}
-              onChange={(event) => updateFilter('permitNumber', event.target.value)}
-            />
-            <TextInput
-              id="applicantClientNumber"
-              labelText="Applicant client number"
-              value={filters.applicantClientNumber}
-              onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
-            />
-            <TextInput
-              id="ownerClientNumber"
-              labelText="Owner client number"
-              value={filters.ownerClientNumber}
-              onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={onSearch}
-              disabled={loading || hasDateValidationError}
-              size="md"
-            >
-              Search
-            </Button>
-            <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-              Clear Filters
-            </Button>
-            {canCreatePermit && (
-              <Link className="cds--link" to="/provincial/permit/create">
-                Add Permit
-              </Link>
-            )}
-          </div>
+            <div className="legacy-search-grid">
+              <TextInput
+                id="applicationNumber"
+                labelText="Application number"
+                value={filters.applicationNumber}
+                onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+              />
+              <TextInput
+                id="packageNumber"
+                labelText="Package number"
+                value={filters.packageNumber}
+                onChange={(event) => updateFilter('packageNumber', event.target.value)}
+              />
+              <FilterableMultiSelect
+                id="region"
+                titleText="Region"
+                items={regionOptions}
+                itemToString={(item) => (item ? item.text : '')}
+                label="Select region(s)"
+                selectionFeedback="fixed"
+                selectedItems={selectedRegions}
+                onChange={(event) => {
+                  const nextSelected = (event.selectedItems ?? []) as RegionOption[]
+                  updateFilter(
+                    'region',
+                    nextSelected.map((item) => item.id),
+                  )
+                }}
+              />
+              <IsoDatePicker
+                id="issuedFromDate"
+                labelText="Issued from date (YYYY-MM-DD)"
+                value={filters.issuedFromDate}
+                invalid={!isValidIsoDate(filters.issuedFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('issuedFromDate', value)}
+              />
+              <IsoDatePicker
+                id="issuedToDate"
+                labelText="Issued to date (YYYY-MM-DD)"
+                value={filters.issuedToDate}
+                invalid={!isValidIsoDate(filters.issuedToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('issuedToDate', value)}
+              />
+              <SearchableSelect
+                id="permitStatus"
+                labelText="Permit status"
+                value={filters.permitStatus}
+                placeholder="All statuses"
+                options={permitStatusOptions}
+                onChange={(value) => updateFilter('permitStatus', value)}
+              />
+              <TextInput
+                id="permitNumber"
+                labelText="Permit number"
+                value={filters.permitNumber}
+                onChange={(event) => updateFilter('permitNumber', event.target.value)}
+              />
+              <TextInput
+                id="applicantClientNumber"
+                labelText="Applicant client number"
+                value={filters.applicantClientNumber}
+                onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
+              />
+              <TextInput
+                id="ownerClientNumber"
+                labelText="Owner client number"
+                value={filters.ownerClientNumber}
+                onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={onSearch}
+                disabled={loading || hasDateValidationError}
+                size="md"
+              >
+                Search
+              </Button>
+              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
+                Clear Filters
+              </Button>
+              {canCreatePermit && (
+                <Link className="cds--link" to="/provincial/permit/create">
+                  Add Permit
+                </Link>
+              )}
+            </div>
           </Tile>
         </section>
       </Column>
@@ -469,60 +469,60 @@ const ProvincialPermitPage: FC = () => {
             loadingDescription="Loading permit search results..."
             totalItems={results.page.totalElements}
           >
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                {SORT_COLUMNS.map((column) => (
-                  <TableHeader key={column.id}>
-                    <button
-                      type="button"
-                      className="legacy-sort-button"
-                      onClick={() => onHeaderClick(column.id)}
-                    >
-                      {column.label}
-                      {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                    </button>
-                  </TableHeader>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {results.content.map((row) => (
-                <TableRow key={row.permitNumber}>
-                  <TableCell>
-                    <Link
-                      className="cds--link"
-                      to={withCurrentSearch(`/provincial/permit/${row.permitNumber}`)}
-                    >
-                      {row.permitNumber}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{row.status}</TableCell>
-                  <TableCell>{row.applicantClientNumber}</TableCell>
-                  <TableCell>{row.ownerClientNumber}</TableCell>
-                  <TableCell>{row.totalVolume}</TableCell>
-                  <TableCell>{row.issueDate}</TableCell>
-                  <TableCell>{row.region}</TableCell>
-                </TableRow>
-              ))}
-              {results.content.length === 0 && (
+            <Table useZebraStyles>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={7}>No permits found for the selected criteria.</TableCell>
+                  {SORT_COLUMNS.map((column) => (
+                    <TableHeader key={column.id}>
+                      <button
+                        type="button"
+                        className="legacy-sort-button"
+                        onClick={() => onHeaderClick(column.id)}
+                      >
+                        {column.label}
+                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                      </button>
+                    </TableHeader>
+                  ))}
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <Pagination
-            page={results.page.number + 1}
-            pageSize={results.page.size}
-            pageSizes={[10, 20, 30]}
-            totalItems={results.page.totalElements}
-            onChange={({ page, pageSize: nextPageSize }) => {
-              setSearchParams(
-                buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-              )
-            }}
-          />
+              </TableHead>
+              <TableBody>
+                {results.content.map((row) => (
+                  <TableRow key={row.permitNumber}>
+                    <TableCell>
+                      <Link
+                        className="cds--link"
+                        to={withCurrentSearch(`/provincial/permit/${row.permitNumber}`)}
+                      >
+                        {row.permitNumber}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{row.status}</TableCell>
+                    <TableCell>{row.applicantClientNumber}</TableCell>
+                    <TableCell>{row.ownerClientNumber}</TableCell>
+                    <TableCell>{row.totalVolume}</TableCell>
+                    <TableCell>{row.issueDate}</TableCell>
+                    <TableCell>{row.region}</TableCell>
+                  </TableRow>
+                ))}
+                {results.content.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7}>No permits found for the selected criteria.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            <Pagination
+              page={results.page.number + 1}
+              pageSize={results.page.size}
+              pageSizes={[10, 20, 30]}
+              totalItems={results.page.totalElements}
+              onChange={({ page, pageSize: nextPageSize }) => {
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                )
+              }}
+            />
           </SearchResultsTableFrame>
         </section>
       </Column>

@@ -878,9 +878,7 @@ describe('Admin upload workflow smoke', () => {
     expect(
       screen.getByText('1 submission failed. Review the queue for details.'),
     ).toBeInTheDocument()
-    expect(
-      screen.getAllByText('Package TEST23-652-7D-2 already exists.').length,
-    ).toBeGreaterThan(0)
+    expect(screen.getAllByText('Package TEST23-652-7D-2 already exists.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Failed').length).toBeGreaterThan(0)
     expect(screen.queryByText('Application submission complete')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Open Application/ })).not.toBeInTheDocument()

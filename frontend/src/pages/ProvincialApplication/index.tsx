@@ -452,134 +452,134 @@ const ProvincialApplicationPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters">
           <Tile>
-          <div className="legacy-search-grid">
-            <TextInput
-              id="applicationNumber"
-              labelText="Application number"
-              value={filters.applicationNumber}
-              onChange={(event) => updateFilter('applicationNumber', event.target.value)}
-            />
-            <TextInput
-              id="packageNumber"
-              labelText="Package number"
-              value={filters.packageNumber}
-              onChange={(event) => updateFilter('packageNumber', event.target.value)}
-            />
-            <SearchableSelect
-              id="exemptionType"
-              labelText="Exemption type"
-              value={filters.exemptionType}
-              placeholder="All types"
-              options={exemptionTypeOptions}
-              onChange={(value) => updateFilter('exemptionType', value)}
-            />
-            <TextInput
-              id="exemptionNumber"
-              labelText="Exemption number"
-              value={filters.exemptionNumber}
-              onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
-            />
-            <SearchableSelect
-              id="applicationStatus"
-              labelText="Application status"
-              value={filters.applicationStatus}
-              placeholder="All statuses"
-              options={applicationStatusOptions}
-              onChange={(value) => updateFilter('applicationStatus', value)}
-            />
-            <SearchableSelect
-              id="productTypeCode"
-              labelText="Product type"
-              value={filters.productTypeCode}
-              placeholder="All product types"
-              options={productTypeOptions}
-              onChange={(value) => updateFilter('productTypeCode', value)}
-            />
-            <FilterableMultiSelect
-              id="region"
-              titleText="Region"
-              items={regionOptions}
-              itemToString={(item) => (item ? item.text : '')}
-              label="Select region(s)"
-              selectionFeedback="fixed"
-              selectedItems={selectedRegions}
-              onChange={(event) => {
-                const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                updateFilter(
-                  'region',
-                  nextSelected.map((item) => item.id),
-                )
-              }}
-            />
-            <IsoDatePicker
-              id="listingFromDate"
-              labelText="Listing from date (YYYY-MM-DD)"
-              value={filters.listingFromDate}
-              invalid={!isValidIsoDate(filters.listingFromDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('listingFromDate', value)}
-            />
-            <IsoDatePicker
-              id="listingToDate"
-              labelText="Listing to date (YYYY-MM-DD)"
-              value={filters.listingToDate}
-              invalid={!isValidIsoDate(filters.listingToDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('listingToDate', value)}
-            />
-            <TextInput
-              id="applicantClientNumber"
-              labelText="Applicant client number"
-              value={filters.applicantClientNumber}
-              onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
-            />
-            <TextInput
-              id="ownerClientNumber"
-              labelText="Owner client number"
-              value={filters.ownerClientNumber}
-              onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={onSearch}
-              disabled={loading || hasDateValidationError}
-              size="md"
-            >
-              Search
-            </Button>
-            <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-              Clear Filters
-            </Button>
-            <Button
-              kind="secondary"
-              size="md"
-              onClick={onCreateExemptionClick}
-              disabled={selectedRowsCount === 0 || !canCreateExemption}
-            >
-              Create exemption for Selected Applications
-            </Button>
-            {canCreateApplication && (
-              <>
-                <Link className="cds--link" to="/provincial/application/create">
-                  Add Application
-                </Link>
-                <Link className="cds--link" to="/provincial/application/upload">
-                  Upload Application Submission
-                </Link>
-              </>
+            <div className="legacy-search-grid">
+              <TextInput
+                id="applicationNumber"
+                labelText="Application number"
+                value={filters.applicationNumber}
+                onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+              />
+              <TextInput
+                id="packageNumber"
+                labelText="Package number"
+                value={filters.packageNumber}
+                onChange={(event) => updateFilter('packageNumber', event.target.value)}
+              />
+              <SearchableSelect
+                id="exemptionType"
+                labelText="Exemption type"
+                value={filters.exemptionType}
+                placeholder="All types"
+                options={exemptionTypeOptions}
+                onChange={(value) => updateFilter('exemptionType', value)}
+              />
+              <TextInput
+                id="exemptionNumber"
+                labelText="Exemption number"
+                value={filters.exemptionNumber}
+                onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
+              />
+              <SearchableSelect
+                id="applicationStatus"
+                labelText="Application status"
+                value={filters.applicationStatus}
+                placeholder="All statuses"
+                options={applicationStatusOptions}
+                onChange={(value) => updateFilter('applicationStatus', value)}
+              />
+              <SearchableSelect
+                id="productTypeCode"
+                labelText="Product type"
+                value={filters.productTypeCode}
+                placeholder="All product types"
+                options={productTypeOptions}
+                onChange={(value) => updateFilter('productTypeCode', value)}
+              />
+              <FilterableMultiSelect
+                id="region"
+                titleText="Region"
+                items={regionOptions}
+                itemToString={(item) => (item ? item.text : '')}
+                label="Select region(s)"
+                selectionFeedback="fixed"
+                selectedItems={selectedRegions}
+                onChange={(event) => {
+                  const nextSelected = (event.selectedItems ?? []) as RegionOption[]
+                  updateFilter(
+                    'region',
+                    nextSelected.map((item) => item.id),
+                  )
+                }}
+              />
+              <IsoDatePicker
+                id="listingFromDate"
+                labelText="Listing from date (YYYY-MM-DD)"
+                value={filters.listingFromDate}
+                invalid={!isValidIsoDate(filters.listingFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingFromDate', value)}
+              />
+              <IsoDatePicker
+                id="listingToDate"
+                labelText="Listing to date (YYYY-MM-DD)"
+                value={filters.listingToDate}
+                invalid={!isValidIsoDate(filters.listingToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingToDate', value)}
+              />
+              <TextInput
+                id="applicantClientNumber"
+                labelText="Applicant client number"
+                value={filters.applicantClientNumber}
+                onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
+              />
+              <TextInput
+                id="ownerClientNumber"
+                labelText="Owner client number"
+                value={filters.ownerClientNumber}
+                onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={onSearch}
+                disabled={loading || hasDateValidationError}
+                size="md"
+              >
+                Search
+              </Button>
+              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
+                Clear Filters
+              </Button>
+              <Button
+                kind="secondary"
+                size="md"
+                onClick={onCreateExemptionClick}
+                disabled={selectedRowsCount === 0 || !canCreateExemption}
+              >
+                Create exemption for Selected Applications
+              </Button>
+              {canCreateApplication && (
+                <>
+                  <Link className="cds--link" to="/provincial/application/create">
+                    Add Application
+                  </Link>
+                  <Link className="cds--link" to="/provincial/application/upload">
+                    Upload Application Submission
+                  </Link>
+                </>
+              )}
+            </div>
+            {exemptionStatus && (
+              <AppNotification
+                className="legacy-inline-notification"
+                kind={exemptionStatus.kind}
+                title="Validation failed"
+                subtitle={exemptionStatus.message}
+                onCloseButtonClick={() => setExemptionStatus(null)}
+              />
             )}
-          </div>
-          {exemptionStatus && (
-            <AppNotification
-              className="legacy-inline-notification"
-              kind={exemptionStatus.kind}
-              title="Validation failed"
-              subtitle={exemptionStatus.message}
-              onCloseButtonClick={() => setExemptionStatus(null)}
-            />
-          )}
           </Tile>
         </section>
       </Column>
@@ -593,95 +593,95 @@ const ProvincialApplicationPage: FC = () => {
             loadingDescription="Loading application search results..."
             totalItems={results.page.totalElements}
           >
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>
-                  <Checkbox
-                    id="selectAllCurrentPageRows"
-                    hideLabel
-                    labelText="Select all rows on this page"
-                    checked={allSelectableRowsAreSelected}
-                    disabled={selectableRows.length === 0}
-                    onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
-                  />
-                </TableHeader>
-                {SORT_COLUMNS.map((column) => (
-                  <TableHeader key={column.id}>
-                    <button
-                      type="button"
-                      className="legacy-sort-button"
-                      onClick={() => onHeaderClick(column.id)}
-                    >
-                      {column.label}
-                      {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                    </button>
-                  </TableHeader>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {results.content.map((row) => (
-                <TableRow key={row.applicationNumber}>
-                  <TableCell>
+            <Table useZebraStyles>
+              <TableHead>
+                <TableRow>
+                  <TableHeader>
                     <Checkbox
-                      id={`selectRow-${row.applicationNumber}`}
+                      id="selectAllCurrentPageRows"
                       hideLabel
-                      labelText={`Select ${row.applicationNumber}`}
-                      checked={Boolean(selectedRowsById[row.applicationNumber])}
-                      disabled={!canCreateExemption || !row.allowCreateExemption}
-                      onChange={(_, payload) => toggleRowSelection(row, Boolean(payload.checked))}
+                      labelText="Select all rows on this page"
+                      checked={allSelectableRowsAreSelected}
+                      disabled={selectableRows.length === 0}
+                      onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
                     />
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      className="cds--link"
-                      to={withCurrentSearch(`/provincial/application/${row.applicationNumber}`)}
-                    >
-                      {row.applicationNumber}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{row.status}</TableCell>
-                  <TableCell>{row.applicantClientNumber}</TableCell>
-                  <TableCell>{row.ownerClientNumber}</TableCell>
-                  <TableCell>{row.region}</TableCell>
-                  <TableCell>{row.applicationVolume}</TableCell>
-                  <TableCell>
-                    {row.exemptionNumber ? (
+                  </TableHeader>
+                  {SORT_COLUMNS.map((column) => (
+                    <TableHeader key={column.id}>
+                      <button
+                        type="button"
+                        className="legacy-sort-button"
+                        onClick={() => onHeaderClick(column.id)}
+                      >
+                        {column.label}
+                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                      </button>
+                    </TableHeader>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {results.content.map((row) => (
+                  <TableRow key={row.applicationNumber}>
+                    <TableCell>
+                      <Checkbox
+                        id={`selectRow-${row.applicationNumber}`}
+                        hideLabel
+                        labelText={`Select ${row.applicationNumber}`}
+                        checked={Boolean(selectedRowsById[row.applicationNumber])}
+                        disabled={!canCreateExemption || !row.allowCreateExemption}
+                        onChange={(_, payload) => toggleRowSelection(row, Boolean(payload.checked))}
+                      />
+                    </TableCell>
+                    <TableCell>
                       <Link
                         className="cds--link"
-                        to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
+                        to={withCurrentSearch(`/provincial/application/${row.applicationNumber}`)}
                       >
-                        {row.exemptionNumber}
+                        {row.applicationNumber}
                       </Link>
-                    ) : (
-                      '-'
-                    )}
-                  </TableCell>
-                  <TableCell>{row.listingDate}</TableCell>
-                </TableRow>
-              ))}
-              {results.content.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={9}>
-                    No applications found for the selected criteria.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <Pagination
-            page={results.page.number + 1}
-            pageSize={results.page.size}
-            pageSizes={[10, 20, 30]}
-            totalItems={results.page.totalElements}
-            onChange={({ page, pageSize: nextPageSize }) => {
-              clearSelection()
-              setSearchParams(
-                buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-              )
-            }}
-          />
+                    </TableCell>
+                    <TableCell>{row.status}</TableCell>
+                    <TableCell>{row.applicantClientNumber}</TableCell>
+                    <TableCell>{row.ownerClientNumber}</TableCell>
+                    <TableCell>{row.region}</TableCell>
+                    <TableCell>{row.applicationVolume}</TableCell>
+                    <TableCell>
+                      {row.exemptionNumber ? (
+                        <Link
+                          className="cds--link"
+                          to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
+                        >
+                          {row.exemptionNumber}
+                        </Link>
+                      ) : (
+                        '-'
+                      )}
+                    </TableCell>
+                    <TableCell>{row.listingDate}</TableCell>
+                  </TableRow>
+                ))}
+                {results.content.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={9}>
+                      No applications found for the selected criteria.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            <Pagination
+              page={results.page.number + 1}
+              pageSize={results.page.size}
+              pageSizes={[10, 20, 30]}
+              totalItems={results.page.totalElements}
+              onChange={({ page, pageSize: nextPageSize }) => {
+                clearSelection()
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                )
+              }}
+            />
           </SearchResultsTableFrame>
         </section>
       </Column>

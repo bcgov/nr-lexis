@@ -1,6 +1,11 @@
 import apiService from '@/service/api-service'
 
-export type UploadWorkflowType = 'application' | 'exemption' | 'permit' | 'invoice' | 'applicationSubmission'
+export type UploadWorkflowType =
+  | 'application'
+  | 'exemption'
+  | 'permit'
+  | 'invoice'
+  | 'applicationSubmission'
 
 export type AdminUploadResult = {
   uploadType?: string

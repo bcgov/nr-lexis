@@ -277,7 +277,9 @@ const AdminPoliciesPage: FC = () => {
           'Unable to save the fee in lieu policy right now. Please check your entry and try again. If this continues, contact support.',
         )
       } else {
-        setErrorMessage('Unable to save the fee in lieu policy. Please try again or contact support.')
+        setErrorMessage(
+          'Unable to save the fee in lieu policy. Please try again or contact support.',
+        )
       }
     } finally {
       setIsMutatingPolicies(false)
@@ -311,7 +313,9 @@ const AdminPoliciesPage: FC = () => {
           'Unable to delete the fee in lieu policy. Refresh and try again, or contact support if the issue persists.',
         )
       } else {
-        setErrorMessage('Unable to delete the fee in lieu policy. Please try again or contact support.')
+        setErrorMessage(
+          'Unable to delete the fee in lieu policy. Please try again or contact support.',
+        )
       }
     } finally {
       setIsMutatingPolicies(false)

@@ -356,92 +356,92 @@ const ProvincialOffersPage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters">
           <Tile>
-          <div className="legacy-search-grid">
-            <TextInput
-              id="applicationNumber"
-              labelText="Application number"
-              value={filters.applicationNumber}
-              onChange={(event) => updateFilter('applicationNumber', event.target.value)}
-            />
-            <TextInput
-              id="packageNumber"
-              labelText="Package number"
-              value={filters.packageNumber}
-              onChange={(event) => updateFilter('packageNumber', event.target.value)}
-            />
-            <TextInput
-              id="clientNumber"
-              labelText="Client number"
-              value={filters.clientNumber}
-              onChange={(event) => updateFilter('clientNumber', event.target.value)}
-            />
-            <IsoDatePicker
-              id="listingFromDate"
-              labelText="Listing from date (YYYY-MM-DD)"
-              value={filters.listingFromDate}
-              invalid={!isValidIsoDate(filters.listingFromDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('listingFromDate', value)}
-            />
-            <IsoDatePicker
-              id="listingToDate"
-              labelText="Listing to date (YYYY-MM-DD)"
-              value={filters.listingToDate}
-              invalid={!isValidIsoDate(filters.listingToDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('listingToDate', value)}
-            />
-            <FilterableMultiSelect
-              id="region"
-              titleText="Region"
-              items={regionOptions}
-              itemToString={(item) => (item ? item.text : '')}
-              label="Select region(s)"
-              selectionFeedback="fixed"
-              selectedItems={selectedRegions}
-              onChange={(event) => {
-                const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                updateFilter(
-                  'region',
-                  nextSelected.map((item) => item.id),
-                )
-              }}
-            />
-            <IsoDatePicker
-              id="withdrawalFromDate"
-              labelText="Withdrawn from date (YYYY-MM-DD)"
-              value={filters.withdrawalFromDate}
-              invalid={!isValidIsoDate(filters.withdrawalFromDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('withdrawalFromDate', value)}
-            />
-            <IsoDatePicker
-              id="withdrawalToDate"
-              labelText="Withdrawn to date (YYYY-MM-DD)"
-              value={filters.withdrawalToDate}
-              invalid={!isValidIsoDate(filters.withdrawalToDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(value) => updateFilter('withdrawalToDate', value)}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={onSearch}
-              disabled={loading || hasDateValidationError}
-              size="md"
-            >
-              Search
-            </Button>
-            <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-              Clear Filters
-            </Button>
-            {canCreateOffer && (
-              <Link className="cds--link" to="/provincial/offers/create">
-                Add Offer
-              </Link>
-            )}
-          </div>
+            <div className="legacy-search-grid">
+              <TextInput
+                id="applicationNumber"
+                labelText="Application number"
+                value={filters.applicationNumber}
+                onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+              />
+              <TextInput
+                id="packageNumber"
+                labelText="Package number"
+                value={filters.packageNumber}
+                onChange={(event) => updateFilter('packageNumber', event.target.value)}
+              />
+              <TextInput
+                id="clientNumber"
+                labelText="Client number"
+                value={filters.clientNumber}
+                onChange={(event) => updateFilter('clientNumber', event.target.value)}
+              />
+              <IsoDatePicker
+                id="listingFromDate"
+                labelText="Listing from date (YYYY-MM-DD)"
+                value={filters.listingFromDate}
+                invalid={!isValidIsoDate(filters.listingFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingFromDate', value)}
+              />
+              <IsoDatePicker
+                id="listingToDate"
+                labelText="Listing to date (YYYY-MM-DD)"
+                value={filters.listingToDate}
+                invalid={!isValidIsoDate(filters.listingToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingToDate', value)}
+              />
+              <FilterableMultiSelect
+                id="region"
+                titleText="Region"
+                items={regionOptions}
+                itemToString={(item) => (item ? item.text : '')}
+                label="Select region(s)"
+                selectionFeedback="fixed"
+                selectedItems={selectedRegions}
+                onChange={(event) => {
+                  const nextSelected = (event.selectedItems ?? []) as RegionOption[]
+                  updateFilter(
+                    'region',
+                    nextSelected.map((item) => item.id),
+                  )
+                }}
+              />
+              <IsoDatePicker
+                id="withdrawalFromDate"
+                labelText="Withdrawn from date (YYYY-MM-DD)"
+                value={filters.withdrawalFromDate}
+                invalid={!isValidIsoDate(filters.withdrawalFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('withdrawalFromDate', value)}
+              />
+              <IsoDatePicker
+                id="withdrawalToDate"
+                labelText="Withdrawn to date (YYYY-MM-DD)"
+                value={filters.withdrawalToDate}
+                invalid={!isValidIsoDate(filters.withdrawalToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('withdrawalToDate', value)}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={onSearch}
+                disabled={loading || hasDateValidationError}
+                size="md"
+              >
+                Search
+              </Button>
+              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
+                Clear Filters
+              </Button>
+              {canCreateOffer && (
+                <Link className="cds--link" to="/provincial/offers/create">
+                  Add Offer
+                </Link>
+              )}
+            </div>
           </Tile>
         </section>
       </Column>
@@ -455,59 +455,59 @@ const ProvincialOffersPage: FC = () => {
             loadingDescription="Loading offer search results..."
             totalItems={results.page.totalElements}
           >
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                {SORT_COLUMNS.map((column) => (
-                  <TableHeader key={column.id}>
-                    <button
-                      type="button"
-                      className="legacy-sort-button"
-                      onClick={() => onHeaderClick(column.id)}
-                    >
-                      {column.label}
-                      {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
-                    </button>
-                  </TableHeader>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {results.content.map((row) => (
-                <TableRow key={row.offerNumber}>
-                  <TableCell>
-                    <Link
-                      className="cds--link"
-                      to={withCurrentSearch(`/provincial/offers/${row.offerNumber}`)}
-                    >
-                      {row.offerNumber}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{row.applicationNumber}</TableCell>
-                  <TableCell>{row.packageNumber || 'No Packages'}</TableCell>
-                  <TableCell>{row.listingDate}</TableCell>
-                  <TableCell>{row.region}</TableCell>
-                  <TableCell>{row.offerWithdrawalDate || '-'}</TableCell>
-                </TableRow>
-              ))}
-              {results.content.length === 0 && (
+            <Table useZebraStyles>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={6}>No offers found for the selected criteria.</TableCell>
+                  {SORT_COLUMNS.map((column) => (
+                    <TableHeader key={column.id}>
+                      <button
+                        type="button"
+                        className="legacy-sort-button"
+                        onClick={() => onHeaderClick(column.id)}
+                      >
+                        {column.label}
+                        {sortField === column.id ? ` (${sortDirection.toUpperCase()})` : ''}
+                      </button>
+                    </TableHeader>
+                  ))}
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <Pagination
-            page={results.page.number + 1}
-            pageSize={results.page.size}
-            pageSizes={[10, 20, 30]}
-            totalItems={results.page.totalElements}
-            onChange={({ page, pageSize: nextPageSize }) => {
-              setSearchParams(
-                buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
-              )
-            }}
-          />
+              </TableHead>
+              <TableBody>
+                {results.content.map((row) => (
+                  <TableRow key={row.offerNumber}>
+                    <TableCell>
+                      <Link
+                        className="cds--link"
+                        to={withCurrentSearch(`/provincial/offers/${row.offerNumber}`)}
+                      >
+                        {row.offerNumber}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{row.applicationNumber}</TableCell>
+                    <TableCell>{row.packageNumber || 'No Packages'}</TableCell>
+                    <TableCell>{row.listingDate}</TableCell>
+                    <TableCell>{row.region}</TableCell>
+                    <TableCell>{row.offerWithdrawalDate || '-'}</TableCell>
+                  </TableRow>
+                ))}
+                {results.content.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6}>No offers found for the selected criteria.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            <Pagination
+              page={results.page.number + 1}
+              pageSize={results.page.size}
+              pageSizes={[10, 20, 30]}
+              totalItems={results.page.totalElements}
+              onChange={({ page, pageSize: nextPageSize }) => {
+                setSearchParams(
+                  buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
+                )
+              }}
+            />
           </SearchResultsTableFrame>
         </section>
       </Column>
