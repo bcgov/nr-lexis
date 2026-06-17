@@ -1488,6 +1488,7 @@ body {
 
 .detail-field-item {
   margin: 0;
+  min-width: 0;
 }
 
 .detail-field-label {
@@ -1499,6 +1500,7 @@ body {
 .detail-field-value {
   font-weight: 600;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .detail-list {
