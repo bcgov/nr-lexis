@@ -4,7 +4,7 @@
     <lexis:LexisSubmission>
       <lexis:applicant>
         <lexis:applicantDetails>
-          <lexis:clientNumber>1074</lexis:clientNumber>
+          <lexis:clientNumber>00001074</lexis:clientNumber>
           <lexis:clientLocnCode>03</lexis:clientLocnCode>
           <lexis:name>Mosaic Forest Management Corporation</lexis:name>
         </lexis:applicantDetails>
@@ -29,7 +29,7 @@
         <lexis:avgLength>6.7</lexis:avgLength>
         <lexis:avgDiameter>12.8</lexis:avgDiameter>
         <lexis:harvestedTimber>
-          <lexis:timberMark>NCHWP</lexis:timberMark>
+          <lexis:timberMark>NCHWQ</lexis:timberMark>
           <lexis:numberOfPieces>1500</lexis:numberOfPieces>
           <lexis:species>HE</lexis:species>
           <lexis:grade>H</lexis:grade>
@@ -43,9 +43,9 @@
           <lexis:quantityVolume>24.5</lexis:quantityVolume>
         </lexis:harvestedTimber>
         <lexis:harvestedTimber>
-          <lexis:timberMark>NCHWP</lexis:timberMark>
+          <lexis:timberMark>NCHWQ</lexis:timberMark>
           <lexis:numberOfPieces>1</lexis:numberOfPieces>
-          <lexis:species>FI</lexis:species>
+          <lexis:species>HE</lexis:species>
           <lexis:grade>J</lexis:grade>
           <lexis:quantityVolume>0.5</lexis:quantityVolume>
         </lexis:harvestedTimber>

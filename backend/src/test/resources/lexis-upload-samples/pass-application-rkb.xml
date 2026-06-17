@@ -4,8 +4,8 @@
     <lexis:LexisSubmission>
       <lexis:applicant>
         <lexis:applicantDetails>
-          <lexis:clientNumber>3099</lexis:clientNumber>
-          <lexis:clientLocnCode>02</lexis:clientLocnCode>
+          <lexis:clientNumber>00001074</lexis:clientNumber>
+          <lexis:clientLocnCode>03</lexis:clientLocnCode>
           <lexis:name>Kootenay Log Exporters Inc.</lexis:name>
         </lexis:applicantDetails>
         <lexis:applicantContact>
@@ -15,7 +15,7 @@
       </lexis:applicant>
       <lexis:applicationDetail>
         <lexis:jurisdictionCode>P</lexis:jurisdictionCode>
-        <lexis:bcForestRegionCode>RKB</lexis:bcForestRegionCode>
+        <lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>
         <lexis:applStatusCode>A</lexis:applStatusCode>
         <lexis:exemptionRsnCde>S</lexis:exemptionRsnCde>
         <lexis:applicantTypeCode>O</lexis:applicantTypeCode>
@@ -38,7 +38,7 @@
         <lexis:harvestedTimber>
           <lexis:timberMark>KBYQA</lexis:timberMark>
           <lexis:numberOfPieces>34</lexis:numberOfPieces>
-          <lexis:species>FI</lexis:species>
+          <lexis:species>HE</lexis:species>
           <lexis:grade>J</lexis:grade>
           <lexis:quantityVolume>12.25</lexis:quantityVolume>
         </lexis:harvestedTimber>
