@@ -947,7 +947,9 @@ describe('Provincial Application Detail Document Actions', () => {
     })
     expect(uploadButtons[0]).toBeDisabled()
     expect(
-      screen.getByText('Application document upload is unavailable for expired applications.'),
+      await screen.findByText(
+        'Application document upload is unavailable for expired applications.',
+      ),
     ).toBeInTheDocument()
 
     const documentName = await screen.findByText('expired-doc.pdf')
