@@ -79,13 +79,45 @@ class LexisPrincipalServiceTest {
     assertThat(principalName).isEqualTo("5cdd5598-30c1-708e-3288-187b41a253e8");
   }
 
+  @Test
+  void shouldResolveOrgUnitFromAccessTokenClaims() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken =
+        jwt("5cdd5598-30c1-708e-3288-187b41a253e8", Map.of("custom:org_unit_no", "76"));
+
+    when(userInfoService.getUserInfo(accessToken)).thenReturn(Map.of());
+
+    String orgUnitNo = service.resolveOrgUnitNo(new JwtAuthenticationToken(accessToken));
+
+    assertThat(orgUnitNo).isEqualTo("76");
+  }
+
+  @Test
+  void shouldResolveOrgUnitFromUserInfoClaims() {
+    LexisPrincipalService service = new LexisPrincipalService(userInfoService);
+    Jwt accessToken = jwt("5cdd5598-30c1-708e-3288-187b41a253e8");
+
+    when(userInfoService.getUserInfo(accessToken)).thenReturn(Map.of("orgUnitNo", "1826"));
+
+    String orgUnitNo = service.resolveOrgUnitNo(new JwtAuthenticationToken(accessToken));
+
+    assertThat(orgUnitNo).isEqualTo("1826");
+  }
+
   private Jwt jwt(String subject) {
+    return jwt(subject, Map.of());
+  }
+
+  private Jwt jwt(String subject, Map<String, Object> additionalClaims) {
     Instant now = Instant.now();
+    Map<String, Object> claims = new java.util.HashMap<>(additionalClaims);
+    claims.put("sub", subject);
+    claims.put("token_use", "access");
     return new Jwt(
         "token",
         now,
         now.plusSeconds(3600),
         Map.of("alg", "none"),
-        Map.of("sub", subject, "token_use", "access"));
+        claims);
   }
 }

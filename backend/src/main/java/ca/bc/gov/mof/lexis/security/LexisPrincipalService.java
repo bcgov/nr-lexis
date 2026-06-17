@@ -30,10 +30,23 @@ public class LexisPrincipalService {
     return blankToNull(principal.getName());
   }
 
+  public String resolveOrgUnitNo(Principal principal) {
+    if (!(principal instanceof JwtAuthenticationToken jwtAuthentication)) {
+      return null;
+    }
+
+    Map<String, Object> claims = resolveJwtClaims(jwtAuthentication);
+    return Stream.of(
+            claimValue(claims, "custom:org_unit_no"),
+            claimValue(claims, "org_unit_no"),
+            claimValue(claims, "orgUnitNo"))
+        .filter(value -> !value.isBlank())
+        .findFirst()
+        .orElse(null);
+  }
+
   private String resolveJwtPrincipalName(JwtAuthenticationToken authentication) {
-    Jwt accessToken = authentication.getToken();
-    Map<String, Object> claims = new HashMap<>(userInfoService.getUserInfo(accessToken));
-    claims.putAll(accessToken.getClaims());
+    Map<String, Object> claims = resolveJwtClaims(authentication);
 
     String userId = resolveUserId(claims);
     if (userId != null) {
@@ -41,6 +54,13 @@ public class LexisPrincipalService {
     }
 
     return blankToNull(authentication.getName());
+  }
+
+  private Map<String, Object> resolveJwtClaims(JwtAuthenticationToken authentication) {
+    Jwt accessToken = authentication.getToken();
+    Map<String, Object> claims = new HashMap<>(userInfoService.getUserInfo(accessToken));
+    claims.putAll(accessToken.getClaims());
+    return claims;
   }
 
   private String resolveUserId(Map<String, Object> claims) {

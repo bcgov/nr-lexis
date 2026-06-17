@@ -13,6 +13,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.security.Principal;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -27,6 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/lexis/session")
 @Validated
 public class LexisSessionController {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(LexisSessionController.class);
 
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
@@ -59,6 +63,16 @@ public class LexisSessionController {
 
     LexisSessionWelcomeDto welcome = sessionService.resolveWelcomeRoute(principalName, roles);
     List<String> grantedActions = authorizationService.resolveGrantedActions(welcome.roles());
+    String orgUnitNo = principalService.resolveOrgUnitNo(principal);
+
+    LOGGER.info(
+        "Resolved LEXIS session capabilities: authenticated={}, principalPresent={}, roles={}, welcomeTarget={}, grantedActionCount={}, orgUnitNo={}",
+        welcome.authenticated(),
+        welcome.principal() != null && !welcome.principal().isBlank(),
+        welcome.roles(),
+        welcome.welcomeTarget(),
+        grantedActions.size(),
+        orgUnitNo);
 
     return ResponseEntity.ok(
         new LexisSessionCapabilitiesDto(
@@ -67,7 +81,8 @@ public class LexisSessionController {
             welcome.roles(),
             welcome.welcomeTarget(),
             welcome.legacyPath(),
-            grantedActions));
+            grantedActions,
+            orgUnitNo));
   }
 
   @GetMapping("/canPerformAction")

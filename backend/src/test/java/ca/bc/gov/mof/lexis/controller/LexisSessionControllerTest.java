@@ -117,6 +117,7 @@ class LexisSessionControllerTest {
         .thenReturn(welcome);
     when(authorizationService.resolveGrantedActions(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN")))
         .thenReturn(List.of("/applicationSearch", "/applicationDetails"));
+    when(principalService.resolveOrgUnitNo(authentication)).thenReturn("76");
 
     ResponseEntity<LexisSessionCapabilitiesDto> response = controller.capabilities(request);
 
@@ -129,11 +130,13 @@ class LexisSessionControllerTest {
                 List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"),
                 "readOnly",
                 "/applicationSearch.do?actionMapping=view",
-                List.of("/applicationSearch", "/applicationDetails")));
+                List.of("/applicationSearch", "/applicationDetails"),
+                "76"));
 
     verify(sessionService).parseRolesFromPrincipal(authentication);
     verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
     verify(authorizationService).resolveGrantedActions(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
+    verify(principalService).resolveOrgUnitNo(authentication);
   }
 
   @Test

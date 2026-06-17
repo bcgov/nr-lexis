@@ -8,4 +8,5 @@ public record LexisSessionCapabilitiesDto(
     List<String> roles,
     String welcomeTarget,
     String legacyPath,
-    List<String> grantedActions) {}
+    List<String> grantedActions,
+    String orgUnitNo) {}
