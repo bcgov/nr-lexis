@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -207,6 +207,14 @@ describe('Create Page Core Flows', () => {
         </Routes>
       </MemoryRouter>,
     )
+
+    const newApplicationState = screen.getByRole('group', { name: 'New application state' })
+    expect(within(newApplicationState).getByText('Application number')).toBeInTheDocument()
+    expect(within(newApplicationState).getByText('Status')).toBeInTheDocument()
+    expect(within(newApplicationState).getAllByText('New')).toHaveLength(2)
+    expect(
+      screen.queryByRole('textbox', { name: /application number/i }),
+    ).not.toBeInTheDocument()
 
     const submitButton = await screen.findByRole('button', { name: 'Submit' })
     await waitFor(() => expect(submitButton).toBeEnabled())
