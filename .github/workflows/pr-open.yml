@@ -42,9 +42,55 @@ jobs:
           tag_fallback: latest
           triggers: ('${{ matrix.package }}/', '.github/workflows/')
 
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Java 21 (Temurin) + Maven cache
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Maven verify
+        working-directory: backend
+        run: mvn -B -DskipITs verify
+
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend checks
+        working-directory: frontend
+        run: |
+          npm run lint
+          npm run format:check
+          npm run test:cov
+
   deploys:
     name: Deploys (${{ github.event.number }})
-    needs: [builds, vars]
+    needs: [builds, vars, backend-tests, frontend-tests]
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-deploy.yml
@@ -78,7 +124,7 @@ jobs:
 
   results:
     name: PR Results
-    needs: [builds, deploys, tests]
+    needs: [builds, backend-tests, frontend-tests, deploys, tests]
     if: always()
     runs-on: ubuntu-slim
     steps:
