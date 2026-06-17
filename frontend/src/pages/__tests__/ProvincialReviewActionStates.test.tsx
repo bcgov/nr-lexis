@@ -92,9 +92,9 @@ const twoNewReviewResponse = {
   },
 }
 
-const renderPage = () => {
+const renderPage = (initialEntry = '/provincial/review') => {
   render(
-    <MemoryRouter initialEntries={['/provincial/review']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/provincial/review" element={<ProvincialReviewPage />} />
       </Routes>
@@ -340,16 +340,30 @@ describe('Provincial Review Action State Smoke', () => {
   it('sends selected region org unit numbers to the review search request', async () => {
     mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
       productTypes: [{ value: 'LOG', label: 'Logs' }],
-      regions: [{ value: '1818', label: 'TST' }],
+      regions: [
+        { value: '1818', label: 'TST' },
+        { value: '1919', label: 'OTHER' },
+      ],
       reviewStatuses: [{ value: 'REJ', label: 'Rejected' }],
     })
 
-    renderPage()
+    renderPage('/provincial/review?applicationNumber=1000123')
     await screen.findByText('1000123')
+    await waitFor(() => {
+      expect(mockedFetchApplicationReviewOptions).toHaveBeenCalledTimes(1)
+    })
+    mockedSearchApplicationReviews.mockClear()
+
+    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'TST' } })
+    await userEvent.click(await screen.findByRole('option', { name: 'TST (1818)' }))
+
     await waitFor(() => {
       expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
         expect.objectContaining({
           filters: expect.objectContaining({
+            applicationNumber: '1000123',
             region: ['1818'],
           }),
         }),

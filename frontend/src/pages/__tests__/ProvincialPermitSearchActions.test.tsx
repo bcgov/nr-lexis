@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import ProvincialPermitPage from '@/pages/ProvincialPermit'
+import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions } from '@/service/search-options-service'
 
@@ -23,9 +24,9 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearchProvincialPermits = vi.mocked(searchProvincialPermits)
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
 
-const renderPage = () => {
+const renderPage = (initialEntry = '/provincial/permit') => {
   return render(
-    <MemoryRouter initialEntries={['/provincial/permit']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/provincial/permit" element={<ProvincialPermitPage />} />
       </Routes>
@@ -36,6 +37,7 @@ const renderPage = () => {
 describe('Provincial Permit Search Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearAllPageDataCache()
     mockedSearchProvincialPermits.mockResolvedValue({
       content: [
         {
@@ -94,12 +96,12 @@ describe('Provincial Permit Search Actions', () => {
       canPerform: () => false,
     } as any)
 
-    const firstRender = renderPage()
+    const firstRender = renderPage('/provincial/permit?permitNumber=7001')
     await screen.findByText('7001')
     expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
 
     firstRender.unmount()
-    renderPage()
+    renderPage('/provincial/permit?permitNumber=7001')
 
     await screen.findByText('7001')
     expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(1)
@@ -153,7 +155,7 @@ describe('Provincial Permit Search Actions', () => {
         },
       } as any)
 
-    renderPage()
+    renderPage('/provincial/permit?permitNumber=7001')
     await screen.findByText('7001')
 
     await userEvent.click(screen.getByRole('button', { name: /next page/i }))
@@ -165,6 +167,7 @@ describe('Provincial Permit Search Actions', () => {
         page: 1,
         pageSize: 10,
       }),
+      { knownTotal: 25 },
     )
   })
 
