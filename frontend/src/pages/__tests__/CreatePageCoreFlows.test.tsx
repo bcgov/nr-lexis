@@ -24,6 +24,12 @@ import {
   fetchApplicationEndUsesForSpeciesRegion,
   fetchApplicationRemainingSpecies,
 } from '@/service/provincial-application-items-service'
+import {
+  fetchOfferApplicationDetails,
+  fetchOfferApplicationVolume,
+  fetchOfferPackageList,
+  fetchOfferPackageVolume,
+} from '@/service/provincial-offer-create-service'
 import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 
 const mockNavigate = vi.fn()
@@ -58,6 +64,13 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationRemainingSpecies: vi.fn(),
 }))
 
+vi.mock('@/service/provincial-offer-create-service', () => ({
+  fetchOfferApplicationDetails: vi.fn(),
+  fetchOfferApplicationVolume: vi.fn(),
+  fetchOfferPackageList: vi.fn(),
+  fetchOfferPackageVolume: vi.fn(),
+}))
+
 vi.mock('@/service/provincial-application-search-service', () => ({
   searchProvincialApplicationNumberOptions: vi.fn(),
 }))
@@ -76,6 +89,10 @@ const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemaini
 const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
   fetchApplicationEndUsesForSpeciesRegion,
 )
+const mockedFetchOfferApplicationDetails = vi.mocked(fetchOfferApplicationDetails)
+const mockedFetchOfferApplicationVolume = vi.mocked(fetchOfferApplicationVolume)
+const mockedFetchOfferPackageList = vi.mocked(fetchOfferPackageList)
+const mockedFetchOfferPackageVolume = vi.mocked(fetchOfferPackageVolume)
 const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
   searchProvincialApplicationNumberOptions,
 )
@@ -140,6 +157,15 @@ describe('Create Page Core Flows', () => {
     mockedFetchApplicationEndUsesForSpeciesRegion.mockResolvedValue([
       { code: 'SA', description: 'Sawlog' },
     ])
+    mockedFetchOfferApplicationDetails.mockResolvedValue({
+      success: true,
+      speciesGradeCode: 'H/SA',
+      advertisingDate: '03/01/2026',
+      teacReviewDate: '',
+    })
+    mockedFetchOfferApplicationVolume.mockResolvedValue('100.0')
+    mockedFetchOfferPackageList.mockResolvedValue(['PKG-9'])
+    mockedFetchOfferPackageVolume.mockResolvedValue('95.0')
     mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([
       {
         value: '321',
@@ -602,6 +628,10 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByText('Create provincial offer')
+    expect(await screen.findByDisplayValue('PKG-9')).toBeInTheDocument()
+    expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('H/SA')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('03/01/2026')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Offer number (required)'), '8080')
     await userEvent.type(screen.getByLabelText('Company name (required)'), 'Example Lumber')
     await userEvent.type(screen.getByLabelText('Contact name (required)'), 'Alex Example')
@@ -637,5 +667,70 @@ describe('Create Page Core Flows', () => {
       })
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8080')
+  })
+
+  it('uses create offer query prefill for company, contact, pickup, and package options', async () => {
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8081'))
+    mockedFetchOfferPackageList.mockResolvedValue(['PKG-10', 'PKG-11'])
+    mockedFetchOfferPackageVolume.mockResolvedValue('120.0')
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-10&packageNumbers=PKG-10%2CPKG-11&offeringClientNumber=00099999&companyName=Bell%20Pole%20Company&contactName=Dave%20Kohlen&region=11&pickupLocation=Van',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Create provincial offer')
+    expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Bell Pole Company')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Dave Kohlen')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Van')).toBeInTheDocument()
+
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Package number (required)' }),
+      'PKG-11',
+    )
+    expect(screen.getByDisplayValue('PKG-11')).toBeInTheDocument()
+  })
+
+  it('replaces stale create offer package query values with application package list values', async () => {
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8082'))
+    mockedFetchOfferPackageList.mockResolvedValue(['PKG-10'])
+    mockedFetchOfferPackageVolume.mockResolvedValue('120.0')
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=45964&packageNumber=45964&offeringClientNumber=00001012&companyName=Bell%20Pole%20Company&contactName=Dave%20Kohlen&region=11&pickupLocation=Van',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Create provincial offer')
+    expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Offer number (required)'), '8082')
+    await userEvent.type(screen.getByLabelText('Offer amount (required)'), '25000')
+    await userEvent.type(screen.getByLabelText('Offer date (YYYY-MM-DD) (required)'), '2026-03-10')
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicationNumber: '45964',
+          packageNumber: 'PKG-10',
+        }),
+      )
+    })
   })
 })

@@ -23,6 +23,13 @@ import {
   type CreateDraftRecord,
 } from '@/service/create-draft-service'
 import { submitProvincialOfferCreate } from '@/service/create-submit-service'
+import {
+  fetchOfferApplicationDetails,
+  fetchOfferApplicationVolume,
+  fetchOfferPackageList,
+  fetchOfferPackageVolume,
+  type OfferApplicationDetails,
+} from '@/service/provincial-offer-create-service'
 import { fetchProvincialOfferOptions, type SearchOption } from '@/service/search-options-service'
 
 type ProvincialOfferCreateForm = {
@@ -61,6 +68,20 @@ const INITIAL_FORM: ProvincialOfferCreateForm = {
   offerCondition: '',
 }
 
+const packageOptionsFromQuery = (query: URLSearchParams): SearchOption[] => {
+  const packageNumbers = [
+    query.get('packageNumber') ?? '',
+    ...(query.get('packageNumbers') ?? '').split(','),
+  ]
+    .map((packageNumber) => packageNumber.trim())
+    .filter((packageNumber) => packageNumber.length > 0)
+
+  return Array.from(new Set(packageNumbers)).map((packageNumber) => ({
+    value: packageNumber,
+    label: packageNumber,
+  }))
+}
+
 const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialOfferCreateForm => {
   return {
     ...INITIAL_FORM,
@@ -70,7 +91,12 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialOfferCreat
     companyName: query.get('companyName') ?? '',
     contactName: query.get('contactName') ?? '',
     region: query.get('region') ?? '',
+    purchaseOfferAmount: query.get('purchaseOfferAmount') ?? '',
+    purchaseOfferDate: query.get('purchaseOfferDate') ?? '',
+    offerEndDate: query.get('offerEndDate') ?? '',
     withdrawReason: query.get('withdrawReason') ?? '',
+    pickupLocation: query.get('pickupLocation') ?? '',
+    offerCondition: query.get('offerCondition') ?? '',
   }
 }
 
@@ -83,9 +109,22 @@ type PageStatus = {
 const ProvincialOfferCreatePage: FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const initialForm = useMemo(() => buildInitialFormFromQuery(searchParams), [searchParams])
+  const searchParamsKey = searchParams.toString()
+  const initialForm = useMemo(
+    () => buildInitialFormFromQuery(new URLSearchParams(searchParamsKey)),
+    [searchParamsKey],
+  )
+  const queryPackageOptions = useMemo(
+    () => packageOptionsFromQuery(new URLSearchParams(searchParamsKey)),
+    [searchParamsKey],
+  )
   const [form, setForm] = useState<ProvincialOfferCreateForm>(() => initialForm)
   const [regions, setRegions] = useState<SearchOption[]>([])
+  const [packageOptions, setPackageOptions] = useState<SearchOption[]>(() => queryPackageOptions)
+  const [applicationDetails, setApplicationDetails] = useState<OfferApplicationDetails | null>(null)
+  const [applicationVolume, setApplicationVolume] = useState('')
+  const [packageVolume, setPackageVolume] = useState('')
+  const [isLoadingApplicationContext, setIsLoadingApplicationContext] = useState(false)
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -103,6 +142,108 @@ const ProvincialOfferCreatePage: FC = () => {
     void loadOptions()
   }, [])
 
+  useEffect(() => {
+    const applicationNumber = form.applicationNumber.trim()
+    if (!applicationNumber) {
+      setApplicationDetails(null)
+      setApplicationVolume('')
+      setPackageVolume('')
+      setPackageOptions(queryPackageOptions)
+      return
+    }
+
+    let isActive = true
+    setIsLoadingApplicationContext(true)
+    void Promise.allSettled([
+      fetchOfferApplicationDetails(applicationNumber),
+      fetchOfferPackageList(applicationNumber),
+      fetchOfferApplicationVolume(applicationNumber),
+    ])
+      .then(([detailsResult, packagesResult, volumeResult]) => {
+        if (!isActive) {
+          return
+        }
+
+        setApplicationDetails(
+          detailsResult.status === 'fulfilled' && detailsResult.value.success
+            ? detailsResult.value
+            : null,
+        )
+        const packageNumbers = packagesResult.status === 'fulfilled' ? packagesResult.value : []
+        const nextPackageOptions = packageNumbers.map((packageNumber) => ({
+          value: packageNumber,
+          label: packageNumber,
+        }))
+        setPackageOptions(nextPackageOptions)
+        setApplicationVolume(volumeResult.status === 'fulfilled' ? volumeResult.value : '')
+        setForm((current) => {
+          if (current.applicationNumber.trim() !== applicationNumber) {
+            return current
+          }
+          const firstPackageNumber = nextPackageOptions[0]?.value
+          if (!firstPackageNumber) {
+            return current.packageNumber ? { ...current, packageNumber: '' } : current
+          }
+          const selectedPackageNumber = current.packageNumber.trim()
+          const hasSelectedPackage = nextPackageOptions.some(
+            (option) => option.value === selectedPackageNumber,
+          )
+          if (hasSelectedPackage) {
+            return current
+          }
+          return { ...current, packageNumber: firstPackageNumber }
+        })
+      })
+      .catch(() => {
+        if (isActive) {
+          setApplicationDetails(null)
+          setApplicationVolume('')
+          setPackageOptions([])
+          setForm((current) =>
+            current.applicationNumber.trim() === applicationNumber
+              ? { ...current, packageNumber: '' }
+              : current,
+          )
+        }
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingApplicationContext(false)
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.applicationNumber, queryPackageOptions])
+
+  useEffect(() => {
+    const packageNumber = form.packageNumber.trim()
+    if (!packageNumber) {
+      setPackageVolume('')
+      return
+    }
+
+    let isActive = true
+    void fetchOfferPackageVolume(packageNumber)
+      .then((volume) => {
+        if (isActive) {
+          setPackageVolume(volume)
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setPackageVolume('')
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [form.packageNumber])
+
+  const contextVolume = form.packageNumber.trim() ? packageVolume : applicationVolume
+
   const fieldErrors = useMemo<FieldErrors<ProvincialOfferCreateField>>(
     () => ({
       offerNumber: firstValidationError(
@@ -113,7 +254,15 @@ const ProvincialOfferCreatePage: FC = () => {
         () => requiredFieldError(form.applicationNumber, 'Application number'),
         () => positiveNumericFieldError(form.applicationNumber),
       ),
-      packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
+      packageNumber: firstValidationError(
+        () => (isLoadingApplicationContext ? 'Wait for package list to load.' : null),
+        () => requiredFieldError(form.packageNumber, 'Package number'),
+        () =>
+          packageOptions.length > 0 &&
+          !packageOptions.some((option) => option.value === form.packageNumber.trim())
+            ? 'Select a package from this application.'
+            : null,
+      ),
       offeringClientNumber:
         requiredFieldError(form.offeringClientNumber, 'Offering client number') ?? undefined,
       companyName: requiredFieldError(form.companyName, 'Company name') ?? undefined,
@@ -133,7 +282,7 @@ const ProvincialOfferCreatePage: FC = () => {
           : undefined,
       pickupLocation: requiredFieldError(form.pickupLocation, 'Pickup location') ?? undefined,
     }),
-    [form],
+    [form, isLoadingApplicationContext, packageOptions],
   )
   const hasValidationError = useMemo(
     () => Object.values(fieldErrors).some((error) => !!error),
@@ -264,17 +413,57 @@ const ProvincialOfferCreatePage: FC = () => {
               onBlur={() => markFieldTouched('applicationNumber')}
               onChange={(value) => setForm((current) => ({ ...current, applicationNumber: value }))}
             />
-            <TextInput
-              id="packageNumber"
-              labelText="Package number (required)"
-              value={form.packageNumber}
-              invalid={!!fieldError('packageNumber')}
-              invalidText={fieldError('packageNumber')}
-              onBlur={() => markFieldTouched('packageNumber')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, packageNumber: event.target.value }))
-              }
-            />
+            {packageOptions.length > 0 ? (
+              <SearchableSelect
+                id="packageNumber"
+                labelText="Package number (required)"
+                value={form.packageNumber}
+                options={packageOptions}
+                placeholder={
+                  isLoadingApplicationContext ? 'Loading packages' : 'Select package number'
+                }
+                invalid={!!fieldError('packageNumber')}
+                invalidText={fieldError('packageNumber')}
+                onBlur={() => markFieldTouched('packageNumber')}
+                onChange={(value) => setForm((current) => ({ ...current, packageNumber: value }))}
+              />
+            ) : (
+              <TextInput
+                id="packageNumber"
+                labelText="Package number (required)"
+                value={form.packageNumber}
+                invalid={!!fieldError('packageNumber')}
+                invalidText={fieldError('packageNumber')}
+                onBlur={() => markFieldTouched('packageNumber')}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, packageNumber: event.target.value }))
+                }
+              />
+            )}
+            {contextVolume && (
+              <TextInput
+                id="applicationPackageVolume"
+                labelText="Application/package volume (m3)"
+                value={contextVolume}
+                readOnly
+              />
+            )}
+            {applicationDetails?.speciesGradeCode && (
+              <TextInput
+                id="speciesGradeCode"
+                labelText="Species/grade"
+                value={applicationDetails.speciesGradeCode}
+                readOnly
+              />
+            )}
+            {applicationDetails?.advertisingDate && (
+              <TextInput
+                id="advertisingDate"
+                labelText="Listing date"
+                value={applicationDetails.advertisingDate}
+                readOnly
+              />
+            )}
             <TextInput
               id="offeringClientNumber"
               labelText="Offering client number (required)"
@@ -372,7 +561,11 @@ const ProvincialOfferCreatePage: FC = () => {
             <Button kind="primary" onClick={onSaveDraft}>
               Save Draft
             </Button>
-            <Button kind="primary" onClick={() => void onSubmit()} disabled={isSubmitting}>
+            <Button
+              kind="primary"
+              onClick={() => void onSubmit()}
+              disabled={isSubmitting || isLoadingApplicationContext}
+            >
               Submit
             </Button>
             <Button

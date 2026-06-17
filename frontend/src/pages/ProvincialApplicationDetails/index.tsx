@@ -424,7 +424,6 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
   const [isLoadingOwnerClientData, setIsLoadingOwnerClientData] = useState(false)
   const [isLoadingAgentClientData, setIsLoadingAgentClientData] = useState(false)
-  const [showClientLookupMessage, setShowClientLookupMessage] = useState(false)
   const [showDocumentUploadUnavailableMessage, setShowDocumentUploadUnavailableMessage] =
     useState(false)
   const [summaryExemptionReasonOptions, setSummaryExemptionReasonOptions] = useState<
@@ -668,11 +667,6 @@ const ProvincialApplicationDetailsPage: FC = () => {
     permitRows,
   )
   useEffect(() => {
-    if (ownerClientData?.notfound || agentClientData?.notfound) {
-      setShowClientLookupMessage(true)
-    }
-  }, [ownerClientData?.notfound, agentClientData?.notfound])
-  useEffect(() => {
     setShowDocumentUploadUnavailableMessage(Boolean(documentUploadUnavailableMessage))
   }, [documentUploadUnavailableMessage])
   const canAddApplicationDocuments =
@@ -775,7 +769,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
       const statusOption = [...summaryApplicationStatusOptions, ...reviewStatusOptions].find(
         (option) => normalizeReviewStatus(option.value) === normalizedStatusCode,
       )
-      return statusOption?.label ?? APPLICATION_STATUS_LABELS[normalizedStatusCode] ?? normalizedStatusCode
+      return (
+        statusOption?.label ??
+        APPLICATION_STATUS_LABELS[normalizedStatusCode] ??
+        normalizedStatusCode
+      )
     },
     [reviewStatusOptions, summaryApplicationStatusOptions],
   )
@@ -1548,19 +1546,38 @@ const ProvincialApplicationDetailsPage: FC = () => {
 
     const params = new URLSearchParams()
     params.set('applicationNumber', String(detail.applicationNumber))
-    if (detail.packages.length === 1 && detail.packages[0]?.packageNumber) {
-      params.set('packageNumber', detail.packages[0].packageNumber)
+    const packageNumbers = detail.packages
+      .map((item) => item.packageNumber.trim())
+      .filter((packageNumber) => packageNumber.length > 0)
+    if (packageNumbers.length > 0) {
+      params.set('packageNumber', packageNumbers[0])
+      params.set('packageNumbers', packageNumbers.join(','))
     }
     if (detail.ownerClientNumber) {
       params.set('offeringClientNumber', detail.ownerClientNumber)
     }
+    if (ownerClientData?.companyName) {
+      params.set('companyName', ownerClientData.companyName)
+    }
+    if (summaryForm?.ownerContactName) {
+      params.set('contactName', summaryForm.ownerContactName)
+    }
     if (detail.orgUnitNumber !== null) {
       params.set('region', String(detail.orgUnitNumber))
+    }
+    if (summaryForm?.productLocation) {
+      params.set('pickupLocation', summaryForm.productLocation)
     }
 
     const query = params.toString()
     navigate(query.length > 0 ? `/provincial/offers/create?${query}` : '/provincial/offers/create')
-  }, [detail, navigate])
+  }, [
+    detail,
+    navigate,
+    ownerClientData?.companyName,
+    summaryForm?.ownerContactName,
+    summaryForm?.productLocation,
+  ])
 
   const refreshApplicationDocuments = useCallback(async () => {
     if (!applicationNumber) {
@@ -2879,7 +2896,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
               className="application-detail-section application-detail-documents"
             >
               <h2 className="detail-tile-title">
-                Documents <ApiSourceTag context="Application documents are returned from the document service." />
+                Documents{' '}
+                <ApiSourceTag context="Application documents are returned from the document service." />
               </h2>
               {!!showDocumentUploadUnavailableMessage && canUploadApplicationDocuments && (
                 <AppNotification

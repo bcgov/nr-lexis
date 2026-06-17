@@ -759,9 +759,12 @@ body {
 .legacy-search-grid .cds--date-picker,
 .legacy-search-grid .cds--date-picker-container,
 .legacy-search-grid .cds--date-picker-input__wrapper,
+.legacy-search-grid .cds--date-picker-input__wrapper > span,
+.legacy-search-grid .cds--date-picker--single .cds--date-picker__input,
 .legacy-search-grid .cds--date-picker-input__wrapper input {
   inline-size: 100%;
-  max-inline-size: none;
+  max-inline-size: 100%;
+  min-inline-size: 0;
 }
 
 .create-page-grid {
