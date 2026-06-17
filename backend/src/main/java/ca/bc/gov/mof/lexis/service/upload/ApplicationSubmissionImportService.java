@@ -600,7 +600,8 @@ public class ApplicationSubmissionImportService {
             "Product details must appear only once.",
             errors);
 
-    String ownerClientNumber = text(applicantDetails, "clientNumber", "Applicant client number", errors);
+    String ownerClientNumber =
+        normalizeClientNumber(text(applicantDetails, "clientNumber", "Applicant client number", errors));
     String ownerClientLocationCode =
         normalizeClientLocation(
             text(applicantDetails, "clientLocnCode", "Applicant client location", errors));
@@ -1380,6 +1381,14 @@ public class ApplicationSubmissionImportService {
       return normalized;
     }
     return "0" + normalized;
+  }
+
+  private String normalizeClientNumber(String value) {
+    String normalized = trimToNull(value);
+    if (normalized == null || normalized.length() >= 8) {
+      return normalized;
+    }
+    return "0".repeat(8 - normalized.length()) + normalized;
   }
 
   private String upper(String value) {
