@@ -33,7 +33,6 @@ import {
 import { fetchProvincialOfferOptions, type SearchOption } from '@/service/search-options-service'
 
 type ProvincialOfferCreateForm = {
-  offerNumber: string
   applicationNumber: string
   packageNumber: string
   offeringClientNumber: string
@@ -53,7 +52,6 @@ type ProvincialOfferCreateField = keyof ProvincialOfferCreateForm & string
 const MODULE_KEY = 'provincial-offer'
 
 const INITIAL_FORM: ProvincialOfferCreateForm = {
-  offerNumber: '',
   applicationNumber: '',
   packageNumber: '',
   offeringClientNumber: '',
@@ -246,10 +244,6 @@ const ProvincialOfferCreatePage: FC = () => {
 
   const fieldErrors = useMemo<FieldErrors<ProvincialOfferCreateField>>(
     () => ({
-      offerNumber: firstValidationError(
-        () => requiredFieldError(form.offerNumber, 'Offer number'),
-        () => positiveNumericFieldError(form.offerNumber),
-      ),
       applicationNumber: firstValidationError(
         () => requiredFieldError(form.applicationNumber, 'Application number'),
         () => positiveNumericFieldError(form.applicationNumber),
@@ -374,7 +368,19 @@ const ProvincialOfferCreatePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create provincial offer</h1>
+        <div className="application-detail-title-row">
+          <h1>Create provincial offer</h1>
+          <dl
+            className="application-detail-header-metrics"
+            role="group"
+            aria-label="New offer state"
+          >
+            <div>
+              <dt>Offer number</dt>
+              <dd>New</dd>
+            </div>
+          </dl>
+        </div>
       </Column>
 
       {!!status && (
@@ -393,17 +399,6 @@ const ProvincialOfferCreatePage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <div className="legacy-search-grid">
-            <TextInput
-              id="offerNumber"
-              labelText="Offer number (required)"
-              value={form.offerNumber}
-              invalid={!!fieldError('offerNumber')}
-              invalidText={fieldError('offerNumber')}
-              onBlur={() => markFieldTouched('offerNumber')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, offerNumber: event.target.value }))
-              }
-            />
             <ApplicationNumberSelect
               id="applicationNumber"
               labelText="Application number (required)"
@@ -603,7 +598,7 @@ const ProvincialOfferCreatePage: FC = () => {
           onDeleteDraft={onDeleteDraft}
           summarize={(payload) => {
             const value = payload as ProvincialOfferCreateForm
-            return `${value.offerNumber || 'N/A'} / application ${value.applicationNumber || 'N/A'}`
+            return `new offer / application ${value.applicationNumber || 'N/A'}`
           }}
         />
       </Column>

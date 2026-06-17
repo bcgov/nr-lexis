@@ -196,7 +196,11 @@ describe('Provincial Review Action State Smoke', () => {
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000123' }))
     await chooseComboBoxOption('Update status code', 'Withdrawn')
-    await userEvent.click(screen.getByRole('button', { name: 'Update Status and Send Email' }))
+    const updateAndEmailButton = screen.getByRole('button', {
+      name: 'Update Status and Send Email',
+    })
+    await waitFor(() => expect(updateAndEmailButton).toBeEnabled())
+    await userEvent.click(updateAndEmailButton)
 
     await waitFor(() => {
       expect(screen.getByText('Action failed')).toBeInTheDocument()

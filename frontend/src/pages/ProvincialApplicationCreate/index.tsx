@@ -950,7 +950,23 @@ const ProvincialApplicationCreatePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid create-page-grid provincial-application-create-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create provincial application</h1>
+        <div className="application-detail-title-row">
+          <h1>Create provincial application</h1>
+          <dl
+            className="application-detail-header-metrics"
+            role="group"
+            aria-label="New application state"
+          >
+            <div>
+              <dt>Application number</dt>
+              <dd>New</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>New</dd>
+            </div>
+          </dl>
+        </div>
       </Column>
 
       {missingRequiredOptions && (

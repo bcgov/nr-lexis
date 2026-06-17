@@ -31,7 +31,6 @@ import {
 import { submitProvincialExemptionCreate } from '@/service/create-submit-service'
 
 type ProvincialExemptionCreateForm = {
-  exemptionNumber: string
   applicationNumber: string
   exemptionTypeCode: string
   exemptionStatusCode: string
@@ -54,7 +53,6 @@ type ExemptionCreatePrefillState = {
 const MODULE_KEY = 'provincial-exemption'
 
 const INITIAL_FORM: ProvincialExemptionCreateForm = {
-  exemptionNumber: '',
   applicationNumber: '',
   exemptionTypeCode: '',
   exemptionStatusCode: '',
@@ -219,7 +217,6 @@ const ProvincialExemptionCreatePage: FC = () => {
 
   const fieldErrors = useMemo<FieldErrors<ProvincialExemptionCreateField>>(
     () => ({
-      exemptionNumber: requiredFieldError(form.exemptionNumber, 'Exemption number') ?? undefined,
       applicationNumber: firstValidationError(
         () => requiredFieldError(form.applicationNumber, 'Application number'),
         () => positiveNumericFieldError(form.applicationNumber),
@@ -338,7 +335,23 @@ const ProvincialExemptionCreatePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create provincial exemption</h1>
+        <div className="application-detail-title-row">
+          <h1>Create provincial exemption</h1>
+          <dl
+            className="application-detail-header-metrics"
+            role="group"
+            aria-label="New exemption state"
+          >
+            <div>
+              <dt>Exemption number</dt>
+              <dd>New</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>New</dd>
+            </div>
+          </dl>
+        </div>
       </Column>
 
       {missingRequiredOptions && (
@@ -382,17 +395,6 @@ const ProvincialExemptionCreatePage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <div className="legacy-search-grid">
-            <TextInput
-              id="exemptionNumber"
-              labelText="Exemption number (required)"
-              value={form.exemptionNumber}
-              invalid={!!fieldError('exemptionNumber')}
-              invalidText={fieldError('exemptionNumber')}
-              onBlur={() => markFieldTouched('exemptionNumber')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, exemptionNumber: event.target.value }))
-              }
-            />
             <ApplicationNumberSelect
               id="applicationNumber"
               labelText="Application number (required)"
@@ -524,7 +526,7 @@ const ProvincialExemptionCreatePage: FC = () => {
           onDeleteDraft={onDeleteDraft}
           summarize={(payload) => {
             const value = payload as ProvincialExemptionCreateForm
-            return `${value.exemptionNumber || 'N/A'} / application ${value.applicationNumber || 'N/A'}`
+            return `new exemption / application ${value.applicationNumber || 'N/A'}`
           }}
         />
       </Column>

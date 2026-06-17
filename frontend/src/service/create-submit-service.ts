@@ -290,7 +290,6 @@ export const submitProvincialApplicationCreate = async (
 }
 
 export type ProvincialExemptionCreateSubmission = {
-  exemptionNumber: string
   applicationNumber: string
   linkedApplicationNumbers: string[]
   exemptionTypeCode: string
@@ -310,7 +309,6 @@ export const submitProvincialExemptionCreate = async (
     const payload = await postLegacyForm(
       getProvincialExemptionCreatePath(),
       withCreateActionMapping('addExemption', {
-        exemptionNumber: form.exemptionNumber,
         applicationNumber: form.applicationNumber,
         applications: form.linkedApplicationNumbers.join(','),
         exemptionTypeCode: form.exemptionTypeCode,
@@ -334,7 +332,6 @@ export const submitProvincialExemptionCreate = async (
 }
 
 export type ProvincialOfferCreateSubmission = {
-  offerNumber: string
   applicationNumber: string
   packageNumber: string
   offeringClientNumber: string
@@ -356,8 +353,6 @@ export const submitProvincialOfferCreate = async (
     const payload = await postLegacyForm(
       getProvincialOfferCreatePath(),
       withCreateActionMapping('addOffer', {
-        offerNumber: form.offerNumber,
-        exportPurchaseOfferNumber: form.offerNumber,
         applicationNumber: form.applicationNumber,
         packageNumber: form.packageNumber,
         companyName: form.companyName,
@@ -384,7 +379,6 @@ export const submitProvincialOfferCreate = async (
 }
 
 export type ProvincialPermitCreateSubmission = {
-  permitNumber: string
   applicationNumber: string
   packageNumber: string
   exemptionNumber: string
@@ -406,7 +400,6 @@ export const submitProvincialPermitCreate = async (
     const payload = await postLegacyForm(
       getProvincialPermitCreatePath(),
       withCreateActionMapping('addPermit', {
-        permitNumber: form.permitNumber,
         permitStatus: form.permitStatus,
         permitIssueDate: form.issueDate,
         estimatedShippingDate: form.estimatedShippingDate,

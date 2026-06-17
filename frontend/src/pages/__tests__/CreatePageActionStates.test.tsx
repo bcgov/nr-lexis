@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -99,9 +99,12 @@ describe('Create Page Action State Smoke', () => {
 
     const submitButton = await screen.findByRole('button', { name: 'Submit' })
     await waitFor(() => expect(submitButton).toBeEnabled())
+    const newPermitState = screen.getByRole('group', { name: 'New permit state' })
+    expect(within(newPermitState).getByText('Permit number')).toBeInTheDocument()
+    expect(within(newPermitState).getByText('New')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: /permit number/i })).not.toBeInTheDocument()
     await userEvent.click(submitButton)
 
-    expect(screen.getAllByText('Permit number is required.')).not.toHaveLength(0)
     expect(screen.getByText('Application number is required.')).toBeInTheDocument()
     expect(screen.getByText('Permit status is required.')).toBeInTheDocument()
     expect(mockedSubmitProvincialPermitCreate).not.toHaveBeenCalled()
@@ -113,7 +116,7 @@ describe('Create Page Action State Smoke', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/permit/create?permitNumber=100&applicationNumber=200&packageNumber=PKG-9&exemptionNumber=EX-1&region=1833&permitStatus=Active&applicantClientNumber=300&ownerClientNumber=400&submitDate=2026-01-09&issueDate=2026-01-10&estimatedShippingDate=2026-01-11&permitVolume=12&remarks=Note',
+          '/provincial/permit/create?applicationNumber=200&packageNumber=PKG-9&exemptionNumber=EX-1&region=1833&permitStatus=Active&applicantClientNumber=300&ownerClientNumber=400&submitDate=2026-01-09&issueDate=2026-01-10&estimatedShippingDate=2026-01-11&permitVolume=12&remarks=Note',
         ]}
       >
         <Routes>
@@ -127,7 +130,6 @@ describe('Create Page Action State Smoke', () => {
     await userEvent.click(submitButton)
 
     expect(mockedSubmitProvincialPermitCreate).toHaveBeenCalledWith({
-      permitNumber: '100',
       applicationNumber: '200',
       packageNumber: 'PKG-9',
       exemptionNumber: 'EX-1',

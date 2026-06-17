@@ -270,7 +270,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public Optional<ExemptionInsertRow> insertExemption(ExemptionInsertRecord record) {
-    if (record == null || trim(record.exemptionNumber()) == null) {
+    if (record == null) {
       return Optional.empty();
     }
 

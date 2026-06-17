@@ -160,6 +160,59 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldValidateDeclaredSpeciesEndUseSortInsteadOfScaleSpecies() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(new PackageValidityItem(true, null));
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    ApplicationSubmissionImportResultDto result = service().validateApplicationSubmission(sampleXml());
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.scaleRows()).isEqualTo(3);
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().speciesCodes()).containsExactly("HE");
+
+    ArgumentCaptor<CreateApplicationRequest> validationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(validationCaptor.capture());
+    CreateApplicationRequest validationRequest = validationCaptor.getValue();
+    assertThat(validationRequest.endUseCode()).isEqualTo("PL");
+    assertThat(validationRequest.speciesCodes()).containsExactly("HE");
+  }
+
+  @Test
+  void shouldParseMultipleSpeciesFromDeclaredSpeciesEndUseSort() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(new PackageValidityItem(true, null));
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>",
+            "<lexis:speciesEndUseSort>HE/FI/PL</lexis:speciesEndUseSort>");
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                new MockMultipartFile(
+                    "formFile", "6-652-7.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)));
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().speciesCodes()).containsExactly("HE", "FI");
+
+    ArgumentCaptor<CreateApplicationRequest> validationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(validationCaptor.capture());
+    CreateApplicationRequest validationRequest = validationCaptor.getValue();
+    assertThat(validationRequest.endUseCode()).isEqualTo("PL");
+    assertThat(validationRequest.speciesCodes()).containsExactly("HE", "FI");
+  }
+
+  @Test
   void shouldRejectLexisXmlValidationWhenPackageAlreadyExists() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
