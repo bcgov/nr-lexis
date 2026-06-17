@@ -4,13 +4,13 @@
     <lexis:LexisSubmission>
       <lexis:applicant>
         <lexis:applicantDetails>
-          <lexis:clientNumber>1074</lexis:clientNumber>
-          <lexis:clientLocnCode>03</lexis:clientLocnCode>
-          <lexis:name>Mosaic Forest Management Corporation</lexis:name>
+          <lexis:clientNumber>99887766</lexis:clientNumber>
+          <lexis:clientLocnCode>99</lexis:clientLocnCode>
+          <lexis:name>Sample Federal Applicant Ltd.</lexis:name>
         </lexis:applicantDetails>
         <lexis:applicantContact>
-          <lexis:contactSurname>SERVICE</lexis:contactSurname>
-          <lexis:contactFirstname>CUSTOMER</lexis:contactFirstname>
+          <lexis:contactSurname>SAMPLE</lexis:contactSurname>
+          <lexis:contactFirstname>CONTACT</lexis:contactFirstname>
         </lexis:applicantContact>
       </lexis:applicant>
       <lexis:applicationDetail>
@@ -22,18 +22,18 @@
       </lexis:applicationDetail>
       <lexis:productDetail>
         <lexis:productTypeCode>H</lexis:productTypeCode>
-        <lexis:boomNumber>QA26-FAIL-FED</lexis:boomNumber>
+        <lexis:boomNumber>FED-SAMPLE-001</lexis:boomNumber>
         <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
-        <lexis:productLocation>Port Alberni c/o Pacific Towing</lexis:productLocation>
+        <lexis:productLocation>Generic Federal Sample Location</lexis:productLocation>
         <lexis:ageClass>S</lexis:ageClass>
         <lexis:avgLength>6.7</lexis:avgLength>
         <lexis:avgDiameter>12.8</lexis:avgDiameter>
         <lexis:harvestedTimber>
-          <lexis:timberMark>NCHWP</lexis:timberMark>
-          <lexis:numberOfPieces>1500</lexis:numberOfPieces>
+          <lexis:timberMark>ZZ999</lexis:timberMark>
+          <lexis:numberOfPieces>321</lexis:numberOfPieces>
           <lexis:species>HE</lexis:species>
           <lexis:grade>H</lexis:grade>
-          <lexis:quantityVolume>500</lexis:quantityVolume>
+          <lexis:quantityVolume>123</lexis:quantityVolume>
         </lexis:harvestedTimber>
       </lexis:productDetail>
     </lexis:LexisSubmission>
