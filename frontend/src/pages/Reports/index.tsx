@@ -585,10 +585,10 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'biweeklyListing',
-    title: 'MOFR Listing Export',
-    category: 'Federal',
+    title: 'Advertising List',
+    category: 'Cross-Module',
     action: 'mofrListing',
-    description: 'MOFR listing output.',
+    description: 'Advertising list output in PDF or CSV format.',
     actionMappings: [
       { value: 'generate', label: 'Generate with filters' },
       { value: 'generateIndustryPDF', label: 'Advertising list PDF' },
