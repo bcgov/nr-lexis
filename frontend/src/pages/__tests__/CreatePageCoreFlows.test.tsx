@@ -212,9 +212,7 @@ describe('Create Page Core Flows', () => {
     expect(within(newApplicationState).getByText('Application number')).toBeInTheDocument()
     expect(within(newApplicationState).getByText('Status')).toBeInTheDocument()
     expect(within(newApplicationState).getAllByText('New')).toHaveLength(2)
-    expect(
-      screen.queryByRole('textbox', { name: /application number/i }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: /application number/i })).not.toBeInTheDocument()
 
     const submitButton = await screen.findByRole('button', { name: 'Submit' })
     await waitFor(() => expect(submitButton).toBeEnabled())
@@ -529,7 +527,10 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByText('Create provincial exemption')
-    await userEvent.type(screen.getByLabelText('Exemption number (required)'), 'EX-777')
+    const newExemptionState = screen.getByRole('group', { name: 'New exemption state' })
+    expect(within(newExemptionState).getByText('Exemption number')).toBeInTheDocument()
+    expect(within(newExemptionState).getAllByText('New')).not.toHaveLength(0)
+    expect(screen.queryByRole('textbox', { name: /exemption number/i })).not.toBeInTheDocument()
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Exemption type (required)' }),
       'Section 1',
@@ -547,7 +548,6 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
 
     expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
-      exemptionNumber: 'EX-777',
       applicationNumber: '321',
       linkedApplicationNumbers: ['321', '654'],
       exemptionTypeCode: 'SECTION_1',
@@ -576,7 +576,6 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByText('Create provincial exemption')
-    await userEvent.type(screen.getByLabelText('Exemption number (required)'), 'EX-778')
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Exemption type (required)' }),
       'Section 1',
@@ -602,7 +601,6 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByText('Create provincial exemption')
-    await userEvent.type(screen.getByLabelText('Exemption number (required)'), 'EX-779')
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Exemption type (required)' }),
       'Section 1',
@@ -636,11 +634,14 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByText('Create provincial offer')
+    const newOfferState = screen.getByRole('group', { name: 'New offer state' })
+    expect(within(newOfferState).getByText('Offer number')).toBeInTheDocument()
+    expect(within(newOfferState).getByText('New')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: /offer number/i })).not.toBeInTheDocument()
     expect(await screen.findByDisplayValue('PKG-9')).toBeInTheDocument()
     expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
     expect(screen.getByDisplayValue('H/SA')).toBeInTheDocument()
     expect(screen.getByDisplayValue('03/01/2026')).toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('Offer number (required)'), '8080')
     await userEvent.type(screen.getByLabelText('Company name (required)'), 'Example Lumber')
     await userEvent.type(screen.getByLabelText('Contact name (required)'), 'Alex Example')
     await userEvent.type(screen.getByLabelText('Offer amount (required)'), '25000')
@@ -659,7 +660,6 @@ describe('Create Page Core Flows', () => {
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith({
-        offerNumber: '8080',
         applicationNumber: '2001',
         packageNumber: 'PKG-9',
         offeringClientNumber: '00099999',
@@ -727,7 +727,6 @@ describe('Create Page Core Flows', () => {
     await screen.findByText('Create provincial offer')
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
 
-    await userEvent.type(screen.getByLabelText('Offer number (required)'), '8082')
     await userEvent.type(screen.getByLabelText('Offer amount (required)'), '25000')
     await userEvent.type(screen.getByLabelText('Offer date (YYYY-MM-DD) (required)'), '2026-03-10')
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }))

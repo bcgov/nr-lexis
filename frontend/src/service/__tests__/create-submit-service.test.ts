@@ -112,7 +112,6 @@ describe('create-submit-service', () => {
     })
 
     const result = await submitProvincialOfferCreate({
-      offerNumber: '900',
       applicationNumber: '200',
       packageNumber: 'PKG-9',
       offeringClientNumber: '00012345',
@@ -132,6 +131,8 @@ describe('create-submit-service', () => {
     expect(body.get('companyName')).toBe('Example Lumber')
     expect(body.get('contactName')).toBe('Alex Example')
     expect(body.get('withdrawReason')).toBe('Withdrawn by buyer')
+    expect(body.get('offerNumber')).toBeNull()
+    expect(body.get('exportPurchaseOfferNumber')).toBeNull()
   })
 
   it('posts provincial application agent applicant fields when applicant type is agent', async () => {
@@ -183,7 +184,6 @@ describe('create-submit-service', () => {
     })
 
     const result = await submitProvincialExemptionCreate({
-      exemptionNumber: '1235',
       applicationNumber: '123',
       linkedApplicationNumbers: ['123'],
       exemptionTypeCode: 'M',
@@ -199,6 +199,8 @@ describe('create-submit-service', () => {
     expect(result.success).toBe(false)
     expect(result.message).toBe('')
     expect(result.errors).toEqual(['Application 123 is already assigned to exemption 1234.'])
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('exemptionNumber')).toBeNull()
   })
 
   it('uses configured create endpoint overrides when provided', async () => {
@@ -298,7 +300,6 @@ describe('create-submit-service', () => {
     })
 
     await submitProvincialPermitCreate({
-      permitNumber: '101',
       applicationNumber: '2',
       packageNumber: 'PKG',
       exemptionNumber: 'EX-1',
@@ -316,11 +317,11 @@ describe('create-submit-service', () => {
     const [, body] = postMock.mock.calls[0]
     expect(body).toEqual(
       expect.objectContaining({
-        permitNumber: '101',
         permitStatus: 'Issued',
       }),
     )
     expect(body).not.toHaveProperty('actionMapping')
+    expect(body).not.toHaveProperty('permitNumber')
   })
 
   it('returns status-specific message when permit submit endpoint is unavailable', async () => {
@@ -333,7 +334,6 @@ describe('create-submit-service', () => {
     })
 
     const result = await submitProvincialPermitCreate({
-      permitNumber: '1',
       applicationNumber: '2',
       packageNumber: 'PKG',
       exemptionNumber: 'EX-1',

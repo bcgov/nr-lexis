@@ -204,7 +204,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
           null,
           null,
           false,
-          List.of("Unable to save exemption " + normalized.exemptionNumber() + "."),
+          List.of("Unable to save exemption."),
           warnings);
     }
 
@@ -859,9 +859,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   private List<String> validateCreateExemption(CreateExemptionRequest request) {
     List<String> errors = new ArrayList<>();
-    if (trimToNull(request.exemptionNumber()) == null) {
-      errors.add(required("exemption number"));
-    }
     validateApprovedVolume(request.approvedVolume(), errors);
     if (trimToNull(request.exemptionTypeCode()) == null) {
       errors.add(required("exemption type code"));

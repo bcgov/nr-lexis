@@ -26,7 +26,6 @@ import { submitProvincialPermitCreate } from '@/service/create-submit-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
 
 type ProvincialPermitCreateForm = {
-  permitNumber: string
   applicationNumber: string
   packageNumber: string
   exemptionNumber: string
@@ -46,7 +45,6 @@ type ProvincialPermitCreateField = keyof ProvincialPermitCreateForm & string
 const MODULE_KEY = 'provincial-permit'
 
 const INITIAL_FORM: ProvincialPermitCreateForm = {
-  permitNumber: '',
   applicationNumber: '',
   packageNumber: '',
   exemptionNumber: '',
@@ -64,7 +62,6 @@ const INITIAL_FORM: ProvincialPermitCreateForm = {
 const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialPermitCreateForm => {
   return {
     ...INITIAL_FORM,
-    permitNumber: query.get('permitNumber') ?? '',
     applicationNumber: query.get('applicationNumber') ?? '',
     packageNumber: query.get('packageNumber') ?? '',
     exemptionNumber: query.get('exemptionNumber') ?? '',
@@ -115,10 +112,6 @@ const ProvincialPermitCreatePage: FC = () => {
 
   const fieldErrors = useMemo<FieldErrors<ProvincialPermitCreateField>>(
     () => ({
-      permitNumber: firstValidationError(
-        () => requiredFieldError(form.permitNumber, 'Permit number'),
-        () => positiveNumericFieldError(form.permitNumber),
-      ),
       applicationNumber: firstValidationError(
         () => requiredFieldError(form.applicationNumber, 'Application number'),
         () => positiveNumericFieldError(form.applicationNumber),
@@ -233,7 +226,19 @@ const ProvincialPermitCreatePage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create provincial permit</h1>
+        <div className="application-detail-title-row">
+          <h1>Create provincial permit</h1>
+          <dl
+            className="application-detail-header-metrics"
+            role="group"
+            aria-label="New permit state"
+          >
+            <div>
+              <dt>Permit number</dt>
+              <dd>New</dd>
+            </div>
+          </dl>
+        </div>
       </Column>
 
       {missingRequiredOptions && (
@@ -264,17 +269,6 @@ const ProvincialPermitCreatePage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <div className="legacy-search-grid">
-            <TextInput
-              id="permitNumber"
-              labelText="Permit number (required)"
-              value={form.permitNumber}
-              invalid={!!fieldError('permitNumber')}
-              invalidText={fieldError('permitNumber')}
-              onBlur={() => markFieldTouched('permitNumber')}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, permitNumber: event.target.value }))
-              }
-            />
             <ApplicationNumberSelect
               id="applicationNumber"
               labelText="Application number (required)"
@@ -440,7 +434,7 @@ const ProvincialPermitCreatePage: FC = () => {
           onDeleteDraft={onDeleteDraft}
           summarize={(payload) => {
             const value = payload as ProvincialPermitCreateForm
-            return `${value.permitNumber || 'N/A'} / application ${value.applicationNumber || 'N/A'}`
+            return `new permit / application ${value.applicationNumber || 'N/A'}`
           }}
         />
       </Column>

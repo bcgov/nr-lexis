@@ -119,7 +119,7 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
-  void addExemptionShouldReturnValidationErrorsBeforeOracleInsert() {
+  void addExemptionShouldReturnValidationErrorsBeforeOracleInsertWithoutRequiringNumber() {
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.addExemption(
             new ExemptionDetailsRpcService.CreateExemptionRequest(
@@ -127,7 +127,8 @@ class OracleExemptionDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors()).contains("A valid exemption number is required.");
+    assertThat(response.errors()).contains("The approved volume must be greater than 0");
+    assertThat(response.errors()).doesNotContain("A valid exemption number is required.");
     verifyNoInteractions(repository);
   }
 
@@ -229,6 +230,38 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(rateRecord.exemptionNumber()).isEqualTo("EX-205");
     assertThat(rateRecord.fixedExemptionRate()).isEqualTo(18.25d);
     assertThat(rateRecord.userId()).isEqualTo("idir\\jsmith");
+  }
+
+  @Test
+  void addExemptionShouldAllowOracleGeneratedExemptionNumber() {
+    when(repository.insertExemption(any(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class)))
+        .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-900")));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                null,
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                "Generated number",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of(),
+                false,
+                false,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.exemptionNumber()).isEqualTo("EX-900");
+
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class);
+    verify(repository).insertExemption(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().exemptionNumber()).isNull();
   }
 
   @Test
