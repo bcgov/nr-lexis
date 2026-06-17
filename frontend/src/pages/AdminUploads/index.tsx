@@ -53,7 +53,7 @@ type AdminUploadsPageProps = {
 const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   {
     type: 'lexisXml',
-    label: 'LEXIS application import',
+    label: 'Application submission upload',
     requiredAction: 'createApplication',
     numberFieldLabel: '',
     numberFieldPlaceholder: '',
@@ -87,6 +87,10 @@ const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
     numberFieldPlaceholder: 'Enter permit number for invoice',
   },
 ]
+
+const DOCUMENT_UPLOAD_WORKFLOW_DEFINITIONS = UPLOAD_WORKFLOW_DEFINITIONS.filter(
+  (workflow) => workflow.type !== 'lexisXml',
+)
 
 type UploadFormState = {
   applicationNumber: string
@@ -140,14 +144,18 @@ const INITIAL_FORM_STATE: UploadFormState = {
 const getWorkflowFromQuery = (
   value: string | null,
   fallback: UploadWorkflowType = 'application',
+  allowLexisXml = true,
 ): UploadWorkflowType => {
   if (
     value === 'application' ||
     value === 'exemption' ||
     value === 'permit' ||
-    value === 'invoice' ||
-    value === 'lexisXml'
+    value === 'invoice'
   ) {
+    return value
+  }
+
+  if (allowLexisXml && value === 'lexisXml') {
     return value
   }
 
@@ -307,7 +315,7 @@ const validateQueuedFile = (file: File, workflowType: UploadWorkflowType): strin
 
 const workflowDescription = (workflowType: UploadWorkflowType): string => {
   if (workflowType === 'lexisXml') {
-    return 'Create LEXIS applications from ESF LEXIS XML or GeoJSON submissions, including package, species, and scale rows.'
+    return 'Upload ESF LEXIS XML or GeoJSON application submissions, including package, species, and scale rows.'
   }
   if (workflowType === 'invoice') {
     return 'Attach an invoice file and invoice values to an existing permit.'
@@ -357,7 +365,8 @@ const defaultSuccessTitle = (workflowType: UploadWorkflowType): string =>
 const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageTitle }) => {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const initialWorkflow = lockedWorkflowType ?? getWorkflowFromQuery(searchParams.get('type'))
+  const initialWorkflow =
+    lockedWorkflowType ?? getWorkflowFromQuery(searchParams.get('type'), 'application', false)
   const [selectedWorkflowType, setSelectedWorkflowType] =
     useState<UploadWorkflowType>(initialWorkflow)
   const [formState, setFormState] = useState<UploadFormState>(() =>
@@ -409,6 +418,8 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
       (item) =>
         item.status === 'validated' || item.status === 'uploading' || item.status === 'complete',
     )
+  const isUploadInputLocked =
+    !hasUploadAccess || (selectedWorkflowType === 'lexisXml' && hasLockedLexisSubmissions)
   const submitButtonLabel =
     selectedWorkflowType === 'lexisXml'
       ? hasQueuedLexisSubmissions || !hasValidatedLexisSubmissions
@@ -604,7 +615,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
       })
       const message = buildUploadResultMessage(
         'lexisXml',
-        'LEXIS application submission imported. Verify the created application and package details.',
+        'LEXIS application submission created. Verify the created application and package details.',
         result,
       )
       return {
@@ -741,13 +752,13 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
       setSuccessMessage(
         successCount === 1
           ? lastSuccessMessage
-          : `${successCount} application submissions validated. Review the file summary and finalize submissions.`,
+          : `${successCount} application submissions validated. Review the submission summary and finalize submissions.`,
       )
     }
 
     if (failureCount > 0) {
       setErrorMessage(
-        `${failureCount} file${failureCount === 1 ? '' : 's'} failed validation. Review the queue for details.`,
+        `${failureCount} submission${failureCount === 1 ? '' : 's'} failed validation. Review the queue for details.`,
       )
     }
   }
@@ -795,13 +806,13 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
       setSuccessMessage(
         successCount === 1
           ? lastSuccessMessage
-          : `${successCount} application submissions imported. Verify the created application and package details.`,
+          : `${successCount} application submissions created. Verify the created application and package details.`,
       )
     }
 
     if (failureCount > 0) {
       setErrorMessage(
-        `${failureCount} file${failureCount === 1 ? '' : 's'} failed. Review the queue for details.`,
+        `${failureCount} submission${failureCount === 1 ? '' : 's'} failed. Review the queue for details.`,
       )
     }
   }
@@ -823,7 +834,11 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
     }
 
     if (uploadQueue.length === 0) {
-      setErrorMessage('Choose at least one file to upload.')
+      setErrorMessage(
+        selectedWorkflowType === 'lexisXml'
+          ? 'Choose at least one application submission file.'
+          : 'Choose at least one file to upload.',
+      )
       return
     }
 
@@ -883,7 +898,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
         successCount === 1
           ? lastSuccessMessage
           : selectedWorkflowType === 'lexisXml'
-            ? `${successCount} application submissions imported. Verify the created application and package details.`
+            ? `${successCount} application submissions created. Verify the created application and package details.`
             : `${successCount} files uploaded. Verify updates in the target details view.`,
       )
     }
@@ -952,7 +967,9 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
                   <strong>{currentUploadTargetSummary}</strong>
                 </div>
                 <div>
-                  <span>Queued files</span>
+                  <span>
+                    {selectedWorkflowType === 'lexisXml' ? 'Queued submissions' : 'Queued files'}
+                  </span>
                   <strong>{uploadQueue.length}</strong>
                 </div>
                 <div>
@@ -967,11 +984,13 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
                     id="uploadWorkflowType"
                     labelText="Upload type"
                     value={selectedWorkflowType}
-                    options={UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
+                    options={DOCUMENT_UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
                       value: workflow.type,
                       label: workflow.label,
                     }))}
-                    onChange={(value) => setWorkflowType(getWorkflowFromQuery(value))}
+                    onChange={(value) =>
+                      setWorkflowType(getWorkflowFromQuery(value, 'application', false))
+                    }
                   />
                 )}
 
@@ -1129,7 +1148,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
             <MultiFileDropZone
               title={
                 selectedWorkflowType === 'lexisXml'
-                  ? 'Upload Application Submissions'
+                  ? 'Upload application submissions'
                   : 'Upload Documents'
               }
               description={uploadFormatText}
@@ -1138,8 +1157,12 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
               inputLabel={uploadInputLabel}
               accept={uploadAccept}
               invalidText={fieldError('uploadFile')}
-              disabled={!hasUploadAccess}
-              disabledDescription="Your session does not include the required upload permission."
+              disabled={isUploadInputLocked}
+              disabledDescription={
+                !hasUploadAccess
+                  ? 'Your session does not include the required upload permission.'
+                  : 'Current application submissions are locked for review. Finalize, cancel, or reset before choosing more files.'
+              }
               onFilesSelected={addFilesToQueue}
             />
           </div>
@@ -1169,6 +1192,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
             submitLabel={submitButtonLabel}
             submittingLabel={submittingButtonLabel}
             removeLabel={selectedWorkflowType === 'lexisXml' ? 'Cancel submission' : undefined}
+            pendingMessage={selectedWorkflowType === 'lexisXml' ? 'Not validated yet.' : undefined}
             onSubmit={() => void onSubmitUpload()}
             onReset={onReset}
             onClear={clearQueuedFiles}

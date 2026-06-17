@@ -78,11 +78,11 @@ describe('Admin tool access smoke', () => {
     )
     expect(mockNavigate).toHaveBeenCalledWith('/admin/uploads?type=application')
 
-    const lexisImportRow = screen.getByText('LEXIS application import').closest('tr')
-    expect(lexisImportRow).not.toBeNull()
+    const submissionUploadRow = screen.getByText('Application submission upload').closest('tr')
+    expect(submissionUploadRow).not.toBeNull()
 
     await userEvent.click(
-      within(lexisImportRow as HTMLTableRowElement).getByRole('button', { name: 'Open' }),
+      within(submissionUploadRow as HTMLTableRowElement).getByRole('button', { name: 'Open' }),
     )
     expect(mockNavigate).toHaveBeenLastCalledWith('/provincial/application/upload')
   })

@@ -175,7 +175,7 @@ export const buildUploadResultMessage = (
     resultMessage.toLowerCase().includes('validated')
   const summary =
     details.length > 0
-      ? `${isValidationResult ? 'LEXIS application submission validated' : 'LEXIS import created'} ${details.join(', ')}.`
+      ? `${isValidationResult ? 'LEXIS application submission validated' : 'LEXIS application submission created'} ${details.join(', ')}.`
       : result?.message?.trim() || resultMessage
 
   const warnings =

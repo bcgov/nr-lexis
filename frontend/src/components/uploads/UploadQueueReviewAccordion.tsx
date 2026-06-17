@@ -13,6 +13,7 @@ type UploadQueueReviewAccordionProps = {
   items: UploadQueueItem[]
   targetSummary: string
   idPrefix?: string
+  itemNoun?: string
 }
 
 const asList = (value: string[] | undefined): string[] => value?.filter(Boolean) ?? []
@@ -27,19 +28,22 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
   items,
   targetSummary,
   idPrefix = 'adminUploadReview',
+  itemNoun = 'file',
 }) => {
   if (items.length === 0) {
     return null
   }
 
   const titleId = `${idPrefix}Title`
+  const itemNounTitle = `${itemNoun.charAt(0).toUpperCase()}${itemNoun.slice(1)}`
+  const itemNounPlural = `${itemNoun}s`
 
   return (
     <section className="admin-upload-review" aria-labelledby={titleId}>
       <div className="admin-upload-review__header">
-        <h3 id={titleId}>File Review</h3>
+        <h3 id={titleId}>{itemNounTitle} review</h3>
         <span>
-          {items.length} file{items.length === 1 ? '' : 's'}
+          {items.length} {items.length === 1 ? itemNoun : itemNounPlural}
         </span>
       </div>
 
@@ -81,19 +85,19 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
               <div className="admin-upload-review__content">
                 <dl className="admin-upload-review__meta">
                   <div>
-                    <dt>Upload Type</dt>
+                    <dt>Upload type</dt>
                     <dd>{item.workflowLabel}</dd>
                   </div>
                   <div>
-                    <dt>File Name</dt>
+                    <dt>File name</dt>
                     <dd>{item.file.name}</dd>
                   </div>
                   <div>
-                    <dt>File Size</dt>
+                    <dt>File size</dt>
                     <dd>{formatUploadFileSize(item.file.size)}</dd>
                   </div>
                   <div>
-                    <dt>Submission Timestamp</dt>
+                    <dt>Submission timestamp</dt>
                     <dd>{formatUploadQueuedAt(item.queuedAt)}</dd>
                   </div>
                   <div>
@@ -124,7 +128,7 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                   )}
                   {typeof details?.scaleRows === 'number' && (
                     <div>
-                      <dt>Scale Rows</dt>
+                      <dt>Scale rows</dt>
                       <dd>{formatScaleRows(details.scaleRows)}</dd>
                     </div>
                   )}
@@ -132,10 +136,10 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
 
                 {submissionSummary && (
                   <div className="admin-upload-review__issue-group">
-                    <h4>Application Summary</h4>
+                    <h4>Application summary</h4>
                     <dl className="admin-upload-review__meta">
                       <div>
-                        <dt>Owner Client</dt>
+                        <dt>Owner client</dt>
                         <dd>
                           {formatOptional(submissionSummary.ownerClientNumber)}
                           {submissionSummary.ownerClientLocationCode
@@ -144,7 +148,7 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                         </dd>
                       </div>
                       <div>
-                        <dt>Owner Contact</dt>
+                        <dt>Owner contact</dt>
                         <dd>{formatOptional(submissionSummary.ownerContactName)}</dd>
                       </div>
                       <div>
@@ -156,27 +160,27 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                         <dd>{formatOptional(submissionSummary.jurisdictionCode)}</dd>
                       </div>
                       <div>
-                        <dt>Product Type</dt>
+                        <dt>Product type</dt>
                         <dd>{formatOptional(submissionSummary.productTypeCode)}</dd>
                       </div>
                       <div>
-                        <dt>Product Location</dt>
+                        <dt>Product location</dt>
                         <dd>{formatOptional(submissionSummary.productLocation)}</dd>
                       </div>
                       <div>
-                        <dt>Application Volume</dt>
+                        <dt>Application volume</dt>
                         <dd>{formatDecimal(submissionSummary.applicationVolume)}</dd>
                       </div>
                       <div>
-                        <dt>Average Log Volume</dt>
+                        <dt>Average log volume</dt>
                         <dd>{formatDecimal(submissionSummary.averageLogVolume)}</dd>
                       </div>
                       <div>
-                        <dt>Average Length</dt>
+                        <dt>Average length</dt>
                         <dd>{formatDecimal(submissionSummary.averageLength)}</dd>
                       </div>
                       <div>
-                        <dt>Average Diameter</dt>
+                        <dt>Average diameter</dt>
                         <dd>{formatDecimal(submissionSummary.averageDiameter)}</dd>
                       </div>
                       <div>
@@ -188,7 +192,7 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                         </dd>
                       </div>
                       <div>
-                        <dt>End Use</dt>
+                        <dt>End use</dt>
                         <dd>{formatOptional(submissionSummary.endUseCode)}</dd>
                       </div>
                     </dl>

@@ -29,6 +29,7 @@ type UploadQueuePreviewProps = {
   submitLabel?: string
   submittingLabel?: string
   removeLabel?: string
+  pendingMessage?: string
   renderCompleteAction?: (item: UploadQueueItem) => ReactNode
 }
 
@@ -58,6 +59,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
   submitLabel = 'Submit Upload',
   submittingLabel = 'Submitting...',
   removeLabel = 'Remove',
+  pendingMessage = 'Not submitted yet.',
   renderCompleteAction,
 }) => {
   const [queueFilter, setQueueFilter] = useState('')
@@ -106,6 +108,9 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
   const previewTitleId = `${idPrefix}PreviewTitle`
   const queueFilterId = `${idPrefix}QueueFilter`
   const itemNounPlural = `${itemNoun}s`
+  const isSubmissionQueue = itemNoun === 'submission'
+  const workflowColumnLabel = isSubmissionQueue ? 'Submission type' : 'Upload type'
+  const fileColumnLabel = isSubmissionQueue ? 'Submission file' : 'File'
   const selectedItemLabel = `${items.length} selected ${
     items.length === 1 ? itemNoun : itemNounPlural
   }`
@@ -158,8 +163,8 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
           <div className="admin-upload-preview-filter">
             <TextInput
               id={queueFilterId}
-              labelText="Filter queued files"
-              placeholder="Filter by upload type, file name, target, status, or message"
+              labelText={`Filter queued ${itemNounPlural}`}
+              placeholder={`Filter by ${workflowColumnLabel.toLowerCase()}, file name, target, status, or message`}
               value={queueFilter}
               onChange={(event) => setQueueFilter(event.target.value)}
             />
@@ -167,8 +172,8 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
           <table className="cds--data-table admin-upload-queue__table">
             <thead>
               <tr>
-                <th>Upload Type</th>
-                <th>File</th>
+                <th>{workflowColumnLabel}</th>
+                <th>{fileColumnLabel}</th>
                 <th>Target</th>
                 <th>Status</th>
                 <th>Message</th>
@@ -178,7 +183,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
             <tbody>
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>No queued files match the current filter.</td>
+                  <td colSpan={6}>No queued {itemNounPlural} match the current filter.</td>
                 </tr>
               ) : (
                 filteredItems.map((item) => (
@@ -199,7 +204,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
                         {uploadQueueStatusLabel(item.status)}
                       </Tag>
                     </td>
-                    <td>{item.message || 'Not submitted yet.'}</td>
+                    <td>{item.message || pendingMessage}</td>
                     <td>
                       <div className="admin-upload-row-actions">
                         {renderCompleteAction?.(item)}
@@ -232,6 +237,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
             items={filteredItems}
             targetSummary={targetSummary}
             idPrefix={`${idPrefix}Review`}
+            itemNoun={itemNoun}
           />
         </>
       )}

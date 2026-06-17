@@ -87,7 +87,7 @@ class LexisXmlImportServiceTest {
     assertThat(application.endUseCode()).isEqualTo("PL");
     assertThat(application.speciesCodes()).containsExactly("HE", "FI");
     assertThat(application.remarkBody())
-        .isEqualTo("Imported from LEXIS upload.\nUser reference: CLIENT-REF-1");
+        .isEqualTo("Created from LEXIS application submission.\nUser reference: CLIENT-REF-1");
 
     ArgumentCaptor<PackageMutationRequest> packageCaptor =
         ArgumentCaptor.forClass(PackageMutationRequest.class);
@@ -100,7 +100,7 @@ class LexisXmlImportServiceTest {
     assertThat(packageRequest.averageDiameter()).isEqualTo(12.8d);
     assertThat(packageRequest.status()).isEqualTo("ACT");
     assertThat(packageRequest.comments())
-        .isEqualTo("Imported from LEXIS upload.\nUser reference: CLIENT-REF-1");
+        .isEqualTo("Created from LEXIS application submission.\nUser reference: CLIENT-REF-1");
     assertThat(packageRequest.endUseCode()).isEqualTo("PL");
     assertThat(packageRequest.speciesCodes()).containsExactly("HE", "FI");
 
@@ -238,7 +238,7 @@ class LexisXmlImportServiceTest {
     assertThat(result.applicationNumber()).isEqualTo(9001L);
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
-    assertThat(result.warnings()).contains("Imported payload/6-652-7.xml from ZIP archive submission.zip.");
+    assertThat(result.warnings()).contains("Loaded payload/6-652-7.xml from ZIP archive submission.zip.");
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
   }
 
@@ -342,7 +342,7 @@ class LexisXmlImportServiceTest {
     assertThat(result.applicationNumber()).isEqualTo(9001L);
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
-    assertThat(result.warnings()).contains("Imported payload/submission.dat from ZIP archive submission.zip.");
+    assertThat(result.warnings()).contains("Loaded payload/submission.dat from ZIP archive submission.zip.");
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
   }
 
@@ -424,9 +424,11 @@ class LexisXmlImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .contains("The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file.");
+        .contains(
+            "The LEXIS application submission file must be an XML, GeoJSON, JSON, or ZIP file.");
     assertThat(result.message())
-        .contains("The LEXIS import file must be an XML, GeoJSON, JSON, or ZIP file.");
+        .contains(
+            "The LEXIS application submission file must be an XML, GeoJSON, JSON, or ZIP file.");
   }
 
   @Test
@@ -437,7 +439,9 @@ class LexisXmlImportServiceTest {
         service.importLexisXml(zippedFile(List.of("first.xml", "second.xml")), "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("The ZIP file must contain exactly one LEXIS XML or GeoJSON import file.");
+    assertThat(result.errors())
+        .contains(
+            "The ZIP file must contain exactly one LEXIS XML or GeoJSON application submission file.");
   }
 
   @Test
@@ -447,7 +451,8 @@ class LexisXmlImportServiceTest {
     LexisXmlImportResultDto result = service.importLexisXml(emptyZipFile(), "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("The ZIP file must contain one LEXIS XML or GeoJSON import file.");
+    assertThat(result.errors())
+        .contains("The ZIP file must contain one LEXIS XML or GeoJSON application submission file.");
   }
 
   @Test
