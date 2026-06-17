@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react'
 import {
   Button,
   Column,
@@ -101,6 +101,7 @@ import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
 const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['REJ', 'WDN'])
+const REVIEW_STATUSES_WITH_PERSISTED_REMARK = new Set(['EXP', 'REJ', 'WDN'])
 const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before updating review status.'
 const REVIEW_REMARK_REQUIRED_MESSAGE =
   'Review remark is required when rejecting or withdrawing an application.'
@@ -372,19 +373,53 @@ const applicationDocumentUploadUnavailableMessage = (
   return ''
 }
 
+const normalizeReviewEmail = (value: string | null | undefined): string => {
+  const normalized = normalizeEmail(value ?? '')
+  const lowered = normalized.toLowerCase()
+  return lowered === 'none' || lowered === 'not on file' ? '' : normalized
+}
+
 const reviewEmailCandidate = (
   applicantTypeCode: string,
   ownerClientData: ApplicationClientData | null,
   agentClientData: ApplicationClientData | null,
 ): string => {
-  const ownerEmail = normalizeEmail(ownerClientData?.email ?? '')
-  const agentEmail = normalizeEmail(agentClientData?.email ?? '')
+  const ownerEmail = normalizeReviewEmail(ownerClientData?.email ?? '')
+  const agentEmail = normalizeReviewEmail(agentClientData?.email ?? '')
 
   if (isAgentApplicant(applicantTypeCode)) {
     return agentEmail || ownerEmail
   }
 
   return ownerEmail || agentEmail
+}
+
+const latestPersistedRemark = (
+  remarks: ProvincialApplicationDetail['remarks'] | undefined,
+): string => {
+  const latest = [...(remarks ?? [])]
+    .filter((remark) => remark.remark.trim())
+    .sort((left, right) => {
+      const leftTime = left.date ? Date.parse(left.date) : 0
+      const rightTime = right.date ? Date.parse(right.date) : 0
+      if (leftTime !== rightTime) {
+        return rightTime - leftTime
+      }
+      return (right.remarkId ?? 0) - (left.remarkId ?? 0)
+    })[0]
+
+  return latest?.remark ?? ''
+}
+
+const latestPersistedReviewRemark = (
+  detail: ProvincialApplicationDetail | null | undefined,
+): string => {
+  const statusCode = normalizeReviewStatus(detail?.applicationStatusCode ?? '')
+  if (!REVIEW_STATUSES_WITH_PERSISTED_REMARK.has(statusCode)) {
+    return ''
+  }
+
+  return latestPersistedRemark(detail?.remarks)
 }
 
 const ProvincialApplicationDetailsPage: FC = () => {
@@ -448,6 +483,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [reviewStatusCode, setReviewStatusCode] = useState('')
   const [reviewStatusRemark, setReviewStatusRemark] = useState('')
   const [reviewStatusEmailAddress, setReviewStatusEmailAddress] = useState('')
+  const seededReviewFieldsApplicationRef = useRef<string | null>(null)
   const [reviewValidationMessage, setReviewValidationMessage] = useState('')
   const [isSubmittingReviewAction, setIsSubmittingReviewAction] = useState(false)
   const [focusedPackageNumber, setFocusedPackageNumber] = useState('')
@@ -487,6 +523,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const loadApplicationDetail = useCallback(async () => {
     const isLatestRequest = beginDetailRequest()
     if (!applicationNumber) {
+      seededReviewFieldsApplicationRef.current = null
       setErrorMessage('Application number is missing from the route.')
       setDetail(null)
       setDocumentRows([])
@@ -518,8 +555,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
       setSummaryBaselineForm(editableSummaryForm)
       setShowSummaryValidationErrors(false)
       setReviewStatusCode(response?.applicationStatusCode ?? '')
-      setReviewStatusRemark('')
-      setReviewStatusEmailAddress('')
+      if (seededReviewFieldsApplicationRef.current !== applicationNumber) {
+        seededReviewFieldsApplicationRef.current = response ? applicationNumber : null
+        setReviewStatusRemark(latestPersistedReviewRemark(response))
+        setReviewStatusEmailAddress('')
+      }
       setReviewValidationMessage('')
       setRemarkBody('')
       setEditingRemarkId(null)
@@ -789,7 +829,8 @@ const ProvincialApplicationDetailsPage: FC = () => {
       }
 
       const statusDescription = resolveApplicationStatusDescription(statusCode)
-      const clientEmail = result.clientEmail ?? fallbackClientEmail
+      const clientEmail =
+        normalizeReviewEmail(result.clientEmail) || normalizeReviewEmail(fallbackClientEmail)
       const remark = result.remark ?? fallbackRemark
       const insertedRemark =
         remark.trim() && result.remarkId
@@ -1814,7 +1855,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const buildReviewStatusPayload = useCallback(
     (requireEmail: boolean) => {
       const statusCode = normalizedReviewStatusCode
-      const clientEmailAddress = normalizeEmail(reviewStatusEmailAddress)
+      const clientEmailAddress = normalizeReviewEmail(reviewStatusEmailAddress)
       const remark = reviewStatusRemark.trim()
       if (!statusCode) {
         return {

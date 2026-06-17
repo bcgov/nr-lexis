@@ -819,8 +819,8 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('MOFR Listing Export')
-    const reportRow = screen.getByText('MOFR Listing Export').closest('tr')
+    await screen.findByText('Advertising List')
+    const reportRow = screen.getByText('Advertising List').closest('tr')
     expect(reportRow).not.toBeNull()
     await userEvent.click(
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
@@ -863,8 +863,8 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('MOFR Listing Export')
-    const reportRow = screen.getByText('MOFR Listing Export').closest('tr')
+    await screen.findByText('Advertising List')
+    const reportRow = screen.getByText('Advertising List').closest('tr')
     expect(reportRow).not.toBeNull()
     await userEvent.click(
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
@@ -908,8 +908,8 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('MOFR Listing Export')
-    const reportRow = screen.getByText('MOFR Listing Export').closest('tr')
+    await screen.findByText('Advertising List')
+    const reportRow = screen.getByText('Advertising List').closest('tr')
     expect(reportRow).not.toBeNull()
     await userEvent.click(
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),

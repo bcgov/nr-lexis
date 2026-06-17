@@ -177,37 +177,42 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.click(newRowCheckbox)
 
     expect(approveButton).toBeEnabled()
-    expect(updateStatusButton).toBeEnabled()
-    expect(updateAndEmailButton).toBeEnabled()
-
-    await userEvent.click(updateStatusButton)
-    expect(screen.getByText('Update status code is required.')).toBeInTheDocument()
+    expect(updateStatusButton).toBeDisabled()
+    expect(updateAndEmailButton).toBeDisabled()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
 
     await chooseComboBoxOption('Update status code', 'Rejected')
 
+    expect(updateStatusButton).toBeDisabled()
+    expect(updateAndEmailButton).toBeDisabled()
+    expect(screen.getByText('Status remark is required.')).toBeInTheDocument()
+
+    await userEvent.type(
+      screen.getByLabelText('Status remark (required for rejected or withdrawn)'),
+      'Rejecting from review queue',
+    )
+
     expect(updateStatusButton).toBeEnabled()
-    expect(updateAndEmailButton).toBeEnabled()
+    expect(updateAndEmailButton).toBeDisabled()
   })
 
-  it('shows validation when sending status email without a valid client email', async () => {
+  it('does not allow sending status email without a valid client email', async () => {
     renderPage()
     await screen.findByText('1000123')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000123' }))
     await chooseComboBoxOption('Update status code', 'Withdrawn')
+    await userEvent.type(
+      screen.getByLabelText('Status remark (required for rejected or withdrawn)'),
+      'Withdrawing from review queue',
+    )
     const updateAndEmailButton = screen.getByRole('button', {
       name: 'Update Status and Send Email',
     })
-    await waitFor(() => expect(updateAndEmailButton).toBeEnabled())
+    await waitFor(() => expect(updateAndEmailButton).toBeDisabled())
     await userEvent.click(updateAndEmailButton)
 
-    await waitFor(() => {
-      expect(screen.getByText('Action failed')).toBeInTheDocument()
-      expect(
-        screen.getByText('Enter a valid client email address before sending status email.'),
-      ).toBeInTheDocument()
-    })
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
@@ -297,6 +302,10 @@ describe('Provincial Review Action State Smoke', () => {
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
     await chooseComboBoxOption('Update status code', 'Rejected')
+    await userEvent.type(
+      screen.getByLabelText('Status remark (required for rejected or withdrawn)'),
+      'Rejecting from review queue',
+    )
     await userEvent.type(
       screen.getByLabelText('Client email address (required for status email)'),
       'client@example.com',

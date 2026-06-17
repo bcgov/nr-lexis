@@ -174,9 +174,20 @@ public class OracleLexisReportService implements LexisReportService {
     parameters.put("SUBREPORT_DIR", runtimeTemplateDirectory.toAbsolutePath() + File.separator);
     parameters.put("SUBREPORT_EXT", ".jasper");
 
+    long startedNanos = System.nanoTime();
+    LOGGER.info(
+        "Generating Jasper report action [{}] format [{}]",
+        definition.action(),
+        effectiveFormat.name());
     try (Connection connection = dataSource.getConnection()) {
       JasperPrint print = JasperFillManager.fillReport(jasperReport, parameters, connection);
       byte[] reportBytes = exportTemplateReport(print, effectiveFormat, definition);
+      LOGGER.info(
+          "Generated Jasper report action [{}] format [{}] bytes [{}] durationMs [{}]",
+          definition.action(),
+          effectiveFormat.name(),
+          reportBytes.length,
+          elapsedMillis(startedNanos));
       return Optional.of(
           new LexisGeneratedReport(
               definition.resolveFilename(effectiveFormat),
@@ -184,15 +195,17 @@ public class OracleLexisReportService implements LexisReportService {
               reportBytes));
     } catch (JRException ex) {
       LOGGER.warn(
-          "Jasper fill/export failed for report action [{}]: {}; root cause: {}",
+          "Jasper fill/export failed for report action [{}] after [{}] ms: {}; root cause: {}",
           definition.action(),
+          elapsedMillis(startedNanos),
           ex.getMessage(),
           rootCauseMessage(ex));
       return Optional.empty();
     } catch (SQLException ex) {
       LOGGER.warn(
-          "Oracle connection failed for report action [{}]: {}; root cause: {}",
+          "Oracle connection failed for report action [{}] after [{}] ms: {}; root cause: {}",
           definition.action(),
+          elapsedMillis(startedNanos),
           ex.getMessage(),
           rootCauseMessage(ex));
       return Optional.empty();
@@ -488,6 +501,10 @@ public class OracleLexisReportService implements LexisReportService {
     }
     String message = root.getMessage();
     return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+  }
+
+  private static long elapsedMillis(long startedNanos) {
+    return (System.nanoTime() - startedNanos) / 1_000_000L;
   }
 
   private Path initRuntimeTemplateDirectory() {

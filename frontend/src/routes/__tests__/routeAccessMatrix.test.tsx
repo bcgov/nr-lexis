@@ -87,7 +87,7 @@ describe('Protected route access matrix', () => {
     expect(route.requiredActions).toEqual(['/lexisAgentAdmin'])
   })
 
-  it('includes MOFR listing action in reports route requirements', () => {
+  it('includes advertising list action in reports route requirements', () => {
     const route = findRoute('/reports')
     expect(route.requiredActions).toContain('mofrListing')
     expect(route.requiredActions).toContain('/applicationReport')

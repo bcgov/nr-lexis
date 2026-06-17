@@ -282,6 +282,7 @@ describe('Provincial Application Detail Document Actions', () => {
         { value: 'APP', label: 'Approved' },
         { value: 'REJ', label: 'Rejected' },
         { value: 'WDN', label: 'Withdrawn' },
+        { value: 'EXP', label: 'Expired' },
       ],
     })
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
@@ -295,6 +296,7 @@ describe('Provincial Application Detail Document Actions', () => {
         { value: 'ACTIVE', label: 'Active' },
         { value: 'APP', label: 'Approved' },
         { value: 'REJ', label: 'Rejected' },
+        { value: 'EXP', label: 'Expired' },
       ],
       productTypes: [
         { value: 'LOG', label: 'Logs' },
@@ -1526,6 +1528,8 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     expect(await screen.findByText('TM001')).toBeInTheDocument()
+    const detailFetchCountAfterInitialLoad =
+      mockedFetchProvincialApplicationDetail.mock.calls.length
     fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
     await chooseComboBoxOption(
       screen.getAllByRole('combobox', { name: 'Species' })[1],
@@ -1550,10 +1554,25 @@ describe('Provincial Application Detail Document Actions', () => {
         }),
       )
     })
+    expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(
+      detailFetchCountAfterInitialLoad,
+    )
 
-    fireEvent.change(screen.getByLabelText('Scale ID'), { target: { value: '55' } })
+    fireEvent.change(screen.getByLabelText('Scale ID or timber mark'), {
+      target: { value: 'TM001' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
+    expect(
+      await screen.findByText(
+        'Found 1 scale row for timber mark TM001: TM001 Douglas-fir/Sawlog 5 pcs 20.0 m3',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedFetchApplicationScaleDetails).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('Scale ID or timber mark'), { target: { value: '55' } })
     await userEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
     expect(await screen.findByText('TM001 FI/1 5 pcs 20.0 m3')).toBeInTheDocument()
+    expect(mockedFetchApplicationScaleDetails).toHaveBeenCalledWith('55')
 
     const scaleRow = screen.getByText('TM001').closest('tr')
     expect(scaleRow).toBeTruthy()
@@ -2085,6 +2104,59 @@ describe('Provincial Application Detail Document Actions', () => {
         'agent@example.test',
       )
     })
+  })
+
+  it('loads persisted review status remark without treating placeholder email as persisted', async () => {
+    const expiredDetail: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      applicationStatusCode: 'EXP',
+      statusDescription: 'Expired',
+      remarks: [
+        {
+          remarkId: 99,
+          title: 'Expired after review',
+          remark: 'Expired after review',
+          user: 'idir\\reviewer',
+          date: '2026-01-06',
+        },
+        ...applicationDetail.remarks,
+      ],
+    }
+    mockedFetchProvincialApplicationDetail.mockResolvedValue(expiredDetail)
+    mockedFetchApplicationClientData.mockResolvedValue({
+      clientNumber: '00033344',
+      companyName: 'Agent Export Services',
+      address: '44 Agent Road',
+      city: 'Nanaimo',
+      province: 'BC',
+      postalCode: 'V9R 1A1',
+      country: 'Canada',
+      phone: '250-555-0102',
+      fax: '',
+      email: 'Not on file',
+      notfound: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
+    const reviewTile = getApplicationReviewTile()
+    await waitFor(() => {
+      expect(within(reviewTile).getByRole('combobox', { name: /application status/i })).toHaveValue(
+        'Expired',
+      )
+    })
+    expect(within(reviewTile).getByLabelText(/review remark/i)).toHaveValue('Expired after review')
+    expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue('')
   })
 
   it('updates application review status and can send status email from detail', async () => {

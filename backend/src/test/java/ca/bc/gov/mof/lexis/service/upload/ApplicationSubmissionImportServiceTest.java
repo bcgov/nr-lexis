@@ -77,7 +77,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(application.termDays()).isEqualTo(180L);
     assertThat(application.applicationVolume()).isEqualTo(525.0d);
     assertThat(application.averageLogVolume()).isEqualTo(0.3d);
-    assertThat(application.ownerClientNumber()).isEqualTo("1074");
+    assertThat(application.ownerClientNumber()).isEqualTo("00001074");
     assertThat(application.ownerClientLocationCode()).isEqualTo("03");
     assertThat(application.ownerContactName()).isEqualTo("CUSTOMER SERVICE");
     assertThat(application.orgUnitNumber()).isEqualTo(1909L);
@@ -139,7 +139,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.scaleRows()).isEqualTo(3);
     assertThat(result.userReference()).isEqualTo("CLIENT-REF-1");
     assertThat(result.submissionSummary()).isNotNull();
-    assertThat(result.submissionSummary().ownerClientNumber()).isEqualTo("1074");
+    assertThat(result.submissionSummary().ownerClientNumber()).isEqualTo("00001074");
     assertThat(result.submissionSummary().ownerClientLocationCode()).isEqualTo("03");
     assertThat(result.submissionSummary().ownerContactName()).isEqualTo("CUSTOMER SERVICE");
     assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(1909L);
@@ -376,7 +376,7 @@ class ApplicationSubmissionImportServiceTest {
     ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
         ArgumentCaptor.forClass(CreateApplicationRequest.class);
     verify(applicationDetailsService).addApplication(applicationCaptor.capture(), eq("jsmith"));
-    assertThat(applicationCaptor.getValue().ownerClientNumber()).isEqualTo("1074");
+    assertThat(applicationCaptor.getValue().ownerClientNumber()).isEqualTo("00001074");
     assertThat(applicationCaptor.getValue().ownerClientLocationCode()).isEqualTo("03");
     assertThat(applicationCaptor.getValue().orgUnitNumber()).isEqualTo(1909L);
     assertThat(applicationCaptor.getValue().applicationVolume()).isEqualTo(525.0d);
