@@ -30,12 +30,18 @@
   --csp-side-nav-collapsed-width: 48px;
   --csp-active-side-nav-width: var(--csp-side-nav-width);
   --csp-profile-panel-width: 320px;
-  --csp-button-primary: #0073e6;
-  --csp-interactive: #0073e6;
-  --csp-interactive-hover: #005cc5;
-  --csp-focus: #0073e6;
-  --csp-border-interactive: #0073e6;
-  --csp-background-brand: #0073e6;
+  --csp-brand-blue: #0073e6;
+  --csp-brand-blue-hover: #005cc5;
+  --csp-brand-blue-active: #004f9e;
+  --csp-brand-blue-tint: #d9ecff;
+  --csp-brand-blue-tint-hover: #c6e0ff;
+  --csp-button-primary: var(--csp-brand-blue);
+  --csp-interactive: var(--csp-brand-blue);
+  --csp-interactive-hover: var(--csp-brand-blue-hover);
+  --csp-interactive-active: var(--csp-brand-blue-active);
+  --csp-focus: var(--csp-brand-blue);
+  --csp-border-interactive: var(--csp-brand-blue);
+  --csp-background-brand: var(--csp-brand-blue);
   --csp-header-bg: var(--csp-interactive);
   --csp-header-hover: var(--csp-interactive-hover);
   --csp-accent: #003366;
@@ -51,13 +57,13 @@
   --csp-border-subtle-01: #e0e0e0;
   --csp-border-strong-01: #8d8d8d;
   --csp-icon-primary: #161616;
-  --csp-link-primary: #0073e6;
-  --csp-link-hover: #0043ce;
+  --csp-link-primary: var(--csp-brand-blue);
+  --csp-link-hover: var(--csp-brand-blue-hover);
   --csp-category-label: var(--csp-text-primary);
   --csp-tile-border: #999999;
   --csp-table-border: #000000;
-  --csp-table-header-bg: #6699cc;
-  --csp-table-header-text: #161616;
+  --csp-table-header-bg: var(--csp-brand-blue);
+  --csp-table-header-text: #ffffff;
   --csp-table-row-alt-bg: #e0e0e0;
   --csp-avatar-bg: var(--csp-interactive);
   --csp-avatar-text: #ffffff;
@@ -84,6 +90,22 @@ body {
 }
 
 .app-shell {
+  --cds-background-brand: var(--csp-background-brand);
+  --cds-border-interactive: var(--csp-border-interactive);
+  --cds-button-primary: var(--csp-button-primary);
+  --cds-button-primary-active: var(--csp-interactive-active);
+  --cds-button-primary-hover: var(--csp-interactive-hover);
+  --cds-focus: var(--csp-focus);
+  --cds-highlight: var(--csp-brand-blue-tint);
+  --cds-icon-interactive: var(--csp-interactive);
+  --cds-interactive: var(--csp-interactive);
+  --cds-link-primary: var(--csp-link-primary);
+  --cds-link-primary-hover: var(--csp-link-hover);
+  --cds-support-info: var(--csp-interactive);
+  --cds-tag-background-blue: var(--csp-brand-blue-tint);
+  --cds-tag-border-blue: var(--csp-brand-blue);
+  --cds-tag-color-blue: var(--csp-brand-blue-active);
+  --cds-tag-hover-blue: var(--csp-brand-blue-tint-hover);
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -96,14 +118,14 @@ body {
 }
 
 .cds--g100 .app-shell {
-  --csp-button-primary: #0073e6;
-  --csp-interactive: #0073e6;
-  --csp-interactive-hover: #005cc5;
-  --csp-focus: #0073e6;
-  --csp-border-interactive: #0073e6;
-  --csp-background-brand: #0073e6;
-  --csp-header-bg: #0043ce;
-  --csp-header-hover: #002d9c;
+  --csp-button-primary: var(--csp-brand-blue);
+  --csp-interactive: var(--csp-brand-blue);
+  --csp-interactive-hover: var(--csp-brand-blue-hover);
+  --csp-focus: var(--csp-brand-blue);
+  --csp-border-interactive: var(--csp-brand-blue);
+  --csp-background-brand: var(--csp-brand-blue);
+  --csp-header-bg: var(--csp-brand-blue);
+  --csp-header-hover: var(--csp-brand-blue-hover);
   --csp-accent: #78a9ff;
   --csp-text-primary: #f4f4f4;
   --csp-text-secondary: #c6c6c6;
@@ -116,13 +138,13 @@ body {
   --csp-border-subtle-01: #525252;
   --csp-border-strong-01: #6f6f6f;
   --csp-icon-primary: #f4f4f4;
-  --csp-link-primary: #0073e6;
+  --csp-link-primary: var(--csp-brand-blue);
   --csp-link-hover: #a6c8ff;
   --csp-category-label: var(--csp-text-primary);
   --csp-tile-border: #6f6f6f;
   --csp-table-border: #8d8d8d;
-  --csp-table-header-bg: #78a9ff;
-  --csp-table-header-text: #161616;
+  --csp-table-header-bg: var(--csp-brand-blue);
+  --csp-table-header-text: #ffffff;
   --csp-table-row-alt-bg: #353535;
   --csp-avatar-bg: #a6c8ff;
   --csp-avatar-text: #161616;
