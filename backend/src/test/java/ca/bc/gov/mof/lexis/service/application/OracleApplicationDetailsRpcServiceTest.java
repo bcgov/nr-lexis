@@ -317,7 +317,7 @@ class OracleApplicationDetailsRpcServiceTest {
 
   @Test
   void addApplicationShouldInsertWhenRequestIsValid() {
-    when(repository.findCandidateExcolCombinations(2, "FI", 11L))
+    when(repository.findCandidateExcolCodes(2, "FI", "LU", 11L))
         .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/FI/LU")));
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
@@ -375,8 +375,48 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void validateApplicationShouldUseExactSpeciesEndUseLookupWithoutInsert() {
+    when(repository.findCandidateExcolCodes(1, "HE", "PL", 1909L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.validateApplication(
+            new ApplicationDetailsRpcService.CreateApplicationRequest(
+                null,
+                LocalDate.of(2026, 6, 17),
+                180L,
+                LocalDate.of(2026, 6, 17),
+                525.0d,
+                0.3d,
+                "Port Alberni c/o Pacific Towing",
+                null,
+                null,
+                null,
+                "1074",
+                "03",
+                null,
+                "S",
+                "O",
+                1909L,
+                "H",
+                "P",
+                "S",
+                null,
+                "CUSTOMER SERVICE",
+                "N",
+                "PL",
+                List.of("HE"),
+                true));
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.errors()).isEmpty();
+    verify(repository).findCandidateExcolCodes(1, "HE", "PL", 1909L);
+    verify(repository, never()).insertApplication(any());
+  }
+
+  @Test
   void addApplicationShouldRejectInvalidSpeciesEndUseBeforeOracleInsert() {
-    when(repository.findCandidateExcolCombinations(2, "FI", 11L))
+    when(repository.findCandidateExcolCodes(2, "FI", "LU", 11L))
         .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("FI/BA/LU")));
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
@@ -412,15 +452,15 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.valid()).isFalse();
     assertThat(response.errors())
         .contains("The application species/enduse sort is not valid for the selected region.");
-    verify(repository).findCandidateExcolCombinations(2, "FI", 11L);
+    verify(repository).findCandidateExcolCodes(2, "FI", "LU", 11L);
     verify(repository, never()).insertApplication(any());
   }
 
   @Test
   void addApplicationShouldPersistCreateCommentsAsRemark() {
     Instant now = Instant.parse("2026-05-27T17:30:00Z");
-    when(repository.findCandidateExcolCombinations(1, "HE", 11L))
-        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE")));
+    when(repository.findCandidateExcolCodes(1, "HE", "SA", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/SA")));
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
     when(repository.replaceApplicationEndUses(
@@ -480,8 +520,8 @@ class OracleApplicationDetailsRpcServiceTest {
 
   @Test
   void addApplicationShouldDefaultMissingApplicantTypeToOwnerBeforeOracleInsert() {
-    when(repository.findCandidateExcolCombinations(1, "HE", 11L))
-        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE")));
+    when(repository.findCandidateExcolCodes(1, "HE", "OT", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/OT")));
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
     when(repository.replaceApplicationEndUses(
@@ -605,7 +645,7 @@ class OracleApplicationDetailsRpcServiceTest {
 
   @Test
   void addApplicationShouldDefaultEntryUserWhenPrincipalIsMissing() {
-    when(repository.findCandidateExcolCombinations(2, "FI", 11L))
+    when(repository.findCandidateExcolCodes(2, "FI", "LU", 11L))
         .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/FI/LU")));
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));

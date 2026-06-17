@@ -22,6 +22,7 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -169,6 +170,19 @@ public class ApplicationSubmissionImportService {
               packageValidity.message() == null
                   ? "Package " + submission.packageNumber() + " already exists."
                   : packageValidity.message()),
+          warnings,
+          submissionSummary,
+          normalizedUserReference);
+    }
+
+    CreateApplicationResult applicationValidation =
+        applicationDetailsService.validateApplication(
+            toCreateApplicationRequest(submission, LocalDate.now(clock), normalizedUserReference));
+    if (!applicationValidation.valid()) {
+      return rejected(
+          fileName,
+          fileSize,
+          resultErrors(applicationValidation.errors(), applicationValidation.message()),
           warnings,
           submissionSummary,
           normalizedUserReference);
@@ -660,12 +674,8 @@ public class ApplicationSubmissionImportService {
     long totalPieces = scaleLines.stream().mapToLong(ScaleLine::pieces).sum();
     double averageLogVolume =
         totalPieces <= 0L ? 0.0d : roundOneDecimal(totalVolume / (double) totalPieces);
-    String endUseCode = parseEndUseFromSpeciesEndUseSort(speciesEndUseSort, errors);
-    List<String> speciesCodes =
-        scaleLines.stream()
-            .map(ScaleLine::speciesCode)
-            .distinct()
-            .toList();
+    ParsedSpeciesEndUseSort parsedSpeciesEndUseSort =
+        parseSpeciesEndUseSort(speciesEndUseSort, errors);
 
     if (!errors.isEmpty()) {
       throw new ApplicationSubmissionImportException(errors);
@@ -688,8 +698,8 @@ public class ApplicationSubmissionImportService {
         averageDiameter,
         totalVolume,
         averageLogVolume,
-        endUseCode,
-        speciesCodes,
+        parsedSpeciesEndUseSort.endUseCode(),
+        parsedSpeciesEndUseSort.speciesCodes(),
         scaleLines);
   }
 
@@ -1283,22 +1293,32 @@ public class ApplicationSubmissionImportService {
     return left + " " + right;
   }
 
-  private String parseEndUseFromSpeciesEndUseSort(String speciesEndUseSort, List<String> errors) {
+  private ParsedSpeciesEndUseSort parseSpeciesEndUseSort(
+      String speciesEndUseSort, List<String> errors) {
     if (speciesEndUseSort == null) {
       errors.add("Species/end-use sort is required.");
-      return null;
+      return new ParsedSpeciesEndUseSort(List.of(), null);
     }
     int separator = speciesEndUseSort.lastIndexOf('/');
     if (separator < 0 || separator >= speciesEndUseSort.length() - 1) {
       errors.add("Species/end-use sort must be formatted as species/end use.");
-      return null;
+      return new ParsedSpeciesEndUseSort(List.of(), null);
+    }
+    List<String> speciesCodes =
+        Arrays.stream(speciesEndUseSort.substring(0, separator).split("/"))
+            .map(String::trim)
+            .filter(value -> !value.isEmpty())
+            .distinct()
+            .toList();
+    if (speciesCodes.isEmpty()) {
+      errors.add("Species/end-use sort must include at least one species.");
     }
     String endUse = speciesEndUseSort.substring(separator + 1).trim();
     if (endUse.isEmpty()) {
       errors.add("Species/end-use sort must include an end-use code.");
-      return null;
+      return new ParsedSpeciesEndUseSort(speciesCodes, null);
     }
-    return endUse;
+    return new ParsedSpeciesEndUseSort(speciesCodes, endUse);
   }
 
   private Long parseNonNegativeLong(String value, String label, List<String> errors) {
@@ -1531,6 +1551,8 @@ public class ApplicationSubmissionImportService {
   }
 
   private record UploadedLexisSubmission(byte[] bytes, UploadFormat format, List<String> warnings) {}
+
+  private record ParsedSpeciesEndUseSort(List<String> speciesCodes, String endUseCode) {}
 
   private record ScaleLine(
       String timberMark, Long pieces, String speciesCode, String gradeCode, Double volume) {}

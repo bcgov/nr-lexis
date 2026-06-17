@@ -86,7 +86,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(application.productTypeCode()).isEqualTo("H");
     assertThat(application.growthTypeCode()).isEqualTo("S");
     assertThat(application.endUseCode()).isEqualTo("PL");
-    assertThat(application.speciesCodes()).containsExactly("HE", "FI");
+    assertThat(application.speciesCodes()).containsExactly("HE");
     assertThat(application.remarkBody())
         .isEqualTo("Created from LEXIS application submission.\nUser reference: CLIENT-REF-1");
 
@@ -103,7 +103,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(packageRequest.comments())
         .isEqualTo("Created from LEXIS application submission.\nUser reference: CLIENT-REF-1");
     assertThat(packageRequest.endUseCode()).isEqualTo("PL");
-    assertThat(packageRequest.speciesCodes()).containsExactly("HE", "FI");
+    assertThat(packageRequest.speciesCodes()).containsExactly("HE");
 
     ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
@@ -127,6 +127,8 @@ class ApplicationSubmissionImportServiceTest {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
         .thenReturn(new PackageValidityItem(true, null));
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result = service().validateApplicationSubmission(sampleXml(), "CLIENT-REF-1");
 
@@ -143,9 +145,15 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(1909L);
     assertThat(result.submissionSummary().productTypeCode()).isEqualTo("H");
     assertThat(result.submissionSummary().applicationVolume()).isEqualTo(525.0d);
-    assertThat(result.submissionSummary().speciesCodes()).containsExactly("HE", "FI");
+    assertThat(result.submissionSummary().speciesCodes()).containsExactly("HE");
     assertThat(result.message()).contains("validated");
     verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    ArgumentCaptor<CreateApplicationRequest> validationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(validationCaptor.capture());
+    CreateApplicationRequest validationRequest = validationCaptor.getValue();
+    assertThat(validationRequest.endUseCode()).isEqualTo("PL");
+    assertThat(validationRequest.speciesCodes()).containsExactly("HE");
     verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
     verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), any());
@@ -163,6 +171,31 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
     verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
+    verify(applicationDetailsService, never()).validateApplication(any(CreateApplicationRequest.class));
+    verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
+  }
+
+  @Test
+  void shouldRejectLexisXmlValidationWhenApplicationValidationFails() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(new PackageValidityItem(true, null));
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(
+            new CreateApplicationResult(
+                false,
+                null,
+                null,
+                List.of("The application species/enduse sort is not valid for the selected region."),
+                List.of()));
+
+    ApplicationSubmissionImportResultDto result = service().validateApplicationSubmission(sampleXml());
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly("The application species/enduse sort is not valid for the selected region.");
+    assertThat(result.submissionSummary()).isNotNull();
+    verify(applicationDetailsService).validateApplication(any(CreateApplicationRequest.class));
     verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
   }
 
@@ -179,6 +212,8 @@ class ApplicationSubmissionImportServiceTest {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.isPackageValid(anyString()))
         .thenReturn(new PackageValidityItem(true, null));
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
 
     for (String fileName :
         List.of(

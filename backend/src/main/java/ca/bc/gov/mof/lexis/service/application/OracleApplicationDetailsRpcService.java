@@ -139,6 +139,17 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
+  @Transactional(readOnly = true)
+  public CreateApplicationResult validateApplication(CreateApplicationRequest request) {
+    CreateApplicationRequest normalized = normalizeCreateApplicationRequest(request);
+    List<String> errors = validateCreateApplication(normalized);
+    if (!errors.isEmpty()) {
+      return new CreateApplicationResult(false, null, null, errors, List.of());
+    }
+    return new CreateApplicationResult(true, null, null, List.of(), List.of());
+  }
+
+  @Override
   @Transactional
   public CreateApplicationResult addApplication(CreateApplicationRequest request, String userId) {
     CreateApplicationRequest normalized = normalizeCreateApplicationRequest(request);
@@ -1648,8 +1659,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     String normalizedProductTypeCode = trimToNull(productTypeCode);
     boolean matchesCandidate = false;
     for (ApplicationDetailsRpcRepository.ExcolValidationRow row :
-        repository.findCandidateExcolCombinations(
-            normalizedSpeciesCodes.size(), normalizedSpeciesCodes.get(0), orgUnitNumber)) {
+        repository.findCandidateExcolCodes(
+            normalizedSpeciesCodes.size(),
+            normalizedSpeciesCodes.get(0),
+            normalizedEndUseCode,
+            orgUnitNumber)) {
       String excolCode = trimToNull(row.excolCode());
       if (excolCode == null || !containsAllLegacy(excolCode, normalizedSpeciesCodes)) {
         continue;

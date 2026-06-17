@@ -78,6 +78,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_SPEC_GRAD_BY_REGION(?,?)";
   private static final String FIND_CANDIDATE_END_USES =
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_END_USES(?,?,?,?)";
+  private static final String FIND_CANDIDATE_EXCOL_VALUES =
+      LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
   private static final String FIND_CANDIDATE_EXCOL_COMBINATIONS =
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_COMBOS(?,?,?,?)";
   private static final String FIND_VALID_BOIC_TIMBER_MARK =
@@ -750,6 +752,30 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       int speciesCount, String speciesCode, Long orgUnitNumber) {
     return findCandidateExcolRows(
         FIND_CANDIDATE_END_USES, excolPattern(speciesCount, false), speciesCode, orgUnitNumber);
+  }
+
+  public List<ExcolValidationRow> findCandidateExcolCodes(
+      int speciesCount, String speciesCode, String endUseCode, Long orgUnitNumber) {
+    String normalizedSpeciesCode = trim(speciesCode);
+    String normalizedEndUseCode = trim(endUseCode);
+    String excolPattern = excolPattern(speciesCount, false);
+    if (excolPattern == null
+        || normalizedSpeciesCode == null
+        || normalizedEndUseCode == null
+        || orgUnitNumber == null
+        || orgUnitNumber < 1) {
+      return List.of();
+    }
+    return queryCursorProcedure(
+        FIND_CANDIDATE_EXCOL_VALUES,
+        cs -> {
+          cs.setString(1, excolPattern);
+          cs.setString(2, normalizedSpeciesCode);
+          cs.setString(3, normalizedEndUseCode);
+          cs.setLong(4, orgUnitNumber);
+        },
+        5,
+        rs -> new ExcolValidationRow(getString(rs, "EXCOL_TRANSLATION_VALUE")));
   }
 
   public List<ExcolValidationRow> findCandidateExcolCombinations(

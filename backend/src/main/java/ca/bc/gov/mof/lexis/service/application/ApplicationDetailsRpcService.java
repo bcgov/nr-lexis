@@ -59,6 +59,8 @@ public interface ApplicationDetailsRpcService {
 
   PackageValidityItem isPackageValid(String packageNumber);
 
+  CreateApplicationResult validateApplication(CreateApplicationRequest request);
+
   PackagePersistenceResult addPackage(PackageMutationRequest request, String userId);
 
   PackagePersistenceResult updatePackage(PackageMutationRequest request, String userId);
