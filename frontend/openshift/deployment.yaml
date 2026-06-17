@@ -139,6 +139,8 @@ kind: Route
 metadata:
   name: lexis-frontend
   namespace: ${OC_NAMESPACE}
+  annotations:
+    haproxy.router.openshift.io/timeout: 120s
 spec:
   host: ${FRONTEND_HOST}
   to:
