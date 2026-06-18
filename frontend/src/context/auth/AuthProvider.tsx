@@ -151,6 +151,10 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   const roleSet = new Set(capabilities.roles)
   const isReadOnlyUser = roleSet.has(ROLE_READ_ONLY) || roleSet.has('LEXIS_READ_ONLY')
   const isIndustryUser = capabilities.roles.some((role) => isIndustryRole(role))
+  const isProvincialSubmitterUser = capabilities.roles.some((role) => {
+    return role === ROLE_PROVINCIAL_SUBMITTER || role.startsWith('PROVINCIAL_SUBMITTER_')
+  })
+  const isFederalSubmitterUser = capabilities.roles.some((role) => role === ROLE_FEDERAL_SUBMITTER)
   const isAdminOnly = roleSet.size === 1 && (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN'))
   const isApplicationApproverUser =
     roleSet.has(ROLE_APPLICATION_APPROVER) || roleSet.has('LEXIS_APPLICATION_APPROVER')
@@ -164,7 +168,13 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   }
 
   if (isIndustryUser) {
-    if (hasGrantedAction('uploadApplicationSubmission')) {
+    if (isProvincialSubmitterUser && hasGrantedAction('/applicationSearch')) {
+      return '/provincial/application'
+    }
+    if (isProvincialSubmitterUser && hasGrantedAction('createApplication')) {
+      return '/provincial/application/create'
+    }
+    if (isFederalSubmitterUser && hasGrantedAction('uploadApplicationSubmission')) {
       return '/provincial/application/upload'
     }
     if (
@@ -172,6 +182,9 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
       hasGrantedAction('viewFederalApplication')
     ) {
       return '/federal'
+    }
+    if (hasGrantedAction('uploadApplicationSubmission')) {
+      return '/provincial/application/upload'
     }
     if (hasGrantedAction('/summary')) {
       return '/provincial/summary'

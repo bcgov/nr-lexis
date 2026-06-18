@@ -224,7 +224,31 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
-  it('routes application-submission upload users to the upload flow', async () => {
+  it('routes provincial submitters with application access to application search before upload', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\submitter',
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: [
+        '/applicationSearch',
+        '/applicationDetails',
+        'createApplication',
+        'uploadApplicationSubmission',
+      ],
+    })
+
+    renderProbe(['uploadApplicationSubmission', 'createApplication', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
+    expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
+  })
+
+  it('routes application-submission-only users to the upload flow', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'bceid\\submitter',
