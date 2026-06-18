@@ -105,6 +105,29 @@ describe('Protected route guard access', () => {
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 
+  it('allows scoped provincial submitters to open the provincial application submission route', async () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'bceid\\scoped-submitter',
+        roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345'],
+        welcomeTarget: '/provincial/application/upload',
+        legacyPath: null,
+        grantedActions: ['uploadApplicationSubmission'],
+      },
+      defaultRoute: '/provincial/application/upload',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderWithPath('/provincial/application/upload')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Upload Application Submission' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+  })
+
   it('allows federal submitters to open the federal application submission upload route', async () => {
     mockedUseAuth.mockReturnValue({
       capabilities: {
