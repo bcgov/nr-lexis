@@ -2796,7 +2796,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
               <Table useZebraStyles>
                 <TableHead>
                   <TableRow>
-                    <TableHeader>Package</TableHeader>
+                    <TableHeader>Package number</TableHeader>
                     <TableHeader>Volume (m3)</TableHeader>
                     <TableHeader>Pieces</TableHeader>
                     <TableHeader>Action</TableHeader>

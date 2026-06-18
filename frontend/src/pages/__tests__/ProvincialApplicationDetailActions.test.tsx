@@ -1307,6 +1307,10 @@ describe('Provincial Application Detail Document Actions', () => {
       await screen.findByRole('heading', { name: 'Package Details' })
     ).closest('section')
     expect(packageDetailsSection).toBeTruthy()
+    expect(
+      within(packageDetailsSection as HTMLElement).getAllByText('Package Number').length,
+    ).toBeGreaterThan(1)
+    expect(within(packageDetailsSection as HTMLElement).getByText('PKG-1')).toBeInTheDocument()
 
     await userEvent.click(
       within(packageDetailsSection as HTMLElement).getByRole('button', {

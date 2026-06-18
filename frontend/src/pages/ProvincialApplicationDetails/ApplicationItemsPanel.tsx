@@ -1194,7 +1194,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
         {[
           ['Application Total Pieces', applicationTotalPieces.toLocaleString()],
           ['Packages', packageNumbers.length.toLocaleString()],
-          ['Selected Package', selectedPackageNumber || 'None selected'],
+          ['Selected Package Number', selectedPackageNumber || 'None selected'],
           ['Selected Scale Volume', packageForm.scaledVolume || 'Not provided'],
         ].map(([label, value]) => (
           <div key={label} className="application-items-metric">
@@ -1224,6 +1224,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
           </div>
           <dl className="detail-field-grid application-items-summary">
             {[
+              ['Package Number', selectedPackageNumber || 'None selected'],
               ['Package Volume', packageForm.volume || 'Not provided'],
               ['Total Scale Volume', packageForm.scaledVolume || 'Not provided'],
               ['Total Pieces', selectedPackageTotalPieces.toLocaleString()],
