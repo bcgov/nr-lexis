@@ -415,15 +415,8 @@ public class LexisApiAuthorizationCustomizer
         HttpMethod.POST,
         new String[] {
           "/api/lexis/reports/biweeklyListing",
-          "/api/lexis/reports/biweekly-listing",
-          "/api/lexis/biweeklyListing",
-          "/api/lexis/biweeklyListing.do"
+          "/api/lexis/reports/biweekly-listing"
         },
-        "mofrListing");
-    authorizeAction(
-        authorize,
-        HttpMethod.GET,
-        new String[] {"/api/lexis/biweeklyListing", "/api/lexis/biweeklyListing.do"},
         "mofrListing");
     authorizeAction(
         authorize,

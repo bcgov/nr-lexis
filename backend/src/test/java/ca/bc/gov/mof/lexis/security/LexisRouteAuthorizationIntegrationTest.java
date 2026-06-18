@@ -147,6 +147,39 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void retiredLegacyMenuRoutesShouldRejectEvenAdminUsers() throws Exception {
+    SimpleGrantedAuthority admin = new SimpleGrantedAuthority("LEXIS_ADMIN");
+
+    mockMvc
+        .perform(
+            get("/api/lexis/indianReservePermitDetails.do")
+                .param("actionMapping", "add")
+                .with(jwt().authorities(admin)))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            get("/api/lexis/indianReservePermitSearch.do")
+                .param("actionMapping", "view")
+                .with(jwt().authorities(admin)))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            get("/api/lexis/biweeklyListing.do")
+                .param("actionMapping", "generateIndustryPDF")
+                .with(jwt().authorities(admin)))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            get("/api/lexis/biweeklyListing.do")
+                .param("actionMapping", "generateIndustryCSV")
+                .with(jwt().authorities(admin)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void legacyApplicationDetailsAddShouldRejectReadOnlyRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/applicationDetails")
