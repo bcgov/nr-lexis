@@ -262,17 +262,29 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
-  void sendStatusEmailShouldReportMissingMailInfrastructureWhenInputValid() {
+  void sendStatusEmailShouldCallRepositoryWhenInputValid() {
     ApplicationReviewStatusEmailRequestDto request =
         new ApplicationReviewStatusEmailRequestDto(" REJ ", " client@gov.bc.ca ", " Missing docs ");
+    when(repository.sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs"))
+        .thenReturn(true);
+
+    ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
+
+    assertThat(result.success()).isTrue();
+    assertThat(result.message()).isEqualTo("The email notification sent successfully.");
+    verify(repository).sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs");
+  }
+
+  @Test
+  void sendStatusEmailShouldReportRepositoryFailure() {
+    ApplicationReviewStatusEmailRequestDto request =
+        new ApplicationReviewStatusEmailRequestDto("EXP", "client@gov.bc.ca", null);
 
     ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
 
     assertThat(result.success()).isFalse();
-    assertThat(result.message())
-        .isEqualTo(
-            "Application status email is not configured yet. The application status was updated, but no email was sent.");
-    verifyNoInteractions(repository);
+    assertThat(result.message()).isEqualTo("There was a problem sending your email.");
+    verify(repository).sendStatusEmail(1000456L, "EXP", "client@gov.bc.ca", null);
   }
 
   private ApplicationReviewSearchResultDto row(Long applicationNumber, LocalDate listingDate) {

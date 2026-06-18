@@ -29,8 +29,6 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 public class ApplicationReviewOracleService implements ApplicationReviewService {
 
   private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN");
-  private static final String STATUS_EMAIL_NOT_CONFIGURED_MESSAGE =
-      "Application status email is not configured yet. The application status was updated, but no email was sent.";
 
   private final ApplicationReviewRepository repository;
 
@@ -227,7 +225,17 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Status code and client email are required.");
     }
 
-    return new ApplicationReviewStatusEmailResultDto(false, STATUS_EMAIL_NOT_CONFIGURED_MESSAGE);
+    boolean sent =
+        repository.sendStatusEmail(
+            applicationNumber,
+            statusCode,
+            clientEmail,
+            request == null ? null : trimToNull(request.remark()));
+    return new ApplicationReviewStatusEmailResultDto(
+        sent,
+        sent
+            ? "The email notification sent successfully."
+            : "There was a problem sending your email.");
   }
 
   private ApplicationReviewSearchCriteria normalizeCriteria(ApplicationReviewSearchCriteria input) {
