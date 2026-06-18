@@ -199,11 +199,50 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void updateStatusShouldFailWhenRequestedRemarkDoesNotPersist() {
+    ApplicationReviewStatusUpdateRequestDto request =
+        new ApplicationReviewStatusUpdateRequestDto("REJ", "Missing docs", "client@gov.bc.ca");
+    when(repository.updateStatusWithRemark(1000456L, "REJ", "Missing docs", "idir\\jsmith"))
+        .thenReturn(new ApplicationStatusUpdateRow(true, null));
+
+    ApplicationReviewStatusUpdateResultDto result =
+        service.updateStatus(1000456L, request, "idir\\jsmith");
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.updated()).isFalse();
+    assertThat(result.statusCode()).isEqualTo("REJ");
+    assertThat(result.clientEmail()).isEqualTo("client@gov.bc.ca");
+    assertThat(result.remark()).isEqualTo("Missing docs");
+    assertThat(result.message()).isEqualTo("Application status remark did not persist.");
+    verify(repository).updateStatusWithRemark(1000456L, "REJ", "Missing docs", "idir\\jsmith");
+  }
+
+  @Test
+  void updateStatusShouldAllowOptionalRemarkToRemainEmpty() {
+    ApplicationReviewStatusUpdateRequestDto request =
+        new ApplicationReviewStatusUpdateRequestDto("EXP", " ", "client@gov.bc.ca");
+    when(repository.updateStatusWithRemark(1000456L, "EXP", null, "idir\\jsmith"))
+        .thenReturn(new ApplicationStatusUpdateRow(true, null));
+
+    ApplicationReviewStatusUpdateResultDto result =
+        service.updateStatus(1000456L, request, "idir\\jsmith");
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.updated()).isTrue();
+    assertThat(result.statusCode()).isEqualTo("EXP");
+    assertThat(result.clientEmail()).isEqualTo("client@gov.bc.ca");
+    assertThat(result.remark()).isNull();
+    verify(repository).updateStatusWithRemark(1000456L, "EXP", null, "idir\\jsmith");
+  }
+
+  @Test
   void updateStatusShouldDefaultUpdateUserWhenPrincipalIsMissing() {
     ApplicationReviewStatusUpdateRequestDto request =
         new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");
     when(repository.updateStatusWithRemark(1000456L, "REJ", "Missing docs", "system"))
-        .thenReturn(new ApplicationStatusUpdateRow(true, null));
+        .thenReturn(
+            new ApplicationStatusUpdateRow(
+                true, new ReviewRemarkRow(99L, "Missing docs", "system", Instant.now())));
 
     ApplicationReviewStatusUpdateResultDto result =
         service.updateStatus(1000456L, request, null);
