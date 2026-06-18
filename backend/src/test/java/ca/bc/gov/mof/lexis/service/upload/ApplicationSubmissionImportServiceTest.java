@@ -153,6 +153,9 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("accepted");
     assertThat(result.applicationNumber()).isEqualTo(9001L);
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().jurisdictionCode()).isEqualTo("F");
+    assertThat(result.submissionSummary().federalApplicationNumber()).isEqualTo(700123L);
 
     ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
         ArgumentCaptor.forClass(CreateApplicationRequest.class);
@@ -182,6 +185,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.submissionSummary().ownerClientNumber()).isEqualTo("00001074");
     assertThat(result.submissionSummary().ownerClientLocationCode()).isEqualTo("03");
     assertThat(result.submissionSummary().ownerContactName()).isEqualTo("CUSTOMER SERVICE");
+    assertThat(result.submissionSummary().federalApplicationNumber()).isNull();
     assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(1909L);
     assertThat(result.submissionSummary().productTypeCode()).isEqualTo("H");
     assertThat(result.submissionSummary().applicationVolume()).isEqualTo(525.0d);

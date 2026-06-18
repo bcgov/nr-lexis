@@ -1196,6 +1196,7 @@ public class ApplicationSubmissionImportService {
         submission.ownerClientLocationCode(),
         submission.ownerContactName(),
         submission.jurisdictionCode(),
+        submission.federalApplicationNumber(),
         submission.orgUnitNumber(),
         submission.applicationStatusCode(),
         submission.exemptionReasonCode(),
