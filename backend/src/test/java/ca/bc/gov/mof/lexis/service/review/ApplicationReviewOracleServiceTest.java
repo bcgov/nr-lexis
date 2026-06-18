@@ -223,16 +223,17 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
-  void sendStatusEmailShouldPassThroughRepositoryWhenInputValid() {
+  void sendStatusEmailShouldReportMissingMailInfrastructureWhenInputValid() {
     ApplicationReviewStatusEmailRequestDto request =
         new ApplicationReviewStatusEmailRequestDto(" REJ ", " client@gov.bc.ca ", " Missing docs ");
-    when(repository.sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs"))
-        .thenReturn(true);
 
     ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
 
-    assertThat(result.success()).isTrue();
-    verify(repository).sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs");
+    assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .isEqualTo(
+            "Application status email is not configured yet. The application status was updated, but no email was sent.");
+    verifyNoInteractions(repository);
   }
 
   private ApplicationReviewSearchResultDto row(Long applicationNumber, LocalDate listingDate) {

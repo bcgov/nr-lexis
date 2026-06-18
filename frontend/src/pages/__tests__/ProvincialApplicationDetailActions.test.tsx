@@ -2218,6 +2218,11 @@ describe('Provincial Application Detail Document Actions', () => {
       'Rejected',
     )
     await userEvent.type(within(reviewTile).getByLabelText(/review remark/i), 'Needs correction')
+    mockedSendApplicationReviewStatusEmail.mockResolvedValueOnce({
+      success: false,
+      message:
+        'Application status email is not configured yet. The application status was updated, but no email was sent.',
+    })
     await userEvent.click(
       within(reviewTile).getByRole('button', { name: 'Update Status and Send Email' }),
     )
@@ -2236,7 +2241,9 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
     expect(
-      await screen.findByText('Application status updated and email sent.'),
+      await screen.findByText(
+        'Application status email is not configured yet. The application status was updated, but no email was sent.',
+      ),
     ).toBeInTheDocument()
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
       'agent@example.test',

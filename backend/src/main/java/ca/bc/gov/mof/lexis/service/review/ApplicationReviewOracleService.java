@@ -26,6 +26,8 @@ import org.springframework.stereotype.Service;
 public class ApplicationReviewOracleService implements ApplicationReviewService {
 
   private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN");
+  private static final String STATUS_EMAIL_NOT_CONFIGURED_MESSAGE =
+      "Application status email is not configured yet. The application status was updated, but no email was sent.";
 
   private final ApplicationReviewRepository repository;
 
@@ -209,13 +211,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Status code and client email are required.");
     }
 
-    String remark = request == null ? null : trimToNull(request.remark());
-    boolean success = repository.sendStatusEmail(applicationNumber, statusCode, clientEmail, remark);
-
-    if (success) {
-      return new ApplicationReviewStatusEmailResultDto(true, "Status email sent.");
-    }
-    return new ApplicationReviewStatusEmailResultDto(false, "Status email could not be sent.");
+    return new ApplicationReviewStatusEmailResultDto(false, STATUS_EMAIL_NOT_CONFIGURED_MESSAGE);
   }
 
   private ApplicationReviewSearchCriteria normalizeCriteria(ApplicationReviewSearchCriteria input) {
