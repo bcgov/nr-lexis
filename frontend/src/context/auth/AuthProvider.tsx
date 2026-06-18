@@ -42,7 +42,7 @@ const ACTION_PRIORITY: string[] = [
   'summary',
   'applicationsReview',
   'applicationSearch',
-  'createApplication',
+  'uploadApplicationSubmission',
   'exemptionSearch',
   'offersSearch',
   'permitSearch',
@@ -164,7 +164,7 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   }
 
   if (isIndustryUser) {
-    if (hasGrantedAction('createApplication')) {
+    if (hasGrantedAction('uploadApplicationSubmission')) {
       return '/provincial/application/upload'
     }
     if (

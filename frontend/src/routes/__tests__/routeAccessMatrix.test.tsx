@@ -15,7 +15,7 @@ describe('Protected route access matrix', () => {
         '/summary',
         '/applicationsReview',
         '/applicationSearch',
-        'createApplication',
+        'uploadApplicationSubmission',
         '/exemptionSearch',
         '/offersSearch',
         '/permitSearch',
@@ -29,7 +29,7 @@ describe('Protected route access matrix', () => {
     },
     {
       path: '/provincial/application/upload',
-      requiredActions: ['createApplication'],
+      requiredActions: ['uploadApplicationSubmission'],
       requiredActionsMatch: 'any',
     },
     {

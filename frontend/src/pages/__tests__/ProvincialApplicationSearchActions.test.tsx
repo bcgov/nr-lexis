@@ -79,7 +79,9 @@ describe('Provincial Application Search Actions', () => {
     vi.clearAllMocks()
     mockedUseAuth.mockReturnValue({
       canPerform: (action: string) =>
-        action === '/createExemption' || action === 'createApplication',
+        action === '/createExemption' ||
+        action === 'createApplication' ||
+        action === 'uploadApplicationSubmission',
     } as any)
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
       exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],

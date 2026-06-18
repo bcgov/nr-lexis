@@ -82,7 +82,7 @@ describe('Protected route guard access', () => {
     expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
   })
 
-  it('allows application submission upload route when create application is granted', async () => {
+  it('allows application submission upload route when submission upload is granted', async () => {
     mockedUseAuth.mockReturnValue({
       capabilities: {
         authenticated: true,
@@ -90,10 +90,34 @@ describe('Protected route guard access', () => {
         roles: ['PROVINCIAL_SUBMITTER'],
         welcomeTarget: '/provincial/application/upload',
         legacyPath: null,
-        grantedActions: ['createApplication'],
+        grantedActions: ['uploadApplicationSubmission'],
       },
       defaultRoute: '/provincial/application/upload',
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderWithPath('/provincial/application/upload')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Upload Application Submission' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+  })
+
+  it('allows federal submitters to open the application submission upload route', async () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'bceid\\federal',
+        roles: ['FEDERAL_SUBMITTER'],
+        welcomeTarget: '/provincial/application/upload',
+        legacyPath: null,
+        grantedActions: ['uploadApplicationSubmission', '/federalApplicationSearch'],
+      },
+      defaultRoute: '/provincial/application/upload',
+      canPerform: (action: string) =>
+        ['uploadApplicationSubmission', '/federalApplicationSearch'].includes(action),
       logout: vi.fn().mockResolvedValue(undefined),
     } as any)
 

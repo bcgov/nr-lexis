@@ -723,7 +723,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void applicationSubmissionUploadShouldAllowCreateApplicationRole() throws Exception {
+  void applicationSubmissionUploadShouldAllowProvincialSubmitterRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
@@ -771,7 +771,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void applicationSubmissionUploadShouldRejectFederalSubmitterRole() throws Exception {
+  void applicationSubmissionUploadShouldAllowFederalSubmitterRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
@@ -779,11 +779,11 @@ class LexisRouteAuthorizationIntegrationTest {
             multipart("/api/lexis/application-submissions")
                 .file(file)
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isUnprocessableEntity());
   }
 
   @Test
-  void applicationSubmissionValidationShouldAllowCreateApplicationRole() throws Exception {
+  void applicationSubmissionValidationShouldAllowProvincialSubmitterRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
@@ -819,7 +819,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void applicationSubmissionValidationShouldRejectFederalSubmitterRole() throws Exception {
+  void applicationSubmissionValidationShouldAllowFederalSubmitterRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
 
@@ -827,7 +827,7 @@ class LexisRouteAuthorizationIntegrationTest {
             multipart("/api/lexis/application-submissions/validation")
                 .file(file)
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isUnprocessableEntity());
   }
 
   @Test

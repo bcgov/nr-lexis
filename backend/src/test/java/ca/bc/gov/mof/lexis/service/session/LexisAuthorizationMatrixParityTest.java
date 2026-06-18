@@ -85,6 +85,7 @@ class LexisAuthorizationMatrixParityTest {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .contains("createApplication")
+        .contains("uploadApplicationSubmission")
         .doesNotContain(
             "/summary",
             "/applicationRemarks",
@@ -107,6 +108,7 @@ class LexisAuthorizationMatrixParityTest {
                 List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .contains("createApplication")
+        .contains("uploadApplicationSubmission")
         .doesNotContain(
             "/fileApplicationUpload",
             "/fileExemptionUpload",
@@ -139,9 +141,13 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void federalSubmitterShouldOnlyViewFederalApplications() {
+  void federalSubmitterShouldOnlyUploadAndViewFederalApplications() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_FEDERAL_SUBMITTER")))
-        .contains("/federalApplicationSearch", "/federalApplicationDetails", "viewFederalApplication")
+        .contains(
+            "/federalApplicationSearch",
+            "/federalApplicationDetails",
+            "uploadApplicationSubmission",
+            "viewFederalApplication")
         .doesNotContainAnyElementsOf(PROVINCIAL_VIEW_ACTIONS)
         .doesNotContainAnyElementsOf(REPORT_ACTIONS)
         .doesNotContain(
@@ -166,7 +172,8 @@ class LexisAuthorizationMatrixParityTest {
             "createApplication",
             "createOffer",
             "saveExemption",
-            "savePermit")
+            "savePermit",
+            "uploadApplicationSubmission")
         .doesNotContain(
             "/federalApplicationSearch",
             "/federalApplicationDetails",
@@ -197,7 +204,8 @@ class LexisAuthorizationMatrixParityTest {
             "/federalApplicationSearch",
             "createApplication",
             "createOffer",
-            "savePermit")
+            "savePermit",
+            "uploadApplicationSubmission")
         .doesNotContainAnyElementsOf(REPORT_ACTIONS);
   }
 
@@ -222,7 +230,8 @@ class LexisAuthorizationMatrixParityTest {
             "createApplication",
             "createOffer",
             "saveExemption",
-            "savePermit")
+            "savePermit",
+            "uploadApplicationSubmission")
         .doesNotContainAnyElementsOf(REPORT_ACTIONS);
   }
 }

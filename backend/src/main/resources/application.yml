@@ -80,6 +80,7 @@ lexis:
         - "createOffer"
         - "saveExemption"
         - "savePermit"
+        - "uploadApplicationSubmission"
       LEXIS_EXEMPTION_APPROVER:
         - "/createExemption"
         - "/exemptionSearch"
@@ -96,8 +97,10 @@ lexis:
         - "/permitSearch"
         - "/permitDetails"
         - "createApplication"
+        - "uploadApplicationSubmission"
       LEXIS_FEDERAL_SUBMITTER:
         - "/federalApplicationSearch"
         - "/federalApplicationDetails"
+        - "uploadApplicationSubmission"
         - "viewFederalApplication"
       LEXIS_DELEGATED_ADMIN: []

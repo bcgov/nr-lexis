@@ -115,7 +115,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       '/summary',
       '/applicationsReview',
       '/applicationSearch',
-      'createApplication',
+      'uploadApplicationSubmission',
       '/exemptionSearch',
       '/offersSearch',
       '/permitSearch',
@@ -353,7 +353,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/application/upload',
     id: 'Upload Application Submission',
-    requiredActions: ['createApplication'],
+    requiredActions: ['uploadApplicationSubmission'],
     element: (
       <Layout>
         <AdminUploadsPage

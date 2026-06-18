@@ -335,7 +335,7 @@ public class LexisApiAuthorizationCustomizer
           "/api/lexis/uploads/lexis-xml/validation",
           "/api/lexis/admin/uploads/lexis-xml/validation"
         },
-        "createApplication");
+        "uploadApplicationSubmission");
 
     authorizeAction(
         authorize,

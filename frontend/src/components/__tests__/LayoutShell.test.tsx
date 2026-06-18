@@ -131,10 +131,10 @@ describe('Layout shell', () => {
         roles: ['PROVINCIAL_SUBMITTER'],
         welcomeTarget: '/provincial/application/upload',
         legacyPath: null,
-        grantedActions: ['createApplication'],
+        grantedActions: ['uploadApplicationSubmission'],
       },
       defaultRoute: '/provincial/application/upload',
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
       logout: vi.fn().mockResolvedValue(undefined),
     } as any)
 

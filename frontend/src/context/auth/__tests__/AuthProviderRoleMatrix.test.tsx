@@ -224,25 +224,26 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
-  it('routes create-application-only users to the application submission upload flow', async () => {
+  it('routes application-submission upload users to the upload flow', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'bceid\\submitter',
       roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
       welcomeTarget: null,
       legacyPath: null,
-      grantedActions: ['createApplication'],
+      grantedActions: ['uploadApplicationSubmission'],
     })
 
-    renderProbe(['createApplication', '/applicationSearch'])
+    renderProbe(['uploadApplicationSubmission', 'createApplication', '/applicationSearch'])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application/upload')
-    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
-  it('routes federal submitters to federal application search', async () => {
+  it('routes federal submitters to application submission upload with federal search access', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'bceid\\federal',
@@ -252,16 +253,23 @@ describe('Auth Provider Role Matrix', () => {
       grantedActions: [
         '/federalApplicationSearch',
         '/federalApplicationDetails',
+        'uploadApplicationSubmission',
         'viewFederalApplication',
       ],
     })
 
-    renderProbe(['/federalApplicationSearch', '/applicationSearch', 'createApplication'])
+    renderProbe([
+      '/federalApplicationSearch',
+      '/applicationSearch',
+      'uploadApplicationSubmission',
+      'createApplication',
+    ])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('FEDERAL_SUBMITTER')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/federal')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application/upload')
     expect(screen.getByTestId('action-/federalApplicationSearch')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')
   })

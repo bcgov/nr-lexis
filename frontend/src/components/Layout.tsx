@@ -52,7 +52,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/provincial/application/upload',
         label: 'Upload application submission',
-        requiredActions: ['createApplication'],
+        requiredActions: ['uploadApplicationSubmission'],
       },
       {
         to: '/provincial/application',

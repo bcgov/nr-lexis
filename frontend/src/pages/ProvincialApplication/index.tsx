@@ -158,6 +158,7 @@ const ProvincialApplicationPage: FC = () => {
   const [exemptionStatus, setExemptionStatus] = useState<ExemptionStatus | null>(null)
   const canCreateExemption = canPerform('/createExemption')
   const canCreateApplication = canPerform('createApplication')
+  const canUploadApplicationSubmission = canPerform('uploadApplicationSubmission')
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
     (path: string): string => {
@@ -539,14 +540,14 @@ const ProvincialApplicationPage: FC = () => {
                 Create exemption for Selected Applications
               </Button>
               {canCreateApplication && (
-                <>
-                  <Link className="cds--link" to="/provincial/application/create">
-                    Add Application
-                  </Link>
-                  <Link className="cds--link" to="/provincial/application/upload">
-                    Upload Application Submission
-                  </Link>
-                </>
+                <Link className="cds--link" to="/provincial/application/create">
+                  Add Application
+                </Link>
+              )}
+              {canUploadApplicationSubmission && (
+                <Link className="cds--link" to="/provincial/application/upload">
+                  Upload Application Submission
+                </Link>
               )}
             </div>
             {exemptionStatus && (

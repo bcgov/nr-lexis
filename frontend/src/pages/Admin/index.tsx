@@ -55,7 +55,7 @@ const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
   {
     id: 'applicationSubmissionUpload',
     label: 'Application submission upload',
-    requiredAction: 'createApplication',
+    requiredAction: 'uploadApplicationSubmission',
     description: 'Create applications from ESF LEXIS XML or GeoJSON submissions.',
     reactPath: '/provincial/application/upload',
   },
@@ -131,6 +131,7 @@ const LEGACY_ACTION_CATALOG = [
   'mofrListing',
   'saveExemption',
   'savePermit',
+  'uploadApplicationSubmission',
   'viewFederalApplication',
 ] as const
 

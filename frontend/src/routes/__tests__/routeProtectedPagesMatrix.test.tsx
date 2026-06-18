@@ -13,6 +13,10 @@ const EXPECTED_CORE_PAGES: RouteExpectation[] = [
     requiredActions: ['/applicationSearch'],
   },
   {
+    path: '/provincial/application/upload',
+    requiredActions: ['uploadApplicationSubmission'],
+  },
+  {
     path: '/provincial/application/:applicationNumber',
     requiredActions: ['/applicationSearch', '/applicationDetails'],
     requiredActionsMatch: 'all',

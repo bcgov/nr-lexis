@@ -57,7 +57,7 @@ const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   {
     type: 'applicationSubmission',
     label: 'Application submission upload',
-    requiredAction: 'createApplication',
+    requiredAction: 'uploadApplicationSubmission',
     numberFieldLabel: '',
     numberFieldPlaceholder: '',
   },
