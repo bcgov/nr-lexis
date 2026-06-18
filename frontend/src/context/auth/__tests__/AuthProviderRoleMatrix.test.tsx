@@ -221,6 +221,30 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
+  it('routes federal submitters to federal application search', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\federal',
+      roles: ['LEXIS_FEDERAL_SUBMITTER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: [
+        '/federalApplicationSearch',
+        '/federalApplicationDetails',
+        'viewFederalApplication',
+      ],
+    })
+
+    renderProbe(['/federalApplicationSearch', '/applicationSearch', 'createApplication'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('FEDERAL_SUBMITTER')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/federal')
+    expect(screen.getByTestId('action-/federalApplicationSearch')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')
+  })
+
   it('coalesces concurrent session refresh requests', async () => {
     let resolveCapabilities:
       | ((value: Awaited<ReturnType<typeof fetchSessionCapabilities>>) => void)

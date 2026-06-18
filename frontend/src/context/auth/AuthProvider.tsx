@@ -164,11 +164,17 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   }
 
   if (isIndustryUser) {
-    if (hasGrantedAction('/summary')) {
-      return '/provincial/summary'
-    }
     if (hasGrantedAction('createApplication')) {
       return '/provincial/application/upload'
+    }
+    if (
+      hasGrantedAction('/federalApplicationSearch') ||
+      hasGrantedAction('viewFederalApplication')
+    ) {
+      return '/federal'
+    }
+    if (hasGrantedAction('/summary')) {
+      return '/provincial/summary'
     }
     return '/unauthorized'
   }

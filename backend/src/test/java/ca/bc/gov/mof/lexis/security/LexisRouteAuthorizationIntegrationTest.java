@@ -470,12 +470,12 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyOfferDetailsAddShouldAllowProvincialSubmitterRole() throws Exception {
+  void legacyOfferDetailsAddShouldRejectProvincialSubmitterRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/offerDetails")
                 .param("actionMapping", "add")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isNoContent());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -518,13 +518,13 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyPermitDetailsRpcWriteActionShouldAllowProvincialSubmitterRole() throws Exception {
+  void legacyPermitDetailsRpcWriteActionShouldRejectProvincialSubmitterRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/permitDetailsRPC")
                 .param("actionMapping", "updateShipping")
                 .param("permitNumber", "7000123")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isNoContent());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -546,12 +546,12 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyPermitDetailsAddShouldAllowProvincialSubmitterRole() throws Exception {
+  void legacyPermitDetailsAddShouldRejectProvincialSubmitterRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/permitDetails")
                 .param("actionMapping", "add")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isNoContent());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -691,7 +691,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void adminApplicationUploadShouldAllowScopedProvincialSubmitterRole() throws Exception {
+  void adminApplicationUploadShouldRejectScopedProvincialSubmitterRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "application.pdf", "application/pdf", "content".getBytes());
 
@@ -705,7 +705,7 @@ class LexisRouteAuthorizationIntegrationTest {
                         .authorities(
                             new SimpleGrantedAuthority(
                                 "LEXIS_PROVINCIAL_SUBMITTER_00012345"))))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -818,34 +818,36 @@ class LexisRouteAuthorizationIntegrationTest {
   void sessionCanPerformActionShouldEvaluateTokenAuthorities() throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")
-                .param("action", "/summary")
+                .param("action", "/federalApplicationSearch")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.granted").value(true));
   }
 
   @Test
-  void sessionCanPerformActionShouldAllowCreateExemptionForProvincialSubmitter() throws Exception {
+  void sessionCanPerformActionShouldRejectCreateExemptionForProvincialSubmitter() throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")
                 .param("action", "/createExemption")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.granted").value(true));
+        .andExpect(jsonPath("$.granted").value(false));
   }
 
   @Test
-  void sessionCanPerformActionShouldAllowUploadsForProvincialSubmitter() throws Exception {
+  void sessionCanPerformActionShouldRejectDocumentUploadsForProvincialSubmitter()
+      throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")
                 .param("action", "/fileApplicationUpload")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.granted").value(true));
+        .andExpect(jsonPath("$.granted").value(false));
   }
 
   @Test
-  void sessionCanPerformActionShouldAllowUploadsForScopedProvincialSubmitter() throws Exception {
+  void sessionCanPerformActionShouldRejectDocumentUploadsForScopedProvincialSubmitter()
+      throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")
                 .param("action", "/filePermitUpload")
@@ -855,7 +857,7 @@ class LexisRouteAuthorizationIntegrationTest {
                             new SimpleGrantedAuthority(
                                 "LEXIS_PROVINCIAL_SUBMITTER_00012345"))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.granted").value(true));
+        .andExpect(jsonPath("$.granted").value(false));
   }
 
   @Test
@@ -879,12 +881,12 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacySummaryRouteShouldAllowPostForIndustryRole() throws Exception {
+  void legacySummaryRouteShouldRejectIndustryRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/summary")
                 .param("actionMapping", "getApplications")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isNoContent());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -933,7 +935,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyReportRouteShouldAllowReadOnlyRole() throws Exception {
+  void legacyReportRouteShouldRejectReadOnlyRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/offerReport")
                 .param("actionMapping", "generate")
@@ -941,7 +943,7 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("fromDate", "2026-01-01")
                 .param("toDate", "2026-01-31")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -957,7 +959,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyBiweeklyListingShouldAllowProvincialSubmitterRole() throws Exception {
+  void legacyBiweeklyListingShouldRejectProvincialSubmitterRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/biweeklyListing")
                 .param("actionMapping", "generate")
@@ -965,6 +967,6 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("fromDate", "2026-01-01")
                 .param("toDate", "2026-01-31")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden());
   }
 }
