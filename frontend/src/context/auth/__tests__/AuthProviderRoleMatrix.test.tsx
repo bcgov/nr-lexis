@@ -160,11 +160,32 @@ describe('Auth Provider Role Matrix', () => {
       grantedActions: [],
     })
 
-    renderProbe(['/applicationsReview'])
+    renderProbe(['/applicationsReview', '/applicationReport', '/lexisAgentAdmin'])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
+  })
+
+  it('routes application approvers to review and honours report but not admin grants', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\approver',
+      roles: ['LEXIS_APPLICATION_APPROVER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/applicationsReview', '/applicationReport'],
+    })
+
+    renderProbe(['/applicationsReview', '/applicationReport', '/lexisAgentAdmin'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
+    expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
   })
 
   it('routes delegated admin without LEXIS actions to unauthorized', async () => {

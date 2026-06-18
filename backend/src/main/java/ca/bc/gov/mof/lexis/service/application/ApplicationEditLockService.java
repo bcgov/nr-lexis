@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +26,7 @@ public class ApplicationEditLockService {
   private final Duration ttl;
   private final Clock clock;
 
+  @Autowired
   public ApplicationEditLockService(
       @Value("${lexis.application-edit-lock.ttl-minutes:20}") long ttlMinutes) {
     this(Duration.ofMinutes(ttlMinutes), Clock.systemUTC());

@@ -159,6 +159,7 @@ class LexisAuthorizationMatrixParityTest {
   void applicationApproverShouldEditProvincialWorkWithoutAdminOrFederalAccess() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_APPLICATION_APPROVER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
+        .containsAll(REPORT_ACTIONS)
         .contains(
             "/summary",
             "/applicationsReview",
