@@ -50,6 +50,19 @@ const ACTION_PRIORITY: string[] = [
   'lexisAgentAdmin',
 ]
 
+const REPORT_ACTIONS = new Set<string>([
+  'applicationreport',
+  'offerreport',
+  'teacreport',
+  'exemptionreport',
+  'permitledgerreport',
+  'transportreport',
+  'speciesgradereport',
+  'feereport',
+  'tenurereport',
+  'mofrlisting',
+])
+
 const LEGACY_TO_CANONICAL_ROLE_MAP: Record<string, string> = {
   LEXIS_ADMIN: 'ADMIN',
   LEXIS_READ_ONLY: 'READ_ONLY',
@@ -341,7 +354,14 @@ export const AuthProvider: FC<Props> = ({ children }) => {
       if (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN')) {
         return true
       }
-      return grantedActionSet.has(normalizeAction(action))
+      const normalizedAction = normalizeAction(action)
+      if (
+        (roleSet.has(ROLE_READ_ONLY) || roleSet.has('LEXIS_READ_ONLY')) &&
+        REPORT_ACTIONS.has(normalizedAction)
+      ) {
+        return false
+      }
+      return grantedActionSet.has(normalizedAction)
     },
     [grantedActionSet, roleSet],
   )

@@ -188,6 +188,26 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
   })
 
+  it('blocks reports for read-only users even when report actions are granted', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\readonly',
+      roles: ['LEXIS_READ_ONLY'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/applicationSearch', '/applicationReport', '/feeReport', 'mofrListing'],
+    })
+
+    renderProbe(['/applicationSearch', '/applicationReport', '/feeReport', 'mofrListing'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/feeReport')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-mofrListing')).toHaveTextContent('false')
+  })
+
   it('routes delegated admin without LEXIS actions to unauthorized', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
