@@ -37,9 +37,15 @@ const userPoolId = env.VITE_USER_POOLS_ID?.trim() ?? ''
 const userPoolClientId = env.VITE_USER_POOLS_WEB_CLIENT_ID?.trim() ?? ''
 const domain = env.VITE_COGNITO_DOMAIN?.trim()?.replace(/^https?:\/\//, '') ?? ''
 const redirectSignIn = resolveSameOriginRedirect(env.VITE_REDIRECT_SIGN_IN, '/')
-// Must match a Cognito allowed sign-out URL. Keep blank values blank so bad
-// runtime config fails at logout instead of silently falling back to Cognito.
-const redirectSignOut = env.VITE_REDIRECT_SIGN_OUT?.trim() ?? ''
+const configuredRedirectSignOut = env.VITE_REDIRECT_SIGN_OUT?.trim() ?? ''
+const fallbackRedirectSignOut = `${window.location.origin}/`
+// Must match a Cognito allowed sign-out URL. If the runtime value is missing
+// or points at the hosted Cognito domain, use the app origin so logout returns
+// to the login screen instead of marooning users on Cognito.
+export const redirectSignOut =
+  configuredRedirectSignOut && !configuredRedirectSignOut.includes('amazoncognito.com')
+    ? configuredRedirectSignOut
+    : fallbackRedirectSignOut
 const scopes = resolveScopes(splitScopes(env.VITE_COGNITO_SCOPES))
 
 export const idirProviderName = `${(env.VITE_ZONE ?? 'DEV').toUpperCase()}-IDIR`
