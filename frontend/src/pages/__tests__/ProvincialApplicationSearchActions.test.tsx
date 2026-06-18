@@ -194,6 +194,19 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
+  it('does not default region filters when opened without query parameters', async () => {
+    renderPage()
+    await screen.findByText('321')
+
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          region: [],
+        }),
+      }),
+    )
+  })
+
   it('debounces backend searches while filters are typed', async () => {
     renderPage()
     await screen.findByText('321')

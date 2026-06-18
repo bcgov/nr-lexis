@@ -132,6 +132,31 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeDisabled()
   })
 
+  it('does not default exemption approvers to their session region', async () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        roles: ['EXEMPTION_APPROVER'],
+        orgUnitNo: '11',
+      },
+      canPerform: () => true,
+    } as any)
+
+    renderPage()
+    await screen.findByText('EX-1001')
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            exemptionStatusCode: 'NEW',
+            exemptionTypeCode: 'M',
+            region: [],
+          }),
+        }),
+      )
+    })
+  })
+
   it('disables search button for invalid date filters', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => true,

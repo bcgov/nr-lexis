@@ -217,6 +217,19 @@ describe('Provincial Review Action State Smoke', () => {
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
 
+  it('does not default region filters when opened without query parameters', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+
+    expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          region: [],
+        }),
+      }),
+    )
+  })
+
   it('approves selected applications sequentially', async () => {
     mockedSearchApplicationReviews.mockResolvedValue(twoNewReviewResponse)
     let resolveFirstApproval:

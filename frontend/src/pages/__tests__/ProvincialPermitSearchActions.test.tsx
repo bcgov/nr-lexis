@@ -91,6 +91,23 @@ describe('Provincial Permit Search Actions', () => {
     expect(screen.queryByRole('link', { name: 'Add Permit' })).not.toBeInTheDocument()
   })
 
+  it('does not default region filters when opened without query parameters', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => false,
+    } as any)
+
+    renderPage()
+    await screen.findByText('7001')
+
+    expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          region: [],
+        }),
+      }),
+    )
+  })
+
   it('reuses cached search results when the route remounts with the same URL state', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => false,

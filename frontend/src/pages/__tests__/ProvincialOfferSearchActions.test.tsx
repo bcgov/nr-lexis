@@ -99,6 +99,23 @@ describe('Provincial Offer Search Actions', () => {
     expect(screen.queryByRole('link', { name: 'Add Offer' })).not.toBeInTheDocument()
   })
 
+  it('does not default region filters when opened without query parameters', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => false,
+    } as any)
+
+    renderPage()
+    await screen.findByText('OFF-1001')
+
+    expect(mockedSearchProvincialOffers).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          region: [],
+        }),
+      }),
+    )
+  })
+
   it('disables search for invalid dates and updates search sort direction from header click', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => true,

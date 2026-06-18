@@ -303,10 +303,6 @@ const ProvincialOffersPage: FC = () => {
       return
     }
 
-    if (regionOptions.length === 0) {
-      return
-    }
-
     const hasSearchQuery = searchParams.toString().length > 0
     if (!hasSearchQuery) {
       setSearchParams(
@@ -314,7 +310,6 @@ const ProvincialOffersPage: FC = () => {
           {
             ...INITIAL_FILTERS,
             listingToDate: defaultListingToDate,
-            region: regionOptions.map((option) => option.id),
           },
           DEFAULT_SORT_FIELD,
           DEFAULT_SORT_DIRECTION,
@@ -324,7 +319,7 @@ const ProvincialOffersPage: FC = () => {
         { replace: true },
       )
     }
-  }, [defaultListingToDate, isOptionsLoaded, regionOptions, searchParams, setSearchParams])
+  }, [defaultListingToDate, isOptionsLoaded, searchParams, setSearchParams])
 
   const onSearch = () => {
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))

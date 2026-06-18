@@ -387,28 +387,6 @@ const ProvincialReviewPage: FC = () => {
     void loadOptions()
   }, [])
 
-  useEffect(() => {
-    if (regionOptions.length === 0) {
-      return
-    }
-
-    const hasSearchQuery = searchParams.toString().length > 0
-    if (hasSearchQuery) {
-      return
-    }
-
-    setSearchParams(
-      buildSearchParams(
-        { ...INITIAL_FILTERS, region: regionOptions.map((option) => option.id) },
-        DEFAULT_SORT_FIELD,
-        DEFAULT_SORT_DIRECTION,
-        DEFAULT_PAGE,
-        DEFAULT_PAGE_SIZE,
-      ),
-      { replace: true },
-    )
-  }, [regionOptions, searchParams, setSearchParams])
-
   const onSearch = () => {
     clearSelection()
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))

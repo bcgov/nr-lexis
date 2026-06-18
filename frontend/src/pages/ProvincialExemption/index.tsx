@@ -136,7 +136,7 @@ const buildSearchParams = (
 }
 
 const ProvincialExemptionPage: FC = () => {
-  const { capabilities, canPerform, isLoading } = useAuth()
+  const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
@@ -293,26 +293,13 @@ const ProvincialExemptionPage: FC = () => {
       capabilities?.roles.includes('EXEMPTION_APPROVER') ||
       capabilities?.roles.includes('LEXIS_EXEMPTION_APPROVER')
     const hasSearchQuery = searchParams.toString().length > 0
-    const orgUnitNo = capabilities?.orgUnitNo
-    const defaultRegion =
-      orgUnitNo && regionOptions.some((option) => option.id === orgUnitNo) ? [orgUnitNo] : []
-    if (
-      !isLoading &&
-      !hasSearchQuery &&
-      isExemptionApprover &&
-      orgUnitNo &&
-      regionOptions.length === 0
-    ) {
-      return
-    }
-    if (!isLoading && !hasSearchQuery && isExemptionApprover) {
+    if (!hasSearchQuery && isExemptionApprover) {
       setSearchParams(
         buildSearchParams(
           {
             ...INITIAL_FILTERS,
             exemptionStatusCode: 'NEW',
             exemptionTypeCode: 'M',
-            region: defaultRegion,
           },
           DEFAULT_SORT_FIELD,
           DEFAULT_SORT_DIRECTION,
@@ -322,14 +309,7 @@ const ProvincialExemptionPage: FC = () => {
         { replace: true },
       )
     }
-  }, [
-    capabilities?.orgUnitNo,
-    capabilities?.roles,
-    isLoading,
-    regionOptions,
-    searchParams,
-    setSearchParams,
-  ])
+  }, [capabilities?.roles, searchParams, setSearchParams])
 
   useEffect(() => {
     const loadOptions = async () => {
