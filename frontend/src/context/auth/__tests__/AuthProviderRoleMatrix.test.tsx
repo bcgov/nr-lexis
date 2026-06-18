@@ -150,6 +150,26 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
   })
 
+  it('keeps admin routing and actions when read-only is also present', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\admin',
+      roles: ['LEXIS_ADMIN', 'LEXIS_READ_ONLY'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/applicationSearch'],
+    })
+
+    renderProbe(['/lexisAgentAdmin', '/applicationReport', 'createApplication'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN,READ_ONLY')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/admin')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
+  })
+
   it('does not use legacyPath for default route routing anymore', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,

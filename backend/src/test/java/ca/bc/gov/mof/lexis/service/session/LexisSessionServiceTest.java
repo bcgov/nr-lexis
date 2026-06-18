@@ -18,10 +18,20 @@ class LexisSessionServiceTest {
   @Test
   void shouldRouteReadOnlyUsersToApplicationSearch() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_admin", "lexis_read_only"));
+        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_read_only"));
 
     assertThat(response.welcomeTarget()).isEqualTo("readOnly");
     assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
+    assertThat(response.roles()).containsExactly("LEXIS_READ_ONLY");
+  }
+
+  @Test
+  void shouldRouteAdminsToAdminLandingWhenOtherRolesArePresent() {
+    LexisSessionWelcomeDto response =
+        service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin", "lexis_read_only"));
+
+    assertThat(response.welcomeTarget()).isEqualTo("adminUser");
+    assertThat(response.legacyPath()).isEqualTo("/lexisAgentAdmin.do?actionMapping=view");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN", "LEXIS_READ_ONLY");
   }
 

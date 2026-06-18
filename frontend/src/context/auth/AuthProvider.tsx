@@ -168,13 +168,17 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     return role === ROLE_PROVINCIAL_SUBMITTER || role.startsWith('PROVINCIAL_SUBMITTER_')
   })
   const isFederalSubmitterUser = capabilities.roles.some((role) => role === ROLE_FEDERAL_SUBMITTER)
-  const isAdminOnly = roleSet.size === 1 && (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN'))
+  const isAdminUser = roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN')
   const isApplicationApproverUser =
     roleSet.has(ROLE_APPLICATION_APPROVER) || roleSet.has('LEXIS_APPLICATION_APPROVER')
   const isExemptionApproverUser =
     roleSet.has(ROLE_EXEMPTION_APPROVER) || roleSet.has('LEXIS_EXEMPTION_APPROVER')
   const grantedSet = new Set(capabilities.grantedActions.map(normalizeAction))
   const hasGrantedAction = (action: string): boolean => grantedSet.has(normalizeAction(action))
+
+  if (isAdminUser) {
+    return '/admin'
+  }
 
   if (isReadOnlyUser) {
     return '/provincial/application'
@@ -205,10 +209,6 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     return '/unauthorized'
   }
 
-  if (isAdminOnly) {
-    return '/admin'
-  }
-
   if (isExemptionApproverUser) {
     return '/provincial/exemption'
   }
@@ -222,10 +222,6 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     if (grantedSet.has(normalizedAction)) {
       return LEGACY_ACTION_ROUTE_MAP[normalizedAction]
     }
-  }
-
-  if (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN')) {
-    return '/admin'
   }
 
   return '/unauthorized'
