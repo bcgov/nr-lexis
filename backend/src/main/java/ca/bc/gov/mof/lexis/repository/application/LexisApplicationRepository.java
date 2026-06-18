@@ -217,6 +217,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             false,
             false,
             false,
+            null,
+            null,
             packages,
             remarks,
             offers));

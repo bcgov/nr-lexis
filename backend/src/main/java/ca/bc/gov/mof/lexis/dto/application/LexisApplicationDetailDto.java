@@ -25,6 +25,8 @@ public record LexisApplicationDetailDto(
     boolean readOnly,
     boolean exemptionApprover,
     boolean locked,
+    String lockedBy,
+    String lockMessage,
     List<LexisPackageDto> packages,
     List<LexisRemarkDto> remarks,
     List<LexisOfferDto> offers) {

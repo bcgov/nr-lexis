@@ -197,7 +197,7 @@ public class LegacyRouteController {
     if (applicationNumber == null) {
       return ResponseEntity.noContent().build();
     }
-    return applicationController.getByApplicationNumber(applicationNumber);
+    return applicationController.getByApplicationNumber(applicationNumber, authentication);
   }
 
   @RequestMapping(

@@ -989,7 +989,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     setItemsErrorMessage('')
     setItemsInfoMessage('')
     try {
-      const result = await deleteApplicationPackage(selectedPackageNumber)
+      const result = await deleteApplicationPackage(selectedPackageNumber, applicationNumber)
       if (!result.success) {
         setItemsErrorMessage('Package delete failed.')
         return
@@ -1069,7 +1069,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
     setItemsErrorMessage('')
     setItemsInfoMessage('')
     try {
-      const result = await deleteApplicationScale(scaleId)
+      const result = await deleteApplicationScale(scaleId, applicationNumber)
       if (!result.success) {
         setItemsErrorMessage('Scale delete failed.')
         return

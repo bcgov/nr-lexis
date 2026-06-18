@@ -20,6 +20,8 @@ export type ProvincialApplicationDetail = {
   readOnly: boolean
   exemptionApprover: boolean
   locked: boolean
+  lockedBy?: string | null
+  lockMessage?: string | null
   packages: {
     packageNumber: string
     volume: number

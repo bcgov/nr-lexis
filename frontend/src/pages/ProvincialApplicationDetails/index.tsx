@@ -25,7 +25,10 @@ import {
   matchesFilter,
   normalizeFilterText as normalizeText,
 } from '@/pages/shared/detail-page-utils'
-import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
+import {
+  fetchProvincialApplicationDetail,
+  releaseApplicationEditLock,
+} from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
   openApplicationDocument,
@@ -649,6 +652,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
   useEffect(() => {
     void loadApplicationDetail()
   }, [loadApplicationDetail])
+
+  useEffect(() => {
+    return () => {
+      if (applicationNumber) {
+        void releaseApplicationEditLock(applicationNumber)
+      }
+    }
+  }, [applicationNumber])
 
   const filteredPackages = useMemo(() => {
     const rows = detail?.packages ?? []
@@ -2691,6 +2702,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   Locked: {detail.locked ? 'Yes' : 'No'}
                 </Tag>
               </div>
+              {detail.locked && detail.lockMessage && (
+                <p className="application-detail-lock-message">{detail.lockMessage}</p>
+              )}
             </Tile>
           </Column>
 

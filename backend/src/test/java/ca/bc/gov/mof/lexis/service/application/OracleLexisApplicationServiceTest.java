@@ -170,6 +170,8 @@ class OracleLexisApplicationServiceTest {
             false,
             false,
             false,
+            null,
+            null,
             List.of(),
             List.of(),
             List.of());

@@ -24,7 +24,7 @@ export const fetchProvincialApplicationDetail = async (
     const response = await apiService.getCachedResponse<ProvincialApplicationDetail>(
       `/lexis/applications/${applicationNumber}`,
       undefined,
-      { ttlMs: DETAIL_CACHE_TTL_MS },
+      { ttlMs: 0 },
     )
     return response.data
   } catch (error) {
@@ -32,6 +32,16 @@ export const fetchProvincialApplicationDetail = async (
       return null
     }
     throw toSearchServiceError('Unable to load provincial application detail.', error)
+  }
+}
+
+export const releaseApplicationEditLock = async (applicationNumber: string): Promise<void> => {
+  try {
+    await apiService.getAxiosInstance().post('/lexis/rpc/application-details/release-lock', null, {
+      params: { applicationNumber },
+    })
+  } catch {
+    // Best-effort cleanup only; the server expires abandoned locks.
   }
 }
 

@@ -15,7 +15,10 @@ import {
   fetchApplicationClientContacts,
   fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
-import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
+import {
+  fetchProvincialApplicationDetail,
+  releaseApplicationEditLock,
+} from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
   openApplicationDocument,
@@ -56,6 +59,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchProvincialApplicationDetail: vi.fn(),
+  releaseApplicationEditLock: vi.fn(),
 }))
 
 vi.mock('@/service/application-review-search-service', () => ({
@@ -141,6 +145,7 @@ const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
 const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
+const mockedReleaseApplicationEditLock = vi.mocked(releaseApplicationEditLock)
 const mockedFetchApplicationDocuments = vi.mocked(fetchApplicationDocuments)
 const mockedOpenApplicationDocument = vi.mocked(openApplicationDocument)
 const mockedRemoveApplicationDocument = vi.mocked(removeApplicationDocument)
@@ -257,6 +262,7 @@ describe('Provincial Application Detail Document Actions', () => {
       canPerform: () => true,
     } as any)
     mockedFetchProvincialApplicationDetail.mockResolvedValue(applicationDetail)
+    mockedReleaseApplicationEditLock.mockResolvedValue()
     mockedFetchApplicationDocuments.mockResolvedValue({
       rows: [],
       source: 'api',
@@ -1319,7 +1325,7 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     await waitFor(() => {
-      expect(mockedDeleteApplicationPackage).toHaveBeenCalledWith('PKG-1')
+      expect(mockedDeleteApplicationPackage).toHaveBeenCalledWith('PKG-1', '321')
     })
     expect(await screen.findByText('Package PKG-1 deleted.')).toBeInTheDocument()
   })
@@ -1568,7 +1574,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(within(scaleRow as HTMLElement).getByText('S')).toBeInTheDocument()
     fireEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
     await waitFor(() => {
-      expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55')
+      expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55', '321')
     })
   })
 

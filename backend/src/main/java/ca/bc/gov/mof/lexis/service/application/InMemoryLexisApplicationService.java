@@ -381,6 +381,8 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         record.readOnly(),
         record.exemptionApprover(),
         record.locked(),
+        null,
+        null,
         record.packages(),
         record.remarks(),
         record.offers());
