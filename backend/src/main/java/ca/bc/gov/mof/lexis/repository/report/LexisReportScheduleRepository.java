@@ -59,7 +59,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadReportJurisdictionOptions() {
-    return withAll(loadCodeNameOptions(FIND_ALL_JURISDICTION_CODES));
+    return withAll(withoutReserveJurisdiction(loadCodeNameOptions(FIND_ALL_JURISDICTION_CODES)));
   }
 
   public List<CodeNameDto> loadBiweeklyJurisdictionOptions() {

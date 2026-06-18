@@ -97,7 +97,6 @@ describe('search-options-service', () => {
         { code: '', name: 'All' },
         { code: 'P', name: 'Provincial' },
         { code: 'F', name: 'Federal' },
-        { code: 'I', name: 'Reserve' },
       ],
       biweeklyJurisdictions: [
         { code: '', name: 'All' },
@@ -166,7 +165,6 @@ describe('search-options-service', () => {
         { value: '', label: 'All' },
         { value: 'P', label: 'Provincial' },
         { value: 'F', label: 'Federal' },
-        { value: 'I', label: 'Reserve' },
       ],
       biweeklyJurisdictions: [
         { value: '', label: 'All' },

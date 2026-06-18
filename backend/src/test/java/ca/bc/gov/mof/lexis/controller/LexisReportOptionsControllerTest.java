@@ -64,8 +64,7 @@ class LexisReportOptionsControllerTest {
             List.of(
                 new CodeNameDto("", "All"),
                 new CodeNameDto("P", "Provincial"),
-                new CodeNameDto("F", "Federal"),
-                new CodeNameDto("I", "Reserve")));
+                new CodeNameDto("F", "Federal")));
     when(scheduleRepository.loadBiweeklyJurisdictionOptions())
         .thenReturn(
             List.of(
@@ -115,8 +114,7 @@ class LexisReportOptionsControllerTest {
         .containsExactly(
             org.assertj.core.groups.Tuple.tuple("", "All"),
             org.assertj.core.groups.Tuple.tuple("P", "Provincial"),
-            org.assertj.core.groups.Tuple.tuple("F", "Federal"),
-            org.assertj.core.groups.Tuple.tuple("I", "Reserve"));
+            org.assertj.core.groups.Tuple.tuple("F", "Federal"));
     assertThat(response.getBody().biweeklyJurisdictions())
         .extracting("code", "name")
         .containsExactly(

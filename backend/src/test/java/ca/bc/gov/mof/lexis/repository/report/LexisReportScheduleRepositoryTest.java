@@ -83,7 +83,7 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void jurisdictionOptionsShouldMatchLegacyReportVariants() throws Exception {
+  void jurisdictionOptionsShouldRemoveReserveReports() throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
     when(resultSet.next()).thenReturn(true, true, true, false);
     when(resultSet.getString(1)).thenReturn("P", "F", "I");
@@ -95,11 +95,7 @@ class LexisReportScheduleRepositoryTest {
 
     assertThat(options)
         .extracting("code", "name")
-        .containsExactly(
-            tuple("", "All"),
-            tuple("P", "Provincial"),
-            tuple("F", "Federal"),
-            tuple("I", "Reserve"));
+        .containsExactly(tuple("", "All"), tuple("P", "Provincial"), tuple("F", "Federal"));
     verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
   }
 

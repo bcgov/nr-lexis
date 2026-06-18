@@ -580,7 +580,6 @@ describe('Reports Page Actions', () => {
         { value: '', label: 'All' },
         { value: 'P', label: 'Provincial' },
         { value: 'F', label: 'Federal Legacy' },
-        { value: 'I', label: 'Reserve' },
       ],
       permitStatuses: [
         { value: '', label: 'All' },
@@ -601,6 +600,9 @@ describe('Reports Page Actions', () => {
     expect(screen.queryByRole('option', { name: 'New Zealand' })).not.toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
     await userEvent.click(screen.getByRole('button', { name: 'More...' }))
+    await userEvent.click(getComboBox('Jurisdiction'))
+    expect(screen.queryByRole('option', { name: 'Reserve' })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
     await chooseComboBoxOption('Jurisdiction', 'Federal Legacy')
     await chooseComboBoxOption('Final destination country', 'New Zealand')
     await chooseComboBoxOption('Customs port of export', 'Vancouver')
