@@ -2274,8 +2274,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await userEvent.type(within(reviewTile).getByLabelText(/review remark/i), 'Needs correction')
     mockedSendApplicationReviewStatusEmail.mockResolvedValueOnce({
       success: false,
-      message:
-        'Application status email is not configured yet. The application status was updated, but no email was sent.',
+      message: 'Application status email is not configured yet. No email was sent.',
     })
     await userEvent.click(
       within(reviewTile).getByRole('button', { name: 'Update Status and Send Email' }),

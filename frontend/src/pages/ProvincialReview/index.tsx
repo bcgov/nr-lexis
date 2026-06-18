@@ -611,18 +611,28 @@ const ProvincialReviewPage: FC = () => {
         }
       }
 
-      const successCount = updateResults.filter((result) => result.success).length
-      const failureCount = updateResults.length - successCount
+      const updateSuccessCount = updateResults.filter((result) => result.updateSuccess).length
+      const updateFailureCount = updateResults.length - updateSuccessCount
       const emailFailureCount = sendEmail
-        ? updateResults.filter((result) => !result.emailSuccess).length
+        ? updateResults.filter((result) => result.updateSuccess && !result.emailSuccess).length
         : 0
+      const firstEmailFailureMessage = sendEmail
+        ? (updateResults.find((result) => result.updateSuccess && !result.emailSuccess)?.message ??
+          '')
+        : ''
 
-      if (failureCount === 0) {
+      if (updateFailureCount === 0 && emailFailureCount === 0) {
         setReviewActionStatus({
           kind: 'success',
           message: sendEmail
-            ? `Updated status and sent email for ${successCount} application(s).`
-            : `Updated status for ${successCount} application(s).`,
+            ? `Updated status and sent email for ${updateSuccessCount} application(s).`
+            : `Updated status for ${updateSuccessCount} application(s).`,
+        })
+      } else if (updateFailureCount === 0) {
+        const emailMessage = firstEmailFailureMessage ? ` ${firstEmailFailureMessage}` : ''
+        setReviewActionStatus({
+          kind: 'error',
+          message: `Updated status for ${updateSuccessCount} application(s), but ${emailFailureCount} email(s) were not sent.${emailMessage}`,
         })
       } else {
         const emailFailureSuffix =
@@ -630,8 +640,8 @@ const ProvincialReviewPage: FC = () => {
         setReviewActionStatus({
           kind: 'error',
           message: sendEmail
-            ? `Updated and emailed ${successCount} application(s); ${failureCount} failed.${emailFailureSuffix}`
-            : `Updated ${successCount} application(s); ${failureCount} failed.`,
+            ? `Updated status for ${updateSuccessCount} application(s); ${updateFailureCount} failed.${emailFailureSuffix}`
+            : `Updated ${updateSuccessCount} application(s); ${updateFailureCount} failed.`,
         })
       }
 

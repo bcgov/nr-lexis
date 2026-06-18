@@ -262,7 +262,7 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
-  void sendStatusEmailShouldCallRepositoryWhenInputValid() {
+  void sendStatusEmailShouldStageRequestAndReportEmailUnavailableWhenInputValid() {
     ApplicationReviewStatusEmailRequestDto request =
         new ApplicationReviewStatusEmailRequestDto(" REJ ", " client@gov.bc.ca ", " Missing docs ");
     when(repository.sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs"))
@@ -270,21 +270,21 @@ class ApplicationReviewOracleServiceTest {
 
     ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
 
-    assertThat(result.success()).isTrue();
-    assertThat(result.message()).isEqualTo("The email notification sent successfully.");
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Application status email is not configured yet. No email was sent.");
     verify(repository).sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs");
   }
 
   @Test
-  void sendStatusEmailShouldReportRepositoryFailure() {
+  void sendStatusEmailShouldRejectUnsupportedStatusesBeforeRepository() {
     ApplicationReviewStatusEmailRequestDto request =
         new ApplicationReviewStatusEmailRequestDto("EXP", "client@gov.bc.ca", null);
 
     ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
 
     assertThat(result.success()).isFalse();
-    assertThat(result.message()).isEqualTo("There was a problem sending your email.");
-    verify(repository).sendStatusEmail(1000456L, "EXP", "client@gov.bc.ca", null);
+    assertThat(result.message()).isEqualTo("Status email is only supported for rejected or withdrawn applications.");
+    verifyNoInteractions(repository);
   }
 
   private ApplicationReviewSearchResultDto row(Long applicationNumber, LocalDate listingDate) {

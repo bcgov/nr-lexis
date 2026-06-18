@@ -2007,7 +2007,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
               payloadResult.payload.remark,
             )
             setActionErrorMessage(
-              emailResult.message || 'Application status updated; email failed.',
+              emailResult.message ===
+                'Application status email is not configured yet. No email was sent.'
+                ? 'Application status email is not configured yet. The application status was updated, but no email was sent.'
+                : emailResult.message || 'Application status updated; email failed.',
             )
             return
           }

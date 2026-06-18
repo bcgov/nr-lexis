@@ -28,6 +28,9 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 @Profile("oracle")
 public class ApplicationReviewOracleService implements ApplicationReviewService {
 
+  private static final List<String> EMAIL_SUPPORTED_STATUS_CODES = List.of("REJ", "WDN");
+  private static final String EMAIL_NOT_CONFIGURED_MESSAGE =
+      "Application status email is not configured yet. No email was sent.";
   private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN");
 
   private final ApplicationReviewRepository repository;
@@ -225,17 +228,23 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Status code and client email are required.");
     }
 
-    boolean sent =
+    if (!EMAIL_SUPPORTED_STATUS_CODES.contains(statusCode)) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "Status email is only supported for rejected or withdrawn applications.");
+    }
+
+    boolean staged =
         repository.sendStatusEmail(
             applicationNumber,
             statusCode,
             clientEmail,
             request == null ? null : trimToNull(request.remark()));
     return new ApplicationReviewStatusEmailResultDto(
-        sent,
-        sent
-            ? "The email notification sent successfully."
-            : "There was a problem sending your email.");
+        false,
+        staged
+            ? EMAIL_NOT_CONFIGURED_MESSAGE
+            : "Application status email could not be prepared.");
   }
 
   private ApplicationReviewSearchCriteria normalizeCriteria(ApplicationReviewSearchCriteria input) {

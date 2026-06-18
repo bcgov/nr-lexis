@@ -363,6 +363,40 @@ describe('Provincial Review Action State Smoke', () => {
     ).toBeInTheDocument()
   })
 
+  it('reports status updates separately when status email is unavailable', async () => {
+    mockedSearchApplicationReviews.mockResolvedValue(twoNewReviewResponse)
+    mockedSendApplicationReviewStatusEmail.mockResolvedValue({
+      success: false,
+      message: 'Application status email is not configured yet. No email was sent.',
+    })
+
+    renderPage()
+    await screen.findByText('2000001')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await chooseComboBoxOption('Update status code', 'Rejected')
+    await userEvent.type(
+      screen.getByLabelText('Status remark (required for rejected or withdrawn)'),
+      'Rejecting from review queue',
+    )
+    await userEvent.type(
+      screen.getByLabelText('Client email address (required for status email)'),
+      'client@example.com',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Update Status and Send Email' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(2)
+      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledTimes(2)
+    })
+
+    expect(
+      await screen.findByText(
+        'Updated status for 2 application(s), but 2 email(s) were not sent. Application status email is not configured yet. No email was sent.',
+      ),
+    ).toBeInTheDocument()
+  })
+
   it('sends selected region org unit numbers to the review search request', async () => {
     mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
       productTypes: [{ value: 'LOG', label: 'Logs' }],
