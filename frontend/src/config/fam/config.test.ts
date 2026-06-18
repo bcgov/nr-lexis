@@ -52,11 +52,11 @@ describe('FAM auth config', () => {
     expect(oauth?.redirectSignOut).toEqual([logoffUrl])
   })
 
-  it('uses same-origin defaults when redirect values are blank', async () => {
+  it('keeps sign-out blank when redirect values are blank', async () => {
     const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
     expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/`])
-    expect(oauth?.redirectSignOut).toEqual([window.location.origin])
+    expect(oauth?.redirectSignOut).toEqual([''])
   })
 })
