@@ -719,7 +719,7 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
-  void sendExemptionApprovalEmailShouldStageExplicitEmailWhenApplicationExists() {
+  void sendExemptionApprovalEmailShouldStageExplicitEmailAndReportUnavailableWhenApplicationExists() {
     when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
         .thenReturn(
             List.of(
@@ -729,8 +729,8 @@ class OracleExemptionDetailsRpcServiceTest {
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
         service.sendExemptionApprovalEmail("EX-205", "client@example.com");
 
-    assertThat(response.success()).isTrue();
-    assertThat(response.message()).isEqualTo("Email sent successfully.");
+    assertThat(response.success()).isFalse();
+    assertThat(response.message()).isEqualTo("Exemption approval email is not configured yet. No email was sent.");
   }
 
   @Test
@@ -745,9 +745,8 @@ class OracleExemptionDetailsRpcServiceTest {
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
         service.sendExemptionApprovalEmails("EX-205:client@example.com,EX-404:missing@example.com");
 
-    assertThat(response.success()).isTrue();
-    assertThat(response.message()).contains("Sending one or more emails failed.");
-    assertThat(response.message()).contains("EX-205");
+    assertThat(response.success()).isFalse();
+    assertThat(response.message()).contains("Exemption approval email is not configured yet. No emails were sent.");
     assertThat(response.message()).contains("EX-404");
   }
 
