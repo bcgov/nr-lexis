@@ -211,7 +211,7 @@ describe('report-service', () => {
 
     const result = await runReport({
       reportId: 'biweeklyListing',
-      actionMapping: 'generateIndustryCSV',
+      actionMapping: 'generate',
       values: {
         outputFormat: 'CSV',
       },

@@ -798,7 +798,7 @@ describe('Reports Page Actions', () => {
     })
   })
 
-  it('uses the selected report variant when generating reports', async () => {
+  it('uses only the filtered advertising list report action', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => true,
     } as any)
@@ -834,66 +834,25 @@ describe('Reports Page Actions', () => {
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
     )
 
-    await chooseComboBoxOption('Report variant', 'Advertising list CSV')
+    expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
+    await chooseComboBoxOption('Output format', 'CSV')
+    await userEvent.type(screen.getByLabelText('Listing from date'), '2026-06-01')
+    await userEvent.type(screen.getByLabelText('Listing to date'), '2026-06-30')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
         reportId: 'biweeklyListing',
-        actionMapping: 'generateIndustryCSV',
-        values: {},
+        actionMapping: 'generate',
+        values: {
+          outputFormat: 'CSV',
+          fromDate: '2026-06-01',
+          toDate: '2026-06-30',
+        },
       })
     })
     expect(anchorClickSpy).toHaveBeenCalled()
     expect(window.open).not.toHaveBeenCalled()
-  })
-
-  it('uses the legacy biweekly industry pdf variant without form criteria', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
-    mockedFetchReportOptions.mockResolvedValueOnce({
-      ...emptyReportOptions(),
-      regions: [
-        { value: '1903', label: 'Cariboo Natural Resource Region' },
-        { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
-      ],
-    })
-    const anchorClickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {})
-
-    render(
-      <MemoryRouter initialEntries={['/reports']}>
-        <Routes>
-          <Route path="/reports" element={<ReportsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByText('Advertising List')
-    const reportRow = screen.getByText('Advertising List').closest('tr')
-    expect(reportRow).not.toBeNull()
-    await userEvent.click(
-      within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
-    )
-
-    await chooseComboBoxOption('Report variant', 'Advertising list PDF')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
-
-    await waitFor(() => {
-      expect(mockedRunReport).toHaveBeenCalledWith({
-        reportId: 'biweeklyListing',
-        actionMapping: 'generateIndustryPDF',
-        values: {},
-      })
-    })
-    expect(window.open).toHaveBeenCalledWith(
-      'blob:report',
-      'reportWindow',
-      'height=900,width=1280,menubar=0,resizable=1,status=1,scrollbars=1',
-    )
-    expect(anchorClickSpy).not.toHaveBeenCalled()
   })
 
   it('does not submit unchanged biweekly listing regions as every region option', async () => {
@@ -923,7 +882,7 @@ describe('Reports Page Actions', () => {
       within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
     )
 
-    expect(getComboBox('Report variant')).toHaveValue('Generate with filters')
+    expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
     await chooseComboBoxOption('Jurisdiction', 'Federal')
     await userEvent.type(screen.getByLabelText('Listing from date'), '2026-06-01')
     await userEvent.type(screen.getByLabelText('Listing to date'), '2026-06-30')

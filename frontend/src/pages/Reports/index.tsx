@@ -590,8 +590,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     description: 'Advertising list output in PDF or CSV format.',
     actionMappings: [
       { value: 'generate', label: 'Generate with filters' },
-      { value: 'generateIndustryPDF', label: 'Advertising list PDF' },
-      { value: 'generateIndustryCSV', label: 'Advertising list CSV' },
     ],
     fields: [
       REGION_CODES_FIELD,
@@ -763,13 +761,8 @@ const buildEffectiveReportValues = (
   values: Record<string, string>,
   optionsByKey: Record<string, SearchOption[]> = {},
   defaultRegion = '',
-  actionMapping = '',
 ): Record<string, string> => {
   const effectiveValues = { ...values }
-  const normalizedActionMapping = actionMapping.trim().toLowerCase()
-  const skipsFormCriteria =
-    normalizedActionMapping === 'generateindustrypdf' ||
-    normalizedActionMapping === 'generateindustrycsv'
   report.fields.forEach((field) => {
     if (
       field.defaultValue !== undefined &&
@@ -780,7 +773,6 @@ const buildEffectiveReportValues = (
     }
 
     if (
-      !skipsFormCriteria &&
       field.type === 'multiselect' &&
       !effectiveValues[field.key] &&
       (field.key === 'region' || field.key === 'orgUnitNumber')
@@ -897,19 +889,13 @@ const hasApplicationReportLimiter = (values: Record<string, string>): boolean =>
 const validateReportLaunch = (
   report: ReportDefinition,
   values: Record<string, string>,
-  actionMapping = '',
 ): string | null => {
   if (report.id === 'applicationReport' && !hasApplicationReportLimiter(values)) {
     return APPLICATION_REPORT_LIMITER_MESSAGE
   }
 
-  const normalizedActionMapping = actionMapping.trim().toLowerCase()
-  const skipsFormCriteria =
-    normalizedActionMapping === 'generateindustrypdf' ||
-    normalizedActionMapping === 'generateindustrycsv'
   if (
     report.id === 'biweeklyListing' &&
-    !skipsFormCriteria &&
     (!values.fromDate?.trim() || !values.toDate?.trim())
   ) {
     return BIWEEKLY_DATE_RANGE_MESSAGE
@@ -1201,13 +1187,8 @@ const ReportsPage: FC = () => {
         selectedReportValues,
         reportFieldOptionsByKey,
         defaultReportRegion,
-        selectedActionMapping,
       )
-      const validationError = validateReportLaunch(
-        selectedReport,
-        effectiveReportValues,
-        selectedActionMapping,
-      )
+      const validationError = validateReportLaunch(selectedReport, effectiveReportValues)
       if (validationError) {
         setLaunchErrorMessage(validationError)
         return
