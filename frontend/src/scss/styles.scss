@@ -1480,7 +1480,7 @@ body {
 .detail-field-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   margin: 0;
 }
 
@@ -1498,7 +1498,9 @@ body {
 .detail-field-value {
   font-weight: 600;
   margin: 0;
+  max-width: 100%;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .detail-list {
