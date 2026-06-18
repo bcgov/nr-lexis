@@ -310,17 +310,22 @@ export const AuthProvider: FC<Props> = ({ children }) => {
 
     try {
       await performLogoff()
+    } catch (error) {
+      console.warn('Unable to complete backend logoff before Cognito sign-out.', error)
+    }
+
+    try {
       if (isCognitoConfigured) {
         await signOut()
       }
     } catch (error) {
-      console.warn('Unable to complete backend logoff. Clearing local auth state.', error)
-    } finally {
-      apiService.clearCachedGetData()
-      clearAllPageDataCache()
-      setCapabilities(DEFAULT_CAPABILITIES)
-      setIsLoading(false)
+      console.warn('Unable to complete Cognito sign-out. Clearing local auth state.', error)
     }
+
+    apiService.clearCachedGetData()
+    clearAllPageDataCache()
+    setCapabilities(DEFAULT_CAPABILITIES)
+    setIsLoading(false)
   }, [])
 
   const grantedActionSet = useMemo(() => {
