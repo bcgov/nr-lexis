@@ -89,6 +89,16 @@ describe('Protected route access matrix', () => {
     expect(route.requiredActions).toContain('/applicationReport')
   })
 
+  it('does not expose retired Indian Reserve or legacy advertising routes', () => {
+    const routePaths = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES].map((route) =>
+      route.path.toLowerCase(),
+    )
+
+    expect(routePaths.some((path) => path.includes('indian'))).toBe(false)
+    expect(routePaths.some((path) => path.includes('reserve'))).toBe(false)
+    expect(routePaths.some((path) => path.includes('advertising'))).toBe(false)
+  })
+
   it('keeps legacy dashboard URL as a redirect instead of a page', () => {
     const publicDashboardRoute = PUBLIC_ROUTES.find((entry) => entry.path === '/dashboard')
 
