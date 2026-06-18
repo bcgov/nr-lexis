@@ -18,7 +18,6 @@ vi.mock('@/config/fam/config', () => ({
   businessBceidProviderName: 'DEV-BCEIDBUSINESS',
   idirProviderName: 'DEV-IDIR',
   isCognitoConfigured: true,
-  redirectSignOut: 'https://nr-lexis-test.apps.silver.devops.gov.bc.ca/',
 }))
 
 vi.mock('@/service/session-service', () => ({
@@ -95,10 +94,7 @@ describe('AuthProvider logout', () => {
     await waitFor(() => {
       expect(authMocks.signOut).toHaveBeenCalledTimes(1)
     })
-    expect(authMocks.signOut).toHaveBeenCalledWith({
-      global: false,
-      oauth: { redirectUrl: 'https://nr-lexis-test.apps.silver.devops.gov.bc.ca/' },
-    })
+    expect(authMocks.signOut).toHaveBeenCalledWith()
     expect(mockedPerformLogoff).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
   })
