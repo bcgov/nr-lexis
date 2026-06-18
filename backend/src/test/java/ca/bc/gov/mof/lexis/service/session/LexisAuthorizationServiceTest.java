@@ -177,7 +177,7 @@ class LexisAuthorizationServiceTest {
             "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
             Map.of(
                 "LEXIS_READ_ONLY", List.of("viewFederalApplication", "viewOICApplication"),
-                "LEXIS_PROVINCIAL_SUBMITTER", List.of("industryListing")));
+                "LEXIS_PROVINCIAL_SUBMITTER", List.of("mofrListing")));
 
     assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "viewFederalApplication")).isTrue();
     assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "viewOICApplication")).isTrue();
