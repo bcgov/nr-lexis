@@ -67,6 +67,25 @@
   --csp-table-row-alt-bg: #e0e0e0;
   --csp-avatar-bg: var(--csp-interactive);
   --csp-avatar-text: #ffffff;
+  --cds-background-brand: var(--csp-background-brand);
+  --cds-border-interactive: var(--csp-border-interactive);
+  --cds-button-primary: var(--csp-button-primary);
+  --cds-button-primary-active: var(--csp-interactive-active);
+  --cds-button-primary-hover: var(--csp-interactive-hover);
+  --cds-button-tertiary: var(--csp-interactive);
+  --cds-button-tertiary-active: var(--csp-interactive-active);
+  --cds-button-tertiary-hover: var(--csp-interactive-hover);
+  --cds-focus: var(--csp-focus);
+  --cds-highlight: var(--csp-brand-blue-tint);
+  --cds-icon-interactive: var(--csp-interactive);
+  --cds-interactive: var(--csp-interactive);
+  --cds-link-primary: var(--csp-link-primary);
+  --cds-link-primary-hover: var(--csp-link-hover);
+  --cds-support-info: var(--csp-interactive);
+  --cds-tag-background-blue: var(--csp-brand-blue-tint);
+  --cds-tag-border-blue: var(--csp-brand-blue);
+  --cds-tag-color-blue: var(--csp-brand-blue-active);
+  --cds-tag-hover-blue: var(--csp-brand-blue-tint-hover);
 }
 
 body {
