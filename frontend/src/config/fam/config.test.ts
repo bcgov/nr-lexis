@@ -41,14 +41,14 @@ describe('FAM auth config', () => {
       'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/'
     window.config = {
       ...configuredRuntimeAuth,
-      VITE_REDIRECT_SIGN_IN: 'https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/dashboard',
+      VITE_REDIRECT_SIGN_IN: 'https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/',
       VITE_REDIRECT_SIGN_OUT: logoffUrl,
     }
 
     const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
-    expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/dashboard`])
+    expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/`])
     expect(oauth?.redirectSignOut).toEqual([logoffUrl])
   })
 

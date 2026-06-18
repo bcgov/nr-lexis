@@ -29,7 +29,7 @@ Mirrors `frontend/.env.example`. Vite bundles these values at dev/build time; ch
 | `VITE_USER_POOLS_ID` | Cognito user pool id | - |
 | `VITE_USER_POOLS_WEB_CLIENT_ID` | Cognito app client id | - |
 | `VITE_COGNITO_DOMAIN` | Cognito hosted UI domain, without protocol | - |
-| `VITE_REDIRECT_SIGN_IN` | OAuth callback URL (LEXIS `/dashboard`) | http://localhost:3000/dashboard |
+| `VITE_REDIRECT_SIGN_IN` | OAuth callback URL | http://localhost:3000/ |
 | `VITE_REDIRECT_SIGN_OUT` | OAuth sign-out redirect URL | http://localhost:3000 |
 | `VITE_COGNITO_SCOPES` | OAuth scopes | openid profile email |
 | `VITE_ZONE` | Environment zone used for IDIR provider selection | dev |
