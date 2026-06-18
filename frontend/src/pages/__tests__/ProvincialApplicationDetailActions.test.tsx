@@ -726,6 +726,44 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
+  it('blocks application edits when another user holds the edit lock', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      locked: true,
+      lockedBy: 'Reviewer One',
+      lockMessage:
+        'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Locked: Yes')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
+
+    const summaryTile = getApplicationSummaryTile()
+    expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
+  })
+
   it('uploads application documents inline and refreshes document rows', async () => {
     mockedFetchApplicationDocuments
       .mockResolvedValueOnce({
