@@ -401,7 +401,7 @@ public class LegacyRouteController {
     if (offerNumber == null) {
       return ResponseEntity.noContent().build();
     }
-    return purchaseOfferController.getByOfferNumber(offerNumber);
+    return purchaseOfferController.getByOfferNumber(offerNumber, authentication);
   }
 
   @GetMapping({"/permitSearch", "/permitSearch.do"})

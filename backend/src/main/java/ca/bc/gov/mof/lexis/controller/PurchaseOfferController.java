@@ -3,12 +3,15 @@ package ca.bc.gov.mof.lexis.controller;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.firstPresent;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
+import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.validation.constraints.Max;
@@ -37,12 +40,15 @@ public class PurchaseOfferController {
 
   private final ObjectProvider<PurchaseOfferService> serviceProvider;
   private final LexisSessionService sessionService;
+  private final LexisApplicationService applicationService;
 
   public PurchaseOfferController(
       ObjectProvider<PurchaseOfferService> serviceProvider,
-      LexisSessionService sessionService) {
+      LexisSessionService sessionService,
+      LexisApplicationService applicationService) {
     this.serviceProvider = serviceProvider;
     this.sessionService = sessionService;
+    this.applicationService = applicationService;
   }
 
   @GetMapping("/search/options")
@@ -145,15 +151,38 @@ public class PurchaseOfferController {
 
   @GetMapping("/{offerNumber}")
   public ResponseEntity<PurchaseOfferDetailDto> getByOfferNumber(
-      @PathVariable("offerNumber") @Positive Long offerNumber) {
+      @PathVariable("offerNumber") @Positive Long offerNumber,
+      Authentication authentication) {
     PurchaseOfferService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Purchase offer service unavailable - returning no content for detail");
       return ResponseEntity.noContent().build();
     }
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     return service.findByOfferNumber(offerNumber)
+        .filter(detail -> canAccessOfferDetail(scopedClientNumber, detail))
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
+  private boolean canAccessOfferDetail(
+      String scopedClientNumber, PurchaseOfferDetailDto detail) {
+    if (scopedClientNumber == null || scopedClientNumber.isBlank()) {
+      return true;
+    }
+    Long applicationNumber = detail == null ? null : detail.applicationNumber();
+    if (applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+    return applicationService.findByApplicationNumber(applicationNumber)
+        .map(application -> matchesScopedApplicationClient(scopedClientNumber, application))
+        .orElse(false);
+  }
+
+  private boolean matchesScopedApplicationClient(
+      String scopedClientNumber, LexisApplicationDetailDto application) {
+    return matchesScopedClient(
+        scopedClientNumber, application.ownerClientNumber(), application.agentClientNumber());
   }
 
   private PurchaseOfferSearchCriteria buildCriteria(
