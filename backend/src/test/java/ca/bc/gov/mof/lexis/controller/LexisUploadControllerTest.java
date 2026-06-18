@@ -43,6 +43,9 @@ class LexisUploadControllerTest {
         controller.fileApplicationUpload(file, null, 7000123L, "test", null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().message())
+        .isEqualTo("Choose a file and enter a valid application number before uploading documents.");
     verifyNoInteractions(uploadService);
   }
 
@@ -109,6 +112,10 @@ class LexisUploadControllerTest {
         controller.fileApplicationUpload(null, formFile, 7000123L, "App file", null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().message())
+        .isEqualTo(
+            "We were unable to save this application document. Confirm the application exists and try again.");
     verify(uploadService).uploadApplication(formFile, 7000123L, "App file", null);
   }
 
@@ -235,7 +242,26 @@ class LexisUploadControllerTest {
         controller.filePermitUpload(file, null, null, "Permit file", null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().message())
+        .isEqualTo("Choose a file and enter a valid permit number before uploading documents.");
     verifyNoInteractions(uploadService);
+  }
+
+  @Test
+  void applicationSubmissionUploadShouldReturnBadRequestPayloadForMissingFile() {
+    LexisUploadController controller = controller();
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.applicationSubmissionUpload(null, null, null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().message())
+        .isEqualTo("Choose a LEXIS application submission file before uploading.");
+    assertThat(response.getBody().errors())
+        .containsExactly("Choose a LEXIS application submission file before uploading.");
+    verifyNoInteractions(applicationSubmissionImportService);
   }
 
   @Test
