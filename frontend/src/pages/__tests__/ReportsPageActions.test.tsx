@@ -972,6 +972,30 @@ describe('Reports Page Actions', () => {
     })
   })
 
+  it('validates advertising list date range before generating the filtered report', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: () => true,
+    } as any)
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=biweeklyListing']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Advertising List' })
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+
+    expect(mockedRunReport).not.toHaveBeenCalled()
+    expect(
+      await screen.findByText(
+        'Choose a Listing from date and Listing to date before generating the Advertising List.',
+      ),
+    ).toBeInTheDocument()
+  })
+
   it('keeps exemption approval date fields hidden like the legacy report form', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => true,

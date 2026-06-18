@@ -862,6 +862,8 @@ const isDownloadReportRequest = (
 
 const APPLICATION_REPORT_LIMITER_MESSAGE =
   'Choose at least one Application Report filter before generating: region, jurisdiction, exemption reason, client number, growth type, or received date.'
+const BIWEEKLY_DATE_RANGE_MESSAGE =
+  'Choose a Listing from date and Listing to date before generating the Advertising List.'
 
 const hasApplicationReportLimiter = (values: Record<string, string>): boolean => {
   const limiterKeys = [
@@ -895,9 +897,22 @@ const hasApplicationReportLimiter = (values: Record<string, string>): boolean =>
 const validateReportLaunch = (
   report: ReportDefinition,
   values: Record<string, string>,
+  actionMapping = '',
 ): string | null => {
   if (report.id === 'applicationReport' && !hasApplicationReportLimiter(values)) {
     return APPLICATION_REPORT_LIMITER_MESSAGE
+  }
+
+  const normalizedActionMapping = actionMapping.trim().toLowerCase()
+  const skipsFormCriteria =
+    normalizedActionMapping === 'generateindustrypdf' ||
+    normalizedActionMapping === 'generateindustrycsv'
+  if (
+    report.id === 'biweeklyListing' &&
+    !skipsFormCriteria &&
+    (!values.fromDate?.trim() || !values.toDate?.trim())
+  ) {
+    return BIWEEKLY_DATE_RANGE_MESSAGE
   }
 
   return null
@@ -1188,7 +1203,11 @@ const ReportsPage: FC = () => {
         defaultReportRegion,
         selectedActionMapping,
       )
-      const validationError = validateReportLaunch(selectedReport, effectiveReportValues)
+      const validationError = validateReportLaunch(
+        selectedReport,
+        effectiveReportValues,
+        selectedActionMapping,
+      )
       if (validationError) {
         setLaunchErrorMessage(validationError)
         return
