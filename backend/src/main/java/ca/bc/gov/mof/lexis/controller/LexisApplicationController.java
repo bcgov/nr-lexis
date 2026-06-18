@@ -2,6 +2,8 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseApplicationNumbers;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationOfferValidationDto;
@@ -75,7 +77,14 @@ public class LexisApplicationController {
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      Authentication authentication) {
+
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    if (scopedClientNumber != null) {
+      ownerClientNumber = null;
+      agentClientNumber = scopedClientNumber;
+    }
 
     LexisApplicationSearchCriteria criteria =
         buildCriteria(
@@ -112,7 +121,14 @@ public class LexisApplicationController {
       @RequestParam(name = "receivedToDate", required = false) String receivedToDate,
       @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
       @RequestParam(name = "listingToDate", required = false) String listingToDate,
-      @RequestParam(name = "region", required = false) List<Long> regionNumbers) {
+      @RequestParam(name = "region", required = false) List<Long> regionNumbers,
+      Authentication authentication) {
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    if (scopedClientNumber != null) {
+      ownerClientNumber = null;
+      agentClientNumber = scopedClientNumber;
+    }
+
     LexisApplicationSearchCriteria criteria =
         buildCriteria(
             applicationNumber,
@@ -138,7 +154,12 @@ public class LexisApplicationController {
   public ResponseEntity<LexisApplicationDetailDto> getByApplicationNumber(
       @PathVariable("applicationNumber") @Positive Long applicationNumber,
       Authentication authentication) {
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     return service.findByApplicationNumber(applicationNumber)
+        .filter(
+            detail ->
+                matchesScopedClient(
+                    scopedClientNumber, detail.ownerClientNumber(), detail.agentClientNumber()))
         .map(detail -> ResponseEntity.ok(withEditLock(detail, authentication)))
         .orElseGet(() -> ResponseEntity.notFound().build());
   }

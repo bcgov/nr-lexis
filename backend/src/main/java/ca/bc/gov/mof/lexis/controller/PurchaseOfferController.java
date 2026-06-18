@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.firstPresent;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
@@ -9,6 +10,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
@@ -18,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,9 +36,13 @@ public class PurchaseOfferController {
   private static final Logger LOGGER = LoggerFactory.getLogger(PurchaseOfferController.class);
 
   private final ObjectProvider<PurchaseOfferService> serviceProvider;
+  private final LexisSessionService sessionService;
 
-  public PurchaseOfferController(ObjectProvider<PurchaseOfferService> serviceProvider) {
+  public PurchaseOfferController(
+      ObjectProvider<PurchaseOfferService> serviceProvider,
+      LexisSessionService sessionService) {
     this.serviceProvider = serviceProvider;
+    this.sessionService = sessionService;
   }
 
   @GetMapping("/search/options")
@@ -62,11 +69,17 @@ public class PurchaseOfferController {
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      Authentication authentication) {
     PurchaseOfferService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Purchase offer service unavailable - returning no content for search");
       return ResponseEntity.noContent().build();
+    }
+
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    if (scopedClientNumber != null) {
+      clientNumber = scopedClientNumber;
     }
 
     PurchaseOfferSearchCriteria criteria =
@@ -99,11 +112,17 @@ public class PurchaseOfferController {
       @RequestParam(name = "withdrawalFromDate", required = false) String withdrawalFromDate,
       @RequestParam(name = "withdrawalToDate", required = false) String withdrawalToDate,
       @RequestParam(name = "clientNumber", required = false) String clientNumber,
-      @RequestParam(name = "region", required = false) List<Long> regionNumbers) {
+      @RequestParam(name = "region", required = false) List<Long> regionNumbers,
+      Authentication authentication) {
     PurchaseOfferService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Purchase offer service unavailable - returning no content for count");
       return ResponseEntity.noContent().build();
+    }
+
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    if (scopedClientNumber != null) {
+      clientNumber = scopedClientNumber;
     }
 
     PurchaseOfferSearchCriteria criteria =

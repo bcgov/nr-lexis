@@ -14,6 +14,7 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | PermitController")
@@ -34,6 +36,8 @@ class PermitControllerTest {
 
   @Mock private ObjectProvider<PermitService> serviceProvider;
   @Mock private PermitService service;
+  @Mock private LexisSessionService sessionService;
+  @Mock private Authentication authentication;
 
   @InjectMocks private PermitController controller;
 
@@ -82,6 +86,7 @@ class PermitControllerTest {
             null,
             0,
             25,
+            null,
             null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
@@ -123,6 +128,7 @@ class PermitControllerTest {
             "permitNumber DESC",
             0,
             25,
+            null,
             null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -147,6 +153,39 @@ class PermitControllerTest {
   }
 
   @Test
+  void searchShouldOverrideClientFiltersWhenUserHasScopedForestClient() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.search(any(PermitSearchCriteria.class)))
+        .thenReturn(new PermitSearchResponseDto(List.of(), 0, 0, 25));
+
+    controller.search(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "00099999",
+        "00088888",
+        List.of(),
+        null,
+        0,
+        25,
+        null,
+        authentication);
+
+    ArgumentCaptor<PermitSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PermitSearchCriteria.class);
+    verify(service).search(criteriaCaptor.capture());
+
+    PermitSearchCriteria criteria = criteriaCaptor.getValue();
+    assertThat(criteria.applicantClientNumber()).isNull();
+    assertThat(criteria.ownerClientNumber()).isEqualTo("00077881");
+  }
+
+  @Test
   void searchShouldPassKnownTotalWhenProvided() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitSearchResponseDto dto = new PermitSearchResponseDto(List.of(), 91, 2, 30);
@@ -167,7 +206,8 @@ class PermitControllerTest {
             null,
             2,
             30,
-            91);
+            91,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
@@ -178,7 +218,7 @@ class PermitControllerTest {
   void detailShouldReturnNoContentWhenServiceMissing() {
     when(serviceProvider.getIfAvailable()).thenReturn(null);
 
-    ResponseEntity<PermitDetailDto> response = controller.getByPermitNumber(9000123L);
+    ResponseEntity<PermitDetailDto> response = controller.getByPermitNumber(9000123L, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(service);
@@ -189,7 +229,7 @@ class PermitControllerTest {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.findByPermitNumber(9000123L)).thenReturn(Optional.empty());
 
-    ResponseEntity<PermitDetailDto> response = controller.getByPermitNumber(9000123L);
+    ResponseEntity<PermitDetailDto> response = controller.getByPermitNumber(9000123L, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     verify(service).findByPermitNumber(9000123L);
@@ -227,7 +267,7 @@ class PermitControllerTest {
             "R2");
     when(service.findByPermitNumber(9000123L)).thenReturn(Optional.of(dto));
 
-    ResponseEntity<PermitDetailDto> response = controller.getByPermitNumber(9000123L);
+    ResponseEntity<PermitDetailDto> response = controller.getByPermitNumber(9000123L, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);

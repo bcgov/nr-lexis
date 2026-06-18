@@ -13,6 +13,7 @@ import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | PurchaseOfferController")
@@ -33,6 +35,8 @@ class PurchaseOfferControllerTest {
 
   @Mock private ObjectProvider<PurchaseOfferService> serviceProvider;
   @Mock private PurchaseOfferService service;
+  @Mock private LexisSessionService sessionService;
+  @Mock private Authentication authentication;
 
   @InjectMocks private PurchaseOfferController controller;
 
@@ -78,7 +82,8 @@ class PurchaseOfferControllerTest {
             List.of(),
             null,
             0,
-            25);
+            25,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(service);
@@ -117,7 +122,8 @@ class PurchaseOfferControllerTest {
             List.of(12L),
             "offerNumber DESC",
             0,
-            25);
+            25,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
@@ -136,6 +142,36 @@ class PurchaseOfferControllerTest {
     assertThat(criteria.clientNumber()).isEqualTo("00077881");
     assertThat(criteria.regionNumbers()).containsExactly(12L);
     assertThat(criteria.sortField()).isEqualTo("offerNumber DESC");
+  }
+
+  @Test
+  void searchShouldOverrideClientFilterWhenUserHasScopedForestClient() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.search(any(PurchaseOfferSearchCriteria.class)))
+        .thenReturn(new PurchaseOfferSearchResponseDto(List.of(), 0, 0, 25));
+
+    controller.search(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "00099999",
+        List.of(),
+        null,
+        0,
+        25,
+        authentication);
+
+    ArgumentCaptor<PurchaseOfferSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(service).search(criteriaCaptor.capture());
+
+    assertThat(criteriaCaptor.getValue().clientNumber()).isEqualTo("00077881");
   }
 
   @Test
