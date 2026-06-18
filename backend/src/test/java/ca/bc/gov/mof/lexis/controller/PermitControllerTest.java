@@ -238,33 +238,7 @@ class PermitControllerTest {
   @Test
   void detailShouldReturnPayloadWhenServiceReturnsEntity() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitDetailDto dto =
-        new PermitDetailDto(
-            9000123L,
-            1000456L,
-            "PKG-903",
-            "EX-205",
-            "ISS",
-            "Issued",
-            "00055667",
-            "00077881",
-            "Example Dest Co",
-            "US",
-            "SEA",
-            "MV Example",
-            "VAN",
-            null,
-            LocalDate.of(2026, 3, 10),
-            LocalDate.of(2026, 4, 10),
-            LocalDate.of(2026, 3, 2),
-            LocalDate.of(2026, 3, 15),
-            80.0,
-            1450L,
-            "RC-12345",
-            "FED-1122",
-            "SI-99881",
-            "Permit remarks",
-            "R2");
+    PermitDetailDto dto = permitDetail("00077881", "00055667");
     when(service.findByPermitNumber(9000123L)).thenReturn(Optional.of(dto));
 
     ResponseEntity<PermitDetailDto> response = controller.getByPermitNumber(9000123L, null);
@@ -272,5 +246,49 @@ class PermitControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).findByPermitNumber(9000123L);
+  }
+
+  @Test
+  void detailShouldReturnNotFoundWhenScopedUserDoesNotOwnPermit() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.findByPermitNumber(9000123L))
+        .thenReturn(Optional.of(permitDetail("00099999", "00088888")));
+
+    ResponseEntity<PermitDetailDto> response =
+        controller.getByPermitNumber(9000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    verify(service).findByPermitNumber(9000123L);
+  }
+
+  private static PermitDetailDto permitDetail(
+      String ownerClientNumber, String applicantClientNumber) {
+    return new PermitDetailDto(
+        9000123L,
+        1000456L,
+        "PKG-903",
+        "EX-205",
+        "ISS",
+        "Issued",
+        applicantClientNumber,
+        ownerClientNumber,
+        "Example Dest Co",
+        "US",
+        "SEA",
+        "MV Example",
+        "VAN",
+        null,
+        LocalDate.of(2026, 3, 10),
+        LocalDate.of(2026, 4, 10),
+        LocalDate.of(2026, 3, 2),
+        LocalDate.of(2026, 3, 15),
+        80.0,
+        1450L,
+        "RC-12345",
+        "FED-1122",
+        "SI-99881",
+        "Permit remarks",
+        "R2");
   }
 }

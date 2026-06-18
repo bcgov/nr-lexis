@@ -230,26 +230,7 @@ class ExemptionControllerTest {
   void detailShouldReturnPayloadWhenServiceReturnsEntity() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
 
-    ExemptionDetailDto dto =
-        new ExemptionDetailDto(
-            "EX-205",
-            "FEE",
-            "Fee in Lieu",
-            "APR",
-            "Approved",
-            "00077881",
-            "00055667",
-            1000456L,
-            "In Review",
-            LocalDate.of(2026, 3, 12),
-            LocalDate.of(2027, 3, 12),
-            95.0,
-            12.0,
-            83.0,
-            "Pending final confirmation",
-            false,
-            List.of("P-88009"),
-            List.of(new ExemptionDetailDto.ExemptionRemarkDto("Pending", "Awaiting documentation")));
+    ExemptionDetailDto dto = exemptionDetail("00077881", "00055667");
 
     when(service.findByExemptionNumber("EX-205")).thenReturn(Optional.of(dto));
 
@@ -258,5 +239,42 @@ class ExemptionControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).findByExemptionNumber("EX-205");
+  }
+
+  @Test
+  void detailShouldReturnNotFoundWhenScopedUserDoesNotOwnExemption() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.findByExemptionNumber("EX-205"))
+        .thenReturn(Optional.of(exemptionDetail("00099999", "00088888")));
+
+    ResponseEntity<ExemptionDetailDto> response =
+        controller.getByExemptionNumber("EX-205", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    verify(service).findByExemptionNumber("EX-205");
+  }
+
+  private static ExemptionDetailDto exemptionDetail(
+      String ownerClientNumber, String agentClientNumber) {
+    return new ExemptionDetailDto(
+        "EX-205",
+        "FEE",
+        "Fee in Lieu",
+        "APR",
+        "Approved",
+        ownerClientNumber,
+        agentClientNumber,
+        1000456L,
+        "In Review",
+        LocalDate.of(2026, 3, 12),
+        LocalDate.of(2027, 3, 12),
+        95.0,
+        12.0,
+        83.0,
+        "Pending final confirmation",
+        false,
+        List.of("P-88009"),
+        List.of(new ExemptionDetailDto.ExemptionRemarkDto("Pending", "Awaiting documentation")));
   }
 }
