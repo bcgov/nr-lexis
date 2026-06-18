@@ -1,14 +1,20 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
-import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
+import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.upload.ApplicationSubmissionImportService;
+import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -33,6 +39,7 @@ class LexisUploadControllerTest {
   @Mock private ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider;
   @Mock private LexisUploadService uploadService;
   @Mock private ApplicationSubmissionImportService applicationSubmissionImportService;
+  @Mock private ApplicationEditLockService applicationEditLockService;
 
   @Test
   void uploadShouldReturnBadRequestForEmptyFile() {
@@ -140,6 +147,31 @@ class LexisUploadControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
     assertThat(response.getBody()).isEqualTo(payload);
     verify(uploadService).uploadApplication(formFile, 7000123L, "App file", null);
+  }
+
+  @Test
+  void fileApplicationUploadShouldRejectWhenApplicationLockedByAnotherUser() {
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleFile("application.pdf");
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(applicationEditLockService.snapshot(7000123L, "idir\\jsmith", false))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true,
+                false,
+                null,
+                "This application is currently locked for editing by another user.",
+                null));
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileApplicationUpload(file, null, 7000123L, "App file", null, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().message())
+        .isEqualTo("This application is currently locked for editing by another user.");
+    verify(uploadServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -390,6 +422,10 @@ class LexisUploadControllerTest {
   }
 
   private LexisUploadController controller() {
-    return new LexisUploadController(uploadServiceProvider, applicationSubmissionImportServiceProvider);
+    lenient()
+        .when(applicationEditLockService.snapshot(any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
+    return new LexisUploadController(
+        uploadServiceProvider, applicationSubmissionImportServiceProvider, applicationEditLockService);
   }
 }

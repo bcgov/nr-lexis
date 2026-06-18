@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -69,6 +70,9 @@ class ApplicationDetailsRpcControllerTest {
     lenient()
         .when(editLockService.requireEditable(any(), any(), any()))
         .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    lenient()
+        .when(editLockService.snapshot(any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
   }
 
   @Test
@@ -163,6 +167,31 @@ class ApplicationDetailsRpcControllerTest {
         .getApplicationSummarySnapshot(org.mockito.ArgumentMatchers.anyLong());
     org.mockito.Mockito.verify(service, org.mockito.Mockito.never())
         .removeDocument(org.mockito.ArgumentMatchers.anyLong());
+  }
+
+  @Test
+  void removeDocumentShouldRejectWhenApplicationLockedByAnotherUser() {
+    TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(55L, "test.pdf", "Not on file", "Uploaded")));
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(editLockService.snapshot(1000456L, "idir\\jsmith", false))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true,
+                false,
+                null,
+                "This application is currently locked for editing by another user.",
+                null));
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isEqualTo("false");
+    verify(service, never()).removeDocument(55L);
   }
 
   @Test

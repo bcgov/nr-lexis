@@ -734,6 +734,17 @@ describe('Provincial Application Detail Document Actions', () => {
       lockMessage:
         'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
     })
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '900',
+          name: 'locked-doc.pdf',
+          description: 'Locked document',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -748,10 +759,10 @@ describe('Provincial Application Detail Document Actions', () => {
 
     expect(await screen.findByText('Locked: Yes')).toBeInTheDocument()
     expect(
-      screen.getByText(
+      screen.getAllByText(
         'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
-      ),
-    ).toBeInTheDocument()
+      ).length,
+    ).toBeGreaterThanOrEqual(1)
     expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
 
     const summaryTile = getApplicationSummaryTile()
@@ -760,6 +771,11 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+    expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
+    expect(await screen.findByText('locked-doc.pdf')).toBeInTheDocument()
+    screen
+      .getAllByRole('button', { name: 'Delete' })
+      .forEach((button) => expect(button).toBeDisabled())
     expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
   })

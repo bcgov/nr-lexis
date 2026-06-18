@@ -1,7 +1,9 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.upload.ApplicationSubmissionImportService;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
 import java.math.BigDecimal;
@@ -29,12 +31,15 @@ public class LexisUploadController {
 
   private final ObjectProvider<LexisUploadService> uploadServiceProvider;
   private final ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider;
+  private final ApplicationEditLockService applicationEditLockService;
 
   public LexisUploadController(
       ObjectProvider<LexisUploadService> uploadServiceProvider,
-      ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider) {
+      ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider,
+      ApplicationEditLockService applicationEditLockService) {
     this.uploadServiceProvider = uploadServiceProvider;
     this.applicationSubmissionImportServiceProvider = applicationSubmissionImportServiceProvider;
+    this.applicationEditLockService = applicationEditLockService;
   }
 
   @PostMapping(
@@ -51,6 +56,12 @@ public class LexisUploadController {
     if (uploadFile == null || uploadFile.isEmpty() || applicationNumber == null || applicationNumber < 1) {
       return uploadBadRequest(
           "application", "Choose a file and enter a valid application number before uploading documents.");
+    }
+    ApplicationEditLockDto lock =
+        applicationEditLockService.snapshot(applicationNumber, userId(authentication), false);
+    if (lock.locked()) {
+      return ResponseEntity.status(HttpStatus.CONFLICT)
+          .body(uploadFailure("application", lock.message()));
     }
 
     LexisUploadService service = uploadServiceProvider.getIfAvailable();
@@ -261,16 +272,24 @@ public class LexisUploadController {
   }
 
   private String resolveEntryUserId(Authentication authentication) {
+    String principalName = userId(authentication);
+    if (principalName == null) {
+      return null;
+    }
+    int slash = Math.max(principalName.lastIndexOf('\\'), principalName.lastIndexOf('/'));
+    if (slash >= 0 && slash < principalName.length() - 1) {
+      return principalName.substring(slash + 1);
+    }
+    return principalName;
+  }
+
+  private String userId(Authentication authentication) {
     if (authentication == null || authentication.getName() == null) {
       return null;
     }
     String principalName = authentication.getName().trim();
     if (principalName.isEmpty()) {
       return null;
-    }
-    int slash = Math.max(principalName.lastIndexOf('\\'), principalName.lastIndexOf('/'));
-    if (slash >= 0 && slash < principalName.length() - 1) {
-      return principalName.substring(slash + 1);
     }
     return principalName;
   }

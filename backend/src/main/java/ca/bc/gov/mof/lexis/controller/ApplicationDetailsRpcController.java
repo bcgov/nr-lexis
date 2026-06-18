@@ -208,6 +208,11 @@ public class ApplicationDetailsRpcController {
     if (!canRemoveApplicationDocument(service, parsedDocumentId, parsedApplicationNumber, roles)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
+    ApplicationEditLockDto lock =
+        editLockService.snapshot(parsedApplicationNumber, userId(authentication), false);
+    if (lock.locked()) {
+      return ResponseEntity.status(HttpStatus.CONFLICT).body(new RemoveDocumentResponseDto("false"));
+    }
 
     boolean removed = service.removeDocument(parsedDocumentId);
     return ResponseEntity.ok(new RemoveDocumentResponseDto(Boolean.toString(removed)));

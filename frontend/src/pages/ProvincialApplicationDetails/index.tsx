@@ -337,6 +337,9 @@ const canDeleteApplicationDocuments = (
   if (!detail) {
     return false
   }
+  if (detail.readOnly || detail.locked) {
+    return false
+  }
 
   const status = detail.applicationStatusCode?.trim().toUpperCase() ?? ''
   const normalizedRoles = roles.map((role) => role.trim().toUpperCase())
@@ -367,6 +370,15 @@ const applicationDocumentUploadUnavailableMessage = (
   detail: ProvincialApplicationDetail | null,
   permitRows: ApplicationPermitRow[],
 ): string => {
+  if (detail?.locked) {
+    return (
+      detail.lockMessage ||
+      'Application document upload is unavailable while this application is locked.'
+    )
+  }
+  if (detail?.readOnly) {
+    return 'Application document upload is unavailable for read-only applications.'
+  }
   if (isExpiredApplication(detail)) {
     return 'Application document upload is unavailable for expired applications.'
   }
