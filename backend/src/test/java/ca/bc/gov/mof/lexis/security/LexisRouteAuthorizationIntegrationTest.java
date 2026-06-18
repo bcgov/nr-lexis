@@ -771,6 +771,18 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void applicationSubmissionUploadShouldRejectFederalSubmitterRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/application-submissions")
+                .file(file)
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void applicationSubmissionValidationShouldAllowCreateApplicationRole() throws Exception {
     MockMultipartFile file =
         new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
@@ -803,6 +815,18 @@ class LexisRouteAuthorizationIntegrationTest {
             multipart("/api/lexis/application-submissions/validation")
                 .file(file)
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void applicationSubmissionValidationShouldRejectFederalSubmitterRole() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("formFile", "submission.xml", "application/xml", "<xml />".getBytes());
+
+    mockMvc.perform(
+            multipart("/api/lexis/application-submissions/validation")
+                .file(file)
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_FEDERAL_SUBMITTER"))))
         .andExpect(status().isForbidden());
   }
 
