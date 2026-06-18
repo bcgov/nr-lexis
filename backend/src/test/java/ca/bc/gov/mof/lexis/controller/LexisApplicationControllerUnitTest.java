@@ -5,9 +5,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
@@ -71,6 +73,50 @@ class LexisApplicationControllerUnitTest {
   }
 
   @Test
+  void searchShouldIncludeActiveEditLocks() {
+    when(authentication.getName()).thenReturn("idir\\reviewer");
+    when(service.search(any(LexisApplicationSearchCriteria.class)))
+        .thenReturn(
+            new LexisApplicationSearchResponseDto(
+                List.of(searchResult(1000456L), searchResult(1000789L)), 2, 0, 25));
+    when(editLockService.snapshot(1000456L, "idir\\reviewer", false))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true,
+                false,
+                null,
+                "This application is currently locked for editing by another user.",
+                null));
+    when(editLockService.snapshot(1000789L, "idir\\reviewer", false))
+        .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
+
+    ResponseEntity<LexisApplicationSearchResponseDto> response =
+        controller.search(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            null,
+            0,
+            25,
+            authentication);
+
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().results())
+        .extracting(LexisApplicationSearchResultDto::locked)
+        .containsExactly(true, false);
+  }
+
+  @Test
   void detailShouldReturnNotFoundWhenScopedUserDoesNotOwnApplication() {
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
     when(service.findByApplicationNumber(1000456L))
@@ -112,5 +158,19 @@ class LexisApplicationControllerUnitTest {
         List.of(),
         List.of(),
         List.of());
+  }
+
+  private static LexisApplicationSearchResultDto searchResult(long applicationNumber) {
+    return new LexisApplicationSearchResultDto(
+        applicationNumber,
+        "New",
+        "",
+        "00077881",
+        "",
+        LocalDate.of(2026, 3, 2),
+        "R2",
+        95.0,
+        true,
+        false);
   }
 }

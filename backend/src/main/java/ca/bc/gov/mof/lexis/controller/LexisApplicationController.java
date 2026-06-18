@@ -10,6 +10,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationOfferValidationDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationValidationDto;
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
@@ -104,7 +105,7 @@ public class LexisApplicationController {
             sortField,
             page,
             size);
-    return ResponseEntity.ok(service.search(criteria));
+    return ResponseEntity.ok(withSearchLocks(service.search(criteria), authentication));
   }
 
   @GetMapping("/search/count")
@@ -255,5 +256,39 @@ public class LexisApplicationController {
         detail.packages(),
         detail.remarks(),
         detail.offers());
+  }
+
+  private LexisApplicationSearchResponseDto withSearchLocks(
+      LexisApplicationSearchResponseDto response, Authentication authentication) {
+    if (response == null || response.results() == null || response.results().isEmpty()) {
+      return response;
+    }
+
+    String userId = authentication == null ? null : authentication.getName();
+    List<LexisApplicationSearchResultDto> results =
+        response.results().stream()
+            .map(row -> withSearchLock(row, userId))
+            .toList();
+    return new LexisApplicationSearchResponseDto(
+        results, response.total(), response.page(), response.size());
+  }
+
+  private LexisApplicationSearchResultDto withSearchLock(
+      LexisApplicationSearchResultDto row, String userId) {
+    ApplicationEditLockDto lock = editLockService.snapshot(row.application(), userId, false);
+    if (!lock.locked()) {
+      return row;
+    }
+    return new LexisApplicationSearchResultDto(
+        row.application(),
+        row.status(),
+        row.client(),
+        row.ownerClientNumber(),
+        row.exemptionNumber(),
+        row.listingDate(),
+        row.region(),
+        row.applicationVolume(),
+        row.showCheckbox(),
+        true);
   }
 }
