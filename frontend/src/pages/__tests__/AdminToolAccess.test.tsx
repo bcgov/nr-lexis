@@ -95,7 +95,7 @@ describe('Admin tool access smoke', () => {
         authenticated: true,
         principal: 'idir\\readonly',
         roles: ['READ_ONLY'],
-        welcomeTarget: '/dashboard',
+        welcomeTarget: 'readOnly',
         legacyPath: null,
         grantedActions: [],
       },

@@ -146,8 +146,8 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
   },
   {
     path: '/dashboard',
-    id: 'Landing Callback',
-    element: <LandingPage />,
+    id: 'Legacy Dashboard Redirect',
+    element: <Navigate to="/" replace />,
     isNavigation: false,
   },
   {

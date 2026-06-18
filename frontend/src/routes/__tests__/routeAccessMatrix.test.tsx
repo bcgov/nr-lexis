@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { PROTECTED_ROUTES } from '@/routes/routePaths'
+import { isValidElement, type ReactElement } from 'react'
+import { Navigate } from 'react-router-dom'
+import { PROTECTED_ROUTES, PUBLIC_ROUTES } from '@/routes/routePaths'
 
 const findRoute = (path: string) => {
   const route = PROTECTED_ROUTES.find((entry) => entry.path === path)
@@ -85,5 +87,18 @@ describe('Protected route access matrix', () => {
     const route = findRoute('/reports')
     expect(route.requiredActions).toContain('mofrListing')
     expect(route.requiredActions).toContain('/applicationReport')
+  })
+
+  it('keeps legacy dashboard URL as a redirect instead of a page', () => {
+    const publicDashboardRoute = PUBLIC_ROUTES.find((entry) => entry.path === '/dashboard')
+
+    expect(publicDashboardRoute).toBeDefined()
+    expect(publicDashboardRoute?.id).toBe('Legacy Dashboard Redirect')
+    expect(isValidElement(publicDashboardRoute?.element)).toBe(true)
+    expect((publicDashboardRoute?.element as ReactElement).type).toBe(Navigate)
+    expect((publicDashboardRoute?.element as ReactElement).props).toMatchObject({
+      to: '/',
+      replace: true,
+    })
   })
 })

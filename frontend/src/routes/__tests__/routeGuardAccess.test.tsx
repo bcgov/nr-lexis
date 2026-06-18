@@ -28,7 +28,7 @@ describe('Protected route guard access', () => {
         authenticated: true,
         principal: 'idir\\readonly',
         roles: ['READ_ONLY'],
-        welcomeTarget: '/dashboard',
+        welcomeTarget: 'readOnly',
         legacyPath: null,
         grantedActions: [],
       },
