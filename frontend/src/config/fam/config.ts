@@ -33,11 +33,25 @@ const resolveSameOriginRedirect = (value: string | undefined, fallbackPath = '')
   }
 }
 
+const resolveSignOutRedirect = (value: string | undefined, fallbackPath = ''): string => {
+  const configured = value?.trim()
+
+  if (!configured) {
+    return `${window.location.origin}${fallbackPath}`
+  }
+
+  try {
+    return new URL(configured, window.location.origin).href
+  } catch {
+    return `${window.location.origin}${fallbackPath}`
+  }
+}
+
 const userPoolId = env.VITE_USER_POOLS_ID?.trim() ?? ''
 const userPoolClientId = env.VITE_USER_POOLS_WEB_CLIENT_ID?.trim() ?? ''
 const domain = env.VITE_COGNITO_DOMAIN?.trim()?.replace(/^https?:\/\//, '') ?? ''
 const redirectSignIn = resolveSameOriginRedirect(env.VITE_REDIRECT_SIGN_IN, '/')
-const redirectSignOut = resolveSameOriginRedirect(env.VITE_REDIRECT_SIGN_OUT)
+const redirectSignOut = resolveSignOutRedirect(env.VITE_REDIRECT_SIGN_OUT)
 const scopes = resolveScopes(splitScopes(env.VITE_COGNITO_SCOPES))
 
 export const idirProviderName = `${(env.VITE_ZONE ?? 'DEV').toUpperCase()}-IDIR`

@@ -36,18 +36,20 @@ describe('FAM auth config', () => {
     window.config = {}
   })
 
-  it('keeps configured OAuth redirect paths on the current browser origin', async () => {
+  it('keeps sign-in on the current origin and preserves the configured sign-out URL', async () => {
+    const logoffUrl =
+      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/'
     window.config = {
       ...configuredRuntimeAuth,
       VITE_REDIRECT_SIGN_IN: 'https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/dashboard',
-      VITE_REDIRECT_SIGN_OUT: 'https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/',
+      VITE_REDIRECT_SIGN_OUT: logoffUrl,
     }
 
     const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
     expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/dashboard`])
-    expect(oauth?.redirectSignOut).toEqual([`${window.location.origin}/`])
+    expect(oauth?.redirectSignOut).toEqual([logoffUrl])
   })
 
   it('uses same-origin defaults when redirect values are blank', async () => {
