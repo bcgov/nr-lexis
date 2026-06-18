@@ -61,4 +61,20 @@ describe('uploadQueueHelpers', () => {
       'The selected file is too large. Choose a smaller file and try again.',
     ])
   })
+
+  it('uses a plain-language file-size message when a 413 response has no structured body', () => {
+    const result = extractUploadErrorDetails({
+      response: {
+        status: 413,
+        data: '',
+      },
+    })
+
+    expect(result.message).toBe(
+      'The selected file is too large. Choose a smaller file and try again.',
+    )
+    expect(result.details.errors).toEqual([
+      'The selected file is too large. Choose a smaller file and try again.',
+    ])
+  })
 })
