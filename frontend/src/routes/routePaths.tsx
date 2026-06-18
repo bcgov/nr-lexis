@@ -8,9 +8,6 @@ import AdminUploadsPage from '@/pages/AdminUploads'
 import DashboardPage from '@/pages/Dashboard'
 import FederalPage from '@/pages/Federal'
 import FederalApplicationDetailsPage from '@/pages/FederalApplicationDetails'
-import IndianReservePage from '@/pages/IndianReserve'
-import IndianReservePermitCreatePage from '@/pages/IndianReservePermitCreate'
-import IndianReservePermitDetailsPage from '@/pages/IndianReservePermitDetails'
 import LandingPage from '@/pages/Landing'
 import NotFoundPage from '@/pages/NotFound'
 import ProvincialApplicationPage from '@/pages/ProvincialApplication'
@@ -317,41 +314,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     element: (
       <Layout>
         <FederalApplicationDetailsPage />
-      </Layout>
-    ),
-    isNavigation: false,
-  },
-  {
-    path: '/indian-reserve',
-    id: 'Indigenous Reserve',
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
-    element: (
-      <Layout>
-        <IndianReservePage />
-      </Layout>
-    ),
-    isNavigation: true,
-  },
-  {
-    path: '/indian-reserve/permit/create',
-    id: 'Create Indigenous Reserve Permit',
-    requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
-    requiredActionsMatch: 'all',
-    element: (
-      <Layout>
-        <IndianReservePermitCreatePage />
-      </Layout>
-    ),
-    isNavigation: false,
-  },
-  {
-    path: '/indian-reserve/permit/:permitNumber',
-    id: 'Indigenous Reserve Permit Details',
-    requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
-    requiredActionsMatch: 'all',
-    element: (
-      <Layout>
-        <IndianReservePermitDetailsPage />
       </Layout>
     ),
     isNavigation: false,

@@ -9,7 +9,6 @@ import {
   previewApplicationReviews,
 } from '@/service/application-review-search-service'
 import { countFederalApplications } from '@/service/federal-application-search-service'
-import { countIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
 import { countProvincialApplications } from '@/service/provincial-application-search-service'
 import { countProvincialExemptions } from '@/service/provincial-exemption-search-service'
 import { countProvincialOffers } from '@/service/provincial-offer-search-service'
@@ -54,10 +53,6 @@ vi.mock('@/service/federal-application-search-service', () => ({
   countFederalApplications: vi.fn(),
 }))
 
-vi.mock('@/service/indian-reserve-permit-search-service', () => ({
-  countIndianReservePermits: vi.fn(),
-}))
-
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedCountProvincialApplications = vi.mocked(countProvincialApplications)
 const mockedCountProvincialExemptions = vi.mocked(countProvincialExemptions)
@@ -66,7 +61,6 @@ const mockedCountProvincialPermits = vi.mocked(countProvincialPermits)
 const mockedCountApplicationReviews = vi.mocked(countApplicationReviews)
 const mockedPreviewApplicationReviews = vi.mocked(previewApplicationReviews)
 const mockedCountFederalApplications = vi.mocked(countFederalApplications)
-const mockedCountIndianReservePermits = vi.mocked(countIndianReservePermits)
 
 const renderPage = () => {
   return render(
@@ -106,7 +100,6 @@ describe('Provincial Summary action smoke', () => {
       page: { number: 0, size: 5, hasNext: true },
     })
     mockedCountFederalApplications.mockResolvedValue(1006)
-    mockedCountIndianReservePermits.mockResolvedValue(1107)
   })
 
   it('loads summary totals and navigates through review actions', async () => {
@@ -120,7 +113,6 @@ describe('Provincial Summary action smoke', () => {
     expect(mockedCountApplicationReviews).toHaveBeenCalledTimes(1)
     expect(mockedPreviewApplicationReviews).toHaveBeenCalledTimes(1)
     expect(mockedCountFederalApplications).toHaveBeenCalledTimes(1)
-    expect(mockedCountIndianReservePermits).toHaveBeenCalledTimes(1)
     expect(mockedCountProvincialApplications).toHaveBeenCalledWith(
       expect.objectContaining({ page: 0, pageSize: 1 }),
     )
@@ -142,16 +134,12 @@ describe('Provincial Summary action smoke', () => {
     expect(mockedCountFederalApplications).toHaveBeenCalledWith(
       expect.objectContaining({ page: 0, pageSize: 1 }),
     )
-    expect(mockedCountIndianReservePermits).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 0, pageSize: 1 }),
-    )
     expect(screen.getByText('501')).toBeInTheDocument()
     expect(screen.getByText('602')).toBeInTheDocument()
     expect(screen.getByText('703')).toBeInTheDocument()
     expect(screen.getByText('804')).toBeInTheDocument()
     expect(screen.getByText('905')).toBeInTheDocument()
     expect(screen.getByText('1,006')).toBeInTheDocument()
-    expect(screen.getByText('1,107')).toBeInTheDocument()
     expect(screen.queryByText(/Accessible modules:/)).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Open review queue' }))
@@ -215,7 +203,6 @@ describe('Provincial Summary action smoke', () => {
     expect(mockedCountApplicationReviews).not.toHaveBeenCalled()
     expect(mockedPreviewApplicationReviews).not.toHaveBeenCalled()
     expect(mockedCountFederalApplications).not.toHaveBeenCalled()
-    expect(mockedCountIndianReservePermits).not.toHaveBeenCalled()
 
     expect(screen.queryByRole('button', { name: 'Open review queue' })).not.toBeInTheDocument()
     expect(screen.queryByText('No review queue data available.')).not.toBeInTheDocument()

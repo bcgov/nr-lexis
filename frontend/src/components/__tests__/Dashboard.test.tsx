@@ -6,7 +6,6 @@ import Dashboard from '@/components/Dashboard'
 import { useAuth } from '@/context/auth/useAuth'
 import { countApplicationReviews } from '@/service/application-review-search-service'
 import { countFederalApplications } from '@/service/federal-application-search-service'
-import { countIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
 import { countProvincialApplications } from '@/service/provincial-application-search-service'
 import { countProvincialExemptions } from '@/service/provincial-exemption-search-service'
 import { countProvincialOffers } from '@/service/provincial-offer-search-service'
@@ -40,10 +39,6 @@ vi.mock('@/service/federal-application-search-service', () => ({
   countFederalApplications: vi.fn(),
 }))
 
-vi.mock('@/service/indian-reserve-permit-search-service', () => ({
-  countIndianReservePermits: vi.fn(),
-}))
-
 const LocationProbe = () => {
   const location = useLocation()
 
@@ -58,7 +53,6 @@ describe('Dashboard', () => {
   const mockedCountProvincialPermits = vi.mocked(countProvincialPermits)
   const mockedCountApplicationReviews = vi.mocked(countApplicationReviews)
   const mockedCountFederalApplications = vi.mocked(countFederalApplications)
-  const mockedCountIndianReservePermits = vi.mocked(countIndianReservePermits)
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -71,7 +65,6 @@ describe('Dashboard', () => {
     mockedCountProvincialPermits.mockResolvedValue(0)
     mockedCountApplicationReviews.mockResolvedValue(0)
     mockedCountFederalApplications.mockResolvedValue(0)
-    mockedCountIndianReservePermits.mockResolvedValue(0)
   })
 
   test('renders a heading with the correct text', () => {
@@ -144,7 +137,6 @@ describe('Dashboard', () => {
     expect(screen.queryByRole('heading', { name: /Provincial summary/i })).not.toBeInTheDocument()
     expect(screen.queryByText(/Provincial review/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Federal applications/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Indigenous reserve permits/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Admin')).not.toBeInTheDocument()
     expect(screen.queryByText(/Accessible modules:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
@@ -186,7 +178,6 @@ describe('Dashboard', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Provincial review/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Federal applications/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /Indigenous reserve permits/i })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /Provincial summary/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Reports' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Admin' })).not.toBeInTheDocument()

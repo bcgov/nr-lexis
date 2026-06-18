@@ -439,12 +439,6 @@ class LexisRouteAuthorizationIntegrationTest {
         .andExpect(status().isForbidden());
     mockMvc
         .perform(
-            post("/api/lexis/indian-reserve/permits")
-                .with(csrf())
-                .with(jwt().authorities(readOnly)))
-        .andExpect(status().isForbidden());
-    mockMvc
-        .perform(
             post("/api/lexis/application-reviews/1000123/approve")
                 .with(csrf())
                 .with(jwt().authorities(readOnly)))
@@ -558,25 +552,6 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("actionMapping", "add")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isNoContent());
-  }
-
-  @Test
-  void legacyIndianReservePermitCreateShouldAllowApplicationApproverRole() throws Exception {
-    mockMvc.perform(
-            post("/api/lexis/indianReservePermitDetails")
-                .param("actionMapping", "saveReservePermit")
-                .param("permitNumber", "111")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
-        .andExpect(status().isNoContent());
-  }
-
-  @Test
-  void modernIndianReservePermitCreateShouldRejectReadOnlyRole() throws Exception {
-    mockMvc.perform(
-            post("/api/lexis/indian-reserve/permits")
-                .param("permitNumber", "111")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
-        .andExpect(status().isForbidden());
   }
 
   @Test

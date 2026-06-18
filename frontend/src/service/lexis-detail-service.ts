@@ -1,7 +1,6 @@
 import axios from 'axios'
 import type {
   FederalApplicationDetail,
-  IndianReservePermitDetail,
   ProvincialApplicationDetail,
   ProvincialExemptionDetail,
   ProvincialOfferDetail,
@@ -105,23 +104,5 @@ export const fetchFederalApplicationDetail = async (
       return null
     }
     throw toSearchServiceError('Unable to load federal application detail.', error)
-  }
-}
-
-export const fetchIndianReservePermitDetail = async (
-  permitNumber: string,
-): Promise<IndianReservePermitDetail | null> => {
-  try {
-    const response = await apiService.getCachedResponse<IndianReservePermitDetail>(
-      `/lexis/indian-reserve/permits/${encodeURIComponent(permitNumber)}`,
-      undefined,
-      { ttlMs: DETAIL_CACHE_TTL_MS },
-    )
-    return response.data
-  } catch (error) {
-    if (isNotFound(error)) {
-      return null
-    }
-    throw toSearchServiceError('Unable to load indigenous reserve permit detail.', error)
   }
 }

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  submitIndianReservePermitCreate,
   submitProvincialApplicationCreate,
   submitProvincialExemptionCreate,
   submitProvincialOfferCreate,
@@ -352,39 +351,5 @@ describe('create-submit-service', () => {
     expect(result.message).toBe(
       'Unable to submit provincial permit create request. Submit endpoint is unavailable in this environment (status 404).',
     )
-  })
-
-  it('uses backend response message for submit failures when provided', async () => {
-    postMock.mockRejectedValue({
-      isAxiosError: true,
-      response: {
-        status: 400,
-        data: {
-          message: 'Validation failed',
-          errors: ['Client number is required'],
-        },
-      },
-    })
-
-    const result = await submitIndianReservePermitCreate({
-      permitNumber: '900',
-      packageNumber: 'PKG-1',
-      clientNumber: '12345678',
-      clientLocation: '00',
-      region: '1833',
-      applicationDate: '2026-03-01',
-      permitIssueDate: '2026-03-02',
-      estimatedShippingDate: '2026-03-03',
-      destinationCountry: 'CA',
-      transportTypeCode: 'TRK',
-      transportName: 'Truck',
-      portOfExport: 'VAN',
-      otherPortOfExport: '',
-      remarks: '',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.message).toBe('Validation failed')
-    expect(result.errors).toEqual(['Client number is required'])
   })
 })

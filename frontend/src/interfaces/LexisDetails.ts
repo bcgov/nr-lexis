@@ -150,19 +150,3 @@ export type FederalApplicationDetail = {
   offers: string[]
   federalPermit: FederalPermitDetail | null
 }
-
-export type IndianReservePermitDetail = {
-  permitNumber: string
-  clientNumber: string | null
-  clientLocation: string | null
-  region: number | null
-  applicationDate: string | null
-  permitIssueDate: string | null
-  estimatedShippingDate: string | null
-  destinationCountry: string | null
-  transportTypeCode: string | null
-  transportName: string | null
-  portOfExport: string | null
-  otherPortOfExport: string | null
-  packages: string[]
-}

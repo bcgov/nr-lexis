@@ -2,10 +2,8 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import IndianReservePermitCreatePage from '@/pages/IndianReservePermitCreate'
 import ProvincialPermitCreatePage from '@/pages/ProvincialPermitCreate'
 import {
-  submitIndianReservePermitCreate,
   submitProvincialPermitCreate,
   type CreateSubmissionResult,
 } from '@/service/create-submit-service'
@@ -34,7 +32,6 @@ vi.mock('@/service/application-client-lookup-service', () => ({
 
 vi.mock('@/service/create-submit-service', () => ({
   submitProvincialPermitCreate: vi.fn(),
-  submitIndianReservePermitCreate: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-application-search-service', () => ({
@@ -48,7 +45,6 @@ const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
   searchProvincialApplicationNumberOptions,
 )
 const mockedSubmitProvincialPermitCreate = vi.mocked(submitProvincialPermitCreate)
-const mockedSubmitIndianReservePermitCreate = vi.mocked(submitIndianReservePermitCreate)
 
 const successfulCreate = (createdId: string): CreateSubmissionResult => ({
   success: true,
@@ -144,64 +140,5 @@ describe('Create Page Action State Smoke', () => {
       remarks: 'Note',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/permit/9001')
-  })
-
-  it('shows indigenous reserve permit field validation when required fields are empty', async () => {
-    render(
-      <MemoryRouter initialEntries={['/indian-reserve/permit/create']}>
-        <Routes>
-          <Route path="/indian-reserve/permit/create" element={<IndianReservePermitCreatePage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const submitButton = await screen.findByRole('button', { name: 'Submit' })
-    expect(submitButton).toBeEnabled()
-    await userEvent.click(submitButton)
-
-    expect(screen.getAllByText('Permit number is required.')).not.toHaveLength(0)
-    expect(screen.getByText('Package number is required.')).toBeInTheDocument()
-    expect(screen.getByText('Client number is required.')).toBeInTheDocument()
-    expect(screen.getByText('Region is required.')).toBeInTheDocument()
-    expect(screen.getByText('Transport name is required.')).toBeInTheDocument()
-    expect(mockedSubmitIndianReservePermitCreate).not.toHaveBeenCalled()
-  })
-
-  it('submits indigenous reserve permit prefilled form and navigates to permit details', async () => {
-    mockedSubmitIndianReservePermitCreate.mockResolvedValue(successfulCreate('IRP-88'))
-
-    render(
-      <MemoryRouter
-        initialEntries={[
-          '/indian-reserve/permit/create?permitNumber=900&packageNumber=PKG-1&clientNumber=12345678&clientLocation=00&region=1833&applicationDate=2026-03-01&permitIssueDate=2026-03-02&estimatedShippingDate=2026-03-03&destinationCountry=CA&transportTypeCode=TRK&transportName=Truck&portOfExport=VAN&otherPortOfExport=Other&remarks=Ready',
-        ]}
-      >
-        <Routes>
-          <Route path="/indian-reserve/permit/create" element={<IndianReservePermitCreatePage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const submitButton = await screen.findByRole('button', { name: 'Submit' })
-    expect(submitButton).toBeEnabled()
-    await userEvent.click(submitButton)
-
-    expect(mockedSubmitIndianReservePermitCreate).toHaveBeenCalledWith({
-      permitNumber: '900',
-      packageNumber: 'PKG-1',
-      clientNumber: '12345678',
-      clientLocation: '00',
-      region: '1833',
-      applicationDate: '2026-03-01',
-      permitIssueDate: '2026-03-02',
-      estimatedShippingDate: '2026-03-03',
-      destinationCountry: 'CA',
-      transportTypeCode: 'TRK',
-      transportName: 'Truck',
-      portOfExport: 'VAN',
-      otherPortOfExport: 'Other',
-      remarks: 'Ready',
-    })
-    expect(mockNavigate).toHaveBeenCalledWith('/indian-reserve/permit/IRP-88')
   })
 })

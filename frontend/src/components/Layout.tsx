@@ -103,22 +103,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     ],
   },
   {
-    label: 'Indian reserve',
-    links: [
-      {
-        to: '/indian-reserve/permit/create',
-        label: 'Create/edit permit',
-        requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
-        requiredActionsMatch: 'all',
-      },
-      {
-        to: '/indian-reserve',
-        label: 'Permit search',
-        requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
-      },
-    ],
-  },
-  {
     label: 'Reports',
     links: [
       {
@@ -182,8 +166,6 @@ const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
   { path: '/provincial/permit', section: 'Provincial' },
   { path: '/provincial', section: 'Provincial' },
   { path: '/federal', section: 'Federal' },
-  { path: '/indian-reserve/permit/create', section: 'Indian reserve' },
-  { path: '/indian-reserve', section: 'Indian reserve' },
   { path: '/reports', section: 'Reports' },
   { path: '/admin/uploads', section: 'Administration' },
   { path: '/admin/policies', section: 'Administration' },

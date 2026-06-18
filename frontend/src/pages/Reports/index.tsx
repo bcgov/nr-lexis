@@ -119,7 +119,6 @@ const REPORT_JURISDICTION_FIELD: ReportFieldDefinition = {
     { value: '', label: 'All' },
     { value: 'P', label: 'Provincial' },
     { value: 'F', label: 'Federal' },
-    { value: 'I', label: 'Indian reserve' },
   ],
 }
 

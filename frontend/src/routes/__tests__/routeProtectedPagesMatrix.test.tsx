@@ -56,10 +56,6 @@ const EXPECTED_CORE_PAGES: RouteExpectation[] = [
     path: '/federal',
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
   },
-  {
-    path: '/indian-reserve',
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
-  },
 ]
 
 describe('Protected page route matrix', () => {

@@ -98,7 +98,6 @@ public class LegacyRouteController {
   private final LexisApplicationController applicationController;
   private final ExemptionController exemptionController;
   private final FederalApplicationController federalApplicationController;
-  private final IndianReservePermitController indianReservePermitController;
   private final PurchaseOfferController purchaseOfferController;
   private final PermitController permitController;
   private final ApplicationReviewController applicationReviewController;
@@ -114,7 +113,6 @@ public class LegacyRouteController {
       LexisApplicationController applicationController,
       ExemptionController exemptionController,
       FederalApplicationController federalApplicationController,
-      IndianReservePermitController indianReservePermitController,
       PurchaseOfferController purchaseOfferController,
       PermitController permitController,
       ApplicationReviewController applicationReviewController,
@@ -128,7 +126,6 @@ public class LegacyRouteController {
     this.applicationController = applicationController;
     this.exemptionController = exemptionController;
     this.federalApplicationController = federalApplicationController;
-    this.indianReservePermitController = indianReservePermitController;
     this.purchaseOfferController = purchaseOfferController;
     this.permitController = permitController;
     this.applicationReviewController = applicationReviewController;
@@ -351,43 +348,6 @@ public class LegacyRouteController {
       return ResponseEntity.noContent().build();
     }
     return federalApplicationController.getByApplicationNumber(applicationNumber);
-  }
-
-  @GetMapping({"/indianReservePermitSearch", "/indianReservePermitSearch.do"})
-  public ResponseEntity<?> indianReservePermitSearch(
-      @RequestParam(name = "actionMapping", required = false) String actionMapping,
-      @RequestParam(name = "permitNumber", required = false) String permitNumber,
-      @RequestParam(name = "packageNumber", required = false) String packageNumber,
-      @RequestParam(name = "fromPermitIssueDate", required = false) String issuedFromDate,
-      @RequestParam(name = "toPermitIssueDate", required = false) String issuedToDate,
-      @RequestParam(name = "fromEstimatedShippingDate", required = false) String shippingFromDate,
-      @RequestParam(name = "toEstimatedShippingDate", required = false) String shippingToDate,
-      @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
-    if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
-      return indianReservePermitController.searchOptions();
-    }
-    return indianReservePermitController.search(
-        permitNumber, packageNumber, issuedFromDate, issuedToDate, shippingFromDate, shippingToDate, page, size);
-  }
-
-  @GetMapping({"/indianReservePermitDetails", "/indianReservePermitDetails.do"})
-  public ResponseEntity<?> indianReservePermitDetails(
-      @RequestParam(name = "permitNumber", required = false) String permitNumber) {
-    if (permitNumber == null || permitNumber.isBlank()) {
-      return ResponseEntity.noContent().build();
-    }
-    return indianReservePermitController.getByPermitNumber(permitNumber);
-  }
-
-  @RequestMapping(
-      value = {"/indianReservePermitDetails", "/indianReservePermitDetails.do"},
-      method = RequestMethod.POST,
-      params = "actionMapping=saveReservePermit")
-  public ResponseEntity<?> saveIndianReservePermit(
-      HttpServletRequest request,
-      Authentication authentication) {
-    return indianReservePermitController.addPermit(fromRequest(request), authentication);
   }
 
   @GetMapping({"/offersSearch", "/offersSearch.do"})

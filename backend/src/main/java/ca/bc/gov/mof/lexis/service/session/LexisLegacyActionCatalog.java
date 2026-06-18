@@ -28,8 +28,6 @@ final class LexisLegacyActionCatalog {
           "/fileExemptionUpload",
           "/fileInvoiceUpload",
           "/filePermitUpload",
-          "/indianReservePermitDetails",
-          "/indianReservePermitSearch",
           "/lexisAgentAdmin",
           "/lexisFILAdmin",
           "/lexisPolicyAdmin",

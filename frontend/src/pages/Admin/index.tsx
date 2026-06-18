@@ -110,8 +110,6 @@ const LEGACY_ACTION_CATALOG = [
   '/fileExemptionUpload',
   '/fileInvoiceUpload',
   '/filePermitUpload',
-  '/indianReservePermitDetails',
-  '/indianReservePermitSearch',
   '/lexisAgentAdmin',
   '/lexisFILAdmin',
   '/lexisPolicyAdmin',
@@ -137,7 +135,6 @@ const LEGACY_ACTION_CATALOG = [
   'saveExemption',
   'savePermit',
   'viewFederalApplication',
-  'viewOICApplication',
 ] as const
 
 const ROUTE_ACCESS_CHECKS = [
@@ -148,7 +145,6 @@ const ROUTE_ACCESS_CHECKS = [
   { label: 'Provincial offers search', action: '/offersSearch' },
   { label: 'Provincial permit search', action: '/permitSearch' },
   { label: 'Federal application search', action: '/federalApplicationSearch' },
-  { label: 'Indigenous reserve permit search', action: '/indianReservePermitSearch' },
   { label: 'Reports', action: '/applicationReport' },
   { label: 'Admin', action: '/lexisAgentAdmin' },
 ]

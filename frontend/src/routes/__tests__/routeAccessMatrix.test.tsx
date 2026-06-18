@@ -48,18 +48,8 @@ describe('Protected route access matrix', () => {
       requiredActionsMatch: 'all',
     },
     {
-      path: '/indian-reserve/permit/create',
-      requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
-      requiredActionsMatch: 'all',
-    },
-    {
       path: '/federal/application/:applicationNumber',
       requiredActions: ['/federalApplicationDetails', 'viewFederalApplication'],
-      requiredActionsMatch: 'all',
-    },
-    {
-      path: '/indian-reserve/permit/:permitNumber',
-      requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
       requiredActionsMatch: 'all',
     },
     {

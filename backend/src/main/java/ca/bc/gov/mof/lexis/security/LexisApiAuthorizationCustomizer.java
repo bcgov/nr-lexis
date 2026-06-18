@@ -115,36 +115,6 @@ public class LexisApiAuthorizationCustomizer
         authorize,
         HttpMethod.GET,
         new String[] {
-          "/api/lexis/indianReservePermitSearch",
-          "/api/lexis/indianReservePermitSearch.do",
-          "/api/lexis/indian-reserve/permits/search/options",
-          "/api/lexis/indian-reserve/permits/search",
-          "/api/lexis/indian-reserve/permits/search/count"
-        },
-        "/indianReservePermitSearch");
-    authorizeAction(
-        authorize,
-        HttpMethod.GET,
-        new String[] {
-          "/api/lexis/indianReservePermitDetails",
-          "/api/lexis/indianReservePermitDetails.do",
-          "/api/lexis/indian-reserve/permits/*"
-        },
-        "/indianReservePermitDetails");
-    authorizeAction(
-        authorize,
-        HttpMethod.POST,
-        new String[] {
-          "/api/lexis/indianReservePermitDetails",
-          "/api/lexis/indianReservePermitDetails.do",
-          "/api/lexis/indian-reserve/permits"
-        },
-        "savePermit");
-
-    authorizeAction(
-        authorize,
-        HttpMethod.GET,
-        new String[] {
           "/api/lexis/offersSearch",
           "/api/lexis/offersSearch.do",
           "/api/lexis/purchase-offers/search/options",

@@ -11,7 +11,6 @@ import {
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { countApplicationReviews } from '@/service/application-review-search-service'
 import { countFederalApplications } from '@/service/federal-application-search-service'
-import { countIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
 import { countProvincialApplications } from '@/service/provincial-application-search-service'
 import { countProvincialExemptions } from '@/service/provincial-exemption-search-service'
 import { countProvincialOffers } from '@/service/provincial-offer-search-service'
@@ -24,7 +23,6 @@ type DashboardCountKey =
   | 'provincialPermits'
   | 'reviewQueue'
   | 'federalApplications'
-  | 'indianReservePermits'
 
 type DashboardModule = {
   id: string
@@ -85,14 +83,6 @@ const DASHBOARD_MODULES: DashboardModule[] = [
     path: '/federal',
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
     countKey: 'federalApplications',
-  },
-  {
-    id: 'indianReservePermits',
-    title: 'Indigenous reserve permits',
-    description: 'Search reserve permits.',
-    path: '/indian-reserve',
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
-    countKey: 'indianReservePermits',
   },
 ]
 
@@ -160,7 +150,6 @@ const INITIAL_COUNTS: DashboardCounts = {
   provincialPermits: 0,
   reviewQueue: 0,
   federalApplications: 0,
-  indianReservePermits: 0,
 }
 
 const Dashboard: FC = () => {
@@ -222,7 +211,6 @@ const Dashboard: FC = () => {
           provincialPermits,
           reviewQueue,
           federalApplications,
-          indianReservePermits,
         ] = await Promise.all([
           loadMetric(canAccessModule(['/applicationSearch']), () =>
             countProvincialApplications({
@@ -337,22 +325,6 @@ const Dashboard: FC = () => {
               sortDirection: 'asc',
             }),
           ),
-          loadMetric(canAccessModule(['/indianReservePermitSearch', 'viewOICApplication']), () =>
-            countIndianReservePermits({
-              filters: {
-                permitNumber: '',
-                packageNumber: '',
-                fromPermitIssueDate: '',
-                toPermitIssueDate: '',
-                fromEstimatedShippingDate: '',
-                toEstimatedShippingDate: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'permitNumber',
-              sortDirection: 'asc',
-            }),
-          ),
         ])
 
         if (isLatestRequest()) {
@@ -363,7 +335,6 @@ const Dashboard: FC = () => {
             provincialPermits: provincialPermits ?? 0,
             reviewQueue: reviewQueue ?? 0,
             federalApplications: federalApplications ?? 0,
-            indianReservePermits: indianReservePermits ?? 0,
           }
           setCounts(nextCounts)
           setPageDataCache(pageCacheKey, nextCounts)
