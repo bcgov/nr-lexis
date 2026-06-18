@@ -21,6 +21,7 @@ describe('Protected route access matrix', () => {
         '/permitSearch',
       ],
       requiredActionsMatch: 'any',
+      roleScope: 'provincial',
     },
     {
       path: '/provincial/application/create',
@@ -31,6 +32,13 @@ describe('Protected route access matrix', () => {
       path: '/provincial/application/upload',
       requiredActions: ['uploadApplicationSubmission'],
       requiredActionsMatch: 'any',
+      roleScope: 'provincialApplicationSubmission',
+    },
+    {
+      path: '/federal/application/upload',
+      requiredActions: ['uploadApplicationSubmission'],
+      requiredActionsMatch: 'any',
+      roleScope: 'federalApplicationSubmission',
     },
     {
       path: '/provincial/exemption/create',
@@ -60,10 +68,11 @@ describe('Protected route access matrix', () => {
     },
   ])(
     'enforces expected action requirements for $path',
-    ({ path, requiredActions, requiredActionsMatch }) => {
+    ({ path, requiredActions, requiredActionsMatch, roleScope }) => {
       const route = findRoute(path)
       expect(route.requiredActions).toEqual(requiredActions)
       expect(route.requiredActionsMatch ?? 'any').toBe(requiredActionsMatch)
+      expect(route.roleScope).toBe(roleScope)
     },
   )
 

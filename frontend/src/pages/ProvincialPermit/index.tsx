@@ -141,7 +141,7 @@ const buildSearchParams = (
 }
 
 const ProvincialPermitPage: FC = () => {
-  const { capabilities, canPerform } = useAuth()
+  const { capabilities } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])

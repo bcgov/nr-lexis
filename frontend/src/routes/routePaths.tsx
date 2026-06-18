@@ -33,6 +33,7 @@ export type RouteDescription = {
   isNavigation: boolean
   requiredActions?: string[]
   requiredActionsMatch?: 'any' | 'all'
+  roleScope?: 'provincial' | 'provincialApplicationSubmission' | 'federalApplicationSubmission'
 } & RouteObject
 
 const ProtectedRootRedirect: FC = () => {
@@ -43,18 +44,86 @@ const ProtectedRootRedirect: FC = () => {
 type RouteGuardProps = {
   requiredActions?: string[]
   requiredActionsMatch?: 'any' | 'all'
+  roleScope?: RouteDescription['roleScope']
   children: ReactNode
+}
+
+const hasProvincialSubmitterRole = (roles: string[]): boolean => {
+  return roles.some((role) => {
+    const normalizedRole = role.trim().toUpperCase()
+    return (
+      normalizedRole === 'PROVINCIAL_SUBMITTER' ||
+      normalizedRole === 'LEXIS_PROVINCIAL_SUBMITTER' ||
+      normalizedRole.startsWith('PROVINCIAL_SUBMITTER_') ||
+      normalizedRole.startsWith('LEXIS_PROVINCIAL_SUBMITTER_')
+    )
+  })
+}
+
+const hasFederalSubmitterRole = (roles: string[]): boolean => {
+  return roles.some((role) => {
+    const normalizedRole = role.trim().toUpperCase()
+    return (
+      normalizedRole === 'FEDERAL_SUBMITTER' ||
+      normalizedRole === 'LEXIS_FEDERAL_SUBMITTER' ||
+      normalizedRole.startsWith('FEDERAL_SUBMITTER_') ||
+      normalizedRole.startsWith('LEXIS_FEDERAL_SUBMITTER_')
+    )
+  })
+}
+
+const hasRole = (roles: string[], role: string): boolean => {
+  return roles.some((entry) => {
+    const normalizedRole = entry.trim().toUpperCase()
+    return normalizedRole === role || normalizedRole === `LEXIS_${role}`
+  })
+}
+
+const canAccessRoleScope = (
+  roles: string[],
+  roleScope: RouteDescription['roleScope'] = undefined,
+): boolean => {
+  if (!roleScope) {
+    return true
+  }
+
+  const hasAdminRole = hasRole(roles, 'ADMIN')
+  if (hasAdminRole) {
+    return true
+  }
+
+  const hasFederalSubmitter = hasFederalSubmitterRole(roles)
+  const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
+  const hasProvincialStaffRole =
+    hasRole(roles, 'READ_ONLY') ||
+    hasRole(roles, 'APPLICATION_APPROVER') ||
+    hasRole(roles, 'EXEMPTION_APPROVER')
+
+  if (roleScope === 'federalApplicationSubmission') {
+    return hasFederalSubmitter
+  }
+
+  if (roleScope === 'provincialApplicationSubmission') {
+    return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
+  }
+
+  return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
 }
 
 const RouteActionGuard: FC<RouteGuardProps> = ({
   children,
   requiredActions,
   requiredActionsMatch = 'any',
+  roleScope,
 }) => {
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
 
   if (!requiredActions || requiredActions.length === 0) {
     return <>{children}</>
+  }
+
+  if (!canAccessRoleScope(capabilities.roles, roleScope)) {
+    return <Navigate to="/unauthorized" replace />
   }
 
   const canAccessRoute =
@@ -111,6 +180,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial',
     id: 'Provincial',
+    roleScope: 'provincial',
     requiredActions: [
       '/summary',
       '/applicationsReview',
@@ -301,6 +371,21 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
+    path: '/federal/application/upload',
+    id: 'Upload Federal Application Submission',
+    roleScope: 'federalApplicationSubmission',
+    requiredActions: ['uploadApplicationSubmission'],
+    element: (
+      <Layout>
+        <AdminUploadsPage
+          lockedWorkflowType="applicationSubmission"
+          pageTitle="Upload Federal Application Submission"
+        />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
     path: '/reports',
     id: 'Reports',
     requiredActions: [
@@ -353,6 +438,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/application/upload',
     id: 'Upload Application Submission',
+    roleScope: 'provincialApplicationSubmission',
     requiredActions: ['uploadApplicationSubmission'],
     element: (
       <Layout>
@@ -427,6 +513,7 @@ export const getProtectedRoutes = (): RouteDescription[] => {
       <RouteActionGuard
         requiredActions={route.requiredActions}
         requiredActionsMatch={route.requiredActionsMatch}
+        roleScope={route.roleScope}
       >
         {route.element}
       </RouteActionGuard>

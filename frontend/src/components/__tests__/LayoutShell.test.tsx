@@ -147,6 +147,41 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /Data upload/i })).not.toBeInTheDocument()
   })
 
+  it('shows federal application submission upload in the federal nav for federal-only users', () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'bceid\\federal',
+        roles: ['FEDERAL_SUBMITTER'],
+        welcomeTarget: '/federal/application/upload',
+        legacyPath: null,
+        grantedActions: [
+          '/federalApplicationSearch',
+          'viewFederalApplication',
+          'uploadApplicationSubmission',
+        ],
+      },
+      defaultRoute: '/federal/application/upload',
+      canPerform: (action: string) =>
+        [
+          '/federalApplicationSearch',
+          'viewFederalApplication',
+          'uploadApplicationSubmission',
+        ].includes(action),
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderLayout('/federal/application/upload')
+
+    expect(document.querySelector('.page-header__eyebrow')).toHaveTextContent('Federal')
+    expect(screen.getByRole('link', { name: /Application search/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Upload application submission/i })).toHaveAttribute(
+      'href',
+      '/federal/application/upload',
+    )
+    expect(screen.queryByText('Provincial')).not.toBeInTheDocument()
+  })
+
   it('defaults the side nav open and supports collapsing it', async () => {
     renderLayout('/admin/uploads')
 

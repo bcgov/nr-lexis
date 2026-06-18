@@ -105,17 +105,41 @@ describe('Protected route guard access', () => {
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 
-  it('allows federal submitters to open the application submission upload route', async () => {
+  it('allows federal submitters to open the federal application submission upload route', async () => {
     mockedUseAuth.mockReturnValue({
       capabilities: {
         authenticated: true,
         principal: 'bceid\\federal',
         roles: ['FEDERAL_SUBMITTER'],
-        welcomeTarget: '/provincial/application/upload',
+        welcomeTarget: '/federal/application/upload',
         legacyPath: null,
         grantedActions: ['uploadApplicationSubmission', '/federalApplicationSearch'],
       },
-      defaultRoute: '/provincial/application/upload',
+      defaultRoute: '/federal/application/upload',
+      canPerform: (action: string) =>
+        ['uploadApplicationSubmission', '/federalApplicationSearch'].includes(action),
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderWithPath('/federal/application/upload')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Upload Federal Application Submission' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+  })
+
+  it('blocks federal-only users from the provincial application submission upload route', async () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'bceid\\federal',
+        roles: ['FEDERAL_SUBMITTER'],
+        welcomeTarget: '/federal/application/upload',
+        legacyPath: null,
+        grantedActions: ['uploadApplicationSubmission', '/federalApplicationSearch'],
+      },
+      defaultRoute: '/federal/application/upload',
       canPerform: (action: string) =>
         ['uploadApplicationSubmission', '/federalApplicationSearch'].includes(action),
       logout: vi.fn().mockResolvedValue(undefined),
@@ -123,10 +147,7 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/provincial/application/upload')
 
-    expect(
-      await screen.findByRole('heading', { name: 'Upload Application Submission' }),
-    ).toBeInTheDocument()
-    expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
   })
 
   it('allows admin users to open the application submission upload route', async () => {

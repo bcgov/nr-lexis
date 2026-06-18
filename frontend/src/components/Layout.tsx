@@ -21,6 +21,7 @@ type NavigationLink = {
   label: string
   requiredActions?: string[]
   requiredActionsMatch?: 'any' | 'all'
+  roleScope?: 'provincialApplicationSubmission' | 'federalApplicationSubmission'
 }
 
 type NavigationSection = {
@@ -53,6 +54,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: '/provincial/application/upload',
         label: 'Upload application submission',
         requiredActions: ['uploadApplicationSubmission'],
+        roleScope: 'provincialApplicationSubmission',
       },
       {
         to: '/provincial/application',
@@ -95,6 +97,12 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: '/federal',
         label: 'Application search',
         requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
+      },
+      {
+        to: '/federal/application/upload',
+        label: 'Upload application submission',
+        requiredActions: ['uploadApplicationSubmission'],
+        roleScope: 'federalApplicationSubmission',
       },
     ],
   },
@@ -159,6 +167,7 @@ const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
   { path: '/provincial/offers', section: 'Provincial' },
   { path: '/provincial/permit', section: 'Provincial' },
   { path: '/provincial', section: 'Provincial' },
+  { path: '/federal/application/upload', section: 'Federal' },
   { path: '/federal', section: 'Federal' },
   { path: '/reports', section: 'Reports' },
   { path: '/admin/uploads', section: 'Administration' },
@@ -190,6 +199,58 @@ const getProfileInitials = (principal: string | null): string => {
   return (initials || principal.slice(0, 2)).toUpperCase()
 }
 
+const hasProvincialSubmitterRole = (roles: string[]): boolean => {
+  return roles.some((role) => {
+    const normalizedRole = role.trim().toUpperCase()
+    return (
+      normalizedRole === 'PROVINCIAL_SUBMITTER' ||
+      normalizedRole === 'LEXIS_PROVINCIAL_SUBMITTER' ||
+      normalizedRole.startsWith('PROVINCIAL_SUBMITTER_') ||
+      normalizedRole.startsWith('LEXIS_PROVINCIAL_SUBMITTER_')
+    )
+  })
+}
+
+const hasFederalSubmitterRole = (roles: string[]): boolean => {
+  return roles.some((role) => {
+    const normalizedRole = role.trim().toUpperCase()
+    return (
+      normalizedRole === 'FEDERAL_SUBMITTER' ||
+      normalizedRole === 'LEXIS_FEDERAL_SUBMITTER' ||
+      normalizedRole.startsWith('FEDERAL_SUBMITTER_') ||
+      normalizedRole.startsWith('LEXIS_FEDERAL_SUBMITTER_')
+    )
+  })
+}
+
+const hasRole = (roles: string[], role: string): boolean => {
+  return roles.some((entry) => {
+    const normalizedRole = entry.trim().toUpperCase()
+    return normalizedRole === role || normalizedRole === `LEXIS_${role}`
+  })
+}
+
+const canShowRoleScopedLink = (link: NavigationLink, roles: string[]): boolean => {
+  if (!link.roleScope) {
+    return true
+  }
+
+  if (hasRole(roles, 'ADMIN')) {
+    return link.roleScope === 'provincialApplicationSubmission'
+  }
+
+  const hasFederalSubmitter = hasFederalSubmitterRole(roles)
+  const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
+  const hasProvincialStaffRole =
+    hasRole(roles, 'APPLICATION_APPROVER') || hasRole(roles, 'EXEMPTION_APPROVER')
+
+  if (link.roleScope === 'federalApplicationSubmission') {
+    return hasFederalSubmitter && !hasProvincialSubmitter && !hasProvincialStaffRole
+  }
+
+  return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
+}
+
 const Layout: FC<Props> = ({ children }) => {
   const location = useLocation()
   const navigate = useNavigate()
@@ -204,6 +265,10 @@ const Layout: FC<Props> = ({ children }) => {
   )
 
   const canShowLink = (link: NavigationLink): boolean => {
+    if (!canShowRoleScopedLink(link, capabilities.roles)) {
+      return false
+    }
+
     if (!link.requiredActions || link.requiredActions.length === 0) {
       return true
     }

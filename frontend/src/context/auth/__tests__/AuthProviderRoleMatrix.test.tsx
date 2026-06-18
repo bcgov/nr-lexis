@@ -311,7 +311,7 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('FEDERAL_SUBMITTER')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application/upload')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/federal/application/upload')
     expect(screen.getByTestId('action-/federalApplicationSearch')).toHaveTextContent('true')
     expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
