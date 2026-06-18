@@ -95,7 +95,6 @@ class LexisAuthorizationMatrixParityTest {
             "/filePermitUpload",
             "approveExemption",
             "createOffer",
-            "createPermit",
             "saveExemption",
             "savePermit")
         .doesNotContainAnyElementsOf(REPORT_ACTIONS);
@@ -114,7 +113,6 @@ class LexisAuthorizationMatrixParityTest {
             "/fileInvoiceUpload",
             "/filePermitUpload",
             "createOffer",
-            "createPermit",
             "saveExemption",
             "savePermit");
   }
@@ -150,7 +148,6 @@ class LexisAuthorizationMatrixParityTest {
             "/summary",
             "createApplication",
             "createOffer",
-            "createPermit",
             "saveExemption",
             "savePermit");
   }
@@ -168,7 +165,6 @@ class LexisAuthorizationMatrixParityTest {
             "approveExemption",
             "createApplication",
             "createOffer",
-            "createPermit",
             "saveExemption",
             "savePermit")
         .doesNotContain(
@@ -201,7 +197,6 @@ class LexisAuthorizationMatrixParityTest {
             "/federalApplicationSearch",
             "createApplication",
             "createOffer",
-            "createPermit",
             "savePermit")
         .doesNotContainAnyElementsOf(REPORT_ACTIONS);
   }
@@ -226,7 +221,6 @@ class LexisAuthorizationMatrixParityTest {
             "approveExemption",
             "createApplication",
             "createOffer",
-            "createPermit",
             "saveExemption",
             "savePermit")
         .doesNotContainAnyElementsOf(REPORT_ACTIONS);

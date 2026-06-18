@@ -134,12 +134,6 @@ const QUICK_ACTIONS: ProvincialQuickAction[] = [
     requiredActions: ['/offersSearch', 'createOffer'],
   },
   {
-    id: 'createPermit',
-    label: 'Create permit',
-    path: '/provincial/permit/create',
-    requiredActions: ['/permitSearch', 'createPermit'],
-  },
-  {
     id: 'openReviewQueue',
     label: 'Open review queue',
     path: '/provincial/review',

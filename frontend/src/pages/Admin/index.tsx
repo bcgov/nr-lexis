@@ -128,7 +128,6 @@ const LEGACY_ACTION_CATALOG = [
   'approveExemption',
   'createApplication',
   'createOffer',
-  'createPermit',
   'mofrListing',
   'saveExemption',
   'savePermit',

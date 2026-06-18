@@ -3,7 +3,6 @@ import {
   submitProvincialApplicationCreate,
   submitProvincialExemptionCreate,
   submitProvincialOfferCreate,
-  submitProvincialPermitCreate,
 } from '@/service/create-submit-service'
 
 const postMock = vi.fn()
@@ -285,71 +284,5 @@ describe('create-submit-service', () => {
         'Content-Type': 'application/json',
       },
     })
-  })
-
-  it('can omit create actionMapping when include-action-mapping toggle is disabled', async () => {
-    vi.stubEnv('VITE_LEXIS_CREATE_SUBMIT_REQUEST_MODE', 'json')
-    vi.stubEnv('VITE_LEXIS_CREATE_SUBMIT_INCLUDE_ACTION_MAPPING', 'false')
-    postMock.mockResolvedValue({
-      data: {
-        success: true,
-        message: 'saved',
-        permitNumber: '101',
-      },
-    })
-
-    await submitProvincialPermitCreate({
-      applicationNumber: '2',
-      packageNumber: 'PKG',
-      exemptionNumber: 'EX-1',
-      region: '1833',
-      permitStatus: 'Issued',
-      applicantClientNumber: '00011111',
-      ownerClientNumber: '00022222',
-      submitDate: '2026-01-01',
-      issueDate: '2026-01-01',
-      estimatedShippingDate: '2026-01-02',
-      permitVolume: '10',
-      remarks: '',
-    })
-
-    const [, body] = postMock.mock.calls[0]
-    expect(body).toEqual(
-      expect.objectContaining({
-        permitStatus: 'Issued',
-      }),
-    )
-    expect(body).not.toHaveProperty('actionMapping')
-    expect(body).not.toHaveProperty('permitNumber')
-  })
-
-  it('returns status-specific message when permit submit endpoint is unavailable', async () => {
-    postMock.mockRejectedValue({
-      isAxiosError: true,
-      response: {
-        status: 404,
-        data: {},
-      },
-    })
-
-    const result = await submitProvincialPermitCreate({
-      applicationNumber: '2',
-      packageNumber: 'PKG',
-      exemptionNumber: 'EX-1',
-      region: '1833',
-      permitStatus: 'Issued',
-      applicantClientNumber: '00011111',
-      ownerClientNumber: '00022222',
-      submitDate: '2026-01-01',
-      issueDate: '2026-01-01',
-      estimatedShippingDate: '2026-01-02',
-      permitVolume: '10',
-      remarks: '',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.message).toBe(
-      'Unable to submit provincial permit create request. Submit endpoint is unavailable in this environment (status 404).',
-    )
   })
 })

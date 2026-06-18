@@ -78,7 +78,6 @@ lexis:
         - "approveExemption"
         - "createApplication"
         - "createOffer"
-        - "createPermit"
         - "saveExemption"
         - "savePermit"
       LEXIS_EXEMPTION_APPROVER:

@@ -46,7 +46,6 @@ final class LexisLegacyActionCatalog {
           "approveExemption",
           "createApplication",
           "createOffer",
-          "createPermit",
           "mofrListing",
           "saveExemption",
           "savePermit",

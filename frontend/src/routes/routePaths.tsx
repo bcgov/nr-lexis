@@ -20,7 +20,6 @@ import ProvincialOfferDetailsPage from '@/pages/ProvincialOfferDetails'
 import ProvincialOffersPage from '@/pages/ProvincialOffers'
 import ProvincialPage from '@/pages/Provincial'
 import ProvincialPermitPage from '@/pages/ProvincialPermit'
-import ProvincialPermitCreatePage from '@/pages/ProvincialPermitCreate'
 import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
 import ProvincialReviewPage from '@/pages/ProvincialReview'
 import ProvincialSummaryPage from '@/pages/ProvincialSummary'
@@ -240,18 +239,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     element: (
       <Layout>
         <ProvincialPermitPage />
-      </Layout>
-    ),
-    isNavigation: false,
-  },
-  {
-    path: '/provincial/permit/create',
-    id: 'Create Provincial Permit',
-    requiredActions: ['/permitSearch', 'createPermit'],
-    requiredActionsMatch: 'all',
-    element: (
-      <Layout>
-        <ProvincialPermitCreatePage />
       </Layout>
     ),
     isNavigation: false,

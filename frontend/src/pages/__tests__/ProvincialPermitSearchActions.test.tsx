@@ -66,23 +66,9 @@ describe('Provincial Permit Search Actions', () => {
     })
   })
 
-  it('shows add permit link only when createPermit action is granted', async () => {
+  it('does not expose the retired add permit link', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createPermit',
-    } as any)
-
-    renderPage()
-    await screen.findByText('7001')
-
-    expect(screen.getByRole('link', { name: 'Add Permit' })).toHaveAttribute(
-      'href',
-      '/provincial/permit/create',
-    )
-  })
-
-  it('hides add permit link when createPermit action is not granted', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => false,
+      canPerform: () => true,
     } as any)
 
     renderPage()

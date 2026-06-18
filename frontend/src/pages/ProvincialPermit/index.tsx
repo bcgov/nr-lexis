@@ -149,7 +149,6 @@ const ProvincialPermitPage: FC = () => {
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const permitTotalCacheRef = useRef<Map<string, PermitTotalCacheEntry>>(new Map())
-  const canCreatePermit = canPerform('createPermit')
   const withCurrentSearch = useCallback(
     (path: string): string => {
       const query = searchParams.toString()
@@ -428,11 +427,6 @@ const ProvincialPermitPage: FC = () => {
               <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
                 Clear Filters
               </Button>
-              {canCreatePermit && (
-                <Link className="cds--link" to="/provincial/permit/create">
-                  Add Permit
-                </Link>
-              )}
             </div>
           </Tile>
         </section>

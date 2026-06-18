@@ -43,11 +43,6 @@ describe('Protected route access matrix', () => {
       requiredActionsMatch: 'all',
     },
     {
-      path: '/provincial/permit/create',
-      requiredActions: ['/permitSearch', 'createPermit'],
-      requiredActionsMatch: 'all',
-    },
-    {
       path: '/federal/application/:applicationNumber',
       requiredActions: ['/federalApplicationDetails', 'viewFederalApplication'],
       requiredActionsMatch: 'all',

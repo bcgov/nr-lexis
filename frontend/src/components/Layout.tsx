@@ -157,7 +157,6 @@ const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
   { path: '/provincial/exemption', section: 'Provincial' },
   { path: '/provincial/offers/create', section: 'Provincial' },
   { path: '/provincial/offers', section: 'Provincial' },
-  { path: '/provincial/permit/create', section: 'Provincial' },
   { path: '/provincial/permit', section: 'Provincial' },
   { path: '/provincial', section: 'Provincial' },
   { path: '/federal', section: 'Federal' },

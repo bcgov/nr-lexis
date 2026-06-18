@@ -93,7 +93,6 @@ public class LegacyRouteController {
   private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
   private static final String LEGACY_ACTION_CREATE_EXEMPTION = "/createExemption";
   private static final String LEGACY_ACTION_CREATE_OFFER = "createOffer";
-  private static final String LEGACY_ACTION_CREATE_PERMIT = "createPermit";
 
   private final LexisApplicationController applicationController;
   private final ExemptionController exemptionController;
@@ -449,7 +448,7 @@ public class LegacyRouteController {
       @RequestParam(name = "permitNumber", required = false) @Positive Long permitNumber,
       Authentication authentication) {
     if (isLegacyAddOrCreateAction(actionMapping)) {
-      return authorizeLegacyAction(authentication, LEGACY_ACTION_CREATE_PERMIT);
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     if (permitNumber == null) {
       return ResponseEntity.noContent().build();
