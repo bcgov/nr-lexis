@@ -27,7 +27,6 @@ public class LegacyReportRouteController {
   private static final String ACTION_GENERATE = "generate";
   private static final Set<String> LEGACY_REPORT_ACTIONS =
       Set.of(
-          "biweeklyListing",
           "offerReport",
           "speciesGradeReport",
           "exemptionReport",
@@ -48,8 +47,6 @@ public class LegacyReportRouteController {
 
   @RequestMapping(
       path = {
-        "/biweeklyListing",
-        "/biweeklyListing.do",
         "/offerReport",
         "/offerReport.do",
         "/speciesGradeReport",
@@ -104,7 +101,6 @@ public class LegacyReportRouteController {
 
   private ResponseEntity<byte[]> dispatch(String reportAction, LexisReportRequestDto request) {
     return switch (reportAction) {
-      case "biweeklyListing" -> reportController.biweeklyListing(request);
       case "offerReport" -> reportController.offerReport(request);
       case "speciesGradeReport" -> reportController.speciesGradeReport(request);
       case "exemptionReport" -> reportController.exemptionReport(request);

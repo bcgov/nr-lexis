@@ -268,9 +268,8 @@ public class OracleLexisReportService implements LexisReportService {
   private LexisReportRequestDto applyLegacyBiweeklyDefaults(LexisReportRequestDto request) {
     HashMap<String, String> parameters =
         new HashMap<>(request == null || request.parameters() == null ? Map.of() : request.parameters());
-    boolean industryVariant = isBiweeklyIndustryVariant(parameters);
     boolean blankDateRange = isBlank(parameters.get("fromDate")) && isBlank(parameters.get("toDate"));
-    if (!industryVariant && !blankDateRange) {
+    if (!blankDateRange) {
       return request;
     }
 
@@ -288,13 +287,6 @@ public class OracleLexisReportService implements LexisReportService {
 
     parameters.put("fromDate", fromDate.toString());
     parameters.put("toDate", toDate.toString());
-    if (industryVariant) {
-      parameters.put("exportJurisdictionCode", "P");
-      parameters.put("jurisdiction", "P");
-      parameters.remove("region");
-      parameters.remove("orgUnitNumber");
-    }
-
     return new LexisReportRequestDto(parameters, request == null ? null : request.format());
   }
 
@@ -417,17 +409,6 @@ public class OracleLexisReportService implements LexisReportService {
       parameters.put("toDate", previousMonth.withDayOfMonth(previousMonth.lengthOfMonth()).toString());
     }
     return new LexisReportRequestDto(parameters, request == null ? null : request.format());
-  }
-
-  private boolean isBiweeklyIndustryVariant(Map<String, String> parameters) {
-    String actionMapping = parameters.get("legacyActionMapping");
-    if (actionMapping == null || actionMapping.isBlank()) {
-      return false;
-    }
-
-    String normalizedActionMapping = actionMapping.trim().toLowerCase(Locale.ROOT);
-    return "generateindustrypdf".equals(normalizedActionMapping)
-        || "generateindustrycsv".equals(normalizedActionMapping);
   }
 
   private boolean isBlank(String value) {

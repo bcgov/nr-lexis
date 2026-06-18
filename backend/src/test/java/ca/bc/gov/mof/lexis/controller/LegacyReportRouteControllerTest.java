@@ -518,32 +518,4 @@ class LegacyReportRouteControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
   }
 
-  @Test
-  void shouldHandleIndustryBiweeklyGeneratePdfActionMapping() {
-    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
-    MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/lexis/biweeklyListing.do");
-
-    when(reportController.biweeklyListing(any())).thenReturn(ResponseEntity.ok(new byte[] {8, 8}));
-
-    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
-    multi.add("actionMapping", "generateIndustryPDF");
-    multi.add("jurisdiction", "P");
-
-    ResponseEntity<byte[]> response =
-        controller.legacyReport(
-            Map.of(
-                "actionMapping", "generateIndustryPDF",
-                "jurisdiction", "P"),
-            multi,
-            request);
-
-    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
-        ArgumentCaptor.forClass(LexisReportRequestDto.class);
-    verify(reportController).biweeklyListing(requestCaptor.capture());
-
-    LexisReportRequestDto delegated = requestCaptor.getValue();
-    assertThat(delegated.format()).isEqualTo("PDF");
-    assertThat(delegated.parameters()).containsEntry("jurisdiction", "P");
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-  }
 }
