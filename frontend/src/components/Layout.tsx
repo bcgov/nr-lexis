@@ -38,12 +38,12 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
     label: 'Provincial',
     links: [
-      { to: '/provincial/summary', label: 'Summary', requiredActions: ['/summary'] },
       {
         to: '/provincial/review',
         label: 'Application review',
         requiredActions: ['/applicationsReview'],
       },
+      { to: '/provincial/summary', label: 'Summary', requiredActions: ['/summary'] },
       {
         to: '/provincial/application/create',
         label: 'Create/edit application',

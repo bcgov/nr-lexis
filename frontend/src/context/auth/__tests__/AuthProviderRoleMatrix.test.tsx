@@ -244,6 +244,24 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
+  it('prioritizes the review queue over summary when both actions are granted', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\reviewer',
+      roles: [],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/summary', '/applicationsReview'],
+    })
+
+    renderProbe(['/summary', '/applicationsReview'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
+    expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
+  })
+
   it('routes provincial submitters with application access to application search before upload', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,

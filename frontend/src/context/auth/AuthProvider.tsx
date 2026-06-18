@@ -39,8 +39,8 @@ const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
 }
 
 const ACTION_PRIORITY: string[] = [
-  'summary',
   'applicationsReview',
+  'summary',
   'applicationSearch',
   'uploadApplicationSubmission',
   'exemptionSearch',
