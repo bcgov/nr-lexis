@@ -54,7 +54,7 @@ describe('FAM auth config', () => {
     const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
-    expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/dashboard`])
+    expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/`])
     expect(oauth?.redirectSignOut).toEqual([window.location.origin])
   })
 })

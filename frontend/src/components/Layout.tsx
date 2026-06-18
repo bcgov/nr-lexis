@@ -35,10 +35,6 @@ type BreadcrumbRoute = {
 
 const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
-    label: 'LEXIS',
-    links: [{ to: '/dashboard', label: 'Dashboard' }],
-  },
-  {
     label: 'Provincial',
     links: [
       { to: '/provincial/summary', label: 'Summary', requiredActions: ['/summary'] },
@@ -152,7 +148,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
 ]
 
 const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
-  { path: '/dashboard', section: 'LEXIS Menu' },
   { path: '/provincial/summary', section: 'Provincial' },
   { path: '/provincial/review', section: 'Provincial' },
   { path: '/provincial/application/create', section: 'Provincial' },
@@ -199,7 +194,7 @@ const getProfileInitials = (principal: string | null): string => {
 const Layout: FC<Props> = ({ children }) => {
   const location = useLocation()
   const navigate = useNavigate()
-  const { capabilities, canPerform, logout } = useAuth()
+  const { capabilities, canPerform, defaultRoute, logout } = useAuth()
   const breadcrumbRoute = getBreadcrumbRoute(location.pathname)
   const [isDarkTheme, setIsDarkTheme] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
@@ -253,8 +248,8 @@ const Layout: FC<Props> = ({ children }) => {
           <button
             type="button"
             className="cds--header__name csp-header-name"
-            onClick={() => navigate('/dashboard')}
-            aria-label="Go to LEXIS dashboard"
+            onClick={() => navigate(defaultRoute)}
+            aria-label="Go to your landing page"
           >
             Log Exemption Information System
           </button>

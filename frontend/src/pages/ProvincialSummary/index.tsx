@@ -381,7 +381,7 @@ const ProvincialSummaryPage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial summary</h1>
-        <p>Drill-down dashboard for operational totals and review queue triage.</p>
+        <p>Drill-down summary for operational totals and review queue triage.</p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>

@@ -5,7 +5,6 @@ import { useAuth } from '@/context/auth/useAuth'
 import AdminPage from '@/pages/Admin'
 import AdminPoliciesPage from '@/pages/AdminPolicies'
 import AdminUploadsPage from '@/pages/AdminUploads'
-import DashboardPage from '@/pages/Dashboard'
 import FederalPage from '@/pages/Federal'
 import FederalApplicationDetailsPage from '@/pages/FederalApplicationDetails'
 import LandingPage from '@/pages/Landing'
@@ -79,7 +78,7 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
   },
   {
     path: '/dashboard',
-    id: 'Landing Dashboard Callback',
+    id: 'Landing Callback',
     element: <LandingPage />,
     isNavigation: false,
   },
@@ -106,13 +105,9 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   },
   {
     path: '/dashboard',
-    id: 'Dashboard',
-    element: (
-      <Layout>
-        <DashboardPage />
-      </Layout>
-    ),
-    isNavigation: true,
+    id: 'Legacy Callback Redirect',
+    element: <ProtectedRootRedirect />,
+    isNavigation: false,
   },
   {
     path: '/provincial',

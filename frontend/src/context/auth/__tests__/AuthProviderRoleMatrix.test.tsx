@@ -106,7 +106,7 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('PROVINCIAL_SUBMITTER_00012345')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/dashboard')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('false')
   })
 
@@ -126,7 +126,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('roles')).toHaveTextContent(
       'LEXIS_INDUSTRY_00012345,LOG_EXPORT_INDUSTRY_00067890',
     )
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/dashboard')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('false')
   })
 
@@ -167,7 +167,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('false')
   })
 
-  it('keeps delegated admin on the dashboard when no LEXIS actions are granted', async () => {
+  it('routes delegated admin without LEXIS actions to unauthorized', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'bceid\\delegated',
@@ -181,7 +181,7 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('DELEGATED_ADMIN')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/dashboard')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('false')
   })
 

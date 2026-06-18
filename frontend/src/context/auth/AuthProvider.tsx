@@ -170,7 +170,7 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     if (hasGrantedAction('createApplication')) {
       return '/provincial/application/upload'
     }
-    return '/dashboard'
+    return '/unauthorized'
   }
 
   if (isAdminOnly) {
@@ -196,7 +196,7 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     return '/admin'
   }
 
-  return '/dashboard'
+  return '/unauthorized'
 }
 
 export const AuthProvider: FC<Props> = ({ children }) => {

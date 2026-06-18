@@ -67,7 +67,7 @@ describe('Layout shell', () => {
 
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
 
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Upload application submission/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /LEXIS administration/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /Data upload/i })).toBeVisible()
@@ -75,14 +75,13 @@ describe('Layout shell', () => {
     expect(sideNav.querySelector('.csp-side-nav__link svg')).not.toBeInTheDocument()
   })
 
-  it('navigates the app name to the dashboard', async () => {
+  it('navigates the app name to the resolved default route', async () => {
     renderLayout('/admin/uploads')
 
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/dashboard')
+    expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Go to your landing page' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Go to LEXIS dashboard' }))
-
-    expect(screen.getByTestId('current-path')).toHaveTextContent('/dashboard')
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/admin')
   })
 
   it('lets pages own the only visible page title', () => {
