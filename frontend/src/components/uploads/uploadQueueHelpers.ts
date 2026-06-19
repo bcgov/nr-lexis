@@ -17,10 +17,10 @@ export const GENERIC_UPLOAD_FAILURE_MESSAGE =
 export const GENERIC_SUBMISSION_FAILURE_MESSAGE =
   'Submission failed. Please try again. If the problem persists, contact your administrator.'
 
-export const FILE_TOO_LARGE_UPLOAD_FAILURE_MESSAGE =
+const FILE_TOO_LARGE_UPLOAD_FAILURE_MESSAGE =
   'The selected file is too large. Choose a smaller file and try again.'
 
-export const asStringArray = (value: unknown): string[] => {
+const asStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value
       .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
