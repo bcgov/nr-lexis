@@ -199,8 +199,11 @@ const getProfileInitials = (principal: string | null): string => {
   return (initials || principal.slice(0, 2)).toUpperCase()
 }
 
-const hasProvincialSubmitterRole = (roles: string[]): boolean => {
-  return roles.some((role) => {
+const normalizeRoles = (roles: string[] | null | undefined): string[] =>
+  Array.isArray(roles) ? roles : []
+
+const hasProvincialSubmitterRole = (roles: string[] | null | undefined): boolean => {
+  return normalizeRoles(roles).some((role) => {
     const normalizedRole = role.trim().toUpperCase()
     return (
       normalizedRole === 'PROVINCIAL_SUBMITTER' ||
@@ -211,8 +214,8 @@ const hasProvincialSubmitterRole = (roles: string[]): boolean => {
   })
 }
 
-const hasFederalSubmitterRole = (roles: string[]): boolean => {
-  return roles.some((role) => {
+const hasFederalSubmitterRole = (roles: string[] | null | undefined): boolean => {
+  return normalizeRoles(roles).some((role) => {
     const normalizedRole = role.trim().toUpperCase()
     return (
       normalizedRole === 'FEDERAL_SUBMITTER' ||
@@ -223,14 +226,17 @@ const hasFederalSubmitterRole = (roles: string[]): boolean => {
   })
 }
 
-const hasRole = (roles: string[], role: string): boolean => {
-  return roles.some((entry) => {
+const hasRole = (roles: string[] | null | undefined, role: string): boolean => {
+  return normalizeRoles(roles).some((entry) => {
     const normalizedRole = entry.trim().toUpperCase()
     return normalizedRole === role || normalizedRole === `LEXIS_${role}`
   })
 }
 
-const canShowRoleScopedLink = (link: NavigationLink, roles: string[]): boolean => {
+const canShowRoleScopedLink = (
+  link: NavigationLink,
+  roles: string[] | null | undefined,
+): boolean => {
   if (!link.roleScope) {
     return true
   }

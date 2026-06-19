@@ -132,6 +132,26 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /Create\/edit offer/i })).not.toBeInTheDocument()
   })
 
+  it('renders navigation when an auth mock omits roles', () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'idir\\partial',
+        welcomeTarget: '/reports',
+        legacyPath: null,
+        grantedActions: ['/applicationReport'],
+      },
+      defaultRoute: '/reports',
+      canPerform: (action: string) => action === '/applicationReport',
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderLayout('/reports')
+
+    expect(screen.getByRole('navigation', { name: 'Side navigation' })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Reports menu/i })).toBeVisible()
+  })
+
   it('shows application submission upload without exposing generic data upload', () => {
     mockedUseAuth.mockReturnValue({
       capabilities: {
