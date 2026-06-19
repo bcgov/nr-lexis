@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+frontend_url="${1:?frontend URL is required}"
+attempts="${2:-30}"
+sleep_seconds="${3:-10}"
+shell_marker="${4:-<div id=\"root\"}"
+response_file="/tmp/frontend-index.html"
+
+for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+  if curl --fail --silent --show-error --location --max-time 10 "${frontend_url}/" > "${response_file}"; then
+    if grep -q "${shell_marker}" "${response_file}"; then
+      echo "Frontend route is ready."
+      exit 0
+    fi
+    echo "Frontend responded but did not look like the app shell."
+  else
+    echo "Frontend route is not ready yet (attempt ${attempt}/${attempts})."
+  fi
+  sleep "${sleep_seconds}"
+done
+
+echo "Frontend route did not become ready: ${frontend_url}/"
+exit 1
