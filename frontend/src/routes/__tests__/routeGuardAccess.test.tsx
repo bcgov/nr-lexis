@@ -195,4 +195,27 @@ describe('Protected route guard access', () => {
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
+
+  it('allows admin users to open the federal application submission upload route', async () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'idir\\admin',
+        roles: ['ADMIN'],
+        welcomeTarget: '/admin',
+        legacyPath: null,
+        grantedActions: [],
+      },
+      defaultRoute: '/admin',
+      canPerform: () => true,
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderWithPath('/federal/application/upload')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Upload Federal Application Submission' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+  })
 })
