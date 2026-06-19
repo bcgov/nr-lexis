@@ -59,7 +59,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   @Override
   public ExemptionApplicationsResponse getApplications(
-      String exemptionNumber, boolean canViewFederalApplications, boolean canViewReserveApplications) {
+      String exemptionNumber, boolean canViewFederalApplications) {
     List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> rows =
         repository.findApplicationSummariesByExemptionNumber(exemptionNumber);
 
@@ -73,8 +73,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
           && !canViewFederalApplications) {
         continue;
       }
-      if (JURISDICTION_RESERVE.equalsIgnoreCase(row.jurisdictionCode())
-          && !canViewReserveApplications) {
+      if (JURISDICTION_RESERVE.equalsIgnoreCase(row.jurisdictionCode())) {
         continue;
       }
 
@@ -293,8 +292,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       Long applicationNumber,
       String exemptionNumber,
       String userId,
-      boolean canViewFederalApplications,
-      boolean canViewReserveApplications) {
+      boolean canViewFederalApplications) {
     String normalizedExemptionNumber = trimToNull(exemptionNumber);
     List<String> errors = new ArrayList<>();
 
@@ -329,7 +327,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       errors.add("Application cannot be added to this exemption because the client number does not match.");
     } else if (!canViewFederalApplications && JURISDICTION_FEDERAL.equalsIgnoreCase(application.exportJurisdictionCode())) {
       errors.add("Insufficient privileges to add this application.");
-    } else if (!canViewReserveApplications && JURISDICTION_RESERVE.equalsIgnoreCase(application.exportJurisdictionCode())) {
+    } else if (JURISDICTION_RESERVE.equalsIgnoreCase(application.exportJurisdictionCode())) {
       errors.add("Insufficient privileges to add this application.");
     }
 
@@ -570,8 +568,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             "Insufficient privileges to add application "
                 + displayApplicationNumber(applicationNumber)
                 + ".");
-      } else if (!request.canViewReserveApplications()
-          && JURISDICTION_RESERVE.equalsIgnoreCase(application.exportJurisdictionCode())) {
+      } else if (JURISDICTION_RESERVE.equalsIgnoreCase(application.exportJurisdictionCode())) {
         errors.add(
             "Insufficient privileges to add application "
                 + displayApplicationNumber(applicationNumber)
@@ -799,7 +796,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private CreateExemptionRequest normalizeCreateExemptionRequest(CreateExemptionRequest input) {
     if (input == null) {
       return new CreateExemptionRequest(
-          null, null, null, null, null, null, null, null, null, List.of(), false, false, List.of());
+          null, null, null, null, null, null, null, null, null, List.of(), false, List.of());
     }
     List<Long> applicationNumbers =
         input.applicationNumbers() == null
@@ -827,7 +824,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         input.enableRateOverride(),
         applicationNumbers,
         input.canViewFederalApplications(),
-        input.canViewReserveApplications(),
         regions);
   }
 

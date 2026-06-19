@@ -6,8 +6,7 @@ import java.util.Optional;
 
 public interface ExemptionDetailsRpcService {
 
-  ExemptionApplicationsResponse getApplications(
-      String exemptionNumber, boolean canViewFederalApplications, boolean canViewReserveApplications);
+  ExemptionApplicationsResponse getApplications(String exemptionNumber, boolean canViewFederalApplications);
 
   List<PermitItem> getPermits(
       String exemptionNumber, boolean ministryUser, boolean privilegedUser, String forestClientNumber);
@@ -30,8 +29,7 @@ public interface ExemptionDetailsRpcService {
       Long applicationNumber,
       String exemptionNumber,
       String userId,
-      boolean canViewFederalApplications,
-      boolean canViewReserveApplications);
+      boolean canViewFederalApplications);
 
   ApplicationExemptionLinkResult removeApplicationFromExemption(Long applicationNumber, String userId);
 
@@ -93,7 +91,6 @@ public interface ExemptionDetailsRpcService {
       Boolean enableRateOverride,
       List<Long> applicationNumbers,
       boolean canViewFederalApplications,
-      boolean canViewReserveApplications,
       List<Long> regionNumbers) {}
 
   record UpdateExemptionRequest(

@@ -49,7 +49,6 @@ lexis:
         - "/federalApplicationSearch"
         - "/federalApplicationDetails"
         - "viewFederalApplication"
-        - "viewOICApplication"
       LEXIS_APPLICATION_APPROVER:
         - "/summary"
         - "/applicationsReview"

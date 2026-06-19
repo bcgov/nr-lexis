@@ -42,12 +42,28 @@ class OracleExemptionDetailsRpcServiceTest {
                     1000457L, 11.0d, 11.0d, "00077881", "P", "S")));
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
-        service.getApplications("EX-205", true, true);
+        service.getApplications("EX-205", true);
 
     assertThat(response.applications()).hasSize(2);
     assertThat(response.applications().get(0).requestedVolume()).isEqualTo("95.0");
     assertThat(response.containsUnmanu()).isTrue();
     assertThat(response.ownerNumber()).isEqualTo("00077881");
+  }
+
+  @Test
+  void getApplicationsShouldExcludeRetiredReserveJurisdiction() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.04d, 94.96d, "00077881", "P", "T"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000457L, 11.0d, 11.0d, "00077881", "I", "T")));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true);
+
+    assertThat(response.applications()).extracting("applicationNumber").containsExactly(1000456L);
   }
 
   @Test
@@ -123,7 +139,7 @@ class OracleExemptionDetailsRpcServiceTest {
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.addExemption(
             new ExemptionDetailsRpcService.CreateExemptionRequest(
-                "", null, null, null, "", "", "", null, null, List.of(), false, false, List.of()),
+                "", null, null, null, "", "", "", null, null, List.of(), false, List.of()),
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
@@ -147,7 +163,6 @@ class OracleExemptionDetailsRpcServiceTest {
                 null,
                 null,
                 List.of(),
-                false,
                 false,
                 List.of()),
             "idir\\jsmith");
@@ -173,7 +188,6 @@ class OracleExemptionDetailsRpcServiceTest {
                 null,
                 null,
                 List.of(),
-                false,
                 false,
                 List.of()),
             "idir\\jsmith");
@@ -205,7 +219,6 @@ class OracleExemptionDetailsRpcServiceTest {
                 18.25d,
                 true,
                 List.of(),
-                false,
                 false,
                 List.of(11L, 12L, 11L)),
             "idir\\jsmith");
@@ -251,7 +264,6 @@ class OracleExemptionDetailsRpcServiceTest {
                 null,
                 List.of(),
                 false,
-                false,
                 List.of()),
             "idir\\jsmith");
 
@@ -281,7 +293,6 @@ class OracleExemptionDetailsRpcServiceTest {
                 null,
                 null,
                 List.of(),
-                false,
                 false,
                 List.of()),
             "idir\\jsmith");
@@ -313,7 +324,6 @@ class OracleExemptionDetailsRpcServiceTest {
                 null,
                 null,
                 List.of(1000456L),
-                false,
                 false,
                 List.of()),
             "idir\\jsmith");
@@ -350,7 +360,6 @@ class OracleExemptionDetailsRpcServiceTest {
                 null,
                 List.of(1000456L),
                 false,
-                false,
                 List.of()),
             "idir\\jsmith");
 
@@ -380,7 +389,6 @@ class OracleExemptionDetailsRpcServiceTest {
                 18.25d,
                 true,
                 List.of(),
-                false,
                 false,
                 List.of(11L, 12L)),
             null);
@@ -429,10 +437,26 @@ class OracleExemptionDetailsRpcServiceTest {
     when(repository.hasActiveValidOffers(1000456L)).thenReturn(true);
 
     ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
-        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true, true);
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors()).contains("Application has valid offers and cannot be added to an exemption.");
+  }
+
+  @Test
+  void addApplicationToExemptionShouldRejectRetiredReserveJurisdiction() {
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application("APP", null, "I")));
+    when(repository.findExemptionTypeCodeByExemptionNumber("EX-205")).thenReturn(Optional.of("O"));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205")).thenReturn(List.of());
+    when(repository.hasActiveValidOffers(1000456L)).thenReturn(false);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).contains("Insufficient privileges to add this application.");
+    verify(repository, never())
+        .updateApplicationExemption(any(ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class));
   }
 
   @Test
@@ -446,7 +470,7 @@ class OracleExemptionDetailsRpcServiceTest {
         .thenReturn(true);
 
     ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
-        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true, true);
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
 
     assertThat(response.success()).isTrue();
     assertThat(response.errors()).isEmpty();

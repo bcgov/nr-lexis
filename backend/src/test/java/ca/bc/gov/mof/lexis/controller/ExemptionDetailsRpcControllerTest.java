@@ -70,9 +70,7 @@ class ExemptionDetailsRpcControllerTest {
     when(sessionService.parseRolesFromPrincipal(null)).thenReturn(List.of("LEXIS_READ_ONLY"));
     when(authorizationService.canPerformAction(List.of("LEXIS_READ_ONLY"), "viewFederalApplication"))
         .thenReturn(true);
-    when(authorizationService.canPerformAction(List.of("LEXIS_READ_ONLY"), "viewOICApplication"))
-        .thenReturn(true);
-    when(service.getApplications("EX-205", true, true))
+    when(service.getApplications("EX-205", true))
         .thenReturn(
             new ExemptionDetailsRpcService.ExemptionApplicationsResponse(
                 List.of(
@@ -88,7 +86,7 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().applications()).hasSize(1);
     assertThat(response.getBody().applications().get(0).applicationNumber()).isEqualTo(1000456L);
-    verify(service).getApplications("EX-205", true, true);
+    verify(service).getApplications("EX-205", true);
   }
 
   @Test
@@ -191,9 +189,7 @@ class ExemptionDetailsRpcControllerTest {
         .thenReturn(true);
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewFederalApplication"))
         .thenReturn(true);
-    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewOICApplication"))
-        .thenReturn(true);
-    when(service.addApplicationToExemption(1000456L, "EX-205", "IDIR\\JSMITH", true, true))
+    when(service.addApplicationToExemption(1000456L, "EX-205", "IDIR\\JSMITH", true))
         .thenReturn(new ExemptionDetailsRpcService.ApplicationExemptionLinkResult(true, List.of()));
 
     ResponseEntity<ExemptionDetailsRpcController.ApplicationExemptionLinkResponseDto> response =
@@ -203,7 +199,7 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isTrue();
     assertThat(response.getBody().errors()).isEmpty();
-    verify(service).addApplicationToExemption(1000456L, "EX-205", "IDIR\\JSMITH", true, true);
+    verify(service).addApplicationToExemption(1000456L, "EX-205", "IDIR\\JSMITH", true);
   }
 
   @Test
@@ -255,8 +251,6 @@ class ExemptionDetailsRpcControllerTest {
         .thenReturn(true);
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewFederalApplication"))
         .thenReturn(true);
-    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewOICApplication"))
-        .thenReturn(true);
     ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
         controller.addExemptionLegacy(params, authentication);
 
@@ -277,7 +271,6 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(request.enableRateOverride()).isTrue();
     assertThat(request.applicationNumbers()).containsExactly(1000456L, 1000457L);
     assertThat(request.canViewFederalApplications()).isTrue();
-    assertThat(request.canViewReserveApplications()).isTrue();
     assertThat(request.regionNumbers()).containsExactly(11L, 12L);
   }
 
