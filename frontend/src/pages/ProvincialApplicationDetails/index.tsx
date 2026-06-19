@@ -144,11 +144,11 @@ type ClientDataSummaryProps = {
 }
 
 const ClientDataSummary: FC<ClientDataSummaryProps> = ({ title, clientData, isLoading }) => {
-  const [showClientLookupMessage, setShowClientLookupMessage] = useState(false)
-
-  useEffect(() => {
-    setShowClientLookupMessage(Boolean(clientData?.notfound))
-  }, [clientData?.notfound])
+  const clientLookupMessage = clientData?.notfound ?? ''
+  const clientLookupMessageKey = `${clientData?.clientNumber ?? ''}:${clientLookupMessage}`
+  const [dismissedClientLookupMessageKey, setDismissedClientLookupMessageKey] = useState<
+    string | null
+  >(null)
 
   if (isLoading) {
     return <InlineLoading description={`Loading ${title.toLowerCase()}...`} />
@@ -179,13 +179,13 @@ const ClientDataSummary: FC<ClientDataSummaryProps> = ({ title, clientData, isLo
           </div>
         ))}
       </dl>
-      {showClientLookupMessage && clientData?.notfound && (
+      {clientLookupMessage && dismissedClientLookupMessageKey !== clientLookupMessageKey && (
         <AppNotification
           kind="warning"
           title="Client lookup"
-          subtitle={clientData.notfound}
+          subtitle={clientLookupMessage}
           lowContrast
-          onCloseButtonClick={() => setShowClientLookupMessage(false)}
+          onCloseButtonClick={() => setDismissedClientLookupMessageKey(clientLookupMessageKey)}
         />
       )}
     </section>
@@ -474,8 +474,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
   const [isLoadingOwnerClientData, setIsLoadingOwnerClientData] = useState(false)
   const [isLoadingAgentClientData, setIsLoadingAgentClientData] = useState(false)
-  const [showDocumentUploadUnavailableMessage, setShowDocumentUploadUnavailableMessage] =
-    useState(false)
+  const [
+    dismissedDocumentUploadUnavailableMessageKey,
+    setDismissedDocumentUploadUnavailableMessageKey,
+  ] = useState<string | null>(null)
   const [summaryExemptionReasonOptions, setSummaryExemptionReasonOptions] = useState<
     SearchOption[]
   >([])
@@ -729,9 +731,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
     detail,
     permitRows,
   )
-  useEffect(() => {
-    setShowDocumentUploadUnavailableMessage(Boolean(documentUploadUnavailableMessage))
-  }, [documentUploadUnavailableMessage])
+  const documentUploadUnavailableMessageKey = `${detail?.applicationNumber ?? ''}:${documentUploadUnavailableMessage}`
+  const showDocumentUploadUnavailableMessage = Boolean(
+    documentUploadUnavailableMessage &&
+    dismissedDocumentUploadUnavailableMessageKey !== documentUploadUnavailableMessageKey,
+  )
   const canAddApplicationDocuments =
     canUploadApplicationDocuments && !documentUploadUnavailableMessage
   const canManageItems =
@@ -2975,7 +2979,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   title="Upload unavailable"
                   subtitle={documentUploadUnavailableMessage}
                   lowContrast
-                  onCloseButtonClick={() => setShowDocumentUploadUnavailableMessage(false)}
+                  onCloseButtonClick={() =>
+                    setDismissedDocumentUploadUnavailableMessageKey(
+                      documentUploadUnavailableMessageKey,
+                    )
+                  }
                 />
               )}
               {canAddApplicationDocuments && (
