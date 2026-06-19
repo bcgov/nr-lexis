@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { isValidElement, type ReactElement } from 'react'
 import { Navigate } from 'react-router-dom'
+import type { RouteActionMatch, RouteRoleScope } from '@/routes/routeAccessTypes'
 import { PROTECTED_ROUTES, PUBLIC_ROUTES } from '@/routes/routePaths'
+
+type RouteAccessExpectation = {
+  path: string
+  requiredActions: string[]
+  requiredActionsMatch: RouteActionMatch
+  roleScope?: RouteRoleScope
+}
 
 const findRoute = (path: string) => {
   const route = PROTECTED_ROUTES.find((entry) => entry.path === path)
@@ -9,66 +17,68 @@ const findRoute = (path: string) => {
   return route!
 }
 
+const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
+  {
+    path: '/provincial',
+    requiredActions: [
+      '/summary',
+      '/applicationsReview',
+      '/applicationSearch',
+      'uploadApplicationSubmission',
+      '/exemptionSearch',
+      '/offersSearch',
+      '/permitSearch',
+    ],
+    requiredActionsMatch: 'any',
+    roleScope: 'provincial',
+  },
+  {
+    path: '/provincial/application/create',
+    requiredActions: ['/applicationSearch', 'createApplication'],
+    requiredActionsMatch: 'all',
+  },
+  {
+    path: '/provincial/application/upload',
+    requiredActions: ['uploadApplicationSubmission'],
+    requiredActionsMatch: 'any',
+    roleScope: 'provincialApplicationSubmission',
+  },
+  {
+    path: '/federal/application/upload',
+    requiredActions: ['uploadApplicationSubmission'],
+    requiredActionsMatch: 'any',
+    roleScope: 'federalApplicationSubmission',
+  },
+  {
+    path: '/provincial/exemption/create',
+    requiredActions: ['/exemptionSearch', '/createExemption'],
+    requiredActionsMatch: 'all',
+  },
+  {
+    path: '/provincial/offers/create',
+    requiredActions: ['/offersSearch', 'createOffer'],
+    requiredActionsMatch: 'all',
+  },
+  {
+    path: '/federal/application/:applicationNumber',
+    requiredActions: ['/federalApplicationDetails', 'viewFederalApplication'],
+    requiredActionsMatch: 'all',
+  },
+  {
+    path: '/admin/uploads',
+    requiredActions: [
+      '/lexisAgentAdmin',
+      '/fileApplicationUpload',
+      '/fileExemptionUpload',
+      '/filePermitUpload',
+      '/fileInvoiceUpload',
+    ],
+    requiredActionsMatch: 'any',
+  },
+]
+
 describe('Protected route access matrix', () => {
-  it.each([
-    {
-      path: '/provincial',
-      requiredActions: [
-        '/summary',
-        '/applicationsReview',
-        '/applicationSearch',
-        'uploadApplicationSubmission',
-        '/exemptionSearch',
-        '/offersSearch',
-        '/permitSearch',
-      ],
-      requiredActionsMatch: 'any',
-      roleScope: 'provincial',
-    },
-    {
-      path: '/provincial/application/create',
-      requiredActions: ['/applicationSearch', 'createApplication'],
-      requiredActionsMatch: 'all',
-    },
-    {
-      path: '/provincial/application/upload',
-      requiredActions: ['uploadApplicationSubmission'],
-      requiredActionsMatch: 'any',
-      roleScope: 'provincialApplicationSubmission',
-    },
-    {
-      path: '/federal/application/upload',
-      requiredActions: ['uploadApplicationSubmission'],
-      requiredActionsMatch: 'any',
-      roleScope: 'federalApplicationSubmission',
-    },
-    {
-      path: '/provincial/exemption/create',
-      requiredActions: ['/exemptionSearch', '/createExemption'],
-      requiredActionsMatch: 'all',
-    },
-    {
-      path: '/provincial/offers/create',
-      requiredActions: ['/offersSearch', 'createOffer'],
-      requiredActionsMatch: 'all',
-    },
-    {
-      path: '/federal/application/:applicationNumber',
-      requiredActions: ['/federalApplicationDetails', 'viewFederalApplication'],
-      requiredActionsMatch: 'all',
-    },
-    {
-      path: '/admin/uploads',
-      requiredActions: [
-        '/lexisAgentAdmin',
-        '/fileApplicationUpload',
-        '/fileExemptionUpload',
-        '/filePermitUpload',
-        '/fileInvoiceUpload',
-      ],
-      requiredActionsMatch: 'any',
-    },
-  ])(
+  it.each(EXPECTED_PROTECTED_ROUTE_ACCESS)(
     'enforces expected action requirements for $path',
     ({ path, requiredActions, requiredActionsMatch, roleScope }) => {
       const route = findRoute(path)

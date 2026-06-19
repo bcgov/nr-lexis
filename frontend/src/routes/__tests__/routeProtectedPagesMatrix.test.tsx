@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import type { RouteActionMatch } from '@/routes/routeAccessTypes'
 import { PROTECTED_ROUTES } from '@/routes/routePaths'
 
 type RouteExpectation = {
   path: string
   requiredActions: string[]
-  requiredActionsMatch?: 'any' | 'all'
+  requiredActionsMatch?: RouteActionMatch
 }
 
 const EXPECTED_CORE_PAGES: RouteExpectation[] = [

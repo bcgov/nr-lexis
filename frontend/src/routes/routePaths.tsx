@@ -1,6 +1,11 @@
 import type { FC, ReactNode } from 'react'
 import { Navigate, type RouteObject } from 'react-router-dom'
 import Layout from '@/components/Layout'
+import {
+  hasFederalSubmitterRole,
+  hasProvincialSubmitterRole,
+  hasRole,
+} from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminPage from '@/pages/Admin'
 import AdminPoliciesPage from '@/pages/AdminPolicies'
@@ -25,6 +30,7 @@ import ProvincialReviewPage from '@/pages/ProvincialReview'
 import ProvincialSummaryPage from '@/pages/ProvincialSummary'
 import ReportsPage from '@/pages/Reports'
 import UnauthorizedPage from '@/pages/Unauthorized'
+import type { RouteActionMatch, RouteRoleScope } from '@/routes/routeAccessTypes'
 
 export type RouteDescription = {
   id: string
@@ -32,8 +38,8 @@ export type RouteDescription = {
   element: ReactNode
   isNavigation: boolean
   requiredActions?: string[]
-  requiredActionsMatch?: 'any' | 'all'
-  roleScope?: 'provincial' | 'provincialApplicationSubmission' | 'federalApplicationSubmission'
+  requiredActionsMatch?: RouteActionMatch
+  roleScope?: RouteRoleScope
 } & RouteObject
 
 const ProtectedRootRedirect: FC = () => {
@@ -43,40 +49,9 @@ const ProtectedRootRedirect: FC = () => {
 
 type RouteGuardProps = {
   requiredActions?: string[]
-  requiredActionsMatch?: 'any' | 'all'
+  requiredActionsMatch?: RouteActionMatch
   roleScope?: RouteDescription['roleScope']
   children: ReactNode
-}
-
-const hasProvincialSubmitterRole = (roles: string[]): boolean => {
-  return roles.some((role) => {
-    const normalizedRole = role.trim().toUpperCase()
-    return (
-      normalizedRole === 'PROVINCIAL_SUBMITTER' ||
-      normalizedRole === 'LEXIS_PROVINCIAL_SUBMITTER' ||
-      normalizedRole.startsWith('PROVINCIAL_SUBMITTER_') ||
-      normalizedRole.startsWith('LEXIS_PROVINCIAL_SUBMITTER_')
-    )
-  })
-}
-
-const hasFederalSubmitterRole = (roles: string[]): boolean => {
-  return roles.some((role) => {
-    const normalizedRole = role.trim().toUpperCase()
-    return (
-      normalizedRole === 'FEDERAL_SUBMITTER' ||
-      normalizedRole === 'LEXIS_FEDERAL_SUBMITTER' ||
-      normalizedRole.startsWith('FEDERAL_SUBMITTER_') ||
-      normalizedRole.startsWith('LEXIS_FEDERAL_SUBMITTER_')
-    )
-  })
-}
-
-const hasRole = (roles: string[], role: string): boolean => {
-  return roles.some((entry) => {
-    const normalizedRole = entry.trim().toUpperCase()
-    return normalizedRole === role || normalizedRole === `LEXIS_${role}`
-  })
 }
 
 const canAccessRoleScope = (

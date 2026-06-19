@@ -10,7 +10,13 @@ import {
 } from '@carbon/icons-react'
 import { IconButton, SkipToContent, Theme } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import {
+  hasFederalSubmitterRole,
+  hasProvincialSubmitterRole,
+  hasRole,
+} from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
+import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
 
 type Props = {
   children: ReactNode
@@ -20,8 +26,8 @@ type NavigationLink = {
   to: string
   label: string
   requiredActions?: string[]
-  requiredActionsMatch?: 'any' | 'all'
-  roleScope?: 'provincialApplicationSubmission' | 'federalApplicationSubmission'
+  requiredActionsMatch?: RouteActionMatch
+  roleScope?: NavigationRoleScope
 }
 
 type NavigationSection = {
@@ -197,40 +203,6 @@ const getProfileInitials = (principal: string | null): string => {
     .join('')
 
   return (initials || principal.slice(0, 2)).toUpperCase()
-}
-
-const normalizeRoles = (roles: string[] | null | undefined): string[] =>
-  Array.isArray(roles) ? roles : []
-
-const hasProvincialSubmitterRole = (roles: string[] | null | undefined): boolean => {
-  return normalizeRoles(roles).some((role) => {
-    const normalizedRole = role.trim().toUpperCase()
-    return (
-      normalizedRole === 'PROVINCIAL_SUBMITTER' ||
-      normalizedRole === 'LEXIS_PROVINCIAL_SUBMITTER' ||
-      normalizedRole.startsWith('PROVINCIAL_SUBMITTER_') ||
-      normalizedRole.startsWith('LEXIS_PROVINCIAL_SUBMITTER_')
-    )
-  })
-}
-
-const hasFederalSubmitterRole = (roles: string[] | null | undefined): boolean => {
-  return normalizeRoles(roles).some((role) => {
-    const normalizedRole = role.trim().toUpperCase()
-    return (
-      normalizedRole === 'FEDERAL_SUBMITTER' ||
-      normalizedRole === 'LEXIS_FEDERAL_SUBMITTER' ||
-      normalizedRole.startsWith('FEDERAL_SUBMITTER_') ||
-      normalizedRole.startsWith('LEXIS_FEDERAL_SUBMITTER_')
-    )
-  })
-}
-
-const hasRole = (roles: string[] | null | undefined, role: string): boolean => {
-  return normalizeRoles(roles).some((entry) => {
-    const normalizedRole = entry.trim().toUpperCase()
-    return normalizedRole === role || normalizedRole === `LEXIS_${role}`
-  })
 }
 
 const canShowRoleScopedLink = (

@@ -6,6 +6,7 @@ import {
   isCognitoConfigured,
 } from '@/config/fam/config'
 import { AuthContext } from '@/context/auth/AuthContext'
+import { hasRole } from '@/context/auth/role-utils'
 import type { AuthContextType, LoginProvider } from '@/context/auth/types'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
@@ -161,18 +162,15 @@ const sanitizeCapabilities = (
 }
 
 const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => {
-  const roleSet = new Set(capabilities.roles)
-  const isReadOnlyUser = roleSet.has(ROLE_READ_ONLY) || roleSet.has('LEXIS_READ_ONLY')
+  const isReadOnlyUser = hasRole(capabilities.roles, ROLE_READ_ONLY)
   const isIndustryUser = capabilities.roles.some((role) => isIndustryRole(role))
   const isProvincialSubmitterUser = capabilities.roles.some((role) => {
     return role === ROLE_PROVINCIAL_SUBMITTER || role.startsWith('PROVINCIAL_SUBMITTER_')
   })
   const isFederalSubmitterUser = capabilities.roles.some((role) => role === ROLE_FEDERAL_SUBMITTER)
-  const isAdminUser = roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN')
-  const isApplicationApproverUser =
-    roleSet.has(ROLE_APPLICATION_APPROVER) || roleSet.has('LEXIS_APPLICATION_APPROVER')
-  const isExemptionApproverUser =
-    roleSet.has(ROLE_EXEMPTION_APPROVER) || roleSet.has('LEXIS_EXEMPTION_APPROVER')
+  const isAdminUser = hasRole(capabilities.roles, ROLE_ADMIN)
+  const isApplicationApproverUser = hasRole(capabilities.roles, ROLE_APPLICATION_APPROVER)
+  const isExemptionApproverUser = hasRole(capabilities.roles, ROLE_EXEMPTION_APPROVER)
   const grantedSet = new Set(capabilities.grantedActions.map(normalizeAction))
   const hasGrantedAction = (action: string): boolean => grantedSet.has(normalizeAction(action))
 
@@ -341,25 +339,18 @@ export const AuthProvider: FC<Props> = ({ children }) => {
     return new Set(capabilities.grantedActions.map(normalizeAction))
   }, [capabilities.grantedActions])
 
-  const roleSet = useMemo(() => {
-    return new Set(capabilities.roles)
-  }, [capabilities.roles])
-
   const canPerform = useCallback(
     (action: string): boolean => {
-      if (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN')) {
+      if (hasRole(capabilities.roles, ROLE_ADMIN)) {
         return true
       }
       const normalizedAction = normalizeAction(action)
-      if (
-        (roleSet.has(ROLE_READ_ONLY) || roleSet.has('LEXIS_READ_ONLY')) &&
-        REPORT_ACTIONS.has(normalizedAction)
-      ) {
+      if (hasRole(capabilities.roles, ROLE_READ_ONLY) && REPORT_ACTIONS.has(normalizedAction)) {
         return false
       }
       return grantedActionSet.has(normalizedAction)
     },
-    [grantedActionSet, roleSet],
+    [capabilities.roles, grantedActionSet],
   )
 
   const hasAnyRole = capabilities.roles.length > 0

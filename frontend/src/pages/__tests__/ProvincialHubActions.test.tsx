@@ -9,6 +9,7 @@ import { countProvincialApplications } from '@/service/provincial-application-se
 import { countProvincialExemptions } from '@/service/provincial-exemption-search-service'
 import { countProvincialOffers } from '@/service/provincial-offer-search-service'
 import { countProvincialPermits } from '@/service/provincial-permit-search-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -55,9 +56,7 @@ const renderPage = () => {
 describe('Provincial hub actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedCountProvincialApplications.mockResolvedValue(11)
     mockedCountProvincialExemptions.mockResolvedValue(12)
     mockedCountProvincialOffers.mockResolvedValue(13)
@@ -89,9 +88,11 @@ describe('Provincial hub actions', () => {
   })
 
   it('hides provincial areas the user cannot access', () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === '/applicationSearch',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === '/applicationSearch',
+      }),
+    )
 
     renderPage()
 
@@ -111,9 +112,11 @@ describe('Provincial hub actions', () => {
   })
 
   it('shows application submission upload as an application quick action', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'uploadApplicationSubmission',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === 'uploadApplicationSubmission',
+      }),
+    )
 
     renderPage()
 

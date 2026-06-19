@@ -3,6 +3,7 @@ import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import { getNoRoleRoutes } from '@/routes/routePaths'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -13,14 +14,18 @@ const mockedUseAuth = vi.mocked(useAuth)
 describe('No-role route behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      defaultRoute: '/unauthorized',
-      capabilities: {
-        principal: 'idir\\norole',
-      },
-      canPerform: () => false,
-      logout: vi.fn().mockResolvedValue(undefined),
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\norole',
+          roles: [],
+          welcomeTarget: '/unauthorized',
+        }),
+        hasAnyRole: false,
+        defaultRoute: '/unauthorized',
+        canPerform: vi.fn().mockReturnValue(false),
+      }),
+    )
   })
 
   it('redirects unknown routes to unauthorized page when no-role routes are active', async () => {

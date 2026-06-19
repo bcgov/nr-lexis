@@ -4,6 +4,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import LandingPage from '@/pages/Landing'
+import {
+  createLoggedOutTestAuthContext,
+  createTestAuthContext,
+  createTestCapabilities,
+} from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -35,48 +40,21 @@ describe('Landing auth flow smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: false,
-        principal: null,
-        roles: [],
-        welcomeTarget: null,
-        legacyPath: null,
-        grantedActions: [],
-      },
-      defaultRoute: '/provincial/summary',
-      isLoading: false,
-      isLoggedIn: false,
-      hasAnyRole: false,
-      usesExternalLogin: true,
-      login: vi.fn().mockResolvedValue(undefined),
-      refresh: vi.fn().mockResolvedValue(undefined),
-      logout: vi.fn().mockResolvedValue(undefined),
-      canPerform: vi.fn().mockReturnValue(false),
-    })
+    mockedUseAuth.mockReturnValue(
+      createLoggedOutTestAuthContext({
+        defaultRoute: '/provincial/summary',
+      }),
+    )
   })
 
   it('runs IDIR login action from the landing entry button', async () => {
     const login = vi.fn().mockResolvedValue(undefined)
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: false,
-        principal: null,
-        roles: [],
-        welcomeTarget: null,
-        legacyPath: null,
-        grantedActions: [],
-      },
-      defaultRoute: '/provincial/summary',
-      isLoading: false,
-      isLoggedIn: false,
-      hasAnyRole: false,
-      usesExternalLogin: true,
-      login,
-      refresh: vi.fn().mockResolvedValue(undefined),
-      logout: vi.fn().mockResolvedValue(undefined),
-      canPerform: vi.fn().mockReturnValue(false),
-    })
+    mockedUseAuth.mockReturnValue(
+      createLoggedOutTestAuthContext({
+        defaultRoute: '/provincial/summary',
+        login,
+      }),
+    )
 
     renderPage()
 
@@ -93,25 +71,12 @@ describe('Landing auth flow smoke', () => {
 
   it('runs Business BCeID login action from the landing entry button', async () => {
     const login = vi.fn().mockResolvedValue(undefined)
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: false,
-        principal: null,
-        roles: [],
-        welcomeTarget: null,
-        legacyPath: null,
-        grantedActions: [],
-      },
-      defaultRoute: '/provincial/summary',
-      isLoading: false,
-      isLoggedIn: false,
-      hasAnyRole: false,
-      usesExternalLogin: true,
-      login,
-      refresh: vi.fn().mockResolvedValue(undefined),
-      logout: vi.fn().mockResolvedValue(undefined),
-      canPerform: vi.fn().mockReturnValue(false),
-    })
+    mockedUseAuth.mockReturnValue(
+      createLoggedOutTestAuthContext({
+        defaultRoute: '/provincial/summary',
+        login,
+      }),
+    )
 
     renderPage()
 
@@ -125,25 +90,24 @@ describe('Landing auth flow smoke', () => {
     const login = vi.fn().mockResolvedValue(undefined)
     const refresh = vi.fn().mockResolvedValue(undefined)
 
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: true,
-        principal: 'idir\\analyst',
-        roles: ['PROVINCIAL_SUBMITTER_00012345'],
-        welcomeTarget: '/summary',
-        legacyPath: null,
-        grantedActions: ['/summary', '/applicationSearch'],
-      },
-      defaultRoute: '/provincial/summary',
-      isLoading: false,
-      isLoggedIn: true,
-      hasAnyRole: true,
-      usesExternalLogin: true,
-      login,
-      refresh,
-      logout: vi.fn().mockResolvedValue(undefined),
-      canPerform: vi.fn().mockReturnValue(true),
-    })
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          authenticated: true,
+          principal: 'idir\\analyst',
+          roles: ['PROVINCIAL_SUBMITTER_00012345'],
+          welcomeTarget: '/summary',
+          legacyPath: null,
+          grantedActions: ['/summary', '/applicationSearch'],
+        }),
+        defaultRoute: '/provincial/summary',
+        isLoggedIn: true,
+        hasAnyRole: true,
+        login,
+        refresh,
+        canPerform: vi.fn().mockReturnValue(true),
+      }),
+    )
 
     renderPage()
 
@@ -161,25 +125,12 @@ describe('Landing auth flow smoke', () => {
   })
 
   it('surfaces inline error when login initiation fails', async () => {
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: false,
-        principal: null,
-        roles: [],
-        welcomeTarget: null,
-        legacyPath: null,
-        grantedActions: [],
-      },
-      defaultRoute: '/provincial/summary',
-      isLoading: false,
-      isLoggedIn: false,
-      hasAnyRole: false,
-      usesExternalLogin: true,
-      login: vi.fn().mockRejectedValue(new Error('boom')),
-      refresh: vi.fn().mockResolvedValue(undefined),
-      logout: vi.fn().mockResolvedValue(undefined),
-      canPerform: vi.fn().mockReturnValue(false),
-    })
+    mockedUseAuth.mockReturnValue(
+      createLoggedOutTestAuthContext({
+        defaultRoute: '/provincial/summary',
+        login: vi.fn().mockRejectedValue(new Error('boom')),
+      }),
+    )
 
     renderPage()
 
