@@ -588,9 +588,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Cross-Module',
     action: 'mofrListing',
     description: 'Advertising list output in PDF or CSV format.',
-    actionMappings: [
-      { value: 'generate', label: 'Generate with filters' },
-    ],
+    actionMappings: [{ value: 'generate', label: 'Generate with filters' }],
     fields: [
       REGION_CODES_FIELD,
       BIWEEKLY_JURISDICTION_FIELD,
@@ -894,10 +892,7 @@ const validateReportLaunch = (
     return APPLICATION_REPORT_LIMITER_MESSAGE
   }
 
-  if (
-    report.id === 'biweeklyListing' &&
-    (!values.fromDate?.trim() || !values.toDate?.trim())
-  ) {
+  if (report.id === 'biweeklyListing' && (!values.fromDate?.trim() || !values.toDate?.trim())) {
     return BIWEEKLY_DATE_RANGE_MESSAGE
   }
 
