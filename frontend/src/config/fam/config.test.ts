@@ -62,27 +62,32 @@ describe('FAM auth config', () => {
     expect(oauth?.redirectSignOut).toEqual([logoffUrl])
   })
 
-  it('falls back to the current origin when sign-out is blank', async () => {
+  it('leaves sign-out blank when no runtime sign-out URL is configured', async () => {
     const configModule = await loadConfigModule()
     const config = configModule.default
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
     expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/`])
-    expect(oauth?.redirectSignOut).toEqual([`${window.location.origin}/`])
-    expect(configModule.redirectSignOut).toBe(`${window.location.origin}/`)
+    expect(oauth?.redirectSignOut).toEqual([''])
+    expect(configModule.redirectSignOut).toBe('')
   })
 
-  it('does not use the Cognito hosted domain as the sign-out redirect', async () => {
+  it('preserves the configured sign-out URL exactly', async () => {
+    const signOutUrl =
+      ' https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-test.apps.silver.devops.gov.bc.ca/ '
     window.config = {
       ...configuredRuntimeAuth,
-      VITE_REDIRECT_SIGN_OUT:
-        'https://lza-prod-fam-user-pool-domain.auth.ca-central-1.amazoncognito.com',
+      VITE_REDIRECT_SIGN_OUT: signOutUrl,
     }
 
     const configModule = await loadConfigModule()
     const oauth = configModule.default.Auth?.Cognito?.loginWith?.oauth
 
-    expect(oauth?.redirectSignOut).toEqual([`${window.location.origin}/`])
-    expect(configModule.redirectSignOut).toBe(`${window.location.origin}/`)
+    expect(oauth?.redirectSignOut).toEqual([
+      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-test.apps.silver.devops.gov.bc.ca/',
+    ])
+    expect(configModule.redirectSignOut).toBe(
+      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-test.apps.silver.devops.gov.bc.ca/',
+    )
   })
 })
