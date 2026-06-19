@@ -236,7 +236,7 @@ const canShowRoleScopedLink = (link: NavigationLink, roles: string[]): boolean =
   }
 
   if (hasRole(roles, 'ADMIN')) {
-    return link.roleScope === 'provincialApplicationSubmission'
+    return true
   }
 
   const hasFederalSubmitter = hasFederalSubmitterRole(roles)

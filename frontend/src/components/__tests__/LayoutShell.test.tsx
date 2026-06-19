@@ -73,7 +73,11 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: 'Advertising List (PDF)' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Advertising List (CSV)' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Help/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Upload application submission/i })).toBeVisible()
+    const uploadLinks = screen.getAllByRole('link', { name: /Upload application submission/i })
+    expect(uploadLinks.map((link) => link.getAttribute('href'))).toEqual([
+      '/provincial/application/upload',
+      '/federal/application/upload',
+    ])
     expect(screen.getByRole('link', { name: /LEXIS administration/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /Data upload/i })).toBeVisible()
     expect(document.querySelector('.csp-side-nav__icon')).not.toBeInTheDocument()
