@@ -64,6 +64,20 @@ class ValueUtilsTest {
   }
 
   @Test
+  void parseNonNegativeLongShouldReturnZeroOrPositiveLong() {
+    assertThat(ValueUtils.parseNonNegativeLong(" 0 ")).isZero();
+    assertThat(ValueUtils.parseNonNegativeLong(" 12 ")).isEqualTo(12L);
+  }
+
+  @Test
+  void parseNonNegativeLongShouldReturnNullForBlankInvalidOrNegativeValues() {
+    assertThat(ValueUtils.parseNonNegativeLong(null)).isNull();
+    assertThat(ValueUtils.parseNonNegativeLong(" ")).isNull();
+    assertThat(ValueUtils.parseNonNegativeLong("abc")).isNull();
+    assertThat(ValueUtils.parseNonNegativeLong("-1")).isNull();
+  }
+
+  @Test
   void parseDoubleShouldReturnParsedDouble() {
     assertThat(ValueUtils.parseDouble(" 12.5 ")).isEqualTo(12.5d);
   }

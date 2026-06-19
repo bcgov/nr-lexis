@@ -30,6 +30,14 @@ public final class TextUtils {
     return null;
   }
 
+  public static String normalizeClientNumber(String value) {
+    String normalized = trimToNull(value);
+    if (normalized == null || normalized.length() >= 8) {
+      return normalized;
+    }
+    return "0".repeat(8 - normalized.length()) + normalized;
+  }
+
   public static String defaultSystemUser(String userId) {
     String normalized = trimToNull(userId);
     return normalized == null ? "system" : normalized;

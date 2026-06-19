@@ -8,6 +8,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseNonNegat
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstTrimmedNonBlank;
+import static ca.bc.gov.mof.lexis.util.TextUtils.normalizeClientNumber;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
@@ -1391,14 +1392,6 @@ public class ApplicationDetailsRpcController {
         data == null ? null : data.phone(),
         data == null ? null : data.fax(),
         data == null ? null : data.email());
-  }
-
-  private String normalizeClientNumber(String clientNumber) {
-    String normalized = trimToNull(clientNumber);
-    if (normalized == null) {
-      return null;
-    }
-    return normalized.length() >= 8 ? normalized : "0".repeat(8 - normalized.length()) + normalized;
   }
 
   private boolean equalsIgnoreCase(String left, String right) {

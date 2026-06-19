@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.client;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.normalizeClientNumber;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
@@ -122,14 +123,6 @@ public class OracleClientLookupService implements ClientLookupService {
   private String replaceEmptyField(String value) {
     String normalized = trimToNull(value);
     return normalized == null ? NOT_ON_FILE : normalized;
-  }
-
-  private String normalizeClientNumber(String clientNumber) {
-    String normalized = trimToNull(clientNumber);
-    if (normalized == null) {
-      return null;
-    }
-    return normalized.length() >= 8 ? normalized : "0".repeat(8 - normalized.length()) + normalized;
   }
 
 }

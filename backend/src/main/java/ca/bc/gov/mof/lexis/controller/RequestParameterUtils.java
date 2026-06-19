@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.controller;
 import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
+import ca.bc.gov.mof.lexis.util.ValueUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -97,15 +98,7 @@ final class RequestParameterUtils {
   }
 
   static Long parsePositiveLong(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(rawValue.trim());
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
+    return ValueUtils.parsePositiveLong(rawValue);
   }
 
   static List<Long> parsePositiveLongs(MultiValueMap<String, String> parameters, String... names) {
@@ -132,26 +125,11 @@ final class RequestParameterUtils {
   }
 
   static Long parseNonNegativeLong(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(rawValue.trim());
-      return parsed >= 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
+    return ValueUtils.parseNonNegativeLong(rawValue);
   }
 
   static Double parseDouble(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      return Double.parseDouble(rawValue.trim());
-    } catch (NumberFormatException ex) {
-      return null;
-    }
+    return ValueUtils.parseDouble(rawValue);
   }
 
   static LocalDate parseDate(String rawValue) {
