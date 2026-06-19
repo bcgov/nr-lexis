@@ -5,12 +5,8 @@ import { useAuth } from '@/context/auth/useAuth'
 import AdminPage from '@/pages/Admin'
 import AdminPoliciesPage from '@/pages/AdminPolicies'
 import AdminUploadsPage from '@/pages/AdminUploads'
-import DashboardPage from '@/pages/Dashboard'
 import FederalPage from '@/pages/Federal'
 import FederalApplicationDetailsPage from '@/pages/FederalApplicationDetails'
-import IndianReservePage from '@/pages/IndianReserve'
-import IndianReservePermitCreatePage from '@/pages/IndianReservePermitCreate'
-import IndianReservePermitDetailsPage from '@/pages/IndianReservePermitDetails'
 import LandingPage from '@/pages/Landing'
 import NotFoundPage from '@/pages/NotFound'
 import ProvincialApplicationPage from '@/pages/ProvincialApplication'
@@ -24,7 +20,6 @@ import ProvincialOfferDetailsPage from '@/pages/ProvincialOfferDetails'
 import ProvincialOffersPage from '@/pages/ProvincialOffers'
 import ProvincialPage from '@/pages/Provincial'
 import ProvincialPermitPage from '@/pages/ProvincialPermit'
-import ProvincialPermitCreatePage from '@/pages/ProvincialPermitCreate'
 import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
 import ProvincialReviewPage from '@/pages/ProvincialReview'
 import ProvincialSummaryPage from '@/pages/ProvincialSummary'
@@ -38,6 +33,7 @@ export type RouteDescription = {
   isNavigation: boolean
   requiredActions?: string[]
   requiredActionsMatch?: 'any' | 'all'
+  roleScope?: 'provincial' | 'provincialApplicationSubmission' | 'federalApplicationSubmission'
 } & RouteObject
 
 const ProtectedRootRedirect: FC = () => {
@@ -48,18 +44,86 @@ const ProtectedRootRedirect: FC = () => {
 type RouteGuardProps = {
   requiredActions?: string[]
   requiredActionsMatch?: 'any' | 'all'
+  roleScope?: RouteDescription['roleScope']
   children: ReactNode
+}
+
+const hasProvincialSubmitterRole = (roles: string[]): boolean => {
+  return roles.some((role) => {
+    const normalizedRole = role.trim().toUpperCase()
+    return (
+      normalizedRole === 'PROVINCIAL_SUBMITTER' ||
+      normalizedRole === 'LEXIS_PROVINCIAL_SUBMITTER' ||
+      normalizedRole.startsWith('PROVINCIAL_SUBMITTER_') ||
+      normalizedRole.startsWith('LEXIS_PROVINCIAL_SUBMITTER_')
+    )
+  })
+}
+
+const hasFederalSubmitterRole = (roles: string[]): boolean => {
+  return roles.some((role) => {
+    const normalizedRole = role.trim().toUpperCase()
+    return (
+      normalizedRole === 'FEDERAL_SUBMITTER' ||
+      normalizedRole === 'LEXIS_FEDERAL_SUBMITTER' ||
+      normalizedRole.startsWith('FEDERAL_SUBMITTER_') ||
+      normalizedRole.startsWith('LEXIS_FEDERAL_SUBMITTER_')
+    )
+  })
+}
+
+const hasRole = (roles: string[], role: string): boolean => {
+  return roles.some((entry) => {
+    const normalizedRole = entry.trim().toUpperCase()
+    return normalizedRole === role || normalizedRole === `LEXIS_${role}`
+  })
+}
+
+const canAccessRoleScope = (
+  roles: string[],
+  roleScope: RouteDescription['roleScope'] = undefined,
+): boolean => {
+  if (!roleScope) {
+    return true
+  }
+
+  const hasAdminRole = hasRole(roles, 'ADMIN')
+  if (hasAdminRole) {
+    return true
+  }
+
+  const hasFederalSubmitter = hasFederalSubmitterRole(roles)
+  const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
+  const hasProvincialStaffRole =
+    hasRole(roles, 'READ_ONLY') ||
+    hasRole(roles, 'APPLICATION_APPROVER') ||
+    hasRole(roles, 'EXEMPTION_APPROVER')
+
+  if (roleScope === 'federalApplicationSubmission') {
+    return hasFederalSubmitter
+  }
+
+  if (roleScope === 'provincialApplicationSubmission') {
+    return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
+  }
+
+  return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
 }
 
 const RouteActionGuard: FC<RouteGuardProps> = ({
   children,
   requiredActions,
   requiredActionsMatch = 'any',
+  roleScope,
 }) => {
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
 
   if (!requiredActions || requiredActions.length === 0) {
     return <>{children}</>
+  }
+
+  if (!canAccessRoleScope(capabilities.roles, roleScope)) {
+    return <Navigate to="/unauthorized" replace />
   }
 
   const canAccessRoute =
@@ -82,8 +146,8 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
   },
   {
     path: '/dashboard',
-    id: 'Landing Dashboard Callback',
-    element: <LandingPage />,
+    id: 'Legacy Dashboard Redirect',
+    element: <Navigate to="/" replace />,
     isNavigation: false,
   },
   {
@@ -109,22 +173,19 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   },
   {
     path: '/dashboard',
-    id: 'Dashboard',
-    element: (
-      <Layout>
-        <DashboardPage />
-      </Layout>
-    ),
-    isNavigation: true,
+    id: 'Legacy Callback Redirect',
+    element: <ProtectedRootRedirect />,
+    isNavigation: false,
   },
   {
     path: '/provincial',
     id: 'Provincial',
+    roleScope: 'provincial',
     requiredActions: [
       '/summary',
       '/applicationsReview',
       '/applicationSearch',
-      'createApplication',
+      'uploadApplicationSubmission',
       '/exemptionSearch',
       '/offersSearch',
       '/permitSearch',
@@ -253,18 +314,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
-    path: '/provincial/permit/create',
-    id: 'Create Provincial Permit',
-    requiredActions: ['/permitSearch', 'createPermit'],
-    requiredActionsMatch: 'all',
-    element: (
-      <Layout>
-        <ProvincialPermitCreatePage />
-      </Layout>
-    ),
-    isNavigation: false,
-  },
-  {
     path: '/provincial/permit/:permitNumber',
     id: 'Provincial Permit Details',
     requiredActions: ['/permitSearch', '/permitDetails'],
@@ -322,36 +371,16 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
-    path: '/indian-reserve',
-    id: 'Indigenous Reserve',
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
+    path: '/federal/application/upload',
+    id: 'Upload Federal Application Submission',
+    roleScope: 'federalApplicationSubmission',
+    requiredActions: ['uploadApplicationSubmission'],
     element: (
       <Layout>
-        <IndianReservePage />
-      </Layout>
-    ),
-    isNavigation: true,
-  },
-  {
-    path: '/indian-reserve/permit/create',
-    id: 'Create Indigenous Reserve Permit',
-    requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
-    requiredActionsMatch: 'all',
-    element: (
-      <Layout>
-        <IndianReservePermitCreatePage />
-      </Layout>
-    ),
-    isNavigation: false,
-  },
-  {
-    path: '/indian-reserve/permit/:permitNumber',
-    id: 'Indigenous Reserve Permit Details',
-    requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
-    requiredActionsMatch: 'all',
-    element: (
-      <Layout>
-        <IndianReservePermitDetailsPage />
+        <AdminUploadsPage
+          lockedWorkflowType="applicationSubmission"
+          pageTitle="Upload Federal Application Submission"
+        />
       </Layout>
     ),
     isNavigation: false,
@@ -409,7 +438,8 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/application/upload',
     id: 'Upload Application Submission',
-    requiredActions: ['createApplication'],
+    roleScope: 'provincialApplicationSubmission',
+    requiredActions: ['uploadApplicationSubmission'],
     element: (
       <Layout>
         <AdminUploadsPage
@@ -483,6 +513,7 @@ export const getProtectedRoutes = (): RouteDescription[] => {
       <RouteActionGuard
         requiredActions={route.requiredActions}
         requiredActionsMatch={route.requiredActionsMatch}
+        roleScope={route.roleScope}
       >
         {route.element}
       </RouteActionGuard>

@@ -11,6 +11,6 @@ Pass cases:
 Failure cases:
 
 - `fail-missing-boom-number.xml` should fail because the package/boom number is missing.
-- `fail-federal-jurisdiction.xml` should fail because only provincial LEXIS submissions are supported.
+- `fail-federal-jurisdiction.xml` should fail because federal submissions require a federal application number.
 
 Use the pass files together to exercise multi-upload validation and submit. Use the failure files with one or more pass files to verify per-file validation errors in the upload queue.

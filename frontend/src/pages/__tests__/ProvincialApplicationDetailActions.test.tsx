@@ -15,7 +15,10 @@ import {
   fetchApplicationClientContacts,
   fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
-import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
+import {
+  fetchProvincialApplicationDetail,
+  releaseApplicationEditLock,
+} from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
   openApplicationDocument,
@@ -56,6 +59,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchProvincialApplicationDetail: vi.fn(),
+  releaseApplicationEditLock: vi.fn(),
 }))
 
 vi.mock('@/service/application-review-search-service', () => ({
@@ -141,6 +145,7 @@ const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
 const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
+const mockedReleaseApplicationEditLock = vi.mocked(releaseApplicationEditLock)
 const mockedFetchApplicationDocuments = vi.mocked(fetchApplicationDocuments)
 const mockedOpenApplicationDocument = vi.mocked(openApplicationDocument)
 const mockedRemoveApplicationDocument = vi.mocked(removeApplicationDocument)
@@ -257,6 +262,7 @@ describe('Provincial Application Detail Document Actions', () => {
       canPerform: () => true,
     } as any)
     mockedFetchProvincialApplicationDetail.mockResolvedValue(applicationDetail)
+    mockedReleaseApplicationEditLock.mockResolvedValue()
     mockedFetchApplicationDocuments.mockResolvedValue({
       rows: [],
       source: 'api',
@@ -718,6 +724,60 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+  })
+
+  it('blocks application edits when another user holds the edit lock', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      locked: true,
+      lockedBy: 'Reviewer One',
+      lockMessage:
+        'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
+    })
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '900',
+          name: 'locked-doc.pdf',
+          description: 'Locked document',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Locked: Yes')).toBeInTheDocument()
+    expect(
+      screen.getAllByText(
+        'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
+      ).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
+
+    const summaryTile = getApplicationSummaryTile()
+    expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+    expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
+    expect(await screen.findByText('locked-doc.pdf')).toBeInTheDocument()
+    screen
+      .getAllByRole('button', { name: 'Delete' })
+      .forEach((button) => expect(button).toBeDisabled())
+    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
   })
 
   it('uploads application documents inline and refreshes document rows', async () => {
@@ -1307,6 +1367,10 @@ describe('Provincial Application Detail Document Actions', () => {
       await screen.findByRole('heading', { name: 'Package Details' })
     ).closest('section')
     expect(packageDetailsSection).toBeTruthy()
+    expect(
+      within(packageDetailsSection as HTMLElement).getAllByText('Package Number').length,
+    ).toBeGreaterThan(1)
+    expect(within(packageDetailsSection as HTMLElement).getByText('PKG-1')).toBeInTheDocument()
 
     await userEvent.click(
       within(packageDetailsSection as HTMLElement).getByRole('button', {
@@ -1315,7 +1379,7 @@ describe('Provincial Application Detail Document Actions', () => {
     )
 
     await waitFor(() => {
-      expect(mockedDeleteApplicationPackage).toHaveBeenCalledWith('PKG-1')
+      expect(mockedDeleteApplicationPackage).toHaveBeenCalledWith('PKG-1', '321')
     })
     expect(await screen.findByText('Package PKG-1 deleted.')).toBeInTheDocument()
   })
@@ -1515,7 +1579,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedFetchApplicationUniqueScales).toHaveBeenCalledWith('321')
   })
 
-  it('adds, looks up, and deletes package scales', async () => {
+  it('adds and deletes package scales', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -1541,7 +1605,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
     fireEvent.change(screen.getByLabelText('Pieces'), { target: { value: '2' } })
     fireEvent.change(screen.getByLabelText('Scale Volume'), { target: { value: '8.0' } })
-    await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
 
     await waitFor(() => {
       expect(mockedAddApplicationScaleToPackage).toHaveBeenCalledWith(
@@ -1557,11 +1621,35 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(
       detailFetchCountAfterInitialLoad,
     )
+    expect(await screen.findByText('Scale 56 added.')).toBeInTheDocument()
+
+    const scaleRow = screen.getByText('TM001').closest('tr')
+    expect(scaleRow).toBeTruthy()
+    expect(within(scaleRow as HTMLElement).getByText('S')).toBeInTheDocument()
+    fireEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => {
+      expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55', '321')
+    })
+  })
+
+  it('looks up package scales by timber mark and scale id', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('TM001')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Scale ID or timber mark'), {
       target: { value: 'TM001' },
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
     expect(
       await screen.findByText(
         'Found 1 scale row for timber mark TM001: TM001 Douglas-fir/Sawlog 5 pcs 20.0 m3',
@@ -1570,17 +1658,9 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedFetchApplicationScaleDetails).not.toHaveBeenCalled()
 
     fireEvent.change(screen.getByLabelText('Scale ID or timber mark'), { target: { value: '55' } })
-    await userEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
     expect(await screen.findByText('TM001 FI/1 5 pcs 20.0 m3')).toBeInTheDocument()
     expect(mockedFetchApplicationScaleDetails).toHaveBeenCalledWith('55')
-
-    const scaleRow = screen.getByText('TM001').closest('tr')
-    expect(scaleRow).toBeTruthy()
-    expect(within(scaleRow as HTMLElement).getByText('S')).toBeInTheDocument()
-    await userEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
-    await waitFor(() => {
-      expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55')
-    })
   })
 
   it('shows field validation before adding an empty scale', async () => {
@@ -2192,6 +2272,10 @@ describe('Provincial Application Detail Document Actions', () => {
       'Rejected',
     )
     await userEvent.type(within(reviewTile).getByLabelText(/review remark/i), 'Needs correction')
+    mockedSendApplicationReviewStatusEmail.mockResolvedValueOnce({
+      success: false,
+      message: 'Application status email is not configured yet. No email was sent.',
+    })
     await userEvent.click(
       within(reviewTile).getByRole('button', { name: 'Update Status and Send Email' }),
     )
@@ -2210,7 +2294,9 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
     expect(
-      await screen.findByText('Application status updated and email sent.'),
+      await screen.findByText(
+        'Application status email is not configured yet. The application status was updated, but no email was sent.',
+      ),
     ).toBeInTheDocument()
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
       'agent@example.test',

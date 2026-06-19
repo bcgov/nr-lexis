@@ -2,6 +2,8 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.firstPresent;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
@@ -9,6 +11,7 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -17,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,9 +36,13 @@ public class ExemptionController {
   private static final Logger LOGGER = LoggerFactory.getLogger(ExemptionController.class);
 
   private final ObjectProvider<ExemptionService> serviceProvider;
+  private final LexisSessionService sessionService;
 
-  public ExemptionController(ObjectProvider<ExemptionService> serviceProvider) {
+  public ExemptionController(
+      ObjectProvider<ExemptionService> serviceProvider,
+      LexisSessionService sessionService) {
     this.serviceProvider = serviceProvider;
+    this.sessionService = sessionService;
   }
 
   @GetMapping("/search/options")
@@ -66,11 +74,18 @@ public class ExemptionController {
       @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      Authentication authentication) {
     ExemptionService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption service unavailable - returning no content for search");
       return ResponseEntity.noContent().build();
+    }
+
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    if (scopedClientNumber != null) {
+      applicantClientNumber = scopedClientNumber;
+      ownerClientNumber = null;
     }
 
     ExemptionSearchCriteria criteria =
@@ -114,11 +129,18 @@ public class ExemptionController {
       @RequestParam(name = "listToDate", required = false) String listToDate,
       @RequestParam(name = "applicantClientNumber", required = false) String applicantClientNumber,
       @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
-      @RequestParam(name = "region", required = false) List<Long> regionNumbers) {
+      @RequestParam(name = "region", required = false) List<Long> regionNumbers,
+      Authentication authentication) {
     ExemptionService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption service unavailable - returning no content for count");
       return ResponseEntity.noContent().build();
+    }
+
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    if (scopedClientNumber != null) {
+      applicantClientNumber = scopedClientNumber;
+      ownerClientNumber = null;
     }
 
     ExemptionSearchCriteria criteria =
@@ -146,13 +168,19 @@ public class ExemptionController {
 
   @GetMapping("/{exemptionNumber}")
   public ResponseEntity<ExemptionDetailDto> getByExemptionNumber(
-      @PathVariable("exemptionNumber") String exemptionNumber) {
+      @PathVariable("exemptionNumber") String exemptionNumber,
+      Authentication authentication) {
     ExemptionService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption service unavailable - returning no content for detail");
       return ResponseEntity.noContent().build();
     }
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     return service.findByExemptionNumber(exemptionNumber)
+        .filter(
+            detail ->
+                matchesScopedClient(
+                    scopedClientNumber, detail.ownerClientNumber(), detail.agentClientNumber()))
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.notFound().build());
   }

@@ -356,6 +356,8 @@ class OfferDetailsRpcControllerTest {
         false,
         false,
         false,
+        null,
+        null,
         packages,
         List.of(),
         List.of());

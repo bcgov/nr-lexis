@@ -121,7 +121,7 @@ describe('Landing auth flow smoke', () => {
     expect(login).toHaveBeenCalledWith('business-bceid')
   })
 
-  it('navigates to default route when logged in without exposing session details', async () => {
+  it('redirects logged in users to the default route without exposing session details', async () => {
     const login = vi.fn().mockResolvedValue(undefined)
     const refresh = vi.fn().mockResolvedValue(undefined)
 
@@ -147,12 +147,16 @@ describe('Landing auth flow smoke', () => {
 
     renderPage()
 
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/provincial/summary', { replace: true })
+    })
+
     expect(screen.queryByText('idir\\analyst')).not.toBeInTheDocument()
     expect(screen.queryByText('PROVINCIAL_SUBMITTER_00012345')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Refresh Session' })).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Continue to Application' }))
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/summary')
+    expect(
+      screen.queryByRole('button', { name: 'Continue to Application' }),
+    ).not.toBeInTheDocument()
     expect(refresh).not.toHaveBeenCalled()
   })
 

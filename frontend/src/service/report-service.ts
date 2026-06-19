@@ -1,4 +1,4 @@
-import type { AxiosRequestConfig } from 'axios'
+import axios, { type AxiosRequestConfig } from 'axios'
 import { env } from '@/env'
 import apiService from '@/service/api-service'
 import { extractResponseFilename, getResponseHeaderValue } from '@/service/http-response-utils'
@@ -19,6 +19,15 @@ export type RunReportResult = {
 type ReportApiPayload = {
   parameters: Record<string, string>
   format: string
+}
+
+const DEFAULT_REPORT_ERROR_MESSAGE = 'Unable to generate report. Check values and try again.'
+
+export class ReportRequestError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ReportRequestError'
+  }
 }
 
 const splitCsv = (value: string): string[] =>
@@ -201,6 +210,20 @@ const getDefaultFilename = (
   return `lexis-${reportId}.${resolveReportExtension(reportId, values, actionMapping)}`
 }
 
+const readErrorPayload = async (payload: unknown): Promise<string> => {
+  if (payload instanceof Blob) {
+    return (await payload.text()).trim()
+  }
+  if (typeof payload === 'string') {
+    return payload.trim()
+  }
+  if (payload && typeof payload === 'object' && 'message' in payload) {
+    const message = (payload as { message?: unknown }).message
+    return typeof message === 'string' ? message.trim() : ''
+  }
+  return ''
+}
+
 export const runReport = async (request: RunReportRequest): Promise<RunReportResult> => {
   const requestConfig: AxiosRequestConfig<ReportApiPayload> = {
     responseType: 'blob',
@@ -210,13 +233,22 @@ export const runReport = async (request: RunReportRequest): Promise<RunReportRes
     },
   }
 
-  const response = await apiService
-    .getAxiosInstance()
-    .post<Blob>(
-      buildModernReportEndpoint(request.reportId),
-      buildReportPayload(request.reportId, request.values, request.actionMapping),
-      requestConfig,
-    )
+  let response
+  try {
+    response = await apiService
+      .getAxiosInstance()
+      .post<Blob>(
+        buildModernReportEndpoint(request.reportId),
+        buildReportPayload(request.reportId, request.values, request.actionMapping),
+        requestConfig,
+      )
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const message = await readErrorPayload(error.response?.data)
+      throw new ReportRequestError(message || DEFAULT_REPORT_ERROR_MESSAGE)
+    }
+    throw error
+  }
 
   const contentType =
     getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream'

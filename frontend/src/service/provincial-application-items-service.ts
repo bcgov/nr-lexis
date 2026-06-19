@@ -732,6 +732,7 @@ export const updateApplicationSummary = async (
 
 export const deleteApplicationScale = async (
   scaleId: string,
+  applicationNumber: string,
 ): Promise<DeleteApplicationItemResult> => {
   try {
     const response = await apiService
@@ -739,6 +740,7 @@ export const deleteApplicationScale = async (
       .delete<unknown>('/lexis/rpc/application-details/scale', {
         params: {
           scaleId,
+          applicationNumber,
         },
       })
     const source = (response.data ?? {}) as Record<string, unknown>
@@ -750,6 +752,7 @@ export const deleteApplicationScale = async (
 
 export const deleteApplicationPackage = async (
   packageNumber: string,
+  applicationNumber: string,
 ): Promise<DeleteApplicationItemResult> => {
   try {
     const response = await apiService
@@ -757,6 +760,7 @@ export const deleteApplicationPackage = async (
       .delete<unknown>('/lexis/rpc/application-details/package', {
         params: {
           packageNumber,
+          applicationNumber,
         },
       })
     const source = (response.data ?? {}) as Record<string, unknown>

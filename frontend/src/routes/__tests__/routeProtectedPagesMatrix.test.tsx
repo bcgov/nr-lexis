@@ -13,6 +13,14 @@ const EXPECTED_CORE_PAGES: RouteExpectation[] = [
     requiredActions: ['/applicationSearch'],
   },
   {
+    path: '/provincial/application/upload',
+    requiredActions: ['uploadApplicationSubmission'],
+  },
+  {
+    path: '/federal/application/upload',
+    requiredActions: ['uploadApplicationSubmission'],
+  },
+  {
     path: '/provincial/application/:applicationNumber',
     requiredActions: ['/applicationSearch', '/applicationDetails'],
     requiredActionsMatch: 'all',
@@ -55,10 +63,6 @@ const EXPECTED_CORE_PAGES: RouteExpectation[] = [
   {
     path: '/federal',
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
-  },
-  {
-    path: '/indian-reserve',
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
   },
 ]
 

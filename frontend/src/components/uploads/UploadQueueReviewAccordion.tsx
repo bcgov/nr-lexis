@@ -173,6 +173,12 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                         <dt>Jurisdiction</dt>
                         <dd>{formatOptional(submissionSummary.jurisdictionCode)}</dd>
                       </div>
+                      {submissionSummary.federalApplicationNumber && (
+                        <div>
+                          <dt>Federal application</dt>
+                          <dd>{submissionSummary.federalApplicationNumber}</dd>
+                        </div>
+                      )}
                       <div>
                         <dt>Source status</dt>
                         <dd>{formatOptional(submissionSummary.sourceApplicationStatusCode)}</dd>

@@ -119,7 +119,7 @@ const QUICK_ACTIONS: ProvincialQuickAction[] = [
     id: 'uploadApplicationSubmission',
     label: 'Upload application submission',
     path: '/provincial/application/upload',
-    requiredActions: ['createApplication'],
+    requiredActions: ['uploadApplicationSubmission'],
   },
   {
     id: 'createExemption',
@@ -132,12 +132,6 @@ const QUICK_ACTIONS: ProvincialQuickAction[] = [
     label: 'Create offer',
     path: '/provincial/offers/create',
     requiredActions: ['/offersSearch', 'createOffer'],
-  },
-  {
-    id: 'createPermit',
-    label: 'Create permit',
-    path: '/provincial/permit/create',
-    requiredActions: ['/permitSearch', 'createPermit'],
   },
   {
     id: 'openReviewQueue',

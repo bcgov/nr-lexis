@@ -57,7 +57,7 @@ const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   {
     type: 'applicationSubmission',
     label: 'Application submission upload',
-    requiredAction: 'createApplication',
+    requiredAction: 'uploadApplicationSubmission',
     numberFieldLabel: '',
     numberFieldPlaceholder: '',
   },
@@ -391,7 +391,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
   const [fileInputKey, setFileInputKey] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
-  const [successTitle, setSuccessTitle] = useState(defaultSuccessTitle(initialWorkflow))
+  const [successTitle, setSuccessTitle] = useState(() => defaultSuccessTitle(initialWorkflow))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<UploadField>>({})
   const [showValidationErrors, setShowValidationErrors] = useState(false)

@@ -211,7 +211,7 @@ describe('report-service', () => {
 
     const result = await runReport({
       reportId: 'biweeklyListing',
-      actionMapping: 'generateIndustryCSV',
+      actionMapping: 'generate',
       values: {
         outputFormat: 'CSV',
       },
@@ -222,6 +222,29 @@ describe('report-service', () => {
     const [path, payload] = postMock.mock.calls[0]
     expect(path).toBe('/lexis/rpc/reports/biweeklyListing')
     expect(payload).toEqual({ parameters: {}, format: 'CSV' })
+  })
+
+  it('surfaces plain text report validation errors from blob responses', async () => {
+    postMock.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        data: new Blob([
+          'Choose a Listing from date and Listing to date before generating the Advertising List.',
+        ]),
+      },
+    })
+
+    await expect(
+      runReport({
+        reportId: 'biweeklyListing',
+        actionMapping: 'generate',
+        values: {},
+      }),
+    ).rejects.toMatchObject({
+      name: 'ReportRequestError',
+      message:
+        'Choose a Listing from date and Listing to date before generating the Advertising List.',
+    })
   })
 
   it('expands tenure and timber mark csv values into modern and legacy fields', async () => {

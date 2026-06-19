@@ -9,19 +9,60 @@
 @use '@carbon/react';
 
 @font-face {
-  font-family: 'BCSans';
+  font-family: 'BC Sans';
   font-display: swap;
-  font-weight: 400;
-  src: url('https://www2.gov.bc.ca/assets/gov/government/connect/bc-gov-typeset/fonts/bc-sans/BCSans-Regular.woff2')
-    format('woff2');
+  font-weight: normal;
+  src:
+    url('/fonts/2023_01_01_BCSans-Regular_2f.woff2') format('woff2'),
+    url('/fonts/2023_01_01_BCSans-Regular_2f.woff') format('woff');
 }
 
 @font-face {
-  font-family: 'BCSans';
+  font-family: 'BC Sans';
   font-display: swap;
-  font-weight: 600 700;
-  src: url('https://www2.gov.bc.ca/assets/gov/government/connect/bc-gov-typeset/fonts/bc-sans/BCSans-Bold.woff2')
-    format('woff2');
+  font-style: italic;
+  font-weight: normal;
+  src:
+    url('/fonts/2023_01_01_BCSans-Italic_2f.woff2') format('woff2'),
+    url('/fonts/2023_01_01_BCSans-Italic_2f.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'BC Sans';
+  font-display: swap;
+  font-weight: bold;
+  src:
+    url('/fonts/2023_01_01_BCSans-Bold_2f.woff2') format('woff2'),
+    url('/fonts/2023_01_01_BCSans-Bold_2f.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'BC Sans';
+  font-display: swap;
+  font-style: italic;
+  font-weight: bold;
+  src:
+    url('/fonts/2023_01_01_BCSans-BoldItalic_2f.woff2') format('woff2'),
+    url('/fonts/2023_01_01_BCSans-BoldItalic_2f.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'BC Sans';
+  font-display: swap;
+  font-weight: light;
+  src:
+    url('/fonts/2023_03_14_BCSans-Light_2g.woff2') format('woff2'),
+    url('/fonts/2023_03_14_BCSans-Light_2g.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'BC Sans';
+  font-display: swap;
+  font-style: italic;
+  font-weight: light;
+  src:
+    url('/fonts/2023_01_01_BCSans-LightItalic_2f.woff2') format('woff2'),
+    url('/fonts/2023_01_01_BCSans-LightItalic_2f.woff') format('woff');
 }
 
 :root {
@@ -67,6 +108,25 @@
   --csp-table-row-alt-bg: #e0e0e0;
   --csp-avatar-bg: var(--csp-interactive);
   --csp-avatar-text: #ffffff;
+  --cds-background-brand: var(--csp-background-brand);
+  --cds-border-interactive: var(--csp-border-interactive);
+  --cds-button-primary: var(--csp-button-primary);
+  --cds-button-primary-active: var(--csp-interactive-active);
+  --cds-button-primary-hover: var(--csp-interactive-hover);
+  --cds-button-tertiary: var(--csp-interactive);
+  --cds-button-tertiary-active: var(--csp-interactive-active);
+  --cds-button-tertiary-hover: var(--csp-interactive-hover);
+  --cds-focus: var(--csp-focus);
+  --cds-highlight: var(--csp-brand-blue-tint);
+  --cds-icon-interactive: var(--csp-interactive);
+  --cds-interactive: var(--csp-interactive);
+  --cds-link-primary: var(--csp-link-primary);
+  --cds-link-primary-hover: var(--csp-link-hover);
+  --cds-support-info: var(--csp-interactive);
+  --cds-tag-background-blue: var(--csp-brand-blue-tint);
+  --cds-tag-border-blue: var(--csp-brand-blue);
+  --cds-tag-color-blue: var(--csp-brand-blue-active);
+  --cds-tag-hover-blue: var(--csp-brand-blue-tint-hover);
 }
 
 body {
@@ -75,7 +135,7 @@ body {
   color: var(--csp-text-primary);
   background-color: var(--csp-content-bg);
   font-family:
-    'BCSans',
+    'BC Sans',
     'IBM Plex Sans',
     -apple-system,
     system-ui,
@@ -95,6 +155,9 @@ body {
   --cds-button-primary: var(--csp-button-primary);
   --cds-button-primary-active: var(--csp-interactive-active);
   --cds-button-primary-hover: var(--csp-interactive-hover);
+  --cds-button-tertiary: var(--csp-interactive);
+  --cds-button-tertiary-active: var(--csp-interactive-active);
+  --cds-button-tertiary-hover: var(--csp-interactive-hover);
   --cds-focus: var(--csp-focus);
   --cds-highlight: var(--csp-brand-blue-tint);
   --cds-icon-interactive: var(--csp-interactive);
@@ -741,11 +804,6 @@ body {
   display: flex;
   gap: 1rem;
   margin-top: 1rem;
-}
-
-.dashboard-page {
-  margin: 0;
-  width: 100%;
 }
 
 .dashboard-title {
@@ -1482,12 +1540,13 @@ body {
 .detail-field-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   margin: 0;
 }
 
 .detail-field-item {
   margin: 0;
+  min-width: 0;
 }
 
 .detail-field-label {
@@ -1499,6 +1558,9 @@ body {
 .detail-field-value {
   font-weight: 600;
   margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .detail-list {
@@ -1572,6 +1634,12 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.application-detail-lock-message {
+  color: var(--cds-text-secondary);
+  margin: 0.75rem 0 0;
+  max-inline-size: 72rem;
 }
 
 .application-detail-summary .legacy-search-grid {

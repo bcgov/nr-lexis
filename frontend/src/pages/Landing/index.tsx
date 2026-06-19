@@ -1,4 +1,4 @@
-import { useState, type FC } from 'react'
+import { useEffect, useState, type FC } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Column, Grid } from '@carbon/react'
 import { Login } from '@carbon/icons-react'
@@ -13,6 +13,12 @@ const LandingPage: FC = () => {
   const { defaultRoute, isLoading, isLoggedIn, login, usesExternalLogin } = useAuth()
 
   const [errorMessage, setErrorMessage] = useState('')
+
+  useEffect(() => {
+    if (!isLoading && isLoggedIn) {
+      navigate(defaultRoute, { replace: true })
+    }
+  }, [defaultRoute, isLoading, isLoggedIn, navigate])
 
   const onLogin = async (provider: LoginProvider) => {
     setErrorMessage('')
@@ -65,16 +71,6 @@ const LandingPage: FC = () => {
                   LEXIS login is not configured for this environment. Contact the system
                   administrator.
                 </p>
-              )}
-
-              {isLoggedIn && (
-                <Button
-                  kind="secondary"
-                  onClick={() => navigate(defaultRoute)}
-                  disabled={isLoading}
-                >
-                  Continue to Application
-                </Button>
               )}
             </div>
 

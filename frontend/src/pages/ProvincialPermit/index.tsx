@@ -141,7 +141,7 @@ const buildSearchParams = (
 }
 
 const ProvincialPermitPage: FC = () => {
-  const { capabilities, canPerform } = useAuth()
+  const { capabilities } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
@@ -149,7 +149,6 @@ const ProvincialPermitPage: FC = () => {
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const permitTotalCacheRef = useRef<Map<string, PermitTotalCacheEntry>>(new Map())
-  const canCreatePermit = canPerform('createPermit')
   const withCurrentSearch = useCallback(
     (path: string): string => {
       const query = searchParams.toString()
@@ -314,28 +313,6 @@ const ProvincialPermitPage: FC = () => {
     void loadOptions()
   }, [])
 
-  useEffect(() => {
-    if (regionOptions.length === 0) {
-      return
-    }
-
-    const hasSearchQuery = searchParams.toString().length > 0
-    if (hasSearchQuery) {
-      return
-    }
-
-    setSearchParams(
-      buildSearchParams(
-        { ...INITIAL_FILTERS, region: regionOptions.map((option) => option.id) },
-        DEFAULT_SORT_FIELD,
-        DEFAULT_SORT_DIRECTION,
-        DEFAULT_PAGE,
-        DEFAULT_PAGE_SIZE,
-      ),
-      { replace: true },
-    )
-  }, [regionOptions, searchParams, setSearchParams])
-
   const onSearch = () => {
     setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
   }
@@ -450,11 +427,6 @@ const ProvincialPermitPage: FC = () => {
               <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
                 Clear Filters
               </Button>
-              {canCreatePermit && (
-                <Link className="cds--link" to="/provincial/permit/create">
-                  Add Permit
-                </Link>
-              )}
             </div>
           </Tile>
         </section>

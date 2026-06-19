@@ -41,6 +41,10 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final String EXEMPTION_NUMBER_ASSIGNED_MESSAGE =
       "* - this exemption number has already been assigned";
   private static final String SAVE_SUCCESS_MESSAGE = "The exemption was saved successfully.";
+  private static final String EMAIL_NOT_CONFIGURED_MESSAGE =
+      "Exemption approval email is not configured yet. No email was sent.";
+  private static final String EMAILS_NOT_CONFIGURED_MESSAGE =
+      "Exemption approval email is not configured yet. No emails were sent.";
   private static final double MAX_APPROVED_VOLUME = 9_999_999.9d;
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
@@ -55,7 +59,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   @Override
   public ExemptionApplicationsResponse getApplications(
-      String exemptionNumber, boolean canViewFederalApplications, boolean canViewReserveApplications) {
+      String exemptionNumber, boolean canViewFederalApplications) {
     List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> rows =
         repository.findApplicationSummariesByExemptionNumber(exemptionNumber);
 
@@ -69,8 +73,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
           && !canViewFederalApplications) {
         continue;
       }
-      if (JURISDICTION_RESERVE.equalsIgnoreCase(row.jurisdictionCode())
-          && !canViewReserveApplications) {
+      if (JURISDICTION_RESERVE.equalsIgnoreCase(row.jurisdictionCode())) {
         continue;
       }
 
@@ -289,8 +292,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       Long applicationNumber,
       String exemptionNumber,
       String userId,
-      boolean canViewFederalApplications,
-      boolean canViewReserveApplications) {
+      boolean canViewFederalApplications) {
     String normalizedExemptionNumber = trimToNull(exemptionNumber);
     List<String> errors = new ArrayList<>();
 
@@ -325,7 +327,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       errors.add("Application cannot be added to this exemption because the client number does not match.");
     } else if (!canViewFederalApplications && JURISDICTION_FEDERAL.equalsIgnoreCase(application.exportJurisdictionCode())) {
       errors.add("Insufficient privileges to add this application.");
-    } else if (!canViewReserveApplications && JURISDICTION_RESERVE.equalsIgnoreCase(application.exportJurisdictionCode())) {
+    } else if (JURISDICTION_RESERVE.equalsIgnoreCase(application.exportJurisdictionCode())) {
       errors.add("Insufficient privileges to add this application.");
     }
 
@@ -393,9 +395,9 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   @Override
   public ExemptionApprovalEmailResult sendExemptionApprovalEmail(
       String exemptionNumber, String toEmailAddress) {
-    boolean success = stageExemptionApprovalEmail(exemptionNumber, toEmailAddress);
+    boolean staged = stageExemptionApprovalEmail(exemptionNumber, toEmailAddress);
     return new ExemptionApprovalEmailResult(
-        success, success ? "Email sent successfully." : "There was a problem sending your email.");
+        false, staged ? EMAIL_NOT_CONFIGURED_MESSAGE : "Exemption approval email could not be prepared.");
   }
 
   @Override
@@ -417,16 +419,15 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         });
 
     if (failures.isEmpty()) {
-      return new ExemptionApprovalEmailResult(true, "Emails sent successfully.");
+      return new ExemptionApprovalEmailResult(false, EMAILS_NOT_CONFIGURED_MESSAGE);
     }
     if (!successes.isEmpty()) {
       return new ExemptionApprovalEmailResult(
-          true,
-          "Sending one or more emails failed.</br> The "
-              + singularPlural(successes).replace("{0}", String.join(", ", successes))
-              + " were sent successfully, but the "
-              + singularPlural(failures).replace("{0}", String.join(", ", failures))
-              + " were not sent successfully.");
+          false,
+          EMAILS_NOT_CONFIGURED_MESSAGE
+              + " Email could not be prepared for exemption(s): "
+              + String.join(", ", failures)
+              + ".");
     }
     return new ExemptionApprovalEmailResult(false, "There was a problem sending the e-mail(s).");
   }
@@ -567,8 +568,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             "Insufficient privileges to add application "
                 + displayApplicationNumber(applicationNumber)
                 + ".");
-      } else if (!request.canViewReserveApplications()
-          && JURISDICTION_RESERVE.equalsIgnoreCase(application.exportJurisdictionCode())) {
+      } else if (JURISDICTION_RESERVE.equalsIgnoreCase(application.exportJurisdictionCode())) {
         errors.add(
             "Insufficient privileges to add application "
                 + displayApplicationNumber(applicationNumber)
@@ -793,14 +793,10 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         .toList();
   }
 
-  private String singularPlural(List<String> count) {
-    return count.size() > 1 ? "e-mails for exemptions: {0} were" : "e-mail for exemption: {0} was";
-  }
-
   private CreateExemptionRequest normalizeCreateExemptionRequest(CreateExemptionRequest input) {
     if (input == null) {
       return new CreateExemptionRequest(
-          null, null, null, null, null, null, null, null, null, List.of(), false, false, List.of());
+          null, null, null, null, null, null, null, null, null, List.of(), false, List.of());
     }
     List<Long> applicationNumbers =
         input.applicationNumbers() == null
@@ -828,7 +824,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         input.enableRateOverride(),
         applicationNumbers,
         input.canViewFederalApplications(),
-        input.canViewReserveApplications(),
         regions);
   }
 

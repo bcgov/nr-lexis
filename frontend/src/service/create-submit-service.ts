@@ -121,20 +121,6 @@ const getProvincialOfferCreatePath = (): string => {
   return getConfiguredPath(env.VITE_LEXIS_CREATE_OFFER_ENDPOINT, '/lexis/offerDetailsRPC')
 }
 
-const getProvincialPermitCreatePath = (): string => {
-  return getConfiguredPath(
-    env.VITE_LEXIS_CREATE_PERMIT_ENDPOINT,
-    '/lexis/rpc/permit-details/add-permit',
-  )
-}
-
-const getIndigenousReservePermitCreatePath = (): string => {
-  return getConfiguredPath(
-    env.VITE_LEXIS_CREATE_INDIGENOUS_PERMIT_ENDPOINT,
-    '/lexis/indianReservePermitDetails',
-  )
-}
-
 const parseCreateResponse = (
   payload: LegacyCreateResponse,
   createdIdKeyCandidates: Array<keyof LegacyCreateResponse>,
@@ -373,103 +359,6 @@ export const submitProvincialOfferCreate = async (
   } catch (error) {
     return buildFailureResult(
       'Offer submission failed. Please review the form and try again. If the problem persists, contact support.',
-      error,
-    )
-  }
-}
-
-export type ProvincialPermitCreateSubmission = {
-  applicationNumber: string
-  packageNumber: string
-  exemptionNumber: string
-  region: string
-  permitStatus: string
-  applicantClientNumber: string
-  ownerClientNumber: string
-  submitDate: string
-  issueDate: string
-  estimatedShippingDate: string
-  permitVolume: string
-  remarks: string
-}
-
-export const submitProvincialPermitCreate = async (
-  form: ProvincialPermitCreateSubmission,
-): Promise<CreateSubmissionResult> => {
-  try {
-    const payload = await postLegacyForm(
-      getProvincialPermitCreatePath(),
-      withCreateActionMapping('addPermit', {
-        permitStatus: form.permitStatus,
-        permitIssueDate: form.issueDate,
-        estimatedShippingDate: form.estimatedShippingDate,
-        exemptionNumber: form.exemptionNumber,
-        orgUnitNo: form.region,
-        region: form.region,
-        permitSubmitDate: form.submitDate,
-        permitTotalVolume: form.permitVolume,
-        ownerClientNumber: form.ownerClientNumber,
-        agentClientNumber: form.applicantClientNumber,
-        permitRemarks: form.remarks,
-        oicApplicationNumber: form.applicationNumber,
-        packageNumber: form.packageNumber,
-      }),
-    )
-    return parseCreateResponse(payload, ['permitNumber'])
-  } catch (error) {
-    return buildFailureResult(
-      'Permit submission failed. Please review the form and try again. If the problem persists, contact support.',
-      error,
-      'Unable to submit provincial permit create request. Submit endpoint is unavailable in this environment (status 404).',
-    )
-  }
-}
-
-export type IndianReservePermitCreateSubmission = {
-  permitNumber: string
-  packageNumber: string
-  clientNumber: string
-  clientLocation: string
-  region: string
-  applicationDate: string
-  permitIssueDate: string
-  estimatedShippingDate: string
-  destinationCountry: string
-  transportTypeCode: string
-  transportName: string
-  portOfExport: string
-  otherPortOfExport: string
-  remarks: string
-}
-
-export const submitIndianReservePermitCreate = async (
-  form: IndianReservePermitCreateSubmission,
-): Promise<CreateSubmissionResult> => {
-  try {
-    const payload = await postLegacyForm(
-      getIndigenousReservePermitCreatePath(),
-      withCreateActionMapping('saveReservePermit', {
-        applicationNumber: '0',
-        clientNumber: form.clientNumber,
-        clientLocation: form.clientLocation,
-        permitNumber: form.permitNumber,
-        region: form.region,
-        applicationDate: form.applicationDate,
-        permitIssueDate: form.permitIssueDate,
-        estShippingDate: form.estimatedShippingDate,
-        destinationCountry: form.destinationCountry,
-        transportTypeCode: form.transportTypeCode,
-        transportName: form.transportName,
-        portOfExport: form.portOfExport,
-        otherPortOfExport: form.otherPortOfExport,
-        permitRemarks: form.remarks,
-        packageNumber: form.packageNumber,
-      }),
-    )
-    return parseCreateResponse(payload, ['permitNumber'])
-  } catch (error) {
-    return buildFailureResult(
-      'Indigenous reserve permit submission failed. Please review the form and try again. If the problem persists, contact support.',
       error,
     )
   }

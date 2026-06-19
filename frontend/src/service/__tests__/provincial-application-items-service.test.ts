@@ -382,11 +382,12 @@ describe('provincial-application-items-service', () => {
       },
     })
 
-    const result = await deleteApplicationScale('55')
+    const result = await deleteApplicationScale('55', '321')
 
     expect(result).toEqual({ success: true })
     expect(deleteMock).toHaveBeenCalledWith('/lexis/rpc/application-details/scale', {
       params: {
+        applicationNumber: '321',
         scaleId: '55',
       },
     })

@@ -67,7 +67,7 @@ Grouped by area; see `controller/` for request and response contracts.
 | Actuator | `/actuator/health`, `/actuator/prometheus` | Protected operational endpoints. Requires authentication and `LEXIS_ADMIN`. |
 | Session | `/api/lexis/session/*` | Session capabilities and logoff routes. |
 | Provincial workflows | `/api/lexis/applications`, `/api/lexis/exemptions`, `/api/lexis/permits`, `/api/lexis/purchase-offers` | Search, options, details, and workflow actions. |
-| Federal and reserve workflows | `/api/lexis/federal`, `/api/lexis/indian-reserve` | Federal application and reserve permit workflows. |
+| Federal workflows | `/api/lexis/federal` | Federal application search and detail workflows. |
 | Reports | `/api/lexis/reports/*` | CSV, PDF, and spreadsheet outputs. |
 | Admin and uploads | `/api/lexis/admin/*`, `/api/lexis/*Upload` | Policy administration and upload workflows. |
 

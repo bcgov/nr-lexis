@@ -66,21 +66,18 @@ describe('Provincial Permit Search Actions', () => {
     })
   })
 
-  it('shows add permit link only when createPermit action is granted', async () => {
+  it('does not expose the retired add permit link', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createPermit',
+      canPerform: () => true,
     } as any)
 
     renderPage()
     await screen.findByText('7001')
 
-    expect(screen.getByRole('link', { name: 'Add Permit' })).toHaveAttribute(
-      'href',
-      '/provincial/permit/create',
-    )
+    expect(screen.queryByRole('link', { name: 'Add Permit' })).not.toBeInTheDocument()
   })
 
-  it('hides add permit link when createPermit action is not granted', async () => {
+  it('does not default region filters when opened without query parameters', async () => {
     mockedUseAuth.mockReturnValue({
       canPerform: () => false,
     } as any)
@@ -88,7 +85,13 @@ describe('Provincial Permit Search Actions', () => {
     renderPage()
     await screen.findByText('7001')
 
-    expect(screen.queryByRole('link', { name: 'Add Permit' })).not.toBeInTheDocument()
+    expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          region: [],
+        }),
+      }),
+    )
   })
 
   it('reuses cached search results when the route remounts with the same URL state', async () => {

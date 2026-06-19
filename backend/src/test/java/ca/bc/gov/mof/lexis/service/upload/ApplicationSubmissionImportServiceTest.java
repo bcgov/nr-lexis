@@ -85,6 +85,8 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(application.applicantTypeCode()).isEqualTo("O");
     assertThat(application.productTypeCode()).isEqualTo("H");
     assertThat(application.growthTypeCode()).isEqualTo("S");
+    assertThat(application.jurisdictionCode()).isEqualTo("P");
+    assertThat(application.federalApplicationNumber()).isNull();
     assertThat(application.endUseCode()).isEqualTo("PL");
     assertThat(application.speciesCodes()).containsExactly("HE");
     assertThat(application.remarkBody())
@@ -123,6 +125,47 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldImportFederalLexisXmlWithFederalApplicationNumber() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
+
+    String xml =
+        SAMPLE_XML
+            .replace(
+                "<lexis:jurisdictionCode>P</lexis:jurisdictionCode>",
+                "<lexis:jurisdictionCode>F</lexis:jurisdictionCode>\n"
+                    + "          <lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>")
+            .replace("<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>", "<lexis:boomNumber>FED26-700123</lexis:boomNumber>");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .importApplicationSubmission(
+                new MockMultipartFile(
+                    "formFile", "federal-submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+                "jsmith");
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.applicationNumber()).isEqualTo(9001L);
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().jurisdictionCode()).isEqualTo("F");
+    assertThat(result.submissionSummary().federalApplicationNumber()).isEqualTo(700123L);
+
+    ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).addApplication(applicationCaptor.capture(), eq("jsmith"));
+    CreateApplicationRequest application = applicationCaptor.getValue();
+    assertThat(application.jurisdictionCode()).isEqualTo("F");
+    assertThat(application.federalApplicationNumber()).isEqualTo(700123L);
+  }
+
+  @Test
   void shouldValidateLexisXmlWithoutPersistingApplication() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
@@ -142,6 +185,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.submissionSummary().ownerClientNumber()).isEqualTo("00001074");
     assertThat(result.submissionSummary().ownerClientLocationCode()).isEqualTo("03");
     assertThat(result.submissionSummary().ownerContactName()).isEqualTo("CUSTOMER SERVICE");
+    assertThat(result.submissionSummary().federalApplicationNumber()).isNull();
     assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(1909L);
     assertThat(result.submissionSummary().productTypeCode()).isEqualTo("H");
     assertThat(result.submissionSummary().applicationVolume()).isEqualTo(525.0d);
@@ -289,7 +333,8 @@ class ApplicationSubmissionImportServiceTest {
     ApplicationSubmissionImportResultDto federalJurisdiction =
         service().validateApplicationSubmission(sampleResourceXml("fail-federal-jurisdiction.xml"));
     assertThat(federalJurisdiction.status()).isEqualTo("rejected");
-    assertThat(federalJurisdiction.errors()).contains("Only provincial LEXIS submissions are supported.");
+    assertThat(federalJurisdiction.errors())
+        .contains("A federal application number is required for federal LEXIS submissions.");
   }
 
   @Test
@@ -744,7 +789,7 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
-  void shouldRejectNonProvincialLexisSubmissions() {
+  void shouldRejectFederalLexisSubmissionsWithoutFederalApplicationNumber() {
     ApplicationSubmissionImportService service = service();
     String xml =
         SAMPLE_XML.replace(
@@ -758,7 +803,26 @@ class ApplicationSubmissionImportServiceTest {
             "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("Only provincial LEXIS submissions are supported.");
+    assertThat(result.errors())
+        .contains("A federal application number is required for federal LEXIS submissions.");
+  }
+
+  @Test
+  void shouldRejectUnsupportedJurisdictionCodes() {
+    ApplicationSubmissionImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:jurisdictionCode>P</lexis:jurisdictionCode>",
+            "<lexis:jurisdictionCode>X</lexis:jurisdictionCode>");
+
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(
+            new MockMultipartFile(
+                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
+            "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Jurisdiction code must be P or F.");
   }
 
   @Test

@@ -17,12 +17,31 @@ import org.springframework.boot.test.context.SpringBootTest;
     })
 class LexisAuthorizationMatrixParityTest {
 
-  private static final List<String> PROVINCIAL_UPLOAD_ACTIONS =
+  private static final List<String> PROVINCIAL_VIEW_ACTIONS =
       List.of(
-          "/fileApplicationUpload",
-          "/fileExemptionUpload",
-          "/fileInvoiceUpload",
-          "/filePermitUpload");
+          "/applicationSearch",
+          "/applicationDetails",
+          "/exemptionSearch",
+          "/exemptionDetails",
+          "/offersSearch",
+          "/offerDetails",
+          "/permitSearch",
+          "/permitDetails");
+
+  private static final List<String> REPORT_ACTIONS =
+      List.of(
+          "mofrListing",
+          "/applicationReport",
+          "/offerReport",
+          "/teacReport",
+          "/exemptionReport",
+          "/permitReport",
+          "/permitLedgerReport",
+          "/transportReport",
+          "/speciesGradeReport",
+          "/feeReport",
+          "/tenureReport",
+          "/approvedExemptionReport");
 
   @Autowired
   private LexisAuthorizationService authorizationService;
@@ -62,19 +81,42 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void provincialSubmitterShouldHaveProvincialUploadActions() {
+  void provincialSubmitterShouldCreateApplicationsAndViewProvincialRecordsOnly() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
-        .containsAll(PROVINCIAL_UPLOAD_ACTIONS)
-        .contains("createApplication");
+        .containsAll(PROVINCIAL_VIEW_ACTIONS)
+        .contains("createApplication")
+        .contains("uploadApplicationSubmission")
+        .doesNotContain(
+            "/summary",
+            "/applicationRemarks",
+            "/createExemption",
+            "/fileApplicationUpload",
+            "/fileExemptionUpload",
+            "/fileInvoiceUpload",
+            "/filePermitUpload",
+            "approveExemption",
+            "createOffer",
+            "saveExemption",
+            "savePermit")
+        .doesNotContainAnyElementsOf(REPORT_ACTIONS);
   }
 
   @Test
-  void scopedProvincialSubmitterShouldHaveProvincialUploadActions() {
+  void scopedProvincialSubmitterShouldUseProvincialSubmitterGrants() {
     assertThat(
             authorizationService.resolveGrantedActions(
                 List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
-        .containsAll(PROVINCIAL_UPLOAD_ACTIONS)
-        .contains("createApplication");
+        .containsAll(PROVINCIAL_VIEW_ACTIONS)
+        .contains("createApplication")
+        .contains("uploadApplicationSubmission")
+        .doesNotContain(
+            "/fileApplicationUpload",
+            "/fileExemptionUpload",
+            "/fileInvoiceUpload",
+            "/filePermitUpload",
+            "createOffer",
+            "saveExemption",
+            "savePermit");
   }
 
   @Test
@@ -86,12 +128,11 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void applicationRemarksShouldMatchLegacyApplicationRemarkRoles() {
+  void applicationRemarksShouldBeAvailableToAdminsAndApplicationApproversOnly() {
     assertThat(authorizationService.resolveRolesForAction("/applicationRemarks"))
         .contains(
             "LEXIS_ADMIN",
-            "LEXIS_APPLICATION_APPROVER",
-            "LEXIS_PROVINCIAL_SUBMITTER")
+            "LEXIS_APPLICATION_APPROVER")
         .doesNotContain(
             "LEXIS_READ_ONLY",
             "LEXIS_EXEMPTION_APPROVER",
@@ -100,9 +141,81 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void readOnlyRoleShouldNotHaveMutatingActions() {
-    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_READ_ONLY")))
+  void federalSubmitterShouldOnlyUploadAndViewFederalApplications() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_FEDERAL_SUBMITTER")))
+        .contains(
+            "/federalApplicationSearch",
+            "/federalApplicationDetails",
+            "uploadApplicationSubmission",
+            "viewFederalApplication")
+        .doesNotContainAnyElementsOf(PROVINCIAL_VIEW_ACTIONS)
+        .doesNotContainAnyElementsOf(REPORT_ACTIONS)
         .doesNotContain(
+            "/summary",
+            "createApplication",
+            "createOffer",
+            "saveExemption",
+            "savePermit");
+  }
+
+  @Test
+  void applicationApproverShouldEditProvincialWorkWithoutAdminOrFederalAccess() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_APPLICATION_APPROVER")))
+        .containsAll(PROVINCIAL_VIEW_ACTIONS)
+        .containsAll(REPORT_ACTIONS)
+        .contains(
+            "/summary",
+            "/applicationsReview",
+            "/applicationRemarks",
+            "/createExemption",
+            "approveExemption",
+            "createApplication",
+            "createOffer",
+            "saveExemption",
+            "savePermit",
+            "uploadApplicationSubmission")
+        .doesNotContain(
+            "/federalApplicationSearch",
+            "/federalApplicationDetails",
+            "/lexisAgentAdmin",
+            "/lexisFILAdmin",
+            "/lexisPolicyAdmin",
+            "/fileApplicationUpload",
+            "/fileExemptionUpload",
+            "/fileInvoiceUpload",
+            "/filePermitUpload");
+  }
+
+  @Test
+  void exemptionApproverShouldOnlyManageProvincialExemptions() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_EXEMPTION_APPROVER")))
+        .contains(
+            "/createExemption",
+            "/exemptionSearch",
+            "/exemptionDetails",
+            "approveExemption",
+            "saveExemption")
+        .doesNotContain(
+            "/applicationsReview",
+            "/applicationSearch",
+            "/applicationDetails",
+            "/offersSearch",
+            "/permitSearch",
+            "/federalApplicationSearch",
+            "createApplication",
+            "createOffer",
+            "savePermit",
+            "uploadApplicationSubmission")
+        .doesNotContainAnyElementsOf(REPORT_ACTIONS);
+  }
+
+  @Test
+  void readOnlyRoleShouldViewSearchesAndDetailsWithoutMutatingActionsOrReports() {
+    assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_READ_ONLY")))
+        .containsAll(PROVINCIAL_VIEW_ACTIONS)
+        .contains("/federalApplicationSearch", "/federalApplicationDetails", "viewFederalApplication")
+        .doesNotContain(
+            "/summary",
             "/applicationRemarks",
             "/applicationsReview",
             "/createExemption",
@@ -116,8 +229,9 @@ class LexisAuthorizationMatrixParityTest {
             "approveExemption",
             "createApplication",
             "createOffer",
-            "createPermit",
             "saveExemption",
-            "savePermit");
+            "savePermit",
+            "uploadApplicationSubmission")
+        .doesNotContainAnyElementsOf(REPORT_ACTIONS);
   }
 }

@@ -20,6 +20,8 @@ export type ProvincialApplicationDetail = {
   readOnly: boolean
   exemptionApprover: boolean
   locked: boolean
+  lockedBy?: string | null
+  lockMessage?: string | null
   packages: {
     packageNumber: string
     volume: number
@@ -149,20 +151,4 @@ export type FederalApplicationDetail = {
   remarks: string[]
   offers: string[]
   federalPermit: FederalPermitDetail | null
-}
-
-export type IndianReservePermitDetail = {
-  permitNumber: string
-  clientNumber: string | null
-  clientLocation: string | null
-  region: number | null
-  applicationDate: string | null
-  permitIssueDate: string | null
-  estimatedShippingDate: string | null
-  destinationCountry: string | null
-  transportTypeCode: string | null
-  transportName: string | null
-  portOfExport: string | null
-  otherPortOfExport: string | null
-  packages: string[]
 }

@@ -19,7 +19,7 @@ import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
-import { runReport } from '@/service/report-service'
+import { ReportRequestError, runReport } from '@/service/report-service'
 import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
 import { normalizeFilterText as normalizeText } from '@/utils/text'
 import {
@@ -119,7 +119,6 @@ const REPORT_JURISDICTION_FIELD: ReportFieldDefinition = {
     { value: '', label: 'All' },
     { value: 'P', label: 'Provincial' },
     { value: 'F', label: 'Federal' },
-    { value: 'I', label: 'Indian reserve' },
   ],
 }
 
@@ -589,11 +588,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     category: 'Cross-Module',
     action: 'mofrListing',
     description: 'Advertising list output in PDF or CSV format.',
-    actionMappings: [
-      { value: 'generate', label: 'Generate with filters' },
-      { value: 'generateIndustryPDF', label: 'Advertising list PDF' },
-      { value: 'generateIndustryCSV', label: 'Advertising list CSV' },
-    ],
+    actionMappings: [{ value: 'generate', label: 'Generate with filters' }],
     fields: [
       REGION_CODES_FIELD,
       BIWEEKLY_JURISDICTION_FIELD,
@@ -764,13 +759,8 @@ const buildEffectiveReportValues = (
   values: Record<string, string>,
   optionsByKey: Record<string, SearchOption[]> = {},
   defaultRegion = '',
-  actionMapping = '',
 ): Record<string, string> => {
   const effectiveValues = { ...values }
-  const normalizedActionMapping = actionMapping.trim().toLowerCase()
-  const skipsFormCriteria =
-    normalizedActionMapping === 'generateindustrypdf' ||
-    normalizedActionMapping === 'generateindustrycsv'
   report.fields.forEach((field) => {
     if (
       field.defaultValue !== undefined &&
@@ -781,7 +771,6 @@ const buildEffectiveReportValues = (
     }
 
     if (
-      !skipsFormCriteria &&
       field.type === 'multiselect' &&
       !effectiveValues[field.key] &&
       (field.key === 'region' || field.key === 'orgUnitNumber')
@@ -863,6 +852,8 @@ const isDownloadReportRequest = (
 
 const APPLICATION_REPORT_LIMITER_MESSAGE =
   'Choose at least one Application Report filter before generating: region, jurisdiction, exemption reason, client number, growth type, or received date.'
+const BIWEEKLY_DATE_RANGE_MESSAGE =
+  'Choose a Listing from date and Listing to date before generating the Advertising List.'
 
 const hasApplicationReportLimiter = (values: Record<string, string>): boolean => {
   const limiterKeys = [
@@ -899,6 +890,10 @@ const validateReportLaunch = (
 ): string | null => {
   if (report.id === 'applicationReport' && !hasApplicationReportLimiter(values)) {
     return APPLICATION_REPORT_LIMITER_MESSAGE
+  }
+
+  if (report.id === 'biweeklyListing' && (!values.fromDate?.trim() || !values.toDate?.trim())) {
+    return BIWEEKLY_DATE_RANGE_MESSAGE
   }
 
   return null
@@ -1187,7 +1182,6 @@ const ReportsPage: FC = () => {
         selectedReportValues,
         reportFieldOptionsByKey,
         defaultReportRegion,
-        selectedActionMapping,
       )
       const validationError = validateReportLaunch(selectedReport, effectiveReportValues)
       if (validationError) {
@@ -1217,7 +1211,11 @@ const ReportsPage: FC = () => {
       }
     } catch (error) {
       console.error(error)
-      setLaunchErrorMessage('Unable to generate report. Check values and try again.')
+      setLaunchErrorMessage(
+        error instanceof ReportRequestError
+          ? error.message
+          : 'Unable to generate report. Check values and try again.',
+      )
     } finally {
       setIsGenerating(false)
     }

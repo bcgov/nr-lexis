@@ -35,22 +35,33 @@ const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
   offerssearch: '/provincial/offers',
   permitsearch: '/provincial/permit',
   federalapplicationsearch: '/federal',
-  indianreservepermitsearch: '/indian-reserve',
   lexisagentadmin: '/admin',
 }
 
 const ACTION_PRIORITY: string[] = [
-  'summary',
   'applicationsReview',
+  'summary',
   'applicationSearch',
-  'createApplication',
+  'uploadApplicationSubmission',
   'exemptionSearch',
   'offersSearch',
   'permitSearch',
   'federalApplicationSearch',
-  'indianReservePermitSearch',
   'lexisAgentAdmin',
 ]
+
+const REPORT_ACTIONS = new Set<string>([
+  'applicationreport',
+  'offerreport',
+  'teacreport',
+  'exemptionreport',
+  'permitledgerreport',
+  'transportreport',
+  'speciesgradereport',
+  'feereport',
+  'tenurereport',
+  'mofrlisting',
+])
 
 const LEGACY_TO_CANONICAL_ROLE_MAP: Record<string, string> = {
   LEXIS_ADMIN: 'ADMIN',
@@ -153,7 +164,11 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   const roleSet = new Set(capabilities.roles)
   const isReadOnlyUser = roleSet.has(ROLE_READ_ONLY) || roleSet.has('LEXIS_READ_ONLY')
   const isIndustryUser = capabilities.roles.some((role) => isIndustryRole(role))
-  const isAdminOnly = roleSet.size === 1 && (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN'))
+  const isProvincialSubmitterUser = capabilities.roles.some((role) => {
+    return role === ROLE_PROVINCIAL_SUBMITTER || role.startsWith('PROVINCIAL_SUBMITTER_')
+  })
+  const isFederalSubmitterUser = capabilities.roles.some((role) => role === ROLE_FEDERAL_SUBMITTER)
+  const isAdminUser = roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN')
   const isApplicationApproverUser =
     roleSet.has(ROLE_APPLICATION_APPROVER) || roleSet.has('LEXIS_APPLICATION_APPROVER')
   const isExemptionApproverUser =
@@ -161,22 +176,37 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   const grantedSet = new Set(capabilities.grantedActions.map(normalizeAction))
   const hasGrantedAction = (action: string): boolean => grantedSet.has(normalizeAction(action))
 
+  if (isAdminUser) {
+    return '/admin'
+  }
+
   if (isReadOnlyUser) {
     return '/provincial/application'
   }
 
   if (isIndustryUser) {
+    if (isProvincialSubmitterUser && hasGrantedAction('/applicationSearch')) {
+      return '/provincial/application'
+    }
+    if (isProvincialSubmitterUser && hasGrantedAction('createApplication')) {
+      return '/provincial/application/create'
+    }
+    if (isFederalSubmitterUser && hasGrantedAction('uploadApplicationSubmission')) {
+      return '/federal/application/upload'
+    }
+    if (
+      hasGrantedAction('/federalApplicationSearch') ||
+      hasGrantedAction('viewFederalApplication')
+    ) {
+      return '/federal'
+    }
+    if (hasGrantedAction('uploadApplicationSubmission')) {
+      return '/provincial/application/upload'
+    }
     if (hasGrantedAction('/summary')) {
       return '/provincial/summary'
     }
-    if (hasGrantedAction('createApplication')) {
-      return '/provincial/application/upload'
-    }
-    return '/dashboard'
-  }
-
-  if (isAdminOnly) {
-    return '/admin'
+    return '/unauthorized'
   }
 
   if (isExemptionApproverUser) {
@@ -194,11 +224,7 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     }
   }
 
-  if (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN')) {
-    return '/admin'
-  }
-
-  return '/dashboard'
+  return '/unauthorized'
 }
 
 export const AuthProvider: FC<Props> = ({ children }) => {
@@ -293,17 +319,22 @@ export const AuthProvider: FC<Props> = ({ children }) => {
 
     try {
       await performLogoff()
+    } catch (error) {
+      console.warn('Unable to complete backend logoff before Cognito sign-out.', error)
+    }
+
+    try {
       if (isCognitoConfigured) {
         await signOut()
       }
     } catch (error) {
-      console.warn('Unable to complete backend logoff. Clearing local auth state.', error)
-    } finally {
-      apiService.clearCachedGetData()
-      clearAllPageDataCache()
-      setCapabilities(DEFAULT_CAPABILITIES)
-      setIsLoading(false)
+      console.warn('Unable to complete Cognito sign-out. Clearing local auth state.', error)
     }
+
+    apiService.clearCachedGetData()
+    clearAllPageDataCache()
+    setCapabilities(DEFAULT_CAPABILITIES)
+    setIsLoading(false)
   }, [])
 
   const grantedActionSet = useMemo(() => {
@@ -319,7 +350,14 @@ export const AuthProvider: FC<Props> = ({ children }) => {
       if (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN')) {
         return true
       }
-      return grantedActionSet.has(normalizeAction(action))
+      const normalizedAction = normalizeAction(action)
+      if (
+        (roleSet.has(ROLE_READ_ONLY) || roleSet.has('LEXIS_READ_ONLY')) &&
+        REPORT_ACTIONS.has(normalizedAction)
+      ) {
+        return false
+      }
+      return grantedActionSet.has(normalizedAction)
     },
     [grantedActionSet, roleSet],
   )

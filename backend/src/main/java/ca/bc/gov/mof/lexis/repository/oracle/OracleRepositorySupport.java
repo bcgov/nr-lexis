@@ -526,8 +526,7 @@ public abstract class OracleRepositorySupport {
       case LEXIS_CODES_PACKAGE + "FIND_ALL_JURISDICTION_CODES(?)" ->
           List.of(
               new CodeNameDto("P", "Provincial"),
-              new CodeNameDto("F", "Federal"),
-              new CodeNameDto("I", "Indian Reserve"));
+              new CodeNameDto("F", "Federal"));
       case LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_RSN_CODES(?)" ->
           List.of(
               new CodeNameDto("S", "Surplus"),

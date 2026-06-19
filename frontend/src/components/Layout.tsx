@@ -21,6 +21,7 @@ type NavigationLink = {
   label: string
   requiredActions?: string[]
   requiredActionsMatch?: 'any' | 'all'
+  roleScope?: 'provincialApplicationSubmission' | 'federalApplicationSubmission'
 }
 
 type NavigationSection = {
@@ -35,18 +36,14 @@ type BreadcrumbRoute = {
 
 const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
-    label: 'LEXIS',
-    links: [{ to: '/dashboard', label: 'Dashboard' }],
-  },
-  {
     label: 'Provincial',
     links: [
-      { to: '/provincial/summary', label: 'Summary', requiredActions: ['/summary'] },
       {
         to: '/provincial/review',
         label: 'Application review',
         requiredActions: ['/applicationsReview'],
       },
+      { to: '/provincial/summary', label: 'Summary', requiredActions: ['/summary'] },
       {
         to: '/provincial/application/create',
         label: 'Create/edit application',
@@ -56,7 +53,8 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/provincial/application/upload',
         label: 'Upload application submission',
-        requiredActions: ['createApplication'],
+        requiredActions: ['uploadApplicationSubmission'],
+        roleScope: 'provincialApplicationSubmission',
       },
       {
         to: '/provincial/application',
@@ -100,21 +98,11 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         label: 'Application search',
         requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
       },
-    ],
-  },
-  {
-    label: 'Indian reserve',
-    links: [
       {
-        to: '/indian-reserve/permit/create',
-        label: 'Create/edit permit',
-        requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
-        requiredActionsMatch: 'all',
-      },
-      {
-        to: '/indian-reserve',
-        label: 'Permit search',
-        requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
+        to: '/federal/application/upload',
+        label: 'Upload application submission',
+        requiredActions: ['uploadApplicationSubmission'],
+        roleScope: 'federalApplicationSubmission',
       },
     ],
   },
@@ -168,7 +156,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
 ]
 
 const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
-  { path: '/dashboard', section: 'LEXIS Menu' },
   { path: '/provincial/summary', section: 'Provincial' },
   { path: '/provincial/review', section: 'Provincial' },
   { path: '/provincial/application/create', section: 'Provincial' },
@@ -178,12 +165,10 @@ const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
   { path: '/provincial/exemption', section: 'Provincial' },
   { path: '/provincial/offers/create', section: 'Provincial' },
   { path: '/provincial/offers', section: 'Provincial' },
-  { path: '/provincial/permit/create', section: 'Provincial' },
   { path: '/provincial/permit', section: 'Provincial' },
   { path: '/provincial', section: 'Provincial' },
+  { path: '/federal/application/upload', section: 'Federal' },
   { path: '/federal', section: 'Federal' },
-  { path: '/indian-reserve/permit/create', section: 'Indian reserve' },
-  { path: '/indian-reserve', section: 'Indian reserve' },
   { path: '/reports', section: 'Reports' },
   { path: '/admin/uploads', section: 'Administration' },
   { path: '/admin/policies', section: 'Administration' },
@@ -214,10 +199,68 @@ const getProfileInitials = (principal: string | null): string => {
   return (initials || principal.slice(0, 2)).toUpperCase()
 }
 
+const normalizeRoles = (roles: string[] | null | undefined): string[] =>
+  Array.isArray(roles) ? roles : []
+
+const hasProvincialSubmitterRole = (roles: string[] | null | undefined): boolean => {
+  return normalizeRoles(roles).some((role) => {
+    const normalizedRole = role.trim().toUpperCase()
+    return (
+      normalizedRole === 'PROVINCIAL_SUBMITTER' ||
+      normalizedRole === 'LEXIS_PROVINCIAL_SUBMITTER' ||
+      normalizedRole.startsWith('PROVINCIAL_SUBMITTER_') ||
+      normalizedRole.startsWith('LEXIS_PROVINCIAL_SUBMITTER_')
+    )
+  })
+}
+
+const hasFederalSubmitterRole = (roles: string[] | null | undefined): boolean => {
+  return normalizeRoles(roles).some((role) => {
+    const normalizedRole = role.trim().toUpperCase()
+    return (
+      normalizedRole === 'FEDERAL_SUBMITTER' ||
+      normalizedRole === 'LEXIS_FEDERAL_SUBMITTER' ||
+      normalizedRole.startsWith('FEDERAL_SUBMITTER_') ||
+      normalizedRole.startsWith('LEXIS_FEDERAL_SUBMITTER_')
+    )
+  })
+}
+
+const hasRole = (roles: string[] | null | undefined, role: string): boolean => {
+  return normalizeRoles(roles).some((entry) => {
+    const normalizedRole = entry.trim().toUpperCase()
+    return normalizedRole === role || normalizedRole === `LEXIS_${role}`
+  })
+}
+
+const canShowRoleScopedLink = (
+  link: NavigationLink,
+  roles: string[] | null | undefined,
+): boolean => {
+  if (!link.roleScope) {
+    return true
+  }
+
+  if (hasRole(roles, 'ADMIN')) {
+    return true
+  }
+
+  const hasFederalSubmitter = hasFederalSubmitterRole(roles)
+  const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
+  const hasProvincialStaffRole =
+    hasRole(roles, 'APPLICATION_APPROVER') || hasRole(roles, 'EXEMPTION_APPROVER')
+
+  if (link.roleScope === 'federalApplicationSubmission') {
+    return hasFederalSubmitter && !hasProvincialSubmitter && !hasProvincialStaffRole
+  }
+
+  return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
+}
+
 const Layout: FC<Props> = ({ children }) => {
   const location = useLocation()
   const navigate = useNavigate()
-  const { capabilities, canPerform, logout } = useAuth()
+  const { capabilities, canPerform, defaultRoute, logout } = useAuth()
   const breadcrumbRoute = getBreadcrumbRoute(location.pathname)
   const [isDarkTheme, setIsDarkTheme] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
@@ -228,6 +271,10 @@ const Layout: FC<Props> = ({ children }) => {
   )
 
   const canShowLink = (link: NavigationLink): boolean => {
+    if (!canShowRoleScopedLink(link, capabilities.roles)) {
+      return false
+    }
+
     if (!link.requiredActions || link.requiredActions.length === 0) {
       return true
     }
@@ -271,8 +318,8 @@ const Layout: FC<Props> = ({ children }) => {
           <button
             type="button"
             className="cds--header__name csp-header-name"
-            onClick={() => navigate('/dashboard')}
-            aria-label="Go to LEXIS dashboard"
+            onClick={() => navigate(defaultRoute)}
+            aria-label="Go to your landing page"
           >
             Log Exemption Information System
           </button>

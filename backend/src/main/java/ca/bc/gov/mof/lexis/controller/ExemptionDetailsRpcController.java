@@ -97,8 +97,7 @@ public class ExemptionDetailsRpcController {
     ExemptionDetailsRpcService.ExemptionApplicationsResponse payload =
         service.getApplications(
             exemptionNumber,
-            authorizationService.canPerformAction(roles, "viewFederalApplication"),
-            authorizationService.canPerformAction(roles, "viewOICApplication"));
+            authorizationService.canPerformAction(roles, "viewFederalApplication"));
 
     return ResponseEntity.ok(toApplicationsResponse(payload));
   }
@@ -299,8 +298,7 @@ public class ExemptionDetailsRpcController {
             parsePositiveLong(applicationNumber),
             exemptionNumber,
             userId(authentication),
-            authorizationService.canPerformAction(roles, "viewFederalApplication"),
-            authorizationService.canPerformAction(roles, "viewOICApplication"));
+            authorizationService.canPerformAction(roles, "viewFederalApplication"));
     return ResponseEntity.ok(new ApplicationExemptionLinkResponseDto(result.success(), result.errors()));
   }
 
@@ -651,7 +649,6 @@ public class ExemptionDetailsRpcController {
         resolveRateOverride(parameters),
         parseApplicationNumbers(parameters),
         authorizationService.canPerformAction(roles, "viewFederalApplication"),
-        authorizationService.canPerformAction(roles, "viewOICApplication"),
         parseRegions(parameters));
   }
 

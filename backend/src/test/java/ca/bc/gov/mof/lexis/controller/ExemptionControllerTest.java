@@ -13,6 +13,7 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ExemptionController")
@@ -34,6 +36,10 @@ class ExemptionControllerTest {
   @Mock private ObjectProvider<ExemptionService> serviceProvider;
 
   @Mock private ExemptionService service;
+
+  @Mock private LexisSessionService sessionService;
+
+  @Mock private Authentication authentication;
 
   @InjectMocks private ExemptionController controller;
 
@@ -89,7 +95,8 @@ class ExemptionControllerTest {
             null,
             List.<Long>of(),
             0,
-            25);
+            25,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verify(serviceProvider).getIfAvailable();
@@ -138,7 +145,8 @@ class ExemptionControllerTest {
             "00077881",
             List.of(12L),
             0,
-            25);
+            25,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
@@ -160,10 +168,47 @@ class ExemptionControllerTest {
   }
 
   @Test
+  void searchShouldOverrideClientFiltersWhenUserHasScopedForestClient() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(new ExemptionSearchResponseDto(List.of(), 0, 0, 25));
+
+    controller.search(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "00099999",
+        "00088888",
+        List.of(),
+        0,
+        25,
+        authentication);
+
+    ArgumentCaptor<ExemptionSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
+    verify(service).search(criteriaCaptor.capture());
+
+    ExemptionSearchCriteria criteria = criteriaCaptor.getValue();
+    assertThat(criteria.applicantClientNumber()).isEqualTo("00077881");
+    assertThat(criteria.ownerClientNumber()).isNull();
+  }
+
+  @Test
   void detailShouldReturnNoContentWhenServiceMissing() {
     when(serviceProvider.getIfAvailable()).thenReturn(null);
 
-    ResponseEntity<ExemptionDetailDto> response = controller.getByExemptionNumber("EX-205");
+    ResponseEntity<ExemptionDetailDto> response = controller.getByExemptionNumber("EX-205", null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verify(serviceProvider).getIfAvailable();
@@ -175,7 +220,7 @@ class ExemptionControllerTest {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.findByExemptionNumber("EX-205")).thenReturn(Optional.empty());
 
-    ResponseEntity<ExemptionDetailDto> response = controller.getByExemptionNumber("EX-205");
+    ResponseEntity<ExemptionDetailDto> response = controller.getByExemptionNumber("EX-205", null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     verify(service).findByExemptionNumber("EX-205");
@@ -185,33 +230,51 @@ class ExemptionControllerTest {
   void detailShouldReturnPayloadWhenServiceReturnsEntity() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
 
-    ExemptionDetailDto dto =
-        new ExemptionDetailDto(
-            "EX-205",
-            "FEE",
-            "Fee in Lieu",
-            "APR",
-            "Approved",
-            "00077881",
-            "00055667",
-            1000456L,
-            "In Review",
-            LocalDate.of(2026, 3, 12),
-            LocalDate.of(2027, 3, 12),
-            95.0,
-            12.0,
-            83.0,
-            "Pending final confirmation",
-            false,
-            List.of("P-88009"),
-            List.of(new ExemptionDetailDto.ExemptionRemarkDto("Pending", "Awaiting documentation")));
+    ExemptionDetailDto dto = exemptionDetail("00077881", "00055667");
 
     when(service.findByExemptionNumber("EX-205")).thenReturn(Optional.of(dto));
 
-    ResponseEntity<ExemptionDetailDto> response = controller.getByExemptionNumber("EX-205");
+    ResponseEntity<ExemptionDetailDto> response = controller.getByExemptionNumber("EX-205", null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).findByExemptionNumber("EX-205");
+  }
+
+  @Test
+  void detailShouldReturnNotFoundWhenScopedUserDoesNotOwnExemption() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.findByExemptionNumber("EX-205"))
+        .thenReturn(Optional.of(exemptionDetail("00099999", "00088888")));
+
+    ResponseEntity<ExemptionDetailDto> response =
+        controller.getByExemptionNumber("EX-205", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    verify(service).findByExemptionNumber("EX-205");
+  }
+
+  private static ExemptionDetailDto exemptionDetail(
+      String ownerClientNumber, String agentClientNumber) {
+    return new ExemptionDetailDto(
+        "EX-205",
+        "FEE",
+        "Fee in Lieu",
+        "APR",
+        "Approved",
+        ownerClientNumber,
+        agentClientNumber,
+        1000456L,
+        "In Review",
+        LocalDate.of(2026, 3, 12),
+        LocalDate.of(2027, 3, 12),
+        95.0,
+        12.0,
+        83.0,
+        "Pending final confirmation",
+        false,
+        List.of("P-88009"),
+        List.of(new ExemptionDetailDto.ExemptionRemarkDto("Pending", "Awaiting documentation")));
   }
 }

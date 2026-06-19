@@ -79,6 +79,7 @@ public class ApplicationSubmissionImportService {
   private static final String DEFAULT_REPROCESSED_INDICATOR = "N";
   private static final String DEFAULT_OIC_INDICATOR = "N";
   private static final String PROVINCIAL_JURISDICTION = "P";
+  private static final String FEDERAL_JURISDICTION = "F";
   private static final int MAX_USER_REFERENCE_LENGTH = 50;
   private static final String DEFAULT_IMPORT_REMARK = "Created from LEXIS application submission.";
   private static final Pattern UNTERMINATED_XML_TAG_PATTERN =
@@ -608,6 +609,9 @@ public class ApplicationSubmissionImportService {
     String applicantName = text(applicantDetails, "name", "Applicant name", errors);
     String ownerContactName = contactName(applicantContact, applicantName, errors);
     String jurisdictionCode = upper(text(applicationDetail, "jurisdictionCode", "Jurisdiction code", errors));
+    Long federalApplicationNumber =
+        parseOptionalPositiveLong(
+            federalApplicationNumber(applicationDetail), "federal application number", errors);
     String regionCode = upper(text(applicationDetail, "bcForestRegionCode", "Forest region code", errors));
     Long orgUnitNumber = resolveOrgUnitNumber(regionCode);
     String applicationStatusCode =
@@ -642,8 +646,11 @@ public class ApplicationSubmissionImportService {
     }
     if (jurisdictionCode == null) {
       errors.add("Jurisdiction code is required.");
-    } else if (!PROVINCIAL_JURISDICTION.equals(jurisdictionCode)) {
-      errors.add("Only provincial LEXIS submissions are supported.");
+    } else if (!PROVINCIAL_JURISDICTION.equals(jurisdictionCode)
+        && !FEDERAL_JURISDICTION.equals(jurisdictionCode)) {
+      errors.add("Jurisdiction code must be P or F.");
+    } else if (FEDERAL_JURISDICTION.equals(jurisdictionCode) && federalApplicationNumber == null) {
+      errors.add("A federal application number is required for federal LEXIS submissions.");
     }
     if (exemptionReasonCode == null) {
       errors.add("Exemption reason is required.");
@@ -687,6 +694,7 @@ public class ApplicationSubmissionImportService {
         ownerClientLocationCode,
         ownerContactName,
         jurisdictionCode,
+        FEDERAL_JURISDICTION.equals(jurisdictionCode) ? federalApplicationNumber : null,
         orgUnitNumber,
         applicationStatusCode,
         exemptionReasonCode,
@@ -799,6 +807,9 @@ public class ApplicationSubmissionImportService {
         applicationDetail,
         List.of(
             "jurisdictionCode",
+            "federalApplicationNumber",
+            "fedApplicationNumber",
+            "applicationNumber",
             "bcForestRegionCode",
             "applStatusCode",
             "exemptionRsnCde",
@@ -1133,7 +1144,7 @@ public class ApplicationSubmissionImportService {
   private CreateApplicationRequest toCreateApplicationRequest(
       ParsedSubmission submission, LocalDate importDate, String userReference) {
     return new CreateApplicationRequest(
-        null,
+        submission.federalApplicationNumber(),
         importDate,
         DEFAULT_TERM_DAYS,
         importDate,
@@ -1185,6 +1196,7 @@ public class ApplicationSubmissionImportService {
         submission.ownerClientLocationCode(),
         submission.ownerContactName(),
         submission.jurisdictionCode(),
+        submission.federalApplicationNumber(),
         submission.orgUnitNumber(),
         submission.applicationStatusCode(),
         submission.exemptionReasonCode(),
@@ -1265,6 +1277,16 @@ public class ApplicationSubmissionImportService {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
+  private String federalApplicationNumber(Element applicationDetail) {
+    for (String fieldName : List.of("federalApplicationNumber", "fedApplicationNumber", "applicationNumber")) {
+      String value = text(applicationDetail, fieldName, null, null);
+      if (value != null) {
+        return value;
+      }
+    }
+    return null;
+  }
+
   private Long resolveOrgUnitNumber(String regionCode) {
     if (regionCode == null) {
       return null;
@@ -1331,6 +1353,23 @@ public class ApplicationSubmissionImportService {
       long parsed = Long.parseLong(value);
       if (parsed < 0L) {
         errors.add("The " + label + " must be greater than or equal to 0.");
+        return null;
+      }
+      return parsed;
+    } catch (NumberFormatException ex) {
+      errors.add("A valid " + label + " is required.");
+      return null;
+    }
+  }
+
+  private Long parseOptionalPositiveLong(String value, String label, List<String> errors) {
+    if (value == null) {
+      return null;
+    }
+    try {
+      long parsed = Long.parseLong(value);
+      if (parsed <= 0L) {
+        errors.add("A valid " + label + " is required.");
         return null;
       }
       return parsed;
@@ -1538,6 +1577,7 @@ public class ApplicationSubmissionImportService {
       String ownerClientLocationCode,
       String ownerContactName,
       String jurisdictionCode,
+      Long federalApplicationNumber,
       Long orgUnitNumber,
       String applicationStatusCode,
       String exemptionReasonCode,

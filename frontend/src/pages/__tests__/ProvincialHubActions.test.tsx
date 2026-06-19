@@ -112,7 +112,7 @@ describe('Provincial hub actions', () => {
 
   it('shows application submission upload as an application quick action', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
 
     renderPage()

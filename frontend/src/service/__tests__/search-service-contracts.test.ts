@@ -9,10 +9,6 @@ import {
   searchFederalApplications,
 } from '@/service/federal-application-search-service'
 import {
-  countIndianReservePermits,
-  searchIndianReservePermits,
-} from '@/service/indian-reserve-permit-search-service'
-import {
   countProvincialApplications,
   searchProvincialApplicationNumberOptions,
   searchProvincialApplications,
@@ -144,21 +140,6 @@ const reviewRequest = {
   page: 0,
   pageSize: 10,
   sortField: 'applicationNumber' as const,
-  sortDirection: 'asc' as const,
-}
-
-const indigenousRequest = {
-  filters: {
-    permitNumber: '',
-    packageNumber: '',
-    fromPermitIssueDate: '',
-    toPermitIssueDate: '',
-    fromEstimatedShippingDate: '',
-    toEstimatedShippingDate: '',
-  },
-  page: 0,
-  pageSize: 10,
-  sortField: 'permitNumber' as const,
   sortDirection: 'asc' as const,
 }
 
@@ -372,11 +353,6 @@ describe('search-service contracts', () => {
       endpoint: '/lexis/application-reviews/search',
       run: () => searchApplicationReviews({ ...reviewRequest, page: 2, pageSize: 30 }),
     },
-    {
-      name: 'indigenous reserve permits',
-      endpoint: '/lexis/indian-reserve/permits/search',
-      run: () => searchIndianReservePermits({ ...indigenousRequest, page: 2, pageSize: 30 }),
-    },
   ])(
     '$name preserves backend pagination metadata and request page params',
     async ({ endpoint, run }) => {
@@ -462,11 +438,6 @@ describe('search-service contracts', () => {
       name: 'application review',
       endpoint: '/lexis/application-reviews/search/count',
       run: () => countApplicationReviews({ ...reviewRequest, page: 2, pageSize: 30 }),
-    },
-    {
-      name: 'indigenous reserve permits',
-      endpoint: '/lexis/indian-reserve/permits/search/count',
-      run: () => countIndianReservePermits({ ...indigenousRequest, page: 2, pageSize: 30 }),
     },
   ])('$name count endpoint strips paging params', async ({ endpoint, run }) => {
     getCachedResponseMock.mockResolvedValue({ data: { total: 42 } })
@@ -572,11 +543,6 @@ describe('search-service contracts', () => {
       name: 'application review',
       run: () => searchApplicationReviews(reviewRequest),
       message: 'Backend application review response did not include results.',
-    },
-    {
-      name: 'indigenous reserve permits',
-      run: () => searchIndianReservePermits(indigenousRequest),
-      message: 'Backend indigenous reserve permit response did not include results.',
     },
   ])('rejects %s response when results payload is missing', async ({ run, message }) => {
     getCachedResponseMock.mockResolvedValue({ data: { rows: [] } })

@@ -1,10 +1,13 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.upload.ApplicationSubmissionImportService;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
 import java.math.BigDecimal;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -28,12 +31,15 @@ public class LexisUploadController {
 
   private final ObjectProvider<LexisUploadService> uploadServiceProvider;
   private final ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider;
+  private final ApplicationEditLockService applicationEditLockService;
 
   public LexisUploadController(
       ObjectProvider<LexisUploadService> uploadServiceProvider,
-      ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider) {
+      ObjectProvider<ApplicationSubmissionImportService> applicationSubmissionImportServiceProvider,
+      ApplicationEditLockService applicationEditLockService) {
     this.uploadServiceProvider = uploadServiceProvider;
     this.applicationSubmissionImportServiceProvider = applicationSubmissionImportServiceProvider;
+    this.applicationEditLockService = applicationEditLockService;
   }
 
   @PostMapping(
@@ -48,7 +54,14 @@ public class LexisUploadController {
       Authentication authentication) {
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null || uploadFile.isEmpty() || applicationNumber == null || applicationNumber < 1) {
-      return ResponseEntity.badRequest().build();
+      return uploadBadRequest(
+          "application", "Choose a file and enter a valid application number before uploading documents.");
+    }
+    ApplicationEditLockDto lock =
+        applicationEditLockService.snapshot(applicationNumber, userId(authentication), false);
+    if (lock.locked()) {
+      return ResponseEntity.status(HttpStatus.CONFLICT)
+          .body(uploadFailure("application", lock.message()));
     }
 
     LexisUploadService service = uploadServiceProvider.getIfAvailable();
@@ -63,7 +76,11 @@ public class LexisUploadController {
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
         .map(this::uploadResponse)
-        .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
+        .orElseGet(
+            () ->
+                uploadPersistenceFailure(
+                    "application",
+                    "We were unable to save this application document. Confirm the application exists and try again."));
   }
 
   @PostMapping(
@@ -78,7 +95,8 @@ public class LexisUploadController {
       Authentication authentication) {
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null || uploadFile.isEmpty() || permitNumber == null || permitNumber < 1) {
-      return ResponseEntity.badRequest().build();
+      return uploadBadRequest(
+          "permit", "Choose a file and enter a valid permit number before uploading documents.");
     }
 
     LexisUploadService service = uploadServiceProvider.getIfAvailable();
@@ -93,7 +111,11 @@ public class LexisUploadController {
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
         .map(this::uploadResponse)
-        .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
+        .orElseGet(
+            () ->
+                uploadPersistenceFailure(
+                    "permit",
+                    "We were unable to save this permit document. Confirm the permit exists and try again."));
   }
 
   @PostMapping(
@@ -111,7 +133,8 @@ public class LexisUploadController {
         || uploadFile.isEmpty()
         || exemptionNumber == null
         || exemptionNumber.isBlank()) {
-      return ResponseEntity.badRequest().build();
+      return uploadBadRequest(
+          "exemption", "Choose a file and enter a valid exemption number before uploading documents.");
     }
 
     LexisUploadService service = uploadServiceProvider.getIfAvailable();
@@ -126,7 +149,11 @@ public class LexisUploadController {
             firstNonBlank(fileDescription, descriptionAlias),
             resolveEntryUserId(authentication))
         .map(this::uploadResponse)
-        .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
+        .orElseGet(
+            () ->
+                uploadPersistenceFailure(
+                    "exemption",
+                    "We were unable to save this exemption document. Confirm the exemption exists and try again."));
   }
 
   @PostMapping(
@@ -155,7 +182,8 @@ public class LexisUploadController {
         || permitNumber < 1
         || salesInvoiceNumber == null
         || salesInvoiceNumber.isBlank()) {
-      return ResponseEntity.badRequest().build();
+      return uploadBadRequest(
+          "invoice", "Choose a file and enter valid permit and invoice numbers before uploading documents.");
     }
 
     LexisUploadService service = uploadServiceProvider.getIfAvailable();
@@ -174,7 +202,11 @@ public class LexisUploadController {
             firstNonNull(invoiceFeeInLieu, feeInLieuAlias),
             resolveEntryUserId(authentication))
         .map(this::uploadResponse)
-        .orElseGet(() -> ResponseEntity.unprocessableEntity().build());
+        .orElseGet(
+            () ->
+                uploadPersistenceFailure(
+                    "invoice",
+                    "We were unable to save this invoice document. Confirm the permit exists and try again."));
   }
 
   @PostMapping(
@@ -191,7 +223,8 @@ public class LexisUploadController {
       Authentication authentication) {
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null || uploadFile.isEmpty()) {
-      return ResponseEntity.badRequest().build();
+      return ResponseEntity.badRequest()
+          .body(applicationSubmissionFailure("Choose a LEXIS application submission file before uploading."));
     }
 
     ApplicationSubmissionImportService service =
@@ -221,7 +254,8 @@ public class LexisUploadController {
       @RequestParam(name = "userReference", required = false) String userReference) {
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null || uploadFile.isEmpty()) {
-      return ResponseEntity.badRequest().build();
+      return ResponseEntity.badRequest()
+          .body(applicationSubmissionFailure("Choose a LEXIS application submission file before validating."));
     }
 
     ApplicationSubmissionImportService service =
@@ -238,11 +272,8 @@ public class LexisUploadController {
   }
 
   private String resolveEntryUserId(Authentication authentication) {
-    if (authentication == null || authentication.getName() == null) {
-      return null;
-    }
-    String principalName = authentication.getName().trim();
-    if (principalName.isEmpty()) {
+    String principalName = userId(authentication);
+    if (principalName == null) {
       return null;
     }
     int slash = Math.max(principalName.lastIndexOf('\\'), principalName.lastIndexOf('/'));
@@ -252,10 +283,49 @@ public class LexisUploadController {
     return principalName;
   }
 
+  private String userId(Authentication authentication) {
+    if (authentication == null || authentication.getName() == null) {
+      return null;
+    }
+    String principalName = authentication.getName().trim();
+    if (principalName.isEmpty()) {
+      return null;
+    }
+    return principalName;
+  }
+
   private ResponseEntity<LexisUploadResultDto> uploadResponse(LexisUploadResultDto result) {
     HttpStatus status =
         "accepted".equalsIgnoreCase(result.status()) ? HttpStatus.OK : HttpStatus.UNPROCESSABLE_ENTITY;
     return ResponseEntity.status(status).body(result);
+  }
+
+  private ResponseEntity<LexisUploadResultDto> uploadBadRequest(
+      String uploadType, String message) {
+    return ResponseEntity.badRequest().body(uploadFailure(uploadType, message));
+  }
+
+  private ResponseEntity<LexisUploadResultDto> uploadPersistenceFailure(
+      String uploadType, String message) {
+    return ResponseEntity.unprocessableEntity().body(uploadFailure(uploadType, message));
+  }
+
+  private LexisUploadResultDto uploadFailure(String uploadType, String message) {
+    return new LexisUploadResultDto(uploadType, null, 0L, "rejected", message);
+  }
+
+  private ApplicationSubmissionImportResultDto applicationSubmissionFailure(String message) {
+    return new ApplicationSubmissionImportResultDto(
+        "applicationSubmission",
+        null,
+        0L,
+        "rejected",
+        message,
+        null,
+        null,
+        0,
+        List.of(message),
+        List.of());
   }
 
   private HttpStatus applicationSubmissionResponseStatus(ApplicationSubmissionImportResultDto result) {

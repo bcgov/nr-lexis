@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { PROTECTED_ROUTES } from '@/routes/routePaths'
+import { isValidElement, type ReactElement } from 'react'
+import { Navigate } from 'react-router-dom'
+import { PROTECTED_ROUTES, PUBLIC_ROUTES } from '@/routes/routePaths'
 
 const findRoute = (path: string) => {
   const route = PROTECTED_ROUTES.find((entry) => entry.path === path)
@@ -15,12 +17,13 @@ describe('Protected route access matrix', () => {
         '/summary',
         '/applicationsReview',
         '/applicationSearch',
-        'createApplication',
+        'uploadApplicationSubmission',
         '/exemptionSearch',
         '/offersSearch',
         '/permitSearch',
       ],
       requiredActionsMatch: 'any',
+      roleScope: 'provincial',
     },
     {
       path: '/provincial/application/create',
@@ -29,8 +32,15 @@ describe('Protected route access matrix', () => {
     },
     {
       path: '/provincial/application/upload',
-      requiredActions: ['createApplication'],
+      requiredActions: ['uploadApplicationSubmission'],
       requiredActionsMatch: 'any',
+      roleScope: 'provincialApplicationSubmission',
+    },
+    {
+      path: '/federal/application/upload',
+      requiredActions: ['uploadApplicationSubmission'],
+      requiredActionsMatch: 'any',
+      roleScope: 'federalApplicationSubmission',
     },
     {
       path: '/provincial/exemption/create',
@@ -43,23 +53,8 @@ describe('Protected route access matrix', () => {
       requiredActionsMatch: 'all',
     },
     {
-      path: '/provincial/permit/create',
-      requiredActions: ['/permitSearch', 'createPermit'],
-      requiredActionsMatch: 'all',
-    },
-    {
-      path: '/indian-reserve/permit/create',
-      requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
-      requiredActionsMatch: 'all',
-    },
-    {
       path: '/federal/application/:applicationNumber',
       requiredActions: ['/federalApplicationDetails', 'viewFederalApplication'],
-      requiredActionsMatch: 'all',
-    },
-    {
-      path: '/indian-reserve/permit/:permitNumber',
-      requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
       requiredActionsMatch: 'all',
     },
     {
@@ -75,10 +70,11 @@ describe('Protected route access matrix', () => {
     },
   ])(
     'enforces expected action requirements for $path',
-    ({ path, requiredActions, requiredActionsMatch }) => {
+    ({ path, requiredActions, requiredActionsMatch, roleScope }) => {
       const route = findRoute(path)
       expect(route.requiredActions).toEqual(requiredActions)
       expect(route.requiredActionsMatch ?? 'any').toBe(requiredActionsMatch)
+      expect(route.roleScope).toBe(roleScope)
     },
   )
 
@@ -91,5 +87,28 @@ describe('Protected route access matrix', () => {
     const route = findRoute('/reports')
     expect(route.requiredActions).toContain('mofrListing')
     expect(route.requiredActions).toContain('/applicationReport')
+  })
+
+  it('does not expose retired Indian Reserve or legacy advertising routes', () => {
+    const routePaths = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES].map((route) =>
+      route.path.toLowerCase(),
+    )
+
+    expect(routePaths.some((path) => path.includes('indian'))).toBe(false)
+    expect(routePaths.some((path) => path.includes('reserve'))).toBe(false)
+    expect(routePaths.some((path) => path.includes('advertising'))).toBe(false)
+  })
+
+  it('keeps legacy dashboard URL as a redirect instead of a page', () => {
+    const publicDashboardRoute = PUBLIC_ROUTES.find((entry) => entry.path === '/dashboard')
+
+    expect(publicDashboardRoute).toBeDefined()
+    expect(publicDashboardRoute?.id).toBe('Legacy Dashboard Redirect')
+    expect(isValidElement(publicDashboardRoute?.element)).toBe(true)
+    expect((publicDashboardRoute?.element as ReactElement).type).toBe(Navigate)
+    expect((publicDashboardRoute?.element as ReactElement).props).toMatchObject({
+      to: '/',
+      replace: true,
+    })
   })
 })

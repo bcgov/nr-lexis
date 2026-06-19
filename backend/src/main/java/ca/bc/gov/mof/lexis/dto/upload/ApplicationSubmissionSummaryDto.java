@@ -7,6 +7,7 @@ public record ApplicationSubmissionSummaryDto(
     String ownerClientLocationCode,
     String ownerContactName,
     String jurisdictionCode,
+    Long federalApplicationNumber,
     Long orgUnitNumber,
     String sourceApplicationStatusCode,
     String exemptionReasonCode,

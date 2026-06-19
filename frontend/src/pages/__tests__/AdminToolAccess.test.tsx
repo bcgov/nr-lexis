@@ -46,6 +46,7 @@ describe('Admin tool access smoke', () => {
           '/fileApplicationUpload',
           '/lexisPolicyAdmin',
           'createApplication',
+          'uploadApplicationSubmission',
         ],
       },
       canPerform: (action: string) =>
@@ -54,6 +55,7 @@ describe('Admin tool access smoke', () => {
           '/fileApplicationUpload',
           '/lexisPolicyAdmin',
           'createApplication',
+          'uploadApplicationSubmission',
         ].includes(action),
       refresh: vi.fn().mockResolvedValue(undefined),
     } as any)
@@ -93,7 +95,7 @@ describe('Admin tool access smoke', () => {
         authenticated: true,
         principal: 'idir\\readonly',
         roles: ['READ_ONLY'],
-        welcomeTarget: '/dashboard',
+        welcomeTarget: 'readOnly',
         legacyPath: null,
         grantedActions: [],
       },

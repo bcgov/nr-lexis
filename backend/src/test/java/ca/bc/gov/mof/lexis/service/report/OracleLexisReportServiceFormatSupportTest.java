@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -275,15 +276,8 @@ class OracleLexisReportServiceFormatSupportTest {
   }
 
   @Test
-  void shouldApplyLegacyBiweeklyIndustryScheduleDefaults() {
+  void shouldNotApplyRetiredBiweeklyIndustryScheduleDefaults() {
     LexisReportScheduleRepository scheduleRepository = Mockito.mock(LexisReportScheduleRepository.class);
-    Mockito.when(scheduleRepository.findCurrentSchedules())
-        .thenReturn(
-            List.of(
-                new LexisReportScheduleRepository.CurrentScheduleRow(
-                    1001L, LocalDate.of(2026, 6, 15)),
-                new LexisReportScheduleRepository.CurrentScheduleRow(
-                    1002L, LocalDate.of(2026, 6, 29))));
     OracleLexisReportService service = createService(scheduleRepository);
     LexisReportRequestDto request =
         new LexisReportRequestDto(
@@ -299,13 +293,16 @@ class OracleLexisReportServiceFormatSupportTest {
     LexisReportRequestDto result =
         service.applyLegacyReportDefaults(LexisJasperReportDefinition.BIWEEKLY_LISTING, request);
 
+    assertThat(result).isSameAs(request);
     assertThat(result.parameters())
         .containsEntry("legacyActionMapping", "generateIndustryCSV")
-        .containsEntry("fromDate", "2026-06-15")
-        .containsEntry("toDate", "2026-06-28")
-        .containsEntry("exportJurisdictionCode", "P")
-        .containsEntry("jurisdiction", "P")
-        .doesNotContainKeys("region", "orgUnitNumber");
+        .containsEntry("fromDate", "2025-01-01")
+        .containsEntry("toDate", "2025-01-31")
+        .containsEntry("region", "12")
+        .containsEntry("orgUnitNumber", "14")
+        .containsEntry("exportJurisdictionCode", "F")
+        .doesNotContainEntry("jurisdiction", "P");
+    Mockito.verifyNoInteractions(scheduleRepository);
   }
 
   @Test
@@ -356,22 +353,6 @@ class OracleLexisReportServiceFormatSupportTest {
   }
 
   @Test
-  void shouldLeaveBiweeklyIndustryRequestUnchangedWhenSchedulesAreUnavailable() {
-    LexisReportScheduleRepository scheduleRepository = Mockito.mock(LexisReportScheduleRepository.class);
-    Mockito.when(scheduleRepository.findCurrentSchedules()).thenReturn(List.of());
-    OracleLexisReportService service = createService(scheduleRepository);
-    LexisReportRequestDto request =
-        new LexisReportRequestDto(
-            Map.of("legacyActionMapping", "generateIndustryPDF", "fromDate", "2025-01-01"),
-            "PDF");
-
-    LexisReportRequestDto result =
-        service.applyLegacyReportDefaults(LexisJasperReportDefinition.BIWEEKLY_LISTING, request);
-
-    assertThat(result).isSameAs(request);
-  }
-
-  @Test
   void shouldNotGenerateUnboundedBiweeklyReportWhenScheduleDefaultsAreUnavailable() throws Exception {
     DataSource dataSource = Mockito.mock(DataSource.class);
     OracleLegacyCsvReportService legacyCsvReportService = Mockito.mock(OracleLegacyCsvReportService.class);
@@ -389,9 +370,11 @@ class OracleLexisReportServiceFormatSupportTest {
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("legacyActionMapping", "generate"), "PDF");
 
-    Optional<LexisGeneratedReport> result = service.generateReport("biweeklyListing", request);
+    assertThatThrownBy(() -> service.generateReport("biweeklyListing", request))
+        .isInstanceOf(LexisReportValidationException.class)
+        .hasMessageContaining("Listing from date")
+        .hasMessageContaining("Listing to date");
 
-    assertThat(result).isEmpty();
     Mockito.verify(scheduleRepository).findCurrentSchedules();
     verifyNoInteractions(dataSource, legacyCsvReportService, legacyJasperTableReportService);
   }

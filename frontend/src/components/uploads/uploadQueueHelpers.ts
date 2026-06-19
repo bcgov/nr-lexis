@@ -17,7 +17,10 @@ export const GENERIC_UPLOAD_FAILURE_MESSAGE =
 export const GENERIC_SUBMISSION_FAILURE_MESSAGE =
   'Submission failed. Please try again. If the problem persists, contact your administrator.'
 
-export const asStringArray = (value: unknown): string[] => {
+const FILE_TOO_LARGE_UPLOAD_FAILURE_MESSAGE =
+  'The selected file is too large. Choose a smaller file and try again.'
+
+const asStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value
       .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
@@ -51,13 +54,15 @@ export const extractUploadErrorDetails = (
   const sanitizedTextResponseMessage = textResponseMessage
     ? sanitizeNotificationText(textResponseMessage, fallbackMessage)
     : ''
+  const statusFallbackMessage =
+    status === 413 ? FILE_TOO_LARGE_UPLOAD_FAILURE_MESSAGE : fallbackMessage
 
   const message =
     sanitizedErrors.length > 0
       ? sanitizedErrors.join(' ')
       : sanitizedResponseMessage
         ? sanitizedResponseMessage
-        : sanitizedTextResponseMessage || (status ? fallbackMessage : fallbackMessage)
+        : sanitizedTextResponseMessage || statusFallbackMessage
 
   return {
     message,

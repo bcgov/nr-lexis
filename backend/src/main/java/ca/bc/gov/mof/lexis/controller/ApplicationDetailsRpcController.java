@@ -10,8 +10,10 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileN
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstTrimmedNonBlank;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
@@ -109,18 +111,21 @@ public class ApplicationDetailsRpcController {
   private final ObjectProvider<ApplicationReviewService> applicationReviewServiceProvider;
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
+  private final ApplicationEditLockService editLockService;
 
   public ApplicationDetailsRpcController(
       ObjectProvider<ApplicationDetailsRpcService> serviceProvider,
       ObjectProvider<ClientLookupService> clientLookupServiceProvider,
       ObjectProvider<ApplicationReviewService> applicationReviewServiceProvider,
       LexisSessionService sessionService,
-      LexisAuthorizationService authorizationService) {
+      LexisAuthorizationService authorizationService,
+      ApplicationEditLockService editLockService) {
     this.serviceProvider = serviceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
     this.applicationReviewServiceProvider = applicationReviewServiceProvider;
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
+    this.editLockService = editLockService;
   }
 
   @GetMapping("/rpc/application-details/document-details")
@@ -203,6 +208,11 @@ public class ApplicationDetailsRpcController {
     if (!canRemoveApplicationDocument(service, parsedDocumentId, parsedApplicationNumber, roles)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
+    ApplicationEditLockDto lock =
+        editLockService.snapshot(parsedApplicationNumber, userId(authentication), false);
+    if (lock.locked()) {
+      return ResponseEntity.status(HttpStatus.CONFLICT).body(new RemoveDocumentResponseDto("false"));
+    }
 
     boolean removed = service.removeDocument(parsedDocumentId);
     return ResponseEntity.ok(new RemoveDocumentResponseDto(Boolean.toString(removed)));
@@ -253,9 +263,16 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    ApplicationEditLockDto lock = requireEditable(parsedApplicationNumber, authentication);
+    if (lock.locked()) {
+      return ResponseEntity.status(HttpStatus.CONFLICT)
+          .body(new PersistRemarkResponseDto("locked", null, null, lock.message(), lock.message(), null));
+    }
+
     String userId = authentication == null ? null : authentication.getName();
     return service
-        .persistRemark(remarkId, parsePositiveLong(applicationNumber), remarkBody, userId)
+        .persistRemark(remarkId, parsedApplicationNumber, remarkBody, userId)
         .map(
             persisted ->
                 ResponseEntity.ok(
@@ -325,7 +342,11 @@ public class ApplicationDetailsRpcController {
   }
 
   @PostMapping("/rpc/application-details/release-lock")
-  public ResponseEntity<ReleaseLockResponseDto> releaseLock(HttpServletRequest request) {
+  public ResponseEntity<ReleaseLockResponseDto> releaseLock(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      HttpServletRequest request,
+      Authentication authentication) {
+    editLockService.release(parsePositiveLong(applicationNumber), userId(authentication));
     if (request != null) {
       var session = request.getSession(false);
       if (session != null) {
@@ -337,8 +358,11 @@ public class ApplicationDetailsRpcController {
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_RELEASE_LOCK)
-  public ResponseEntity<ReleaseLockResponseDto> releaseLockLegacy(HttpServletRequest request) {
-    return releaseLock(request);
+  public ResponseEntity<ReleaseLockResponseDto> releaseLockLegacy(
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
+      HttpServletRequest request,
+      Authentication authentication) {
+    return releaseLock(applicationNumber, request, authentication);
   }
 
   @PostMapping(
@@ -419,8 +443,14 @@ public class ApplicationDetailsRpcController {
     }
 
     String userId = authentication == null ? null : authentication.getName();
+    ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request =
+        toApplicationSummaryUpdateRequest(parameters);
+    ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
+    if (lock.locked()) {
+      return applicationPersistenceLockConflict(lock, request.applicationNumber());
+    }
     ApplicationDetailsRpcService.CreateApplicationResult result =
-        service.updateApplicationSummary(toApplicationSummaryUpdateRequest(parameters), userId);
+        service.updateApplicationSummary(request, userId);
     return ResponseEntity.ok(
         new ApplicationPersistenceResponseDto(
             result.valid(),
@@ -899,9 +929,14 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    ApplicationDetailsRpcService.PackageMutationRequest request = toPackageMutationRequest(parameters);
+    ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
+    if (lock.locked()) {
+      return packagePersistenceLockConflict(lock);
+    }
+
     return ResponseEntity.ok(
-        toPackagePersistenceResponse(
-            service.addPackage(toPackageMutationRequest(parameters), userId(authentication))));
+        toPackagePersistenceResponse(service.addPackage(request, userId(authentication))));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_ADD_PACKAGE_TO_APPLICATION)
@@ -925,9 +960,14 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    ApplicationDetailsRpcService.PackageMutationRequest request = toPackageMutationRequest(parameters);
+    ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
+    if (lock.locked()) {
+      return packagePersistenceLockConflict(lock);
+    }
+
     return ResponseEntity.ok(
-        toPackagePersistenceResponse(
-            service.updatePackage(toPackageMutationRequest(parameters), userId(authentication))));
+        toPackagePersistenceResponse(service.updatePackage(request, userId(authentication))));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_UPDATE_PACKAGE)
@@ -951,9 +991,14 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    ApplicationDetailsRpcService.ScaleMutationRequest request = toScaleMutationRequest(parameters);
+    ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
+    if (lock.locked()) {
+      return scalePersistenceLockConflict(lock);
+    }
+
     return ResponseEntity.ok(
-        toScalePersistenceResponse(
-            service.addScaleToPackage(toScaleMutationRequest(parameters), userId(authentication))));
+        toScalePersistenceResponse(service.addScaleToPackage(request, userId(authentication))));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_ADD_SCALE_TO_PACKAGE)
@@ -966,6 +1011,7 @@ public class ApplicationDetailsRpcController {
   @DeleteMapping("/rpc/application-details/scale")
   public ResponseEntity<DeleteResponseDto> deleteScaleById(
       @RequestParam(name = "scaleId", required = false) String scaleId,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
     if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -977,6 +1023,11 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    ApplicationEditLockDto lock = requireEditable(parsePositiveLong(applicationNumber), authentication);
+    if (lock.locked()) {
+      return ResponseEntity.status(HttpStatus.CONFLICT).body(new DeleteResponseDto(false));
+    }
+
     return ResponseEntity.ok(
         new DeleteResponseDto(service.deleteScaleById(scaleId, userId(authentication))));
   }
@@ -984,13 +1035,15 @@ public class ApplicationDetailsRpcController {
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_DELETE_SCALE_BY_ID)
   public ResponseEntity<DeleteResponseDto> deleteScaleByIdLegacy(
       @RequestParam(name = "scaleId", required = false) String scaleId,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
-    return deleteScaleById(scaleId, authentication);
+    return deleteScaleById(scaleId, applicationNumber, authentication);
   }
 
   @DeleteMapping("/rpc/application-details/package")
   public ResponseEntity<DeleteResponseDto> deletePackageById(
       @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
     if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -1002,6 +1055,11 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    ApplicationEditLockDto lock = requireEditable(parsePositiveLong(applicationNumber), authentication);
+    if (lock.locked()) {
+      return ResponseEntity.status(HttpStatus.CONFLICT).body(new DeleteResponseDto(false));
+    }
+
     return ResponseEntity.ok(
         new DeleteResponseDto(service.deletePackageById(packageNumber, userId(authentication))));
   }
@@ -1009,8 +1067,9 @@ public class ApplicationDetailsRpcController {
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_DELETE_PACKAGE_BY_ID)
   public ResponseEntity<DeleteResponseDto> deletePackageByIdLegacy(
       @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
-    return deletePackageById(packageNumber, authentication);
+    return deletePackageById(packageNumber, applicationNumber, authentication);
   }
 
   private boolean canPerform(Authentication authentication, String action) {
@@ -1020,6 +1079,35 @@ public class ApplicationDetailsRpcController {
 
   private boolean canPerform(List<String> roles, String action) {
     return authorizationService.canPerformAction(roles, action);
+  }
+
+  private ApplicationEditLockDto requireEditable(Long applicationNumber, Authentication authentication) {
+    return editLockService.requireEditable(applicationNumber, userId(authentication), userId(authentication));
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> applicationPersistenceLockConflict(
+      ApplicationEditLockDto lock, Long applicationNumber) {
+    String message = lock.message();
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(
+            new ApplicationPersistenceResponseDto(
+                false, message, applicationNumber, List.of(message), List.of()));
+  }
+
+  private ResponseEntity<PackagePersistenceResponseDto> packagePersistenceLockConflict(
+      ApplicationEditLockDto lock) {
+    String message = lock.message();
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(
+            new PackagePersistenceResponseDto(
+                false, List.of(message), List.of(), null, null, null, null, null, null));
+  }
+
+  private ResponseEntity<ScalePersistenceResponseDto> scalePersistenceLockConflict(
+      ApplicationEditLockDto lock) {
+    String message = lock.message();
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(new ScalePersistenceResponseDto(false, null, List.of(message), List.of()));
   }
 
   private boolean canRemoveApplicationDocument(

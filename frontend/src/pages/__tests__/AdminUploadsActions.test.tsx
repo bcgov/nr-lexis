@@ -58,6 +58,15 @@ const renderPage = (path = '/admin/uploads?type=permit') => {
             />
           }
         />
+        <Route
+          path="/federal/application/upload"
+          element={
+            <AdminUploadsPage
+              lockedWorkflowType="applicationSubmission"
+              pageTitle="Upload Federal Application Submission"
+            />
+          }
+        />
       </Routes>
     </MemoryRouter>,
   )
@@ -385,7 +394,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('validates LEXIS XML before submitting an application submission', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
     mockedValidateApplicationSubmissionUpload.mockResolvedValue({
       message:
@@ -509,9 +518,54 @@ describe('Admin upload workflow smoke', () => {
     )
   })
 
+  it('shows parsed federal application numbers for federal application submissions', async () => {
+    mockedUseAuth.mockReturnValue({
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
+    } as any)
+    mockedValidateApplicationSubmissionUpload.mockResolvedValue({
+      message:
+        'LEXIS application submission validated for federal application 700123 and package FED26-700123.',
+      packageNumber: 'FED26-700123',
+      scaleRows: 1,
+      submissionSummary: {
+        ownerClientNumber: '1074',
+        ownerClientLocationCode: '03',
+        ownerContactName: 'CUSTOMER SERVICE',
+        jurisdictionCode: 'F',
+        federalApplicationNumber: 700123,
+        orgUnitNumber: 1909,
+        sourceApplicationStatusCode: 'SUB',
+        exemptionReasonCode: 'U',
+        applicantTypeCode: 'O',
+        productTypeCode: 'H',
+        productLocation: 'Federal water lot',
+        ageClass: 'M',
+        applicationVolume: 10,
+        averageLogVolume: 0.2,
+        averageLength: 6.1,
+        averageDiameter: 12.2,
+        speciesCodes: ['HE'],
+        endUseCode: 'PL',
+      },
+    })
+
+    renderPage('/federal/application/upload')
+
+    expect(screen.getByText('Upload Federal Application Submission')).toBeInTheDocument()
+
+    const file = new File(['<xml />'], 'federal-submission.xml', { type: 'application/xml' })
+    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Validate submission' }))
+
+    expect(await screen.findByText('Submission validated')).toBeInTheDocument()
+    expect(screen.getByText('Federal application')).toBeInTheDocument()
+    expect(screen.getByText('700123')).toBeInTheDocument()
+    expect(screen.getByText('F')).toBeInTheDocument()
+  })
+
   it('cancels a validated application submission and clears review state', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
     mockedValidateApplicationSubmissionUpload.mockResolvedValue({
       message:
@@ -546,7 +600,7 @@ describe('Admin upload workflow smoke', () => {
     const user = userEvent.setup({ applyAccept: false })
 
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
     mockedValidateApplicationSubmissionUpload.mockResolvedValue({
       message:
@@ -584,7 +638,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('shows structured XML warning details in the upload queue', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
     mockedValidateApplicationSubmissionUpload.mockResolvedValue({
       packageNumber: 'TEST23-652-7D-2',
@@ -607,7 +661,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('previews safe structure from queued LEXIS XML files before submit', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
 
     renderPage('/provincial/application/upload')
@@ -622,7 +676,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('previews safe structure from queued LEXIS GeoJSON files before submit', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
 
     renderPage('/provincial/application/upload')
@@ -654,7 +708,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('does not echo XML preview fields that contain nested markup', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
 
     renderPage('/provincial/application/upload')
@@ -677,7 +731,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('previews queued ZIP files as server-validated XML archives before submit', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
 
     renderPage('/provincial/application/upload')
@@ -692,7 +746,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('submits queued XML files one at a time', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
     mockedValidateApplicationSubmissionUpload
       .mockResolvedValueOnce({
@@ -764,7 +818,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('shows per-file review details for mixed XML upload results', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
     mockedValidateApplicationSubmissionUpload
       .mockResolvedValueOnce({
@@ -831,7 +885,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('shows duplicate package conflict when finalized after another validated submission wins', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
     mockedValidateApplicationSubmissionUpload.mockResolvedValue({
       message:
@@ -888,7 +942,7 @@ describe('Admin upload workflow smoke', () => {
     const user = userEvent.setup({ applyAccept: false })
 
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
     mockedValidateApplicationSubmissionUpload.mockRejectedValue({
       response: {
@@ -933,7 +987,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('shows resolved validation rejection details for unsupported schema versions', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
     mockedValidateApplicationSubmissionUpload.mockResolvedValue({
       status: 'rejected',
@@ -996,7 +1050,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('blocks empty files before submit', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
 
     renderPage('/provincial/application/upload')
@@ -1017,7 +1071,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('shows LEXIS XML validation rejection details from a 422 response', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
     mockedValidateApplicationSubmissionUpload.mockRejectedValue({
       response: {
@@ -1042,7 +1096,7 @@ describe('Admin upload workflow smoke', () => {
 
   it('opens LEXIS application submission as a locked application upload route', async () => {
     mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
     } as any)
 
     renderPage('/provincial/application/upload')

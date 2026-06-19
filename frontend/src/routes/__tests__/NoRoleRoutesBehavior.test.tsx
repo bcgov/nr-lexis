@@ -14,7 +14,7 @@ describe('No-role route behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedUseAuth.mockReturnValue({
-      defaultRoute: '/dashboard',
+      defaultRoute: '/unauthorized',
       capabilities: {
         principal: 'idir\\norole',
       },

@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.controller;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.service.report.LexisGeneratedReport;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
+import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -61,9 +62,7 @@ public class LexisReportController {
       @RequestBody(required = false) LexisReportRequestDto request) {
     LexisReportRequestDto normalizedRequest = normalizeRequest(request);
     if (!hasApplicationReportLimiter(normalizedRequest.parameters())) {
-      return ResponseEntity.badRequest()
-          .contentType(MediaType.TEXT_PLAIN)
-          .body(APPLICATION_REPORT_LIMITER_MESSAGE.getBytes(StandardCharsets.UTF_8));
+      return badRequest(APPLICATION_REPORT_LIMITER_MESSAGE);
     }
     return executeReport("applicationReport", "application report", normalizedRequest);
   }
@@ -114,9 +113,13 @@ public class LexisReportController {
       return ResponseEntity.noContent().build();
     }
 
-    return reportService.generateReport(reportAction, normalizeRequest(request))
-        .map(this::toResponse)
-        .orElseGet(() -> ResponseEntity.noContent().build());
+    try {
+      return reportService.generateReport(reportAction, normalizeRequest(request))
+          .map(this::toResponse)
+          .orElseGet(() -> ResponseEntity.noContent().build());
+    } catch (LexisReportValidationException ex) {
+      return badRequest(ex.getMessage());
+    }
   }
 
   private LexisReportRequestDto normalizeRequest(LexisReportRequestDto request) {
@@ -178,6 +181,15 @@ public class LexisReportController {
         .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
         .contentType(mediaType)
         .body(content);
+  }
+
+  private ResponseEntity<byte[]> badRequest(String message) {
+    String responseMessage = message == null || message.isBlank()
+        ? "Unable to generate report. Check values and try again."
+        : message;
+    return ResponseEntity.badRequest()
+        .contentType(MediaType.TEXT_PLAIN)
+        .body(responseMessage.getBytes(StandardCharsets.UTF_8));
   }
 
   private MediaType resolveMediaType(String mediaType) {

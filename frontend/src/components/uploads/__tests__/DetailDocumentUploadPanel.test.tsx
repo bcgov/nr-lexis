@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
 import { submitAdminUpload } from '@/service/admin-upload-service'
 
@@ -11,6 +11,10 @@ vi.mock('@/service/admin-upload-service', () => ({
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 
 describe('DetailDocumentUploadPanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('disables file selection when upload access is not available', () => {
     render(
       <DetailDocumentUploadPanel
@@ -66,6 +70,40 @@ describe('DetailDocumentUploadPanel', () => {
     expect(await screen.findByText('Upload error')).toBeInTheDocument()
     expect(
       screen.getByText('Documents uploaded, but the document list could not refresh.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows plain-language backend upload errors in the queue', async () => {
+    const file = new File(['oversized document upload'], 'oversized-application-document.pdf', {
+      type: 'application/pdf',
+    })
+    mockedSubmitAdminUpload.mockRejectedValue({
+      response: {
+        status: 413,
+        data: {
+          message: 'The selected file is too large. Choose a smaller file and try again.',
+          errors: ['The selected file is too large. Choose a smaller file and try again.'],
+        },
+      },
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Upload' }))
+
+    expect(await screen.findByText('Upload error')).toBeInTheDocument()
+    expect(screen.getByText('1 file failed. Review the queue for details.')).toBeInTheDocument()
+    expect(
+      screen.getAllByText(
+        'The selected file is too large. Choose a smaller file and try again.',
+      )[0],
     ).toBeInTheDocument()
   })
 })

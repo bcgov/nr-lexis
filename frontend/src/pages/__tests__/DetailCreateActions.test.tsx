@@ -31,6 +31,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchProvincialApplicationDetail: vi.fn(),
   fetchProvincialExemptionDetail: vi.fn(),
+  releaseApplicationEditLock: vi.fn(),
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
@@ -97,7 +98,6 @@ const defaultCanPerform = (action: string) =>
     '/offersSearch',
     '/permitSearch',
     'createOffer',
-    'createPermit',
   ].includes(action)
 
 const applicationDetail: ProvincialApplicationDetail = {
@@ -281,7 +281,7 @@ describe('Detail Create Action Smoke', () => {
     expect(createOfferButton).toBeDisabled()
   })
 
-  it('enables Create Permit and navigates with prefill from provincial exemption detail', async () => {
+  it('does not expose the retired Create Permit action on exemption detail', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue(exemptionDetail)
 
     render(
@@ -295,35 +295,7 @@ describe('Detail Create Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    const createPermitButton = await screen.findByRole('button', { name: /Create permit/i })
-    expect(createPermitButton).toBeEnabled()
-
-    await userEvent.click(createPermitButton)
-
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/provincial/permit/create?exemptionNumber=EX-777&applicationNumber=654&ownerClientNumber=00055566&applicantClientNumber=00077788',
-    )
-  })
-
-  it('disables Create Permit when exemption is not active', async () => {
-    mockedFetchProvincialExemptionDetail.mockResolvedValue({
-      ...exemptionDetail,
-      exemptionStatusCode: 'CLOSED',
-      exemptionStatusDescription: 'Closed',
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
-        <Routes>
-          <Route
-            path="/provincial/exemption/:exemptionNumber"
-            element={<ProvincialExemptionDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const createPermitButton = await screen.findByRole('button', { name: /Create permit/i })
-    expect(createPermitButton).toBeDisabled()
+    await screen.findByText('Exemption summary')
+    expect(screen.queryByRole('button', { name: /Create permit/i })).not.toBeInTheDocument()
   })
 })

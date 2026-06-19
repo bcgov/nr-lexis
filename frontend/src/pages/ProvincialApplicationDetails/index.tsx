@@ -25,7 +25,10 @@ import {
   matchesFilter,
   normalizeFilterText as normalizeText,
 } from '@/pages/shared/detail-page-utils'
-import { fetchProvincialApplicationDetail } from '@/service/lexis-detail-service'
+import {
+  fetchProvincialApplicationDetail,
+  releaseApplicationEditLock,
+} from '@/service/lexis-detail-service'
 import {
   fetchApplicationDocuments,
   openApplicationDocument,
@@ -141,11 +144,11 @@ type ClientDataSummaryProps = {
 }
 
 const ClientDataSummary: FC<ClientDataSummaryProps> = ({ title, clientData, isLoading }) => {
-  const [showClientLookupMessage, setShowClientLookupMessage] = useState(false)
-
-  useEffect(() => {
-    setShowClientLookupMessage(Boolean(clientData?.notfound))
-  }, [clientData?.notfound])
+  const clientLookupMessage = clientData?.notfound ?? ''
+  const clientLookupMessageKey = `${clientData?.clientNumber ?? ''}:${clientLookupMessage}`
+  const [dismissedClientLookupMessageKey, setDismissedClientLookupMessageKey] = useState<
+    string | null
+  >(null)
 
   if (isLoading) {
     return <InlineLoading description={`Loading ${title.toLowerCase()}...`} />
@@ -176,13 +179,13 @@ const ClientDataSummary: FC<ClientDataSummaryProps> = ({ title, clientData, isLo
           </div>
         ))}
       </dl>
-      {showClientLookupMessage && clientData?.notfound && (
+      {clientLookupMessage && dismissedClientLookupMessageKey !== clientLookupMessageKey && (
         <AppNotification
           kind="warning"
           title="Client lookup"
-          subtitle={clientData.notfound}
+          subtitle={clientLookupMessage}
           lowContrast
-          onCloseButtonClick={() => setShowClientLookupMessage(false)}
+          onCloseButtonClick={() => setDismissedClientLookupMessageKey(clientLookupMessageKey)}
         />
       )}
     </section>
@@ -334,6 +337,9 @@ const canDeleteApplicationDocuments = (
   if (!detail) {
     return false
   }
+  if (detail.readOnly || detail.locked) {
+    return false
+  }
 
   const status = detail.applicationStatusCode?.trim().toUpperCase() ?? ''
   const normalizedRoles = roles.map((role) => role.trim().toUpperCase())
@@ -364,6 +370,15 @@ const applicationDocumentUploadUnavailableMessage = (
   detail: ProvincialApplicationDetail | null,
   permitRows: ApplicationPermitRow[],
 ): string => {
+  if (detail?.locked) {
+    return (
+      detail.lockMessage ||
+      'Application document upload is unavailable while this application is locked.'
+    )
+  }
+  if (detail?.readOnly) {
+    return 'Application document upload is unavailable for read-only applications.'
+  }
   if (isExpiredApplication(detail)) {
     return 'Application document upload is unavailable for expired applications.'
   }
@@ -459,8 +474,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
   const [isLoadingOwnerClientData, setIsLoadingOwnerClientData] = useState(false)
   const [isLoadingAgentClientData, setIsLoadingAgentClientData] = useState(false)
-  const [showDocumentUploadUnavailableMessage, setShowDocumentUploadUnavailableMessage] =
-    useState(false)
+  const [
+    dismissedDocumentUploadUnavailableMessageKey,
+    setDismissedDocumentUploadUnavailableMessageKey,
+  ] = useState<string | null>(null)
   const [summaryExemptionReasonOptions, setSummaryExemptionReasonOptions] = useState<
     SearchOption[]
   >([])
@@ -650,6 +667,14 @@ const ProvincialApplicationDetailsPage: FC = () => {
     void loadApplicationDetail()
   }, [loadApplicationDetail])
 
+  useEffect(() => {
+    return () => {
+      if (applicationNumber) {
+        void releaseApplicationEditLock(applicationNumber)
+      }
+    }
+  }, [applicationNumber])
+
   const filteredPackages = useMemo(() => {
     const rows = detail?.packages ?? []
     if (!packageFilter.trim()) {
@@ -706,9 +731,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
     detail,
     permitRows,
   )
-  useEffect(() => {
-    setShowDocumentUploadUnavailableMessage(Boolean(documentUploadUnavailableMessage))
-  }, [documentUploadUnavailableMessage])
+  const documentUploadUnavailableMessageKey = `${detail?.applicationNumber ?? ''}:${documentUploadUnavailableMessage}`
+  const showDocumentUploadUnavailableMessage = Boolean(
+    documentUploadUnavailableMessage &&
+    dismissedDocumentUploadUnavailableMessageKey !== documentUploadUnavailableMessageKey,
+  )
   const canAddApplicationDocuments =
     canUploadApplicationDocuments && !documentUploadUnavailableMessage
   const canManageItems =
@@ -1984,7 +2011,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
               payloadResult.payload.remark,
             )
             setActionErrorMessage(
-              emailResult.message || 'Application status updated; email failed.',
+              emailResult.message ===
+                'Application status email is not configured yet. No email was sent.'
+                ? 'Application status email is not configured yet. The application status was updated, but no email was sent.'
+                : emailResult.message || 'Application status updated; email failed.',
             )
             return
           }
@@ -2691,6 +2721,9 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   Locked: {detail.locked ? 'Yes' : 'No'}
                 </Tag>
               </div>
+              {detail.locked && detail.lockMessage && (
+                <p className="application-detail-lock-message">{detail.lockMessage}</p>
+              )}
             </Tile>
           </Column>
 
@@ -2796,7 +2829,7 @@ const ProvincialApplicationDetailsPage: FC = () => {
               <Table useZebraStyles>
                 <TableHead>
                   <TableRow>
-                    <TableHeader>Package</TableHeader>
+                    <TableHeader>Package number</TableHeader>
                     <TableHeader>Volume (m3)</TableHeader>
                     <TableHeader>Pieces</TableHeader>
                     <TableHeader>Action</TableHeader>
@@ -2946,7 +2979,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
                   title="Upload unavailable"
                   subtitle={documentUploadUnavailableMessage}
                   lowContrast
-                  onCloseButtonClick={() => setShowDocumentUploadUnavailableMessage(false)}
+                  onCloseButtonClick={() =>
+                    setDismissedDocumentUploadUnavailableMessageKey(
+                      documentUploadUnavailableMessageKey,
+                    )
+                  }
                 />
               )}
               {canAddApplicationDocuments && (

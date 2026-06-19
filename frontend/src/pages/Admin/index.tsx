@@ -55,7 +55,7 @@ const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
   {
     id: 'applicationSubmissionUpload',
     label: 'Application submission upload',
-    requiredAction: 'createApplication',
+    requiredAction: 'uploadApplicationSubmission',
     description: 'Create applications from ESF LEXIS XML or GeoJSON submissions.',
     reactPath: '/provincial/application/upload',
   },
@@ -96,7 +96,6 @@ const LEGACY_ACTION_CATALOG = [
   '/applicationSearch',
   '/applicationsReview',
   '/approvedExemptionReport',
-  '/blankListing',
   '/changeApplicantType',
   '/createExemption',
   '/editCompletedApplications',
@@ -110,8 +109,6 @@ const LEGACY_ACTION_CATALOG = [
   '/fileExemptionUpload',
   '/fileInvoiceUpload',
   '/filePermitUpload',
-  '/indianReservePermitDetails',
-  '/indianReservePermitSearch',
   '/lexisAgentAdmin',
   '/lexisFILAdmin',
   '/lexisPolicyAdmin',
@@ -131,13 +128,11 @@ const LEGACY_ACTION_CATALOG = [
   'approveExemption',
   'createApplication',
   'createOffer',
-  'createPermit',
-  'industryListing',
   'mofrListing',
   'saveExemption',
   'savePermit',
+  'uploadApplicationSubmission',
   'viewFederalApplication',
-  'viewOICApplication',
 ] as const
 
 const ROUTE_ACCESS_CHECKS = [
@@ -148,7 +143,6 @@ const ROUTE_ACCESS_CHECKS = [
   { label: 'Provincial offers search', action: '/offersSearch' },
   { label: 'Provincial permit search', action: '/permitSearch' },
   { label: 'Federal application search', action: '/federalApplicationSearch' },
-  { label: 'Indigenous reserve permit search', action: '/indianReservePermitSearch' },
   { label: 'Reports', action: '/applicationReport' },
   { label: 'Admin', action: '/lexisAgentAdmin' },
 ]

@@ -56,7 +56,7 @@ class LexisSessionControllerTest {
             "idir\\jsmith",
             List.of("LEXIS_PROVINCIAL_SUBMITTER"),
             "industryUser",
-            "/summary.do?actionMapping=view");
+            "/applicationSearch.do?actionMapping=view");
 
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .thenReturn(dto);

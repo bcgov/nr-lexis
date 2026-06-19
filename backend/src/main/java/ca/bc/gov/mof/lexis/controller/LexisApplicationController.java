@@ -2,21 +2,29 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseApplicationNumbers;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
+import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationOfferValidationDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationValidationDto;
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,10 +37,23 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 public class LexisApplicationController {
 
-  private final LexisApplicationService service;
+  private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
+  private static final String LEGACY_ACTION_APPLICATIONS_REVIEW = "/applicationsReview";
 
-  public LexisApplicationController(LexisApplicationService service) {
+  private final LexisApplicationService service;
+  private final ApplicationEditLockService editLockService;
+  private final LexisSessionService sessionService;
+  private final LexisAuthorizationService authorizationService;
+
+  public LexisApplicationController(
+      LexisApplicationService service,
+      ApplicationEditLockService editLockService,
+      LexisSessionService sessionService,
+      LexisAuthorizationService authorizationService) {
     this.service = service;
+    this.editLockService = editLockService;
+    this.sessionService = sessionService;
+    this.authorizationService = authorizationService;
   }
 
   @GetMapping("/search/options")
@@ -57,7 +78,14 @@ public class LexisApplicationController {
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      Authentication authentication) {
+
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    if (scopedClientNumber != null) {
+      ownerClientNumber = null;
+      agentClientNumber = scopedClientNumber;
+    }
 
     LexisApplicationSearchCriteria criteria =
         buildCriteria(
@@ -77,7 +105,7 @@ public class LexisApplicationController {
             sortField,
             page,
             size);
-    return ResponseEntity.ok(service.search(criteria));
+    return ResponseEntity.ok(withSearchLocks(service.search(criteria), authentication));
   }
 
   @GetMapping("/search/count")
@@ -94,7 +122,14 @@ public class LexisApplicationController {
       @RequestParam(name = "receivedToDate", required = false) String receivedToDate,
       @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
       @RequestParam(name = "listingToDate", required = false) String listingToDate,
-      @RequestParam(name = "region", required = false) List<Long> regionNumbers) {
+      @RequestParam(name = "region", required = false) List<Long> regionNumbers,
+      Authentication authentication) {
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    if (scopedClientNumber != null) {
+      ownerClientNumber = null;
+      agentClientNumber = scopedClientNumber;
+    }
+
     LexisApplicationSearchCriteria criteria =
         buildCriteria(
             applicationNumber,
@@ -118,9 +153,15 @@ public class LexisApplicationController {
 
   @GetMapping("/{applicationNumber}")
   public ResponseEntity<LexisApplicationDetailDto> getByApplicationNumber(
-      @PathVariable("applicationNumber") @Positive Long applicationNumber) {
+      @PathVariable("applicationNumber") @Positive Long applicationNumber,
+      Authentication authentication) {
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     return service.findByApplicationNumber(applicationNumber)
-        .map(ResponseEntity::ok)
+        .filter(
+            detail ->
+                matchesScopedClient(
+                    scopedClientNumber, detail.ownerClientNumber(), detail.agentClientNumber()))
+        .map(detail -> ResponseEntity.ok(withEditLock(detail, authentication)))
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
@@ -172,5 +213,82 @@ public class LexisApplicationController {
         sortField,
         page,
         size);
+  }
+
+  private LexisApplicationDetailDto withEditLock(
+      LexisApplicationDetailDto detail, Authentication authentication) {
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    boolean canEdit =
+        authorizationService.canPerformAction(roles, LEGACY_ACTION_CREATE_APPLICATION)
+            && !detail.readOnly()
+            && !detail.exemptionApprover();
+    boolean showLockOwner =
+        authorizationService.canPerformAction(roles, LEGACY_ACTION_APPLICATIONS_REVIEW);
+    String userId = authentication == null ? null : authentication.getName();
+    ApplicationEditLockDto editLock =
+        canEdit
+            ? editLockService.acquire(detail.applicationNumber(), userId, userId, showLockOwner)
+            : editLockService.snapshot(detail.applicationNumber(), userId, showLockOwner);
+    return new LexisApplicationDetailDto(
+        detail.applicationNumber(),
+        detail.exemptionNumber(),
+        detail.applicationStatusCode(),
+        detail.statusDescription(),
+        detail.ownerClientNumber(),
+        detail.agentClientNumber(),
+        detail.orgUnitNumber(),
+        detail.orgUnitName(),
+        detail.productTypeCode(),
+        detail.exemptionReasonCode(),
+        detail.applicationDate(),
+        detail.receivedDate(),
+        detail.listingDate(),
+        detail.termDays(),
+        detail.applicationVolume(),
+        detail.averageLogVolume(),
+        detail.canCreateOffers(),
+        detail.industryUser(),
+        detail.readOnly(),
+        detail.exemptionApprover(),
+        detail.locked() || editLock.locked(),
+        editLock.lockedBy(),
+        editLock.message(),
+        detail.packages(),
+        detail.remarks(),
+        detail.offers());
+  }
+
+  private LexisApplicationSearchResponseDto withSearchLocks(
+      LexisApplicationSearchResponseDto response, Authentication authentication) {
+    if (response == null || response.results() == null || response.results().isEmpty()) {
+      return response;
+    }
+
+    String userId = authentication == null ? null : authentication.getName();
+    List<LexisApplicationSearchResultDto> results =
+        response.results().stream()
+            .map(row -> withSearchLock(row, userId))
+            .toList();
+    return new LexisApplicationSearchResponseDto(
+        results, response.total(), response.page(), response.size());
+  }
+
+  private LexisApplicationSearchResultDto withSearchLock(
+      LexisApplicationSearchResultDto row, String userId) {
+    ApplicationEditLockDto lock = editLockService.snapshot(row.application(), userId, false);
+    if (!lock.locked()) {
+      return row;
+    }
+    return new LexisApplicationSearchResultDto(
+        row.application(),
+        row.status(),
+        row.client(),
+        row.ownerClientNumber(),
+        row.exemptionNumber(),
+        row.listingDate(),
+        row.region(),
+        row.applicationVolume(),
+        row.showCheckbox(),
+        true);
   }
 }

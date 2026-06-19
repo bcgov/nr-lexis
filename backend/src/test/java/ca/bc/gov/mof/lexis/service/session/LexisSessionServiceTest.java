@@ -18,30 +18,49 @@ class LexisSessionServiceTest {
   @Test
   void shouldRouteReadOnlyUsersToApplicationSearch() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_admin", "lexis_read_only"));
+        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_read_only"));
 
     assertThat(response.welcomeTarget()).isEqualTo("readOnly");
     assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
+    assertThat(response.roles()).containsExactly("LEXIS_READ_ONLY");
+  }
+
+  @Test
+  void shouldRouteAdminsToAdminLandingWhenOtherRolesArePresent() {
+    LexisSessionWelcomeDto response =
+        service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin", "lexis_read_only"));
+
+    assertThat(response.welcomeTarget()).isEqualTo("adminUser");
+    assertThat(response.legacyPath()).isEqualTo("/lexisAgentAdmin.do?actionMapping=view");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN", "LEXIS_READ_ONLY");
   }
 
   @Test
-  void shouldRouteIndustryUsersToSummary() {
+  void shouldRouteProvincialSubmittersToApplicationSearch() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter"));
 
     assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/summary.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
   }
 
   @Test
-  void shouldRouteForestClientScopedIndustryUsersToSummary() {
+  void shouldRouteForestClientScopedProvincialSubmittersToApplicationSearch() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter_00001234"));
 
     assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/summary.do?actionMapping=view");
+    assertThat(response.legacyPath()).isEqualTo("/applicationSearch.do?actionMapping=view");
     assertThat(response.roles()).containsExactly("LEXIS_PROVINCIAL_SUBMITTER");
+  }
+
+  @Test
+  void shouldRouteFederalSubmittersToFederalSearch() {
+    LexisSessionWelcomeDto response =
+        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_federal_submitter"));
+
+    assertThat(response.welcomeTarget()).isEqualTo("industryUser");
+    assertThat(response.legacyPath()).isEqualTo("/federalApplicationSearch.do?actionMapping=view");
   }
 
   @Test

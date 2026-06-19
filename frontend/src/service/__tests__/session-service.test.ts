@@ -27,7 +27,7 @@ describe('session-service', () => {
       authenticated: true,
       principal: 'idir\\tester',
       roles: ['READ_ONLY'],
-      welcomeTarget: '/dashboard',
+      welcomeTarget: 'readOnly',
       legacyPath: null,
       grantedActions: ['/applicationSearch'],
     }

@@ -158,6 +158,7 @@ const ProvincialApplicationPage: FC = () => {
   const [exemptionStatus, setExemptionStatus] = useState<ExemptionStatus | null>(null)
   const canCreateExemption = canPerform('/createExemption')
   const canCreateApplication = canPerform('createApplication')
+  const canUploadApplicationSubmission = canPerform('uploadApplicationSubmission')
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
     (path: string): string => {
@@ -313,28 +314,6 @@ const ProvincialApplicationPage: FC = () => {
 
     void loadOptions()
   }, [])
-
-  useEffect(() => {
-    if (regionOptions.length === 0) {
-      return
-    }
-
-    const hasSearchQuery = searchParams.toString().length > 0
-    if (hasSearchQuery) {
-      return
-    }
-
-    setSearchParams(
-      buildSearchParams(
-        { ...INITIAL_FILTERS, region: regionOptions.map((option) => option.id) },
-        DEFAULT_SORT_FIELD,
-        DEFAULT_SORT_DIRECTION,
-        DEFAULT_PAGE,
-        DEFAULT_PAGE_SIZE,
-      ),
-      { replace: true },
-    )
-  }, [regionOptions, searchParams, setSearchParams])
 
   const onSearch = () => {
     clearSelection()
@@ -561,14 +540,14 @@ const ProvincialApplicationPage: FC = () => {
                 Create exemption for Selected Applications
               </Button>
               {canCreateApplication && (
-                <>
-                  <Link className="cds--link" to="/provincial/application/create">
-                    Add Application
-                  </Link>
-                  <Link className="cds--link" to="/provincial/application/upload">
-                    Upload Application Submission
-                  </Link>
-                </>
+                <Link className="cds--link" to="/provincial/application/create">
+                  Add Application
+                </Link>
+              )}
+              {canUploadApplicationSubmission && (
+                <Link className="cds--link" to="/provincial/application/upload">
+                  Upload Application Submission
+                </Link>
               )}
             </div>
             {exemptionStatus && (

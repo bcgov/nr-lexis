@@ -168,16 +168,6 @@ const ProvincialExemptionDetailsPage: FC = () => {
     )
   }, [documentRows, documentsFilter])
 
-  const isActiveExemption = useMemo(() => {
-    if (!detail) {
-      return false
-    }
-    return (
-      normalizeText(detail.exemptionStatusDescription ?? '') === 'active' ||
-      normalizeText(detail.exemptionStatusCode ?? '') === 'active'
-    )
-  }, [detail])
-
   const canManageDocuments = canPerform('/fileExemptionUpload')
 
   const onOpenApprovedExemptionReport = useCallback(async () => {
@@ -212,27 +202,6 @@ const ProvincialExemptionDetailsPage: FC = () => {
       setIsOpeningApprovedExemptionReport(false)
     }
   }, [detail])
-
-  const onCreatePermit = useCallback(() => {
-    if (!detail) {
-      return
-    }
-
-    const params = new URLSearchParams()
-    params.set('exemptionNumber', detail.exemptionNumber)
-    if (detail.applicationNumber !== null) {
-      params.set('applicationNumber', String(detail.applicationNumber))
-    }
-    if (detail.ownerClientNumber) {
-      params.set('ownerClientNumber', detail.ownerClientNumber)
-    }
-    if (detail.agentClientNumber) {
-      params.set('applicantClientNumber', detail.agentClientNumber)
-    }
-
-    const query = params.toString()
-    navigate(query.length > 0 ? `/provincial/permit/create?${query}` : '/provincial/permit/create')
-  }, [detail, navigate])
 
   const refreshExemptionDocuments = useCallback(async () => {
     if (!exemptionNumber) {
@@ -429,18 +398,6 @@ const ProvincialExemptionDetailsPage: FC = () => {
                   {isOpeningApprovedExemptionReport
                     ? 'Opening Approved Exemption Report...'
                     : 'Open Approved Exemption Report'}
-                </Button>
-                <Button
-                  kind="primary"
-                  size="sm"
-                  disabled={
-                    !canPerform('/permitSearch') ||
-                    !canPerform('createPermit') ||
-                    !isActiveExemption
-                  }
-                  onClick={onCreatePermit}
-                >
-                  Create permit
                 </Button>
               </div>
             </Tile>

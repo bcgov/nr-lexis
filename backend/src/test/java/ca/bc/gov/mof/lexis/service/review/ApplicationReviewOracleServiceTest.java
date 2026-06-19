@@ -199,11 +199,50 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void updateStatusShouldFailWhenRequestedRemarkDoesNotPersist() {
+    ApplicationReviewStatusUpdateRequestDto request =
+        new ApplicationReviewStatusUpdateRequestDto("REJ", "Missing docs", "client@gov.bc.ca");
+    when(repository.updateStatusWithRemark(1000456L, "REJ", "Missing docs", "idir\\jsmith"))
+        .thenReturn(new ApplicationStatusUpdateRow(true, null));
+
+    ApplicationReviewStatusUpdateResultDto result =
+        service.updateStatus(1000456L, request, "idir\\jsmith");
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.updated()).isFalse();
+    assertThat(result.statusCode()).isEqualTo("REJ");
+    assertThat(result.clientEmail()).isEqualTo("client@gov.bc.ca");
+    assertThat(result.remark()).isEqualTo("Missing docs");
+    assertThat(result.message()).isEqualTo("Application status remark did not persist.");
+    verify(repository).updateStatusWithRemark(1000456L, "REJ", "Missing docs", "idir\\jsmith");
+  }
+
+  @Test
+  void updateStatusShouldAllowOptionalRemarkToRemainEmpty() {
+    ApplicationReviewStatusUpdateRequestDto request =
+        new ApplicationReviewStatusUpdateRequestDto("EXP", " ", "client@gov.bc.ca");
+    when(repository.updateStatusWithRemark(1000456L, "EXP", null, "idir\\jsmith"))
+        .thenReturn(new ApplicationStatusUpdateRow(true, null));
+
+    ApplicationReviewStatusUpdateResultDto result =
+        service.updateStatus(1000456L, request, "idir\\jsmith");
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.updated()).isTrue();
+    assertThat(result.statusCode()).isEqualTo("EXP");
+    assertThat(result.clientEmail()).isEqualTo("client@gov.bc.ca");
+    assertThat(result.remark()).isNull();
+    verify(repository).updateStatusWithRemark(1000456L, "EXP", null, "idir\\jsmith");
+  }
+
+  @Test
   void updateStatusShouldDefaultUpdateUserWhenPrincipalIsMissing() {
     ApplicationReviewStatusUpdateRequestDto request =
         new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");
     when(repository.updateStatusWithRemark(1000456L, "REJ", "Missing docs", "system"))
-        .thenReturn(new ApplicationStatusUpdateRow(true, null));
+        .thenReturn(
+            new ApplicationStatusUpdateRow(
+                true, new ReviewRemarkRow(99L, "Missing docs", "system", Instant.now())));
 
     ApplicationReviewStatusUpdateResultDto result =
         service.updateStatus(1000456L, request, null);
@@ -223,7 +262,7 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
-  void sendStatusEmailShouldPassThroughRepositoryWhenInputValid() {
+  void sendStatusEmailShouldStageRequestAndReportEmailUnavailableWhenInputValid() {
     ApplicationReviewStatusEmailRequestDto request =
         new ApplicationReviewStatusEmailRequestDto(" REJ ", " client@gov.bc.ca ", " Missing docs ");
     when(repository.sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs"))
@@ -231,8 +270,21 @@ class ApplicationReviewOracleServiceTest {
 
     ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
 
-    assertThat(result.success()).isTrue();
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Application status email is not configured yet. No email was sent.");
     verify(repository).sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs");
+  }
+
+  @Test
+  void sendStatusEmailShouldRejectUnsupportedStatusesBeforeRepository() {
+    ApplicationReviewStatusEmailRequestDto request =
+        new ApplicationReviewStatusEmailRequestDto("EXP", "client@gov.bc.ca", null);
+
+    ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Status email is only supported for rejected or withdrawn applications.");
+    verifyNoInteractions(repository);
   }
 
   private ApplicationReviewSearchResultDto row(Long applicationNumber, LocalDate listingDate) {

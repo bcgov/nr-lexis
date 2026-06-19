@@ -123,6 +123,8 @@ class OracleLexisSummaryServiceTest {
                     false,
                     false,
                     false,
+                    null,
+                    null,
                     List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", 95.0, 28)),
                     List.of(),
                     List.of())));

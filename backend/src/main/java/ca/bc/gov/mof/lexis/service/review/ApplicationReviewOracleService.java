@@ -20,11 +20,17 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.NoTransactionException;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 @Service
 @Profile("oracle")
 public class ApplicationReviewOracleService implements ApplicationReviewService {
 
+  private static final List<String> EMAIL_SUPPORTED_STATUS_CODES = List.of("REJ", "WDN");
+  private static final String EMAIL_NOT_CONFIGURED_MESSAGE =
+      "Application status email is not configured yet. No email was sent.";
   private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN");
 
   private final ApplicationReviewRepository repository;
@@ -75,6 +81,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
   }
 
   @Override
+  @Transactional
   public ApplicationReviewStatusUpdateResultDto approve(Long applicationNumber, String updateUserId) {
     if (applicationNumber == null || applicationNumber < 1) {
       return statusUpdateResult(
@@ -109,6 +116,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
   }
 
   @Override
+  @Transactional
   public ApplicationReviewStatusUpdateResultDto updateStatus(
       Long applicationNumber,
       ApplicationReviewStatusUpdateRequestDto request,
@@ -152,6 +160,17 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
         repository.updateStatusWithRemark(applicationNumber, statusCode, remark, defaultMutationUser(updateUserId));
 
     if (updateRow.updated()) {
+      if (remark != null && updateRow.remark() == null) {
+        markRollbackOnly();
+        return statusUpdateResult(
+            false,
+            true,
+            statusCode,
+            clientEmail,
+            remark,
+            null,
+            "Application status remark did not persist.");
+      }
       return statusUpdateResult(
           true,
           true,
@@ -209,13 +228,23 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Status code and client email are required.");
     }
 
-    String remark = request == null ? null : trimToNull(request.remark());
-    boolean success = repository.sendStatusEmail(applicationNumber, statusCode, clientEmail, remark);
-
-    if (success) {
-      return new ApplicationReviewStatusEmailResultDto(true, "Status email sent.");
+    if (!EMAIL_SUPPORTED_STATUS_CODES.contains(statusCode)) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "Status email is only supported for rejected or withdrawn applications.");
     }
-    return new ApplicationReviewStatusEmailResultDto(false, "Status email could not be sent.");
+
+    boolean staged =
+        repository.sendStatusEmail(
+            applicationNumber,
+            statusCode,
+            clientEmail,
+            request == null ? null : trimToNull(request.remark()));
+    return new ApplicationReviewStatusEmailResultDto(
+        false,
+        staged
+            ? EMAIL_NOT_CONFIGURED_MESSAGE
+            : "Application status email could not be prepared.");
   }
 
   private ApplicationReviewSearchCriteria normalizeCriteria(ApplicationReviewSearchCriteria input) {
@@ -239,6 +268,14 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
 
   private String defaultMutationUser(String userId) {
     return defaultSystemUser(userId);
+  }
+
+  private void markRollbackOnly() {
+    try {
+      TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+    } catch (NoTransactionException ignored) {
+      // Unit tests call the service without Spring transaction advice.
+    }
   }
 
 }

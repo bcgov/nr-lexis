@@ -115,36 +115,6 @@ public class LexisApiAuthorizationCustomizer
         authorize,
         HttpMethod.GET,
         new String[] {
-          "/api/lexis/indianReservePermitSearch",
-          "/api/lexis/indianReservePermitSearch.do",
-          "/api/lexis/indian-reserve/permits/search/options",
-          "/api/lexis/indian-reserve/permits/search",
-          "/api/lexis/indian-reserve/permits/search/count"
-        },
-        "/indianReservePermitSearch");
-    authorizeAction(
-        authorize,
-        HttpMethod.GET,
-        new String[] {
-          "/api/lexis/indianReservePermitDetails",
-          "/api/lexis/indianReservePermitDetails.do",
-          "/api/lexis/indian-reserve/permits/*"
-        },
-        "/indianReservePermitDetails");
-    authorizeAction(
-        authorize,
-        HttpMethod.POST,
-        new String[] {
-          "/api/lexis/indianReservePermitDetails",
-          "/api/lexis/indianReservePermitDetails.do",
-          "/api/lexis/indian-reserve/permits"
-        },
-        "savePermit");
-
-    authorizeAction(
-        authorize,
-        HttpMethod.GET,
-        new String[] {
           "/api/lexis/offersSearch",
           "/api/lexis/offersSearch.do",
           "/api/lexis/purchase-offers/search/options",
@@ -365,7 +335,7 @@ public class LexisApiAuthorizationCustomizer
           "/api/lexis/uploads/lexis-xml/validation",
           "/api/lexis/admin/uploads/lexis-xml/validation"
         },
-        "createApplication");
+        "uploadApplicationSubmission");
 
     authorizeAction(
         authorize,
@@ -445,15 +415,8 @@ public class LexisApiAuthorizationCustomizer
         HttpMethod.POST,
         new String[] {
           "/api/lexis/reports/biweeklyListing",
-          "/api/lexis/reports/biweekly-listing",
-          "/api/lexis/biweeklyListing",
-          "/api/lexis/biweeklyListing.do"
+          "/api/lexis/reports/biweekly-listing"
         },
-        "mofrListing");
-    authorizeAction(
-        authorize,
-        HttpMethod.GET,
-        new String[] {"/api/lexis/biweeklyListing", "/api/lexis/biweeklyListing.do"},
         "mofrListing");
     authorizeAction(
         authorize,

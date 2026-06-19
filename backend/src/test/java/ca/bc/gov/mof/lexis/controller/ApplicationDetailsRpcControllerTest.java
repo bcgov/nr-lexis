@@ -2,29 +2,35 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
@@ -47,6 +53,7 @@ class ApplicationDetailsRpcControllerTest {
   @Mock private LexisAuthorizationService authorizationService;
   @Mock private HttpServletRequest servletRequest;
   @Mock private HttpSession session;
+  @Mock private ApplicationEditLockService editLockService;
 
   private ApplicationDetailsRpcController controller;
 
@@ -58,7 +65,14 @@ class ApplicationDetailsRpcControllerTest {
             clientLookupServiceProvider,
             applicationReviewServiceProvider,
             sessionService,
-            authorizationService);
+            authorizationService,
+            editLockService);
+    lenient()
+        .when(editLockService.requireEditable(any(), any(), any()))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    lenient()
+        .when(editLockService.snapshot(any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
   }
 
   @Test
@@ -153,6 +167,31 @@ class ApplicationDetailsRpcControllerTest {
         .getApplicationSummarySnapshot(org.mockito.ArgumentMatchers.anyLong());
     org.mockito.Mockito.verify(service, org.mockito.Mockito.never())
         .removeDocument(org.mockito.ArgumentMatchers.anyLong());
+  }
+
+  @Test
+  void removeDocumentShouldRejectWhenApplicationLockedByAnotherUser() {
+    TestingAuthenticationToken authentication = authorized("/fileApplicationUpload");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(new ApplicationDetailsRpcService.DocumentItem(55L, "test.pdf", "Not on file", "Uploaded")));
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(editLockService.snapshot(1000456L, "idir\\jsmith", false))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true,
+                false,
+                null,
+                "This application is currently locked for editing by another user.",
+                null));
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isEqualTo("false");
+    verify(service, never()).removeDocument(55L);
   }
 
   @Test
@@ -307,13 +346,15 @@ class ApplicationDetailsRpcControllerTest {
   @Test
   void releaseLockShouldReturnLegacyOkPayloadAndClearApplicationSessionState() {
     when(servletRequest.getSession(false)).thenReturn(session);
+    TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
 
     ResponseEntity<ApplicationDetailsRpcController.ReleaseLockResponseDto> response =
-        controller.releaseLockLegacy(servletRequest);
+        controller.releaseLockLegacy("1000456", servletRequest, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().release()).isEqualTo("ok");
+    verify(editLockService).release(1000456L, "idir\\jsmith");
     verify(session).removeAttribute("exemptionApplication");
     verify(session).removeAttribute("applicationNumber");
   }
@@ -976,6 +1017,34 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void addPackageToApplicationLegacyShouldReturnConflictWhenApplicationLockedByAnotherUser() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(editLockService.requireEditable(1000456L, "idir\\jsmith", "idir\\jsmith"))
+        .thenReturn(
+            new ApplicationEditLockDto(
+                true,
+                false,
+                null,
+                "This application is currently locked for editing by another user.",
+                null));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("packageNumber", "PKG-904");
+    params.add("applicationNumber", "1000456");
+
+    ResponseEntity<ApplicationDetailsRpcController.PackagePersistenceResponseDto> response =
+        controller.addPackageToApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("This application is currently locked for editing by another user.");
+    verify(service, never()).addPackage(any(), any());
+  }
+
+  @Test
   void updatePackageLegacyShouldMapLegacyParamsAndReturnPackagePayload() {
     TestingAuthenticationToken authentication = authorized("createApplication");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
@@ -1064,7 +1133,7 @@ class ApplicationDetailsRpcControllerTest {
     when(service.deleteScaleById("55", "idir\\jsmith")).thenReturn(true);
 
     ResponseEntity<ApplicationDetailsRpcController.DeleteResponseDto> response =
-        controller.deleteScaleByIdLegacy("55", authentication);
+        controller.deleteScaleByIdLegacy("55", "1000456", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
@@ -1077,7 +1146,7 @@ class ApplicationDetailsRpcControllerTest {
     TestingAuthenticationToken authentication = unauthorized("createApplication");
 
     ResponseEntity<ApplicationDetailsRpcController.DeleteResponseDto> response =
-        controller.deleteScaleByIdLegacy("55", authentication);
+        controller.deleteScaleByIdLegacy("55", "1000456", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
@@ -1090,7 +1159,7 @@ class ApplicationDetailsRpcControllerTest {
     when(service.deletePackageById("PKG-903", "idir\\jsmith")).thenReturn(true);
 
     ResponseEntity<ApplicationDetailsRpcController.DeleteResponseDto> response =
-        controller.deletePackageByIdLegacy("PKG-903", authentication);
+        controller.deletePackageByIdLegacy("PKG-903", "1000456", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();

@@ -67,22 +67,30 @@ describe('Layout shell', () => {
 
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
 
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeVisible()
-    expect(screen.getByRole('link', { name: /Upload application submission/i })).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Indian reserve')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Create\/edit permit/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Advertising List (PDF)' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Advertising List (CSV)' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Help/i })).not.toBeInTheDocument()
+    const uploadLinks = screen.getAllByRole('link', { name: /Upload application submission/i })
+    expect(uploadLinks.map((link) => link.getAttribute('href'))).toEqual([
+      '/provincial/application/upload',
+      '/federal/application/upload',
+    ])
     expect(screen.getByRole('link', { name: /LEXIS administration/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /Data upload/i })).toBeVisible()
     expect(document.querySelector('.csp-side-nav__icon')).not.toBeInTheDocument()
     expect(sideNav.querySelector('.csp-side-nav__link svg')).not.toBeInTheDocument()
   })
 
-  it('navigates the app name to the dashboard', async () => {
+  it('navigates the app name to the resolved default route', async () => {
     renderLayout('/admin/uploads')
 
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/dashboard')
+    expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Go to your landing page' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Go to LEXIS dashboard' }))
-
-    expect(screen.getByTestId('current-path')).toHaveTextContent('/dashboard')
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/admin')
   })
 
   it('lets pages own the only visible page title', () => {
@@ -124,6 +132,26 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /Create\/edit offer/i })).not.toBeInTheDocument()
   })
 
+  it('renders navigation when an auth mock omits roles', () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'idir\\partial',
+        welcomeTarget: '/reports',
+        legacyPath: null,
+        grantedActions: ['/applicationReport'],
+      },
+      defaultRoute: '/reports',
+      canPerform: (action: string) => action === '/applicationReport',
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderLayout('/reports')
+
+    expect(screen.getByRole('navigation', { name: 'Side navigation' })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Reports menu/i })).toBeVisible()
+  })
+
   it('shows application submission upload without exposing generic data upload', () => {
     mockedUseAuth.mockReturnValue({
       capabilities: {
@@ -132,10 +160,10 @@ describe('Layout shell', () => {
         roles: ['PROVINCIAL_SUBMITTER'],
         welcomeTarget: '/provincial/application/upload',
         legacyPath: null,
-        grantedActions: ['createApplication'],
+        grantedActions: ['uploadApplicationSubmission'],
       },
       defaultRoute: '/provincial/application/upload',
-      canPerform: (action: string) => action === 'createApplication',
+      canPerform: (action: string) => action === 'uploadApplicationSubmission',
       logout: vi.fn().mockResolvedValue(undefined),
     } as any)
 
@@ -146,6 +174,41 @@ describe('Layout shell', () => {
       screen.queryByRole('link', { name: /Create\/edit application/i }),
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Data upload/i })).not.toBeInTheDocument()
+  })
+
+  it('shows federal application submission upload in the federal nav for federal-only users', () => {
+    mockedUseAuth.mockReturnValue({
+      capabilities: {
+        authenticated: true,
+        principal: 'bceid\\federal',
+        roles: ['FEDERAL_SUBMITTER'],
+        welcomeTarget: '/federal/application/upload',
+        legacyPath: null,
+        grantedActions: [
+          '/federalApplicationSearch',
+          'viewFederalApplication',
+          'uploadApplicationSubmission',
+        ],
+      },
+      defaultRoute: '/federal/application/upload',
+      canPerform: (action: string) =>
+        [
+          '/federalApplicationSearch',
+          'viewFederalApplication',
+          'uploadApplicationSubmission',
+        ].includes(action),
+      logout: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    renderLayout('/federal/application/upload')
+
+    expect(document.querySelector('.page-header__eyebrow')).toHaveTextContent('Federal')
+    expect(screen.getByRole('link', { name: /Application search/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Upload application submission/i })).toHaveAttribute(
+      'href',
+      '/federal/application/upload',
+    )
+    expect(screen.queryByText('Provincial')).not.toBeInTheDocument()
   })
 
   it('defaults the side nav open and supports collapsing it', async () => {

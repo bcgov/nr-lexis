@@ -27,7 +27,6 @@ import {
   previewApplicationReviews,
 } from '@/service/application-review-search-service'
 import { countFederalApplications } from '@/service/federal-application-search-service'
-import { countIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
 import { countProvincialApplications } from '@/service/provincial-application-search-service'
 import { countProvincialExemptions } from '@/service/provincial-exemption-search-service'
 import { countProvincialOffers } from '@/service/provincial-offer-search-service'
@@ -40,7 +39,6 @@ type SummaryMetricKey =
   | 'provincialPermits'
   | 'reviewQueue'
   | 'federalApplications'
-  | 'indianReservePermits'
 
 type SummaryMetric = {
   key: SummaryMetricKey
@@ -91,10 +89,6 @@ const SUMMARY_ROUTE_CONFIG: Record<SummaryMetricKey, SummaryRouteConfig> = {
     path: '/federal',
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
   },
-  indianReservePermits: {
-    path: '/indian-reserve',
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
-  },
 }
 
 const INITIAL_METRICS: SummaryMetric[] = [
@@ -132,12 +126,6 @@ const INITIAL_METRICS: SummaryMetric[] = [
     key: 'federalApplications',
     label: 'Federal applications',
     description: 'Total federal application files in scope.',
-    total: 0,
-  },
-  {
-    key: 'indianReservePermits',
-    label: 'Indigenous reserve permits',
-    description: 'Total reserve permit files in scope.',
     total: 0,
   },
 ]
@@ -202,7 +190,6 @@ const ProvincialSummaryPage: FC = () => {
           reviewQueueTotal,
           reviewQueuePreview,
           federalApplications,
-          indianReservePermits,
         ] = await Promise.all([
           loadMetric(canAccessSummaryRoute('provincialApplications'), () =>
             countProvincialApplications({
@@ -334,22 +321,6 @@ const ProvincialSummaryPage: FC = () => {
               sortDirection: 'asc',
             }),
           ),
-          loadMetric(canAccessSummaryRoute('indianReservePermits'), () =>
-            countIndianReservePermits({
-              filters: {
-                permitNumber: '',
-                packageNumber: '',
-                fromPermitIssueDate: '',
-                toPermitIssueDate: '',
-                fromEstimatedShippingDate: '',
-                toEstimatedShippingDate: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'permitNumber',
-              sortDirection: 'asc',
-            }),
-          ),
         ])
 
         const totalsByKey: Record<SummaryMetricKey, number> = {
@@ -359,7 +330,6 @@ const ProvincialSummaryPage: FC = () => {
           provincialPermits: provincialPermits ?? 0,
           reviewQueue: reviewQueueTotal ?? 0,
           federalApplications: federalApplications ?? 0,
-          indianReservePermits: indianReservePermits ?? 0,
         }
 
         if (isLatestRequest()) {
@@ -411,7 +381,7 @@ const ProvincialSummaryPage: FC = () => {
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial summary</h1>
-        <p>Drill-down dashboard for operational totals and review queue triage.</p>
+        <p>Drill-down summary for operational totals and review queue triage.</p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
