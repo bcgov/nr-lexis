@@ -39,7 +39,7 @@ const domain = env.VITE_COGNITO_DOMAIN?.trim()?.replace(/^https?:\/\//, '') ?? '
 const redirectSignIn = resolveSameOriginRedirect(env.VITE_REDIRECT_SIGN_IN, '/')
 // Full BC Gov logoff chain URL. This must match one of the Cognito allowed
 // sign-out URLs for the current environment.
-export const redirectSignOut = env.VITE_REDIRECT_SIGN_OUT?.trim() ?? ''
+const redirectSignOut = env.VITE_REDIRECT_SIGN_OUT?.trim() ?? ''
 const scopes = resolveScopes(splitScopes(env.VITE_COGNITO_SCOPES))
 
 export const idirProviderName = `${(env.VITE_ZONE ?? 'DEV').toUpperCase()}-IDIR`

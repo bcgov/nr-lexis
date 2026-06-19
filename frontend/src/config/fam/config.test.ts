@@ -13,11 +13,6 @@ type AmplifyConfig = {
   }
 }
 
-type FamConfigModule = {
-  default: AmplifyConfig
-  redirectSignOut: string
-}
-
 const configuredRuntimeAuth = {
   VITE_USER_POOLS_ID: 'ca-central-1_testpool',
   VITE_USER_POOLS_WEB_CLIENT_ID: 'test-client-id',
@@ -30,11 +25,6 @@ const loadConfig = async (): Promise<AmplifyConfig> => {
   vi.resetModules()
   const configModule = await import('@/config/fam/config')
   return configModule.default as AmplifyConfig
-}
-
-const loadConfigModule = async (): Promise<FamConfigModule> => {
-  vi.resetModules()
-  return (await import('@/config/fam/config')) as FamConfigModule
 }
 
 describe('FAM auth config', () => {
@@ -63,13 +53,11 @@ describe('FAM auth config', () => {
   })
 
   it('leaves sign-out blank when no runtime sign-out URL is configured', async () => {
-    const configModule = await loadConfigModule()
-    const config = configModule.default
+    const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
     expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/`])
     expect(oauth?.redirectSignOut).toEqual([''])
-    expect(configModule.redirectSignOut).toBe('')
   })
 
   it('preserves the configured sign-out URL exactly', async () => {
@@ -80,14 +68,11 @@ describe('FAM auth config', () => {
       VITE_REDIRECT_SIGN_OUT: signOutUrl,
     }
 
-    const configModule = await loadConfigModule()
-    const oauth = configModule.default.Auth?.Cognito?.loginWith?.oauth
+    const config = await loadConfig()
+    const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
     expect(oauth?.redirectSignOut).toEqual([
       'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-test.apps.silver.devops.gov.bc.ca/',
     ])
-    expect(configModule.redirectSignOut).toBe(
-      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-test.apps.silver.devops.gov.bc.ca/',
-    )
   })
 })
