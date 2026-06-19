@@ -1,0 +1,24 @@
+name: BCeID Regression
+
+on:
+  schedule:
+    - cron: "0 15 * * 1" # Mondays at 15:00 UTC; 8 AM Pacific during daylight time.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  bceid-regression:
+    name: TEST BCeID Provincial Submitter
+    permissions:
+      contents: read
+    uses: ./.github/workflows/reusable-bceid-regression.yml
+    secrets:
+      e2e_bceid_user: ${{ secrets.E2E_BCEID_USER }}
+      e2e_bceid_password: ${{ secrets.E2E_BCEID_PASSWORD }}
+    with:
+      target: test

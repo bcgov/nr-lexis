@@ -66,6 +66,7 @@ These are read by `vite.config.ts` and only matter when running `npm run dev` or
 | `npm run test:unit` | Run unit tests |
 | `npm run test:cov` | Run tests with coverage |
 | `npm run e2e` | Run Playwright smoke E2E in Chromium |
+| `npm run e2e:real-bceid` | Run TEST-only Business BCeID provincial submitter E2E |
 | `npm run e2e:ui` | Run Playwright UI mode |
 | `npm run e2e:report` | Open the last Playwright HTML report |
 
@@ -76,6 +77,9 @@ npm run test:unit
 npm run test:cov
 npm run e2e
 ```
+
+Run `npm run e2e:real-bceid` only against TEST with `E2E_BCEID_USER` and `E2E_BCEID_PASSWORD`
+configured.
 
 ### Testing Libraries
 
@@ -89,7 +93,7 @@ npm run e2e
 
 ```text
 frontend/
-├── e2e/                 # Playwright smoke tests
+├── e2e/                 # Playwright E2E tests
 ├── public/              # Static public files and runtime config seed
 ├── src/
 │   ├── components/      # Reusable UI components
