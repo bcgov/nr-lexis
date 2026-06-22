@@ -2,7 +2,7 @@ name: BCeID Regression
 
 on:
   schedule:
-    - cron: "0 15 * * 1" # Mondays at 15:00 UTC; 8 AM Pacific during daylight time.
+    - cron: "0 10 * * 3" # Wednesdays at 10:00 UTC; 3 AM Pacific during daylight time.
   workflow_dispatch:
 
 concurrency:
