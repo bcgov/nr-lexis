@@ -12,6 +12,7 @@ import {
   upsertFeePolicy,
   upsertFilPolicy,
 } from '@/service/admin-policy-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -48,9 +49,12 @@ describe('Admin policy action states', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === '/lexisPolicyAdmin' || action === '/lexisFILAdmin',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) =>
+          action === '/lexisPolicyAdmin' || action === '/lexisFILAdmin',
+      }),
+    )
 
     mockedFetchFeePolicies.mockResolvedValue([
       {
@@ -152,9 +156,7 @@ describe('Admin policy action states', () => {
   })
 
   it('enforces permission and disables mutating actions when not granted', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => false,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage()
 

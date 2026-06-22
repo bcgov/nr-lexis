@@ -11,6 +11,7 @@ import {
   updateApplicationReviewStatus,
 } from '@/service/application-review-search-service'
 import { fetchApplicationReviewOptions } from '@/service/search-options-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -115,9 +116,7 @@ Element.prototype.scrollIntoView = vi.fn()
 describe('Provincial Review Action State Smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedSearchApplicationReviews.mockResolvedValue(reviewResponse)
     mockedFetchApplicationReviewOptions.mockResolvedValue({
       productTypes: [
@@ -432,10 +431,12 @@ describe('Provincial Review Action State Smoke', () => {
   })
 
   it('disables selection and action buttons when user lacks review permission', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) =>
-        action === '/applicationSearch' || action === '/applicationDetails',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) =>
+          action === '/applicationSearch' || action === '/applicationDetails',
+      }),
+    )
 
     renderPage()
     await screen.findByText('1000123')

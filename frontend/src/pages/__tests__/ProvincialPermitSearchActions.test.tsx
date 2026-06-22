@@ -3,10 +3,12 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
+import type { ProvincialPermitSearchResponse } from '@/interfaces/ProvincialPermitSearch'
 import ProvincialPermitPage from '@/pages/ProvincialPermit'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions } from '@/service/search-options-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -24,6 +26,20 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearchProvincialPermits = vi.mocked(searchProvincialPermits)
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
 
+const permitSearchResponse = (
+  content: ProvincialPermitSearchResponse['content'],
+  page: Partial<ProvincialPermitSearchResponse['page']> = {},
+): ProvincialPermitSearchResponse => ({
+  content,
+  page: {
+    number: 0,
+    size: 10,
+    totalElements: content.length,
+    totalPages: content.length > 0 ? 1 : 0,
+    ...page,
+  },
+})
+
 const renderPage = (initialEntry = '/provincial/permit') => {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
@@ -38,8 +54,8 @@ describe('Provincial Permit Search Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     clearAllPageDataCache()
-    mockedSearchProvincialPermits.mockResolvedValue({
-      content: [
+    mockedSearchProvincialPermits.mockResolvedValue(
+      permitSearchResponse([
         {
           permitNumber: '7001',
           status: 'Issued',
@@ -50,16 +66,9 @@ describe('Provincial Permit Search Actions', () => {
           region: '11',
           packageNumber: 'PKG-1',
           applicationNumber: '3001',
-          permitStatus: 'Issued',
         },
-      ],
-      page: {
-        number: 0,
-        size: 10,
-        totalElements: 1,
-        totalPages: 1,
-      },
-    } as any)
+      ]),
+    )
     mockedFetchProvincialPermitOptions.mockResolvedValue({
       permitStatuses: [{ value: 'Issued', label: 'Issued' }],
       regions: [{ value: '11', label: 'Cariboo' }],
@@ -67,9 +76,7 @@ describe('Provincial Permit Search Actions', () => {
   })
 
   it('does not expose the retired add permit link', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage()
     await screen.findByText('7001')
@@ -78,9 +85,7 @@ describe('Provincial Permit Search Actions', () => {
   })
 
   it('does not default region filters when opened without query parameters', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => false,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage()
     await screen.findByText('7001')
@@ -95,9 +100,7 @@ describe('Provincial Permit Search Actions', () => {
   })
 
   it('reuses cached search results when the route remounts with the same URL state', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => false,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     const firstRender = renderPage('/provincial/permit?permitNumber=7001')
     await screen.findByText('7001')
@@ -111,52 +114,51 @@ describe('Provincial Permit Search Actions', () => {
   })
 
   it('reuses the first search total when pagination changes page', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => false,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
     mockedSearchProvincialPermits
-      .mockResolvedValueOnce({
-        content: [
+      .mockResolvedValueOnce(
+        permitSearchResponse(
+          [
+            {
+              permitNumber: '7001',
+              status: 'Issued',
+              applicantClientNumber: '11111111',
+              ownerClientNumber: '22222222',
+              totalVolume: 120,
+              issueDate: '2026-01-10',
+              region: '11',
+              packageNumber: 'PKG-1',
+              applicationNumber: '3001',
+            },
+          ],
           {
-            permitNumber: '7001',
-            status: 'Issued',
-            applicantClientNumber: '11111111',
-            ownerClientNumber: '22222222',
-            totalVolume: 120,
-            issueDate: '2026-01-10',
-            region: '11',
-            packageNumber: 'PKG-1',
-            applicationNumber: '3001',
+            totalElements: 25,
+            totalPages: 3,
           },
-        ],
-        page: {
-          number: 0,
-          size: 10,
-          totalElements: 25,
-          totalPages: 3,
-        },
-      } as any)
-      .mockResolvedValueOnce({
-        content: [
+        ),
+      )
+      .mockResolvedValueOnce(
+        permitSearchResponse(
+          [
+            {
+              permitNumber: '7002',
+              status: 'Issued',
+              applicantClientNumber: '11111111',
+              ownerClientNumber: '22222222',
+              totalVolume: 130,
+              issueDate: '2026-01-11',
+              region: '11',
+              packageNumber: 'PKG-2',
+              applicationNumber: '3002',
+            },
+          ],
           {
-            permitNumber: '7002',
-            status: 'Issued',
-            applicantClientNumber: '11111111',
-            ownerClientNumber: '22222222',
-            totalVolume: 130,
-            issueDate: '2026-01-11',
-            region: '11',
-            packageNumber: 'PKG-2',
-            applicationNumber: '3002',
+            number: 1,
+            totalElements: 25,
+            totalPages: 3,
           },
-        ],
-        page: {
-          number: 1,
-          size: 10,
-          totalElements: 25,
-          totalPages: 3,
-        },
-      } as any)
+        ),
+      )
 
     renderPage('/provincial/permit?permitNumber=7001')
     await screen.findByText('7001')
@@ -175,9 +177,7 @@ describe('Provincial Permit Search Actions', () => {
   })
 
   it('disables search for invalid dates and requests descending sort when permit header is clicked', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage()
     await screen.findByText('7001')

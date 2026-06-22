@@ -6,6 +6,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import FederalPage from '@/pages/Federal'
 import { searchFederalApplications } from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions } from '@/service/search-options-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -75,9 +76,11 @@ const defaultRows = [
 describe('Federal Search Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === '/createExemption',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === '/createExemption',
+      }),
+    )
     mockedFetchFederalApplicationOptions.mockResolvedValue({
       applicationStatuses: [
         { value: 'NEW', label: 'New' },
