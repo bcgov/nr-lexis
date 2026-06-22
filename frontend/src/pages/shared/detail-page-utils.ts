@@ -1,13 +1,6 @@
-import { normalizeFilterText } from '@/utils/text'
+import { displayValue, normalizeFilterText } from '@/utils/text'
 
-export { normalizeFilterText }
-
-export const displayValue = (value: string | number | null | undefined): string => {
-  if (value === null || value === undefined || value === '') {
-    return 'Not provided'
-  }
-  return String(value)
-}
+export { displayValue, normalizeFilterText }
 
 export const matchesFilter = (
   values: Array<string | number | null | undefined>,

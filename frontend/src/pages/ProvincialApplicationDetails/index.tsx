@@ -25,6 +25,7 @@ import {
   matchesFilter,
   normalizeFilterText as normalizeText,
 } from '@/pages/shared/detail-page-utils'
+import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
 import {
   fetchProvincialApplicationDetail,
   releaseApplicationEditLock,
@@ -511,20 +512,12 @@ const ProvincialApplicationDetailsPage: FC = () => {
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
   const documentsFilter = searchParams.get('documentsFilter') ?? ''
   const withCurrentSearch = useCallback(
-    (path: string): string => {
-      const query = searchParams.toString()
-      return query.length > 0 ? `${path}?${query}` : path
-    },
+    (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
   const updateFilterParam = useCallback(
     (key: 'packageFilter' | 'offerFilter' | 'remarkFilter' | 'documentsFilter', value: string) => {
-      const nextSearchParams = new URLSearchParams(searchParams)
-      if (value.trim().length > 0) {
-        nextSearchParams.set(key, value)
-      } else {
-        nextSearchParams.delete(key)
-      }
+      const nextSearchParams = searchParamsWithValue(searchParams, key, value)
 
       if (nextSearchParams.toString() !== searchParams.toString()) {
         setSearchParams(nextSearchParams, { replace: true })

@@ -1,14 +1,13 @@
 import {
-  appendNumericSearchParams,
-  appendSearchParams,
-  appendSearchSortAndPageParams,
+  createSortedPagedSearchParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
+  requireParsedSearchResponse,
   uniqueSearchItemsByKey,
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
-import { joinNonBlankText } from '@/utils/text'
+import { searchResultOptionLabel } from '@/utils/text'
 import type {
   ProvincialApplicationSearchFilters,
   ProvincialApplicationSearchItem,
@@ -55,25 +54,23 @@ const DEFAULT_APPLICATION_SEARCH_FILTERS: ProvincialApplicationSearchFilters = {
 }
 
 const buildBackendParams = (request: ProvincialApplicationSearchRequest): URLSearchParams => {
-  const params = new URLSearchParams()
-
   const { filters } = request
-  appendSearchParams(params, [
-    ['applicationNumber', filters.applicationNumber],
-    ['packageNumber', filters.packageNumber],
-    ['exemptionNumber', filters.exemptionNumber],
-    ['exemptionType', filters.exemptionType],
-    ['applicationStatus', filters.applicationStatus],
-    ['productTypeCode', filters.productTypeCode],
-    ['listingFromDate', filters.listingFromDate],
-    ['listingToDate', filters.listingToDate],
-    ['agentClientNumber', filters.applicantClientNumber],
-    ['ownerClientNumber', filters.ownerClientNumber],
-  ])
-  appendNumericSearchParams(params, 'region', filters.region)
-  appendSearchSortAndPageParams(params, request)
-
-  return params
+  return createSortedPagedSearchParams(
+    request,
+    [
+      ['applicationNumber', filters.applicationNumber],
+      ['packageNumber', filters.packageNumber],
+      ['exemptionNumber', filters.exemptionNumber],
+      ['exemptionType', filters.exemptionType],
+      ['applicationStatus', filters.applicationStatus],
+      ['productTypeCode', filters.productTypeCode],
+      ['listingFromDate', filters.listingFromDate],
+      ['listingToDate', filters.listingToDate],
+      ['agentClientNumber', filters.applicantClientNumber],
+      ['ownerClientNumber', filters.ownerClientNumber],
+    ],
+    [['region', filters.region]],
+  )
 }
 
 const parseBackendResponse = (payload: unknown): ProvincialApplicationSearchResponse | null => {
@@ -105,12 +102,10 @@ export const searchProvincialApplications = async (
       buildBackendParams(request),
     )
 
-    const parsed = parseBackendResponse(response.data)
-    if (!parsed) {
-      throw new Error('Backend provincial application response did not include results.')
-    }
-
-    return parsed
+    return requireParsedSearchResponse(
+      parseBackendResponse(response.data),
+      'Backend provincial application response did not include results.',
+    )
   } catch (error) {
     throw toSearchServiceError('Unable to load provincial application search results.', error)
   }
@@ -126,16 +121,13 @@ export const countProvincialApplications = async (
   )
 
 const applicationNumberOptionLabel = (item: ProvincialApplicationSearchItem): string =>
-  joinNonBlankText(
-    [
-      item.applicationNumber,
-      item.status,
-      item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
-      item.region ? `Region ${item.region}` : '',
-      item.listingDate,
-    ],
-    ' - ',
-  )
+  searchResultOptionLabel({
+    primary: item.applicationNumber,
+    status: item.status,
+    ownerClientNumber: item.ownerClientNumber,
+    region: item.region,
+    date: item.listingDate,
+  })
 
 export const searchProvincialApplicationNumberOptions = async (
   query: string,

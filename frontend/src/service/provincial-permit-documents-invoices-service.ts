@@ -8,7 +8,7 @@ import {
   parseRemoveDocumentSuccess,
 } from '@/service/document-service-utils'
 import { extractResponseFilename } from '@/service/http-response-utils'
-import { LEGACY_FORM_CONTENT_TYPE } from '@/service/legacy-form-utils'
+import { LEGACY_FORM_CONTENT_TYPE, toUrlEncodedParams } from '@/service/legacy-form-utils'
 import { recordOrEmpty } from '@/utils/record'
 
 export type PermitDocumentRow = {
@@ -247,7 +247,7 @@ export const fetchPermitInvoiceConversionRate =
 const postFormData = async (path: string, payload: Record<string, string>): Promise<unknown> => {
   const response = await apiService
     .getAxiosInstance()
-    .post<unknown>(path, new URLSearchParams(payload), {
+    .post<unknown>(path, toUrlEncodedParams(payload), {
       headers: {
         'Content-Type': LEGACY_FORM_CONTENT_TYPE,
       },

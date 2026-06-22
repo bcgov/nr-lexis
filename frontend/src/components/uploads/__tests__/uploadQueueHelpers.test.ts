@@ -20,6 +20,20 @@ describe('uploadQueueHelpers', () => {
     expect(result.details.errors).toEqual(['Package TEST23-652-7D-2 already exists.'])
   })
 
+  it('keeps actionable validation errors when the backend returns a single string', () => {
+    const result = extractUploadErrorDetails({
+      response: {
+        status: 422,
+        data: {
+          errors: 'Application number is required.',
+        },
+      },
+    })
+
+    expect(result.message).toBe('Application number is required.')
+    expect(result.details.errors).toEqual(['Application number is required.'])
+  })
+
   it('hides raw server response details from hard upload failures', () => {
     const result = extractUploadErrorDetails(
       {

@@ -1,14 +1,13 @@
 import {
-  appendNumericSearchParams,
-  appendSearchPageParams,
-  appendSearchParams,
+  createPagedSearchParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
+  requireParsedSearchResponse,
   uniqueSearchItemsByKey,
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
-import { joinNonBlankText } from '@/utils/text'
+import { searchResultOptionLabel } from '@/utils/text'
 import type {
   ProvincialExemptionSearchRequest,
   ProvincialExemptionSearchResponse,
@@ -55,23 +54,22 @@ const normalizeStatusCode = (status: string): string => {
 }
 
 const buildBackendParams = (request: ProvincialExemptionSearchRequest): URLSearchParams => {
-  const params = new URLSearchParams()
-
   const { filters } = request
-  appendSearchParams(params, [
-    ['applicationNumber', filters.applicationNumber],
-    ['packageNumber', filters.packageNumber],
-    ['exemptionNumber', filters.exemptionNumber],
-    ['listingFromDate', filters.listFromDate],
-    ['listingToDate', filters.listToDate],
-    ['exemptionTypeCode', filters.exemptionTypeCode],
-    ['exemptionStatusCode', filters.exemptionStatusCode],
-    ['applicantClientNumber', filters.applicantClientNumber],
-    ['ownerClientNumber', filters.ownerClientNumber],
-  ])
-  appendNumericSearchParams(params, 'region', filters.region)
-  appendSearchPageParams(params, request)
-  return params
+  return createPagedSearchParams(
+    request,
+    [
+      ['applicationNumber', filters.applicationNumber],
+      ['packageNumber', filters.packageNumber],
+      ['exemptionNumber', filters.exemptionNumber],
+      ['listingFromDate', filters.listFromDate],
+      ['listingToDate', filters.listToDate],
+      ['exemptionTypeCode', filters.exemptionTypeCode],
+      ['exemptionStatusCode', filters.exemptionStatusCode],
+      ['applicantClientNumber', filters.applicantClientNumber],
+      ['ownerClientNumber', filters.ownerClientNumber],
+    ],
+    [['region', filters.region]],
+  )
 }
 
 const parseBackendResponse = (payload: unknown): ProvincialExemptionSearchResponse | null => {
@@ -111,12 +109,10 @@ export const searchProvincialExemptions = async (
       buildBackendParams(request),
     )
 
-    const parsed = parseBackendResponse(response.data)
-    if (!parsed) {
-      throw new Error('Backend provincial exemption response did not include results.')
-    }
-
-    return parsed
+    return requireParsedSearchResponse(
+      parseBackendResponse(response.data),
+      'Backend provincial exemption response did not include results.',
+    )
   } catch (error) {
     throw toSearchServiceError('Unable to load provincial exemption search results.', error)
   }
@@ -134,16 +130,13 @@ export const countProvincialExemptions = async (
 const exemptionNumberOptionLabel = (
   item: ProvincialExemptionSearchResponse['content'][number],
 ): string =>
-  joinNonBlankText(
-    [
-      item.exemptionNumber,
-      item.status,
-      item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
-      item.region ? `Region ${item.region}` : '',
-      item.listingDate,
-    ],
-    ' - ',
-  )
+  searchResultOptionLabel({
+    primary: item.exemptionNumber,
+    status: item.status,
+    ownerClientNumber: item.ownerClientNumber,
+    region: item.region,
+    date: item.listingDate,
+  })
 
 export const searchProvincialExemptionNumberOptions = async (
   query: string,

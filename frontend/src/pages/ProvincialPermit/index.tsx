@@ -24,14 +24,23 @@ import type {
   ProvincialPermitSearchSortField,
 } from '@/interfaces/ProvincialPermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
-import { isValidIsoDate } from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
+  DEFAULT_SEARCH_PAGE,
+  DEFAULT_SEARCH_PAGE_SIZE,
+  SEARCH_PAGE_SIZE_OPTIONS,
+  appendSearchParamsToPath,
+  createEmptyPagedSearchResponse,
+  createSearchParams,
+  getNextSortDirection,
   mapSelectedOptionsById,
+  mapValueLabelOptionsToIdTextOptions,
   parseCsvParam,
   parseEnumParam,
+  parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
-  setSearchParam,
+  type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import {
   buildPageDataCacheKey,
@@ -43,11 +52,6 @@ import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
-
-type RegionOption = {
-  id: string
-  text: string
-}
 
 const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
   applicationNumber: '',
@@ -61,15 +65,7 @@ const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
   applicantClientNumber: '',
 }
 
-const EMPTY_RESULTS: ProvincialPermitSearchResponse = {
-  content: [],
-  page: {
-    number: 0,
-    size: 10,
-    totalElements: 0,
-    totalPages: 1,
-  },
-}
+const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialPermitSearchResponse>()
 
 const SORT_COLUMNS: {
   id: ProvincialPermitSearchSortField
@@ -86,9 +82,6 @@ const SORT_COLUMNS: {
 
 const DEFAULT_SORT_FIELD: ProvincialPermitSearchSortField = 'permitNumber'
 const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
-const DEFAULT_PAGE = 1
-const DEFAULT_PAGE_SIZE = 10
-const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
 const PERMIT_TOTAL_CACHE_TTL_MS = 60_000
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
@@ -120,40 +113,34 @@ const buildSearchParams = (
   sortDirection: 'asc' | 'desc',
   page: number,
   pageSize: number,
-): URLSearchParams => {
-  const params = new URLSearchParams()
-
-  setSearchParam(params, 'applicationNumber', filters.applicationNumber)
-  setSearchParam(params, 'packageNumber', filters.packageNumber)
-  setSearchParam(params, 'region', filters.region)
-  setSearchParam(params, 'issuedFromDate', filters.issuedFromDate)
-  setSearchParam(params, 'issuedToDate', filters.issuedToDate)
-  setSearchParam(params, 'permitStatus', filters.permitStatus)
-  setSearchParam(params, 'permitNumber', filters.permitNumber)
-  setSearchParam(params, 'ownerClientNumber', filters.ownerClientNumber)
-  setSearchParam(params, 'applicantClientNumber', filters.applicantClientNumber)
-  setSearchParam(params, 'sortField', sortField)
-  setSearchParam(params, 'sortDirection', sortDirection)
-  setSearchParam(params, 'page', page)
-  setSearchParam(params, 'pageSize', pageSize)
-
-  return params
-}
+): URLSearchParams =>
+  createSearchParams([
+    ['applicationNumber', filters.applicationNumber],
+    ['packageNumber', filters.packageNumber],
+    ['region', filters.region],
+    ['issuedFromDate', filters.issuedFromDate],
+    ['issuedToDate', filters.issuedToDate],
+    ['permitStatus', filters.permitStatus],
+    ['permitNumber', filters.permitNumber],
+    ['ownerClientNumber', filters.ownerClientNumber],
+    ['applicantClientNumber', filters.applicantClientNumber],
+    ['sortField', sortField],
+    ['sortDirection', sortDirection],
+    ['page', page],
+    ['pageSize', pageSize],
+  ])
 
 const ProvincialPermitPage: FC = () => {
   const { capabilities } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
+  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
   const [results, setResults] = useState<ProvincialPermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const permitTotalCacheRef = useRef<Map<string, PermitTotalCacheEntry>>(new Map())
   const withCurrentSearch = useCallback(
-    (path: string): string => {
-      const query = searchParams.toString()
-      return query.length > 0 ? `${path}?${query}` : path
-    },
+    (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
 
@@ -169,7 +156,6 @@ const ProvincialPermitPage: FC = () => {
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
     }
-    const parsedPageSize = parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
 
     return {
       filters: urlFilters,
@@ -182,10 +168,12 @@ const ProvincialPermitPage: FC = () => {
         searchParams.get('sortDirection'),
         DEFAULT_SORT_DIRECTION,
       ),
-      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
-      pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
-        ? parsedPageSize
-        : DEFAULT_PAGE_SIZE,
+      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_SEARCH_PAGE),
+      pageSize: parsePageSizeParam(
+        searchParams.get('pageSize'),
+        DEFAULT_SEARCH_PAGE_SIZE,
+        SEARCH_PAGE_SIZE_OPTIONS,
+      ),
     }
   }, [searchParams])
   const debouncedUrlState = useDebouncedValue(urlState)
@@ -203,7 +191,7 @@ const ProvincialPermitPage: FC = () => {
         [key]: value,
       }
       setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
+        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
         { replace: true },
       )
     },
@@ -216,7 +204,7 @@ const ProvincialPermitPage: FC = () => {
   )
 
   const hasDateValidationError = useMemo(() => {
-    return !isValidIsoDate(filters.issuedFromDate) || !isValidIsoDate(filters.issuedToDate)
+    return hasInvalidIsoDateValue(filters.issuedFromDate, filters.issuedToDate)
   }, [filters.issuedFromDate, filters.issuedToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
@@ -243,10 +231,7 @@ const ProvincialPermitPage: FC = () => {
       }
 
       const isLatestRequest = beginSearchRequest()
-      if (
-        !isValidIsoDate(request.filters.issuedFromDate) ||
-        !isValidIsoDate(request.filters.issuedToDate)
-      ) {
+      if (hasInvalidIsoDateValue(request.filters.issuedFromDate, request.filters.issuedToDate)) {
         setLoading(false)
         return
       }
@@ -302,19 +287,16 @@ const ProvincialPermitPage: FC = () => {
     const loadOptions = async () => {
       const options = await fetchProvincialPermitOptions()
       setPermitStatusOptions(options.permitStatuses)
-      setRegionOptions(
-        options.regions.map((option) => ({
-          id: option.value,
-          text: `${option.label} (${option.value})`,
-        })),
-      )
+      setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
     }
 
     void loadOptions()
   }, [])
 
   const onSearch = () => {
-    setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
+    setSearchParams(
+      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    )
   }
 
   const onClearFilters = () => {
@@ -323,15 +305,17 @@ const ProvincialPermitPage: FC = () => {
         INITIAL_FILTERS,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
-        DEFAULT_PAGE,
-        DEFAULT_PAGE_SIZE,
+        DEFAULT_SEARCH_PAGE,
+        DEFAULT_SEARCH_PAGE_SIZE,
       ),
     )
   }
 
   const onHeaderClick = (column: ProvincialPermitSearchSortField) => {
-    const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
-    setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
+    const nextDirection = getNextSortDirection(sortField, sortDirection, column)
+    setSearchParams(
+      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    )
   }
 
   return (
@@ -365,7 +349,7 @@ const ProvincialPermitPage: FC = () => {
                 selectionFeedback="fixed"
                 selectedItems={selectedRegions}
                 onChange={(event) => {
-                  const nextSelected = (event.selectedItems ?? []) as RegionOption[]
+                  const nextSelected = (event.selectedItems ?? []) as IdTextOption[]
                   updateFilter(
                     'region',
                     nextSelected.map((item) => item.id),
@@ -487,7 +471,7 @@ const ProvincialPermitPage: FC = () => {
             <Pagination
               page={results.page.number + 1}
               pageSize={results.page.size}
-              pageSizes={[10, 20, 30]}
+              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
                 setSearchParams(

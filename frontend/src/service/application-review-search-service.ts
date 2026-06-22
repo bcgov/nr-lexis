@@ -6,12 +6,11 @@ import type {
 } from '@/interfaces/ApplicationReviewSearch'
 import apiService from '@/service/api-service'
 import {
-  appendNumericSearchParams,
-  appendSearchParams,
-  appendSearchSortAndPageParams,
+  createSortedPagedSearchParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
   parsePreviewSearchResponse,
+  requireParsedSearchResponse,
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
@@ -50,21 +49,19 @@ export type ApplicationReviewStatusEmailResult = {
 }
 
 const buildBackendParams = (request: ApplicationReviewSearchRequest): URLSearchParams => {
-  const params = new URLSearchParams()
-
   const { filters } = request
-  appendSearchParams(params, [
-    ['applicationNumber', filters.applicationNumber],
-    ['productTypeCode', filters.productTypeCode],
-    ['receivedFromDate', filters.receivedFromDate],
-    ['receivedToDate', filters.receivedToDate],
-    ['listingFromDate', filters.listingFromDate],
-    ['listingToDate', filters.listingToDate],
-  ])
-  appendNumericSearchParams(params, 'region', filters.region)
-  appendSearchSortAndPageParams(params, request)
-
-  return params
+  return createSortedPagedSearchParams(
+    request,
+    [
+      ['applicationNumber', filters.applicationNumber],
+      ['productTypeCode', filters.productTypeCode],
+      ['receivedFromDate', filters.receivedFromDate],
+      ['receivedToDate', filters.receivedToDate],
+      ['listingFromDate', filters.listingFromDate],
+      ['listingToDate', filters.listingToDate],
+    ],
+    [['region', filters.region]],
+  )
 }
 
 const mapBackendReviewRow = (
@@ -102,12 +99,10 @@ export const searchApplicationReviews = async (
       buildBackendParams(request),
     )
 
-    const parsed = parseBackendResponse(response.data)
-    if (!parsed) {
-      throw new Error('Backend application review response did not include results.')
-    }
-
-    return parsed
+    return requireParsedSearchResponse(
+      parseBackendResponse(response.data),
+      'Backend application review response did not include results.',
+    )
   } catch (error) {
     throw toSearchServiceError('Unable to load provincial review search results.', error)
   }
@@ -131,12 +126,10 @@ export const previewApplicationReviews = async (
       buildBackendParams(request),
     )
 
-    const parsed = parseBackendPreviewResponse(response.data)
-    if (!parsed) {
-      throw new Error('Backend application review preview response did not include results.')
-    }
-
-    return parsed
+    return requireParsedSearchResponse(
+      parseBackendPreviewResponse(response.data),
+      'Backend application review preview response did not include results.',
+    )
   } catch (error) {
     throw toSearchServiceError('Unable to load provincial review preview results.', error)
   }

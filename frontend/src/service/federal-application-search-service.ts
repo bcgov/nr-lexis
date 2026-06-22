@@ -1,8 +1,8 @@
 import {
-  appendSearchParams,
-  appendSearchSortAndPageParams,
+  createSortedPagedSearchParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
+  requireParsedSearchResponse,
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
@@ -26,10 +26,8 @@ type BackendFederalApplicationSearchResult = {
 }
 
 const buildBackendParams = (request: FederalApplicationSearchRequest): URLSearchParams => {
-  const params = new URLSearchParams()
-
   const { filters } = request
-  appendSearchParams(params, [
+  return createSortedPagedSearchParams(request, [
     ['applicationNumber', filters.applicationNumber],
     ['packageNumber', filters.packageNumber],
     ['applicationStatus', filters.applicationStatus],
@@ -41,9 +39,6 @@ const buildBackendParams = (request: FederalApplicationSearchRequest): URLSearch
     ['ownerClientNumber', filters.clientNumber],
     ['agentClientNumber', filters.clientNumber],
   ])
-  appendSearchSortAndPageParams(params, request)
-
-  return params
 }
 
 const parseBackendResponse = (payload: unknown): FederalApplicationSearchResponse | null => {
@@ -80,12 +75,10 @@ export const searchFederalApplications = async (
       buildBackendParams(request),
     )
 
-    const parsed = parseBackendResponse(response.data)
-    if (!parsed) {
-      throw new Error('Backend federal application response did not include results.')
-    }
-
-    return parsed
+    return requireParsedSearchResponse(
+      parseBackendResponse(response.data),
+      'Backend federal application response did not include results.',
+    )
   } catch (error) {
     throw toSearchServiceError('Unable to load federal application search results.', error)
   }
