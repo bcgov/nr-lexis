@@ -63,9 +63,6 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-bceid-regression.yml
-    secrets:
-      e2e_bceid_user: ${{ secrets.E2E_BCEID_USER }}
-      e2e_bceid_password: ${{ secrets.E2E_BCEID_PASSWORD }}
     with:
       target: test
 
