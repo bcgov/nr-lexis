@@ -38,6 +38,7 @@ jobs:
     name: PR Deployment Purge
     env:
       CUTOFF: "1 week ago"
+    environment: dev
     runs-on: ubuntu-slim
     timeout-minutes: 10
     steps:
