@@ -3,6 +3,7 @@ import {
   payloadValueAsStringArray as asStringArray,
   payloadValueAsTrimmedString as asString,
 } from '@/service/payload-utils'
+import { recordOrEmpty } from '@/utils/record'
 
 const OFFER_CREATE_CACHE_TTL_MS = 30_000
 
@@ -26,7 +27,7 @@ export const fetchOfferApplicationDetails = async (
       ttlMs: OFFER_CREATE_CACHE_TTL_MS,
     },
   )
-  const source = (data ?? {}) as Record<string, unknown>
+  const source = recordOrEmpty(data)
   return {
     success: source.success === true,
     speciesGradeCode: asString(source.speciesGradeCode),
@@ -46,7 +47,7 @@ export const fetchOfferPackageList = async (applicationNumber: string): Promise<
       ttlMs: OFFER_CREATE_CACHE_TTL_MS,
     },
   )
-  const source = (data ?? {}) as Record<string, unknown>
+  const source = recordOrEmpty(data)
   return asStringArray(source.packageList).filter(
     (packageNumber) => packageNumber.toLowerCase() !== 'no packages',
   )
@@ -63,7 +64,7 @@ export const fetchOfferPackageVolume = async (packageNumber: string): Promise<st
       ttlMs: OFFER_CREATE_CACHE_TTL_MS,
     },
   )
-  const source = (data ?? {}) as Record<string, unknown>
+  const source = recordOrEmpty(data)
   return asString(source.volume)
 }
 
@@ -78,6 +79,6 @@ export const fetchOfferApplicationVolume = async (applicationNumber: string): Pr
       ttlMs: OFFER_CREATE_CACHE_TTL_MS,
     },
   )
-  const source = (data ?? {}) as Record<string, unknown>
+  const source = recordOrEmpty(data)
   return asString(source.volume)
 }

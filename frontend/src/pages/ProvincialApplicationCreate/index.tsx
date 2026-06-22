@@ -23,10 +23,10 @@ import {
   getVisibleFieldError,
   isoDateFieldError,
   maxNumericValueFieldError,
-  maxLengthFieldError,
   mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
+  requiredMaxLengthFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
@@ -684,20 +684,17 @@ const ProvincialApplicationCreatePage: FC = () => {
     () => ({
       ownerClientNumber:
         requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
-      ownerClientLocationCode: firstValidationError(
-        () => requiredFieldError(form.ownerClientLocationCode, 'Owner client location code'),
-        () => maxLengthFieldError(form.ownerClientLocationCode, 2, 'Owner client location code'),
+      ownerClientLocationCode: requiredMaxLengthFieldError(
+        form.ownerClientLocationCode,
+        2,
+        'Owner client location code',
       ),
       ownerContactName: requiredFieldError(form.ownerContactName, 'Owner name') ?? undefined,
       agentClientNumber: isAgentApplicant(form.applicantTypeCode)
         ? (requiredFieldError(form.agentClientNumber, 'Agent client number') ?? undefined)
         : undefined,
       agentClientLocationCode: isAgentApplicant(form.applicantTypeCode)
-        ? firstValidationError(
-            () => requiredFieldError(form.agentClientLocationCode, 'Agent client location code'),
-            () =>
-              maxLengthFieldError(form.agentClientLocationCode, 2, 'Agent client location code'),
-          )
+        ? requiredMaxLengthFieldError(form.agentClientLocationCode, 2, 'Agent client location code')
         : undefined,
       agentContactName: isAgentApplicant(form.applicantTypeCode)
         ? (requiredFieldError(form.agentContactName, 'Agent contact name') ?? undefined)
@@ -723,9 +720,11 @@ const ProvincialApplicationCreatePage: FC = () => {
                 ? 'At least one application species is required, but no species are available for the selected region and product type.'
                 : 'At least one application species is required.'
           : undefined,
-      exemptionType: firstValidationError(
-        () => requiredFieldError(form.exemptionType, 'Exemption reason'),
-        () => maxLengthFieldError(form.exemptionType, 1, 'Exemption reason code'),
+      exemptionType: requiredMaxLengthFieldError(
+        form.exemptionType,
+        1,
+        'Exemption reason code',
+        'Exemption reason',
       ),
       region: requiredFieldError(form.region, 'Region') ?? undefined,
       applicationDate: firstValidationError(

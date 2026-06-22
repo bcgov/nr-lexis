@@ -1,6 +1,15 @@
 import axios from 'axios'
 import { env } from '@/env'
 import apiService from '@/service/api-service'
+import {
+  LEGACY_FORM_CONTENT_TYPE,
+  toUrlEncodedParams,
+  type LegacyFormPayload,
+} from '@/service/legacy-form-utils'
+import {
+  payloadValueAsOptionalString as asString,
+  payloadValueAsStringList as asStringArray,
+} from '@/service/payload-utils'
 
 export type CreateSubmissionResult = {
   success: boolean
@@ -24,38 +33,6 @@ type LegacyCreateResponse = {
 }
 
 type CreateSubmitRequestMode = 'form' | 'json'
-
-const asString = (value: unknown): string | undefined => {
-  if (value === null || value === undefined) {
-    return undefined
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    return trimmed.length > 0 ? trimmed : undefined
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return String(value)
-  }
-  return undefined
-}
-
-const asStringArray = (value: unknown): string[] => {
-  if (Array.isArray(value)) {
-    return value.map((item) => asString(item)).filter((item): item is string => Boolean(item))
-  }
-  const singleValue = asString(value)
-  return singleValue ? [singleValue] : []
-}
-
-const toUrlEncodedParams = (payload: Record<string, string | undefined>): URLSearchParams => {
-  const params = new URLSearchParams()
-  Object.entries(payload).forEach(([key, value]) => {
-    if (value !== undefined && value.trim().length > 0) {
-      params.append(key, value)
-    }
-  })
-  return params
-}
 
 const withQueryParam = (path: string, key: string, value: string | undefined): string => {
   if (!value) {
@@ -94,8 +71,8 @@ const shouldIncludeCreateSubmitActionMapping = (): boolean => {
 
 const withCreateActionMapping = (
   actionMapping: string,
-  payload: Record<string, string | undefined>,
-): Record<string, string | undefined> => {
+  payload: LegacyFormPayload,
+): LegacyFormPayload => {
   if (!shouldIncludeCreateSubmitActionMapping()) {
     return payload
   }
@@ -171,14 +148,13 @@ const buildFailureResult = (
 
 const postLegacyForm = async (
   path: string,
-  payload: Record<string, string | undefined>,
+  payload: LegacyFormPayload,
 ): Promise<LegacyCreateResponse> => {
   const requestMode = getCreateSubmitRequestMode()
   const requestBody = requestMode === 'json' ? payload : toUrlEncodedParams(payload)
   const requestPath =
     requestMode === 'json' ? withQueryParam(path, 'actionMapping', payload.actionMapping) : path
-  const contentType =
-    requestMode === 'json' ? 'application/json' : 'application/x-www-form-urlencoded'
+  const contentType = requestMode === 'json' ? 'application/json' : LEGACY_FORM_CONTENT_TYPE
 
   const response = await apiService
     .getAxiosInstance()

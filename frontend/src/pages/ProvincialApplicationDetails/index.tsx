@@ -87,9 +87,9 @@ import {
   firstValidationError,
   isoDateFieldError,
   maxNumericValueFieldError,
-  maxLengthFieldError,
   positiveNumericFieldError,
   requiredFieldError,
+  requiredMaxLengthFieldError,
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
 import { triggerBrowserDownload } from '@/utils/download'
@@ -925,10 +925,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
     return {
       ownerClientNumber:
         requiredFieldError(summaryForm.ownerClientNumber, 'Owner client number') ?? undefined,
-      ownerClientLocationCode: firstValidationError(
-        () => requiredFieldError(summaryForm.ownerClientLocationCode, 'Owner client location code'),
-        () =>
-          maxLengthFieldError(summaryForm.ownerClientLocationCode, 2, 'Owner client location code'),
+      ownerClientLocationCode: requiredMaxLengthFieldError(
+        summaryForm.ownerClientLocationCode,
+        2,
+        'Owner client location code',
       ),
       ownerContactName:
         requiredFieldError(summaryForm.ownerContactName, 'Owner contact name') ?? undefined,
@@ -936,15 +936,10 @@ const ProvincialApplicationDetailsPage: FC = () => {
         ? (requiredFieldError(summaryForm.agentClientNumber, 'Agent client number') ?? undefined)
         : undefined,
       agentClientLocationCode: isAgentApplicant(summaryForm.applicantTypeCode)
-        ? firstValidationError(
-            () =>
-              requiredFieldError(summaryForm.agentClientLocationCode, 'Agent client location code'),
-            () =>
-              maxLengthFieldError(
-                summaryForm.agentClientLocationCode,
-                2,
-                'Agent client location code',
-              ),
+        ? requiredMaxLengthFieldError(
+            summaryForm.agentClientLocationCode,
+            2,
+            'Agent client location code',
           )
         : undefined,
       agentContactName: isAgentApplicant(summaryForm.applicantTypeCode)
@@ -961,9 +956,11 @@ const ProvincialApplicationDetailsPage: FC = () => {
       growthTypeCode: productTypeRequiresGrowthType(summaryForm.productTypeCode)
         ? (requiredFieldError(summaryForm.growthTypeCode, 'Growth type') ?? undefined)
         : undefined,
-      exemptionReasonCode: firstValidationError(
-        () => requiredFieldError(summaryForm.exemptionReasonCode, 'Exemption reason'),
-        () => maxLengthFieldError(summaryForm.exemptionReasonCode, 1, 'Exemption reason code'),
+      exemptionReasonCode: requiredMaxLengthFieldError(
+        summaryForm.exemptionReasonCode,
+        1,
+        'Exemption reason code',
+        'Exemption reason',
       ),
       orgUnitNumber: requiredFieldError(summaryForm.orgUnitNumber, 'Region') ?? undefined,
       applicationDate: firstValidationError(

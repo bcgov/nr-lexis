@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FC } from 'react'
+import { useEffect, useMemo, useReducer, useState, type FC } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
 import { AppNotification } from '@/components/AppNotification'
@@ -104,6 +104,68 @@ type PageStatus = {
   message: string
 }
 
+type OfferApplicationContextState = {
+  applicationDetails: OfferApplicationDetails | null
+  applicationVolume: string
+  packageOptions: SearchOption[]
+  packageVolume: string
+  isLoading: boolean
+}
+
+type OfferApplicationContextAction =
+  | { type: 'reset'; packageOptions: SearchOption[] }
+  | { type: 'loadStart' }
+  | {
+      type: 'loadSuccess'
+      applicationDetails: OfferApplicationDetails | null
+      applicationVolume: string
+      packageOptions: SearchOption[]
+    }
+  | { type: 'loadFailure' }
+  | { type: 'setPackageVolume'; packageVolume: string }
+
+const createOfferApplicationContextState = (
+  packageOptions: SearchOption[],
+): OfferApplicationContextState => ({
+  applicationDetails: null,
+  applicationVolume: '',
+  packageOptions,
+  packageVolume: '',
+  isLoading: false,
+})
+
+const offerApplicationContextReducer = (
+  state: OfferApplicationContextState,
+  action: OfferApplicationContextAction,
+): OfferApplicationContextState => {
+  switch (action.type) {
+    case 'reset':
+      return createOfferApplicationContextState(action.packageOptions)
+    case 'loadStart':
+      return { ...state, isLoading: true }
+    case 'loadSuccess':
+      return {
+        ...state,
+        applicationDetails: action.applicationDetails,
+        applicationVolume: action.applicationVolume,
+        packageOptions: action.packageOptions,
+        isLoading: false,
+      }
+    case 'loadFailure':
+      return {
+        ...state,
+        applicationDetails: null,
+        applicationVolume: '',
+        packageOptions: [],
+        isLoading: false,
+      }
+    case 'setPackageVolume':
+      return { ...state, packageVolume: action.packageVolume }
+    default:
+      return state
+  }
+}
+
 const ProvincialOfferCreatePage: FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -118,11 +180,18 @@ const ProvincialOfferCreatePage: FC = () => {
   )
   const [form, setForm] = useState<ProvincialOfferCreateForm>(() => initialForm)
   const [regions, setRegions] = useState<SearchOption[]>([])
-  const [packageOptions, setPackageOptions] = useState<SearchOption[]>(() => queryPackageOptions)
-  const [applicationDetails, setApplicationDetails] = useState<OfferApplicationDetails | null>(null)
-  const [applicationVolume, setApplicationVolume] = useState('')
-  const [packageVolume, setPackageVolume] = useState('')
-  const [isLoadingApplicationContext, setIsLoadingApplicationContext] = useState(false)
+  const [applicationContext, dispatchApplicationContext] = useReducer(
+    offerApplicationContextReducer,
+    queryPackageOptions,
+    createOfferApplicationContextState,
+  )
+  const {
+    applicationDetails,
+    applicationVolume,
+    packageOptions,
+    packageVolume,
+    isLoading: isLoadingApplicationContext,
+  } = applicationContext
   const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
     listCreateDrafts(MODULE_KEY),
   )
@@ -143,15 +212,12 @@ const ProvincialOfferCreatePage: FC = () => {
   useEffect(() => {
     const applicationNumber = form.applicationNumber.trim()
     if (!applicationNumber) {
-      setApplicationDetails(null)
-      setApplicationVolume('')
-      setPackageVolume('')
-      setPackageOptions(queryPackageOptions)
+      dispatchApplicationContext({ type: 'reset', packageOptions: queryPackageOptions })
       return
     }
 
     let isActive = true
-    setIsLoadingApplicationContext(true)
+    dispatchApplicationContext({ type: 'loadStart' })
     void Promise.allSettled([
       fetchOfferApplicationDetails(applicationNumber),
       fetchOfferPackageList(applicationNumber),
@@ -162,18 +228,20 @@ const ProvincialOfferCreatePage: FC = () => {
           return
         }
 
-        setApplicationDetails(
-          detailsResult.status === 'fulfilled' && detailsResult.value.success
-            ? detailsResult.value
-            : null,
-        )
         const packageNumbers = packagesResult.status === 'fulfilled' ? packagesResult.value : []
         const nextPackageOptions = packageNumbers.map((packageNumber) => ({
           value: packageNumber,
           label: packageNumber,
         }))
-        setPackageOptions(nextPackageOptions)
-        setApplicationVolume(volumeResult.status === 'fulfilled' ? volumeResult.value : '')
+        dispatchApplicationContext({
+          type: 'loadSuccess',
+          applicationDetails:
+            detailsResult.status === 'fulfilled' && detailsResult.value.success
+              ? detailsResult.value
+              : null,
+          applicationVolume: volumeResult.status === 'fulfilled' ? volumeResult.value : '',
+          packageOptions: nextPackageOptions,
+        })
         setForm((current) => {
           if (current.applicationNumber.trim() !== applicationNumber) {
             return current
@@ -194,19 +262,12 @@ const ProvincialOfferCreatePage: FC = () => {
       })
       .catch(() => {
         if (isActive) {
-          setApplicationDetails(null)
-          setApplicationVolume('')
-          setPackageOptions([])
+          dispatchApplicationContext({ type: 'loadFailure' })
           setForm((current) =>
             current.applicationNumber.trim() === applicationNumber
               ? { ...current, packageNumber: '' }
               : current,
           )
-        }
-      })
-      .finally(() => {
-        if (isActive) {
-          setIsLoadingApplicationContext(false)
         }
       })
 
@@ -218,7 +279,7 @@ const ProvincialOfferCreatePage: FC = () => {
   useEffect(() => {
     const packageNumber = form.packageNumber.trim()
     if (!packageNumber) {
-      setPackageVolume('')
+      dispatchApplicationContext({ type: 'setPackageVolume', packageVolume: '' })
       return
     }
 
@@ -226,12 +287,12 @@ const ProvincialOfferCreatePage: FC = () => {
     void fetchOfferPackageVolume(packageNumber)
       .then((volume) => {
         if (isActive) {
-          setPackageVolume(volume)
+          dispatchApplicationContext({ type: 'setPackageVolume', packageVolume: volume })
         }
       })
       .catch(() => {
         if (isActive) {
-          setPackageVolume('')
+          dispatchApplicationContext({ type: 'setPackageVolume', packageVolume: '' })
         }
       })
 

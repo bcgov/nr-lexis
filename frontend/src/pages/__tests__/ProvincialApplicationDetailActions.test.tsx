@@ -52,6 +52,7 @@ import {
   fetchProvincialApplicationOptions,
 } from '@/service/search-options-service'
 import { submitAdminUpload } from '@/service/admin-upload-service'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -176,6 +177,22 @@ const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOpti
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 
+const mockApplicationDetailAuth = (
+  canPerform: (action: string) => boolean = () => true,
+  roles: string[] = ['APPLICATION_APPROVER'],
+): void => {
+  mockedUseAuth.mockReturnValue(
+    createTestAuthContext({
+      capabilities: createTestCapabilities({
+        principal: 'idir\\reviewer',
+        roles,
+        welcomeTarget: null,
+      }),
+      canPerform,
+    }),
+  )
+}
+
 const applicationDetail: ProvincialApplicationDetail = {
   applicationNumber: 321,
   exemptionNumber: 'EX-555',
@@ -250,17 +267,7 @@ const getSummaryComboBox = (
 describe('Provincial Application Detail Document Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: true,
-        principal: 'idir\\reviewer',
-        roles: ['APPLICATION_APPROVER'],
-        welcomeTarget: null,
-        legacyPath: null,
-        grantedActions: [],
-      },
-      canPerform: () => true,
-    } as any)
+    mockApplicationDetailAuth()
     mockedFetchProvincialApplicationDetail.mockResolvedValue(applicationDetail)
     mockedReleaseApplicationEditLock.mockResolvedValue()
     mockedFetchApplicationDocuments.mockResolvedValue({
@@ -1782,17 +1789,7 @@ describe('Provincial Application Detail Document Actions', () => {
   })
 
   it('hides application remark editing without application remarks action', async () => {
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: true,
-        principal: 'idir\\reviewer',
-        roles: ['APPLICATION_APPROVER'],
-        welcomeTarget: null,
-        legacyPath: null,
-        grantedActions: [],
-      },
-      canPerform: (action: string) => action !== '/applicationRemarks',
-    } as any)
+    mockApplicationDetailAuth((action: string) => action !== '/applicationRemarks')
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -2376,9 +2373,7 @@ describe('Provincial Application Detail Document Actions', () => {
   })
 
   it('disables upload and delete without file upload permission', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action !== '/fileApplicationUpload',
-    } as any)
+    mockApplicationDetailAuth((action: string) => action !== '/fileApplicationUpload', [])
     mockedFetchApplicationDocuments.mockResolvedValue({
       rows: [
         {

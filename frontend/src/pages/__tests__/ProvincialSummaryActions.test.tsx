@@ -13,6 +13,7 @@ import { countProvincialApplications } from '@/service/provincial-application-se
 import { countProvincialExemptions } from '@/service/provincial-exemption-search-service'
 import { countProvincialOffers } from '@/service/provincial-offer-search-service'
 import { countProvincialPermits } from '@/service/provincial-permit-search-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -76,9 +77,7 @@ describe('Provincial Summary action smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     mockedCountProvincialApplications.mockResolvedValue(501)
     mockedCountProvincialExemptions.mockResolvedValue(602)
@@ -186,9 +185,7 @@ describe('Provincial Summary action smoke', () => {
   })
 
   it('hides summary route actions when the user lacks all route permissions', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => false,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage()
 

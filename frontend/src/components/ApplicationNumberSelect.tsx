@@ -4,6 +4,7 @@ import {
   searchProvincialApplicationNumberOptions,
   type ProvincialApplicationNumberOption,
 } from '@/service/provincial-application-search-service'
+import { leadingDigits } from '@/utils/text'
 
 type ApplicationNumberSelectProps = {
   id: string
@@ -22,8 +23,6 @@ const itemToString = (item: ProvincialApplicationNumberOption | string | null | 
   }
   return item?.label ?? ''
 }
-
-const applicationNumberFromInput = (input: string): string => input.match(/^\d+/)?.[0] ?? ''
 
 const shouldFilterItem = ({
   item,
@@ -62,7 +61,7 @@ export default function ApplicationNumberSelect({
     let ignore = false
     const timeout = window.setTimeout(() => {
       setIsLoading(true)
-      void searchProvincialApplicationNumberOptions(applicationNumberFromInput(inputText))
+      void searchProvincialApplicationNumberOptions(leadingDigits(inputText))
         .then((items) => {
           if (!ignore) {
             setOptions(items)
@@ -111,14 +110,14 @@ export default function ApplicationNumberSelect({
       onBlur={onBlur}
       onInputChange={(inputValue) => {
         setInputText(inputValue)
-        onChange(applicationNumberFromInput(inputValue))
+        onChange(leadingDigits(inputValue))
       }}
       onChange={({ selectedItem, inputValue }) => {
         if (typeof selectedItem === 'string') {
-          onChange(applicationNumberFromInput(selectedItem))
+          onChange(leadingDigits(selectedItem))
           return
         }
-        onChange(selectedItem?.value ?? applicationNumberFromInput(inputValue ?? ''))
+        onChange(selectedItem?.value ?? leadingDigits(inputValue ?? ''))
       }}
     />
   )
