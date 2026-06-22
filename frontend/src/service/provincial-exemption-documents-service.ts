@@ -1,17 +1,13 @@
 import apiService from '@/service/api-service'
 import {
+  type DocumentRowBase,
   normalizeDocumentRowBase,
   parseDocumentArrayPayload,
   parseRemoveDocumentSuccess,
 } from '@/service/document-service-utils'
 import { extractResponseFilename } from '@/service/http-response-utils'
 
-export type ProvincialExemptionDocumentRow = {
-  id: string
-  name: string
-  description: string
-  type: string
-}
+export type ProvincialExemptionDocumentRow = DocumentRowBase
 
 export type ProvincialExemptionDocumentSource = 'api'
 
@@ -32,10 +28,6 @@ export type RemoveProvincialExemptionDocumentResult = {
 }
 
 const DOCUMENT_LIST_CACHE_TTL_MS = 30_000
-
-const normalizeDocumentRow = (row: unknown, index: number): ProvincialExemptionDocumentRow => {
-  return normalizeDocumentRowBase(row, index)
-}
 
 export const fetchExemptionDocuments = async (
   exemptionNumber: string,
@@ -63,7 +55,7 @@ export const fetchExemptionDocuments = async (
   }
 
   return {
-    rows: rows.map(normalizeDocumentRow),
+    rows: rows.map(normalizeDocumentRowBase),
     source: 'api',
   }
 }

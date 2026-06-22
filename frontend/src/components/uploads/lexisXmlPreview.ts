@@ -1,3 +1,4 @@
+import { isRecord } from '@/utils/record'
 import { getFileExtension } from './uploadQueueHelpers'
 
 const ESF_NAMESPACE = 'http://www.for.gov.bc.ca/schema/esf'
@@ -28,9 +29,6 @@ const countXmlElements = (xml: string, localName: string): number => {
   )
   return xml.match(elementPattern)?.length ?? 0
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const normalizeGeoJsonEntityType = (value: unknown): string =>
   typeof value === 'string' ? value.toUpperCase().replace(/[^A-Z0-9]/g, '') : ''
