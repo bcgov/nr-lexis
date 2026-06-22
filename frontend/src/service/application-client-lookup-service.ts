@@ -1,5 +1,11 @@
 import apiService from '@/service/api-service'
-import { booleanField, firstStringField, isRecord, stringField } from '@/utils/record'
+import {
+  booleanField,
+  firstStringField,
+  isRecord,
+  mapRecordArray,
+  stringField,
+} from '@/utils/record'
 
 export type ApplicationClientLocation = {
   locationCode: string
@@ -55,56 +61,36 @@ const parseClientData = (input: unknown): ApplicationClientData | null => {
 }
 
 const parseClientLocations = (input: unknown): ApplicationClientLocation[] => {
-  if (!Array.isArray(input)) {
-    return []
-  }
+  return mapRecordArray(input, (item) => {
+    const locationCode = firstStringField(item, ['locationCode', 'code'])
+    const locationName = firstStringField(item, ['locationName', 'name'])
 
-  return input
-    .map((item) => {
-      if (!isRecord(item)) {
-        return null
-      }
+    if (!locationCode || !locationName) {
+      return null
+    }
 
-      const locationCode = firstStringField(item, ['locationCode', 'code'])
-      const locationName = firstStringField(item, ['locationName', 'name'])
-
-      if (!locationCode || !locationName) {
-        return null
-      }
-
-      return {
-        locationCode,
-        locationName,
-        selected: booleanField(item, 'selected'),
-      }
-    })
-    .filter((item): item is ApplicationClientLocation => item !== null)
+    return {
+      locationCode,
+      locationName,
+      selected: booleanField(item, 'selected'),
+    }
+  })
 }
 
 const parseClientContacts = (input: unknown): ApplicationClientContact[] => {
-  if (!Array.isArray(input)) {
-    return []
-  }
+  return mapRecordArray(input, (item) => {
+    const contactName = firstStringField(item, ['contactName', 'name'])
+    const contactId = firstStringField(item, ['contactId', 'id'])
 
-  return input
-    .map((item) => {
-      if (!isRecord(item)) {
-        return null
-      }
+    if (!contactName || contactId === '0') {
+      return null
+    }
 
-      const contactName = firstStringField(item, ['contactName', 'name'])
-      const contactId = firstStringField(item, ['contactId', 'id'])
-
-      if (!contactName || contactId === '0') {
-        return null
-      }
-
-      return {
-        contactName,
-        contactId,
-      }
-    })
-    .filter((item): item is ApplicationClientContact => item !== null)
+    return {
+      contactName,
+      contactId,
+    }
+  })
 }
 
 export const fetchApplicationClientData = async (

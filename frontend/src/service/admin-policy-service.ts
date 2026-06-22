@@ -1,5 +1,6 @@
 import apiService from '@/service/api-service'
 import { parsePayloadArray, payloadValueAsString as asString } from '@/service/payload-utils'
+import { recordOrEmpty } from '@/utils/record'
 
 export type FeePolicyRow = {
   id: string
@@ -53,7 +54,7 @@ const sortByEffectiveDateDesc = <TRow extends { effectiveDate: string }>(rows: T
 }
 
 const normalizeFeePolicyRow = (row: unknown): FeePolicyRow => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = recordOrEmpty(row)
   return {
     id: asString(source.id || source.policyId || source.lexisFeePolicyId) || createRowId(),
     effectiveDate: asString(source.effectiveDate || source.policyEffectiveDate),
@@ -74,7 +75,7 @@ const normalizeFeePolicyRow = (row: unknown): FeePolicyRow => {
 }
 
 const normalizeFilPolicyRow = (row: unknown): FilPolicyRow => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = recordOrEmpty(row)
   return {
     id:
       asString(

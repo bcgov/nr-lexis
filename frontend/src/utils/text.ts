@@ -7,5 +7,7 @@ export const normalizeUpperText = (value: string): string => value.trim().toUppe
 export const joinNonBlankText = (values: string[], separator: string): string =>
   values.filter((value) => value.trim().length > 0).join(separator)
 
+export const leadingDigits = (value: string): string => value.match(/^\d+/)?.[0] ?? ''
+
 export const isValidEmail = (value: string): boolean =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())

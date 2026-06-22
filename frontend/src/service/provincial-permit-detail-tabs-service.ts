@@ -5,6 +5,7 @@ import {
   payloadValueAsString as asString,
 } from '@/service/payload-utils'
 import { toSearchServiceError } from '@/service/search-service-fallback'
+import { recordOrEmpty } from '@/utils/record'
 
 export type ProvincialPermitItemRow = {
   id: string
@@ -63,7 +64,7 @@ const asNumber = (value: unknown): number => {
 }
 
 const normalizePermitItemRow = (row: unknown, index: number): ProvincialPermitItemRow => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = recordOrEmpty(row)
   return {
     id: asString(
       source.id ||
@@ -83,7 +84,7 @@ const normalizePermitItemRow = (row: unknown, index: number): ProvincialPermitIt
 }
 
 const normalizeScaleFeeRow = (row: unknown, index: number): ProvincialPermitFeeRow => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = recordOrEmpty(row)
   const feeCode = asString(source.fil || source.feeCode || source.code)
   const descriptor = [
     asString(source.timberMark || source.timbermark),
@@ -106,7 +107,7 @@ const normalizeScaleFeeRow = (row: unknown, index: number): ProvincialPermitFeeR
 }
 
 const normalizeGbmsHistoryRow = (row: unknown, index: number): ProvincialPermitEventRow => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = recordOrEmpty(row)
   const cancelledByInvoice = asString(source.cancelledByInvoice)
   const replacedByInvoice = asString(source.replacedByInvoice)
   const invoiceAmount = asString(source.invoiceAmount)
@@ -179,7 +180,7 @@ const fetchPackageList = async (permitNumber: string): Promise<string[]> => {
       return []
     }
 
-    const objectPayload = (response.data ?? {}) as Record<string, unknown>
+    const objectPayload = recordOrEmpty(response.data)
     const packageList = Array.isArray(objectPayload.packageList) ? objectPayload.packageList : []
     return packageList
       .map(asString)

@@ -4,8 +4,10 @@ import {
   parsePayloadArrayOrEmpty,
   payloadValueAsBoolean,
   payloadValueAsNumber,
+  payloadValueAsOptionalString,
   payloadValueAsString,
   payloadValueAsStringArray,
+  payloadValueAsStringList,
   payloadValueAsTrimmedString,
 } from '@/service/payload-utils'
 
@@ -20,6 +22,12 @@ describe('payload-utils', () => {
     expect(payloadValueAsTrimmedString(' raw value ')).toBe('raw value')
     expect(payloadValueAsTrimmedString(123)).toBe('123')
     expect(payloadValueAsTrimmedString(null)).toBe('')
+  })
+
+  it('coerces optional string-like payload values', () => {
+    expect(payloadValueAsOptionalString(' raw value ')).toBe('raw value')
+    expect(payloadValueAsOptionalString(123)).toBe('123')
+    expect(payloadValueAsOptionalString('   ')).toBeUndefined()
   })
 
   it('coerces numeric payload values with optional string normalization', () => {
@@ -38,6 +46,12 @@ describe('payload-utils', () => {
   it('coerces string arrays with trimmed nonblank entries', () => {
     expect(payloadValueAsStringArray([' FI ', '', 12, null])).toEqual(['FI', '12'])
     expect(payloadValueAsStringArray('FI')).toEqual([])
+  })
+
+  it('coerces string lists from arrays or single values', () => {
+    expect(payloadValueAsStringList([' FI ', '', 12, null])).toEqual(['FI', '12'])
+    expect(payloadValueAsStringList(' FI ')).toEqual(['FI'])
+    expect(payloadValueAsStringList('   ')).toEqual([])
   })
 
   it('extracts arrays from response envelopes using ordered keys', () => {

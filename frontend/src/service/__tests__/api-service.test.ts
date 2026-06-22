@@ -1,14 +1,18 @@
+import type { AxiosRequestConfig } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import apiService from '@/service/api-service'
+
+type RequestInterceptor = (
+  config: AxiosRequestConfig,
+) => AxiosRequestConfig | Promise<AxiosRequestConfig>
 
 const { axiosClientMock, fetchAuthSessionMock, getRegisteredRequestInterceptor, getMock } =
   vi.hoisted(() => {
     const getMock = vi.fn()
-    let registeredRequestInterceptor: ((config: any) => Promise<any>) | undefined
-    const requestInterceptorUseMock = vi.fn((interceptor) => {
+    let registeredRequestInterceptor: RequestInterceptor | undefined
+    const requestInterceptorUseMock = vi.fn((interceptor: RequestInterceptor) => {
       registeredRequestInterceptor = interceptor
     })
-    const responseInterceptorUseMock = vi.fn()
 
     return {
       fetchAuthSessionMock: vi.fn(),
@@ -19,9 +23,6 @@ const { axiosClientMock, fetchAuthSessionMock, getRegisteredRequestInterceptor, 
         interceptors: {
           request: {
             use: requestInterceptorUseMock,
-          },
-          response: {
-            use: responseInterceptorUseMock,
           },
         },
       },
@@ -66,6 +67,17 @@ const buildSession = ({
     },
   },
 })
+
+const registeredRequestInterceptor = (): RequestInterceptor => {
+  const requestInterceptor = getRegisteredRequestInterceptor()
+  expect(requestInterceptor).toBeInstanceOf(Function)
+
+  if (!requestInterceptor) {
+    throw new Error('Expected API service to register a request interceptor.')
+  }
+
+  return requestInterceptor
+}
 
 describe('api-service cached GET support', () => {
   beforeEach(() => {
@@ -334,9 +346,7 @@ describe('api-service cached GET support', () => {
         count: 1,
       })
 
-      const requestInterceptor = getRegisteredRequestInterceptor()
-      expect(requestInterceptor).toBeInstanceOf(Function)
-      await requestInterceptor({
+      await registeredRequestInterceptor()({
         method,
         headers: {},
       })
@@ -350,10 +360,7 @@ describe('api-service cached GET support', () => {
   )
 
   it('adds auth headers when the request interceptor receives a config without headers', async () => {
-    const requestInterceptor = getRegisteredRequestInterceptor()
-    expect(requestInterceptor).toBeInstanceOf(Function)
-
-    const result = await requestInterceptor({
+    const result = await registeredRequestInterceptor()({
       method: 'get',
     })
 
@@ -366,10 +373,8 @@ describe('api-service cached GET support', () => {
 
   it('adds auth headers through AxiosHeaders-style setters when available', async () => {
     const headerValues: Record<string, string> = {}
-    const requestInterceptor = getRegisteredRequestInterceptor()
-    expect(requestInterceptor).toBeInstanceOf(Function)
 
-    await requestInterceptor({
+    await registeredRequestInterceptor()({
       method: 'get',
       headers: {
         get: (name: string) => headerValues[name],
@@ -393,9 +398,7 @@ describe('api-service cached GET support', () => {
       count: 1,
     })
 
-    const requestInterceptor = getRegisteredRequestInterceptor()
-    expect(requestInterceptor).toBeInstanceOf(Function)
-    await requestInterceptor({
+    await registeredRequestInterceptor()({
       method: 'get',
       headers: {},
     })
@@ -423,9 +426,7 @@ describe('api-service cached GET support', () => {
       expect(getMock).toHaveBeenCalledTimes(1)
     })
 
-    const requestInterceptor = getRegisteredRequestInterceptor()
-    expect(requestInterceptor).toBeInstanceOf(Function)
-    await requestInterceptor({
+    await registeredRequestInterceptor()({
       method: 'post',
       headers: {},
     })

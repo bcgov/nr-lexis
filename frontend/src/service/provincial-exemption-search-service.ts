@@ -1,9 +1,10 @@
 import {
   appendNumericSearchParams,
   appendSearchPageParams,
-  appendSearchParam,
+  appendSearchParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
+  uniqueSearchItemsByKey,
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
@@ -57,15 +58,17 @@ const buildBackendParams = (request: ProvincialExemptionSearchRequest): URLSearc
   const params = new URLSearchParams()
 
   const { filters } = request
-  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
-  appendSearchParam(params, 'packageNumber', filters.packageNumber)
-  appendSearchParam(params, 'exemptionNumber', filters.exemptionNumber)
-  appendSearchParam(params, 'listingFromDate', filters.listFromDate)
-  appendSearchParam(params, 'listingToDate', filters.listToDate)
-  appendSearchParam(params, 'exemptionTypeCode', filters.exemptionTypeCode)
-  appendSearchParam(params, 'exemptionStatusCode', filters.exemptionStatusCode)
-  appendSearchParam(params, 'applicantClientNumber', filters.applicantClientNumber)
-  appendSearchParam(params, 'ownerClientNumber', filters.ownerClientNumber)
+  appendSearchParams(params, [
+    ['applicationNumber', filters.applicationNumber],
+    ['packageNumber', filters.packageNumber],
+    ['exemptionNumber', filters.exemptionNumber],
+    ['listingFromDate', filters.listFromDate],
+    ['listingToDate', filters.listToDate],
+    ['exemptionTypeCode', filters.exemptionTypeCode],
+    ['exemptionStatusCode', filters.exemptionStatusCode],
+    ['applicantClientNumber', filters.applicantClientNumber],
+    ['ownerClientNumber', filters.ownerClientNumber],
+  ])
   appendNumericSearchParams(params, 'region', filters.region)
   appendSearchPageParams(params, request)
   return params
@@ -156,23 +159,14 @@ export const searchProvincialExemptionNumberOptions = async (
     sortDirection: 'desc',
   })
 
-  const seen = new Set<string>()
-  return response.content
-    .filter((item) => {
-      if (!item.exemptionNumber || seen.has(item.exemptionNumber)) {
-        return false
-      }
-      seen.add(item.exemptionNumber)
-      return true
-    })
-    .map((item) => ({
-      value: item.exemptionNumber,
-      label: exemptionNumberOptionLabel(item),
-      status: item.status,
-      type: item.type,
-      ownerClientNumber: item.ownerClientNumber,
-      region: item.region,
-      listingDate: item.listingDate,
-      applicationNumber: item.applicationNumber,
-    }))
+  return uniqueSearchItemsByKey(response.content, (item) => item.exemptionNumber).map((item) => ({
+    value: item.exemptionNumber,
+    label: exemptionNumberOptionLabel(item),
+    status: item.status,
+    type: item.type,
+    ownerClientNumber: item.ownerClientNumber,
+    region: item.region,
+    listingDate: item.listingDate,
+    applicationNumber: item.applicationNumber,
+  }))
 }

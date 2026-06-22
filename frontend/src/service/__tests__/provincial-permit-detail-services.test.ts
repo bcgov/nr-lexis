@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchProvincialPermitDetailTabs } from '@/service/provincial-permit-detail-tabs-service'
-import { fetchPermitInvoices } from '@/service/provincial-permit-documents-invoices-service'
+import {
+  addPermitInvoice,
+  fetchPermitInvoices,
+} from '@/service/provincial-permit-documents-invoices-service'
 
-const { getCachedResponseMock } = vi.hoisted(() => ({
+const { getCachedResponseMock, postMock } = vi.hoisted(() => ({
   getCachedResponseMock: vi.fn(),
+  postMock: vi.fn(),
 }))
 
 vi.mock('@/service/api-service', () => ({
@@ -11,7 +15,7 @@ vi.mock('@/service/api-service', () => ({
     getCachedResponse: getCachedResponseMock,
     getAxiosInstance: () => ({
       get: vi.fn(),
-      post: vi.fn(),
+      post: postMock,
       delete: vi.fn(),
     }),
   },
@@ -218,5 +222,45 @@ describe('provincial permit detail services', () => {
         exportValueCad: '200.00',
       }),
     ])
+  })
+
+  it('posts permit invoice values as a legacy form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        valid: true,
+        message: 'saved',
+        warnings: ['Review invoice value.'],
+      }),
+    )
+
+    const result = await addPermitInvoice({
+      permitNumber: ' 777 ',
+      salesInvoiceNumber: ' INV-3 ',
+      invoiceExportValue: ' 100.00 ',
+      invoiceConversionRate: ' 1.25 ',
+      invoiceFeeInLieu: ' 12.50 ',
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/add-invoice')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('permitNumber')).toBe('777')
+    expect(body.get('salesInvoiceNumber')).toBe('INV-3')
+    expect(body.get('invoiceExportValue')).toBe('100.00')
+    expect(body.get('invoiceConversionRate')).toBe('1.25')
+    expect(body.get('invoiceFeeInLieu')).toBe('12.50')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'saved',
+      errors: [],
+      warnings: ['Review invoice value.'],
+      source: 'api',
+    })
   })
 })

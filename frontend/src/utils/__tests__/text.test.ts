@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isValidEmail,
   joinNonBlankText,
+  leadingDigits,
   normalizeFilterText,
   normalizeTrimmedText,
   normalizeUpperText,
@@ -24,6 +25,12 @@ describe('text utilities', () => {
     expect(joinNonBlankText(['123', '', ' Owner 00001012 ', '   ', 'RSI'], ' - ')).toBe(
       '123 -  Owner 00001012  - RSI',
     )
+  })
+
+  it('extracts only leading digits', () => {
+    expect(leadingDigits('123 - Approved')).toBe('123')
+    expect(leadingDigits('abc123')).toBe('')
+    expect(leadingDigits('')).toBe('')
   })
 
   it('validates trimmed email addresses', () => {

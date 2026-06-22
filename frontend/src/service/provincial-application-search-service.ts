@@ -1,9 +1,10 @@
 import {
   appendNumericSearchParams,
-  appendSearchParam,
+  appendSearchParams,
   appendSearchSortAndPageParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
+  uniqueSearchItemsByKey,
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
@@ -57,16 +58,18 @@ const buildBackendParams = (request: ProvincialApplicationSearchRequest): URLSea
   const params = new URLSearchParams()
 
   const { filters } = request
-  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
-  appendSearchParam(params, 'packageNumber', filters.packageNumber)
-  appendSearchParam(params, 'exemptionNumber', filters.exemptionNumber)
-  appendSearchParam(params, 'exemptionType', filters.exemptionType)
-  appendSearchParam(params, 'applicationStatus', filters.applicationStatus)
-  appendSearchParam(params, 'productTypeCode', filters.productTypeCode)
-  appendSearchParam(params, 'listingFromDate', filters.listingFromDate)
-  appendSearchParam(params, 'listingToDate', filters.listingToDate)
-  appendSearchParam(params, 'agentClientNumber', filters.applicantClientNumber)
-  appendSearchParam(params, 'ownerClientNumber', filters.ownerClientNumber)
+  appendSearchParams(params, [
+    ['applicationNumber', filters.applicationNumber],
+    ['packageNumber', filters.packageNumber],
+    ['exemptionNumber', filters.exemptionNumber],
+    ['exemptionType', filters.exemptionType],
+    ['applicationStatus', filters.applicationStatus],
+    ['productTypeCode', filters.productTypeCode],
+    ['listingFromDate', filters.listingFromDate],
+    ['listingToDate', filters.listingToDate],
+    ['agentClientNumber', filters.applicantClientNumber],
+    ['ownerClientNumber', filters.ownerClientNumber],
+  ])
   appendNumericSearchParams(params, 'region', filters.region)
   appendSearchSortAndPageParams(params, request)
 
@@ -148,23 +151,14 @@ export const searchProvincialApplicationNumberOptions = async (
     sortDirection: 'desc',
   })
 
-  const seen = new Set<string>()
-  return response.content
-    .filter((item) => {
-      if (!item.applicationNumber || seen.has(item.applicationNumber)) {
-        return false
-      }
-      seen.add(item.applicationNumber)
-      return true
-    })
-    .map((item) => ({
-      value: item.applicationNumber,
-      label: applicationNumberOptionLabel(item),
-      status: item.status,
-      applicantClientNumber: item.applicantClientNumber,
-      ownerClientNumber: item.ownerClientNumber,
-      region: item.region,
-      listingDate: item.listingDate,
-      exemptionNumber: item.exemptionNumber,
-    }))
+  return uniqueSearchItemsByKey(response.content, (item) => item.applicationNumber).map((item) => ({
+    value: item.applicationNumber,
+    label: applicationNumberOptionLabel(item),
+    status: item.status,
+    applicantClientNumber: item.applicantClientNumber,
+    ownerClientNumber: item.ownerClientNumber,
+    region: item.region,
+    listingDate: item.listingDate,
+    exemptionNumber: item.exemptionNumber,
+  }))
 }
