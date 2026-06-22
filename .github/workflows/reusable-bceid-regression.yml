@@ -1,0 +1,84 @@
+name: Reusable BCeID Regression
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        description: Deployment target. Real BCeID regression is only valid against TEST.
+        default: test
+        type: string
+    secrets:
+      e2e_bceid_user:
+        description: Business BCeID provincial submitter username for Playwright auth
+        required: true
+      e2e_bceid_password:
+        description: Business BCeID provincial submitter password for Playwright auth
+        required: true
+
+env:
+  DOMAIN: apps.silver.devops.gov.bc.ca
+  PREFIX: ${{ github.event.repository.name }}-${{ inputs.target }}
+
+permissions: {}
+
+jobs:
+  real-bceid-provincial-submitter:
+    name: TEST BCeID Provincial Submitter (${{ matrix.project }})
+    if: inputs.target == 'test'
+    defaults:
+      run:
+        working-directory: frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps ${{ matrix.project }}
+
+      - name: Wait for deployed frontend
+        env:
+          E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
+        run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL"
+
+      - name: Check Business BCeID credentials
+        env:
+          E2E_BCEID_USER: ${{ secrets.e2e_bceid_user }}
+          E2E_BCEID_PASSWORD: ${{ secrets.e2e_bceid_password }}
+        run: |
+          echo "::add-mask::$E2E_BCEID_USER"
+          echo "::add-mask::$E2E_BCEID_PASSWORD"
+          test -n "$E2E_BCEID_USER" || (echo "E2E_BCEID_USER is required for TEST BCeID regression." && exit 1)
+          test -n "$E2E_BCEID_PASSWORD" || (echo "E2E_BCEID_PASSWORD is required for TEST BCeID regression." && exit 1)
+
+      - name: Run TEST Business BCeID provincial submitter suite
+        env:
+          E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
+          E2E_BCEID_USER: ${{ secrets.e2e_bceid_user }}
+          E2E_BCEID_PASSWORD: ${{ secrets.e2e_bceid_password }}
+          E2E_PROVINCIAL_APPLICATION_NUMBER: ${{ vars.E2E_PROVINCIAL_APPLICATION_NUMBER }}
+          E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER: ${{ vars.E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER }}
+          CI: "true"
+        run: |
+          npm run e2e:real-bceid -- --reporter=html,list
+
+      - uses: actions/upload-artifact@v7
+        if: (! cancelled())
+        with:
+          name: playwright-real-bceid-${{ matrix.project }}-${{ inputs.target }}
+          path: frontend/playwright-report
+          retention-days: 7

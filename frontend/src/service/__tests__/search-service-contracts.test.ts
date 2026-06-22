@@ -4,6 +4,7 @@ import {
   previewApplicationReviews,
   searchApplicationReviews,
 } from '@/service/application-review-search-service'
+import { uniqueSearchItemsByKey } from '@/service/cached-search-service'
 import {
   countFederalApplications,
   searchFederalApplications,
@@ -154,6 +155,23 @@ const readParams = (callIndex = 0): URLSearchParams => {
 describe('search-service contracts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('keeps the first search option for each non-empty key', () => {
+    const result = uniqueSearchItemsByKey(
+      [
+        { id: '100', label: 'first' },
+        { id: '', label: 'blank' },
+        { id: '100', label: 'duplicate' },
+        { id: '101', label: 'second' },
+      ],
+      (item) => item.id,
+    )
+
+    expect(result).toEqual([
+      { id: '100', label: 'first' },
+      { id: '101', label: 'second' },
+    ])
   })
 
   it('maps provincial application results and backend query params', async () => {

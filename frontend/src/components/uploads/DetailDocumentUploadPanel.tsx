@@ -16,11 +16,8 @@ import type {
   UploadQueueStatus,
 } from './uploadQueueTypes'
 import {
-  firstValidationError,
-  maxLengthFieldError,
-  numericFieldError,
-  positiveNumericFieldError,
-  requiredFieldError,
+  requiredMaxLengthFieldError,
+  requiredPositiveNumericFieldError,
 } from '@/pages/shared/create-form-utils'
 import { submitAdminUpload } from '@/service/admin-upload-service'
 
@@ -113,23 +110,10 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
     }
 
     return [
-      requiredFieldError(salesInvoiceNumber, 'Invoice number'),
-      maxLengthFieldError(salesInvoiceNumber, 9, 'Invoice number'),
-      firstValidationError(
-        () => requiredFieldError(invoiceExportValue, 'Invoice export value'),
-        () => numericFieldError(invoiceExportValue, 'Invoice export value'),
-        () => positiveNumericFieldError(invoiceExportValue),
-      ),
-      firstValidationError(
-        () => requiredFieldError(invoiceConversionRate, 'Invoice conversion rate'),
-        () => numericFieldError(invoiceConversionRate, 'Invoice conversion rate'),
-        () => positiveNumericFieldError(invoiceConversionRate),
-      ),
-      firstValidationError(
-        () => requiredFieldError(invoiceFeeInLieu, 'Invoice fee in lieu'),
-        () => numericFieldError(invoiceFeeInLieu, 'Invoice fee in lieu'),
-        () => positiveNumericFieldError(invoiceFeeInLieu),
-      ),
+      requiredMaxLengthFieldError(salesInvoiceNumber, 9, 'Invoice number'),
+      requiredPositiveNumericFieldError(invoiceExportValue, 'Invoice export value'),
+      requiredPositiveNumericFieldError(invoiceConversionRate, 'Invoice conversion rate'),
+      requiredPositiveNumericFieldError(invoiceFeeInLieu, 'Invoice fee in lieu'),
     ].filter((error): error is string => !!error)
   }, [
     invoiceConversionRate,
@@ -143,23 +127,18 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
     workflowType === 'invoice' && salesInvoiceNumber.trim()
       ? `${baseTargetSummary}; invoice ${salesInvoiceNumber.trim()}`
       : baseTargetSummary
-  const invoiceNumberError =
-    requiredFieldError(salesInvoiceNumber, 'Invoice number') ??
-    maxLengthFieldError(salesInvoiceNumber, 9, 'Invoice number')
-  const invoiceExportValueError = firstValidationError(
-    () => requiredFieldError(invoiceExportValue, 'Invoice export value'),
-    () => numericFieldError(invoiceExportValue, 'Invoice export value'),
-    () => positiveNumericFieldError(invoiceExportValue),
+  const invoiceNumberError = requiredMaxLengthFieldError(salesInvoiceNumber, 9, 'Invoice number')
+  const invoiceExportValueError = requiredPositiveNumericFieldError(
+    invoiceExportValue,
+    'Invoice export value',
   )
-  const invoiceConversionRateError = firstValidationError(
-    () => requiredFieldError(invoiceConversionRate, 'Invoice conversion rate'),
-    () => numericFieldError(invoiceConversionRate, 'Invoice conversion rate'),
-    () => positiveNumericFieldError(invoiceConversionRate),
+  const invoiceConversionRateError = requiredPositiveNumericFieldError(
+    invoiceConversionRate,
+    'Invoice conversion rate',
   )
-  const invoiceFeeInLieuError = firstValidationError(
-    () => requiredFieldError(invoiceFeeInLieu, 'Invoice fee in lieu'),
-    () => numericFieldError(invoiceFeeInLieu, 'Invoice fee in lieu'),
-    () => positiveNumericFieldError(invoiceFeeInLieu),
+  const invoiceFeeInLieuError = requiredPositiveNumericFieldError(
+    invoiceFeeInLieu,
+    'Invoice fee in lieu',
   )
   const showInvoiceFieldErrors = workflowType === 'invoice' && showInvoiceValidationErrors
   const canSubmit =

@@ -1,6 +1,6 @@
 import {
   appendNumericSearchParams,
-  appendSearchParam,
+  appendSearchParams,
   appendSearchSortAndPageParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
@@ -25,13 +25,15 @@ const buildBackendParams = (request: ProvincialOfferSearchRequest): URLSearchPar
   const params = new URLSearchParams()
 
   const { filters } = request
-  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
-  appendSearchParam(params, 'packageNumber', filters.packageNumber)
-  appendSearchParam(params, 'clientNumber', filters.clientNumber)
-  appendSearchParam(params, 'listingFromDate', filters.listingFromDate)
-  appendSearchParam(params, 'listingToDate', filters.listingToDate)
-  appendSearchParam(params, 'withdrawalFromDate', filters.withdrawalFromDate)
-  appendSearchParam(params, 'withdrawalToDate', filters.withdrawalToDate)
+  appendSearchParams(params, [
+    ['applicationNumber', filters.applicationNumber],
+    ['packageNumber', filters.packageNumber],
+    ['clientNumber', filters.clientNumber],
+    ['listingFromDate', filters.listingFromDate],
+    ['listingToDate', filters.listingToDate],
+    ['withdrawalFromDate', filters.withdrawalFromDate],
+    ['withdrawalToDate', filters.withdrawalToDate],
+  ])
   appendNumericSearchParams(params, 'region', filters.region)
   appendSearchSortAndPageParams(params, request)
 

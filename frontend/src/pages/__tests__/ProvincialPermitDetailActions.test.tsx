@@ -22,6 +22,7 @@ import {
 } from '@/service/provincial-permit-documents-invoices-service'
 import { runReport } from '@/service/report-service'
 import { submitAdminUpload } from '@/service/admin-upload-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -116,9 +117,7 @@ const tabsResult: ProvincialPermitDetailTabsData = {
 describe('Provincial Permit Detail Action Smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialPermitDetail.mockResolvedValue(permitDetail)
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
     mockedAddPermitInvoice.mockResolvedValue({
@@ -411,9 +410,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('disables invoice document delete when invoice upload permission is missing', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action !== '/fileInvoiceUpload',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/fileInvoiceUpload',
+      }),
+    )
     mockedFetchPermitDocuments.mockResolvedValue({
       rows: [
         {
@@ -538,9 +539,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('gates permit report action on the legacy permit report permission', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action !== '/permitReport',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/permitReport',
+      }),
+    )
 
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>

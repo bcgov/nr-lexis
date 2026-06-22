@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - '*.md'
-      - '.github/graphics/**'
+      - "*.md"
+      - ".github/graphics/**"
   workflow_dispatch:
 
 concurrency:
@@ -54,9 +54,18 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-tests.yml
+    with:
+      target: test
+
+  bceid-regression:
+    name: TEST BCeID Regression
+    needs: [deploy-test]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/reusable-bceid-regression.yml
     secrets:
-      e2e_idir_user: ${{ secrets.E2E_IDIR_USER }}
-      e2e_idir_password: ${{ secrets.E2E_IDIR_PASSWORD }}
+      e2e_bceid_user: ${{ secrets.E2E_BCEID_USER }}
+      e2e_bceid_password: ${{ secrets.E2E_BCEID_PASSWORD }}
     with:
       target: test
 
@@ -65,7 +74,7 @@ jobs:
     # secrets, and readiness checks are finalized.
     if: false
     name: PROD Deploys (${{ needs.init.outputs.pr }})
-    needs: [tests, init]
+    needs: [tests, bceid-regression, init]
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-deploy.yml

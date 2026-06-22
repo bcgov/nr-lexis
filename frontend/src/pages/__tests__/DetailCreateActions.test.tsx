@@ -13,6 +13,7 @@ import {
   fetchProvincialApplicationDetail,
   fetchProvincialExemptionDetail,
 } from '@/service/lexis-detail-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -159,9 +160,7 @@ const exemptionDetail: ProvincialExemptionDetail = {
 describe('Detail Create Action Smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: defaultCanPerform,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: defaultCanPerform }))
   })
 
   it('enables Create Offer and navigates with prefill from provincial application detail', async () => {

@@ -22,12 +22,11 @@ import type {
 } from '@/components/uploads/uploadQueueTypes'
 import { useAuth } from '@/context/auth/useAuth'
 import {
-  firstValidationError,
   getVisibleFieldError,
   maxLengthFieldError,
-  numericFieldError,
-  positiveNumericFieldError,
   requiredFieldError,
+  requiredMaxLengthFieldError,
+  requiredPositiveNumericFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
@@ -39,6 +38,7 @@ import {
 } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
+import { leadingDigits } from '@/utils/text'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -200,8 +200,6 @@ const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState
 }
 
 const trimTargetNumberInput = (input: string): string => input.trim()
-
-const targetNumberFromNumericInput = (input: string): string => input.match(/^\d+/)?.[0] ?? ''
 
 const uploadTargetItemToString = (
   item: UploadTargetNumberOption | string | null | undefined,
@@ -483,34 +481,22 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
           : undefined,
       salesInvoiceNumber:
         selectedWorkflowType === 'invoice'
-          ? firstValidationError(
-              () => requiredFieldError(formState.salesInvoiceNumber, 'Invoice number'),
-              () => maxLengthFieldError(formState.salesInvoiceNumber, 9, 'Invoice number'),
-            )
+          ? requiredMaxLengthFieldError(formState.salesInvoiceNumber, 9, 'Invoice number')
           : undefined,
       invoiceExportValue:
         selectedWorkflowType === 'invoice'
-          ? firstValidationError(
-              () => requiredFieldError(formState.invoiceExportValue, 'Invoice export value'),
-              () => numericFieldError(formState.invoiceExportValue, 'Invoice export value'),
-              () => positiveNumericFieldError(formState.invoiceExportValue),
-            )
+          ? requiredPositiveNumericFieldError(formState.invoiceExportValue, 'Invoice export value')
           : undefined,
       invoiceConversionRate:
         selectedWorkflowType === 'invoice'
-          ? firstValidationError(
-              () => requiredFieldError(formState.invoiceConversionRate, 'Invoice conversion rate'),
-              () => numericFieldError(formState.invoiceConversionRate, 'Invoice conversion rate'),
-              () => positiveNumericFieldError(formState.invoiceConversionRate),
+          ? requiredPositiveNumericFieldError(
+              formState.invoiceConversionRate,
+              'Invoice conversion rate',
             )
           : undefined,
       invoiceFeeInLieu:
         selectedWorkflowType === 'invoice'
-          ? firstValidationError(
-              () => requiredFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu'),
-              () => numericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu'),
-              () => positiveNumericFieldError(formState.invoiceFeeInLieu),
-            )
+          ? requiredPositiveNumericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu')
           : undefined,
       userReference:
         selectedWorkflowType === 'applicationSubmission'
@@ -1110,7 +1096,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
                     invalid={!!fieldError('permitNumber')}
                     invalidText={fieldError('permitNumber')}
                     searchOptions={searchProvincialPermitNumberOptions}
-                    normalizeInput={targetNumberFromNumericInput}
+                    normalizeInput={leadingDigits}
                     onBlur={() => markFieldTouched('permitNumber')}
                     onChange={(value) =>
                       setFormState((current) => ({

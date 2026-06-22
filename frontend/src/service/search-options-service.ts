@@ -1,5 +1,5 @@
 import apiService from '@/service/api-service'
-import { isRecord, stringField } from '@/utils/record'
+import { isRecord, mapRecordArray, stringField } from '@/utils/record'
 
 export type SearchOption = {
   value: string
@@ -7,28 +7,18 @@ export type SearchOption = {
 }
 
 const parseOptions = (input: unknown, allowEmptyCode = false): SearchOption[] => {
-  if (!Array.isArray(input)) {
-    return []
-  }
+  return mapRecordArray(input, (item) => {
+    const code = stringField(item, 'code')
+    const name = stringField(item, 'name')
+    if ((!code && !allowEmptyCode) || !name) {
+      return null
+    }
 
-  return input
-    .map((item) => {
-      if (!isRecord(item)) {
-        return null
-      }
-
-      const code = stringField(item, 'code')
-      const name = stringField(item, 'name')
-      if ((!code && !allowEmptyCode) || !name) {
-        return null
-      }
-
-      return {
-        value: code,
-        label: name,
-      }
-    })
-    .filter((item): item is SearchOption => item !== null)
+    return {
+      value: code,
+      label: name,
+    }
+  })
 }
 
 const fetchOptions = async (path: string): Promise<Record<string, unknown> | null> => {

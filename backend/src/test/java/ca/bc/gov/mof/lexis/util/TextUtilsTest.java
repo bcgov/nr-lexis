@@ -50,6 +50,19 @@ class TextUtilsTest {
   }
 
   @Test
+  void normalizeClientNumberShouldTrimAndPadShortValues() {
+    assertThat(TextUtils.normalizeClientNumber(" 1074 ")).isEqualTo("00001074");
+    assertThat(TextUtils.normalizeClientNumber("00001074")).isEqualTo("00001074");
+    assertThat(TextUtils.normalizeClientNumber("123456789")).isEqualTo("123456789");
+  }
+
+  @Test
+  void normalizeClientNumberShouldReturnNullForBlankValues() {
+    assertThat(TextUtils.normalizeClientNumber(null)).isNull();
+    assertThat(TextUtils.normalizeClientNumber("  ")).isNull();
+  }
+
+  @Test
   void defaultSystemUserShouldReturnSystemWhenUserIdIsBlank() {
     assertThat(TextUtils.defaultSystemUser("  ")).isEqualTo("system");
   }

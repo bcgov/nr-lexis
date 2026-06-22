@@ -1,5 +1,10 @@
 import apiService from '@/service/api-service'
 import {
+  LEGACY_FORM_CONTENT_TYPE,
+  toUrlEncodedParams,
+  type LegacyFormPayload,
+} from '@/service/legacy-form-utils'
+import {
   parsePayloadArrayOrEmpty,
   payloadValueAsBoolean as asBoolean,
   payloadValueAsNumber as asNumber,
@@ -7,6 +12,7 @@ import {
   payloadValueAsTrimmedString as asString,
 } from '@/service/payload-utils'
 import { toSearchServiceError } from '@/service/search-service-fallback'
+import { recordOrEmpty } from '@/utils/record'
 
 export type ApplicationCodeOption = {
   code: string
@@ -171,32 +177,24 @@ export type ApplicationSummarySnapshot = ApplicationSummaryMutation & {
 
 const ITEMS_CACHE_TTL_MS = 30_000
 
-const toUrlEncodedParams = (payload: Record<string, string | undefined>): URLSearchParams => {
-  const params = new URLSearchParams()
-  Object.entries(payload).forEach(([key, value]) => {
-    if (value !== undefined && value.trim().length > 0) {
-      params.append(key, value)
-    }
-  })
-  return params
-}
+const asRecord = recordOrEmpty
 
 const postLegacyForm = async <TResponse>(
   path: string,
-  payload: Record<string, string | undefined>,
+  payload: LegacyFormPayload,
 ): Promise<TResponse> => {
   const response = await apiService
     .getAxiosInstance()
     .post<TResponse>(path, toUrlEncodedParams(payload), {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': LEGACY_FORM_CONTENT_TYPE,
       },
     })
   return response.data
 }
 
 const normalizeCodeOption = (row: unknown): ApplicationCodeOption => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = asRecord(row)
   const code = asString(source.code || source.value)
   return {
     code,
@@ -205,7 +203,7 @@ const normalizeCodeOption = (row: unknown): ApplicationCodeOption => {
 }
 
 const normalizePackageDetails = (payload: unknown): ApplicationPackageDetails => {
-  const source = (payload ?? {}) as Record<string, unknown>
+  const source = asRecord(payload)
   return {
     success: asBoolean(source.success),
     packageNumber: asString(source.packageNumber),
@@ -225,7 +223,7 @@ const normalizePackageDetails = (payload: unknown): ApplicationPackageDetails =>
 }
 
 const normalizePackageSpeciesRow = (row: unknown): ApplicationPackageSpeciesRow => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = asRecord(row)
   return {
     species: asString(source.species),
     endUse: asString(source.enduse || source.endUse || source.packageEndUse),
@@ -236,7 +234,7 @@ const normalizePackageSpeciesRow = (row: unknown): ApplicationPackageSpeciesRow 
 }
 
 const normalizePackageScaleRow = (row: unknown): ApplicationPackageScaleRow => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = asRecord(row)
   return {
     permitted: asBoolean(source.permitted),
     timberMark: asString(source.timberMark),
@@ -250,14 +248,14 @@ const normalizePackageScaleRow = (row: unknown): ApplicationPackageScaleRow => {
 }
 
 const normalizeApplicationScaleSummaryRow = (row: unknown): ApplicationScaleSummaryRow => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = asRecord(row)
   return {
     timberMark: asString(source.timberMark),
   }
 }
 
 const normalizeScaleDetails = (payload: unknown): ApplicationScaleDetails => {
-  const source = (payload ?? {}) as Record<string, unknown>
+  const source = asRecord(payload)
   return {
     success: asBoolean(source.success),
     timberMark: asString(source.timberMark),
@@ -270,7 +268,7 @@ const normalizeScaleDetails = (payload: unknown): ApplicationScaleDetails => {
 }
 
 const normalizeApplicationPermitRow = (row: unknown): ApplicationPermitRow => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = asRecord(row)
   return {
     permitNumber: asString(source.permitNumber),
     permitStatusDescription: asString(
@@ -280,7 +278,7 @@ const normalizeApplicationPermitRow = (row: unknown): ApplicationPermitRow => {
 }
 
 const normalizePackageMutationResult = (payload: unknown): ApplicationPackageMutationResult => {
-  const source = (payload ?? {}) as Record<string, unknown>
+  const source = asRecord(payload)
   return {
     valid: asBoolean(source.valid),
     packageNumber: asString(source.packageNumber || source.package),
@@ -290,7 +288,7 @@ const normalizePackageMutationResult = (payload: unknown): ApplicationPackageMut
 }
 
 const normalizeScaleMutationResult = (payload: unknown): ApplicationScaleMutationResult => {
-  const source = (payload ?? {}) as Record<string, unknown>
+  const source = asRecord(payload)
   return {
     valid: asBoolean(source.valid),
     result: source.result ? normalizePackageScaleRow(source.result) : null,
@@ -300,7 +298,7 @@ const normalizeScaleMutationResult = (payload: unknown): ApplicationScaleMutatio
 }
 
 const normalizeRemarkMutationResult = (payload: unknown): ApplicationRemarkMutationResult => {
-  const source = (payload ?? {}) as Record<string, unknown>
+  const source = asRecord(payload)
   const status = asString(source.status)
   return {
     success: status.toLowerCase() === 'ok',
@@ -315,7 +313,7 @@ const normalizeRemarkMutationResult = (payload: unknown): ApplicationRemarkMutat
 const normalizeApplicationSummaryMutationResult = (
   payload: unknown,
 ): ApplicationSummaryMutationResult => {
-  const source = (payload ?? {}) as Record<string, unknown>
+  const source = asRecord(payload)
   return {
     valid: asBoolean(source.valid),
     message: asString(source.message),
@@ -326,7 +324,7 @@ const normalizeApplicationSummaryMutationResult = (
 }
 
 const normalizeApplicationSummarySnapshot = (payload: unknown): ApplicationSummarySnapshot => {
-  const source = (payload ?? {}) as Record<string, unknown>
+  const source = asRecord(payload)
   return {
     applicationNumber: asString(source.applicationNumber),
     federalApplicationNumber: asString(source.federalApplicationNumber),
@@ -682,7 +680,7 @@ export const checkApplicationVolumeUsage = async (
       },
       { ttlMs: 0 },
     )
-    const payload = (response.data ?? {}) as Record<string, unknown>
+    const payload = asRecord(response.data)
     return {
       volumeUsed: asBoolean(payload.volumeUsedInd),
     }
@@ -743,7 +741,7 @@ export const deleteApplicationScale = async (
           applicationNumber,
         },
       })
-    const source = (response.data ?? {}) as Record<string, unknown>
+    const source = asRecord(response.data)
     return { success: response.status === 204 || asBoolean(source.success) }
   } catch (error) {
     throw toSearchServiceError('Unable to delete application scale.', error)
@@ -763,7 +761,7 @@ export const deleteApplicationPackage = async (
           applicationNumber,
         },
       })
-    const source = (response.data ?? {}) as Record<string, unknown>
+    const source = asRecord(response.data)
     return { success: response.status === 204 || asBoolean(source.success) }
   } catch (error) {
     throw toSearchServiceError('Unable to delete application package.', error)

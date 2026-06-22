@@ -1,4 +1,4 @@
-import { type FC, useCallback, useEffect, useRef, useState, type PropsWithChildren } from 'react'
+import { type FC, useCallback, useEffect, useState, type PropsWithChildren } from 'react'
 import { createPortal } from 'react-dom'
 import { ToastNotification, type ToastNotificationProps } from '@carbon/react'
 import {
@@ -47,9 +47,8 @@ export const AppNotification: FC<AppNotificationProps> = ({
   className,
   ...notificationProps
 }) => {
-  const [notificationRegion, setNotificationRegion] = useState<HTMLElement | null>(null)
+  const [notificationRegion] = useState<HTMLElement | null>(() => getNotificationRegion())
   const [isPaused, setIsPaused] = useState(false)
-  const timeoutRef = useRef<number | null>(null)
   const normalizedKind = typeof kind === 'string' ? kind : ''
   const isPersistentNotification = PERSISTENT_NOTIFICATION_KINDS.has(normalizedKind)
   const hasNotificationAction = Boolean(
@@ -72,32 +71,18 @@ export const AppNotification: FC<AppNotificationProps> = ({
       : subtitle
 
   useEffect(() => {
-    setNotificationRegion(getNotificationRegion())
-  }, [])
-
-  const clearAutoDismiss = useCallback(() => {
-    if (timeoutRef.current !== null) {
-      window.clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!onCloseButtonClick || !effectiveAutoDismissMs) {
-      clearAutoDismiss()
-      return
-    }
-    if (isPaused) {
-      clearAutoDismiss()
-      return
+    if (!onCloseButtonClick || !effectiveAutoDismissMs || isPaused) {
+      return undefined
     }
 
-    timeoutRef.current = window.setTimeout(() => {
+    const timeoutId = window.setTimeout(() => {
       onCloseButtonClick()
     }, effectiveAutoDismissMs)
 
-    return () => clearAutoDismiss()
-  }, [clearAutoDismiss, effectiveAutoDismissMs, isPaused, onCloseButtonClick])
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [effectiveAutoDismissMs, isPaused, onCloseButtonClick])
 
   const handleMouseEnter = useCallback(() => {
     if (pauseAutoDismissOnInteraction) {

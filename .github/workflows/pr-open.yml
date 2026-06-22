@@ -54,8 +54,8 @@ jobs:
       - name: Set up Java 21 (Temurin) + Maven cache
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: "21"
+          distribution: "temurin"
           cache: maven
 
       - name: Maven verify
@@ -115,9 +115,6 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-tests.yml
-    secrets:
-      e2e_idir_user: ${{ secrets.E2E_IDIR_USER }}
-      e2e_idir_password: ${{ secrets.E2E_IDIR_PASSWORD }}
     with:
       target: ${{ github.event.number }}
       slot: ${{ needs.vars.outputs.slot }}

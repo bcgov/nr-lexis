@@ -72,6 +72,15 @@ export const appendSearchParam = (params: URLSearchParams, key: string, value: s
   }
 }
 
+export const appendSearchParams = (
+  params: URLSearchParams,
+  entries: Array<readonly [key: string, value: string]>,
+): void => {
+  entries.forEach(([key, value]) => {
+    appendSearchParam(params, key, value)
+  })
+}
+
 export const appendNumericSearchParams = (
   params: URLSearchParams,
   key: string,
@@ -83,6 +92,18 @@ export const appendNumericSearchParams = (
     .forEach((value) => {
       params.append(key, String(value))
     })
+}
+
+export const uniqueSearchItemsByKey = <T>(items: T[], getKey: (item: T) => string): T[] => {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const key = getKey(item)
+    if (!key || seen.has(key)) {
+      return false
+    }
+    seen.add(key)
+    return true
+  })
 }
 
 export const appendSearchPageParams = (

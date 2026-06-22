@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import UnauthorizedPage from '@/pages/Unauthorized'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -28,9 +29,7 @@ describe('Unauthorized page actions', () => {
   })
 
   it('navigates back to landing page', async () => {
-    mockedUseAuth.mockReturnValue({
-      logout: vi.fn().mockResolvedValue(undefined),
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext())
 
     renderPage()
 
@@ -41,9 +40,7 @@ describe('Unauthorized page actions', () => {
 
   it('calls logout without local navigation', async () => {
     const logout = vi.fn().mockResolvedValue(undefined)
-    mockedUseAuth.mockReturnValue({
-      logout,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ logout }))
 
     renderPage()
 

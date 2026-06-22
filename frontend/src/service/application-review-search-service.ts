@@ -7,7 +7,7 @@ import type {
 import apiService from '@/service/api-service'
 import {
   appendNumericSearchParams,
-  appendSearchParam,
+  appendSearchParams,
   appendSearchSortAndPageParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
@@ -53,12 +53,14 @@ const buildBackendParams = (request: ApplicationReviewSearchRequest): URLSearchP
   const params = new URLSearchParams()
 
   const { filters } = request
-  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
-  appendSearchParam(params, 'productTypeCode', filters.productTypeCode)
-  appendSearchParam(params, 'receivedFromDate', filters.receivedFromDate)
-  appendSearchParam(params, 'receivedToDate', filters.receivedToDate)
-  appendSearchParam(params, 'listingFromDate', filters.listingFromDate)
-  appendSearchParam(params, 'listingToDate', filters.listingToDate)
+  appendSearchParams(params, [
+    ['applicationNumber', filters.applicationNumber],
+    ['productTypeCode', filters.productTypeCode],
+    ['receivedFromDate', filters.receivedFromDate],
+    ['receivedToDate', filters.receivedToDate],
+    ['listingFromDate', filters.listingFromDate],
+    ['listingToDate', filters.listingToDate],
+  ])
   appendNumericSearchParams(params, 'region', filters.region)
   appendSearchSortAndPageParams(params, request)
 

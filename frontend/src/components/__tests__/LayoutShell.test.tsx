@@ -4,6 +4,8 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Layout from '@/components/Layout'
 import { useAuth } from '@/context/auth/useAuth'
+import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -32,19 +34,7 @@ describe('Layout shell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: true,
-        principal: 'idir\\admin',
-        roles: ['ADMIN'],
-        welcomeTarget: '/admin',
-        legacyPath: null,
-        grantedActions: [],
-      },
-      defaultRoute: '/admin',
-      canPerform: vi.fn().mockReturnValue(true),
-      logout: vi.fn().mockResolvedValue(undefined),
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext())
   })
 
   it('marks only the exact side-nav route as active', () => {
@@ -102,20 +92,19 @@ describe('Layout shell', () => {
   })
 
   it('hides create links when the role only has search access', () => {
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: true,
-        principal: 'idir\\readonly',
-        roles: ['READ_ONLY'],
-        welcomeTarget: '/provincial/application',
-        legacyPath: null,
-        grantedActions: [],
-      },
-      defaultRoute: '/provincial/application',
-      canPerform: (action: string) =>
-        ['/applicationSearch', '/exemptionSearch', '/offersSearch'].includes(action),
-      logout: vi.fn().mockResolvedValue(undefined),
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\readonly',
+          roles: ['READ_ONLY'],
+          welcomeTarget: '/provincial/application',
+          grantedActions: [],
+        }),
+        defaultRoute: '/provincial/application',
+        canPerform: (action: string) =>
+          ['/applicationSearch', '/exemptionSearch', '/offersSearch'].includes(action),
+      }),
+    )
 
     renderLayout('/provincial/application')
 
@@ -133,18 +122,21 @@ describe('Layout shell', () => {
   })
 
   it('renders navigation when an auth mock omits roles', () => {
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: true,
-        principal: 'idir\\partial',
-        welcomeTarget: '/reports',
-        legacyPath: null,
-        grantedActions: ['/applicationReport'],
-      },
-      defaultRoute: '/reports',
-      canPerform: (action: string) => action === '/applicationReport',
-      logout: vi.fn().mockResolvedValue(undefined),
-    } as any)
+    const capabilitiesWithoutRoles = {
+      authenticated: true,
+      principal: 'idir\\partial',
+      welcomeTarget: '/reports',
+      legacyPath: null,
+      grantedActions: ['/applicationReport'],
+    } as LexisSessionCapabilities
+
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: capabilitiesWithoutRoles,
+        defaultRoute: '/reports',
+        canPerform: (action: string) => action === '/applicationReport',
+      }),
+    )
 
     renderLayout('/reports')
 
@@ -153,19 +145,18 @@ describe('Layout shell', () => {
   })
 
   it('shows application submission upload without exposing generic data upload', () => {
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: true,
-        principal: 'bceid\\submitter',
-        roles: ['PROVINCIAL_SUBMITTER'],
-        welcomeTarget: '/provincial/application/upload',
-        legacyPath: null,
-        grantedActions: ['uploadApplicationSubmission'],
-      },
-      defaultRoute: '/provincial/application/upload',
-      canPerform: (action: string) => action === 'uploadApplicationSubmission',
-      logout: vi.fn().mockResolvedValue(undefined),
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['PROVINCIAL_SUBMITTER'],
+          welcomeTarget: '/provincial/application/upload',
+          grantedActions: ['uploadApplicationSubmission'],
+        }),
+        defaultRoute: '/provincial/application/upload',
+        canPerform: (action: string) => action === 'uploadApplicationSubmission',
+      }),
+    )
 
     renderLayout('/provincial/application/upload')
 
@@ -177,28 +168,27 @@ describe('Layout shell', () => {
   })
 
   it('shows federal application submission upload in the federal nav for federal-only users', () => {
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: true,
-        principal: 'bceid\\federal',
-        roles: ['FEDERAL_SUBMITTER'],
-        welcomeTarget: '/federal/application/upload',
-        legacyPath: null,
-        grantedActions: [
-          '/federalApplicationSearch',
-          'viewFederalApplication',
-          'uploadApplicationSubmission',
-        ],
-      },
-      defaultRoute: '/federal/application/upload',
-      canPerform: (action: string) =>
-        [
-          '/federalApplicationSearch',
-          'viewFederalApplication',
-          'uploadApplicationSubmission',
-        ].includes(action),
-      logout: vi.fn().mockResolvedValue(undefined),
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\federal',
+          roles: ['FEDERAL_SUBMITTER'],
+          welcomeTarget: '/federal/application/upload',
+          grantedActions: [
+            '/federalApplicationSearch',
+            'viewFederalApplication',
+            'uploadApplicationSubmission',
+          ],
+        }),
+        defaultRoute: '/federal/application/upload',
+        canPerform: (action: string) =>
+          [
+            '/federalApplicationSearch',
+            'viewFederalApplication',
+            'uploadApplicationSubmission',
+          ].includes(action),
+      }),
+    )
 
     renderLayout('/federal/application/upload')
 

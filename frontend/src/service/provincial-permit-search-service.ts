@@ -1,9 +1,10 @@
 import {
   appendNumericSearchParams,
-  appendSearchParam,
+  appendSearchParams,
   appendSearchSortAndPageParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
+  uniqueSearchItemsByKey,
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
@@ -55,14 +56,16 @@ const buildBackendParams = (request: ProvincialPermitSearchRequest): URLSearchPa
   const params = new URLSearchParams()
 
   const { filters } = request
-  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
-  appendSearchParam(params, 'packageNumber', filters.packageNumber)
-  appendSearchParam(params, 'permitNumber', filters.permitNumber)
-  appendSearchParam(params, 'issuedFromDate', filters.issuedFromDate)
-  appendSearchParam(params, 'issuedToDate', filters.issuedToDate)
-  appendSearchParam(params, 'permitStatus', filters.permitStatus)
-  appendSearchParam(params, 'applicantClientNumber', filters.applicantClientNumber)
-  appendSearchParam(params, 'ownerClientNumber', filters.ownerClientNumber)
+  appendSearchParams(params, [
+    ['applicationNumber', filters.applicationNumber],
+    ['packageNumber', filters.packageNumber],
+    ['permitNumber', filters.permitNumber],
+    ['issuedFromDate', filters.issuedFromDate],
+    ['issuedToDate', filters.issuedToDate],
+    ['permitStatus', filters.permitStatus],
+    ['applicantClientNumber', filters.applicantClientNumber],
+    ['ownerClientNumber', filters.ownerClientNumber],
+  ])
   appendNumericSearchParams(params, 'region', filters.region)
   appendSearchSortAndPageParams(params, request)
 
@@ -144,23 +147,14 @@ export const searchProvincialPermitNumberOptions = async (
     sortDirection: 'desc',
   })
 
-  const seen = new Set<string>()
-  return response.content
-    .filter((item) => {
-      if (!item.permitNumber || seen.has(item.permitNumber)) {
-        return false
-      }
-      seen.add(item.permitNumber)
-      return true
-    })
-    .map((item) => ({
-      value: item.permitNumber,
-      label: permitNumberOptionLabel(item),
-      status: item.status,
-      applicantClientNumber: item.applicantClientNumber,
-      ownerClientNumber: item.ownerClientNumber,
-      totalVolume: item.totalVolume,
-      issueDate: item.issueDate,
-      region: item.region,
-    }))
+  return uniqueSearchItemsByKey(response.content, (item) => item.permitNumber).map((item) => ({
+    value: item.permitNumber,
+    label: permitNumberOptionLabel(item),
+    status: item.status,
+    applicantClientNumber: item.applicantClientNumber,
+    ownerClientNumber: item.ownerClientNumber,
+    totalVolume: item.totalVolume,
+    issueDate: item.issueDate,
+    region: item.region,
+  }))
 }

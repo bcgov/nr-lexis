@@ -53,6 +53,7 @@ describe('create-draft-service', () => {
           savedAt: '2026-06-15T15:01:00.000Z',
           payload: { applicationNumber: '124' },
         },
+        ['DRF-2-ABC123'],
         null,
       ]),
     )
@@ -65,6 +66,12 @@ describe('create-draft-service', () => {
         payload: { applicationNumber: '123' },
       },
     ])
+  })
+
+  it('returns an empty list for non-array JSON', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ id: 'DRF-1-ABC123' }))
+
+    expect(listCreateDrafts(MODULE)).toEqual([])
   })
 
   it('returns an empty list for invalid JSON', () => {

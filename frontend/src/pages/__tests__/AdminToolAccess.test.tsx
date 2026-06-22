@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminPage from '@/pages/Admin'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -34,31 +35,27 @@ const renderPage = () => {
 describe('Admin tool access smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: true,
-        principal: 'idir\\admin',
-        roles: ['ADMIN'],
-        welcomeTarget: '/admin',
-        legacyPath: null,
-        grantedActions: [
-          '/lexisAgentAdmin',
-          '/fileApplicationUpload',
-          '/lexisPolicyAdmin',
-          'createApplication',
-          'uploadApplicationSubmission',
-        ],
-      },
-      canPerform: (action: string) =>
-        [
-          '/lexisAgentAdmin',
-          '/fileApplicationUpload',
-          '/lexisPolicyAdmin',
-          'createApplication',
-          'uploadApplicationSubmission',
-        ].includes(action),
-      refresh: vi.fn().mockResolvedValue(undefined),
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          grantedActions: [
+            '/lexisAgentAdmin',
+            '/fileApplicationUpload',
+            '/lexisPolicyAdmin',
+            'createApplication',
+            'uploadApplicationSubmission',
+          ],
+        }),
+        canPerform: (action: string) =>
+          [
+            '/lexisAgentAdmin',
+            '/fileApplicationUpload',
+            '/lexisPolicyAdmin',
+            'createApplication',
+            'uploadApplicationSubmission',
+          ].includes(action),
+      }),
+    )
   })
 
   it('opens policy and upload workflows when required actions are granted', async () => {
@@ -90,18 +87,17 @@ describe('Admin tool access smoke', () => {
   })
 
   it('disables tool actions when permissions are denied', () => {
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: true,
-        principal: 'idir\\readonly',
-        roles: ['READ_ONLY'],
-        welcomeTarget: 'readOnly',
-        legacyPath: null,
-        grantedActions: [],
-      },
-      canPerform: () => false,
-      refresh: vi.fn().mockResolvedValue(undefined),
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\readonly',
+          roles: ['READ_ONLY'],
+          welcomeTarget: 'readOnly',
+          grantedActions: [],
+        }),
+        canPerform: () => false,
+      }),
+    )
 
     renderPage()
 

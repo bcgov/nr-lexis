@@ -3,12 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
+import type { ProvincialOfferSearchResponse } from '@/interfaces/ProvincialOfferSearch'
 import ProvincialOffersPage from '@/pages/ProvincialOffers'
 import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
 import {
   fetchProvincialApplicationOptions,
   fetchProvincialOfferOptions,
 } from '@/service/search-options-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -27,6 +29,18 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearchProvincialOffers = vi.mocked(searchProvincialOffers)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialOfferOptions = vi.mocked(fetchProvincialOfferOptions)
+
+const offerSearchResponse = (
+  content: ProvincialOfferSearchResponse['content'],
+): ProvincialOfferSearchResponse => ({
+  content,
+  page: {
+    number: 0,
+    size: 10,
+    totalElements: content.length,
+    totalPages: content.length > 0 ? 1 : 0,
+  },
+})
 
 const renderPage = () => {
   render(
@@ -53,8 +67,8 @@ describe('Provincial Offer Search Actions', () => {
       regions: [],
       currentSchedules: [],
     })
-    mockedSearchProvincialOffers.mockResolvedValue({
-      content: [
+    mockedSearchProvincialOffers.mockResolvedValue(
+      offerSearchResponse([
         {
           offerNumber: 'OFF-1001',
           applicationNumber: '3001',
@@ -64,20 +78,16 @@ describe('Provincial Offer Search Actions', () => {
           offerWithdrawalDate: '',
           clientNumber: '11111111',
         },
-      ],
-      page: {
-        number: 0,
-        size: 10,
-        totalElements: 1,
-        totalPages: 1,
-      },
-    } as any)
+      ]),
+    )
   })
 
   it('shows add offer link only when createOffer action is granted', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === 'createOffer',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === 'createOffer',
+      }),
+    )
 
     renderPage()
     await screen.findByText('OFF-1001')
@@ -89,9 +99,7 @@ describe('Provincial Offer Search Actions', () => {
   })
 
   it('hides add offer link when createOffer action is not granted', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => false,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage()
     await screen.findByText('OFF-1001')
@@ -100,9 +108,7 @@ describe('Provincial Offer Search Actions', () => {
   })
 
   it('does not default region filters when opened without query parameters', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => false,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage()
     await screen.findByText('OFF-1001')
@@ -117,9 +123,7 @@ describe('Provincial Offer Search Actions', () => {
   })
 
   it('disables search for invalid dates and updates search sort direction from header click', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage()
     await screen.findByText('OFF-1001')

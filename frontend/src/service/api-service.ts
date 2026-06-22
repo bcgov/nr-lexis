@@ -40,16 +40,6 @@ class APIService {
         'Content-Type': 'application/json',
       },
     })
-    this.client.interceptors.response.use(
-      (config) => {
-        console.info(`received response status: ${config.status}`)
-        return config
-      },
-      (error) => {
-        console.error(error)
-        return Promise.reject(error)
-      },
-    )
 
     this.client.interceptors.request.use(async (config) => {
       const requestConfig = config

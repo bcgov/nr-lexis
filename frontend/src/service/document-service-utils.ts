@@ -1,3 +1,6 @@
+import { parsePayloadArray } from '@/service/payload-utils'
+import { isRecord, recordOrEmpty } from '@/utils/record'
+
 export type DocumentRowBase = {
   id: string
   name: string
@@ -27,30 +30,21 @@ export const documentValueAsBoolean = (value: unknown): boolean => {
   return false
 }
 
+export const documentValueAsStringArray = (payload: unknown): string[] => {
+  if (!Array.isArray(payload)) {
+    return []
+  }
+
+  return payload.map((entry) => documentValueAsString(entry)).filter((entry) => entry.length > 0)
+}
+
 export const parseDocumentArrayPayload = (
   payload: unknown,
   extraKeys: string[] = [],
-): unknown[] | null => {
-  if (Array.isArray(payload)) {
-    return payload
-  }
-
-  if (!payload || typeof payload !== 'object') {
-    return null
-  }
-
-  const objectPayload = payload as Record<string, unknown>
-  for (const key of [...DEFAULT_ARRAY_KEYS, ...extraKeys]) {
-    if (Array.isArray(objectPayload[key])) {
-      return objectPayload[key]
-    }
-  }
-
-  return null
-}
+): unknown[] | null => parsePayloadArray(payload, [...DEFAULT_ARRAY_KEYS, ...extraKeys])
 
 export const normalizeDocumentRowBase = (row: unknown, index: number): DocumentRowBase => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = recordOrEmpty(row)
   const fallbackId = `document-${index + 1}`
   return {
     id: documentValueAsString(source.id || source.fileId || fallbackId) || fallbackId,
@@ -65,19 +59,18 @@ export const parseRemoveDocumentSuccess = (payload: unknown): boolean => {
     return payload
   }
 
-  if (!payload || typeof payload !== 'object') {
+  if (!isRecord(payload)) {
     return false
   }
 
-  const objectPayload = payload as Record<string, unknown>
-  if ('success' in objectPayload) {
-    return documentValueAsBoolean(objectPayload.success)
+  if ('success' in payload) {
+    return documentValueAsBoolean(payload.success)
   }
-  if ('removed' in objectPayload) {
-    return documentValueAsBoolean(objectPayload.removed)
+  if ('removed' in payload) {
+    return documentValueAsBoolean(payload.removed)
   }
-  if ('valid' in objectPayload) {
-    return documentValueAsBoolean(objectPayload.valid)
+  if ('valid' in payload) {
+    return documentValueAsBoolean(payload.valid)
   }
 
   return false

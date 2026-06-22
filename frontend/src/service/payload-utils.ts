@@ -1,3 +1,5 @@
+import { isRecord } from '@/utils/record'
+
 const DEFAULT_ARRAY_KEYS = ['results', 'rows', 'items', 'data']
 
 export const payloadValueAsString = (value: unknown): string => {
@@ -12,6 +14,11 @@ export const payloadValueAsString = (value: unknown): string => {
 
 export const payloadValueAsTrimmedString = (value: unknown): string =>
   payloadValueAsString(value).trim()
+
+export const payloadValueAsOptionalString = (value: unknown): string | undefined => {
+  const trimmed = payloadValueAsTrimmedString(value)
+  return trimmed.length > 0 ? trimmed : undefined
+}
 
 export const payloadValueAsNumber = (
   value: unknown,
@@ -48,6 +55,17 @@ export const payloadValueAsStringArray = (value: unknown): string[] => {
     .filter((entry) => entry.length > 0)
 }
 
+export const payloadValueAsStringList = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => payloadValueAsOptionalString(entry))
+      .filter((entry): entry is string => Boolean(entry))
+  }
+
+  const singleValue = payloadValueAsOptionalString(value)
+  return singleValue ? [singleValue] : []
+}
+
 export const parsePayloadArray = (
   payload: unknown,
   keys: string[] = DEFAULT_ARRAY_KEYS,
@@ -56,14 +74,13 @@ export const parsePayloadArray = (
     return payload
   }
 
-  if (!payload || typeof payload !== 'object') {
+  if (!isRecord(payload)) {
     return null
   }
 
-  const objectPayload = payload as Record<string, unknown>
   for (const key of keys) {
-    if (Array.isArray(objectPayload[key])) {
-      return objectPayload[key]
+    if (Array.isArray(payload[key])) {
+      return payload[key]
     }
   }
 

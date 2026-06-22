@@ -1,17 +1,13 @@
 import apiService from '@/service/api-service'
 import {
+  type DocumentRowBase,
   normalizeDocumentRowBase,
   parseDocumentArrayPayload,
   parseRemoveDocumentSuccess,
 } from '@/service/document-service-utils'
 import { extractResponseFilename } from '@/service/http-response-utils'
 
-export type ProvincialApplicationDocumentRow = {
-  id: string
-  name: string
-  description: string
-  type: string
-}
+export type ProvincialApplicationDocumentRow = DocumentRowBase
 
 export type ProvincialApplicationDocumentSource = 'api'
 
@@ -32,10 +28,6 @@ export type RemoveApplicationDocumentResult = {
 }
 
 const DOCUMENT_LIST_CACHE_TTL_MS = 30_000
-
-const normalizeDocumentRow = (row: unknown, index: number): ProvincialApplicationDocumentRow => {
-  return normalizeDocumentRowBase(row, index)
-}
 
 export const fetchApplicationDocuments = async (
   applicationNumber: string,
@@ -63,7 +55,7 @@ export const fetchApplicationDocuments = async (
   }
 
   return {
-    rows: rows.map(normalizeDocumentRow),
+    rows: rows.map(normalizeDocumentRowBase),
     source: 'api',
   }
 }

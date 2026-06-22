@@ -16,10 +16,17 @@ import { AppNotification } from '@/components/AppNotification'
 import SearchableSelect from '@/components/SearchableSelect'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import {
+  atMostOneDecimalFieldError,
   firstValidationError,
   getVisibleFieldError,
+  greaterThanFieldError,
+  greaterThanOrEqualFieldError,
+  integerFieldError,
+  lessThanOrEqualFieldError,
   numericFieldError,
+  parseNonNegativeDecimalFieldValue,
   requiredFieldError,
+  requiredNumericFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
@@ -164,67 +171,6 @@ const packageRequiresAgeClass = (productTypeCode: string): boolean =>
 const uniqueCodes = (rows: ApplicationPackageSpeciesRow[]): string[] =>
   Array.from(new Set(rows.map((row) => row.species).filter(Boolean)))
 
-const numberValue = (value: string): number | null => {
-  const normalizedValue = value.trim()
-  if (!normalizedValue || !/^\d+(\.\d+)?$/.test(normalizedValue)) {
-    return null
-  }
-
-  const parsed = Number(normalizedValue)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-const requiredNumericFieldError = (value: string, label: string): string | null =>
-  firstValidationError(
-    () => requiredFieldError(value, label),
-    () => numericFieldError(value, label),
-  ) ?? null
-
-const atMostOneDecimalFieldError = (value: string, label: string): string | null => {
-  if (!value.trim() || !/^\d+(\.\d+)?$/.test(value.trim())) {
-    return null
-  }
-
-  return /^\d+(\.\d{1})?$/.test(value.trim())
-    ? null
-    : `${label} must have no more than one decimal place.`
-}
-
-const greaterThanFieldError = (value: string, label: string, minimum: number): string | null => {
-  const parsed = numberValue(value)
-  if (parsed === null) {
-    return null
-  }
-
-  return parsed > minimum ? null : `${label} must be greater than ${minimum}.`
-}
-
-const greaterThanOrEqualFieldError = (
-  value: string,
-  label: string,
-  minimum: number,
-): string | null => {
-  const parsed = numberValue(value)
-  if (parsed === null) {
-    return null
-  }
-
-  return parsed >= minimum ? null : `${label} must be greater than or equal to ${minimum}.`
-}
-
-const lessThanOrEqualFieldError = (
-  value: string,
-  label: string,
-  maximum: number,
-): string | null => {
-  const parsed = numberValue(value)
-  if (parsed === null) {
-    return null
-  }
-
-  return parsed <= maximum ? null : `${label} must be ${maximum} or less.`
-}
-
 const roundOneDecimal = (value: number): number => Math.round(value * 10) / 10
 
 const formatPieceCount = (value: number | string): string =>
@@ -243,7 +189,7 @@ const scaleVolumeWithinPackageFieldError = (
   value: string,
   remainingVolume: number | null,
 ): string | null => {
-  const parsed = numberValue(value)
+  const parsed = parseNonNegativeDecimalFieldValue(value)
   if (parsed === null || remainingVolume === null) {
     return null
   }
@@ -251,14 +197,6 @@ const scaleVolumeWithinPackageFieldError = (
   return parsed <= remainingVolume
     ? null
     : `Scale volume must be ${remainingVolume.toFixed(1)} or less.`
-}
-
-const integerFieldError = (value: string, label: string): string | null => {
-  if (!value.trim() || !/^\d+$/.test(value.trim())) {
-    return `${label} must be a whole number.`
-  }
-
-  return null
 }
 
 const buildPackageSelectionState = (packageNumbers: string[]): PackageSelectionState => ({
@@ -397,10 +335,10 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   const [showScaleValidationErrors, setShowScaleValidationErrors] = useState(false)
   const beginItemsRequest = useLatestRequestGuard()
   const selectedPackageScaleVolume = scales.reduce(
-    (total, row) => total + (numberValue(row.volume) ?? 0),
+    (total, row) => total + (parseNonNegativeDecimalFieldValue(row.volume) ?? 0),
     0,
   )
-  const selectedPackageVolume = numberValue(packageForm.volume)
+  const selectedPackageVolume = parseNonNegativeDecimalFieldValue(packageForm.volume)
   const selectedPackageRemainingScaleVolume =
     selectedPackageVolume === null
       ? null

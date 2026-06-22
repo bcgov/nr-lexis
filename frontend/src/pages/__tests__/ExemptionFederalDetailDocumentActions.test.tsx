@@ -21,6 +21,7 @@ import {
   removeExemptionDocument,
 } from '@/service/provincial-exemption-documents-service'
 import { runReport } from '@/service/report-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -114,9 +115,7 @@ const federalDetail: FederalApplicationDetail = {
 describe('Exemption and Federal Detail Document Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialExemptionDetail.mockResolvedValue(exemptionDetail)
     mockedFetchFederalApplicationDetail.mockResolvedValue(federalDetail)
     mockedFetchExemptionDocuments.mockResolvedValue({
@@ -257,9 +256,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
   })
 
   it('disables exemption upload and delete without file upload permission', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action !== '/fileExemptionUpload',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/fileExemptionUpload',
+      }),
+    )
     mockedFetchExemptionDocuments.mockResolvedValue({
       rows: [
         {
@@ -426,9 +427,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
   })
 
   it('disables federal upload and delete without file upload permission', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action !== '/fileApplicationUpload',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/fileApplicationUpload',
+      }),
+    )
     mockedFetchFederalApplicationDocuments.mockResolvedValue({
       rows: [
         {

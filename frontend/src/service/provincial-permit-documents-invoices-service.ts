@@ -2,11 +2,14 @@ import apiService from '@/service/api-service'
 import {
   documentValueAsBoolean as asBoolean,
   documentValueAsString as asString,
+  documentValueAsStringArray as asStringArray,
   normalizeDocumentRowBase,
   parseDocumentArrayPayload,
   parseRemoveDocumentSuccess,
 } from '@/service/document-service-utils'
 import { extractResponseFilename } from '@/service/http-response-utils'
+import { LEGACY_FORM_CONTENT_TYPE } from '@/service/legacy-form-utils'
+import { recordOrEmpty } from '@/utils/record'
 
 export type PermitDocumentRow = {
   id: string
@@ -79,18 +82,8 @@ type PermitInvoiceDetailsPayload = {
 const DEFAULT_CONVERSION_RATE = '1.00'
 const PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS = 30_000
 
-const parseStringArrayPayload = (payload: unknown): string[] => {
-  if (!Array.isArray(payload)) {
-    return []
-  }
-
-  return payload
-    .map((entry) => asString(entry))
-    .filter((entry): entry is string => entry.length > 0)
-}
-
 const normalizeDocumentRow = (row: unknown, index: number): PermitDocumentRow => {
-  const source = (row ?? {}) as Record<string, unknown>
+  const source = recordOrEmpty(row)
   return {
     ...normalizeDocumentRowBase(row, index),
     typeCode: asString(source.typeCode || source.attachmentType || source.type_code),
@@ -256,7 +249,7 @@ const postFormData = async (path: string, payload: Record<string, string>): Prom
     .getAxiosInstance()
     .post<unknown>(path, new URLSearchParams(payload), {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': LEGACY_FORM_CONTENT_TYPE,
       },
     })
 
@@ -267,11 +260,11 @@ const parseAddPermitInvoiceResponse = (
   payload: unknown,
   source: PermitDocumentAndInvoiceSource,
 ): AddPermitInvoiceResult => {
-  const objectPayload = (payload ?? {}) as Record<string, unknown>
+  const objectPayload = recordOrEmpty(payload)
   const success = asBoolean(objectPayload.success ?? objectPayload.valid)
   const message = asString(objectPayload.message)
-  const errors = parseStringArrayPayload(objectPayload.errors)
-  const warnings = parseStringArrayPayload(objectPayload.warnings)
+  const errors = asStringArray(objectPayload.errors)
+  const warnings = asStringArray(objectPayload.warnings)
 
   return {
     success,

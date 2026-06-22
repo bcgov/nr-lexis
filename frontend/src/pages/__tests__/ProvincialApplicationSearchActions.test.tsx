@@ -6,6 +6,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import ProvincialApplicationPage from '@/pages/ProvincialApplication'
 import { searchProvincialApplications } from '@/service/provincial-application-search-service'
 import { fetchProvincialApplicationOptions } from '@/service/search-options-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -77,12 +78,14 @@ const searchRowsWithMixedEligibility = [
 describe('Provincial Application Search Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) =>
-        action === '/createExemption' ||
-        action === 'createApplication' ||
-        action === 'uploadApplicationSubmission',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) =>
+          action === '/createExemption' ||
+          action === 'createApplication' ||
+          action === 'uploadApplicationSubmission',
+      }),
+    )
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
       exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
       applicationStatuses: [{ value: 'NEW', label: 'New' }],

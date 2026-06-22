@@ -1,4 +1,4 @@
-import { isRecord } from '@/utils/record'
+import { mapRecordArray } from '@/utils/record'
 
 export type CreateDraftRecord<TData> = {
   id: string
@@ -16,20 +16,13 @@ const parseRecords = <TData>(rawValue: string | null): CreateDraftRecord<TData>[
 
   try {
     const parsed = JSON.parse(rawValue)
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-
-    return parsed.filter((item): item is CreateDraftRecord<TData> => {
-      if (!isRecord(item)) {
-        return false
-      }
-      return (
-        typeof item.id === 'string' &&
+    return mapRecordArray(parsed, (item) => {
+      return typeof item.id === 'string' &&
         typeof item.module === 'string' &&
         typeof item.savedAt === 'string' &&
         typeof item.payload === 'object'
-      )
+        ? (item as CreateDraftRecord<TData>)
+        : null
     })
   } catch (error) {
     console.warn('Unable to parse create draft records.', error)

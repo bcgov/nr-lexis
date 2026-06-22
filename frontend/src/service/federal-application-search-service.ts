@@ -1,5 +1,5 @@
 import {
-  appendSearchParam,
+  appendSearchParams,
   appendSearchSortAndPageParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
@@ -29,17 +29,18 @@ const buildBackendParams = (request: FederalApplicationSearchRequest): URLSearch
   const params = new URLSearchParams()
 
   const { filters } = request
-  appendSearchParam(params, 'applicationNumber', filters.applicationNumber)
-  appendSearchParam(params, 'packageNumber', filters.packageNumber)
-  appendSearchParam(params, 'applicationStatus', filters.applicationStatus)
-  appendSearchParam(params, 'receivedFromDate', filters.receivedFromDate)
-  appendSearchParam(params, 'receivedToDate', filters.receivedToDate)
-  appendSearchParam(params, 'listingFromDate', filters.listingFromDate)
-  appendSearchParam(params, 'listingToDate', filters.listingToDate)
-
-  // Legacy UI uses one client filter; backend currently supports owner and agent.
-  appendSearchParam(params, 'ownerClientNumber', filters.clientNumber)
-  appendSearchParam(params, 'agentClientNumber', filters.clientNumber)
+  appendSearchParams(params, [
+    ['applicationNumber', filters.applicationNumber],
+    ['packageNumber', filters.packageNumber],
+    ['applicationStatus', filters.applicationStatus],
+    ['receivedFromDate', filters.receivedFromDate],
+    ['receivedToDate', filters.receivedToDate],
+    ['listingFromDate', filters.listingFromDate],
+    ['listingToDate', filters.listingToDate],
+    // The single client filter fans out to both backend owner and agent fields.
+    ['ownerClientNumber', filters.clientNumber],
+    ['agentClientNumber', filters.clientNumber],
+  ])
   appendSearchSortAndPageParams(params, request)
 
   return params

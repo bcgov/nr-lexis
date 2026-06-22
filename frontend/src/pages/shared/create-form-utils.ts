@@ -9,6 +9,8 @@ export const isPositiveNumeric = (value: string): boolean => {
   return Number.isFinite(parsed) && parsed > 0
 }
 
+const NON_NEGATIVE_DECIMAL_PATTERN = /^\d+(\.\d+)?$/
+
 export const normalizeText = (value: string): string => value.trim()
 
 export type FieldErrors<TField extends string> = Partial<Record<TField, string>>
@@ -70,6 +72,17 @@ export const maxLengthFieldError = (
     : `${label} must be ${maxLength} ${unit} or fewer.`
 }
 
+export const requiredMaxLengthFieldError = (
+  value: string,
+  maxLength: number,
+  label = 'This field',
+  requiredLabel = label,
+): string | null =>
+  firstValidationError(
+    () => requiredFieldError(value, requiredLabel),
+    () => maxLengthFieldError(value, maxLength, label),
+  ) ?? null
+
 export const positiveNumericFieldError = (value: string): string | null => {
   return isPositiveNumeric(value) ? null : 'Use a positive numeric value.'
 }
@@ -95,7 +108,77 @@ export const atMostOneDecimalFieldError = (value: string, label = 'Value'): stri
 
 export const numericFieldError = (value: string, label = 'Value'): string | null => {
   if (!value.trim()) return null
-  return /^\d+(\.\d+)?$/.test(value.trim()) ? null : `${label} must be numeric.`
+  return NON_NEGATIVE_DECIMAL_PATTERN.test(value.trim()) ? null : `${label} must be numeric.`
+}
+
+export const requiredNumericFieldError = (value: string, label = 'Value'): string | null =>
+  firstValidationError(
+    () => requiredFieldError(value, label),
+    () => numericFieldError(value, label),
+  ) ?? null
+
+export const requiredPositiveNumericFieldError = (value: string, label = 'Value'): string | null =>
+  firstValidationError(
+    () => requiredFieldError(value, label),
+    () => numericFieldError(value, label),
+    () => positiveNumericFieldError(value),
+  ) ?? null
+
+export const parseNonNegativeDecimalFieldValue = (value: string): number | null => {
+  const normalizedValue = value.trim()
+  if (!normalizedValue || !NON_NEGATIVE_DECIMAL_PATTERN.test(normalizedValue)) {
+    return null
+  }
+
+  const parsed = Number(normalizedValue)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+export const integerFieldError = (value: string, label = 'Value'): string | null => {
+  if (!value.trim() || !/^\d+$/.test(value.trim())) {
+    return `${label} must be a whole number.`
+  }
+
+  return null
+}
+
+export const greaterThanFieldError = (
+  value: string,
+  label: string,
+  minimum: number,
+): string | null => {
+  const parsed = parseNonNegativeDecimalFieldValue(value)
+  if (parsed === null) {
+    return null
+  }
+
+  return parsed > minimum ? null : `${label} must be greater than ${minimum}.`
+}
+
+export const greaterThanOrEqualFieldError = (
+  value: string,
+  label: string,
+  minimum: number,
+): string | null => {
+  const parsed = parseNonNegativeDecimalFieldValue(value)
+  if (parsed === null) {
+    return null
+  }
+
+  return parsed >= minimum ? null : `${label} must be greater than or equal to ${minimum}.`
+}
+
+export const lessThanOrEqualFieldError = (
+  value: string,
+  label: string,
+  maximum: number,
+): string | null => {
+  const parsed = parseNonNegativeDecimalFieldValue(value)
+  if (parsed === null) {
+    return null
+  }
+
+  return parsed <= maximum ? null : `${label} must be ${maximum} or less.`
 }
 
 export const isoDateFieldError = (value: string): string | null => {

@@ -116,7 +116,7 @@ const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) =
 describe('Create Page Core Flows', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    localStorage.clear()
+    window.localStorage.clear()
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
       productTypes: [{ value: 'LOG', label: 'Logs' }],
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
@@ -125,12 +125,12 @@ describe('Create Page Core Flows', () => {
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '11', label: 'Cariboo' }],
       currentSchedules: [{ value: '987', label: '2026-01-11' }],
-    } as any)
+    } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>)
     mockedFetchProvincialExemptionOptions.mockResolvedValue({
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
       exemptionStatuses: [{ value: 'NEW', label: 'New' }],
       regions: [{ value: '11', label: 'Cariboo' }],
-    } as any)
+    } satisfies Awaited<ReturnType<typeof fetchProvincialExemptionOptions>>)
     mockedFetchProvincialOfferOptions.mockResolvedValue({
       regions: [{ value: '11', label: 'Cariboo' }],
     })

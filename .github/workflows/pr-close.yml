@@ -25,3 +25,31 @@ jobs:
       cleanup: label
       packages: backend frontend
       cleanup_name: nr-lexis-backend-${{ github.event.number }} nr-lexis-frontend-${{ github.event.number }}
+
+  cleanup-networkpolicies:
+    name: Cleanup PR OpenShift Resources
+    needs: cleanup
+    if: always()
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Delete per-PR OpenShift resources
+        uses: bcgov/action-oc-runner@d2fc921aaa9d70684c186dbb7754e6985d44d86f # v1.4.1
+        with:
+          oc_namespace: ${{ secrets.oc_namespace }}
+          oc_token: ${{ secrets.oc_token }}
+          oc_server: ${{ vars.oc_server }}
+          commands: |
+            set -euo pipefail
+            NAMESPACE="${{ secrets.oc_namespace }}"
+            RESOURCE_TYPES="deploy,rs,pod,svc,route,hpa,networkpolicy,secret,pvc,cm"
+
+            oc project "${NAMESPACE}" >/dev/null
+
+            for label in \
+              "nr-lexis-backend-${{ github.event.number }}" \
+              "nr-lexis-frontend-${{ github.event.number }}"
+            do
+              echo "Deleting PR resources matching app=${label}"
+              oc delete "${RESOURCE_TYPES}" -n "${NAMESPACE}" -l "app=${label}" --ignore-not-found
+            done

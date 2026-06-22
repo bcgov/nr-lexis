@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.upload;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.normalizeClientNumber;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
@@ -1420,14 +1421,6 @@ public class ApplicationSubmissionImportService {
       return normalized;
     }
     return "0" + normalized;
-  }
-
-  private String normalizeClientNumber(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null || normalized.length() >= 8) {
-      return normalized;
-    }
-    return "0".repeat(8 - normalized.length()) + normalized;
   }
 
   private String upper(String value) {

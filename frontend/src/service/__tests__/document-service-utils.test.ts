@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   documentValueAsBoolean,
   documentValueAsString,
+  documentValueAsStringArray,
   normalizeDocumentRowBase,
   parseDocumentArrayPayload,
   parseRemoveDocumentSuccess,
@@ -17,6 +18,14 @@ describe('document-service-utils', () => {
     expect(documentValueAsBoolean(true)).toBe(true)
     expect(documentValueAsBoolean(' TRUE ')).toBe(true)
     expect(documentValueAsBoolean('yes')).toBe(false)
+  })
+
+  it('coerces document string arrays with trimmed nonblank entries', () => {
+    expect(documentValueAsStringArray(['  file.pdf  ', '', 123, Number.NaN, null])).toEqual([
+      'file.pdf',
+      '123',
+    ])
+    expect(documentValueAsStringArray('file.pdf')).toEqual([])
   })
 
   it('extracts array payloads from common response envelopes', () => {
@@ -49,6 +58,13 @@ describe('document-service-utils', () => {
     expect(normalizeDocumentRowBase({}, 1)).toEqual({
       id: 'document-2',
       name: 'Document 2',
+      description: '',
+      type: '',
+    })
+
+    expect(normalizeDocumentRowBase('not a row', 2)).toEqual({
+      id: 'document-3',
+      name: 'Document 3',
       description: '',
       type: '',
     })

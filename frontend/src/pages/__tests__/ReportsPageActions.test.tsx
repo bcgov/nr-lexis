@@ -11,6 +11,7 @@ import {
   fetchProvincialExemptionOptions,
   fetchProvincialPermitOptions,
 } from '@/service/search-options-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -39,6 +40,10 @@ const mockedFetchReportOptions = vi.mocked(fetchReportOptions)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
+
+const mockReportPermissions = (canPerform: (action: string) => boolean = () => true): void => {
+  mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform }))
+}
 
 const emptyReportOptions = (): Awaited<ReturnType<typeof fetchReportOptions>> => ({
   currentSchedules: [],
@@ -117,9 +122,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('hides report controls when no report actions are granted', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => false,
-    } as any)
+    mockReportPermissions(() => false)
 
     render(
       <MemoryRouter initialEntries={['/reports']}>
@@ -138,9 +141,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('lists only reports granted to the current session', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === '/exemptionReport',
-    } as any)
+    mockReportPermissions((action: string) => action === '/exemptionReport')
 
     render(
       <MemoryRouter initialEntries={['/reports']}>
@@ -160,9 +161,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('loads report field options from the report options endpoint only', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       regions: [{ value: '12', label: 'Coast' }],
@@ -224,9 +223,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('loads TEAC report selects and submits selected jurisdiction and schedule ids', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       currentSchedules: [
@@ -275,9 +272,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('submits first TEAC select options when unchanged like legacy browser forms', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       currentSchedules: [
@@ -318,9 +313,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('leaves unchanged TEAC region criteria unset instead of submitting every region', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       regions: [
@@ -361,9 +354,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('blocks the application report when only the legacy all-regions sentinel is selected', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       regions: [
@@ -404,9 +395,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('submits the report default region for unchanged legacy multi-select reports', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       defaultRegion: '1903',
@@ -443,9 +432,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('defaults species and grade permit status to complete like legacy Struts', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       permitStatuses: [
@@ -482,9 +469,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('leaves unchanged species and grade regions unset instead of submitting every region', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       regions: [
@@ -524,9 +509,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('keeps species timber mark and forest file filters mutually exclusive like legacy JavaScript', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
 
     render(
       <MemoryRouter initialEntries={['/reports?report=speciesGradeReport']}>
@@ -559,9 +542,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('uses legacy transport destination and port labels while submitting report codes', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       destinationCountries: [
@@ -628,9 +609,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('defaults tenure analysis dates like legacy Struts', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     const defaultDates = legacyTenureDefaultDates()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
@@ -676,9 +655,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('updates tenure issued to date from issued from date like legacy JavaScript', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
 
     render(
       <MemoryRouter initialEntries={['/reports?report=tenureReport']}>
@@ -711,9 +688,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('uses separate tenure type and timber mark fields like the legacy report form', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     const defaultDates = legacyTenureDefaultDates()
 
     render(
@@ -753,9 +728,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('uses legacy biweekly jurisdiction options for application-style reports', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       biweeklyJurisdictions: [
@@ -799,9 +772,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('uses only the filtered advertising list report action', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedRunReport.mockResolvedValueOnce({
       source: 'api',
       blob: new Blob(['report']),
@@ -856,9 +827,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('does not submit unchanged biweekly listing regions as every region option', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
       regions: [
@@ -903,9 +872,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('shows backend report validation messages when generation is rejected', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     const error = new ReportRequestError(
       'Choose a Listing from date and Listing to date before generating the Advertising List.',
     )
@@ -932,9 +899,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('validates advertising list date range before generating the filtered report', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
 
     render(
       <MemoryRouter initialEntries={['/reports?report=biweeklyListing']}>
@@ -956,9 +921,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('keeps exemption approval date fields hidden like the legacy report form', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
 
     render(
       <MemoryRouter initialEntries={['/reports?report=exemptionReport']}>
@@ -988,9 +951,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('downloads CSV reports without opening a popup window', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     const anchorClickSpy = vi
       .spyOn(HTMLAnchorElement.prototype, 'click')
       .mockImplementation(() => {})
@@ -1025,9 +986,7 @@ describe('Reports Page Actions', () => {
   })
 
   it('falls back to download and shows error when pdf popup is blocked', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockReportPermissions()
     vi.spyOn(window, 'open').mockReturnValue(null)
     const anchorClickSpy = vi
       .spyOn(HTMLAnchorElement.prototype, 'click')
