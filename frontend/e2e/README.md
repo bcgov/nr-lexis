@@ -21,12 +21,11 @@ regression coverage uses a separate TEST-only Playwright config.
 
 ## CI setup
 
-- `E2E_BCEID_USER` and `E2E_BCEID_PASSWORD` GitHub secrets are required only when the TEST Business
-  BCeID suite is enabled.
-- `E2E_PROVINCIAL_APPLICATION_NUMBER` and `E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER` GitHub
-  variables can optionally enable owned/unowned application detail checks.
-- The reusable workflow guards the real-auth job to `target: test`, so dev preview deploys stay on
-  smoke coverage.
+- `E2E_BCEID_USER` and `E2E_BCEID_PASSWORD` must be set as `test` environment secrets.
+- `E2E_PROVINCIAL_APPLICATION_NUMBER` and `E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER` can be set as
+  `test` environment variables to enable owned/unowned application detail checks.
+- Real-auth jobs are scoped to the `test` GitHub environment, so dev preview deploys stay on smoke
+  coverage.
 - CI suppresses Playwright screenshots, video, and traces for real-auth suites because those runs
   type real test credentials.
 
