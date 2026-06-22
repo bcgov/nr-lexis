@@ -7,13 +7,6 @@ on:
         description: Deployment target. Real BCeID regression is only valid against TEST.
         default: test
         type: string
-    secrets:
-      e2e_bceid_user:
-        description: Business BCeID provincial submitter username for Playwright auth
-        required: true
-      e2e_bceid_password:
-        description: Business BCeID provincial submitter password for Playwright auth
-        required: true
 
 env:
   DOMAIN: apps.silver.devops.gov.bc.ca
@@ -25,6 +18,7 @@ jobs:
   real-bceid-provincial-submitter:
     name: TEST BCeID Provincial Submitter (${{ matrix.project }})
     if: inputs.target == 'test'
+    environment: ${{ inputs.target }}
     defaults:
       run:
         working-directory: frontend
@@ -57,8 +51,8 @@ jobs:
 
       - name: Check Business BCeID credentials
         env:
-          E2E_BCEID_USER: ${{ secrets.e2e_bceid_user }}
-          E2E_BCEID_PASSWORD: ${{ secrets.e2e_bceid_password }}
+          E2E_BCEID_USER: ${{ secrets.E2E_BCEID_USER }}
+          E2E_BCEID_PASSWORD: ${{ secrets.E2E_BCEID_PASSWORD }}
         run: |
           echo "::add-mask::$E2E_BCEID_USER"
           echo "::add-mask::$E2E_BCEID_PASSWORD"
@@ -68,8 +62,8 @@ jobs:
       - name: Run TEST Business BCeID provincial submitter suite
         env:
           E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
-          E2E_BCEID_USER: ${{ secrets.e2e_bceid_user }}
-          E2E_BCEID_PASSWORD: ${{ secrets.e2e_bceid_password }}
+          E2E_BCEID_USER: ${{ secrets.E2E_BCEID_USER }}
+          E2E_BCEID_PASSWORD: ${{ secrets.E2E_BCEID_PASSWORD }}
           E2E_PROVINCIAL_APPLICATION_NUMBER: ${{ vars.E2E_PROVINCIAL_APPLICATION_NUMBER }}
           E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER: ${{ vars.E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER }}
           CI: "true"
