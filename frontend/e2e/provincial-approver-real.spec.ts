@@ -115,14 +115,19 @@ test.describe('real TEST IDIR provincial application approver', () => {
     expect(hasApplicationApproverRole(roles)).toBe(true)
     expect(hasProvincialSubmitterRole(roles)).toBe(false)
     expect(hasGrantedAction(grantedActions, '/applicationsReview')).toBe(true)
+    expect(hasGrantedAction(grantedActions, 'createApplication')).toBe(false)
     expect(hasGrantedAction(grantedActions, 'uploadApplicationSubmission')).toBe(false)
 
     const provincialSection = page.locator(sideNavSection('Provincial'))
     await expect(provincialSection).toBeVisible()
     await expect(provincialSection.getByRole('link', { name: 'Application review' })).toBeVisible()
     await expect(
+      provincialSection.getByRole('link', { name: 'Create/edit application' }),
+    ).toHaveCount(0)
+    await expect(
       provincialSection.getByRole('link', { name: 'Upload application submission' }),
     ).toHaveCount(0)
+    await expectRouteUnauthorized(page, '/provincial/application/create')
     await expectRouteUnauthorized(page, '/provincial/application/upload')
 
     expect(apiServerErrors).toEqual([])
