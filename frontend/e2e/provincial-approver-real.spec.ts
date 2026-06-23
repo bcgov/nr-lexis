@@ -45,12 +45,25 @@ type ReviewStatusResponse = {
   message?: string | null
 }
 
+type ReviewStatusEmailResponse = {
+  success?: boolean
+  message?: string | null
+}
+
 const readReviewStatusResponse = async (
   response: Awaited<ReturnType<typeof postWithCsrf>>,
 ): Promise<ReviewStatusResponse> => {
   const text = await response.text()
   expect(response.status(), text.slice(0, 500)).toBe(200)
   return JSON.parse(text) as ReviewStatusResponse
+}
+
+const readReviewStatusEmailResponse = async (
+  response: Awaited<ReturnType<typeof postWithCsrf>>,
+): Promise<ReviewStatusEmailResponse> => {
+  const text = await response.text()
+  expect(response.status(), text.slice(0, 500)).toBe(200)
+  return JSON.parse(text) as ReviewStatusEmailResponse
 }
 
 const missingApplicationNumber = '999999999'
@@ -164,6 +177,22 @@ test.describe('real TEST IDIR provincial application approver', () => {
     expect(rejectResponse.valid).toBe(false)
     expect(rejectResponse.updated).toBe(false)
     expect(rejectResponse.message ?? '').toContain('Application status update did not persist.')
+
+    const emailResponse = await readReviewStatusEmailResponse(
+      await postWithCsrf(
+        page,
+        `/api/lexis/application-reviews/${missingApplicationNumber}/status-email`,
+        {
+          data: {
+            statusCode: 'REJ',
+            remark: 'IDIR regression authorization check',
+            clientEmailAddress: 'idir-regression@example.test',
+          },
+        },
+      ),
+    )
+    expect(emailResponse.success).toBe(false)
+    expect(emailResponse.message ?? '').toContain('Application status email could not be prepared.')
   })
 
   test('can approve a dedicated application when configured', async ({ page }) => {
