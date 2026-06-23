@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLResolver;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
@@ -525,17 +526,15 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
   private static XMLInputFactory newXmlInputFactory() {
     XMLInputFactory factory = XMLInputFactory.newFactory();
-    setXmlProperty(factory, XMLInputFactory.SUPPORT_DTD, false);
-    setXmlProperty(factory, XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+    factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+    factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+    factory.setProperty(XMLInputFactory.IS_REPLACING_ENTITY_REFERENCES, false);
+    factory.setXMLResolver(
+        (XMLResolver)
+            (publicID, systemID, baseURI, namespace) -> {
+              throw new XMLStreamException("External entities are not allowed.");
+            });
     return factory;
-  }
-
-  private static void setXmlProperty(XMLInputFactory factory, String property, Object value) {
-    try {
-      factory.setProperty(property, value);
-    } catch (IllegalArgumentException ex) {
-      // Some StAX implementations do not expose all hardening flags.
-    }
   }
 
   private static String attribute(XMLStreamReader reader, String localName) {
