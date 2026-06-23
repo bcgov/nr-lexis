@@ -1,10 +1,10 @@
 package ca.bc.gov.mof.lexis.service.rtm;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -13,22 +13,17 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
 
 final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
-  private static final Pattern ROW_PATTERN =
-      Pattern.compile("<row[^>]*\\br=\"(\\d+)\"[^>]*>(.*?)</row>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-  private static final Pattern CELL_PATTERN =
-      Pattern.compile(
-          "(<c[^>]*\\sr=\"([A-Z]{1,3})(\\d+)\"[^>]*>.*?</c>)",
-          Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-  private static final Pattern VALUE_PATTERN = Pattern.compile("<v>(.*?)</v>", Pattern.DOTALL);
-  private static final Pattern SHARED_STRING_PATTERN =
-      Pattern.compile("<si><t[^>]*>(.*?)</t></si>", Pattern.DOTALL);
+  private static final String WORKSHEET_ENTRY_PREFIX = "xl/worksheets/sheet";
+  private static final String XML_EXTENSION = ".xml";
   private static final Set<String> EXPECTED_TEMPLATE_HEADERS = new HashSet<>(
           Arrays.asList(
           "GRADE",
@@ -62,15 +57,16 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       List<UploadRow> rows) {}
 
   private record ParsedCell(int column, String value) {}
+  private record ParsedRow(int rowNumber, List<ParsedCell> cells) {}
 
   static Analysis analyze(InputStream inputStream) throws IOException {
     ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
-    return analyzeSheet(parsedWorkbook.sheetXml(), parsedWorkbook.sharedStrings());
+    return analyzeSheet(parsedWorkbook.rows());
   }
 
   static UploadParseResult parseForUpload(InputStream inputStream) throws IOException {
     ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
-    return parseUploadSheet(parsedWorkbook.sheetXml(), parsedWorkbook.sharedStrings());
+    return parseUploadSheet(parsedWorkbook.rows());
   }
 
   private static ParsedWorkbook readWorkbook(InputStream inputStream) throws IOException {
@@ -82,7 +78,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       while ((entry = zip.getNextEntry()) != null) {
         if ("xl/sharedStrings.xml".equals(entry.getName())) {
           sharedStringBytes = readAllBytes(zip);
-        } else if (entry.getName().matches("xl/worksheets/sheet\\d+\\.xml")) {
+        } else if (isWorksheetEntry(entry.getName())) {
           if (sheetBytes == null) {
             sheetBytes = readAllBytes(zip);
           }
@@ -90,40 +86,35 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       }
     }
 
-    if (sheetBytes == null) {
-      return new ParsedWorkbook("", Collections.emptyList());
-    }
-
     List<String> sharedStrings =
         sharedStringBytes == null
             ? Collections.emptyList()
-            : parseSharedStrings(new String(sharedStringBytes, StandardCharsets.UTF_8));
+            : parseSharedStrings(sharedStringBytes);
+    List<ParsedRow> rows =
+        sheetBytes == null ? Collections.emptyList() : parseSheetRows(sheetBytes, sharedStrings);
 
-    return new ParsedWorkbook(new String(sheetBytes, StandardCharsets.UTF_8), sharedStrings);
+    return new ParsedWorkbook(rows);
   }
 
-  private static Analysis analyzeSheet(String sheetXml, List<String> sharedStrings) {
-    Matcher rowMatcher = ROW_PATTERN.matcher(sheetXml);
-
+  private static Analysis analyzeSheet(List<ParsedRow> rows) {
     int dataRows = 0;
     int numericCells = 0;
     boolean foundHeader = false;
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
 
-    while (rowMatcher.find()) {
-      int rowNumber = parseIntSafe(rowMatcher.group(1));
+    for (ParsedRow row : rows) {
+      int rowNumber = row.rowNumber();
       if (rowNumber <= 1) {
-        if (rowNumber == 1 && rowHasHeader(rowMatcher.group(2), sharedStrings)) {
+        if (rowNumber == 1 && rowHasHeader(row.cells())) {
           foundHeader = true;
         }
         continue;
       }
 
-      String rowXml = rowMatcher.group(2);
-      if (rowHasAnyData(rowXml, sharedStrings)) {
+      if (rowHasAnyData(row.cells())) {
         dataRows++;
-        numericCells += countNumericCells(rowXml, sharedStrings);
+        numericCells += countNumericCells(row.cells());
       }
     }
 
@@ -134,9 +125,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return new Analysis(dataRows, numericCells, foundHeader, warnings, errors);
   }
 
-  private static UploadParseResult parseUploadSheet(String sheetXml, List<String> sharedStrings) {
-    Matcher rowMatcher = ROW_PATTERN.matcher(sheetXml);
-
+  private static UploadParseResult parseUploadSheet(List<ParsedRow> rows) {
     int dataRows = 0;
     int numericCells = 0;
     boolean headerDetected = false;
@@ -144,16 +133,16 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     Map<Integer, String> speciesByColumn = new HashMap<>();
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
-    List<UploadRow> rows = new ArrayList<>();
-    while (rowMatcher.find()) {
-      int rowNumber = parseIntSafe(rowMatcher.group(1));
-      String rowXml = rowMatcher.group(2);
+    List<UploadRow> uploadRows = new ArrayList<>();
+    for (ParsedRow parsedRow : rows) {
+      int rowNumber = parsedRow.rowNumber();
+      List<ParsedCell> rowCells = parsedRow.cells();
 
-      if (!headerDetected && rowHasHeader(rowXml, sharedStrings)) {
+      if (!headerDetected && rowHasHeader(rowCells)) {
         headerDetected = true;
         headerRow = rowNumber;
         List<String> parsedHeaderWarnings = new ArrayList<>();
-        speciesByColumn = parseSpeciesHeaders(rowXml, sharedStrings, rowNumber, parsedHeaderWarnings);
+        speciesByColumn = parseSpeciesHeaders(rowCells, rowNumber, parsedHeaderWarnings);
 
         if (speciesByColumn.isEmpty()) {
           errors.add("Header row %d does not include recognized species columns.".formatted(rowNumber));
@@ -162,22 +151,19 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         continue;
       }
 
-      if (rowNumber <= headerRow || headerRow < 0 || !rowHasAnyData(rowXml, sharedStrings)) {
+      if (rowNumber <= headerRow || headerRow < 0 || !rowHasAnyData(rowCells)) {
         continue;
       }
 
       dataRows++;
 
       String grade = "";
-      List<ParsedCell> rowCells = new ArrayList<>();
-      Matcher cellMatcher = CELL_PATTERN.matcher(rowXml);
       boolean foundGrade = false;
       boolean foundNumericValue = false;
 
-      while (cellMatcher.find()) {
-        int column = columnIndex(cellMatcher.group(2));
-        String value = extractCellValue(cellMatcher.group(1), sharedStrings);
-        rowCells.add(new ParsedCell(column, value));
+      for (ParsedCell cell : rowCells) {
+        int column = cell.column();
+        String value = cell.value();
         if (column == 1) {
           grade = value.trim();
           foundGrade = true;
@@ -218,7 +204,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         }
 
         if (isNumeric(value)) {
-          rows.add(
+          uploadRows.add(
               new UploadRow(
                   species,
                   grade,
@@ -245,25 +231,23 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     }
 
     return new UploadParseResult(
-        dataRows, numericCells, headerDetected, errors, warnings, rows);
+        dataRows, numericCells, headerDetected, errors, warnings, uploadRows);
   }
 
   private static Map<Integer, String> parseSpeciesHeaders(
-      String rowXml,
-      List<String> sharedStrings,
+      List<ParsedCell> cells,
       int rowNumber,
       List<String> warnings) {
     Map<Integer, String> speciesByColumn = new HashMap<>();
     Set<String> observedSpecies = new HashSet<>();
 
-    Matcher cellMatcher = CELL_PATTERN.matcher(rowXml);
-    while (cellMatcher.find()) {
-      int column = columnIndex(cellMatcher.group(2));
+    for (ParsedCell cell : cells) {
+      int column = cell.column();
       if (column <= 1) {
         continue;
       }
 
-      String value = extractCellValue(cellMatcher.group(1), sharedStrings);
+      String value = cell.value();
       if (!value.isBlank()) {
         String normalizedValue = value.trim();
         if (observedSpecies.contains(normalizedValue.toUpperCase())) {
@@ -297,11 +281,9 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return speciesByColumn;
   }
 
-  private static boolean rowHasHeader(String rowXml, List<String> sharedStrings) {
-    Matcher cellMatcher = CELL_PATTERN.matcher(rowXml);
-    while (cellMatcher.find()) {
-      String value = extractCellValue(cellMatcher.group(1), sharedStrings);
-      if (containsExpectedHeader(value)) {
+  private static boolean rowHasHeader(List<ParsedCell> cells) {
+    for (ParsedCell cell : cells) {
+      if (containsExpectedHeader(cell.value())) {
         return true;
       }
     }
@@ -309,11 +291,9 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return false;
   }
 
-  private static boolean rowHasAnyData(String rowXml, List<String> sharedStrings) {
-    Matcher cellMatcher = CELL_PATTERN.matcher(rowXml);
-    while (cellMatcher.find()) {
-      String value = extractCellValue(cellMatcher.group(1), sharedStrings);
-      if (!value.isBlank()) {
+  private static boolean rowHasAnyData(List<ParsedCell> cells) {
+    for (ParsedCell cell : cells) {
+      if (!cell.value().isBlank()) {
         return true;
       }
     }
@@ -321,12 +301,10 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return false;
   }
 
-  private static int countNumericCells(String rowXml, List<String> sharedStrings) {
+  private static int countNumericCells(List<ParsedCell> cells) {
     int count = 0;
-    Matcher cellMatcher = CELL_PATTERN.matcher(rowXml);
-    while (cellMatcher.find()) {
-      String value = extractCellValue(cellMatcher.group(1), sharedStrings);
-      if (isNumeric(value)) {
+    for (ParsedCell cell : cells) {
+      if (isNumeric(cell.value())) {
         count++;
       }
     }
@@ -346,25 +324,6 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     } catch (NumberFormatException ex) {
       return false;
     }
-  }
-
-  private static String extractCellValue(String cellXml, List<String> sharedStrings) {
-    Matcher valueMatcher = VALUE_PATTERN.matcher(cellXml);
-    if (!valueMatcher.find()) {
-      return "";
-    }
-
-    String rawValue = valueMatcher.group(1).trim();
-    if (!cellXml.contains("t=\"s\"")) {
-      return rawValue;
-    }
-
-    int stringIndex = parseIntSafe(rawValue);
-    if (stringIndex < 0 || stringIndex >= sharedStrings.size()) {
-      return "";
-    }
-
-    return sharedStrings.get(stringIndex);
   }
 
   private static boolean containsExpectedHeader(String value) {
@@ -391,16 +350,6 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return value == null ? "" : value.strip();
   }
 
-  private static List<String> parseSharedStrings(String sharedStringsXml) {
-    List<String> sharedStrings = new ArrayList<>();
-    Matcher matcher = SHARED_STRING_PATTERN.matcher(sharedStringsXml);
-    while (matcher.find()) {
-      sharedStrings.add(matcher.group(1));
-    }
-
-    return sharedStrings;
-  }
-
   private static int parseIntSafe(String value) {
     try {
       return Integer.parseInt(value);
@@ -421,6 +370,199 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
   private static String normalizeNumericValue(String value) {
     return value.replace(",", "").strip();
+  }
+
+  private static boolean isWorksheetEntry(String entryName) {
+    if (entryName == null
+        || !entryName.startsWith(WORKSHEET_ENTRY_PREFIX)
+        || !entryName.endsWith(XML_EXTENSION)) {
+      return false;
+    }
+
+    String sheetNumber =
+        entryName.substring(
+            WORKSHEET_ENTRY_PREFIX.length(), entryName.length() - XML_EXTENSION.length());
+    if (sheetNumber.isBlank()) {
+      return false;
+    }
+
+    for (int index = 0; index < sheetNumber.length(); index++) {
+      if (!Character.isDigit(sheetNumber.charAt(index))) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private static List<ParsedRow> parseSheetRows(byte[] sheetBytes, List<String> sharedStrings)
+      throws IOException {
+    List<ParsedRow> rows = new ArrayList<>();
+    XMLInputFactory factory = newXmlInputFactory();
+
+    try {
+      XMLStreamReader reader =
+          factory.createXMLStreamReader(new ByteArrayInputStream(sheetBytes));
+      int rowNumber = -1;
+      List<ParsedCell> cells = null;
+      int cellColumn = -1;
+      String cellType = null;
+      StringBuilder cellValue = null;
+      boolean readingCellValue = false;
+
+      while (reader.hasNext()) {
+        int event = reader.next();
+        if (event == XMLStreamConstants.START_ELEMENT) {
+          String elementName = reader.getLocalName();
+          if ("row".equals(elementName)) {
+            rowNumber = parseIntSafe(attribute(reader, "r"));
+            cells = new ArrayList<>();
+          } else if (cells != null && "c".equals(elementName)) {
+            cellColumn = columnIndexFromCellReference(attribute(reader, "r"));
+            cellType = attribute(reader, "t");
+            cellValue = new StringBuilder();
+          } else if (cellValue != null
+              && ("v".equals(elementName)
+                  || ("t".equals(elementName) && "inlineStr".equals(cellType)))) {
+            readingCellValue = true;
+          }
+        } else if ((event == XMLStreamConstants.CHARACTERS || event == XMLStreamConstants.CDATA)
+            && readingCellValue
+            && cellValue != null) {
+          cellValue.append(reader.getText());
+        } else if (event == XMLStreamConstants.END_ELEMENT) {
+          String elementName = reader.getLocalName();
+          if (cellValue != null
+              && ("v".equals(elementName)
+                  || ("t".equals(elementName) && "inlineStr".equals(cellType)))) {
+            readingCellValue = false;
+          } else if ("c".equals(elementName) && cells != null) {
+            if (cellColumn > 0) {
+              cells.add(
+                  new ParsedCell(
+                      cellColumn,
+                      resolveCellValue(cellValue == null ? "" : cellValue.toString(), cellType, sharedStrings)));
+            }
+            cellColumn = -1;
+            cellType = null;
+            cellValue = null;
+            readingCellValue = false;
+          } else if ("row".equals(elementName) && cells != null) {
+            if (rowNumber >= 0) {
+              rows.add(new ParsedRow(rowNumber, List.copyOf(cells)));
+            }
+            rowNumber = -1;
+            cells = null;
+          }
+        }
+      }
+
+      reader.close();
+      return rows;
+    } catch (XMLStreamException ex) {
+      throw new IOException("Could not parse workbook worksheet XML.", ex);
+    }
+  }
+
+  private static String resolveCellValue(
+      String rawValue, String cellType, List<String> sharedStrings) {
+    String normalizedRawValue = rawValue == null ? "" : rawValue.trim();
+    if (!"s".equals(cellType)) {
+      return normalizedRawValue;
+    }
+
+    int stringIndex = parseIntSafe(normalizedRawValue);
+    if (stringIndex < 0 || stringIndex >= sharedStrings.size()) {
+      return "";
+    }
+
+    return sharedStrings.get(stringIndex);
+  }
+
+  private static List<String> parseSharedStrings(byte[] sharedStringBytes) throws IOException {
+    List<String> sharedStrings = new ArrayList<>();
+    XMLInputFactory factory = newXmlInputFactory();
+
+    try {
+      XMLStreamReader reader =
+          factory.createXMLStreamReader(new ByteArrayInputStream(sharedStringBytes));
+      boolean insideSharedString = false;
+      boolean insideText = false;
+      StringBuilder currentValue = null;
+
+      while (reader.hasNext()) {
+        int event = reader.next();
+        if (event == XMLStreamConstants.START_ELEMENT) {
+          String elementName = reader.getLocalName();
+          if ("si".equals(elementName)) {
+            insideSharedString = true;
+            currentValue = new StringBuilder();
+          } else if (insideSharedString && "t".equals(elementName)) {
+            insideText = true;
+          }
+        } else if ((event == XMLStreamConstants.CHARACTERS || event == XMLStreamConstants.CDATA)
+            && insideText
+            && currentValue != null) {
+          currentValue.append(reader.getText());
+        } else if (event == XMLStreamConstants.END_ELEMENT) {
+          String elementName = reader.getLocalName();
+          if ("t".equals(elementName)) {
+            insideText = false;
+          } else if ("si".equals(elementName) && insideSharedString) {
+            sharedStrings.add(currentValue == null ? "" : currentValue.toString());
+            insideSharedString = false;
+            currentValue = null;
+          }
+        }
+      }
+
+      reader.close();
+      return sharedStrings;
+    } catch (XMLStreamException ex) {
+      throw new IOException("Could not parse workbook shared strings XML.", ex);
+    }
+  }
+
+  private static XMLInputFactory newXmlInputFactory() {
+    XMLInputFactory factory = XMLInputFactory.newFactory();
+    setXmlProperty(factory, XMLInputFactory.SUPPORT_DTD, false);
+    setXmlProperty(factory, XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+    return factory;
+  }
+
+  private static void setXmlProperty(XMLInputFactory factory, String property, Object value) {
+    try {
+      factory.setProperty(property, value);
+    } catch (IllegalArgumentException ex) {
+      // Some StAX implementations do not expose all hardening flags.
+    }
+  }
+
+  private static String attribute(XMLStreamReader reader, String localName) {
+    for (int index = 0; index < reader.getAttributeCount(); index++) {
+      if (localName.equals(reader.getAttributeLocalName(index))) {
+        return reader.getAttributeValue(index);
+      }
+    }
+
+    return null;
+  }
+
+  private static int columnIndexFromCellReference(String cellReference) {
+    if (cellReference == null || cellReference.isBlank()) {
+      return -1;
+    }
+
+    StringBuilder column = new StringBuilder();
+    for (int index = 0; index < cellReference.length(); index++) {
+      char character = cellReference.charAt(index);
+      if (!Character.isLetter(character)) {
+        break;
+      }
+      column.append(Character.toUpperCase(character));
+    }
+
+    return column.isEmpty() ? -1 : columnIndex(column.toString());
   }
 
   private static String columnToLetter(int index) {
@@ -447,5 +589,5 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return buffer.toByteArray();
   }
 
-  private record ParsedWorkbook(String sheetXml, List<String> sharedStrings) {}
+  private record ParsedWorkbook(List<ParsedRow> rows) {}
 }
