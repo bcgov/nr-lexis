@@ -251,7 +251,8 @@ public class LexisUploadController {
   public ResponseEntity<ApplicationSubmissionImportResultDto> applicationSubmissionValidation(
       @RequestParam(name = "file", required = false) MultipartFile file,
       @RequestParam(name = "formFile", required = false) MultipartFile formFile,
-      @RequestParam(name = "userReference", required = false) String userReference) {
+      @RequestParam(name = "userReference", required = false) String userReference,
+      Authentication authentication) {
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null || uploadFile.isEmpty()) {
       return ResponseEntity.badRequest()
