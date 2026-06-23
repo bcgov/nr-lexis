@@ -195,6 +195,17 @@ test.describe('real TEST IDIR provincial application approver', () => {
     expect(emailResponse.message ?? '').toContain('Application status email could not be prepared.')
   })
 
+  test('uses distinct disposable applications for mutating checks when enabled', () => {
+    test.skip(
+      !TEST_IDIR_ENABLE_MUTATION_TESTS,
+      'IDIR mutation checks are disabled for scheduled runs.',
+    )
+
+    expect(TEST_IDIR_APPROVE_APPLICATION_NUMBER).not.toBe('')
+    expect(TEST_IDIR_REJECT_APPLICATION_NUMBER).not.toBe('')
+    expect(TEST_IDIR_APPROVE_APPLICATION_NUMBER).not.toBe(TEST_IDIR_REJECT_APPLICATION_NUMBER)
+  })
+
   test('can approve a dedicated application when configured', async ({ page }) => {
     test.skip(
       !TEST_IDIR_ENABLE_MUTATION_TESTS || !TEST_IDIR_APPROVE_APPLICATION_NUMBER,

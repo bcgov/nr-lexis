@@ -33,7 +33,8 @@ regression coverage uses a separate TEST-only Playwright config.
   application detail checks. It falls back to `E2E_PROVINCIAL_APPLICATION_NUMBER` when unset.
 - `E2E_IDIR_APPROVE_APPLICATION_NUMBER` and `E2E_IDIR_REJECT_APPLICATION_NUMBER` can be set as
   `test` environment variables to enable opt-in mutation checks against disposable TEST
-  applications.
+  applications. These must be distinct application numbers because approve and reject are consuming
+  state changes.
 - IDIR approve/reject mutation checks only run when the `Real Auth Regression` workflow is manually
   dispatched with `run_idir_mutations=true`; scheduled runs leave those checks skipped so they do
   not repeatedly consume the same disposable applications.
