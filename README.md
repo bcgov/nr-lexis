@@ -2,7 +2,7 @@
 [![Merge](https://github.com/bcgov/nr-lexis/actions/workflows/merge.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/merge.yml)
 [![Analysis](https://github.com/bcgov/nr-lexis/actions/workflows/analysis.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/analysis.yml)
 [![Scheduled](https://github.com/bcgov/nr-lexis/actions/workflows/scheduled.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/scheduled.yml)
-[![Real Auth Regression](https://github.com/bcgov/nr-lexis/actions/workflows/real-auth-regression.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/real-auth-regression.yml)
+[![Regression](https://github.com/bcgov/nr-lexis/actions/workflows/regression.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/regression.yml)
 
 # LEXIS - Log Exemption Information System
 
@@ -120,6 +120,14 @@ Regardless of option:
 - Open `http://localhost:3000` and complete the Cognito login round trip.
 
 If the backend starts but authenticated API calls fail, check network access, `application-local.yml` credentials, Cognito config, and the truststore path.
+
+## CI regression
+
+The `Regression` GitHub Actions workflow runs weekly and manually against TEST. It assumes an AWS
+role through GitHub OIDC, reads the TEST IDIR admin credential from AWS Secrets Manager, and passes
+the masked credential values into the `npm run e2e:regression` command. See
+[frontend/e2e/README.md](frontend/e2e/README.md) for the required AWS secret shape and GitHub
+environment variable.
 
 ## Component docs
 

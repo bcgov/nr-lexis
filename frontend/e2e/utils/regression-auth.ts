@@ -15,66 +15,39 @@ type ValidationResponse = {
   errors?: unknown
 }
 
-type RealLoginProvider = 'business-bceid' | 'idir'
-
 type RealCredentials = {
   username: string
   password: string
+}
+
+type LoginConfig = {
+  buttonName: RegExp
+  label: string
+  usernameEnv: string
+  passwordEnv: string
 }
 
 const baseOrigin = new URL(E2E_BASE_URL).origin
 const CREDENTIAL_SCREEN_TIMEOUT_MS = 5_000
 const LOGIN_SESSION_TIMEOUT_MS = 30_000
 
-export const TEST_PROVINCIAL_APPLICATION_NUMBER =
-  process.env.E2E_PROVINCIAL_APPLICATION_NUMBER?.trim() ?? ''
-export const TEST_UNOWNED_APPLICATION_NUMBER =
-  process.env.E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER?.trim() ?? ''
-export const TEST_IDIR_APPLICATION_NUMBER =
-  process.env.E2E_IDIR_APPLICATION_NUMBER?.trim() || TEST_PROVINCIAL_APPLICATION_NUMBER
-export const TEST_IDIR_APPROVE_APPLICATION_NUMBER =
-  process.env.E2E_IDIR_APPROVE_APPLICATION_NUMBER?.trim() ?? ''
-export const TEST_IDIR_REJECT_APPLICATION_NUMBER =
-  process.env.E2E_IDIR_REJECT_APPLICATION_NUMBER?.trim() ?? ''
-export const TEST_IDIR_ENABLE_MUTATION_TESTS =
-  process.env.E2E_IDIR_ENABLE_MUTATION_TESTS?.trim().toLowerCase() === 'true'
 export const TEST_IDIR_EXPECTED_PRINCIPAL =
-  process.env.E2E_IDIR_EXPECTED_PRINCIPAL?.trim() || 'MOF_FAMT'
+  process.env.E2E_IDIR_EXPECTED_PRINCIPAL?.trim() ?? 'MOF_FAMT'
 
-const providerConfig: Record<
-  RealLoginProvider,
-  {
-    buttonName: RegExp
-    label: string
-    usernameEnv: string
-    passwordEnv: string
-  }
-> = {
-  'business-bceid': {
-    buttonName: /log in with business bceid/i,
-    label: 'Business BCeID',
-    usernameEnv: 'E2E_BCEID_USER',
-    passwordEnv: 'E2E_BCEID_PASSWORD',
-  },
-  idir: {
-    buttonName: /log in with idir/i,
-    label: 'IDIR',
-    usernameEnv: 'E2E_IDIR_USER',
-    passwordEnv: 'E2E_IDIR_PASSWORD',
-  },
+const idirLoginConfig: LoginConfig = {
+  buttonName: /log in with idir/i,
+  label: 'IDIR',
+  usernameEnv: 'E2E_IDIR_USER',
+  passwordEnv: 'E2E_IDIR_PASSWORD',
 }
 
-const hasCredentials = (provider: RealLoginProvider): boolean => {
-  const { usernameEnv, passwordEnv } = providerConfig[provider]
+export const hasIdirCredentials = (): boolean => {
+  const { usernameEnv, passwordEnv } = idirLoginConfig
   return Boolean(process.env[usernameEnv]?.trim() && process.env[passwordEnv]?.trim())
 }
 
-export const hasBusinessBceidCredentials = (): boolean => hasCredentials('business-bceid')
-
-export const hasIdirCredentials = (): boolean => hasCredentials('idir')
-
-const credentialsForProvider = (provider: RealLoginProvider): RealCredentials => {
-  const { usernameEnv, passwordEnv } = providerConfig[provider]
+const idirCredentials = (): RealCredentials => {
+  const { usernameEnv, passwordEnv } = idirLoginConfig
   return {
     username: process.env[usernameEnv]?.trim() ?? '',
     password: process.env[passwordEnv] ?? '',
@@ -163,9 +136,9 @@ const fillCredentialScreen = async (
   return true
 }
 
-export const loginWithProvider = async (page: Page, provider: RealLoginProvider): Promise<void> => {
-  const { buttonName, label } = providerConfig[provider]
-  const { username, password } = credentialsForProvider(provider)
+export const loginWithIdir = async (page: Page): Promise<void> => {
+  const { buttonName, label } = idirLoginConfig
+  const { username, password } = idirCredentials()
   await page.goto('/', { waitUntil: 'domcontentloaded' })
 
   if (await isSessionAuthenticated(page)) {
@@ -202,14 +175,6 @@ export const loginWithProvider = async (page: Page, provider: RealLoginProvider)
   }
 }
 
-export const loginWithBusinessBceid = async (page: Page): Promise<void> => {
-  await loginWithProvider(page, 'business-bceid')
-}
-
-export const loginWithIdir = async (page: Page): Promise<void> => {
-  await loginWithProvider(page, 'idir')
-}
-
 export const collectApiServerErrors = (page: Page): string[] => {
   const errors: string[] = []
   page.on('response', (response) => {
@@ -233,11 +198,6 @@ export const expectAccessiblePage = async (
   await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
 }
 
-export const expectRouteUnauthorized = async (page: Page, path: string): Promise<void> => {
-  await page.goto(path, { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: 'Unauthorized' })).toBeVisible()
-}
-
 const csrfHeaders = async (page: Page): Promise<Record<string, string>> => {
   const cookies = await page.context().cookies()
   const xsrfCookie = cookies.find((cookie) => cookie.name === 'XSRF-TOKEN')
@@ -257,18 +217,6 @@ export const postWithCsrf = async (
     headers: await csrfHeaders(page),
     failOnStatusCode: false,
   })
-}
-
-export const expectForbiddenPost = async (
-  page: Page,
-  path: string,
-  options: {
-    data?: Record<string, unknown>
-    form?: Record<string, string>
-  } = {},
-): Promise<void> => {
-  const response = await postWithCsrf(page, path, options)
-  expect(response.status(), `${path} should be forbidden for this user`).toBe(403)
 }
 
 export const expectInvalidApplicationCreateValidation = async (

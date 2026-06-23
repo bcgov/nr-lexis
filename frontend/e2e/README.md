@@ -1,6 +1,6 @@
 # Playwright E2E Smoke
 
-The default suite validates core frontend availability in deployment environments. Real-role
+The default suite validates core frontend availability in deployment environments. Credentialed
 regression coverage uses a separate TEST-only Playwright config.
 
 ## What it covers
@@ -8,7 +8,7 @@ regression coverage uses a separate TEST-only Playwright config.
 - Landing/login shell renders.
 - Unauthenticated users cannot directly access protected routes.
 - Authenticated route and workflow coverage is handled by unit/integration tests, environment-backed
-  manual smoke testing, and TEST real-auth regression configs.
+  manual smoke testing, and TEST credentialed regression configs.
 
 ## Execution model
 
@@ -16,41 +16,40 @@ regression coverage uses a separate TEST-only Playwright config.
 - If `E2E_BASE_URL` is a deployed URL in CI, Playwright does not start a local `webServer`.
 - The default config only runs `smoke.spec.ts`. Local role simulation is intentionally not
   supported.
-- `playwright.real-bceid.config.ts` runs the TEST Business BCeID provincial submitter regression
-  specs.
-- `playwright.real-idir.config.ts` runs the TEST IDIR provincial application approver regression
-  specs.
+- `playwright.regression.config.ts` runs the scheduled TEST IDIR admin regression specs.
 
 ## CI setup
 
-- `E2E_BCEID_USER` and `E2E_BCEID_PASSWORD` must be set as `test` environment secrets.
-- `E2E_IDIR_USER` and `E2E_IDIR_PASSWORD` should be set as `test` environment secrets when
-  enabling IDIR coverage. Until they exist, the TEST IDIR job exits successfully after logging that
-  it was skipped.
-- `E2E_IDIR_EXPECTED_PRINCIPAL` can be set as a `test` environment variable when the IDIR test
-  account changes. It defaults to `MOF_FAMT`.
-- `E2E_PROVINCIAL_APPLICATION_NUMBER` and `E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER` can be set as
-  `test` environment variables to enable owned/unowned application detail checks.
-- `E2E_IDIR_APPLICATION_NUMBER` can be set as a `test` environment variable to enable IDIR
-  application detail checks. It falls back to `E2E_PROVINCIAL_APPLICATION_NUMBER` when unset.
-- `E2E_IDIR_APPROVE_APPLICATION_NUMBER` and `E2E_IDIR_REJECT_APPLICATION_NUMBER` can be set as
-  `test` environment variables to enable opt-in mutation checks against disposable TEST
-  applications. These must be distinct application numbers because approve and reject are consuming
-  state changes.
-- IDIR approve/reject mutation checks only run when the `Real Auth Regression` workflow is manually
-  dispatched with `run_idir_mutations=true`; scheduled runs leave those checks skipped so they do
-  not repeatedly consume the same disposable applications.
-- Real-auth jobs are scoped to the `test` GitHub environment, so dev preview deploys stay on smoke
-  coverage.
-- CI suppresses Playwright screenshots, video, and traces for real-auth suites because those runs
-  type real test credentials.
+- The scheduled/manual `Regression` workflow reads TEST IDIR credentials from AWS Secrets Manager
+  before running Playwright.
+- The `test` GitHub environment must define `AWS_SECRETS_MANAGER_ROLE_ARN` as a variable for a
+  GitHub OIDC assumable AWS role with `secretsmanager:GetSecretValue` access to the IDIR secret.
+- The workflow fetches the `test/mof_famt` secret from AWS Secrets Manager in `ca-central-1`.
+- Do not configure IDIR username/password as GitHub secrets. The workflow masks the values returned
+  from AWS and passes them into the regression command as `E2E_IDIR_USER`,
+  `E2E_IDIR_PASSWORD`, and `E2E_IDIR_EXPECTED_PRINCIPAL`.
+- The AWS secret value must be JSON with this shape:
+
+```json
+{
+  "username": "idir-user",
+  "password": "idir-password",
+  "OSID (online service id)": "MOF_FAMT"
+}
+```
+
+- The IDIR suite asserts the authenticated principal includes the secret's online service ID and
+  that the account has admin grants.
+- Credentialed regression jobs are scoped to the `test` GitHub environment, so dev preview deploys
+  stay on smoke coverage.
+- CI suppresses Playwright screenshots, video, and traces for the credentialed regression suite
+  because those runs type real test credentials.
 
 ## Run commands
 
 ```bash
 npm run e2e
-npm run e2e:real-bceid
-npm run e2e:real-idir
+npm run e2e:regression
 npm run e2e:ui
 npm run e2e:report
 ```
@@ -59,6 +58,9 @@ Override base URL when needed:
 
 ```bash
 E2E_BASE_URL=http://127.0.0.1:4173 npm run e2e
-E2E_BASE_URL=https://nr-lexis-test.apps.silver.devops.gov.bc.ca npm run e2e:real-bceid
-E2E_BASE_URL=https://nr-lexis-test.apps.silver.devops.gov.bc.ca npm run e2e:real-idir
+E2E_BASE_URL=https://nr-lexis-test.apps.silver.devops.gov.bc.ca npm run e2e:regression
 ```
+
+For local `e2e:regression` runs, export `E2E_IDIR_USER`, `E2E_IDIR_PASSWORD`, and
+`E2E_IDIR_EXPECTED_PRINCIPAL` in your shell from approved secure sources. The local command does not
+fetch AWS Secrets Manager values.
