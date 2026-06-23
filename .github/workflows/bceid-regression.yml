@@ -1,9 +1,15 @@
-name: BCeID Regression
+name: Real Auth Regression
 
 on:
   schedule:
     - cron: "0 10 * * 3" # Wednesdays at 10:00 UTC; 3 AM Pacific during daylight time.
   workflow_dispatch:
+    inputs:
+      run_idir_mutations:
+        description: "Run opt-in IDIR approve/reject tests against disposable TEST applications."
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}
@@ -50,8 +56,8 @@ jobs:
           E2E_BCEID_USER: ${{ secrets.E2E_BCEID_USER }}
           E2E_BCEID_PASSWORD: ${{ secrets.E2E_BCEID_PASSWORD }}
         run: |
-          echo "::add-mask::$E2E_BCEID_USER"
-          echo "::add-mask::$E2E_BCEID_PASSWORD"
+          if [ -n "$E2E_BCEID_USER" ]; then echo "::add-mask::$E2E_BCEID_USER"; fi
+          if [ -n "$E2E_BCEID_PASSWORD" ]; then echo "::add-mask::$E2E_BCEID_PASSWORD"; fi
           test -n "$E2E_BCEID_USER" || (echo "E2E_BCEID_USER is required for TEST BCeID regression." && exit 1)
           test -n "$E2E_BCEID_PASSWORD" || (echo "E2E_BCEID_PASSWORD is required for TEST BCeID regression." && exit 1)
 
@@ -69,5 +75,68 @@ jobs:
         if: (! cancelled())
         with:
           name: playwright-real-bceid-${{ matrix.project }}-test
+          path: frontend/playwright-report
+          retention-days: 7
+
+  idir-regression:
+    name: TEST IDIR Provincial Approver (${{ matrix.project }})
+    environment: test
+    defaults:
+      run:
+        working-directory: frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium]
+    env:
+      E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.silver.devops.gov.bc.ca
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps ${{ matrix.project }}
+
+      - name: Wait for deployed frontend
+        run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL"
+
+      - name: Check IDIR credentials
+        env:
+          E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
+          E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
+        run: |
+          if [ -n "$E2E_IDIR_USER" ]; then echo "::add-mask::$E2E_IDIR_USER"; fi
+          if [ -n "$E2E_IDIR_PASSWORD" ]; then echo "::add-mask::$E2E_IDIR_PASSWORD"; fi
+          test -n "$E2E_IDIR_USER" || (echo "E2E_IDIR_USER is required for TEST IDIR regression." && exit 1)
+          test -n "$E2E_IDIR_PASSWORD" || (echo "E2E_IDIR_PASSWORD is required for TEST IDIR regression." && exit 1)
+
+      - name: Run TEST IDIR provincial approver suite
+        env:
+          E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
+          E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
+          E2E_IDIR_APPLICATION_NUMBER: ${{ vars.E2E_IDIR_APPLICATION_NUMBER }}
+          E2E_IDIR_APPROVE_APPLICATION_NUMBER: ${{ vars.E2E_IDIR_APPROVE_APPLICATION_NUMBER }}
+          E2E_IDIR_REJECT_APPLICATION_NUMBER: ${{ vars.E2E_IDIR_REJECT_APPLICATION_NUMBER }}
+          E2E_IDIR_ENABLE_MUTATION_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_idir_mutations && 'true' || 'false' }}
+          E2E_PROVINCIAL_APPLICATION_NUMBER: ${{ vars.E2E_PROVINCIAL_APPLICATION_NUMBER }}
+          CI: "true"
+        run: |
+          npm run e2e:real-idir -- --reporter=html,list
+
+      - uses: actions/upload-artifact@v7
+        if: (! cancelled())
+        with:
+          name: playwright-real-idir-${{ matrix.project }}-test
           path: frontend/playwright-report
           retention-days: 7

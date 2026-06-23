@@ -14,6 +14,13 @@ type ValidationResponse = {
   errors?: unknown
 }
 
+type RealLoginProvider = 'business-bceid' | 'idir'
+
+type RealCredentials = {
+  username: string
+  password: string
+}
+
 const baseOrigin = new URL(E2E_BASE_URL).origin
 const CREDENTIAL_SCREEN_TIMEOUT_MS = 5_000
 const LOGIN_SESSION_TIMEOUT_MS = 30_000
@@ -22,14 +29,54 @@ export const TEST_PROVINCIAL_APPLICATION_NUMBER =
   process.env.E2E_PROVINCIAL_APPLICATION_NUMBER?.trim() ?? ''
 export const TEST_UNOWNED_APPLICATION_NUMBER =
   process.env.E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER?.trim() ?? ''
+export const TEST_IDIR_APPLICATION_NUMBER =
+  process.env.E2E_IDIR_APPLICATION_NUMBER?.trim() || TEST_PROVINCIAL_APPLICATION_NUMBER
+export const TEST_IDIR_APPROVE_APPLICATION_NUMBER =
+  process.env.E2E_IDIR_APPROVE_APPLICATION_NUMBER?.trim() ?? ''
+export const TEST_IDIR_REJECT_APPLICATION_NUMBER =
+  process.env.E2E_IDIR_REJECT_APPLICATION_NUMBER?.trim() ?? ''
+export const TEST_IDIR_ENABLE_MUTATION_TESTS =
+  process.env.E2E_IDIR_ENABLE_MUTATION_TESTS?.trim().toLowerCase() === 'true'
 
-export const hasBusinessBceidCredentials = (): boolean =>
-  Boolean(process.env.E2E_BCEID_USER?.trim() && process.env.E2E_BCEID_PASSWORD?.trim())
+const providerConfig: Record<
+  RealLoginProvider,
+  {
+    buttonName: RegExp
+    label: string
+    usernameEnv: string
+    passwordEnv: string
+  }
+> = {
+  'business-bceid': {
+    buttonName: /log in with business bceid/i,
+    label: 'Business BCeID',
+    usernameEnv: 'E2E_BCEID_USER',
+    passwordEnv: 'E2E_BCEID_PASSWORD',
+  },
+  idir: {
+    buttonName: /log in with idir/i,
+    label: 'IDIR',
+    usernameEnv: 'E2E_IDIR_USER',
+    passwordEnv: 'E2E_IDIR_PASSWORD',
+  },
+}
 
-const businessBceidCredentials = (): { username: string; password: string } => ({
-  username: process.env.E2E_BCEID_USER?.trim() ?? '',
-  password: process.env.E2E_BCEID_PASSWORD ?? '',
-})
+const hasCredentials = (provider: RealLoginProvider): boolean => {
+  const { usernameEnv, passwordEnv } = providerConfig[provider]
+  return Boolean(process.env[usernameEnv]?.trim() && process.env[passwordEnv]?.trim())
+}
+
+export const hasBusinessBceidCredentials = (): boolean => hasCredentials('business-bceid')
+
+export const hasIdirCredentials = (): boolean => hasCredentials('idir')
+
+const credentialsForProvider = (provider: RealLoginProvider): RealCredentials => {
+  const { usernameEnv, passwordEnv } = providerConfig[provider]
+  return {
+    username: process.env[usernameEnv]?.trim() ?? '',
+    password: process.env[passwordEnv] ?? '',
+  }
+}
 
 const isSessionAuthenticated = async (page: Page): Promise<boolean> => {
   const response = await page.request
@@ -113,15 +160,16 @@ const fillCredentialScreen = async (
   return true
 }
 
-export const loginWithBusinessBceid = async (page: Page): Promise<void> => {
-  const { username, password } = businessBceidCredentials()
+export const loginWithProvider = async (page: Page, provider: RealLoginProvider): Promise<void> => {
+  const { buttonName, label } = providerConfig[provider]
+  const { username, password } = credentialsForProvider(provider)
   await page.goto('/', { waitUntil: 'domcontentloaded' })
 
   if (await isSessionAuthenticated(page)) {
     return
   }
 
-  await page.getByRole('button', { name: /log in with business bceid/i }).click()
+  await page.getByRole('button', { name: buttonName }).click()
   await page.waitForLoadState('domcontentloaded').catch(() => undefined)
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -140,15 +188,23 @@ export const loginWithBusinessBceid = async (page: Page): Promise<void> => {
   try {
     await expect
       .poll(() => isSessionAuthenticated(page), {
-        message: 'Expected Business BCeID login to establish a LEXIS session.',
+        message: `Expected ${label} login to establish a LEXIS session.`,
         timeout: LOGIN_SESSION_TIMEOUT_MS,
       })
       .toBe(true)
   } catch {
     throw new Error(
-      `Business BCeID login did not establish a LEXIS session. Last page: ${await currentPageSummary(page)}.`,
+      `${label} login did not establish a LEXIS session. Last page: ${await currentPageSummary(page)}.`,
     )
   }
+}
+
+export const loginWithBusinessBceid = async (page: Page): Promise<void> => {
+  await loginWithProvider(page, 'business-bceid')
+}
+
+export const loginWithIdir = async (page: Page): Promise<void> => {
+  await loginWithProvider(page, 'idir')
 }
 
 export const collectApiServerErrors = (page: Page): string[] => {
