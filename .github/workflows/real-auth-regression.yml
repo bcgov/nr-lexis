@@ -107,9 +107,19 @@ jobs:
           if [ -n "$E2E_IDIR_PASSWORD" ]; then echo "::add-mask::$E2E_IDIR_PASSWORD"; fi
           if [ -n "$E2E_IDIR_USER" ] && [ -n "$E2E_IDIR_PASSWORD" ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### TEST IDIR regression"
+              echo ""
+              echo "IDIR credentials are configured. Running provincial approver coverage."
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
             echo "IDIR credentials are not configured; skipping TEST IDIR regression."
+            {
+              echo "### TEST IDIR regression"
+              echo ""
+              echo "Skipped because `E2E_IDIR_USER` and `E2E_IDIR_PASSWORD` are not configured in the `test` environment."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - uses: actions/setup-node@v6
