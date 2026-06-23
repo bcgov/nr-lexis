@@ -336,6 +336,26 @@ public class LexisApiAuthorizationCustomizer
           "/api/lexis/admin/uploads/lexis-xml/validation"
         },
         "uploadApplicationSubmission");
+    authorizeAction(
+        authorize,
+        HttpMethod.GET,
+        new String[] {"/api/lexis/rtm/emslogamv"},
+        "/lexisAgentAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {"/api/lexis/rtm/emslogamv"},
+        "/lexisAgentAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {"/api/lexis/rtm/emslogamv/preview"},
+        "/lexisAgentAdmin");
+    authorizeAction(
+        authorize,
+        HttpMethod.POST,
+        new String[] {"/api/lexis/rtm/emslogamv/upload"},
+        "/lexisAgentAdmin");
 
     authorizeAction(
         authorize,
