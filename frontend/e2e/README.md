@@ -27,6 +27,8 @@ regression coverage uses a separate TEST-only Playwright config.
 - `E2E_IDIR_USER` and `E2E_IDIR_PASSWORD` should be set as `test` environment secrets when
   enabling IDIR coverage. Until they exist, the TEST IDIR job exits successfully after logging that
   it was skipped.
+- `E2E_IDIR_EXPECTED_PRINCIPAL` can be set as a `test` environment variable when the IDIR test
+  account changes. It defaults to `MOF_FAMT`.
 - `E2E_PROVINCIAL_APPLICATION_NUMBER` and `E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER` can be set as
   `test` environment variables to enable owned/unowned application detail checks.
 - `E2E_IDIR_APPLICATION_NUMBER` can be set as a `test` environment variable to enable IDIR

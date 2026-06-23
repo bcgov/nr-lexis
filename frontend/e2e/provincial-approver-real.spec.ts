@@ -10,6 +10,7 @@ import {
   TEST_IDIR_APPLICATION_NUMBER,
   TEST_IDIR_APPROVE_APPLICATION_NUMBER,
   TEST_IDIR_ENABLE_MUTATION_TESTS,
+  TEST_IDIR_EXPECTED_PRINCIPAL,
   TEST_IDIR_REJECT_APPLICATION_NUMBER,
 } from './utils/real-auth'
 
@@ -35,6 +36,11 @@ const hasGrantedAction = (actions: string[], action: string): boolean => {
   const normalizedAction = action.toLowerCase().replace(/^\//, '')
   return actions.some((item) => item.toLowerCase().replace(/^\//, '') === normalizedAction)
 }
+
+const includesPrincipal = (actual: unknown, expected: string): boolean =>
+  String(actual ?? '')
+    .toUpperCase()
+    .includes(expected.toUpperCase())
 
 type ReviewStatusResponse = {
   updated?: boolean
@@ -105,6 +111,7 @@ test.describe('real TEST IDIR provincial application approver', () => {
     const grantedActions = asStringArray(capabilities.grantedActions)
 
     expect(capabilities.authenticated).toBe(true)
+    expect(includesPrincipal(capabilities.principal, TEST_IDIR_EXPECTED_PRINCIPAL)).toBe(true)
     expect(hasApplicationApproverRole(roles)).toBe(true)
     expect(hasProvincialSubmitterRole(roles)).toBe(false)
     expect(hasGrantedAction(grantedActions, '/applicationsReview')).toBe(true)

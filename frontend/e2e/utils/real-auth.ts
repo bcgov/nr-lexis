@@ -3,6 +3,7 @@ import { E2E_BASE_URL } from './index'
 
 type SessionCapabilities = {
   authenticated?: boolean
+  principal?: unknown
   roles?: unknown
   grantedActions?: unknown
 }
@@ -37,6 +38,8 @@ export const TEST_IDIR_REJECT_APPLICATION_NUMBER =
   process.env.E2E_IDIR_REJECT_APPLICATION_NUMBER?.trim() ?? ''
 export const TEST_IDIR_ENABLE_MUTATION_TESTS =
   process.env.E2E_IDIR_ENABLE_MUTATION_TESTS?.trim().toLowerCase() === 'true'
+export const TEST_IDIR_EXPECTED_PRINCIPAL =
+  process.env.E2E_IDIR_EXPECTED_PRINCIPAL?.trim() || 'MOF_FAMT'
 
 const providerConfig: Record<
   RealLoginProvider,

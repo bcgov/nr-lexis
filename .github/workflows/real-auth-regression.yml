@@ -137,6 +137,7 @@ jobs:
           E2E_IDIR_APPLICATION_NUMBER: ${{ vars.E2E_IDIR_APPLICATION_NUMBER }}
           E2E_IDIR_APPROVE_APPLICATION_NUMBER: ${{ vars.E2E_IDIR_APPROVE_APPLICATION_NUMBER }}
           E2E_IDIR_REJECT_APPLICATION_NUMBER: ${{ vars.E2E_IDIR_REJECT_APPLICATION_NUMBER }}
+          E2E_IDIR_EXPECTED_PRINCIPAL: ${{ vars.E2E_IDIR_EXPECTED_PRINCIPAL }}
           E2E_IDIR_ENABLE_MUTATION_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_idir_mutations && 'true' || 'false' }}
           E2E_PROVINCIAL_APPLICATION_NUMBER: ${{ vars.E2E_PROVINCIAL_APPLICATION_NUMBER }}
           CI: "true"
