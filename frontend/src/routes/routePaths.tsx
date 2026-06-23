@@ -30,6 +30,7 @@ import ProvincialReviewPage from '@/pages/ProvincialReview'
 import ProvincialSummaryPage from '@/pages/ProvincialSummary'
 import ReportsPage from '@/pages/Reports'
 import UnauthorizedPage from '@/pages/Unauthorized'
+import RTMEmsLogAmvPage from '@/pages/RTMEmsLogAmv'
 import type { RouteActionMatch, RouteRoleScope } from '@/routes/routeAccessTypes'
 
 export type RouteDescription = {
@@ -392,6 +393,17 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isNavigation: true,
+  },
+  {
+    path: '/admin/rtm/emslogamv',
+    id: 'Admin - RTM EMS AMV',
+    requiredActions: ['/lexisAgentAdmin'],
+    element: (
+      <Layout>
+        <RTMEmsLogAmvPage />
+      </Layout>
+    ),
+    isNavigation: false,
   },
   {
     path: '/admin/uploads',
