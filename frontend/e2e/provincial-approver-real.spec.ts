@@ -2,6 +2,7 @@ import { expect, type Page, test } from '@playwright/test'
 import {
   collectApiServerErrors,
   expectAccessiblePage,
+  expectRouteUnauthorized,
   fetchSessionCapabilities,
   hasIdirCredentials,
   loginWithIdir,
@@ -20,6 +21,15 @@ const asStringArray = (value: unknown): string[] =>
 
 const hasApplicationApproverRole = (roles: string[]): boolean =>
   roles.some((role) => role === 'APPLICATION_APPROVER' || role === 'LEXIS_APPLICATION_APPROVER')
+
+const hasProvincialSubmitterRole = (roles: string[]): boolean =>
+  roles.some(
+    (role) =>
+      role === 'PROVINCIAL_SUBMITTER' ||
+      role === 'LEXIS_PROVINCIAL_SUBMITTER' ||
+      role.startsWith('PROVINCIAL_SUBMITTER_') ||
+      role.startsWith('LEXIS_PROVINCIAL_SUBMITTER_'),
+  )
 
 const hasGrantedAction = (actions: string[], action: string): boolean => {
   const normalizedAction = action.toLowerCase().replace(/^\//, '')
@@ -83,11 +93,17 @@ test.describe('real TEST IDIR provincial application approver', () => {
 
     expect(capabilities.authenticated).toBe(true)
     expect(hasApplicationApproverRole(roles)).toBe(true)
+    expect(hasProvincialSubmitterRole(roles)).toBe(false)
     expect(hasGrantedAction(grantedActions, '/applicationsReview')).toBe(true)
+    expect(hasGrantedAction(grantedActions, 'uploadApplicationSubmission')).toBe(false)
 
     const provincialSection = page.locator(sideNavSection('Provincial'))
     await expect(provincialSection).toBeVisible()
     await expect(provincialSection.getByRole('link', { name: 'Application review' })).toBeVisible()
+    await expect(
+      provincialSection.getByRole('link', { name: 'Upload application submission' }),
+    ).toHaveCount(0)
+    await expectRouteUnauthorized(page, '/provincial/application/upload')
 
     expect(apiServerErrors).toEqual([])
   })
