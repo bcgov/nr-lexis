@@ -2,6 +2,7 @@
 [![Merge](https://github.com/bcgov/nr-lexis/actions/workflows/merge.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/merge.yml)
 [![Analysis](https://github.com/bcgov/nr-lexis/actions/workflows/analysis.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/analysis.yml)
 [![Scheduled](https://github.com/bcgov/nr-lexis/actions/workflows/scheduled.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/scheduled.yml)
+[![BCeID Regression](https://github.com/bcgov/nr-lexis/actions/workflows/bceid-regression.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/bceid-regression.yml)
 
 # LEXIS - Log Exemption Information System
 

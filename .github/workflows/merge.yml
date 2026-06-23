@@ -57,73 +57,12 @@ jobs:
     with:
       target: test
 
-  bceid-regression:
-    name: TEST BCeID Regression (${{ matrix.project }})
-    needs: [deploy-test]
-    environment: test
-    defaults:
-      run:
-        working-directory: frontend
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        project: [chromium]
-    env:
-      E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.silver.devops.gov.bc.ca
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: |
-          npm ci
-          npx playwright install --with-deps ${{ matrix.project }}
-
-      - name: Wait for deployed frontend
-        run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL"
-
-      - name: Check Business BCeID credentials
-        env:
-          E2E_BCEID_USER: ${{ secrets.E2E_BCEID_USER }}
-          E2E_BCEID_PASSWORD: ${{ secrets.E2E_BCEID_PASSWORD }}
-        run: |
-          echo "::add-mask::$E2E_BCEID_USER"
-          echo "::add-mask::$E2E_BCEID_PASSWORD"
-          test -n "$E2E_BCEID_USER" || (echo "E2E_BCEID_USER is required for TEST BCeID regression." && exit 1)
-          test -n "$E2E_BCEID_PASSWORD" || (echo "E2E_BCEID_PASSWORD is required for TEST BCeID regression." && exit 1)
-
-      - name: Run TEST Business BCeID provincial submitter suite
-        env:
-          E2E_BCEID_USER: ${{ secrets.E2E_BCEID_USER }}
-          E2E_BCEID_PASSWORD: ${{ secrets.E2E_BCEID_PASSWORD }}
-          E2E_PROVINCIAL_APPLICATION_NUMBER: ${{ vars.E2E_PROVINCIAL_APPLICATION_NUMBER }}
-          E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER: ${{ vars.E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER }}
-          CI: "true"
-        run: |
-          npm run e2e:real-bceid -- --reporter=html,list
-
-      - uses: actions/upload-artifact@v7
-        if: (! cancelled())
-        with:
-          name: playwright-real-bceid-${{ matrix.project }}-test
-          path: frontend/playwright-report
-          retention-days: 7
-
   deploy-prod:
     # TODO(infra): Re-enable PROD deployment once prod environment approvals,
     # secrets, and readiness checks are finalized.
     if: false
     name: PROD Deploys (${{ needs.init.outputs.pr }})
-    needs: [tests, bceid-regression, init]
+    needs: [tests, init]
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-deploy.yml

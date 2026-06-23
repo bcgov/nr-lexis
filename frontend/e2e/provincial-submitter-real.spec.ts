@@ -124,6 +124,7 @@ const restrictedWriteChecks: Array<{
 ]
 
 test.describe('real TEST Business BCeID provincial submitter', () => {
+  test.describe.configure({ retries: 0 })
   test.skip(!hasBusinessBceidCredentials(), 'Business BCeID e2e credentials are not configured.')
 
   test('shows provincial submitter navigation without restricted links', async ({ page }) => {

@@ -15,6 +15,8 @@ type ValidationResponse = {
 }
 
 const baseOrigin = new URL(E2E_BASE_URL).origin
+const CREDENTIAL_SCREEN_TIMEOUT_MS = 5_000
+const LOGIN_SESSION_TIMEOUT_MS = 30_000
 
 export const TEST_PROVINCIAL_APPLICATION_NUMBER =
   process.env.E2E_PROVINCIAL_APPLICATION_NUMBER?.trim() ?? ''
@@ -56,17 +58,34 @@ const firstVisible = async (page: Page, selector: string, timeout = 5000) => {
   return visible ? locator : null
 }
 
+const currentPageSummary = async (page: Page): Promise<string> => {
+  const title = await page.title().catch(() => '')
+  const rawUrl = page.url()
+  const safeUrl = (() => {
+    try {
+      const url = new URL(rawUrl)
+      return `${url.origin}${url.pathname}`
+    } catch {
+      return rawUrl
+    }
+  })()
+
+  return `${safeUrl}${title ? ` (${title})` : ''}`
+}
+
 const fillCredentialScreen = async (
   page: Page,
   username: string,
   password: string,
 ): Promise<boolean> => {
-  const usernameInput = await firstVisible(
-    page,
-    'input[name*="user" i], input[id*="user" i], input[type="email"], input[type="text"]',
-    10000,
-  )
-  const passwordInput = await firstVisible(page, 'input[type="password"]', 10000)
+  const [usernameInput, passwordInput] = await Promise.all([
+    firstVisible(
+      page,
+      'input[name*="user" i], input[id*="user" i], input[type="email"], input[type="text"]',
+      CREDENTIAL_SCREEN_TIMEOUT_MS,
+    ),
+    firstVisible(page, 'input[type="password"]', CREDENTIAL_SCREEN_TIMEOUT_MS),
+  ])
 
   if (!usernameInput && !passwordInput) {
     return false
@@ -118,12 +137,18 @@ export const loginWithBusinessBceid = async (page: Page): Promise<void> => {
     await page.waitForTimeout(1000)
   }
 
-  await expect
-    .poll(() => isSessionAuthenticated(page), {
-      message: 'Expected Business BCeID login to establish a LEXIS session.',
-      timeout: 120000,
-    })
-    .toBe(true)
+  try {
+    await expect
+      .poll(() => isSessionAuthenticated(page), {
+        message: 'Expected Business BCeID login to establish a LEXIS session.',
+        timeout: LOGIN_SESSION_TIMEOUT_MS,
+      })
+      .toBe(true)
+  } catch {
+    throw new Error(
+      `Business BCeID login did not establish a LEXIS session. Last page: ${await currentPageSummary(page)}.`,
+    )
+  }
 }
 
 export const collectApiServerErrors = (page: Page): string[] => {
