@@ -230,6 +230,13 @@ test.describe('real TEST IDIR provincial application approver', () => {
       { timeout: 30_000 },
     )
     await expect(page.getByText('Approved').first()).toBeVisible()
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    const reloadedReviewPanel = applicationReviewPanel(page)
+    await expect(page.getByRole('heading', { name: 'Application review' })).toBeVisible()
+    await expect(
+      reloadedReviewPanel.getByRole('combobox', { name: /application status/i }),
+    ).toHaveValue('Approved', { timeout: 30_000 })
   })
 
   test('can reject a dedicated application with a persisted remark when configured', async ({
@@ -254,6 +261,14 @@ test.describe('real TEST IDIR provincial application approver', () => {
       { timeout: 30_000 },
     )
     await expect(reviewPanel.getByLabel(/review remark/i)).toHaveValue(remark)
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    const reloadedReviewPanel = applicationReviewPanel(page)
+    await expect(page.getByRole('heading', { name: 'Application review' })).toBeVisible()
+    await expect(
+      reloadedReviewPanel.getByRole('combobox', { name: /application status/i }),
+    ).toHaveValue('Rejected', { timeout: 30_000 })
+    await expect(reloadedReviewPanel.getByLabel(/review remark/i)).toHaveValue(remark)
   })
 
   test('reject status requires a review remark in the UI', async ({ page }) => {
