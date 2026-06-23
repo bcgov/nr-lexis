@@ -24,7 +24,9 @@ regression coverage uses a separate TEST-only Playwright config.
 ## CI setup
 
 - `E2E_BCEID_USER` and `E2E_BCEID_PASSWORD` must be set as `test` environment secrets.
-- `E2E_IDIR_USER` and `E2E_IDIR_PASSWORD` must be set as `test` environment secrets.
+- `E2E_IDIR_USER` and `E2E_IDIR_PASSWORD` should be set as `test` environment secrets when
+  enabling IDIR coverage. Until they exist, the TEST IDIR job exits successfully after logging that
+  it was skipped.
 - `E2E_PROVINCIAL_APPLICATION_NUMBER` and `E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER` can be set as
   `test` environment variables to enable owned/unowned application detail checks.
 - `E2E_IDIR_APPLICATION_NUMBER` can be set as a `test` environment variable to enable IDIR
