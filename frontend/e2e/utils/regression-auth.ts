@@ -537,7 +537,7 @@ export const expectAccessiblePage = async (
   heading: RegExp | string,
 ): Promise<void> => {
   await navigateSpaRoute(page, path)
-  await expect(page.getByRole('heading', { name: heading })).toBeVisible()
+  await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Unauthorized' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
 }

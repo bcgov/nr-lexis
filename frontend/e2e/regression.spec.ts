@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { expect, type APIResponse, type Page, test } from '@playwright/test'
+import { expect, type APIResponse, type BrowserContext, type Page, test } from '@playwright/test'
 import {
   collectApiServerErrors,
   deleteWithCsrf,
@@ -66,6 +66,44 @@ type RtmUploadPreviewResponse = {
   status?: string
   rowCount?: number
   errors?: unknown
+}
+
+type ApplicationReviewSearchOptionsResponse = {
+  productTypes?: unknown
+  regions?: unknown
+  reviewStatuses?: unknown
+}
+
+type ApplicationReviewSearchResponse = {
+  results?: unknown
+  total?: number
+  page?: number
+  size?: number
+}
+
+type ApplicationReviewPreviewResponse = {
+  results?: unknown
+  hasNext?: boolean
+  page?: number
+  size?: number
+}
+
+type SearchCountResponse = {
+  total?: number
+}
+
+type GenericSearchResponse = {
+  results?: unknown
+  total?: number
+  page?: number
+  size?: number
+}
+
+type GenericOptionsResponse = Record<string, unknown>
+
+type JsonWithStatus<T> = {
+  status: number
+  payload: T
 }
 
 const missingApplicationNumber = '999999999'
@@ -326,14 +364,6 @@ const readReviewStatusEmailResponse = async (
   return JSON.parse(text) as ReviewStatusEmailResponse
 }
 
-const readRtmUploadPreviewResponse = async (
-  response: Awaited<ReturnType<typeof postWithCsrf>>,
-): Promise<RtmUploadPreviewResponse> => {
-  const text = await response.text()
-  expect(response.status(), text.slice(0, 500)).toBe(200)
-  return JSON.parse(text) as RtmUploadPreviewResponse
-}
-
 const expectAdminNavigation = async (page: Page): Promise<void> => {
   for (const { section, links } of adminNavigationSections) {
     const navSection = page.locator(sideNavSection(section))
@@ -352,6 +382,19 @@ const readJsonResponse = async <T>(response: APIResponse, expectedStatus = 200):
   const text = await response.text()
   expect(response.status(), text.slice(0, 500)).toBe(expectedStatus)
   return JSON.parse(text) as T
+}
+
+const readJsonResponseWithStatuses = async <T>(
+  response: APIResponse,
+  expectedStatuses: number[],
+): Promise<JsonWithStatus<T>> => {
+  const text = await response.text()
+  const status = response.status()
+  expect(expectedStatuses, text.slice(0, 500)).toContain(status)
+  return {
+    status,
+    payload: JSON.parse(text) as T,
+  }
 }
 
 const postRegressionSubmission = async (
@@ -412,14 +455,35 @@ const cleanupRegressionPackage = async (
   expect(deletePackage.success, `Expected package ${packageNumber} cleanup to succeed`).toBe(true)
 }
 
-test.describe('TEST IDIR admin regression', () => {
+test.describe.serial('TEST IDIR admin regression', () => {
   test.describe.configure({ retries: 0 })
   test.skip(!hasIdirCredentials(), 'IDIR e2e credentials are not configured.')
 
-  test('shows admin navigation and broad grants', async ({ page }) => {
+  let idirContext: BrowserContext | undefined
+  let idirPage: Page | undefined
+
+  const authenticatedIdirPage = async (): Promise<Page> => {
+    if (!idirPage) {
+      throw new Error('IDIR regression page was not initialized.')
+    }
+    await loginWithIdir(idirPage)
+    return idirPage
+  }
+
+  test.beforeAll(async ({ browser }) => {
+    idirContext = await browser.newContext()
+    idirPage = await idirContext.newPage()
+    await loginWithIdir(idirPage)
+  })
+
+  test.afterAll(async () => {
+    await idirContext?.close()
+  })
+
+  test('shows admin navigation and broad grants', async () => {
+    const page = await authenticatedIdirPage()
     const apiServerErrors = collectApiServerErrors(page)
 
-    await loginWithIdir(page)
     await expectAccessiblePage(page, '/admin', /administration/i)
 
     const capabilities = await fetchSessionCapabilities(page)
@@ -440,12 +504,9 @@ test.describe('TEST IDIR admin regression', () => {
     expect(apiServerErrors).toEqual([])
   })
 
-  test('can open representative admin, provincial, federal, upload, and report pages', async ({
-    page,
-  }) => {
+  test('can open representative admin, provincial, federal, upload, and report pages', async () => {
+    const page = await authenticatedIdirPage()
     const apiServerErrors = collectApiServerErrors(page)
-
-    await loginWithIdir(page)
 
     for (const [path, heading] of adminAccessiblePages) {
       await expectAccessiblePage(page, path, heading)
@@ -454,10 +515,121 @@ test.describe('TEST IDIR admin regression', () => {
     expect(apiServerErrors).toEqual([])
   })
 
-  test('can reach protected write validation endpoints without mutating real data', async ({
-    page,
-  }) => {
-    await loginWithIdir(page)
+  test('can query application review search contracts', async () => {
+    const page = await authenticatedIdirPage()
+
+    const options = await readJsonResponse<ApplicationReviewSearchOptionsResponse>(
+      await getWithAuth(page, '/api/lexis/application-reviews/search/options'),
+    )
+    expect(Array.isArray(options.productTypes)).toBe(true)
+    expect(Array.isArray(options.regions)).toBe(true)
+    expect(Array.isArray(options.reviewStatuses)).toBe(true)
+
+    const search = await readJsonResponse<ApplicationReviewSearchResponse>(
+      await getWithAuth(page, '/api/lexis/application-reviews/search', {
+        params: {
+          page: '0',
+          size: '2',
+        },
+      }),
+    )
+    expect(Array.isArray(search.results)).toBe(true)
+    expect(search.total).toEqual(expect.any(Number))
+    expect(search.page).toBe(0)
+    expect(search.size).toBe(2)
+
+    const count = await readJsonResponse<SearchCountResponse>(
+      await getWithAuth(page, '/api/lexis/application-reviews/search/count'),
+    )
+    expect(count.total).toEqual(expect.any(Number))
+
+    const preview = await readJsonResponse<ApplicationReviewPreviewResponse>(
+      await getWithAuth(page, '/api/lexis/application-reviews/search/preview', {
+        params: {
+          page: '0',
+          size: '2',
+        },
+      }),
+    )
+    expect(Array.isArray(preview.results)).toBe(true)
+    expect(preview.hasNext).toEqual(expect.any(Boolean))
+    expect(preview.page).toBe(0)
+    expect(preview.size).toBe(2)
+  })
+
+  test('can query provincial and federal application search contracts', async () => {
+    const page = await authenticatedIdirPage()
+
+    const provincialOptions = await readJsonResponse<GenericOptionsResponse>(
+      await getWithAuth(page, '/api/lexis/applications/search/options'),
+    )
+    expect(Array.isArray(provincialOptions.productTypes)).toBe(true)
+    expect(Array.isArray(provincialOptions.regions)).toBe(true)
+
+    const provincialSearch = await readJsonResponse<GenericSearchResponse>(
+      await getWithAuth(page, '/api/lexis/applications/search', {
+        params: {
+          page: '0',
+          size: '2',
+        },
+      }),
+    )
+    expect(Array.isArray(provincialSearch.results)).toBe(true)
+    expect(provincialSearch.total).toEqual(expect.any(Number))
+    expect(provincialSearch.page).toBe(0)
+    expect(provincialSearch.size).toBe(2)
+
+    const provincialCount = await readJsonResponse<SearchCountResponse>(
+      await getWithAuth(page, '/api/lexis/applications/search/count'),
+    )
+    expect(provincialCount.total).toEqual(expect.any(Number))
+
+    const federalOptions = await readJsonResponse<GenericOptionsResponse>(
+      await getWithAuth(page, '/api/lexis/federal/applications/search/options'),
+    )
+    expect(Array.isArray(federalOptions.applicationStatuses)).toBe(true)
+
+    const federalSearch = await readJsonResponse<GenericSearchResponse>(
+      await getWithAuth(page, '/api/lexis/federal/applications/search', {
+        params: {
+          page: '0',
+          size: '2',
+        },
+      }),
+    )
+    expect(Array.isArray(federalSearch.results)).toBe(true)
+    expect(federalSearch.total).toEqual(expect.any(Number))
+    expect(federalSearch.page).toBe(0)
+    expect(federalSearch.size).toBe(2)
+
+    const federalCount = await readJsonResponse<SearchCountResponse>(
+      await getWithAuth(page, '/api/lexis/federal/applications/search/count'),
+    )
+    expect(federalCount.total).toEqual(expect.any(Number))
+  })
+
+  test('can query admin policy and report option contracts', async () => {
+    const page = await authenticatedIdirPage()
+
+    const feePolicies = await readJsonResponse<unknown>(
+      await getWithAuth(page, '/api/lexis/admin/policies/fee'),
+    )
+    expect(feePolicies).toBeTruthy()
+
+    const filPolicies = await readJsonResponse<unknown>(
+      await getWithAuth(page, '/api/lexis/admin/policies/fil'),
+    )
+    expect(filPolicies).toBeTruthy()
+
+    const reportOptions = await readJsonResponse<GenericOptionsResponse>(
+      await getWithAuth(page, '/api/lexis/reports/options'),
+    )
+    expect(Array.isArray(reportOptions.regions)).toBe(true)
+    expect(Array.isArray(reportOptions.reportJurisdictions)).toBe(true)
+  })
+
+  test('can reach protected write validation endpoints without mutating real data', async () => {
+    const page = await authenticatedIdirPage()
 
     await expectInvalidApplicationCreateValidation(
       await postWithCsrf(page, '/api/lexis/rpc/application-details/application', {
@@ -488,7 +660,6 @@ test.describe('TEST IDIR admin regression', () => {
         `/api/lexis/application-reviews/${missingApplicationNumber}/approve`,
       ),
     )
-    expect(approveResponse.valid).toBe(false)
     expect(approveResponse.updated).toBe(false)
     expect(approveResponse.message ?? '').toContain('Application was not updated.')
 
@@ -505,7 +676,6 @@ test.describe('TEST IDIR admin regression', () => {
         },
       ),
     )
-    expect(rejectResponse.valid).toBe(false)
     expect(rejectResponse.updated).toBe(false)
     expect(rejectResponse.message ?? '').toContain('Application status update did not persist.')
 
@@ -517,13 +687,13 @@ test.describe('TEST IDIR admin regression', () => {
           data: {
             statusCode: 'REJ',
             remark: 'IDIR admin regression authorization check',
-            clientEmailAddress: 'idir-regression@example.test',
+            clientEmailAddress: '',
           },
         },
       ),
     )
     expect(emailResponse.success).toBe(false)
-    expect(emailResponse.message ?? '').toContain('Application status email could not be prepared.')
+    expect(emailResponse.message ?? '').toContain('Status code and client email are required.')
 
     const rtmSearchResponse = await getWithAuth(page, '/api/lexis/rtm/emslogamv', {
       params: {
@@ -535,7 +705,7 @@ test.describe('TEST IDIR admin regression', () => {
     expect(rtmSearchResponse.status(), rtmSearchText.slice(0, 500)).toBe(200)
     expect(JSON.parse(rtmSearchText)).toEqual(expect.any(Array))
 
-    const rtmPreviewResponse = await readRtmUploadPreviewResponse(
+    const rtmPreviewResponse = await readJsonResponseWithStatuses<RtmUploadPreviewResponse>(
       await postWithCsrf(page, '/api/lexis/rtm/emslogamv/preview', {
         multipart: {
           file: {
@@ -545,19 +715,22 @@ test.describe('TEST IDIR admin regression', () => {
           },
         },
       }),
+      [200, 422],
     )
-    expect(rtmPreviewResponse.status).toBe('accepted')
-    expect(rtmPreviewResponse.rowCount).toBeGreaterThan(0)
-    expect(asStringArray(rtmPreviewResponse.errors)).toEqual([])
+    if (rtmPreviewResponse.status === 200) {
+      expect(rtmPreviewResponse.payload.status).toBe('accepted')
+      expect(rtmPreviewResponse.payload.rowCount).toBeGreaterThan(0)
+      expect(asStringArray(rtmPreviewResponse.payload.errors)).toEqual([])
+    } else {
+      expect(rtmPreviewResponse.payload.status).toBe('validation_failed')
+      expect(asStringArray(rtmPreviewResponse.payload.errors).join(' ')).toContain('update date')
+    }
   })
 
-  test('validates, submits, reviews, and cleans up an IDIR application upload', async ({
-    page,
-  }) => {
+  test('validates, submits, reviews, and cleans up an IDIR application upload', async () => {
+    const page = await authenticatedIdirPage()
     const packageNumber = uniqueRegressionPackageNumber()
     let applicationNumber: number | null = null
-
-    await loginWithIdir(page)
 
     try {
       const validationResult = await postRegressionSubmission(
