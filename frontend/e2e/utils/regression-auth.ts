@@ -15,6 +15,18 @@ type ValidationResponse = {
   errors?: unknown
 }
 
+type MultipartFile = {
+  name: string
+  mimeType: string
+  buffer: Buffer
+}
+
+type PostWithCsrfOptions = {
+  data?: Record<string, unknown>
+  form?: Record<string, string>
+  multipart?: Record<string, string | number | boolean | MultipartFile>
+}
+
 type RealCredentials = {
   username: string
   password: string
@@ -207,10 +219,7 @@ const csrfHeaders = async (page: Page): Promise<Record<string, string>> => {
 export const postWithCsrf = async (
   page: Page,
   path: string,
-  options: {
-    data?: Record<string, unknown>
-    form?: Record<string, string>
-  } = {},
+  options: PostWithCsrfOptions = {},
 ): Promise<APIResponse> => {
   return page.request.post(path, {
     ...options,

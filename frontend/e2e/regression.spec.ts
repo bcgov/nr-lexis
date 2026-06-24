@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, type Page, test } from '@playwright/test'
 import {
   collectApiServerErrors,
@@ -40,7 +41,19 @@ type ReviewStatusEmailResponse = {
   message?: string | null
 }
 
+type RtmUploadPreviewResponse = {
+  status?: string
+  rowCount?: number
+  errors?: unknown
+}
+
 const missingApplicationNumber = '999999999'
+const rtmSuccessWorkbook = readFileSync(
+  new URL(
+    '../../backend/src/test/resources/rtm-upload-samples/data_upload_template-success.xlsx',
+    import.meta.url,
+  ),
+)
 
 const adminNavigationSections: Array<{
   section: string
@@ -71,7 +84,7 @@ const adminNavigationSections: Array<{
   },
   {
     section: 'Administration',
-    links: ['LEXIS administration', 'Fee policy administration', 'Data upload'],
+    links: ['LEXIS administration', 'Fee policy administration', 'Data upload', 'EMS AMV'],
   },
 ]
 
@@ -86,6 +99,7 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/federal', /federal application search/i],
   ['/federal/application/upload', /upload federal application submission/i],
   ['/reports', /reports/i],
+  ['/admin/rtm/emslogamv', /rtm ems log amv/i],
 ]
 
 const requiredAdminActions = [
@@ -112,6 +126,14 @@ const readReviewStatusEmailResponse = async (
   const text = await response.text()
   expect(response.status(), text.slice(0, 500)).toBe(200)
   return JSON.parse(text) as ReviewStatusEmailResponse
+}
+
+const readRtmUploadPreviewResponse = async (
+  response: Awaited<ReturnType<typeof postWithCsrf>>,
+): Promise<RtmUploadPreviewResponse> => {
+  const text = await response.text()
+  expect(response.status(), text.slice(0, 500)).toBe(200)
+  return JSON.parse(text) as RtmUploadPreviewResponse
 }
 
 const expectAdminNavigation = async (page: Page): Promise<void> => {
@@ -240,5 +262,28 @@ test.describe('TEST IDIR admin regression', () => {
     )
     expect(emailResponse.success).toBe(false)
     expect(emailResponse.message ?? '').toContain('Application status email could not be prepared.')
+
+    const rtmSearchResponse = await page.request.get(
+      '/api/lexis/rtm/emslogamv?retrievalDate=2026-01-01&growthIndicator=S',
+      { failOnStatusCode: false },
+    )
+    const rtmSearchText = await rtmSearchResponse.text()
+    expect(rtmSearchResponse.status(), rtmSearchText.slice(0, 500)).toBe(200)
+    expect(JSON.parse(rtmSearchText)).toEqual(expect.any(Array))
+
+    const rtmPreviewResponse = await readRtmUploadPreviewResponse(
+      await postWithCsrf(page, '/api/lexis/rtm/emslogamv/preview', {
+        multipart: {
+          file: {
+            name: 'data_upload_template-success.xlsx',
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            buffer: rtmSuccessWorkbook,
+          },
+        },
+      }),
+    )
+    expect(rtmPreviewResponse.status).toBe('accepted')
+    expect(rtmPreviewResponse.rowCount).toBeGreaterThan(0)
+    expect(asStringArray(rtmPreviewResponse.errors)).toEqual([])
   })
 })
