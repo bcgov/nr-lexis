@@ -15,6 +15,7 @@ import {
   loginWithIdir,
   postWithCsrf,
 } from './utils/regression-auth'
+import { E2E_BASE_URL } from './utils'
 
 const sideNavSection = (name: string) =>
   `.csp-side-nav__section:has(.csp-side-nav__category:text-is("${name}"))`
@@ -786,6 +787,31 @@ test.describe.serial('TEST IDIR admin regression', () => {
         )
       }
     }
+  })
+
+  test('signs out to the login shell', async () => {
+    const page = await authenticatedIdirPage()
+    const baseOrigin = new URL(E2E_BASE_URL).origin
+
+    await page.getByRole('button', { name: /open profile panel/i }).click()
+    await page.getByRole('button', { name: /sign out/i }).click()
+
+    const logoutResult = await Promise.race([
+      page
+        .getByRole('button', { name: /log in with idir/i })
+        .waitFor({ state: 'visible', timeout: 60_000 })
+        .then(() => 'login-shell' as const),
+      page
+        .waitForURL(/amazoncognito\.com\/error/i, { timeout: 60_000 })
+        .then(() => 'cognito-error' as const),
+    ])
+
+    if (logoutResult === 'cognito-error') {
+      throw new Error(`Cognito rejected the configured logout redirect: ${page.url()}`)
+    }
+
+    expect(new URL(page.url()).origin).toBe(baseOrigin)
+    await expect(page.getByRole('button', { name: /log in with business bceid/i })).toBeVisible()
   })
 })
 
