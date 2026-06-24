@@ -109,10 +109,7 @@ type JsonWithStatus<T> = {
 
 const missingApplicationNumber = '999999999'
 const rtmSuccessWorkbook = readFileSync(
-  new URL(
-    '../public/templates/rtm-ems-log-amv-template.xlsx',
-    import.meta.url,
-  ),
+  new URL('../public/templates/rtm-ems-log-amv-template.xlsx', import.meta.url),
 )
 const regressionStatusRemark = 'Weekly credentialed regression status check'
 const regressionClientEmail = 'lexis-regression@example.test'
@@ -214,7 +211,7 @@ const adminNavigationSections: Array<{
   },
   {
     section: 'Administration',
-    links: ['LEXIS administration', 'Fee policy administration', 'Data upload', 'EMS AMV'],
+    links: ['LEXIS administration', 'Fee policy administration', 'Data upload', 'RTM'],
   },
 ]
 
