@@ -36,6 +36,18 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       String growthIndicator,
       LocalDate retrievalDate,
       LocalDate updateDate) {
+    List<RtmEmsLogAmvRowDto> rows = executeFind(species, growthIndicator, retrievalDate, updateDate);
+    if (rows.isEmpty() && updateDate != null && updateDate.equals(retrievalDate)) {
+      return executeFind(species, growthIndicator, retrievalDate, null);
+    }
+    return rows;
+  }
+
+  private List<RtmEmsLogAmvRowDto> executeFind(
+      String species,
+      String growthIndicator,
+      LocalDate retrievalDate,
+      LocalDate updateDate) {
     try {
       String call = "{ call " + SELECT_PROCEDURE + " }";
       return jdbcTemplate.execute(
