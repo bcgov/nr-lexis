@@ -1,4 +1,4 @@
-import { type FC, useCallback, useEffect, useState, type PropsWithChildren } from 'react'
+import { useCallback, useEffect, useState, type PropsWithChildren } from 'react'
 import { createPortal } from 'react-dom'
 import { ToastNotification, type ToastNotificationProps } from '@carbon/react'
 import {
@@ -10,7 +10,7 @@ const MINIMUM_SUCCESS_AUTO_DISMISS_MS = 8000
 const PERSISTENT_NOTIFICATION_KINDS = new Set(['error', 'warning', 'warning-alt'])
 const NOTIFICATION_REGION_ID = 'lexis-toast-notification-region'
 
-type AppNotificationProps = PropsWithChildren<
+export type AppNotificationProps = PropsWithChildren<
   Omit<ToastNotificationProps, 'onCloseButtonClick' | 'hideCloseButton' | 'timeout'> & {
     onCloseButtonClick?: () => void
     autoDismissMs?: number
@@ -36,7 +36,7 @@ const getNotificationRegion = (): HTMLElement | null => {
   return region
 }
 
-export const AppNotification: FC<AppNotificationProps> = ({
+export function AppNotification({
   onCloseButtonClick,
   autoDismissMs,
   pauseAutoDismissOnInteraction = true,
@@ -46,7 +46,7 @@ export const AppNotification: FC<AppNotificationProps> = ({
   title,
   className,
   ...notificationProps
-}) => {
+}: AppNotificationProps) {
   const [notificationRegion] = useState<HTMLElement | null>(() => getNotificationRegion())
   const [isPaused, setIsPaused] = useState(false)
   const normalizedKind = typeof kind === 'string' ? kind : ''

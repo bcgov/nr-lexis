@@ -36,7 +36,7 @@ export const createEmptyPagedSearchResponse = <TResponse extends PagedSearchResp
       totalElements: 0,
       totalPages: 1,
     },
-  }) as TResponse
+  }) as unknown as TResponse
 
 export const appendSearchParamsToPath = (path: string, searchParams: URLSearchParams): string => {
   const query = searchParams.toString()

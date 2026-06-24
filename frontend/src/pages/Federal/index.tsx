@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -15,10 +15,10 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
-import { AppNotification } from '@/components/AppNotification'
-import SearchableSelect from '@/components/SearchableSelect'
-import IsoDatePicker from '@/components/IsoDatePicker'
+import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
+import { AppNotification } from '../../components/AppNotification'
+import SearchableSelect from '../../components/SearchableSelect'
+import IsoDatePicker from '../../components/IsoDatePicker'
 import type {
   FederalApplicationSearchFilters,
   FederalApplicationSearchItem,
@@ -114,7 +114,7 @@ type ExemptionCreatePrefillState = {
   ownerClientNumber: string
 }
 
-const FederalPage: FC = () => {
+const FederalPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform, isLoading } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()

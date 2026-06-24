@@ -1,8 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { type FC } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '@/context/auth/AuthProvider'
+import { AuthProvider } from '../AuthProvider'
 import { useAuth } from '@/context/auth/useAuth'
 import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
 
@@ -29,7 +28,7 @@ const mockedFetchSessionCapabilities = vi.mocked(fetchSessionCapabilities)
 const mockedPerformLogoff = vi.mocked(performLogoff)
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>
 
-const LogoutProbe: FC = () => {
+const LogoutProbe = () => {
   const { isLoading, isLoggedIn, logout } = useAuth()
 
   return (

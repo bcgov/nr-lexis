@@ -608,6 +608,22 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void addInvoiceShouldRejectOversizedSalesInvoiceNumberBeforeOracleInsert() {
+    PermitPersistenceRpcResponseDto response =
+        service.addInvoice(
+            7000123L,
+            "INV-123456",
+            new BigDecimal("100.00"),
+            new BigDecimal("1.25"),
+            new BigDecimal("12.00"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The sales invoice number must be 9 characters or fewer.");
+  }
+
+  @Test
   void addInvoiceShouldRejectDuplicateInvoice() {
     when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L))
         .thenReturn(Optional.of(new SalesInvoiceRow("INV-100", 100.0d, 1.25d, 12.0d)));

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -15,8 +15,8 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
-import SearchableSelect from '@/components/SearchableSelect'
+import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
+import SearchableSelect from '../../components/SearchableSelect'
 import type {
   ProvincialPermitSearchFilters,
   ProvincialPermitSearchRequest,
@@ -47,7 +47,7 @@ import {
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
-import IsoDatePicker from '@/components/IsoDatePicker'
+import IsoDatePicker from '../../components/IsoDatePicker'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
@@ -130,7 +130,7 @@ const buildSearchParams = (
     ['pageSize', pageSize],
   ])
 
-const ProvincialPermitPage: FC = () => {
+const ProvincialPermitPage = () => {
   const { capabilities } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
@@ -345,7 +345,7 @@ const ProvincialPermitPage: FC = () => {
                 titleText="Region"
                 items={regionOptions}
                 itemToString={(item) => (item ? item.text : '')}
-                label="Select region(s)"
+                placeholder="Select region(s)"
                 selectionFeedback="fixed"
                 selectedItems={selectedRegions}
                 onChange={(event) => {

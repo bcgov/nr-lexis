@@ -27,6 +27,11 @@ type PostWithCsrfOptions = {
   multipart?: Record<string, string | number | boolean | MultipartFile>
 }
 
+type GetWithAuthOptions = {
+  params?: Record<string, string>
+  failOnStatusCode?: boolean
+}
+
 type RealCredentials = {
   username: string
   password: string
@@ -43,9 +48,6 @@ const baseOrigin = new URL(E2E_BASE_URL).origin
 const CREDENTIAL_SCREEN_TIMEOUT_MS = 5_000
 const LOGIN_SESSION_TIMEOUT_MS = 30_000
 
-export const TEST_IDIR_EXPECTED_PRINCIPAL =
-  process.env.E2E_IDIR_EXPECTED_PRINCIPAL?.trim() ?? 'MOF_FAMT'
-
 const idirLoginConfig: LoginConfig = {
   buttonName: /log in with idir/i,
   label: 'IDIR',
@@ -53,23 +55,62 @@ const idirLoginConfig: LoginConfig = {
   passwordEnv: 'E2E_IDIR_PASSWORD',
 }
 
-export const hasIdirCredentials = (): boolean => {
-  const { usernameEnv, passwordEnv } = idirLoginConfig
-  return Boolean(process.env[usernameEnv]?.trim() && process.env[passwordEnv]?.trim())
+const businessBceidLoginConfig: LoginConfig = {
+  buttonName: /log in with business bceid/i,
+  label: 'Business BCeID',
+  usernameEnv: 'E2E_BCEID_USER',
+  passwordEnv: 'E2E_BCEID_PASSWORD',
 }
 
-const idirCredentials = (): RealCredentials => {
-  const { usernameEnv, passwordEnv } = idirLoginConfig
+const hasCredentials = ({ usernameEnv, passwordEnv }: LoginConfig): boolean =>
+  Boolean(process.env[usernameEnv]?.trim() && process.env[passwordEnv]?.trim())
+
+export const hasIdirCredentials = (): boolean => hasCredentials(idirLoginConfig)
+
+export const hasBusinessBceidCredentials = (): boolean => hasCredentials(businessBceidLoginConfig)
+
+const credentials = ({ usernameEnv, passwordEnv }: LoginConfig): RealCredentials => {
   return {
     username: process.env[usernameEnv]?.trim() ?? '',
     password: process.env[passwordEnv] ?? '',
   }
 }
 
+const csrfHeaders = async (page: Page): Promise<Record<string, string>> => {
+  const cookies = await page.context().cookies()
+  const xsrfCookie = cookies.find((cookie) => cookie.name === 'XSRF-TOKEN')
+  return xsrfCookie ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrfCookie.value) } : {}
+}
+
+const bearerHeaders = async (page: Page): Promise<Record<string, string>> => {
+  const cookies = await page.context().cookies()
+  const accessTokenCookie = cookies.find((cookie) =>
+    cookie.name.toLowerCase().endsWith('.accesstoken'),
+  )
+  return accessTokenCookie
+    ? { Authorization: `Bearer ${decodeURIComponent(accessTokenCookie.value)}` }
+    : {}
+}
+
+const authHeaders = async (page: Page): Promise<Record<string, string>> => ({
+  ...(await bearerHeaders(page)),
+  ...(await csrfHeaders(page)),
+})
+
+export const getWithAuth = async (
+  page: Page,
+  path: string,
+  options: GetWithAuthOptions = {},
+): Promise<APIResponse> => {
+  return page.request.get(path, {
+    ...options,
+    failOnStatusCode: options.failOnStatusCode ?? false,
+    headers: await authHeaders(page),
+  })
+}
+
 const isSessionAuthenticated = async (page: Page): Promise<boolean> => {
-  const response = await page.request
-    .get('/api/lexis/session/capabilities', { failOnStatusCode: false })
-    .catch(() => null)
+  const response = await getWithAuth(page, '/api/lexis/session/capabilities').catch(() => null)
 
   if (!response?.ok()) {
     return false
@@ -80,9 +121,7 @@ const isSessionAuthenticated = async (page: Page): Promise<boolean> => {
 }
 
 export const fetchSessionCapabilities = async (page: Page): Promise<SessionCapabilities> => {
-  const response = await page.request.get('/api/lexis/session/capabilities', {
-    failOnStatusCode: false,
-  })
+  const response = await getWithAuth(page, '/api/lexis/session/capabilities')
   expect(response.status()).toBe(200)
   return (await response.json()) as SessionCapabilities
 }
@@ -148,9 +187,9 @@ const fillCredentialScreen = async (
   return true
 }
 
-export const loginWithIdir = async (page: Page): Promise<void> => {
-  const { buttonName, label } = idirLoginConfig
-  const { username, password } = idirCredentials()
+const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> => {
+  const { buttonName, label } = config
+  const { username, password } = credentials(config)
   await page.goto('/', { waitUntil: 'domcontentloaded' })
 
   if (await isSessionAuthenticated(page)) {
@@ -187,6 +226,14 @@ export const loginWithIdir = async (page: Page): Promise<void> => {
   }
 }
 
+export const loginWithIdir = async (page: Page): Promise<void> => {
+  await loginWithConfig(page, idirLoginConfig)
+}
+
+export const loginWithBusinessBceid = async (page: Page): Promise<void> => {
+  await loginWithConfig(page, businessBceidLoginConfig)
+}
+
 export const collectApiServerErrors = (page: Page): string[] => {
   const errors: string[] = []
   page.on('response', (response) => {
@@ -210,10 +257,9 @@ export const expectAccessiblePage = async (
   await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
 }
 
-const csrfHeaders = async (page: Page): Promise<Record<string, string>> => {
-  const cookies = await page.context().cookies()
-  const xsrfCookie = cookies.find((cookie) => cookie.name === 'XSRF-TOKEN')
-  return xsrfCookie ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrfCookie.value) } : {}
+export const expectRouteUnauthorized = async (page: Page, path: string): Promise<void> => {
+  await page.goto(path, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Unauthorized' })).toBeVisible()
 }
 
 export const postWithCsrf = async (
@@ -223,9 +269,32 @@ export const postWithCsrf = async (
 ): Promise<APIResponse> => {
   return page.request.post(path, {
     ...options,
-    headers: await csrfHeaders(page),
+    headers: await authHeaders(page),
     failOnStatusCode: false,
   })
+}
+
+export const deleteWithCsrf = async (
+  page: Page,
+  path: string,
+  options: {
+    params?: Record<string, string>
+  } = {},
+): Promise<APIResponse> => {
+  return page.request.delete(path, {
+    ...options,
+    headers: await authHeaders(page),
+    failOnStatusCode: false,
+  })
+}
+
+export const expectForbiddenPost = async (
+  page: Page,
+  path: string,
+  options: PostWithCsrfOptions = {},
+): Promise<void> => {
+  const response = await postWithCsrf(page, path, options)
+  expect(response.status(), `${path} should be forbidden for this user`).toBe(403)
 }
 
 export const expectInvalidApplicationCreateValidation = async (

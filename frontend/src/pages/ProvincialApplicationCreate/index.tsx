@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, type FC } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, Tag, TextArea, TextInput, Tile } from '@carbon/react'
-import SearchableSelect from '@/components/SearchableSelect'
-import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
-import { AppNotification } from '@/components/AppNotification'
+import SearchableSelect from '../../components/SearchableSelect'
+import CreateDraftHistory from '../shared/CreateDraftHistory'
+import { AppNotification } from '../../components/AppNotification'
 import {
   calculateApplicationTermDays,
   nonNegativeWholeNumberFieldError,
@@ -52,7 +52,7 @@ import {
   fetchApplicationRemainingSpecies,
   type ApplicationCodeOption,
 } from '@/service/provincial-application-items-service'
-import IsoDatePicker from '@/components/IsoDatePicker'
+import IsoDatePicker from '../../components/IsoDatePicker'
 
 type ProvincialApplicationCreateForm = {
   ownerClientNumber: string
@@ -155,7 +155,7 @@ type PageStatus = {
   message: string
 }
 
-const ProvincialApplicationCreatePage: FC = () => {
+const ProvincialApplicationCreatePage = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [form, setForm] = useState<ProvincialApplicationCreateForm>(() =>
@@ -684,17 +684,22 @@ const ProvincialApplicationCreatePage: FC = () => {
     () => ({
       ownerClientNumber:
         requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
-      ownerClientLocationCode: requiredMaxLengthFieldError(
-        form.ownerClientLocationCode,
-        2,
-        'Owner client location code',
-      ),
+      ownerClientLocationCode:
+        requiredMaxLengthFieldError(
+          form.ownerClientLocationCode,
+          2,
+          'Owner client location code',
+        ) ?? undefined,
       ownerContactName: requiredFieldError(form.ownerContactName, 'Owner name') ?? undefined,
       agentClientNumber: isAgentApplicant(form.applicantTypeCode)
         ? (requiredFieldError(form.agentClientNumber, 'Agent client number') ?? undefined)
         : undefined,
       agentClientLocationCode: isAgentApplicant(form.applicantTypeCode)
-        ? requiredMaxLengthFieldError(form.agentClientLocationCode, 2, 'Agent client location code')
+        ? (requiredMaxLengthFieldError(
+            form.agentClientLocationCode,
+            2,
+            'Agent client location code',
+          ) ?? undefined)
         : undefined,
       agentContactName: isAgentApplicant(form.applicantTypeCode)
         ? (requiredFieldError(form.agentContactName, 'Agent contact name') ?? undefined)
@@ -703,7 +708,7 @@ const ProvincialApplicationCreatePage: FC = () => {
         () => requiredFieldError(form.applicantTypeCode, 'Applicant type'),
         () =>
           form.applicantTypeCode === 'O' || form.applicantTypeCode === 'A'
-            ? undefined
+            ? null
             : 'Applicant type must be Owner or Agent.',
       ),
       productTypeCode: requiredFieldError(form.productTypeCode, 'Product type') ?? undefined,
@@ -720,12 +725,13 @@ const ProvincialApplicationCreatePage: FC = () => {
                 ? 'At least one application species is required, but no species are available for the selected region and product type.'
                 : 'At least one application species is required.'
           : undefined,
-      exemptionType: requiredMaxLengthFieldError(
-        form.exemptionType,
-        1,
-        'Exemption reason code',
-        'Exemption reason',
-      ),
+      exemptionType:
+        requiredMaxLengthFieldError(
+          form.exemptionType,
+          1,
+          'Exemption reason code',
+          'Exemption reason',
+        ) ?? undefined,
       region: requiredFieldError(form.region, 'Region') ?? undefined,
       applicationDate: firstValidationError(
         () => requiredFieldError(form.applicationDate, 'Application date'),
@@ -735,14 +741,12 @@ const ProvincialApplicationCreatePage: FC = () => {
         () => requiredFieldError(calculatedApplicationTermDays, 'Application term'),
         () => nonNegativeWholeNumberFieldError(form.applicationTermDays, 'Application term days'),
       ),
-      applicationTermMonths: nonNegativeWholeNumberFieldError(
-        form.applicationTermMonths,
-        'Application term months',
-      ),
-      applicationTermYears: nonNegativeWholeNumberFieldError(
-        form.applicationTermYears,
-        'Application term years',
-      ),
+      applicationTermMonths:
+        nonNegativeWholeNumberFieldError(form.applicationTermMonths, 'Application term months') ??
+        undefined,
+      applicationTermYears:
+        nonNegativeWholeNumberFieldError(form.applicationTermYears, 'Application term years') ??
+        undefined,
       receivedDate: firstValidationError(
         () => requiredFieldError(form.receivedDate, 'Received date'),
         () => isoDateFieldError(form.receivedDate),

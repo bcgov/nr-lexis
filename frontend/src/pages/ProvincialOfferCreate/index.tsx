@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useReducer, useState, type FC } from 'react'
+import { useEffect, useMemo, useReducer, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
-import { AppNotification } from '@/components/AppNotification'
-import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
-import IsoDatePicker from '@/components/IsoDatePicker'
-import SearchableSelect from '@/components/SearchableSelect'
-import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
+import { AppNotification } from '../../components/AppNotification'
+import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
+import IsoDatePicker from '../../components/IsoDatePicker'
+import SearchableSelect from '../../components/SearchableSelect'
+import CreateDraftHistory from '../shared/CreateDraftHistory'
 import {
   firstValidationError,
   getVisibleFieldError,
@@ -166,7 +166,7 @@ const offerApplicationContextReducer = (
   }
 }
 
-const ProvincialOfferCreatePage: FC = () => {
+const ProvincialOfferCreatePage = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const searchParamsKey = searchParams.toString()

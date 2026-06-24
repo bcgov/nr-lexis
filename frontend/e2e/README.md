@@ -16,30 +16,21 @@ regression coverage uses a separate TEST-only Playwright config.
 - If `E2E_BASE_URL` is a deployed URL in CI, Playwright does not start a local `webServer`.
 - The default config only runs `smoke.spec.ts`. Local role simulation is intentionally not
   supported.
-- `playwright.regression.config.ts` runs the scheduled TEST IDIR admin regression specs.
+- `playwright.regression.config.ts` runs the scheduled TEST IDIR admin and Business BCeID regression
+  specs.
 
 ## CI setup
 
-- The scheduled/manual `Regression` workflow reads TEST IDIR credentials from AWS Secrets Manager
-  before running Playwright.
-- The `test` GitHub environment must define `AWS_SECRETS_MANAGER_ROLE_ARN` as a variable for a
-  GitHub OIDC assumable AWS role with `secretsmanager:GetSecretValue` access to the IDIR secret.
-- The workflow fetches the `test/mof_famt` secret from AWS Secrets Manager in `ca-central-1`.
-- Do not configure IDIR username/password as GitHub secrets. The workflow masks the values returned
-  from AWS and passes them into the regression command as `E2E_IDIR_USER`,
-  `E2E_IDIR_PASSWORD`, and `E2E_IDIR_EXPECTED_PRINCIPAL`.
-- The AWS secret value must be JSON with this shape:
-
-```json
-{
-  "username": "idir-user",
-  "password": "idir-password",
-  "OSID (online service id)": "MOF_FAMT"
-}
-```
-
-- The IDIR suite asserts the authenticated principal includes the secret's online service ID and
-  that the account has admin grants.
+- The scheduled/manual `Regression` workflow reads TEST credentials from GitHub `test` environment
+  secrets before running Playwright.
+- Required `test` environment secrets:
+  - `E2E_IDIR_USER`
+  - `E2E_IDIR_PASSWORD`
+  - `E2E_BCEID_USER`
+  - `E2E_BCEID_PASSWORD`
+- The IDIR suite asserts the account establishes an authenticated session and has admin grants.
+- The lifecycle suite creates fresh TEST applications at runtime for BCeID submission, IDIR review
+  mutation, and BCeID data-scope checks, so static application-number variables are not required.
 - Credentialed regression jobs are scoped to the `test` GitHub environment, so dev preview deploys
   stay on smoke coverage.
 - CI suppresses Playwright screenshots, video, and traces for the credentialed regression suite
@@ -61,6 +52,5 @@ E2E_BASE_URL=http://127.0.0.1:4173 npm run e2e
 E2E_BASE_URL=https://nr-lexis-test.apps.silver.devops.gov.bc.ca npm run e2e:regression
 ```
 
-For local `e2e:regression` runs, export `E2E_IDIR_USER`, `E2E_IDIR_PASSWORD`, and
-`E2E_IDIR_EXPECTED_PRINCIPAL` in your shell from approved secure sources. The local command does not
-fetch AWS Secrets Manager values.
+For local `e2e:regression` runs, export the same `E2E_IDIR_*` and `E2E_BCEID_*` credential variables
+in your shell from approved secure sources.

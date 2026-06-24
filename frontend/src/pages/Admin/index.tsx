@@ -1,4 +1,4 @@
-import { useMemo, useState, type FC } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Button,
   Checkbox,
@@ -154,7 +154,7 @@ const ROUTE_ACCESS_CHECKS = [
   { label: 'Admin', action: '/lexisAgentAdmin' },
 ]
 
-const AdminPage: FC = () => {
+const AdminPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform, refresh } = useAuth()
   const [actionFilter, setActionFilter] = useState('')
@@ -253,6 +253,7 @@ const AdminPage: FC = () => {
             <TableBody>
               {[...LEGACY_ADMIN_TOOLS, ...LEGACY_UPLOAD_TOOLS].map((tool) => {
                 const granted = canPerform(tool.requiredAction)
+                const reactPath = tool.reactPath
                 return (
                   <TableRow key={tool.id}>
                     <TableCell>
@@ -275,11 +276,11 @@ const AdminPage: FC = () => {
                         >
                           Open
                         </Button>
-                      ) : tool.reactPath ? (
+                      ) : reactPath ? (
                         <Button
                           kind="secondary"
                           size="sm"
-                          onClick={() => navigate(tool.reactPath)}
+                          onClick={() => navigate(reactPath)}
                           disabled={!granted}
                         >
                           Open

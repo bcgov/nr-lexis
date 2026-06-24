@@ -4,7 +4,6 @@ import {
   useState,
   type ChangeEvent,
   type DragEvent,
-  type FC,
   type FormEvent,
 } from 'react'
 import { Upload } from '@carbon/icons-react'
@@ -24,8 +23,8 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { AppNotification } from '@/components/AppNotification'
-import IsoDatePicker from '@/components/IsoDatePicker'
+import { AppNotification } from '../../components/AppNotification'
+import IsoDatePicker from '../../components/IsoDatePicker'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   isValidIsoDate,
@@ -53,14 +52,24 @@ const INITIAL_FILTERS: RtmEmsLogAmvFilters = {
   updateDate: '',
 }
 
-const INITIAL_FORM = {
+type ManualFormState = {
+  species: string
+  grade: string
+  growthIndicator: string
+  retrievalDate: string
+  updateDate: string
+  newValue: string
+  saveMode: 'create' | 'update'
+}
+
+const INITIAL_FORM: ManualFormState = {
   species: '',
   grade: '',
   growthIndicator: '',
   retrievalDate: '',
   updateDate: '',
   newValue: '',
-  saveMode: 'create' as const,
+  saveMode: 'create',
 }
 
 type PendingUploadValidation = {
@@ -128,7 +137,7 @@ const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 const RTM_MODULE_DESCRIPTION =
   'Query current and historical RTM AMV rows, make manual create/update entries, and generate an upload preview from XLSX files.'
 
-const RTMEmsLogAmvPage: FC = () => {
+const RTMEmsLogAmvPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
   const [filters, setFilters] = useState<RtmEmsLogAmvFilters>(INITIAL_FILTERS)

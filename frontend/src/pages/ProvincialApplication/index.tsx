@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -16,9 +16,9 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
-import { AppNotification } from '@/components/AppNotification'
-import SearchableSelect from '@/components/SearchableSelect'
+import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
+import { AppNotification } from '../../components/AppNotification'
+import SearchableSelect from '../../components/SearchableSelect'
 import type {
   ProvincialApplicationSearchFilters,
   ProvincialApplicationSearchItem,
@@ -57,7 +57,7 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
-import IsoDatePicker from '@/components/IsoDatePicker'
+import IsoDatePicker from '../../components/IsoDatePicker'
 
 type ExemptionStatus = {
   kind: 'error'
@@ -131,7 +131,7 @@ const buildSearchParams = (
     ['pageSize', pageSize],
   ])
 
-const ProvincialApplicationPage: FC = () => {
+const ProvincialApplicationPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -463,7 +463,7 @@ const ProvincialApplicationPage: FC = () => {
                 titleText="Region"
                 items={regionOptions}
                 itemToString={(item) => (item ? item.text : '')}
-                label="Select region(s)"
+                placeholder="Select region(s)"
                 selectionFeedback="fixed"
                 selectedItems={selectedRegions}
                 onChange={(event) => {

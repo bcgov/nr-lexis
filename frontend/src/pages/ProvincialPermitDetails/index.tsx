@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Column,
@@ -15,11 +15,11 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
-import { ApiSourceTag } from '@/components/AbbreviatedSourceTag'
-import { AppNotification } from '@/components/AppNotification'
-import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
+import { ApiSourceTag } from '../../components/AbbreviatedSourceTag'
+import { AppNotification } from '../../components/AppNotification'
+import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
 import {
@@ -27,6 +27,7 @@ import {
   getVisibleFieldError,
   numericFieldError,
   requiredFieldError,
+  requiredMaxLengthFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
@@ -74,7 +75,9 @@ const isApplicationDocumentRow = (row: PermitDocumentRow): boolean => {
 
 type PermitInvoiceField = 'invoiceDraftNumber' | 'invoiceDraftExportValue' | 'invoiceDraftFeeInLieu'
 
-const ProvincialPermitDetailsPage: FC = () => {
+const MAX_SALES_INVOICE_NUMBER_LENGTH = 9
+
+const ProvincialPermitDetailsPage = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const { permitNumber } = useParams()
@@ -318,7 +321,12 @@ const ProvincialPermitDetailsPage: FC = () => {
   const canDeleteInvoiceDocuments = canPerform('/fileInvoiceUpload')
   const invoiceFieldErrors = useMemo<FieldErrors<PermitInvoiceField>>(
     () => ({
-      invoiceDraftNumber: requiredFieldError(invoiceDraftNumber, 'Invoice number') ?? undefined,
+      invoiceDraftNumber:
+        requiredMaxLengthFieldError(
+          invoiceDraftNumber,
+          MAX_SALES_INVOICE_NUMBER_LENGTH,
+          'Invoice number',
+        ) ?? undefined,
       invoiceDraftExportValue: firstValidationError(
         () => requiredFieldError(invoiceDraftExportValue, 'Invoice export value'),
         () => numericFieldError(invoiceDraftExportValue, 'Invoice export value'),

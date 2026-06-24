@@ -6,7 +6,7 @@ export type SearchableSelectOption = {
   label: string
 }
 
-type SearchableSelectProps = {
+export type SearchableSelectProps = {
   id: string
   labelText: ReactNode
   value: string

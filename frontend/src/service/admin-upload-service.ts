@@ -105,44 +105,49 @@ const appendUploadFile = (formData: FormData, request: UploadFileRequestBase): v
   formData.append('formFile', request.file)
 }
 
-const buildModernPayload = <TType extends UploadWorkflowType>(
-  workflowType: TType,
-  request: UploadRequestByType[TType],
+const buildModernPayload = (
+  workflowType: UploadWorkflowType,
+  request: UploadRequestByType[UploadWorkflowType],
 ): FormData => {
   const formData = new FormData()
   if (workflowType === 'applicationSubmission') {
-    appendUploadFile(formData, request)
-  } else {
-    appendBaseFormData(formData, request)
-  }
-
-  if (workflowType === 'application') {
-    formData.append('applicationNumber', request.applicationNumber)
-  }
-
-  if (workflowType === 'exemption') {
-    formData.append('exemptionNumber', request.exemptionNumber)
-  }
-
-  if (workflowType === 'permit') {
-    formData.append('permitNumber', request.permitNumber)
-  }
-
-  if (workflowType === 'invoice') {
-    formData.append('permitNumber', request.permitNumber)
-    formData.append('salesInvoiceNumber', request.salesInvoiceNumber)
-    formData.append('invoiceExportValue', request.invoiceExportValue)
-    formData.append('invoiceConversionRate', request.invoiceConversionRate)
-    formData.append('invoiceFeeInLieu', request.invoiceFeeInLieu)
-  }
-
-  if (workflowType === 'applicationSubmission' && 'userReference' in request) {
-    const userReference = request.userReference?.trim()
+    const submissionRequest = request as ApplicationSubmissionUploadRequest
+    appendUploadFile(formData, submissionRequest)
+    const userReference = submissionRequest.userReference?.trim()
     if (userReference) {
       formData.append('userReference', userReference)
     }
+    return formData
   }
 
+  if (workflowType === 'application') {
+    const applicationRequest = request as ApplicationUploadRequest
+    appendBaseFormData(formData, applicationRequest)
+    formData.append('applicationNumber', applicationRequest.applicationNumber)
+    return formData
+  }
+
+  if (workflowType === 'exemption') {
+    const exemptionRequest = request as ExemptionUploadRequest
+    appendBaseFormData(formData, exemptionRequest)
+    formData.append('exemptionNumber', exemptionRequest.exemptionNumber)
+    return formData
+  }
+
+  if (workflowType === 'permit') {
+    const permitRequest = request as PermitUploadRequest
+    appendBaseFormData(formData, permitRequest)
+    formData.append('permitNumber', permitRequest.permitNumber)
+    return formData
+  }
+
+  const invoiceRequest = request as InvoiceUploadRequest
+  appendBaseFormData(formData, invoiceRequest)
+  formData.append('permitNumber', invoiceRequest.permitNumber)
+  formData.append('salesInvoiceNumber', invoiceRequest.salesInvoiceNumber)
+  formData.append('invoiceExportValue', invoiceRequest.invoiceExportValue)
+  formData.append('invoiceConversionRate', invoiceRequest.invoiceConversionRate)
+  formData.append('invoiceFeeInLieu', invoiceRequest.invoiceFeeInLieu)
   return formData
 }
 

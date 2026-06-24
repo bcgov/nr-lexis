@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
+import DetailDocumentUploadPanel from '../DetailDocumentUploadPanel'
 import { submitAdminUpload } from '@/service/admin-upload-service'
 
 vi.mock('@/service/admin-upload-service', () => ({

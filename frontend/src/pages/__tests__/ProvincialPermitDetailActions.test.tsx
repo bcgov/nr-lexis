@@ -237,6 +237,28 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
   })
 
+  it('blocks add invoice when invoice number exceeds the legacy length limit', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.type(await screen.findByLabelText('Invoice number'), '1234567890')
+    await userEvent.type(screen.getByLabelText('Export value'), '100')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add Invoice' }))
+
+    expect(
+      screen.getAllByText('Invoice number must be 9 characters or fewer.').length,
+    ).toBeGreaterThan(0)
+    expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
+  })
+
   it('jumps from the permit document action to the embedded upload panel', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>

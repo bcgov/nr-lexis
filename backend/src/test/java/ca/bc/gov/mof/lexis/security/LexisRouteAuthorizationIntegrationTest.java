@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.security;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -12,13 +13,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpMethod;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 @SpringBootTest(
     properties = {
@@ -29,7 +40,51 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class LexisRouteAuthorizationIntegrationTest {
 
+  private static final Pattern PATH_VARIABLE_PATTERN = Pattern.compile("\\{[^/]+}");
+  private static final Pattern ACTION_MAPPING_PARAM_PATTERN =
+      Pattern.compile("actionMapping=([^,\\]]+)");
+  private static final Map<String, String> SAMPLE_PATH_VARIABLES =
+      Map.of(
+          "applicationNumber", "1000123",
+          "exemptionNumber", "EX-100",
+          "offerNumber", "3000123",
+          "permitNumber", "7000123",
+          "policyId", "123");
+
   @Autowired private MockMvc mockMvc;
+
+  @Autowired
+  @Qualifier("requestMappingHandlerMapping")
+  private RequestMappingHandlerMapping handlerMapping;
+
+  @Test
+  @DisplayName("Every Lexis controller endpoint has an explicit authorization rule")
+  void everyLexisControllerEndpointShouldHaveExplicitAuthorizationRule() {
+    List<EndpointAuthorizationLookup> lookups =
+        handlerMapping.getHandlerMethods().entrySet().stream()
+            .filter(entry -> isLexisController(entry.getValue().getBeanType()))
+            .flatMap(
+                entry ->
+                    authorizationLookups(entry.getKey()).stream()
+                        .map(lookup -> lookup.withHandler(entry.getValue().toString())))
+            .toList();
+
+    assertThat(lookups.stream().filter(lookup -> lookup.actionMapping() != null).count())
+        .isGreaterThan(40);
+
+    List<String> uncoveredMappings =
+        lookups.stream()
+            .filter(
+                lookup ->
+                    LexisApiAuthorizationRules.findRule(
+                            lookup.method(), lookup.path(), lookup.actionMapping())
+                        .isEmpty())
+            .map(EndpointAuthorizationLookup::description)
+            .sorted()
+            .toList();
+
+    assertThat(uncoveredMappings).isEmpty();
+  }
 
   @Test
   void applicationsSearchShouldRejectAnonymousRequests() throws Exception {
@@ -281,6 +336,36 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void legacyExemptionDetailsRpcReadActionShouldAllowReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/exemptionDetailsRPC")
+                .param("actionMapping", "getApplications")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyExemptionDetailsRpcSaveActionShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/exemptionDetailsRPC")
+                .param("actionMapping", "addExemption")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyExemptionDetailsRpcApprovalActionShouldRejectReadOnlyRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/exemptionDetailsRPC")
+                .param("actionMapping", "sendExemptionApprovalEmail")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void legacyApplicationDetailsRpcShouldAllowClientLookupAction() throws Exception {
     mockMvc.perform(
             post("/api/lexis/applicationDetailsRPC")
@@ -400,6 +485,47 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("packageNumber", "PKG-903")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyApplicationDetailsRpcRemarkShouldRequireApplicationRemarksGrant() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "persistRemark")
+                .param("applicationNumber", "1000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyApplicationDetailsRpcRemarkShouldAllowApplicationApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "persistRemark")
+                .param("applicationNumber", "1000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void legacyApplicationDetailsRpcWithdrawnEmailShouldRequireReviewGrant() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "sendApplWithdrawnEmail")
+                .param("applicationNumber", "1000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void legacyApplicationDetailsRpcWithdrawnEmailShouldAllowApplicationApproverRole()
+      throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/applicationDetailsRPC")
+                .param("actionMapping", "sendApplWithdrawnEmail")
+                .param("applicationNumber", "1000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
   }
 
   @Test
@@ -567,6 +693,24 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("permitNumber", "7000123")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void modernPermitDetailsWriteActionShouldRejectProvincialSubmitterRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/update-permit")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void modernPermitDetailsWriteActionShouldAllowCanonicalApproverRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/rpc/permit-details/update-permit")
+                .param("permitNumber", "7000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent());
   }
 
   @Test
@@ -1025,5 +1169,71 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("toDate", "2026-01-31")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isForbidden());
+  }
+
+  private static boolean isLexisController(Class<?> beanType) {
+    return beanType.getPackageName().equals("ca.bc.gov.mof.lexis.controller")
+        && beanType.getSimpleName().endsWith("Controller");
+  }
+
+  private static List<EndpointAuthorizationLookup> authorizationLookups(RequestMappingInfo info) {
+    String actionMapping = actionMapping(info);
+    return paths(info).stream()
+        .flatMap(
+            path ->
+                methods(info).stream()
+                    .map(
+                        method ->
+                            new EndpointAuthorizationLookup(
+                                httpMethod(method), samplePath(path), actionMapping, null)))
+        .toList();
+  }
+
+  private static Set<String> paths(RequestMappingInfo info) {
+    if (info.getPathPatternsCondition() != null) {
+      return info.getPathPatternsCondition().getPatternValues();
+    }
+    if (info.getPatternsCondition() != null) {
+      return info.getPatternsCondition().getPatterns();
+    }
+    return Set.of();
+  }
+
+  private static Set<RequestMethod> methods(RequestMappingInfo info) {
+    return info.getMethodsCondition().getMethods();
+  }
+
+  private static HttpMethod httpMethod(RequestMethod method) {
+    return HttpMethod.valueOf(method.name());
+  }
+
+  private static String actionMapping(RequestMappingInfo info) {
+    return info.getParamsCondition().getExpressions().stream()
+        .map(Object::toString)
+        .map(ACTION_MAPPING_PARAM_PATTERN::matcher)
+        .filter(matcher -> matcher.find())
+        .map(matcher -> matcher.group(1))
+        .findFirst()
+        .orElse(null);
+  }
+
+  private static String samplePath(String pattern) {
+    String path = pattern;
+    for (Map.Entry<String, String> sample : SAMPLE_PATH_VARIABLES.entrySet()) {
+      path = path.replace("{" + sample.getKey() + "}", sample.getValue());
+    }
+    return PATH_VARIABLE_PATTERN.matcher(path).replaceAll("1");
+  }
+
+  private record EndpointAuthorizationLookup(
+      HttpMethod method, String path, String actionMapping, String handler) {
+    EndpointAuthorizationLookup withHandler(String resolvedHandler) {
+      return new EndpointAuthorizationLookup(method, path, actionMapping, resolvedHandler);
+    }
+
+    String description() {
+      String params = actionMapping == null ? "" : "?actionMapping=" + actionMapping;
+      return method + " " + path + params + " -> " + handler;
+    }
   }
 }

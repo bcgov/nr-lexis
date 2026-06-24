@@ -7,7 +7,7 @@ import { CookieStorage } from 'aws-amplify/utils'
 import '@/scss/styles.scss'
 import App from '@/App'
 import amplifyConfig, { isCognitoConfigured } from '@/config/fam/config'
-import { AuthProvider } from '@/context/auth/AuthProvider'
+import { AuthProvider } from './context/auth/AuthProvider'
 
 if (isCognitoConfigured) {
   cognitoUserPoolsTokenProvider.setKeyValueStorage(

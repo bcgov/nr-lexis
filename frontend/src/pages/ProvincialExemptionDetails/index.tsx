@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Column,
@@ -16,11 +16,11 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
-import { ApiSourceTag } from '@/components/AbbreviatedSourceTag'
-import { AppNotification } from '@/components/AppNotification'
-import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
+import { ApiSourceTag } from '../../components/AbbreviatedSourceTag'
+import { AppNotification } from '../../components/AppNotification'
+import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { DetailFieldTile } from '../shared/DetailSections'
 import {
   displayValue,
   matchesFilter,
@@ -38,7 +38,7 @@ import {
 import { runReport } from '@/service/report-service'
 import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
 
-const ProvincialExemptionDetailsPage: FC = () => {
+const ProvincialExemptionDetailsPage = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const { exemptionNumber } = useParams()
