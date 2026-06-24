@@ -260,16 +260,6 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         String grade = trimToNull(row.grade());
         String normalizedGrowthIndicator = trimToNull(row.growthIndicator());
         BigDecimal newValue = row.newValue();
-        String effectiveMode = SAVE_MODE_CREATE;
-        String requestUpdateDate = null;
-
-        if (existingRowExists(species, grade, normalizedGrowthIndicator, parsedRetrievalDate)) {
-          effectiveMode = SAVE_MODE_UPDATE;
-          requestUpdateDate = formatDate(parsedUpdateDate);
-          warnings.add(
-              "Existing record found for species '%s', grade '%s', growth '%s' (source row %d); row will be updated."
-                  .formatted(species, grade, normalizedGrowthIndicator, row.sourceRow()));
-        }
 
         RtmEmsLogAmvMutationResultDto mutationResult =
             save(
@@ -278,9 +268,9 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
                     grade,
                     normalizedGrowthIndicator,
                     formatDate(parsedRetrievalDate),
-                    requestUpdateDate,
+                    formatDate(parsedUpdateDate),
                     newValue,
-                    effectiveMode));
+                    SAVE_MODE_UPDATE));
 
         if ("accepted".equalsIgnoreCase(mutationResult.status())) {
           uploadedCount++;
@@ -469,24 +459,6 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     String upperGrade = normalizedGrade.toUpperCase();
     return !upperGrade.equals("AVERAGE") && !upperGrade.startsWith("GRAND TOTAL");
-  }
-
-  private boolean existingRowExists(
-      String species,
-      String grade,
-      String growthIndicator,
-      LocalDate retrievalDate) {
-    return repository
-        .find(species, growthIndicator, retrievalDate, null)
-        .stream()
-        .anyMatch(
-            row ->
-                trimToNull(row.species()) != null
-                    && trimToNull(row.species()).equalsIgnoreCase(species)
-                    && trimToNull(row.grade()) != null
-                    && trimToNull(row.grade()).equalsIgnoreCase(grade)
-                    && trimToNull(row.growthIndicator()) != null
-                    && trimToNull(row.growthIndicator()).equalsIgnoreCase(growthIndicator));
   }
 
   private List<RtmEmsLogAmvRowDto> buildPreviewRows(
