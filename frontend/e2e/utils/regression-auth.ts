@@ -40,6 +40,7 @@ type RealCredentials = {
 type LoginConfig = {
   buttonName: RegExp
   label: string
+  testId: string
   usernameEnv: string
   passwordEnv: string
 }
@@ -60,6 +61,7 @@ const LOGIN_ERROR_TEXT =
 const idirLoginConfig: LoginConfig = {
   buttonName: /log in with idir/i,
   label: 'IDIR',
+  testId: 'landing-button__idir',
   usernameEnv: 'E2E_IDIR_USER',
   passwordEnv: 'E2E_IDIR_PASSWORD',
 }
@@ -67,6 +69,7 @@ const idirLoginConfig: LoginConfig = {
 const businessBceidLoginConfig: LoginConfig = {
   buttonName: /log in with business bceid/i,
   label: 'Business BCeID',
+  testId: 'landing-button__bceid',
   usernameEnv: 'E2E_BCEID_USER',
   passwordEnv: 'E2E_BCEID_PASSWORD',
 }
@@ -337,6 +340,16 @@ const firstVisible = async (page: Page, selector: string, timeout = 5000) => {
   return visible ? locator : null
 }
 
+const clickLoginButton = async (page: Page, config: LoginConfig): Promise<void> => {
+  const testIdButton = page.getByTestId(config.testId)
+  if (await testIdButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await testIdButton.click()
+    return
+  }
+
+  await page.getByRole('button', { name: config.buttonName }).click()
+}
+
 const currentPageSummary = async (page: Page): Promise<string> => {
   const title = await page.title().catch(() => '')
   const rawUrl = page.url()
@@ -369,10 +382,14 @@ const fillCredentialScreen = async (
   const [usernameInput, passwordInput] = await Promise.all([
     firstVisible(
       page,
-      'input[name*="user" i], input[id*="user" i], input[type="email"], input[type="text"]',
+      'input[name="user"], input[name*="user" i], input[id*="user" i], input[type="email"], input[type="text"]',
       CREDENTIAL_SCREEN_TIMEOUT_MS,
     ),
-    firstVisible(page, 'input[type="password"]', CREDENTIAL_SCREEN_TIMEOUT_MS),
+    firstVisible(
+      page,
+      'input[name="password"], input[type="password"]',
+      CREDENTIAL_SCREEN_TIMEOUT_MS,
+    ),
   ])
 
   if (!usernameInput && !passwordInput) {
@@ -386,11 +403,20 @@ const fillCredentialScreen = async (
     await passwordInput.fill(password)
   }
 
-  const submitButton = page
-    .getByRole('button', { name: /log in|login|sign in|continue|submit/i })
-    .first()
+  const submitButton = page.locator('input[type="submit"], button[type="submit"]').first()
   if (await submitButton.isVisible({ timeout: 5000 }).catch(() => false)) {
     await submitButton.click()
+  } else if (
+    await page
+      .getByRole('button', { name: /log in|login|sign in|continue|submit/i })
+      .first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false)
+  ) {
+    await page
+      .getByRole('button', { name: /log in|login|sign in|continue|submit/i })
+      .first()
+      .click()
   } else if (passwordInput) {
     await passwordInput.press('Enter')
   } else if (usernameInput) {
@@ -402,7 +428,7 @@ const fillCredentialScreen = async (
 }
 
 const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> => {
-  const { buttonName, label } = config
+  const { label } = config
   const { username, password } = credentials(config)
   await page.goto('/', { waitUntil: 'domcontentloaded' })
 
@@ -410,7 +436,7 @@ const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> =
     return
   }
 
-  await page.getByRole('button', { name: buttonName }).click()
+  await clickLoginButton(page, config)
   await page.waitForLoadState('domcontentloaded').catch(() => undefined)
 
   for (let attempt = 0; attempt < 4; attempt += 1) {

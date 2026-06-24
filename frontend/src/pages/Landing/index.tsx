@@ -52,6 +52,7 @@ const LandingPage = () => {
                     renderIcon={Login}
                     onClick={() => void onLogin('idir')}
                     disabled={isLoading || !usesExternalLogin}
+                    data-testid="landing-button__idir"
                   >
                     Log in with IDIR
                   </Button>
@@ -60,6 +61,7 @@ const LandingPage = () => {
                     renderIcon={Login}
                     onClick={() => void onLogin('business-bceid')}
                     disabled={isLoading || !usesExternalLogin}
+                    data-testid="landing-button__bceid"
                   >
                     Log in with Business BCeID
                   </Button>
