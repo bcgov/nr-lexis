@@ -142,6 +142,8 @@ const createResultMessage = (status: string, message: string, errors: string[]):
 }
 
 const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
+const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 
 const RTM_MODULE_DESCRIPTION =
   'Query current and historical RTM AMV rows, make manual create/update entries, and generate an upload preview from XLSX files.'
@@ -725,7 +727,22 @@ const RTMEmsLogAmvPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <h2 className="dashboard-title">Upload preview</h2>
+          <div className="legacy-search-section-header">
+            <div>
+              <h2 className="dashboard-title">Upload Log Spreadsheet</h2>
+              <p className="landing-page-help-text">
+                Upload an XLSX spreadsheet to validate RTM EMS AMV rows before applying changes.
+              </p>
+            </div>
+            <a
+              className="cds--btn cds--btn--ghost"
+              href={RTM_TEMPLATE_DOWNLOAD_PATH}
+              download={RTM_TEMPLATE_DOWNLOAD_NAME}
+            >
+              Download template
+            </a>
+          </div>
+
           <div className="legacy-search-grid">
             <div>
               <label htmlFor="rtm-upload-file">Choose an XLSX file to preview and apply</label>
@@ -737,18 +754,6 @@ const RTMEmsLogAmvPage: FC = () => {
               />
               {selectedUploadFile && <p>Selected: {selectedUploadFile.name}</p>}
             </div>
-            <Button
-              kind="secondary"
-              onClick={() => {
-                void submitPreview()
-              }}
-              disabled={isPreviewDisabled}
-            >
-              Preview
-            </Button>
-          </div>
-
-          <div className="legacy-search-grid" style={{ marginTop: '0.75rem' }}>
             <IsoDatePicker
               id="rtm-upload-retrieval-date"
               labelText="Retrieval date"
@@ -766,16 +771,24 @@ const RTMEmsLogAmvPage: FC = () => {
               }}
             />
             <Button
-              kind="primary"
+              kind="secondary"
               onClick={() => {
-                void submitUpload()
+                void submitPreview()
               }}
-              disabled={isUploadDisabled}
+              disabled={isPreviewDisabled}
             >
-              Apply upload
+              Preview data
             </Button>
           </div>
+        </Tile>
+      </Column>
 
+      <Column sm={4} md={8} lg={16}>
+        <Tile>
+          <h2 className="dashboard-title">Data Preview</h2>
+          <p className="landing-page-help-text">
+            Review validation results before applying the spreadsheet upload.
+          </p>
           {uploadError && (
             <p className="landing-page-help-text landing-page-help-text--error">{uploadError}</p>
           )}
@@ -795,6 +808,15 @@ const RTMEmsLogAmvPage: FC = () => {
                 Generate a valid preview before applying the upload.
               </p>
             )}
+
+          {!previewResult && (
+            <div style={{ marginTop: '0.75rem', padding: '2rem 1rem', textAlign: 'center' }}>
+              <p>No preview data yet.</p>
+              <p className="landing-page-help-text">
+                Upload an XLSX file above and select Preview data to validate it.
+              </p>
+            </div>
+          )}
 
           {previewResult && (
             <div style={{ marginTop: '0.75rem' }}>
@@ -826,6 +848,16 @@ const RTMEmsLogAmvPage: FC = () => {
               )}
             </div>
           )}
+
+          <Button
+            kind="primary"
+            onClick={() => {
+              void submitUpload()
+            }}
+            disabled={isUploadDisabled}
+          >
+            Apply upload
+          </Button>
 
           {uploadResult && (
             <div style={{ marginTop: '0.75rem' }}>
