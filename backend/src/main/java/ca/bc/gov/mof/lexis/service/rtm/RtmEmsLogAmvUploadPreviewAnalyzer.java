@@ -30,8 +30,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
   private static final String WORKSHEET_ENTRY_PREFIX = "xl/worksheets/sheet";
   private static final String XML_EXTENSION = ".xml";
   private static final String GRADE_HEADER = "GRADE";
-  private static final List<String> PINE_SPECIES_CODES = List.of("PL", "PW", "PY");
-  private static final Map<String, List<String>> SPECIES_HEADER_ALIASES = speciesHeaderAliases();
+  static final List<String> DEFAULT_PINE_SPECIES_CODES = List.of("PL", "PW", "PY");
 
   private RtmEmsLogAmvUploadPreviewAnalyzer() {}
 
@@ -77,7 +76,13 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
   static UploadParseResult parseForUpload(InputStream inputStream) throws IOException {
     ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
-    return parseUploadSheet(parsedWorkbook.rows());
+    return parseUploadSheet(parsedWorkbook.rows(), DEFAULT_PINE_SPECIES_CODES);
+  }
+
+  static UploadParseResult parseForUpload(
+      InputStream inputStream, List<String> pineSpeciesCodes) throws IOException {
+    ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
+    return parseUploadSheet(parsedWorkbook.rows(), pineSpeciesCodes);
   }
 
   private static ParsedWorkbook readWorkbook(InputStream inputStream) throws IOException {
@@ -103,7 +108,8 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return new ParsedWorkbook(rows);
   }
 
-  private static UploadParseResult parseUploadSheet(List<ParsedRow> rows) {
+  private static UploadParseResult parseUploadSheet(
+      List<ParsedRow> rows, List<String> pineSpeciesCodes) {
     int dataRows = 0;
     int numericCells = 0;
     boolean headerDetected = false;
@@ -111,6 +117,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     LocalDate updateDate = parseUpdateDate(rows);
     LocalDate retrievalDate =
         updateDate == null ? null : updateDate.minusMonths(1).withDayOfMonth(1);
+    Map<String, List<String>> speciesHeaderAliases = speciesHeaderAliases(pineSpeciesCodes);
     Map<Integer, List<String>> speciesByColumn = new HashMap<>();
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
@@ -124,10 +131,10 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       int rowNumber = parsedRow.rowNumber();
       List<ParsedCell> rowCells = parsedRow.cells();
 
-      if (!headerDetected && rowHasHeader(rowCells)) {
+      if (!headerDetected && rowHasHeader(rowCells, speciesHeaderAliases)) {
         headerDetected = true;
         headerRow = rowNumber;
-        speciesByColumn = parseSpeciesHeaders(rowCells, rowNumber, warnings);
+        speciesByColumn = parseSpeciesHeaders(rowCells, rowNumber, warnings, speciesHeaderAliases);
 
         if (speciesByColumn.isEmpty()) {
           errors.add("Header row %d does not include recognized species columns.".formatted(rowNumber));
@@ -212,7 +219,10 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
   }
 
   private static Map<Integer, List<String>> parseSpeciesHeaders(
-      List<ParsedCell> cells, int rowNumber, List<String> warnings) {
+      List<ParsedCell> cells,
+      int rowNumber,
+      List<String> warnings,
+      Map<String, List<String>> speciesHeaderAliases) {
     Map<Integer, List<String>> speciesByColumn = new HashMap<>();
     Set<String> observedSpecies = new HashSet<>();
 
@@ -228,7 +238,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       }
 
       String normalizedValue = normalizeHeader(value);
-      List<String> speciesCodes = resolveSpeciesCodes(value);
+      List<String> speciesCodes = resolveSpeciesCodes(value, speciesHeaderAliases);
       if (speciesCodes.isEmpty()) {
         warnings.add(
             "Header row %d contains unmapped species header '%s' at column %s."
@@ -250,9 +260,10 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return speciesByColumn;
   }
 
-  private static boolean rowHasHeader(List<ParsedCell> cells) {
+  private static boolean rowHasHeader(
+      List<ParsedCell> cells, Map<String, List<String>> speciesHeaderAliases) {
     for (ParsedCell cell : cells) {
-      if (containsExpectedHeader(cell.value())) {
+      if (containsExpectedHeader(cell.value(), speciesHeaderAliases)) {
         return true;
       }
     }
@@ -284,9 +295,10 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     }
   }
 
-  private static boolean containsExpectedHeader(String value) {
+  private static boolean containsExpectedHeader(
+      String value, Map<String, List<String>> speciesHeaderAliases) {
     String normalized = normalizeHeader(value);
-    return GRADE_HEADER.equals(normalized) || !resolveSpeciesCodes(value).isEmpty();
+    return GRADE_HEADER.equals(normalized) || !resolveSpeciesCodes(value, speciesHeaderAliases).isEmpty();
   }
 
   private static boolean isUploadableGrade(String grade) {
@@ -372,13 +384,14 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return null;
   }
 
-  private static List<String> resolveSpeciesCodes(String value) {
+  private static List<String> resolveSpeciesCodes(
+      String value, Map<String, List<String>> speciesHeaderAliases) {
     String normalized = normalizeHeader(value);
     if (normalized.isBlank() || GRADE_HEADER.equals(normalized)) {
       return List.of();
     }
 
-    List<String> alias = SPECIES_HEADER_ALIASES.get(normalized);
+    List<String> alias = speciesHeaderAliases.get(normalized);
     if (alias != null) {
       return alias;
     }
@@ -398,8 +411,9 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         .strip();
   }
 
-  private static Map<String, List<String>> speciesHeaderAliases() {
+  private static Map<String, List<String>> speciesHeaderAliases(List<String> pineSpeciesCodes) {
     Map<String, List<String>> aliases = new LinkedHashMap<>();
+    List<String> normalizedPineSpeciesCodes = normalizePineSpeciesCodes(pineSpeciesCodes);
     aliases.put("BA", List.of("BA"));
     aliases.put("BALSAM", List.of("BA"));
     aliases.put("HE", List.of("HE"));
@@ -412,12 +426,25 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     aliases.put("FIR", List.of("FI"));
     aliases.put("SP", List.of("SP"));
     aliases.put("SPRUCE", List.of("SP"));
-    aliases.put("P", PINE_SPECIES_CODES);
-    aliases.put("PINE", PINE_SPECIES_CODES);
-    for (String pineCode : PINE_SPECIES_CODES) {
-      aliases.put(pineCode, PINE_SPECIES_CODES);
+    aliases.put("P", normalizedPineSpeciesCodes);
+    aliases.put("PINE", normalizedPineSpeciesCodes);
+    for (String pineCode : normalizedPineSpeciesCodes) {
+      aliases.put(pineCode, normalizedPineSpeciesCodes);
     }
     return aliases;
+  }
+
+  private static List<String> normalizePineSpeciesCodes(List<String> pineSpeciesCodes) {
+    List<String> normalized =
+        pineSpeciesCodes == null
+            ? List.of()
+            : pineSpeciesCodes.stream()
+                .map(RtmEmsLogAmvUploadPreviewAnalyzer::normalizeHeader)
+                .filter(code -> code.matches("[A-Z0-9]{1,3}"))
+                .distinct()
+                .toList();
+
+    return normalized.isEmpty() ? DEFAULT_PINE_SPECIES_CODES : normalized;
   }
 
   private static String trimToNull(String value) {

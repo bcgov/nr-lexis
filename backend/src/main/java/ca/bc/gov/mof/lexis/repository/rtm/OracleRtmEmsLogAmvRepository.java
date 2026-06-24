@@ -26,9 +26,21 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       "RTM_EMS_LOG_AMV_UPDATE(?,?,?,?,?,?,?)";
   private static final String SELECT_PROCEDURE =
       "RTM_EMS_LOG_AMV_SELECT(?,?,?,?,?,?)";
+  private static final String FIND_ALL_SPECIES_CODES =
+      LEXIS_CODES_PACKAGE + "FIND_ALL_SPECIES_CODES(?)";
 
   public OracleRtmEmsLogAmvRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
+  }
+
+  public record SpeciesCodeRow(String code, String description) {}
+
+  public List<SpeciesCodeRow> findAllSpeciesCodes() {
+    return queryCursorProcedure(
+        FIND_ALL_SPECIES_CODES,
+        null,
+        1,
+        rs -> new SpeciesCodeRow(getString(rs, "CODE"), getString(rs, "DESCRIPTION")));
   }
 
   public List<RtmEmsLogAmvRowDto> find(

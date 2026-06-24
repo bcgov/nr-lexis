@@ -317,27 +317,15 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
         String grade = trimToNull(row.grade());
         String normalizedGrowthIndicator = trimToNull(row.growthIndicator());
         BigDecimal newValue = row.newValue();
-        String effectiveMode = SAVE_MODE_CREATE;
-        String requestUpdateDate = null;
-
-        if (hasExistingRow(species, grade, normalizedGrowthIndicator, formatDate(parsedRetrievalDate))) {
-          effectiveMode = SAVE_MODE_UPDATE;
-          requestUpdateDate = formatDate(parsedUpdateDate);
-          warnings.add(
-              "Existing record found for species '%s', grade '%s', growth '%s' (source row %d); row will be updated."
-                  .formatted(species, grade, normalizedGrowthIndicator, row.sourceRow()));
-        }
 
         RtmEmsLogAmvMutationResultDto mutationResult =
-            save(
-                new RtmEmsLogAmvSaveRequestDto(
-                    species,
-                    grade,
-                    normalizedGrowthIndicator,
-                    formatDate(parsedRetrievalDate),
-                    requestUpdateDate,
-                    newValue,
-                    effectiveMode));
+            saveUploadRow(
+                species,
+                grade,
+                normalizedGrowthIndicator,
+                parsedRetrievalDate,
+                parsedUpdateDate,
+                newValue);
 
         if ("accepted".equalsIgnoreCase(mutationResult.status())) {
           uploadedCount++;
@@ -508,6 +496,36 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     return expected.equals(trimToNull(candidate));
   }
 
+  private RtmEmsLogAmvMutationResultDto saveUploadRow(
+      String species,
+      String grade,
+      String growthIndicator,
+      LocalDate retrievalDate,
+      LocalDate updateDate,
+      BigDecimal newValue) {
+    int existingIndex = findMatchingRowIndex(
+        species, grade, growthIndicator, formatDate(retrievalDate));
+    BigDecimal currentValue =
+        existingIndex < 0 ? null : rows.get(existingIndex).newValue();
+    RtmEmsLogAmvRowDto uploadedRow = new RtmEmsLogAmvRowDto(
+        species,
+        grade,
+        growthIndicator,
+        formatDate(retrievalDate),
+        formatDate(updateDate),
+        currentValue,
+        newValue,
+        "0");
+
+    if (existingIndex < 0) {
+      rows.add(uploadedRow);
+    } else {
+      rows.set(existingIndex, uploadedRow);
+    }
+
+    return buildMutationResult(RETURN_SUCCESS, "Upload row saved.", List.of(), List.of(uploadedRow));
+  }
+
   private String formatDate(LocalDate date) {
     return date == null ? null : date.toString();
   }
@@ -546,20 +564,6 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     String upperGrade = normalizedGrade.toUpperCase();
     return !upperGrade.equals("AVERAGE") && !upperGrade.startsWith("GRAND TOTAL");
-  }
-
-  private boolean hasExistingRow(
-      String species,
-      String grade,
-      String growthIndicator,
-      String retrievalDate) {
-    return rows.stream()
-        .anyMatch(
-            row ->
-                equalsIgnoreCaseOrNull(species, row.species())
-                    && equalsIgnoreCaseOrNull(grade, row.grade())
-                    && equalsIgnoreCaseOrNull(growthIndicator, row.growthIndicator())
-                    && equalsOrNull(retrievalDate, row.retrievalDate()));
   }
 
   private List<RtmEmsLogAmvRowDto> buildPreviewRows(

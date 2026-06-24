@@ -46,6 +46,18 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void shouldUseProvidedPineSpeciesCodes() throws IOException {
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook()),
+            List.of("PA", "PB", "PC"));
+
+    assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
+        .contains("PA", "PB", "PC")
+        .doesNotContain("PL", "PW", "PY");
+  }
+
+  @Test
   void shouldImportOnlyRequestedGradeRows() throws IOException {
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(

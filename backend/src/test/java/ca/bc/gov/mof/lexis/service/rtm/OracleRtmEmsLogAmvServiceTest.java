@@ -15,6 +15,8 @@ import ca.bc.gov.mof.lexis.repository.rtm.OracleRtmEmsLogAmvRepository;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.mock.web.MockMultipartFile;
@@ -71,6 +73,43 @@ class OracleRtmEmsLogAmvServiceTest {
             anyString(),
             any(LocalDate.class),
             any(BigDecimal.class));
+  }
+
+  @Test
+  void shouldResolveUploadPineCodesFromOracleSpeciesDescriptions() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.findAllSpeciesCodes())
+        .thenReturn(
+            List.of(
+                new OracleRtmEmsLogAmvRepository.SpeciesCodeRow("PA", "Alpine pine"),
+                new OracleRtmEmsLogAmvRepository.SpeciesCodeRow("PB", "PINE beta"),
+                new OracleRtmEmsLogAmvRepository.SpeciesCodeRow("PC", "Coastal Pine"),
+                new OracleRtmEmsLogAmvRepository.SpeciesCodeRow("BA", "Balsam")));
+    when(repository.update(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(LocalDate.class),
+            any(LocalDate.class),
+            any(BigDecimal.class)))
+        .thenReturn("0");
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+
+    RtmEmsLogAmvUploadResultDto result = service.upload(matrixWorkbook(), null, null);
+
+    ArgumentCaptor<String> speciesCaptor = ArgumentCaptor.forClass(String.class);
+    assertThat(result.status()).isEqualTo("accepted");
+    verify(repository, times(12))
+        .update(
+            speciesCaptor.capture(),
+            anyString(),
+            anyString(),
+            eq(LocalDate.of(2026, 6, 1)),
+            eq(LocalDate.of(2026, 7, 1)),
+            any(BigDecimal.class));
+    assertThat(speciesCaptor.getAllValues())
+        .contains("PA", "PB", "PC")
+        .doesNotContain("PL", "PW", "PY");
   }
 
   private MultipartFile matrixWorkbook() throws IOException {

@@ -16,8 +16,9 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -113,7 +114,8 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
-          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream());
+          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+              file.getInputStream(), resolvePineSpeciesCodes());
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
       List<RtmEmsLogAmvRowDto> previewRows = buildPreviewRows(parseResult);
@@ -178,7 +180,8 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
-          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream());
+          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+              file.getInputStream(), resolvePineSpeciesCodes());
 
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
@@ -507,6 +510,34 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       BigDecimal newValue,
       int sourceRow,
       int sourceColumn) {}
+
+  private List<String> resolvePineSpeciesCodes() {
+    List<OracleRtmEmsLogAmvRepository.SpeciesCodeRow> speciesCodes =
+        repository.findAllSpeciesCodes();
+    List<String> pineSpeciesCodes =
+        (speciesCodes == null ? List.<OracleRtmEmsLogAmvRepository.SpeciesCodeRow>of() : speciesCodes)
+            .stream()
+            .filter(row -> row != null && isPineSpeciesDescription(row.description()))
+            .map(OracleRtmEmsLogAmvRepository.SpeciesCodeRow::code)
+            .map(OracleRtmEmsLogAmvService::normalizeSpeciesCode)
+            .filter(code -> code != null && code.matches("[A-Z0-9]{1,3}"))
+            .distinct()
+            .toList();
+
+    return pineSpeciesCodes.isEmpty()
+        ? RtmEmsLogAmvUploadPreviewAnalyzer.DEFAULT_PINE_SPECIES_CODES
+        : pineSpeciesCodes;
+  }
+
+  private boolean isPineSpeciesDescription(String description) {
+    String normalized = trimToNull(description);
+    return normalized != null && normalized.toUpperCase(Locale.CANADA).contains("PINE");
+  }
+
+  private static String normalizeSpeciesCode(String code) {
+    String normalized = trimToNull(code);
+    return normalized == null ? null : normalized.toUpperCase(Locale.CANADA);
+  }
 
   private String columnToLetter(int index) {
     StringBuilder column = new StringBuilder();
