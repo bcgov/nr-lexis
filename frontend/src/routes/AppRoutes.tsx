@@ -1,10 +1,10 @@
 import { Loading } from '@carbon/react'
-import { Suspense, useMemo, type FC } from 'react'
+import { Suspense, useMemo } from 'react'
 import { RouterProvider, createBrowserRouter } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { getNoRoleRoutes, getProtectedRoutes, getPublicRoutes } from '@/routes/routePaths'
 
-const AppRoutes: FC = () => {
+const AppRoutes = () => {
   const { hasAnyRole, isLoading, isLoggedIn } = useAuth()
   const routesToUse = useMemo(() => {
     if (!isLoggedIn) {

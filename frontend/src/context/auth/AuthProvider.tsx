@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth'
 import {
   businessBceidProviderName,
@@ -13,7 +13,7 @@ import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import apiService from '@/service/api-service'
 import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
 
-type Props = {
+export type AuthProviderProps = {
   children: ReactNode
 }
 
@@ -225,7 +225,7 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   return '/unauthorized'
 }
 
-export const AuthProvider: FC<Props> = ({ children }) => {
+export function AuthProvider({ children }: AuthProviderProps) {
   const [capabilities, setCapabilities] = useState<LexisSessionCapabilities>(DEFAULT_CAPABILITIES)
   const [isLoading, setIsLoading] = useState(true)
   const refreshPromiseRef = useRef<Promise<void> | null>(null)

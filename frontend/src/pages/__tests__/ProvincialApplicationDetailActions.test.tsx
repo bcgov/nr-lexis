@@ -262,7 +262,7 @@ const getSummaryComboBox = (
 ): HTMLElement =>
   summaryControls
     .getAllByLabelText(labelText)
-    .find((element) => element.getAttribute('role') === 'combobox') as HTMLElement
+    .find((element: HTMLElement) => element.getAttribute('role') === 'combobox') as HTMLElement
 
 describe('Provincial Application Detail Document Actions', () => {
   beforeEach(() => {

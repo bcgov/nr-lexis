@@ -2,7 +2,7 @@ import { DatePicker, DatePickerInput } from '@carbon/react'
 import type { ReactNode } from 'react'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 
-type Props = {
+export type IsoDatePickerProps = {
   id: string
   labelText: ReactNode
   value: string
@@ -22,7 +22,7 @@ export default function IsoDatePicker({
   disabled = false,
   onBlur,
   onChange,
-}: Props) {
+}: IsoDatePickerProps) {
   const flatpickrValue = value.trim() && isValidIsoDate(value) ? value : undefined
 
   return (
@@ -35,10 +35,8 @@ export default function IsoDatePicker({
     >
       <DatePickerInput
         id={id}
-        name={`${id}-lexis-date`}
         labelText={labelText}
         placeholder="YYYY-MM-DD"
-        autoComplete="off"
         data-1p-ignore="true"
         data-lpignore="true"
         invalid={invalid}

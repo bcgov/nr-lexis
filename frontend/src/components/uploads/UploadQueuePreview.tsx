@@ -1,4 +1,4 @@
-import { useMemo, useState, type FC, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Button, Tag, TextInput } from '@carbon/react'
 import { Upload } from '@carbon/icons-react'
 import UploadQueueReviewAccordion from './UploadQueueReviewAccordion'
@@ -11,7 +11,7 @@ import {
 } from './uploadQueueHelpers'
 import type { UploadQueueItem } from './uploadQueueTypes'
 
-type UploadQueuePreviewProps = {
+export type UploadQueuePreviewProps = {
   items: UploadQueueItem[]
   targetSummary: string
   canSubmit: boolean
@@ -42,7 +42,7 @@ const formatFileType = (file: File): string => {
   return file.type || 'Unknown type'
 }
 
-const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
+function UploadQueuePreview({
   items,
   targetSummary,
   canSubmit,
@@ -63,7 +63,7 @@ const UploadQueuePreview: FC<UploadQueuePreviewProps> = ({
   pendingMessage = 'Not submitted yet.',
   canRemoveItem = () => true,
   renderCompleteAction,
-}) => {
+}: UploadQueuePreviewProps) {
   const [queueFilter, setQueueFilter] = useState('')
   const readyCount = items.filter((item) => item.status === 'queued').length
   const invalidCount = items.filter((item) => item.status === 'invalid').length

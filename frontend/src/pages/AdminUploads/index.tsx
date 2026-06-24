@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Column, ComboBox, Grid, Tag, TextArea, TextInput } from '@carbon/react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { AppNotification } from '@/components/AppNotification'
-import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
-import SearchableSelect from '@/components/SearchableSelect'
-import MultiFileDropZone from '@/components/uploads/MultiFileDropZone'
-import UploadQueuePreview from '@/components/uploads/UploadQueuePreview'
+import { AppNotification } from '../../components/AppNotification'
+import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
+import SearchableSelect from '../../components/SearchableSelect'
+import MultiFileDropZone from '../../components/uploads/MultiFileDropZone'
+import UploadQueuePreview from '../../components/uploads/UploadQueuePreview'
 import { buildLexisXmlPreviewMessage } from '@/components/uploads/lexisXmlPreview'
 import {
   buildUploadResultMessage,
@@ -48,7 +48,7 @@ type UploadWorkflowDefinition = {
   numberFieldPlaceholder: string
 }
 
-type AdminUploadsPageProps = {
+export type AdminUploadsPageProps = {
   lockedWorkflowType?: UploadWorkflowType
   pageTitle?: string
 }
@@ -132,7 +132,7 @@ type UploadTargetNumberOption = {
   label: string
 }
 
-type UploadTargetNumberSelectProps = {
+export type UploadTargetNumberSelectProps = {
   id: string
   labelText: ReactNode
   value: string
@@ -225,7 +225,7 @@ const shouldFilterUploadTargetItem = ({
   return item.label.toLowerCase().includes(query) || item.value.toLowerCase().includes(query)
 }
 
-const UploadTargetNumberSelect: FC<UploadTargetNumberSelectProps> = ({
+function UploadTargetNumberSelect({
   id,
   labelText,
   value,
@@ -235,7 +235,7 @@ const UploadTargetNumberSelect: FC<UploadTargetNumberSelectProps> = ({
   normalizeInput = trimTargetNumberInput,
   onBlur,
   onChange,
-}) => {
+}: UploadTargetNumberSelectProps) {
   const [options, setOptions] = useState<UploadTargetNumberOption[]>([])
   const [inputText, setInputText] = useState(value)
   const [isLoading, setIsLoading] = useState(false)
@@ -375,7 +375,7 @@ const uploadTargetSummary = (
 const defaultSuccessTitle = (workflowType: UploadWorkflowType): string =>
   workflowType === 'applicationSubmission' ? 'Application submission complete' : 'Upload submitted'
 
-const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageTitle }) => {
+function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPageProps) {
   const { canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const initialWorkflow =
@@ -481,26 +481,31 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
           : undefined,
       salesInvoiceNumber:
         selectedWorkflowType === 'invoice'
-          ? requiredMaxLengthFieldError(formState.salesInvoiceNumber, 9, 'Invoice number')
+          ? (requiredMaxLengthFieldError(formState.salesInvoiceNumber, 9, 'Invoice number') ??
+            undefined)
           : undefined,
       invoiceExportValue:
         selectedWorkflowType === 'invoice'
-          ? requiredPositiveNumericFieldError(formState.invoiceExportValue, 'Invoice export value')
+          ? (requiredPositiveNumericFieldError(
+              formState.invoiceExportValue,
+              'Invoice export value',
+            ) ?? undefined)
           : undefined,
       invoiceConversionRate:
         selectedWorkflowType === 'invoice'
-          ? requiredPositiveNumericFieldError(
+          ? (requiredPositiveNumericFieldError(
               formState.invoiceConversionRate,
               'Invoice conversion rate',
-            )
+            ) ?? undefined)
           : undefined,
       invoiceFeeInLieu:
         selectedWorkflowType === 'invoice'
-          ? requiredPositiveNumericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu')
+          ? (requiredPositiveNumericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu') ??
+            undefined)
           : undefined,
       userReference:
         selectedWorkflowType === 'applicationSubmission'
-          ? maxLengthFieldError(formState.userReference, 50, 'User reference')
+          ? (maxLengthFieldError(formState.userReference, 50, 'User reference') ?? undefined)
           : undefined,
     }),
     [formState, invalidUploadCount, uploadQueue.length, selectedWorkflowType],
@@ -538,7 +543,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
     }
 
     const queuedAt = Date.now()
-    const nextItems = Array.from(files).map((file, index) => {
+    const nextItems: UploadQueueItem[] = Array.from(files).map((file, index) => {
       const validationMessage = validateQueuedFile(file, selectedWorkflowType)
 
       return {
@@ -547,7 +552,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
         workflowLabel: selectedWorkflow.label,
         queuedAt,
         status: validationMessage ? ('invalid' as const) : ('queued' as const),
-        message: validationMessage,
+        message: validationMessage ?? '',
         details: validationMessage
           ? { summary: validationMessage, errors: [validationMessage] }
           : undefined,
@@ -931,12 +936,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
         )
       } catch (error) {
         failureCount += 1
-        const uploadError = extractUploadErrorDetails(
-          error,
-          selectedWorkflowType === 'applicationSubmission'
-            ? GENERIC_SUBMISSION_FAILURE_MESSAGE
-            : GENERIC_UPLOAD_FAILURE_MESSAGE,
-        )
+        const uploadError = extractUploadErrorDetails(error, GENERIC_UPLOAD_FAILURE_MESSAGE)
         setQueueItemStatus(
           item.id,
           'failed',
@@ -952,9 +952,7 @@ const AdminUploadsPage: FC<AdminUploadsPageProps> = ({ lockedWorkflowType, pageT
       setSuccessMessage(
         successCount === 1
           ? lastSuccessMessage
-          : selectedWorkflowType === 'applicationSubmission'
-            ? `${successCount} application submissions created. Verify the created application and package details.`
-            : `${successCount} files uploaded. Verify updates in the target details view.`,
+          : `${successCount} files uploaded. Verify updates in the target details view.`,
       )
     }
 

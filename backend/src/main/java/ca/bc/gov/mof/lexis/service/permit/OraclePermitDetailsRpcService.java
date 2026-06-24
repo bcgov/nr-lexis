@@ -83,6 +83,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final String EXPORT_SCALE_METHOD_WEIGHT = "W";
   private static final String EXPORT_PERMIT_STATUS_ACTIVE = "ACT";
   private static final String SPECIES_FIR = "FI";
+  private static final int MAX_SALES_INVOICE_NUMBER_LENGTH = 9;
   private static final long RCO_REGION_CODE = 1835L;
   private static final long RSK_REGION_CODE = 1908L;
   private static final long RSC_REGION_CODE = 1909L;
@@ -909,6 +910,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     if (normalizedSalesInvoiceNumber == null) {
       errors.add("A valid sales invoice number is required.");
+    } else if (normalizedSalesInvoiceNumber.length() > MAX_SALES_INVOICE_NUMBER_LENGTH) {
+      errors.add(
+          "The sales invoice number must be "
+              + MAX_SALES_INVOICE_NUMBER_LENGTH
+              + " characters or fewer.");
     }
     if (invoiceExportValue == null || invoiceExportValue.compareTo(BigDecimal.ZERO) <= 0) {
       errors.add("A valid export value is required.");

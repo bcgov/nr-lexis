@@ -1,5 +1,4 @@
 import { Column, Grid, Link as CarbonLink, Tile } from '@carbon/react'
-import { type FC } from 'react'
 import { Link } from 'react-router-dom'
 
 type ChildRoute = {
@@ -7,13 +6,13 @@ type ChildRoute = {
   path: string
 }
 
-type Props = {
+export type LegacyModulePageProps = {
   title: string
   description: string
   childRoutes?: ChildRoute[]
 }
 
-const LegacyModulePage: FC<Props> = ({ title, description, childRoutes = [] }) => {
+function LegacyModulePage({ title, description, childRoutes = [] }: LegacyModulePageProps) {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={12}>

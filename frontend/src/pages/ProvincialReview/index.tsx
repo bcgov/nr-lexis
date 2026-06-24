@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -17,10 +17,10 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
-import { AppNotification } from '@/components/AppNotification'
-import SearchableSelect from '@/components/SearchableSelect'
-import IsoDatePicker from '@/components/IsoDatePicker'
+import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
+import { AppNotification } from '../../components/AppNotification'
+import SearchableSelect from '../../components/SearchableSelect'
+import IsoDatePicker from '../../components/IsoDatePicker'
 import type {
   ApplicationReviewSearchFilters,
   ApplicationReviewSearchRequest,
@@ -133,7 +133,7 @@ const buildSearchParams = (
     ['pageSize', pageSize],
   ])
 
-const ProvincialReviewPage: FC = () => {
+const ProvincialReviewPage = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
@@ -172,7 +172,7 @@ const ProvincialReviewPage: FC = () => {
     () => ({
       reviewStatusCode: requiredFieldError(selectedStatusCode, 'Update status code') ?? undefined,
       reviewStatusRemark: selectedStatusRequiresRemark
-        ? requiredFieldError(statusRemark, 'Status remark')
+        ? (requiredFieldError(statusRemark, 'Status remark') ?? undefined)
         : undefined,
       reviewStatusEmail:
         statusEmailAddress.trim() && !isValidEmail(statusEmailAddress)
@@ -679,7 +679,7 @@ const ProvincialReviewPage: FC = () => {
                 titleText="Region"
                 items={regionOptions}
                 itemToString={(item) => (item ? item.text : '')}
-                label="Select region(s)"
+                placeholder="Select region(s)"
                 selectionFeedback="fixed"
                 selectedItems={selectedRegions}
                 onChange={(event) => {

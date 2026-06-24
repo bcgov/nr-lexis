@@ -1,7 +1,7 @@
-import { useState, type DragEvent, type FC } from 'react'
+import { useState, type DragEvent } from 'react'
 import { Upload } from '@carbon/icons-react'
 
-type MultiFileDropZoneProps = {
+export type MultiFileDropZoneProps = {
   title: string
   description: string
   inputId: string
@@ -14,7 +14,7 @@ type MultiFileDropZoneProps = {
   onFilesSelected: (files: FileList | null) => void
 }
 
-const MultiFileDropZone: FC<MultiFileDropZoneProps> = ({
+function MultiFileDropZone({
   title,
   description,
   inputId,
@@ -25,7 +25,7 @@ const MultiFileDropZone: FC<MultiFileDropZoneProps> = ({
   disabled = false,
   disabledDescription = 'File upload is not available.',
   onFilesSelected,
-}) => {
+}: MultiFileDropZoneProps) {
   const [isDraggingOver, setIsDraggingOver] = useState(false)
 
   const onDropUploadFiles = (event: DragEvent<HTMLDivElement>): void => {

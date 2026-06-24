@@ -88,9 +88,12 @@ describe('Provincial Application Search Actions', () => {
     )
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
       exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
+      exemptionReasons: [],
       applicationStatuses: [{ value: 'NEW', label: 'New' }],
       productTypes: [{ value: 'LOG', label: 'Logs' }],
+      growthTypes: [],
       regions: [{ value: '11', label: 'Cariboo' }],
+      currentSchedules: [],
     })
     mockedSearchProvincialApplications.mockResolvedValue({
       content: searchRowsWithMixedEligibility,
@@ -234,9 +237,12 @@ describe('Provincial Application Search Actions', () => {
   it('sends selected region org unit numbers to the application search request', async () => {
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
       exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
+      exemptionReasons: [],
       applicationStatuses: [{ value: 'NEW', label: 'New' }],
       productTypes: [{ value: 'LOG', label: 'Logs' }],
+      growthTypes: [],
       regions: [{ value: '1818', label: 'TST' }],
+      currentSchedules: [],
     })
 
     renderPage('/provincial/application?region=1818')

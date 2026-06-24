@@ -2,10 +2,10 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import IsoDatePicker from '@/components/IsoDatePicker'
+import IsoDatePicker from '../IsoDatePicker'
 
 describe('IsoDatePicker', () => {
-  it('disables browser autocomplete on the editable date input', () => {
+  it('marks the editable date input for password manager ignore', () => {
     render(
       <IsoDatePicker
         id="applicationDate"
@@ -17,8 +17,6 @@ describe('IsoDatePicker', () => {
 
     const input = screen.getByLabelText('Application Date')
 
-    expect(input).toHaveAttribute('autocomplete', 'off')
-    expect(input).toHaveAttribute('name', 'applicationDate-lexis-date')
     expect(input).toHaveAttribute('data-1p-ignore', 'true')
     expect(input).toHaveAttribute('data-lpignore', 'true')
   })

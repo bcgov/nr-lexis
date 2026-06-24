@@ -1,17 +1,13 @@
-import { type ComponentProps, type FC } from 'react'
-import { Tag, Tooltip } from '@carbon/react'
+import { type ComponentProps } from 'react'
+import { Tag, Tooltip, type TagProps } from '@carbon/react'
 
-type ApiSourceTagProps = {
+export type ApiSourceTagProps = {
   context: string
-  tagType?: ComponentProps<typeof Tag>['type']
+  tagType?: TagProps<'div'>['type']
   align?: ComponentProps<typeof Tooltip>['align']
 }
 
-export const ApiSourceTag: FC<ApiSourceTagProps> = ({
-  context,
-  tagType = 'green',
-  align = 'top',
-}) => {
+export function ApiSourceTag({ context, tagType = 'green', align = 'top' }: ApiSourceTagProps) {
   return (
     <Tooltip align={align} label="Application Programming Interface (API)" description={context}>
       <Tag type={tagType}>API</Tag>

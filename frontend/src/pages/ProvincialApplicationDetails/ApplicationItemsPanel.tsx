@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import {
   Button,
   InlineLoading,
@@ -12,8 +12,8 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { AppNotification } from '@/components/AppNotification'
-import SearchableSelect from '@/components/SearchableSelect'
+import { AppNotification } from '../../components/AppNotification'
+import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import {
   atMostOneDecimalFieldError,
@@ -110,7 +110,7 @@ type PackageSelectionAction =
   | { type: 'delete'; packageNumber: string }
   | { type: 'rename'; previousPackageNumber: string; nextPackageNumber: string }
 
-type Props = {
+export type ProvincialApplicationItemsPanelProps = {
   detail: ProvincialApplicationDetail
   canManageItems: boolean
   productTypeOptions: ApplicationCodeOption[]
@@ -273,7 +273,7 @@ const toPackageForm = (
   endUseCode: speciesRows[0]?.endUse ?? '',
 })
 
-const ProvincialApplicationItemsPanel: FC<Props> = ({
+function ProvincialApplicationItemsPanel({
   detail,
   canManageItems,
   productTypeOptions,
@@ -281,7 +281,7 @@ const ProvincialApplicationItemsPanel: FC<Props> = ({
   onDetailChanged,
   focusedPackageNumber,
   focusedPackageRequestId,
-}) => {
+}: ProvincialApplicationItemsPanelProps) {
   const applicationNumber = String(detail.applicationNumber)
   const productTypeCode = detail.productTypeCode ?? ''
   const packageNumbersFromDetail = useMemo(

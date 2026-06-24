@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FC } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -15,8 +15,8 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { AppNotification } from '@/components/AppNotification'
-import SearchableSelect from '@/components/SearchableSelect'
+import { AppNotification } from '../../components/AppNotification'
+import SearchableSelect from '../../components/SearchableSelect'
 import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import { ReportRequestError, runReport } from '@/service/report-service'
@@ -892,7 +892,7 @@ const validateReportLaunch = (
   return null
 }
 
-const ReportsPage: FC = () => {
+const ReportsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const { canPerform } = useAuth()
   const initialReportId = useMemo(() => {
@@ -975,7 +975,7 @@ const ReportsPage: FC = () => {
     () => (hasSelectedReportAccess ? getRequiredReportOptionSources(selectedReport) : []),
     [hasSelectedReportAccess, selectedReport],
   )
-  const reportFieldOptionsByKey = useMemo(() => {
+  const reportFieldOptionsByKey = useMemo<Record<string, SearchOption[]>>(() => {
     const reportOptions = reportOptionSourcesByKey.report
     const destinationCountryOptions =
       expandedDestinationCountryReports[selectedReport.id] &&
@@ -1357,7 +1357,7 @@ const ReportsPage: FC = () => {
                         titleText={field.label}
                         items={dynamicOptions}
                         itemToString={(item) => (item ? item.label : '')}
-                        label="Select region(s)"
+                        placeholder="Select region(s)"
                         selectionFeedback="fixed"
                         selectedItems={selectedItems}
                         onChange={(event) => {

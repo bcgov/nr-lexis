@@ -1,14 +1,14 @@
-import { useEffect, useState, type FC } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Column, Grid } from '@carbon/react'
 import { Login } from '@carbon/icons-react'
-import { AppNotification } from '@/components/AppNotification'
+import { AppNotification } from '../../components/AppNotification'
 import type { LoginProvider } from '@/context/auth/types'
 import { useAuth } from '@/context/auth/useAuth'
 import logo from '@/assets/gov-bc-logo-horiz.png'
 import landingImage from '@/assets/landing.jpg'
 
-const LandingPage: FC = () => {
+const LandingPage = () => {
   const navigate = useNavigate()
   const { defaultRoute, isLoading, isLoggedIn, login, usesExternalLogin } = useAuth()
 

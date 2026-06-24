@@ -1,6 +1,6 @@
-import { useMemo, useState, type FC } from 'react'
+import { useMemo, useState } from 'react'
 import { TextArea, TextInput } from '@carbon/react'
-import { AppNotification } from '@/components/AppNotification'
+import { AppNotification } from '../AppNotification'
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
@@ -23,7 +23,7 @@ import { submitAdminUpload } from '@/service/admin-upload-service'
 
 type DetailDocumentUploadType = 'application' | 'exemption' | 'permit' | 'invoice'
 
-type DetailDocumentUploadPanelProps = {
+export type DetailDocumentUploadPanelProps = {
   workflowType: DetailDocumentUploadType
   targetNumber: string
   inputId: string
@@ -70,16 +70,18 @@ const UPLOAD_COPY: Record<DetailDocumentUploadType, UploadCopy> = {
 const uploadTargetSummary = (copy: UploadCopy, targetNumber: string): string =>
   targetNumber.trim() ? `${copy.targetLabel} ${targetNumber.trim()}` : `${copy.targetLabel} missing`
 
-const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
+const DetailDocumentUploadPanel = ({
   workflowType,
   targetNumber,
   inputId,
   disabled = false,
-  disabledReason = 'Your session does not include the required upload permission.',
+  disabledReason: disabledReasonProp,
   initialInvoiceConversionRate = '1.00',
   onUploadComplete,
-}) => {
+}: DetailDocumentUploadPanelProps) => {
   const copy = UPLOAD_COPY[workflowType]
+  const disabledReason =
+    disabledReasonProp ?? 'Your session does not include the required upload permission.'
   const [fileDescription, setFileDescription] = useState('')
   const [salesInvoiceNumber, setSalesInvoiceNumber] = useState('')
   const [invoiceExportValue, setInvoiceExportValue] = useState('')
@@ -150,7 +152,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
     }
 
     const queuedAt = Date.now()
-    const nextItems = Array.from(files).map((file, index) => {
+    const nextItems: UploadQueueItem[] = Array.from(files).map((file, index) => {
       const validationMessage = validateDocumentUploadFile(file)
 
       return {
@@ -159,7 +161,7 @@ const DetailDocumentUploadPanel: FC<DetailDocumentUploadPanelProps> = ({
         workflowLabel: copy.workflowLabel,
         queuedAt,
         status: validationMessage ? ('invalid' as const) : ('queued' as const),
-        message: validationMessage,
+        message: validationMessage ?? '',
         details: validationMessage
           ? { summary: validationMessage, errors: [validationMessage] }
           : undefined,

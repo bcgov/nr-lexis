@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
+import ApplicationNumberSelect from '../ApplicationNumberSelect'
 import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 
 vi.mock('@/service/provincial-application-search-service', () => ({

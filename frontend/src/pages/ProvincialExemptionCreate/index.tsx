@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, type FC } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
-import ApplicationNumberSelect from '@/components/ApplicationNumberSelect'
-import IsoDatePicker from '@/components/IsoDatePicker'
-import { AppNotification } from '@/components/AppNotification'
-import SearchableSelect from '@/components/SearchableSelect'
-import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
+import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
+import IsoDatePicker from '../../components/IsoDatePicker'
+import { AppNotification } from '../../components/AppNotification'
+import SearchableSelect from '../../components/SearchableSelect'
+import CreateDraftHistory from '../shared/CreateDraftHistory'
 import {
   atMostOneDecimalFieldError,
   firstValidationError,
@@ -175,7 +175,7 @@ type PageStatus = {
   message: string
 }
 
-const ProvincialExemptionCreatePage: FC = () => {
+const ProvincialExemptionCreatePage = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()

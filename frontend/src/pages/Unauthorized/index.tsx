@@ -1,9 +1,8 @@
-import type { FC } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Tile } from '@carbon/react'
 import { useAuth } from '@/context/auth/useAuth'
 
-const UnauthorizedPage: FC = () => {
+const UnauthorizedPage = () => {
   const navigate = useNavigate()
   const { logout } = useAuth()
 

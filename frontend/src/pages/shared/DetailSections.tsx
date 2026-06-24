@@ -1,5 +1,5 @@
 import { Tile } from '@carbon/react'
-import type { FC, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 export type DetailField = {
   label: string
@@ -11,12 +11,12 @@ export type DetailListItem = {
   content: ReactNode
 }
 
-type DetailFieldTileProps = {
+export type DetailFieldTileProps = {
   title: string
   fields: DetailField[]
 }
 
-export const DetailFieldTile: FC<DetailFieldTileProps> = ({ title, fields }) => {
+export function DetailFieldTile({ title, fields }: DetailFieldTileProps) {
   return (
     <Tile>
       <h2 className="detail-tile-title">{title}</h2>
@@ -32,13 +32,13 @@ export const DetailFieldTile: FC<DetailFieldTileProps> = ({ title, fields }) => 
   )
 }
 
-type DetailListTileProps = {
+export type DetailListTileProps = {
   title: string
   items: DetailListItem[]
   emptyLabel: string
 }
 
-export const DetailListTile: FC<DetailListTileProps> = ({ title, items, emptyLabel }) => {
+export function DetailListTile({ title, items, emptyLabel }: DetailListTileProps) {
   return (
     <Tile>
       <h2 className="detail-tile-title">{title}</h2>
