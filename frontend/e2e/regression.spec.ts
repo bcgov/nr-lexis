@@ -550,9 +550,74 @@ test.describe('TEST IDIR admin regression', () => {
     expect(rtmPreviewResponse.rowCount).toBeGreaterThan(0)
     expect(asStringArray(rtmPreviewResponse.errors)).toEqual([])
   })
+
+  test('validates, submits, reviews, and cleans up an IDIR application upload', async ({
+    page,
+  }) => {
+    const packageNumber = uniqueRegressionPackageNumber()
+    let applicationNumber: number | null = null
+
+    await loginWithIdir(page)
+
+    try {
+      const validationResult = await postRegressionSubmission(
+        page,
+        '/api/lexis/application-submissions/validation',
+        packageNumber,
+      )
+      expect(validationResult.status).toBe('validated')
+      expect(validationResult.packageNumber).toBe(packageNumber)
+      expect(validationResult.scaleRows).toBe(3)
+      expect(asStringArray(validationResult.errors)).toEqual([])
+
+      const submissionResult = await postRegressionSubmission(
+        page,
+        '/api/lexis/application-submissions',
+        packageNumber,
+      )
+      expect(submissionResult.status).toBe('accepted')
+      expect(submissionResult.packageNumber).toBe(packageNumber)
+      expect(submissionResult.scaleRows).toBe(3)
+      expect(asStringArray(submissionResult.errors)).toEqual([])
+      expect(submissionResult.applicationNumber).toEqual(expect.any(Number))
+      applicationNumber = submissionResult.applicationNumber ?? null
+
+      if (applicationNumber === null) {
+        throw new Error('IDIR application submission did not return an application number.')
+      }
+
+      const approved = await readJsonResponse<ReviewStatusResponse>(
+        await postWithCsrf(page, `/api/lexis/application-reviews/${applicationNumber}/approve`),
+      )
+      expect(approved.valid).toBe(true)
+      expect(approved.updated).toBe(true)
+      expect(approved.statusCode).toBe('APP')
+
+      const rejected = await readJsonResponse<ReviewStatusResponse>(
+        await postWithCsrf(page, `/api/lexis/application-reviews/${applicationNumber}/status`, {
+          data: {
+            statusCode: 'REJ',
+            remark: regressionStatusRemark,
+            clientEmailAddress: regressionClientEmail,
+          },
+        }),
+      )
+      expect(rejected.valid).toBe(true)
+      expect(rejected.updated).toBe(true)
+      expect(rejected.statusCode).toBe('REJ')
+      expect(rejected.remark).toBe(regressionStatusRemark)
+    } finally {
+      if (applicationNumber !== null) {
+        await cleanupRegressionPackage(page, applicationNumber, packageNumber).catch(
+          () => undefined,
+        )
+      }
+    }
+  })
 })
 
-test.describe('TEST Business BCeID provincial submitter regression', () => {
+// TODO: Re-enable once the TEST Business BCeID regression account is unlocked and reset.
+test.describe.skip('TEST Business BCeID provincial submitter regression', () => {
   test.describe.configure({ retries: 0 })
   test.skip(!hasBusinessBceidCredentials(), 'Business BCeID e2e credentials are not configured.')
 
@@ -641,7 +706,8 @@ test.describe('TEST Business BCeID provincial submitter regression', () => {
   })
 })
 
-test.describe('TEST credentialed application lifecycle regression', () => {
+// TODO: Re-enable once the TEST Business BCeID regression account is unlocked and reset.
+test.describe.skip('TEST credentialed application lifecycle regression', () => {
   test.describe.configure({ retries: 0 })
   test.skip(
     !hasBusinessBceidCredentials() || !hasIdirCredentials(),
