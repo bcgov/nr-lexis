@@ -6,6 +6,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
+import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialOfferDetail } from '@/service/lexis-detail-service'
 
@@ -19,10 +20,7 @@ const ProvincialOfferDetailsPage: FC = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const beginDetailRequest = useLatestRequestGuard()
   const withCurrentSearch = useCallback(
-    (path: string): string => {
-      const query = searchParams.toString()
-      return query.length > 0 ? `${path}?${query}` : path
-    },
+    (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
 

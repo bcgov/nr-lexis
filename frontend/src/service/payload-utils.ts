@@ -1,6 +1,6 @@
 import { isRecord } from '@/utils/record'
 
-const DEFAULT_ARRAY_KEYS = ['results', 'rows', 'items', 'data']
+export const DEFAULT_PAYLOAD_ARRAY_KEYS = ['results', 'rows', 'items', 'data'] as const
 
 export const payloadValueAsString = (value: unknown): string => {
   if (typeof value === 'string') {
@@ -68,7 +68,7 @@ export const payloadValueAsStringList = (value: unknown): string[] => {
 
 export const parsePayloadArray = (
   payload: unknown,
-  keys: string[] = DEFAULT_ARRAY_KEYS,
+  keys: readonly string[] = DEFAULT_PAYLOAD_ARRAY_KEYS,
 ): unknown[] | null => {
   if (Array.isArray(payload)) {
     return payload
@@ -89,5 +89,5 @@ export const parsePayloadArray = (
 
 export const parsePayloadArrayOrEmpty = (
   payload: unknown,
-  keys: string[] = DEFAULT_ARRAY_KEYS,
+  keys: readonly string[] = DEFAULT_PAYLOAD_ARRAY_KEYS,
 ): unknown[] => parsePayloadArray(payload, keys) ?? []

@@ -3,6 +3,9 @@ export const isValidIsoDate = (value: string): boolean => {
   return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
 }
 
+export const hasInvalidIsoDateValue = (...values: string[]): boolean =>
+  values.some((value) => !isValidIsoDate(value))
+
 export const isPositiveNumeric = (value: string): boolean => {
   if (!value.trim()) return true
   const parsed = Number(value)

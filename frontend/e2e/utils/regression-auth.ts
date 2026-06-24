@@ -3,6 +3,7 @@ import { E2E_BASE_URL } from './index'
 
 type SessionCapabilities = {
   authenticated?: boolean
+  principal?: unknown
   roles?: unknown
   grantedActions?: unknown
 }
@@ -14,20 +15,44 @@ type ValidationResponse = {
   errors?: unknown
 }
 
+type RealCredentials = {
+  username: string
+  password: string
+}
+
+type LoginConfig = {
+  buttonName: RegExp
+  label: string
+  usernameEnv: string
+  passwordEnv: string
+}
+
 const baseOrigin = new URL(E2E_BASE_URL).origin
+const CREDENTIAL_SCREEN_TIMEOUT_MS = 5_000
+const LOGIN_SESSION_TIMEOUT_MS = 30_000
 
-export const TEST_PROVINCIAL_APPLICATION_NUMBER =
-  process.env.E2E_PROVINCIAL_APPLICATION_NUMBER?.trim() ?? ''
-export const TEST_UNOWNED_APPLICATION_NUMBER =
-  process.env.E2E_PROVINCIAL_UNOWNED_APPLICATION_NUMBER?.trim() ?? ''
+export const TEST_IDIR_EXPECTED_PRINCIPAL =
+  process.env.E2E_IDIR_EXPECTED_PRINCIPAL?.trim() ?? 'MOF_FAMT'
 
-export const hasBusinessBceidCredentials = (): boolean =>
-  Boolean(process.env.E2E_BCEID_USER?.trim() && process.env.E2E_BCEID_PASSWORD?.trim())
+const idirLoginConfig: LoginConfig = {
+  buttonName: /log in with idir/i,
+  label: 'IDIR',
+  usernameEnv: 'E2E_IDIR_USER',
+  passwordEnv: 'E2E_IDIR_PASSWORD',
+}
 
-const businessBceidCredentials = (): { username: string; password: string } => ({
-  username: process.env.E2E_BCEID_USER?.trim() ?? '',
-  password: process.env.E2E_BCEID_PASSWORD ?? '',
-})
+export const hasIdirCredentials = (): boolean => {
+  const { usernameEnv, passwordEnv } = idirLoginConfig
+  return Boolean(process.env[usernameEnv]?.trim() && process.env[passwordEnv]?.trim())
+}
+
+const idirCredentials = (): RealCredentials => {
+  const { usernameEnv, passwordEnv } = idirLoginConfig
+  return {
+    username: process.env[usernameEnv]?.trim() ?? '',
+    password: process.env[passwordEnv] ?? '',
+  }
+}
 
 const isSessionAuthenticated = async (page: Page): Promise<boolean> => {
   const response = await page.request
@@ -56,17 +81,34 @@ const firstVisible = async (page: Page, selector: string, timeout = 5000) => {
   return visible ? locator : null
 }
 
+const currentPageSummary = async (page: Page): Promise<string> => {
+  const title = await page.title().catch(() => '')
+  const rawUrl = page.url()
+  const safeUrl = (() => {
+    try {
+      const url = new URL(rawUrl)
+      return `${url.origin}${url.pathname}`
+    } catch {
+      return rawUrl
+    }
+  })()
+
+  return `${safeUrl}${title ? ` (${title})` : ''}`
+}
+
 const fillCredentialScreen = async (
   page: Page,
   username: string,
   password: string,
 ): Promise<boolean> => {
-  const usernameInput = await firstVisible(
-    page,
-    'input[name*="user" i], input[id*="user" i], input[type="email"], input[type="text"]',
-    10000,
-  )
-  const passwordInput = await firstVisible(page, 'input[type="password"]', 10000)
+  const [usernameInput, passwordInput] = await Promise.all([
+    firstVisible(
+      page,
+      'input[name*="user" i], input[id*="user" i], input[type="email"], input[type="text"]',
+      CREDENTIAL_SCREEN_TIMEOUT_MS,
+    ),
+    firstVisible(page, 'input[type="password"]', CREDENTIAL_SCREEN_TIMEOUT_MS),
+  ])
 
   if (!usernameInput && !passwordInput) {
     return false
@@ -94,15 +136,16 @@ const fillCredentialScreen = async (
   return true
 }
 
-export const loginWithBusinessBceid = async (page: Page): Promise<void> => {
-  const { username, password } = businessBceidCredentials()
+export const loginWithIdir = async (page: Page): Promise<void> => {
+  const { buttonName, label } = idirLoginConfig
+  const { username, password } = idirCredentials()
   await page.goto('/', { waitUntil: 'domcontentloaded' })
 
   if (await isSessionAuthenticated(page)) {
     return
   }
 
-  await page.getByRole('button', { name: /log in with business bceid/i }).click()
+  await page.getByRole('button', { name: buttonName }).click()
   await page.waitForLoadState('domcontentloaded').catch(() => undefined)
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -118,12 +161,18 @@ export const loginWithBusinessBceid = async (page: Page): Promise<void> => {
     await page.waitForTimeout(1000)
   }
 
-  await expect
-    .poll(() => isSessionAuthenticated(page), {
-      message: 'Expected Business BCeID login to establish a LEXIS session.',
-      timeout: 120000,
-    })
-    .toBe(true)
+  try {
+    await expect
+      .poll(() => isSessionAuthenticated(page), {
+        message: `Expected ${label} login to establish a LEXIS session.`,
+        timeout: LOGIN_SESSION_TIMEOUT_MS,
+      })
+      .toBe(true)
+  } catch {
+    throw new Error(
+      `${label} login did not establish a LEXIS session. Last page: ${await currentPageSummary(page)}.`,
+    )
+  }
 }
 
 export const collectApiServerErrors = (page: Page): string[] => {
@@ -149,11 +198,6 @@ export const expectAccessiblePage = async (
   await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
 }
 
-export const expectRouteUnauthorized = async (page: Page, path: string): Promise<void> => {
-  await page.goto(path, { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: 'Unauthorized' })).toBeVisible()
-}
-
 const csrfHeaders = async (page: Page): Promise<Record<string, string>> => {
   const cookies = await page.context().cookies()
   const xsrfCookie = cookies.find((cookie) => cookie.name === 'XSRF-TOKEN')
@@ -173,18 +217,6 @@ export const postWithCsrf = async (
     headers: await csrfHeaders(page),
     failOnStatusCode: false,
   })
-}
-
-export const expectForbiddenPost = async (
-  page: Page,
-  path: string,
-  options: {
-    data?: Record<string, unknown>
-    form?: Record<string, string>
-  } = {},
-): Promise<void> => {
-  const response = await postWithCsrf(page, path, options)
-  expect(response.status(), `${path} should be forbidden for this user`).toBe(403)
 }
 
 export const expectInvalidApplicationCreateValidation = async (

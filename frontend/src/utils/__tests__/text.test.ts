@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
+  displayValue,
   isValidEmail,
   joinNonBlankText,
   leadingDigits,
   normalizeFilterText,
   normalizeTrimmedText,
   normalizeUpperText,
+  ownerClientLabel,
+  regionLabel,
+  searchResultOptionLabel,
 } from '@/utils/text'
 
 describe('text utilities', () => {
@@ -25,6 +29,43 @@ describe('text utilities', () => {
     expect(joinNonBlankText(['123', '', ' Owner 00001012 ', '   ', 'RSI'], ' - ')).toBe(
       '123 -  Owner 00001012  - RSI',
     )
+  })
+
+  it('formats display fallback values', () => {
+    expect(displayValue(null)).toBe('Not provided')
+    expect(displayValue(undefined)).toBe('Not provided')
+    expect(displayValue('')).toBe('Not provided')
+    expect(displayValue(0)).toBe('0')
+    expect(displayValue('DAR')).toBe('DAR')
+  })
+
+  it('formats optional owner client and region labels', () => {
+    expect(ownerClientLabel('00001012')).toBe('Owner 00001012')
+    expect(ownerClientLabel('')).toBe('')
+    expect(regionLabel('RSI')).toBe('Region RSI')
+    expect(regionLabel(undefined)).toBe('')
+  })
+
+  it('formats search result option labels', () => {
+    expect(
+      searchResultOptionLabel({
+        primary: '45964',
+        status: 'New',
+        ownerClientNumber: '00001012',
+        region: 'RSI',
+        date: '2026-06-17',
+      }),
+    ).toBe('45964 - New - Owner 00001012 - Region RSI - 2026-06-17')
+
+    expect(
+      searchResultOptionLabel({
+        primary: '45964',
+        status: '',
+        ownerClientNumber: '',
+        region: '',
+        date: '',
+      }),
+    ).toBe('45964')
   })
 
   it('extracts only leading digits', () => {

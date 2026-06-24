@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   greaterThanFieldError,
   greaterThanOrEqualFieldError,
+  hasInvalidIsoDateValue,
   integerFieldError,
   joinCreateSubmitMessages,
   lessThanOrEqualFieldError,
@@ -53,6 +54,12 @@ describe('create-form-utils', () => {
         warnings: ['Check scale rows'],
       }),
     ).toBe('Created Invalid location Check scale rows')
+  })
+
+  it('detects invalid ISO date values', () => {
+    expect(hasInvalidIsoDateValue('', '2026-06-23')).toBe(false)
+    expect(hasInvalidIsoDateValue('2026-06-23', '2026-13-23')).toBe(true)
+    expect(hasInvalidIsoDateValue('not-a-date')).toBe(true)
   })
 
   it('parses non-negative decimal field values', () => {

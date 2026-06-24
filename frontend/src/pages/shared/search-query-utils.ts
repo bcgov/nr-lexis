@@ -9,10 +9,70 @@ export const parseCsvParam = (value: string | null): string[] => {
     .filter((item) => item.length > 0)
 }
 
+export const DEFAULT_SEARCH_PAGE = 1
+export const DEFAULT_SEARCH_PAGE_SIZE = 10
+export const SEARCH_PAGE_SIZE_OPTIONS = [10, 20, 30] as const
+
+type SearchParamValue = string | number | string[] | null | undefined
+
+type PagedSearchResponse = {
+  content: unknown[]
+  page: {
+    number: number
+    size: number
+    totalElements: number
+    totalPages: number
+  }
+}
+
+export const createEmptyPagedSearchResponse = <TResponse extends PagedSearchResponse>(
+  pageSize = DEFAULT_SEARCH_PAGE_SIZE,
+): TResponse =>
+  ({
+    content: [],
+    page: {
+      number: 0,
+      size: pageSize,
+      totalElements: 0,
+      totalPages: 1,
+    },
+  }) as TResponse
+
+export const appendSearchParamsToPath = (path: string, searchParams: URLSearchParams): string => {
+  const query = searchParams.toString()
+  return query.length > 0 ? `${path}?${query}` : path
+}
+
+export const searchParamsWithValue = (
+  searchParams: URLSearchParams,
+  key: string,
+  value: string,
+): URLSearchParams => {
+  const nextSearchParams = new URLSearchParams(searchParams)
+  if (value.trim().length > 0) {
+    nextSearchParams.set(key, value)
+  } else {
+    nextSearchParams.delete(key)
+  }
+
+  return nextSearchParams
+}
+
 export type IdTextOption = {
   id: string
   text: string
 }
+
+export type ValueLabelOption = {
+  value: string
+  label: string
+}
+
+export const mapValueLabelOptionsToIdTextOptions = (options: ValueLabelOption[]): IdTextOption[] =>
+  options.map((option) => ({
+    id: option.value,
+    text: `${option.label} (${option.value})`,
+  }))
 
 export const mapSelectedOptionsById = <TOption extends IdTextOption>(
   selectedIds: string[],
@@ -39,6 +99,15 @@ export const parsePositiveIntParam = (value: string | null, fallback: number): n
   return parsed
 }
 
+export const parsePageSizeParam = <TPageSize extends number>(
+  value: string | null,
+  fallback: TPageSize,
+  validPageSizes: readonly TPageSize[],
+): TPageSize => {
+  const parsed = parsePositiveIntParam(value, fallback)
+  return validPageSizes.includes(parsed as TPageSize) ? (parsed as TPageSize) : fallback
+}
+
 export const parseSortDirectionParam = (
   value: string | null,
   fallback: 'asc' | 'desc',
@@ -54,6 +123,12 @@ export const parseSortDirectionParam = (
 
   return fallback
 }
+
+export const getNextSortDirection = <TField extends string>(
+  currentField: TField,
+  currentDirection: 'asc' | 'desc',
+  nextField: TField,
+): 'asc' | 'desc' => (currentField === nextField && currentDirection === 'asc' ? 'desc' : 'asc')
 
 export const parseEnumParam = <TValue extends string>(
   value: string | null,
@@ -75,7 +150,7 @@ export const parseEnumParam = <TValue extends string>(
 export const setSearchParam = (
   params: URLSearchParams,
   key: string,
-  value: string | number | string[] | null | undefined,
+  value: SearchParamValue,
 ): void => {
   if (value == null) {
     return
@@ -98,4 +173,12 @@ export const setSearchParam = (
   if (normalized.length > 0) {
     params.set(key, normalized)
   }
+}
+
+export const createSearchParams = (
+  entries: readonly (readonly [string, SearchParamValue])[],
+): URLSearchParams => {
+  const params = new URLSearchParams()
+  entries.forEach(([key, value]) => setSearchParam(params, key, value))
+  return params
 }

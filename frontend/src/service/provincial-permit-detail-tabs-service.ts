@@ -1,5 +1,6 @@
 import apiService from '@/service/api-service'
 import {
+  DEFAULT_PAYLOAD_ARRAY_KEYS,
   parsePayloadArray,
   payloadValueAsNumber,
   payloadValueAsString as asString,
@@ -49,7 +50,7 @@ export type ProvincialPermitDetailTabsRequest = {
 }
 
 const PERMIT_TAB_CACHE_TTL_MS = 30_000
-const PERMIT_TAB_ARRAY_KEYS = ['results', 'rows', 'items', 'scaleList', 'data']
+const PERMIT_TAB_ARRAY_KEYS = ['scaleList', ...DEFAULT_PAYLOAD_ARRAY_KEYS]
 
 export const EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: ProvincialPermitDetailTabsData = {
   items: [],

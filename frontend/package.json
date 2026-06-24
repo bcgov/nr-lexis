@@ -18,7 +18,7 @@
     "build": "vite build",
     "pree2e": "playwright install chromium",
     "e2e": "playwright test --project=chromium",
-    "e2e:real-bceid": "playwright test --config=playwright.real-bceid.config.ts --project=chromium",
+    "e2e:regression": "playwright test --config=playwright.regression.config.ts --project=chromium",
     "e2e:ui": "playwright test --project=chromium --ui",
     "e2e:report": "playwright show-report"
   },

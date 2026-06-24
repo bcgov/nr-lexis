@@ -24,19 +24,28 @@ import type {
   ProvincialOfferSearchSortField,
 } from '@/interfaces/ProvincialOfferSearch'
 import { useAuth } from '@/context/auth/useAuth'
-import { isValidIsoDate } from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
+  DEFAULT_SEARCH_PAGE,
+  DEFAULT_SEARCH_PAGE_SIZE,
+  SEARCH_PAGE_SIZE_OPTIONS,
+  appendSearchParamsToPath,
+  createEmptyPagedSearchResponse,
+  createSearchParams,
+  getNextSortDirection,
   mapSelectedOptionsById,
+  mapValueLabelOptionsToIdTextOptions,
   parseCsvParam,
   parseEnumParam,
+  parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
-  setSearchParam,
+  type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -45,11 +54,7 @@ import {
   fetchProvincialApplicationOptions,
   fetchProvincialOfferOptions,
 } from '@/service/search-options-service'
-
-type RegionOption = {
-  id: string
-  text: string
-}
+import { formatLocalIsoDate } from '@/utils/date'
 
 const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
   applicationNumber: '',
@@ -62,15 +67,7 @@ const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
   withdrawalToDate: '',
 }
 
-const EMPTY_RESULTS: ProvincialOfferSearchResponse = {
-  content: [],
-  page: {
-    number: 0,
-    size: 10,
-    totalElements: 0,
-    totalPages: 1,
-  },
-}
+const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialOfferSearchResponse>()
 
 const SORT_COLUMNS: {
   id: ProvincialOfferSearchSortField
@@ -86,18 +83,9 @@ const SORT_COLUMNS: {
 
 const DEFAULT_SORT_FIELD: ProvincialOfferSearchSortField = 'listingDate'
 const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
-const DEFAULT_PAGE = 1
-const DEFAULT_PAGE_SIZE = 10
-const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialOfferSearchSortField[]
-const formatDate = (date: Date): string => {
-  const year = date.getFullYear()
-  const month = `${(date.getMonth() + 1).toString().padStart(2, '0')}`
-  const day = `${date.getDate().toString().padStart(2, '0')}`
-  return `${year}-${month}-${day}`
-}
 
 const buildSearchParams = (
   filters: ProvincialOfferSearchFilters,
@@ -105,29 +93,26 @@ const buildSearchParams = (
   sortDirection: 'asc' | 'desc',
   page: number,
   pageSize: number,
-): URLSearchParams => {
-  const params = new URLSearchParams()
-
-  setSearchParam(params, 'applicationNumber', filters.applicationNumber)
-  setSearchParam(params, 'packageNumber', filters.packageNumber)
-  setSearchParam(params, 'clientNumber', filters.clientNumber)
-  setSearchParam(params, 'listingFromDate', filters.listingFromDate)
-  setSearchParam(params, 'listingToDate', filters.listingToDate)
-  setSearchParam(params, 'region', filters.region)
-  setSearchParam(params, 'withdrawalFromDate', filters.withdrawalFromDate)
-  setSearchParam(params, 'withdrawalToDate', filters.withdrawalToDate)
-  setSearchParam(params, 'sortField', sortField)
-  setSearchParam(params, 'sortDirection', sortDirection)
-  setSearchParam(params, 'page', page)
-  setSearchParam(params, 'pageSize', pageSize)
-
-  return params
-}
+): URLSearchParams =>
+  createSearchParams([
+    ['applicationNumber', filters.applicationNumber],
+    ['packageNumber', filters.packageNumber],
+    ['clientNumber', filters.clientNumber],
+    ['listingFromDate', filters.listingFromDate],
+    ['listingToDate', filters.listingToDate],
+    ['region', filters.region],
+    ['withdrawalFromDate', filters.withdrawalFromDate],
+    ['withdrawalToDate', filters.withdrawalToDate],
+    ['sortField', sortField],
+    ['sortDirection', sortDirection],
+    ['page', page],
+    ['pageSize', pageSize],
+  ])
 
 const ProvincialOffersPage: FC = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
+  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -135,10 +120,7 @@ const ProvincialOffersPage: FC = () => {
   const [isOptionsLoaded, setIsOptionsLoaded] = useState(false)
   const canCreateOffer = canPerform('createOffer')
   const withCurrentSearch = useCallback(
-    (path: string): string => {
-      const query = searchParams.toString()
-      return query.length > 0 ? `${path}?${query}` : path
-    },
+    (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
 
@@ -154,8 +136,6 @@ const ProvincialOffersPage: FC = () => {
       withdrawalToDate: searchParams.get('withdrawalToDate') ?? '',
     }
 
-    const parsedPageSize = parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
-
     return {
       filters: urlFilters,
       sortField: parseEnumParam(
@@ -167,10 +147,12 @@ const ProvincialOffersPage: FC = () => {
         searchParams.get('sortDirection'),
         DEFAULT_SORT_DIRECTION,
       ),
-      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
-      pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
-        ? parsedPageSize
-        : DEFAULT_PAGE_SIZE,
+      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_SEARCH_PAGE),
+      pageSize: parsePageSizeParam(
+        searchParams.get('pageSize'),
+        DEFAULT_SEARCH_PAGE_SIZE,
+        SEARCH_PAGE_SIZE_OPTIONS,
+      ),
     }
   }, [searchParams])
   const debouncedUrlState = useDebouncedValue(urlState)
@@ -188,7 +170,7 @@ const ProvincialOffersPage: FC = () => {
         [key]: value,
       }
       setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
+        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
         { replace: true },
       )
     },
@@ -201,11 +183,11 @@ const ProvincialOffersPage: FC = () => {
   )
 
   const hasDateValidationError = useMemo(() => {
-    return (
-      !isValidIsoDate(filters.listingFromDate) ||
-      !isValidIsoDate(filters.listingToDate) ||
-      !isValidIsoDate(filters.withdrawalFromDate) ||
-      !isValidIsoDate(filters.withdrawalToDate)
+    return hasInvalidIsoDateValue(
+      filters.listingFromDate,
+      filters.listingToDate,
+      filters.withdrawalFromDate,
+      filters.withdrawalToDate,
     )
   }, [
     filters.listingFromDate,
@@ -235,10 +217,12 @@ const ProvincialOffersPage: FC = () => {
 
       const isLatestRequest = beginSearchRequest()
       if (
-        !isValidIsoDate(request.filters.listingFromDate) ||
-        !isValidIsoDate(request.filters.listingToDate) ||
-        !isValidIsoDate(request.filters.withdrawalFromDate) ||
-        !isValidIsoDate(request.filters.withdrawalToDate)
+        hasInvalidIsoDateValue(
+          request.filters.listingFromDate,
+          request.filters.listingToDate,
+          request.filters.withdrawalFromDate,
+          request.filters.withdrawalToDate,
+        )
       ) {
         setLoading(false)
         return
@@ -283,14 +267,9 @@ const ProvincialOffersPage: FC = () => {
         fetchProvincialOfferOptions(),
         fetchProvincialApplicationOptions(),
       ])
-      setRegionOptions(
-        offerOptions.regions.map((option) => ({
-          id: option.value,
-          text: `${option.label} (${option.value})`,
-        })),
-      )
+      setRegionOptions(mapValueLabelOptionsToIdTextOptions(offerOptions.regions))
       setDefaultListingToDate(
-        applicationOptions.currentSchedules[0]?.value ?? formatDate(new Date()),
+        applicationOptions.currentSchedules[0]?.value ?? formatLocalIsoDate(new Date()),
       )
       setIsOptionsLoaded(true)
     }
@@ -313,8 +292,8 @@ const ProvincialOffersPage: FC = () => {
           },
           DEFAULT_SORT_FIELD,
           DEFAULT_SORT_DIRECTION,
-          DEFAULT_PAGE,
-          DEFAULT_PAGE_SIZE,
+          DEFAULT_SEARCH_PAGE,
+          DEFAULT_SEARCH_PAGE_SIZE,
         ),
         { replace: true },
       )
@@ -322,7 +301,9 @@ const ProvincialOffersPage: FC = () => {
   }, [defaultListingToDate, isOptionsLoaded, searchParams, setSearchParams])
 
   const onSearch = () => {
-    setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
+    setSearchParams(
+      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    )
   }
 
   const onClearFilters = () => {
@@ -331,15 +312,17 @@ const ProvincialOffersPage: FC = () => {
         INITIAL_FILTERS,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
-        DEFAULT_PAGE,
-        DEFAULT_PAGE_SIZE,
+        DEFAULT_SEARCH_PAGE,
+        DEFAULT_SEARCH_PAGE_SIZE,
       ),
     )
   }
 
   const onHeaderClick = (column: ProvincialOfferSearchSortField) => {
-    const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
-    setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
+    const nextDirection = getNextSortDirection(sortField, sortDirection, column)
+    setSearchParams(
+      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    )
   }
 
   return (
@@ -395,7 +378,7 @@ const ProvincialOffersPage: FC = () => {
                 selectionFeedback="fixed"
                 selectedItems={selectedRegions}
                 onChange={(event) => {
-                  const nextSelected = (event.selectedItems ?? []) as RegionOption[]
+                  const nextSelected = (event.selectedItems ?? []) as IdTextOption[]
                   updateFilter(
                     'region',
                     nextSelected.map((item) => item.id),
@@ -495,7 +478,7 @@ const ProvincialOffersPage: FC = () => {
             <Pagination
               page={results.page.number + 1}
               pageSize={results.page.size}
-              pageSizes={[10, 20, 30]}
+              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
                 setSearchParams(

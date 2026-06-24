@@ -12,6 +12,7 @@ import {
   fetchProvincialPermitOptions,
 } from '@/service/search-options-service'
 import { createTestAuthContext } from '@/test-utils/auth'
+import { formatLocalIsoDate } from '@/utils/date'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -63,18 +64,11 @@ const emptyReportOptions = (): Awaited<ReturnType<typeof fetchReportOptions>> =>
   portsOfExport: [],
 })
 
-const formatLocalDate = (date: Date): string => {
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 const legacyTenureDefaultDates = (): { fromDate: string; toDate: string } => {
   const today = new Date()
   return {
-    fromDate: formatLocalDate(new Date(today.getFullYear() - 1, today.getMonth(), 1)),
-    toDate: formatLocalDate(new Date(today.getFullYear(), today.getMonth(), 0)),
+    fromDate: formatLocalIsoDate(new Date(today.getFullYear() - 1, today.getMonth(), 1)),
+    toDate: formatLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 0)),
   }
 }
 

@@ -1,14 +1,13 @@
 import {
-  appendNumericSearchParams,
-  appendSearchParams,
-  appendSearchSortAndPageParams,
+  createSortedPagedSearchParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
+  requireParsedSearchResponse,
   uniqueSearchItemsByKey,
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
-import { joinNonBlankText } from '@/utils/text'
+import { searchResultOptionLabel } from '@/utils/text'
 import type {
   ProvincialPermitSearchRequest,
   ProvincialPermitSearchResponse,
@@ -53,23 +52,21 @@ const DEFAULT_PERMIT_SEARCH_FILTERS = {
 }
 
 const buildBackendParams = (request: ProvincialPermitSearchRequest): URLSearchParams => {
-  const params = new URLSearchParams()
-
   const { filters } = request
-  appendSearchParams(params, [
-    ['applicationNumber', filters.applicationNumber],
-    ['packageNumber', filters.packageNumber],
-    ['permitNumber', filters.permitNumber],
-    ['issuedFromDate', filters.issuedFromDate],
-    ['issuedToDate', filters.issuedToDate],
-    ['permitStatus', filters.permitStatus],
-    ['applicantClientNumber', filters.applicantClientNumber],
-    ['ownerClientNumber', filters.ownerClientNumber],
-  ])
-  appendNumericSearchParams(params, 'region', filters.region)
-  appendSearchSortAndPageParams(params, request)
-
-  return params
+  return createSortedPagedSearchParams(
+    request,
+    [
+      ['applicationNumber', filters.applicationNumber],
+      ['packageNumber', filters.packageNumber],
+      ['permitNumber', filters.permitNumber],
+      ['issuedFromDate', filters.issuedFromDate],
+      ['issuedToDate', filters.issuedToDate],
+      ['permitStatus', filters.permitStatus],
+      ['applicantClientNumber', filters.applicantClientNumber],
+      ['ownerClientNumber', filters.ownerClientNumber],
+    ],
+    [['region', filters.region]],
+  )
 }
 
 const parseBackendResponse = (payload: unknown): ProvincialPermitSearchResponse | null => {
@@ -101,12 +98,10 @@ export const searchProvincialPermits = async (
 
     const response = await getCachedSearchResponse<unknown>('/lexis/permits/search', params)
 
-    const parsed = parseBackendResponse(response.data)
-    if (!parsed) {
-      throw new Error('Backend provincial permit response did not include results.')
-    }
-
-    return parsed
+    return requireParsedSearchResponse(
+      parseBackendResponse(response.data),
+      'Backend provincial permit response did not include results.',
+    )
   } catch (error) {
     throw toSearchServiceError('Unable to load provincial permit search results.', error)
   }
@@ -122,16 +117,13 @@ export const countProvincialPermits = async (
   )
 
 const permitNumberOptionLabel = (item: ProvincialPermitSearchResponse['content'][number]): string =>
-  joinNonBlankText(
-    [
-      item.permitNumber,
-      item.status,
-      item.ownerClientNumber ? `Owner ${item.ownerClientNumber}` : '',
-      item.region ? `Region ${item.region}` : '',
-      item.issueDate,
-    ],
-    ' - ',
-  )
+  searchResultOptionLabel({
+    primary: item.permitNumber,
+    status: item.status,
+    ownerClientNumber: item.ownerClientNumber,
+    region: item.region,
+    date: item.issueDate,
+  })
 
 export const searchProvincialPermitNumberOptions = async (
   query: string,

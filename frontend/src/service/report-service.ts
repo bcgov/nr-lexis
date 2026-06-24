@@ -2,6 +2,7 @@ import axios, { type AxiosRequestConfig } from 'axios'
 import { env } from '@/env'
 import apiService from '@/service/api-service'
 import { extractResponseFilename, getResponseHeaderValue } from '@/service/http-response-utils'
+import { getConfiguredBasePath, isEnabledConfig } from '@/service/service-config-utils'
 
 export type RunReportRequest = {
   reportId: string
@@ -81,19 +82,7 @@ const compactLegacyIndexedValues = (
 }
 
 const getModernReportApiBasePath = (): string => {
-  const configured = (env.VITE_LEXIS_REPORT_API_BASE ?? '/lexis/reports').trim()
-  if (!configured) {
-    return '/lexis/reports'
-  }
-  return configured.endsWith('/') ? configured.slice(0, -1) : configured
-}
-
-const shouldIncludeActionMapping = (): boolean => {
-  const configured = (env.VITE_LEXIS_REPORT_INCLUDE_ACTION_MAPPING ?? 'true')
-    .toString()
-    .trim()
-    .toLowerCase()
-  return configured !== '0' && configured !== 'false' && configured !== 'no'
+  return getConfiguredBasePath(env.VITE_LEXIS_REPORT_API_BASE, '/lexis/reports')
 }
 
 const buildModernReportEndpoint = (reportId: string): string => {
@@ -150,7 +139,11 @@ const buildReportPayload = (
 ): ReportApiPayload => {
   const parameters: Record<string, string> = {}
 
-  if (shouldIncludeActionMapping() && actionMapping && actionMapping.trim().length > 0) {
+  if (
+    isEnabledConfig(env.VITE_LEXIS_REPORT_INCLUDE_ACTION_MAPPING) &&
+    actionMapping &&
+    actionMapping.trim().length > 0
+  ) {
     parameters.legacyActionMapping = actionMapping.trim()
   }
 

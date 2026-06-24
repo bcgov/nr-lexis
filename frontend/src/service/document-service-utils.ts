@@ -1,4 +1,8 @@
-import { parsePayloadArray } from '@/service/payload-utils'
+import {
+  DEFAULT_PAYLOAD_ARRAY_KEYS,
+  parsePayloadArray,
+  payloadValueAsBoolean,
+} from '@/service/payload-utils'
 import { isRecord, recordOrEmpty } from '@/utils/record'
 
 export type DocumentRowBase = {
@@ -7,8 +11,6 @@ export type DocumentRowBase = {
   description: string
   type: string
 }
-
-const DEFAULT_ARRAY_KEYS = ['results', 'rows', 'items', 'data']
 
 export const documentValueAsString = (value: unknown): string => {
   if (typeof value === 'string') {
@@ -20,15 +22,7 @@ export const documentValueAsString = (value: unknown): string => {
   return ''
 }
 
-export const documentValueAsBoolean = (value: unknown): boolean => {
-  if (typeof value === 'boolean') {
-    return value
-  }
-  if (typeof value === 'string') {
-    return value.trim().toLowerCase() === 'true'
-  }
-  return false
-}
+export const documentValueAsBoolean = payloadValueAsBoolean
 
 export const documentValueAsStringArray = (payload: unknown): string[] => {
   if (!Array.isArray(payload)) {
@@ -41,7 +35,7 @@ export const documentValueAsStringArray = (payload: unknown): string[] => {
 export const parseDocumentArrayPayload = (
   payload: unknown,
   extraKeys: string[] = [],
-): unknown[] | null => parsePayloadArray(payload, [...DEFAULT_ARRAY_KEYS, ...extraKeys])
+): unknown[] | null => parsePayloadArray(payload, [...DEFAULT_PAYLOAD_ARRAY_KEYS, ...extraKeys])
 
 export const normalizeDocumentRowBase = (row: unknown, index: number): DocumentRowBase => {
   const source = recordOrEmpty(row)

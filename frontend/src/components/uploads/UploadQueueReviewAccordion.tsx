@@ -1,5 +1,6 @@
 import { type FC } from 'react'
 import { Tag } from '@carbon/react'
+import { displayValue } from '@/utils/text'
 import {
   formatScaleRows,
   formatUploadFileSize,
@@ -17,9 +18,6 @@ type UploadQueueReviewAccordionProps = {
 }
 
 const asList = (value: string[] | undefined): string[] => value?.filter(Boolean) ?? []
-
-const formatOptional = (value: string | number | undefined | null): string =>
-  value === undefined || value === null || value === '' ? 'Not provided' : String(value)
 
 const formatDecimal = (value: number | undefined): string =>
   typeof value === 'number' ? value.toFixed(1) : 'Not provided'
@@ -155,7 +153,7 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                       <div>
                         <dt>Owner client</dt>
                         <dd>
-                          {formatOptional(submissionSummary.ownerClientNumber)}
+                          {displayValue(submissionSummary.ownerClientNumber)}
                           {submissionSummary.ownerClientLocationCode
                             ? `-${submissionSummary.ownerClientLocationCode}`
                             : ''}
@@ -163,15 +161,15 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                       </div>
                       <div>
                         <dt>Owner contact</dt>
-                        <dd>{formatOptional(submissionSummary.ownerContactName)}</dd>
+                        <dd>{displayValue(submissionSummary.ownerContactName)}</dd>
                       </div>
                       <div>
                         <dt>Region</dt>
-                        <dd>{formatOptional(submissionSummary.orgUnitNumber)}</dd>
+                        <dd>{displayValue(submissionSummary.orgUnitNumber)}</dd>
                       </div>
                       <div>
                         <dt>Jurisdiction</dt>
-                        <dd>{formatOptional(submissionSummary.jurisdictionCode)}</dd>
+                        <dd>{displayValue(submissionSummary.jurisdictionCode)}</dd>
                       </div>
                       {submissionSummary.federalApplicationNumber && (
                         <div>
@@ -181,27 +179,27 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                       )}
                       <div>
                         <dt>Source status</dt>
-                        <dd>{formatOptional(submissionSummary.sourceApplicationStatusCode)}</dd>
+                        <dd>{displayValue(submissionSummary.sourceApplicationStatusCode)}</dd>
                       </div>
                       <div>
                         <dt>Exemption reason</dt>
-                        <dd>{formatOptional(submissionSummary.exemptionReasonCode)}</dd>
+                        <dd>{displayValue(submissionSummary.exemptionReasonCode)}</dd>
                       </div>
                       <div>
                         <dt>Applicant type</dt>
-                        <dd>{formatOptional(submissionSummary.applicantTypeCode)}</dd>
+                        <dd>{displayValue(submissionSummary.applicantTypeCode)}</dd>
                       </div>
                       <div>
                         <dt>Product type</dt>
-                        <dd>{formatOptional(submissionSummary.productTypeCode)}</dd>
+                        <dd>{displayValue(submissionSummary.productTypeCode)}</dd>
                       </div>
                       <div>
                         <dt>Age class</dt>
-                        <dd>{formatOptional(submissionSummary.ageClass)}</dd>
+                        <dd>{displayValue(submissionSummary.ageClass)}</dd>
                       </div>
                       <div>
                         <dt>Product location</dt>
-                        <dd>{formatOptional(submissionSummary.productLocation)}</dd>
+                        <dd>{displayValue(submissionSummary.productLocation)}</dd>
                       </div>
                       <div>
                         <dt>Application volume</dt>
@@ -229,7 +227,7 @@ const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
                       </div>
                       <div>
                         <dt>End use</dt>
-                        <dd>{formatOptional(submissionSummary.endUseCode)}</dd>
+                        <dd>{displayValue(submissionSummary.endUseCode)}</dd>
                       </div>
                     </dl>
                   </div>

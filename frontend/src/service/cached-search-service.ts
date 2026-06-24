@@ -4,15 +4,18 @@ import { booleanField, isRecord, type UnknownRecord } from '@/utils/record'
 
 const SEARCH_CACHE_TTL_MS = 10_000
 
-type SearchPageRequest = {
+export type SearchPageRequest = {
   page: number
   pageSize: number
 }
 
-type SearchSortRequest = SearchPageRequest & {
+export type SearchSortRequest = SearchPageRequest & {
   sortField: string
   sortDirection: 'asc' | 'desc'
 }
+
+export type SearchTextParamEntry = readonly [key: string, value: string]
+export type SearchNumericParamEntry = readonly [key: string, values: string[]]
 
 export type PagedSearchResponse<T> = {
   content: T[]
@@ -74,7 +77,7 @@ export const appendSearchParam = (params: URLSearchParams, key: string, value: s
 
 export const appendSearchParams = (
   params: URLSearchParams,
-  entries: Array<readonly [key: string, value: string]>,
+  entries: SearchTextParamEntry[],
 ): void => {
   entries.forEach(([key, value]) => {
     appendSearchParam(params, key, value)
@@ -106,6 +109,14 @@ export const uniqueSearchItemsByKey = <T>(items: T[], getKey: (item: T) => strin
   })
 }
 
+export const requireParsedSearchResponse = <T>(response: T | null, message: string): T => {
+  if (!response) {
+    throw new Error(message)
+  }
+
+  return response
+}
+
 export const appendSearchPageParams = (
   params: URLSearchParams,
   request: SearchPageRequest,
@@ -122,6 +133,39 @@ export const appendSearchSortAndPageParams = (
     request.sortDirection === 'desc' ? `${request.sortField} DESC` : request.sortField
   params.append('sortField', backendSortField)
   appendSearchPageParams(params, request)
+}
+
+const appendNumericSearchParamEntries = (
+  params: URLSearchParams,
+  entries: SearchNumericParamEntry[],
+): void => {
+  entries.forEach(([key, values]) => {
+    appendNumericSearchParams(params, key, values)
+  })
+}
+
+export const createPagedSearchParams = (
+  request: SearchPageRequest,
+  textEntries: SearchTextParamEntry[],
+  numericEntries: SearchNumericParamEntry[] = [],
+): URLSearchParams => {
+  const params = new URLSearchParams()
+  appendSearchParams(params, textEntries)
+  appendNumericSearchParamEntries(params, numericEntries)
+  appendSearchPageParams(params, request)
+  return params
+}
+
+export const createSortedPagedSearchParams = (
+  request: SearchSortRequest,
+  textEntries: SearchTextParamEntry[],
+  numericEntries: SearchNumericParamEntry[] = [],
+): URLSearchParams => {
+  const params = new URLSearchParams()
+  appendSearchParams(params, textEntries)
+  appendNumericSearchParamEntries(params, numericEntries)
+  appendSearchSortAndPageParams(params, request)
+  return params
 }
 
 export const parsePagedSearchResponse = <BackendRow, SearchItem>(
