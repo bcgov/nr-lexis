@@ -14,7 +14,10 @@ import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.rtm.OracleRtmEmsLogAmvRepository;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
@@ -23,6 +26,9 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
 class OracleRtmEmsLogAmvServiceTest {
+
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-06-23T12:00:00Z"), ZoneOffset.UTC);
 
   @Test
   void shouldInstantiateWithRepositoryConstructorInOracleProfile() {
@@ -45,7 +51,7 @@ class OracleRtmEmsLogAmvServiceTest {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.find(anyString(), anyString(), any(LocalDate.class), any(LocalDate.class)))
         .thenReturn(List.of());
-    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
     service.find("HE", "O", "2026-06-01", "");
 
@@ -76,8 +82,8 @@ class OracleRtmEmsLogAmvServiceTest {
             anyString(),
             anyString(),
             anyString(),
+            eq(LocalDate.of(2026, 5, 1)),
             eq(LocalDate.of(2026, 6, 1)),
-            eq(LocalDate.of(2026, 7, 1)),
             any(BigDecimal.class));
     verify(repository, never())
         .insert(
@@ -89,15 +95,8 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldResolveUploadPineCodesFromOracleSpeciesDescriptions() throws IOException {
+  void shouldUploadPineCellsToFunctionalPineCodes() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
-    when(repository.findAllSpeciesCodes())
-        .thenReturn(
-            List.of(
-                new OracleRtmEmsLogAmvRepository.SpeciesCodeRow("PA", "Alpine pine"),
-                new OracleRtmEmsLogAmvRepository.SpeciesCodeRow("PB", "PINE beta"),
-                new OracleRtmEmsLogAmvRepository.SpeciesCodeRow("PC", "Coastal Pine"),
-                new OracleRtmEmsLogAmvRepository.SpeciesCodeRow("BA", "Balsam")));
     when(repository.update(
             anyString(),
             anyString(),
@@ -106,7 +105,7 @@ class OracleRtmEmsLogAmvServiceTest {
             any(LocalDate.class),
             any(BigDecimal.class)))
         .thenReturn("0");
-    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(matrixWorkbook(), null, null);
 
@@ -117,11 +116,11 @@ class OracleRtmEmsLogAmvServiceTest {
             speciesCaptor.capture(),
             anyString(),
             anyString(),
+            eq(LocalDate.of(2026, 5, 1)),
             eq(LocalDate.of(2026, 6, 1)),
-            eq(LocalDate.of(2026, 7, 1)),
             any(BigDecimal.class));
     assertThat(speciesCaptor.getAllValues())
-        .contains("PA", "PB", "PC")
+        .contains("WH", "LO", "YE")
         .doesNotContain("PL", "PW", "PY");
   }
 

@@ -15,10 +15,9 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
   static byte[] matrixWorkbook() throws IOException {
     return workbook(
         List.of(
-            row(1, text("A1", "Date:first day of the month/year"), text("B1", "202607")),
-            row(2, text("A2", "GRADE"), text("B2", "BA"), text("C2", "HE"), text("D2", "PINE**")),
-            row(3, text("A3", "A"), number("B3", "10.25"), number("C3", "20.50"), number("D3", "30.75")),
-            row(4, text("A4", "1"), number("B4", "1.25"))));
+            row(1, text("A1", "GRADE"), text("B1", "BA"), text("C1", "HE"), text("D1", "PINE**")),
+            row(2, text("A2", "A"), number("B2", "10.25"), number("C2", "20.50"), number("D2", "30.75")),
+            row(3, text("A3", "1"), number("B3", "1.25"))));
   }
 
   static byte[] invalidWorkbook() throws IOException {
@@ -30,10 +29,9 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
 
   static byte[] fullGradeWorkbookWithBlankRow() throws IOException {
     List<String> rows = new ArrayList<>();
-    rows.add(row(1, text("A1", "Date:first day of the month/year"), text("B1", "202607")));
-    rows.add(row(2, text("A2", "GRADE"), text("B2", "BA")));
+    rows.add(row(1, text("A1", "GRADE"), text("B1", "BA")));
 
-    int rowNumber = 3;
+    int rowNumber = 2;
     for (char grade = 'A'; grade <= 'Z'; grade++) {
       rows.add(
           row(

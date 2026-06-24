@@ -718,8 +718,8 @@ const RTMEmsLogAmvPage: FC = () => {
             <div className="admin-upload-drop-zone__copy">
               <p>Drag and drop your Excel file here, or browse for files.</p>
               <p>
-                Supported format: .xlsx. The first row supplies the update date; retrieval date is
-                calculated as the previous month and values apply to old and second growth.
+                Supported format: .xlsx. The update date is assigned from the submission month,
+                retrieval date is calculated internally, and values apply to old and second growth.
               </p>
             </div>
             <input
@@ -831,7 +831,6 @@ const RTMEmsLogAmvPage: FC = () => {
               <p>{previewResult.message}</p>
               {previewResult.fileName && <p>File: {previewResult.fileName}</p>}
               {previewResult.updateDate && <p>Update date: {previewResult.updateDate}</p>}
-              {previewResult.retrievalDate && <p>Retrieval date: {previewResult.retrievalDate}</p>}
               <p>Rows to apply: {previewResult.rowCount}</p>
 
               {previewResult.errors.length > 0 && (
@@ -863,8 +862,6 @@ const RTMEmsLogAmvPage: FC = () => {
                       <TableHeader>Species code</TableHeader>
                       <TableHeader>Grade</TableHeader>
                       <TableHeader>Growth</TableHeader>
-                      <TableHeader>Retrieval date</TableHeader>
-                      <TableHeader>Update date</TableHeader>
                       <TableHeader>New value</TableHeader>
                     </TableRow>
                   </TableHead>
@@ -873,13 +870,11 @@ const RTMEmsLogAmvPage: FC = () => {
                       <TableRow
                         key={`${row.species ?? ''}-${row.grade ?? ''}-${
                           row.growthIndicator ?? ''
-                        }-${row.retrievalDate ?? ''}-${row.updateDate ?? ''}-${row.newValue ?? ''}`}
+                        }-${row.newValue ?? ''}`}
                       >
                         <TableCell>{row.species ?? ''}</TableCell>
                         <TableCell>{row.grade ?? ''}</TableCell>
                         <TableCell>{row.growthIndicator ?? ''}</TableCell>
-                        <TableCell>{row.retrievalDate ?? ''}</TableCell>
-                        <TableCell>{row.updateDate ?? ''}</TableCell>
                         <TableCell>{formatMoney(row.newValue)}</TableCell>
                       </TableRow>
                     ))}

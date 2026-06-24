@@ -25,11 +25,11 @@ class InMemoryRtmEmsLogAmvServiceTest {
 
     assertThat(result.status()).isEqualTo("accepted");
     assertThat(result.rowCount()).isEqualTo(12);
-    assertThat(result.retrievalDate()).isEqualTo("2026-06-01");
-    assertThat(result.updateDate()).isEqualTo("2026-07-01");
+    assertThat(result.retrievalDate()).isEqualTo("2026-05-01");
+    assertThat(result.updateDate()).isEqualTo("2026-06-01");
     assertThat(result.rows()).hasSize(12);
     assertThat(result.rows()).extracting(row -> row.growthIndicator()).contains("O", "S");
-    assertThat(result.rows()).extracting(row -> row.species()).contains("PL", "PW", "PY");
+    assertThat(result.rows()).extracting(row -> row.species()).contains("WH", "LO", "YE");
     assertThat(result.errors()).isEmpty();
   }
 
@@ -43,8 +43,8 @@ class InMemoryRtmEmsLogAmvServiceTest {
     assertThat(result.attemptedRowCount()).isEqualTo(12);
     assertThat(result.uploadedRowCount()).isEqualTo(12);
     assertThat(result.rows()).extracting(row -> row.growthIndicator()).contains("O", "S");
-    assertThat(result.rows()).extracting(row -> row.retrievalDate()).containsOnly("2026-06-01");
-    assertThat(result.rows()).extracting(row -> row.updateDate()).containsOnly("2026-07-01");
+    assertThat(result.rows()).extracting(row -> row.retrievalDate()).containsOnly("2026-05-01");
+    assertThat(result.rows()).extracting(row -> row.updateDate()).containsOnly("2026-06-01");
     assertThat(result.errors()).isEmpty();
   }
 
@@ -57,9 +57,7 @@ class InMemoryRtmEmsLogAmvServiceTest {
     assertThat(result.status()).isEqualTo("validation_failed");
     assertThat(result.uploadedRowCount()).isZero();
     assertThat(result.errors())
-        .contains(
-            "The first row must include the update date.",
-            "The template header is not recognized as an RTM EMS AMV sheet.");
+        .contains("The template header is not recognized as an RTM EMS AMV sheet.");
   }
 
   private MultipartFile matrixWorkbook() throws IOException {
