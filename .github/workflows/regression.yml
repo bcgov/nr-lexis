@@ -12,8 +12,8 @@ concurrency:
 permissions: {}
 
 jobs:
-  idir-admin-regression:
-    name: TEST IDIR Admin Regression (${{ matrix.project }})
+  credentialed-regression:
+    name: TEST Credentialed Regression (${{ matrix.project }})
     environment: test
     defaults:
       run:
@@ -22,15 +22,12 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      id-token: write
     strategy:
       fail-fast: false
       matrix:
         project: [chromium]
     env:
-      AWS_REGION: ca-central-1
       E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.silver.devops.gov.bc.ca
-      E2E_IDIR_SECRET_ID: test/mof_famt
     steps:
       - uses: actions/checkout@v6
 
@@ -40,94 +37,17 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Check AWS Secrets Manager config
+      - name: Check regression secrets
         env:
-          AWS_SECRETS_MANAGER_ROLE_ARN: ${{ secrets.AWS_SECRETS_MANAGER_ROLE_ARN }}
+          E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
+          E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
+          E2E_BCEID_USER: ${{ secrets.E2E_BCEID_USER }}
+          E2E_BCEID_PASSWORD: ${{ secrets.E2E_BCEID_PASSWORD }}
         run: |
-          test -n "$AWS_SECRETS_MANAGER_ROLE_ARN" || (echo "AWS_SECRETS_MANAGER_ROLE_ARN test environment secret is required." && exit 1)
-          command -v aws >/dev/null || (echo "AWS CLI is required on the runner." && exit 1)
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_SECRETS_MANAGER_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Load IDIR credentials from AWS Secrets Manager
-        id: idir-credentials
-        run: |
-          secret_file="$RUNNER_TEMP/idir-secret.json"
-          aws secretsmanager get-secret-value \
-            --secret-id "$E2E_IDIR_SECRET_ID" \
-            --query SecretString \
-            --output text > "$secret_file"
-
-          SECRET_FILE="$secret_file" node <<'NODE'
-          const crypto = require('node:crypto')
-          const fs = require('node:fs')
-
-          const secret = fs.readFileSync(process.env.SECRET_FILE, 'utf8').trim()
-          let parsed
-          try {
-            parsed = JSON.parse(secret)
-          } catch {
-            parsed = {}
-          }
-
-          const firstString = (...keys) => {
-            for (const key of keys) {
-              const value = parsed[key]
-              if (typeof value === 'string' && value.trim()) {
-                return value
-              }
-            }
-            return ''
-          }
-
-          const username = firstString(
-            'E2E_IDIR_USER',
-            'IDIR_USER',
-            'username',
-            'user',
-            'Username',
-            'UserName',
-          )
-          const password = firstString(
-            'E2E_IDIR_PASSWORD',
-            'IDIR_PASSWORD',
-            'password',
-            'pass',
-            'Password',
-          )
-          const osid = firstString(
-            'OSID (online service id)',
-            'OSID',
-            'onlineServiceId',
-            'online_service_id',
-            'ONLINE_SERVICE_ID',
-          )
-
-          if (!username || !password || !osid) {
-            console.error(
-              'AWS secret must be JSON containing username, password, and OSID (online service id).',
-            )
-            process.exit(1)
-          }
-
-          const appendOutput = (name, value) => {
-            const delimiter = `EOF_${crypto.randomUUID().replace(/-/g, '')}`
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}<<${delimiter}\n${value}\n${delimiter}\n`)
-          }
-
-          console.log(`::add-mask::${username}`)
-          console.log(`::add-mask::${password}`)
-          console.log(`::add-mask::${osid}`)
-          appendOutput('username', username)
-          appendOutput('password', password)
-          appendOutput('expected_principal', osid)
-          NODE
-
-          rm -f "$secret_file"
+          test -n "$E2E_IDIR_USER" || (echo "E2E_IDIR_USER test environment secret is required." && exit 1)
+          test -n "$E2E_IDIR_PASSWORD" || (echo "E2E_IDIR_PASSWORD test environment secret is required." && exit 1)
+          test -n "$E2E_BCEID_USER" || (echo "E2E_BCEID_USER test environment secret is required." && exit 1)
+          test -n "$E2E_BCEID_PASSWORD" || (echo "E2E_BCEID_PASSWORD test environment secret is required." && exit 1)
 
       - name: Install dependencies
         run: |
@@ -137,12 +57,13 @@ jobs:
       - name: Wait for deployed frontend
         run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL"
 
-      - name: Run TEST IDIR admin regression suite
+      - name: Run TEST credentialed regression suite
         env:
           CI: "true"
-          E2E_IDIR_USER: ${{ steps.idir-credentials.outputs.username }}
-          E2E_IDIR_PASSWORD: ${{ steps.idir-credentials.outputs.password }}
-          E2E_IDIR_EXPECTED_PRINCIPAL: ${{ steps.idir-credentials.outputs.expected_principal }}
+          E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
+          E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
+          E2E_BCEID_USER: ${{ secrets.E2E_BCEID_USER }}
+          E2E_BCEID_PASSWORD: ${{ secrets.E2E_BCEID_PASSWORD }}
         run: |
           npm run e2e:regression -- --reporter=html,list
 
