@@ -44,9 +44,18 @@ type LoginConfig = {
   passwordEnv: string
 }
 
+type AuthTokenSnapshot = {
+  accessToken?: string
+  cookieCandidateCount: number
+  storageCandidateCount: number
+}
+
 const baseOrigin = new URL(E2E_BASE_URL).origin
 const CREDENTIAL_SCREEN_TIMEOUT_MS = 5_000
 const LOGIN_SESSION_TIMEOUT_MS = 30_000
+const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
+const LOGIN_ERROR_TEXT =
+  /username or password.*incorrect|invalid username|invalid password|authentication failed/i
 
 const idirLoginConfig: LoginConfig = {
   buttonName: /log in with idir/i,
@@ -76,6 +85,187 @@ const credentials = ({ usernameEnv, passwordEnv }: LoginConfig): RealCredentials
   }
 }
 
+const safeDecode = (value: string): string => {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+const findAccessTokenValue = (name: string, value: string): string | undefined => {
+  const normalizedName = name.toLowerCase()
+  const decodedValue = safeDecode(value).replace(/^"|"$/g, '')
+
+  if (
+    (normalizedName.includes('accesstoken') || normalizedName.includes('access_token')) &&
+    JWT_PATTERN.test(decodedValue)
+  ) {
+    return decodedValue
+  }
+
+  if (!decodedValue.includes('accessToken') && !decodedValue.includes('access_token')) {
+    return undefined
+  }
+
+  try {
+    const parsed = JSON.parse(decodedValue) as unknown
+    if (!parsed || typeof parsed !== 'object') {
+      return undefined
+    }
+
+    const stack: unknown[] = [parsed]
+    while (stack.length > 0) {
+      const item = stack.pop()
+      if (!item || typeof item !== 'object') {
+        continue
+      }
+
+      for (const [key, nestedValue] of Object.entries(item)) {
+        if (typeof nestedValue === 'string') {
+          const token = findAccessTokenValue(key, nestedValue)
+          if (token) {
+            return token
+          }
+        } else if (nestedValue && typeof nestedValue === 'object') {
+          stack.push(nestedValue)
+        }
+      }
+    }
+  } catch {
+    return undefined
+  }
+
+  return undefined
+}
+
+const browserAuthSnapshot = async (page: Page): Promise<AuthTokenSnapshot> => {
+  return page
+    .evaluate(() => {
+      const jwtPattern = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
+      const decode = (value: string): string => {
+        try {
+          return decodeURIComponent(value)
+        } catch {
+          return value
+        }
+      }
+      const findToken = (name: string, value: string): string | undefined => {
+        const normalizedName = name.toLowerCase()
+        const decodedValue = decode(value).replace(/^"|"$/g, '')
+
+        if (
+          (normalizedName.includes('accesstoken') || normalizedName.includes('access_token')) &&
+          jwtPattern.test(decodedValue)
+        ) {
+          return decodedValue
+        }
+
+        if (!decodedValue.includes('accessToken') && !decodedValue.includes('access_token')) {
+          return undefined
+        }
+
+        try {
+          const parsed = JSON.parse(decodedValue) as unknown
+          if (!parsed || typeof parsed !== 'object') {
+            return undefined
+          }
+
+          const stack: unknown[] = [parsed]
+          while (stack.length > 0) {
+            const item = stack.pop()
+            if (!item || typeof item !== 'object') {
+              continue
+            }
+
+            for (const [key, nestedValue] of Object.entries(item)) {
+              if (typeof nestedValue === 'string') {
+                const token = findToken(key, nestedValue)
+                if (token) {
+                  return token
+                }
+              } else if (nestedValue && typeof nestedValue === 'object') {
+                stack.push(nestedValue)
+              }
+            }
+          }
+        } catch {
+          return undefined
+        }
+
+        return undefined
+      }
+
+      const cookieEntries = document.cookie
+        .split(';')
+        .map((cookie) => cookie.trim())
+        .filter(Boolean)
+        .map((cookie) => {
+          const separatorIndex = cookie.indexOf('=')
+          return separatorIndex >= 0
+            ? [cookie.slice(0, separatorIndex), cookie.slice(separatorIndex + 1)]
+            : [cookie, '']
+        })
+      const storageEntries = [
+        ...Array.from({ length: localStorage.length }, (_, index) => {
+          const key = localStorage.key(index) ?? ''
+          return [key, localStorage.getItem(key) ?? '']
+        }),
+        ...Array.from({ length: sessionStorage.length }, (_, index) => {
+          const key = sessionStorage.key(index) ?? ''
+          return [key, sessionStorage.getItem(key) ?? '']
+        }),
+      ]
+
+      let accessToken: string | undefined
+      let cookieCandidateCount = 0
+      let storageCandidateCount = 0
+
+      for (const [name, value] of cookieEntries) {
+        if (name.toLowerCase().includes('token')) {
+          cookieCandidateCount += 1
+        }
+        accessToken = accessToken ?? findToken(name, value)
+      }
+
+      for (const [name, value] of storageEntries) {
+        if (name.toLowerCase().includes('token') || value.includes('accessToken')) {
+          storageCandidateCount += 1
+        }
+        accessToken = accessToken ?? findToken(name, value)
+      }
+
+      return {
+        accessToken,
+        cookieCandidateCount,
+        storageCandidateCount,
+      }
+    })
+    .catch(() => ({
+      cookieCandidateCount: 0,
+      storageCandidateCount: 0,
+    }))
+}
+
+const contextAuthSnapshot = async (page: Page): Promise<AuthTokenSnapshot> => {
+  const cookies = await page.context().cookies()
+  let accessToken: string | undefined
+  let cookieCandidateCount = 0
+
+  for (const cookie of cookies) {
+    if (cookie.name.toLowerCase().includes('token')) {
+      cookieCandidateCount += 1
+    }
+    accessToken = accessToken ?? findAccessTokenValue(cookie.name, cookie.value)
+  }
+
+  return {
+    accessToken,
+    cookieCandidateCount,
+    storageCandidateCount: 0,
+  }
+}
+
 const csrfHeaders = async (page: Page): Promise<Record<string, string>> => {
   const cookies = await page.context().cookies()
   const xsrfCookie = cookies.find((cookie) => cookie.name === 'XSRF-TOKEN')
@@ -83,13 +273,10 @@ const csrfHeaders = async (page: Page): Promise<Record<string, string>> => {
 }
 
 const bearerHeaders = async (page: Page): Promise<Record<string, string>> => {
-  const cookies = await page.context().cookies()
-  const accessTokenCookie = cookies.find((cookie) =>
-    cookie.name.toLowerCase().endsWith('.accesstoken'),
-  )
-  return accessTokenCookie
-    ? { Authorization: `Bearer ${decodeURIComponent(accessTokenCookie.value)}` }
-    : {}
+  const browserSnapshot = await browserAuthSnapshot(page)
+  const contextSnapshot = browserSnapshot.accessToken ? null : await contextAuthSnapshot(page)
+  const accessToken = browserSnapshot.accessToken ?? contextSnapshot?.accessToken
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
 }
 
 const authHeaders = async (page: Page): Promise<Record<string, string>> => ({
@@ -107,6 +294,24 @@ export const getWithAuth = async (
     failOnStatusCode: options.failOnStatusCode ?? false,
     headers: await authHeaders(page),
   })
+}
+
+const authDiagnostics = async (page: Page): Promise<string> => {
+  const [browserSnapshot, contextSnapshot] = await Promise.all([
+    browserAuthSnapshot(page),
+    contextAuthSnapshot(page),
+  ])
+  const sessionResponse = await getWithAuth(page, '/api/lexis/session/capabilities').catch(
+    () => null,
+  )
+
+  return [
+    `browserCookieTokenCandidates=${browserSnapshot.cookieCandidateCount}`,
+    `browserStorageTokenCandidates=${browserSnapshot.storageCandidateCount}`,
+    `contextCookieTokenCandidates=${contextSnapshot.cookieCandidateCount}`,
+    `bearerTokenFound=${Boolean(browserSnapshot.accessToken ?? contextSnapshot.accessToken)}`,
+    `sessionStatus=${sessionResponse?.status() ?? 'request-failed'}`,
+  ].join(', ')
 }
 
 const isSessionAuthenticated = async (page: Page): Promise<boolean> => {
@@ -145,6 +350,15 @@ const currentPageSummary = async (page: Page): Promise<string> => {
   })()
 
   return `${safeUrl}${title ? ` (${title})` : ''}`
+}
+
+const visibleLoginError = async (page: Page): Promise<string | null> => {
+  const error = page.getByText(LOGIN_ERROR_TEXT).first()
+  if (!(await error.isVisible({ timeout: 500 }).catch(() => false))) {
+    return null
+  }
+  const text = await error.textContent().catch(() => null)
+  return text?.trim() || 'Login form reported an authentication error.'
 }
 
 const fillCredentialScreen = async (
@@ -204,12 +418,26 @@ const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> =
       return
     }
 
+    const loginError = await visibleLoginError(page)
+    if (loginError) {
+      throw new Error(
+        `${label} login was rejected by the identity provider: ${loginError}. Last page: ${await currentPageSummary(page)}.`,
+      )
+    }
+
     const filled = await fillCredentialScreen(page, username, password)
     if (!filled && page.url().startsWith(baseOrigin)) {
       break
     }
 
     await page.waitForTimeout(1000)
+
+    const submittedLoginError = await visibleLoginError(page)
+    if (submittedLoginError) {
+      throw new Error(
+        `${label} login was rejected by the identity provider: ${submittedLoginError}. Last page: ${await currentPageSummary(page)}.`,
+      )
+    }
   }
 
   try {
@@ -221,7 +449,7 @@ const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> =
       .toBe(true)
   } catch {
     throw new Error(
-      `${label} login did not establish a LEXIS session. Last page: ${await currentPageSummary(page)}.`,
+      `${label} login did not establish a LEXIS session. Last page: ${await currentPageSummary(page)}. ${await authDiagnostics(page)}.`,
     )
   }
 }
