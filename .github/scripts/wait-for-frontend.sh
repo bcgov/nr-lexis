@@ -5,10 +5,13 @@ frontend_url="${1:?frontend URL is required}"
 attempts="${2:-30}"
 sleep_seconds="${3:-10}"
 shell_marker="${4:-<div id=\"root\"}"
+curl_max_seconds="${5:-10}"
 response_file="/tmp/frontend-index.html"
 
+echo "Waiting for frontend route: ${frontend_url}/"
+
 for ((attempt = 1; attempt <= attempts; attempt += 1)); do
-  if curl --fail --silent --show-error --location --max-time 10 "${frontend_url}/" > "${response_file}"; then
+  if curl --fail --silent --show-error --location --connect-timeout 10 --max-time "${curl_max_seconds}" "${frontend_url}/" > "${response_file}"; then
     if grep -q "${shell_marker}" "${response_file}"; then
       echo "Frontend route is ready."
       exit 0
