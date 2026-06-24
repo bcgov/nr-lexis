@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
@@ -38,6 +39,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private final OracleRtmEmsLogAmvRepository repository;
   private final Clock clock;
 
+  @Autowired
   public OracleRtmEmsLogAmvService(OracleRtmEmsLogAmvRepository repository) {
     this(repository, Clock.systemUTC());
   }
