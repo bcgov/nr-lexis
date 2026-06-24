@@ -1,0 +1,154 @@
+name: Regression
+
+on:
+  schedule:
+    - cron: "0 10 * * 3" # Wednesdays at 10:00 UTC; 3 AM Pacific during daylight time.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  idir-admin-regression:
+    name: TEST IDIR Admin Regression (${{ matrix.project }})
+    environment: test
+    defaults:
+      run:
+        working-directory: frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium]
+    env:
+      AWS_REGION: ca-central-1
+      E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.silver.devops.gov.bc.ca
+      E2E_IDIR_SECRET_ID: test/mof_famt
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Check AWS Secrets Manager config
+        env:
+          AWS_SECRETS_MANAGER_ROLE_ARN: ${{ vars.AWS_SECRETS_MANAGER_ROLE_ARN }}
+        run: |
+          test -n "$AWS_SECRETS_MANAGER_ROLE_ARN" || (echo "AWS_SECRETS_MANAGER_ROLE_ARN test environment variable is required." && exit 1)
+          command -v aws >/dev/null || (echo "AWS CLI is required on the runner." && exit 1)
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_SECRETS_MANAGER_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Load IDIR credentials from AWS Secrets Manager
+        id: idir-credentials
+        run: |
+          secret_file="$RUNNER_TEMP/idir-secret.json"
+          aws secretsmanager get-secret-value \
+            --secret-id "$E2E_IDIR_SECRET_ID" \
+            --query SecretString \
+            --output text > "$secret_file"
+
+          SECRET_FILE="$secret_file" node <<'NODE'
+          const crypto = require('node:crypto')
+          const fs = require('node:fs')
+
+          const secret = fs.readFileSync(process.env.SECRET_FILE, 'utf8').trim()
+          let parsed
+          try {
+            parsed = JSON.parse(secret)
+          } catch {
+            parsed = {}
+          }
+
+          const firstString = (...keys) => {
+            for (const key of keys) {
+              const value = parsed[key]
+              if (typeof value === 'string' && value.trim()) {
+                return value
+              }
+            }
+            return ''
+          }
+
+          const username = firstString(
+            'E2E_IDIR_USER',
+            'IDIR_USER',
+            'username',
+            'user',
+            'Username',
+            'UserName',
+          )
+          const password = firstString(
+            'E2E_IDIR_PASSWORD',
+            'IDIR_PASSWORD',
+            'password',
+            'pass',
+            'Password',
+          )
+          const osid = firstString(
+            'OSID (online service id)',
+            'OSID',
+            'onlineServiceId',
+            'online_service_id',
+            'ONLINE_SERVICE_ID',
+          )
+
+          if (!username || !password || !osid) {
+            console.error(
+              'AWS secret must be JSON containing username, password, and OSID (online service id).',
+            )
+            process.exit(1)
+          }
+
+          const appendOutput = (name, value) => {
+            const delimiter = `EOF_${crypto.randomUUID().replace(/-/g, '')}`
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}<<${delimiter}\n${value}\n${delimiter}\n`)
+          }
+
+          console.log(`::add-mask::${username}`)
+          console.log(`::add-mask::${password}`)
+          console.log(`::add-mask::${osid}`)
+          appendOutput('username', username)
+          appendOutput('password', password)
+          appendOutput('expected_principal', osid)
+          NODE
+
+          rm -f "$secret_file"
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps ${{ matrix.project }}
+
+      - name: Wait for deployed frontend
+        run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL"
+
+      - name: Run TEST IDIR admin regression suite
+        env:
+          CI: "true"
+          E2E_IDIR_USER: ${{ steps.idir-credentials.outputs.username }}
+          E2E_IDIR_PASSWORD: ${{ steps.idir-credentials.outputs.password }}
+          E2E_IDIR_EXPECTED_PRINCIPAL: ${{ steps.idir-credentials.outputs.expected_principal }}
+        run: |
+          npm run e2e:regression -- --reporter=html,list
+
+      - uses: actions/upload-artifact@v7
+        if: (! cancelled())
+        with:
+          name: playwright-regression-${{ matrix.project }}-test
+          path: frontend/playwright-report
+          retention-days: 7

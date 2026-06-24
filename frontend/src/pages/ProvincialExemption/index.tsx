@@ -27,19 +27,28 @@ import type {
   ProvincialExemptionSearchSortField,
 } from '@/interfaces/ProvincialExemptionSearch'
 import { useAuth } from '@/context/auth/useAuth'
-import { isValidIsoDate } from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
+  DEFAULT_SEARCH_PAGE,
+  DEFAULT_SEARCH_PAGE_SIZE,
+  SEARCH_PAGE_SIZE_OPTIONS,
+  appendSearchParamsToPath,
+  createEmptyPagedSearchResponse,
+  createSearchParams,
+  getNextSortDirection,
   mapSelectedOptionsById,
+  mapValueLabelOptionsToIdTextOptions,
   parseCsvParam,
   parseEnumParam,
+  parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
-  setSearchParam,
+  type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -49,11 +58,6 @@ import {
   type SearchOption,
 } from '@/service/search-options-service'
 import IsoDatePicker from '@/components/IsoDatePicker'
-
-type RegionOption = {
-  id: string
-  text: string
-}
 
 type ApprovalStatus = {
   kind: 'error' | 'success'
@@ -73,15 +77,7 @@ const INITIAL_FILTERS: ProvincialExemptionSearchFilters = {
   ownerClientNumber: '',
 }
 
-const EMPTY_RESULTS: ProvincialExemptionSearchResponse = {
-  content: [],
-  page: {
-    number: 0,
-    size: 10,
-    totalElements: 0,
-    totalPages: 1,
-  },
-}
+const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialExemptionSearchResponse>()
 
 const SORT_COLUMNS: {
   id: ProvincialExemptionSearchSortField
@@ -101,9 +97,6 @@ const SORT_COLUMNS: {
 
 const DEFAULT_SORT_FIELD: ProvincialExemptionSearchSortField = 'exemptionNumber'
 const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
-const DEFAULT_PAGE = 1
-const DEFAULT_PAGE_SIZE = 10
-const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialExemptionSearchSortField[]
@@ -114,31 +107,28 @@ const buildSearchParams = (
   sortDirection: 'asc' | 'desc',
   page: number,
   pageSize: number,
-): URLSearchParams => {
-  const params = new URLSearchParams()
-
-  setSearchParam(params, 'applicationNumber', filters.applicationNumber)
-  setSearchParam(params, 'packageNumber', filters.packageNumber)
-  setSearchParam(params, 'exemptionNumber', filters.exemptionNumber)
-  setSearchParam(params, 'region', filters.region)
-  setSearchParam(params, 'listFromDate', filters.listFromDate)
-  setSearchParam(params, 'listToDate', filters.listToDate)
-  setSearchParam(params, 'exemptionTypeCode', filters.exemptionTypeCode)
-  setSearchParam(params, 'exemptionStatusCode', filters.exemptionStatusCode)
-  setSearchParam(params, 'applicantClientNumber', filters.applicantClientNumber)
-  setSearchParam(params, 'ownerClientNumber', filters.ownerClientNumber)
-  setSearchParam(params, 'sortField', sortField)
-  setSearchParam(params, 'sortDirection', sortDirection)
-  setSearchParam(params, 'page', page)
-  setSearchParam(params, 'pageSize', pageSize)
-
-  return params
-}
+): URLSearchParams =>
+  createSearchParams([
+    ['applicationNumber', filters.applicationNumber],
+    ['packageNumber', filters.packageNumber],
+    ['exemptionNumber', filters.exemptionNumber],
+    ['region', filters.region],
+    ['listFromDate', filters.listFromDate],
+    ['listToDate', filters.listToDate],
+    ['exemptionTypeCode', filters.exemptionTypeCode],
+    ['exemptionStatusCode', filters.exemptionStatusCode],
+    ['applicantClientNumber', filters.applicantClientNumber],
+    ['ownerClientNumber', filters.ownerClientNumber],
+    ['sortField', sortField],
+    ['sortDirection', sortDirection],
+    ['page', page],
+    ['pageSize', pageSize],
+  ])
 
 const ProvincialExemptionPage: FC = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
+  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>([])
   const [results, setResults] = useState<ProvincialExemptionSearchResponse>(EMPTY_RESULTS)
@@ -152,10 +142,7 @@ const ProvincialExemptionPage: FC = () => {
   const canApproveExemption = canPerform('approveExemption')
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
-    (path: string): string => {
-      const query = searchParams.toString()
-      return query.length > 0 ? `${path}?${query}` : path
-    },
+    (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
 
@@ -172,7 +159,6 @@ const ProvincialExemptionPage: FC = () => {
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
     }
-    const parsedPageSize = parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
 
     return {
       filters: urlFilters,
@@ -185,10 +171,12 @@ const ProvincialExemptionPage: FC = () => {
         searchParams.get('sortDirection'),
         DEFAULT_SORT_DIRECTION,
       ),
-      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
-      pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
-        ? parsedPageSize
-        : DEFAULT_PAGE_SIZE,
+      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_SEARCH_PAGE),
+      pageSize: parsePageSizeParam(
+        searchParams.get('pageSize'),
+        DEFAULT_SEARCH_PAGE_SIZE,
+        SEARCH_PAGE_SIZE_OPTIONS,
+      ),
     }
   }, [searchParams])
   const debouncedUrlState = useDebouncedValue(urlState)
@@ -211,7 +199,7 @@ const ProvincialExemptionPage: FC = () => {
       }
       clearSelection()
       setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
+        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
         { replace: true },
       )
     },
@@ -224,7 +212,7 @@ const ProvincialExemptionPage: FC = () => {
   )
 
   const hasDateValidationError = useMemo(() => {
-    return !isValidIsoDate(filters.listFromDate) || !isValidIsoDate(filters.listToDate)
+    return hasInvalidIsoDateValue(filters.listFromDate, filters.listToDate)
   }, [filters.listFromDate, filters.listToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
@@ -247,10 +235,7 @@ const ProvincialExemptionPage: FC = () => {
       }
 
       const isLatestRequest = beginSearchRequest()
-      if (
-        !isValidIsoDate(request.filters.listFromDate) ||
-        !isValidIsoDate(request.filters.listToDate)
-      ) {
+      if (hasInvalidIsoDateValue(request.filters.listFromDate, request.filters.listToDate)) {
         setLoading(false)
         return
       }
@@ -303,8 +288,8 @@ const ProvincialExemptionPage: FC = () => {
           },
           DEFAULT_SORT_FIELD,
           DEFAULT_SORT_DIRECTION,
-          DEFAULT_PAGE,
-          DEFAULT_PAGE_SIZE,
+          DEFAULT_SEARCH_PAGE,
+          DEFAULT_SEARCH_PAGE_SIZE,
         ),
         { replace: true },
       )
@@ -317,12 +302,7 @@ const ProvincialExemptionPage: FC = () => {
 
       setExemptionTypeOptions(options.exemptionTypes)
       setExemptionStatusOptions(options.exemptionStatuses)
-      setRegionOptions(
-        options.regions.map((option) => ({
-          id: option.value,
-          text: `${option.label} (${option.value})`,
-        })),
-      )
+      setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
     }
 
     void loadOptions()
@@ -330,7 +310,9 @@ const ProvincialExemptionPage: FC = () => {
 
   const onSearch = () => {
     clearSelection()
-    setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
+    setSearchParams(
+      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    )
   }
 
   const onClearFilters = () => {
@@ -340,16 +322,18 @@ const ProvincialExemptionPage: FC = () => {
         INITIAL_FILTERS,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
-        DEFAULT_PAGE,
-        DEFAULT_PAGE_SIZE,
+        DEFAULT_SEARCH_PAGE,
+        DEFAULT_SEARCH_PAGE_SIZE,
       ),
     )
   }
 
   const onHeaderClick = (column: ProvincialExemptionSearchSortField) => {
-    const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
+    const nextDirection = getNextSortDirection(sortField, sortDirection, column)
     clearSelection()
-    setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
+    setSearchParams(
+      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    )
   }
 
   const selectableRows = useMemo(() => {
@@ -455,7 +439,7 @@ const ProvincialExemptionPage: FC = () => {
                 selectionFeedback="fixed"
                 selectedItems={selectedRegions}
                 onChange={(event) => {
-                  const nextSelected = (event.selectedItems ?? []) as RegionOption[]
+                  const nextSelected = (event.selectedItems ?? []) as IdTextOption[]
                   updateFilter(
                     'region',
                     nextSelected.map((item) => item.id),
@@ -640,7 +624,7 @@ const ProvincialExemptionPage: FC = () => {
             <Pagination
               page={results.page.number + 1}
               pageSize={results.page.size}
-              pageSizes={[10, 20, 30]}
+              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
                 clearSelection()

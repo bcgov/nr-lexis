@@ -10,6 +10,7 @@ import {
   payloadValueAsOptionalString as asString,
   payloadValueAsStringList as asStringArray,
 } from '@/service/payload-utils'
+import { getConfiguredString, isEnabledConfig } from '@/service/service-config-utils'
 
 export type CreateSubmissionResult = {
   success: boolean
@@ -43,15 +44,6 @@ const withQueryParam = (path: string, key: string, value: string | undefined): s
   return `${path}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`
 }
 
-const getConfiguredPath = (configured: unknown, fallback: string): string => {
-  if (typeof configured !== 'string') {
-    return fallback
-  }
-
-  const trimmed = configured.trim()
-  return trimmed.length > 0 ? trimmed : fallback
-}
-
 const getCreateSubmitRequestMode = (): CreateSubmitRequestMode => {
   const configured = (env.VITE_LEXIS_CREATE_SUBMIT_REQUEST_MODE ?? 'form')
     .toString()
@@ -61,19 +53,11 @@ const getCreateSubmitRequestMode = (): CreateSubmitRequestMode => {
   return configured === 'json' ? 'json' : 'form'
 }
 
-const shouldIncludeCreateSubmitActionMapping = (): boolean => {
-  const configured = (env.VITE_LEXIS_CREATE_SUBMIT_INCLUDE_ACTION_MAPPING ?? 'true')
-    .toString()
-    .trim()
-    .toLowerCase()
-  return configured !== '0' && configured !== 'false' && configured !== 'no'
-}
-
 const withCreateActionMapping = (
   actionMapping: string,
   payload: LegacyFormPayload,
 ): LegacyFormPayload => {
-  if (!shouldIncludeCreateSubmitActionMapping()) {
+  if (!isEnabledConfig(env.VITE_LEXIS_CREATE_SUBMIT_INCLUDE_ACTION_MAPPING)) {
     return payload
   }
 
@@ -84,18 +68,18 @@ const withCreateActionMapping = (
 }
 
 const getProvincialApplicationCreatePath = (): string => {
-  return getConfiguredPath(
+  return getConfiguredString(
     env.VITE_LEXIS_CREATE_APPLICATION_ENDPOINT,
     '/lexis/applicationDetailsRPC',
   )
 }
 
 const getProvincialExemptionCreatePath = (): string => {
-  return getConfiguredPath(env.VITE_LEXIS_CREATE_EXEMPTION_ENDPOINT, '/lexis/exemptionDetailsRPC')
+  return getConfiguredString(env.VITE_LEXIS_CREATE_EXEMPTION_ENDPOINT, '/lexis/exemptionDetailsRPC')
 }
 
 const getProvincialOfferCreatePath = (): string => {
-  return getConfiguredPath(env.VITE_LEXIS_CREATE_OFFER_ENDPOINT, '/lexis/offerDetailsRPC')
+  return getConfiguredString(env.VITE_LEXIS_CREATE_OFFER_ENDPOINT, '/lexis/offerDetailsRPC')
 }
 
 const parseCreateResponse = (

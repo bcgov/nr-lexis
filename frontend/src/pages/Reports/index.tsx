@@ -21,6 +21,9 @@ import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-util
 import { useAuth } from '@/context/auth/useAuth'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
+import { formatLocalIsoDate } from '@/utils/date'
+import { parseJsonValue } from '@/utils/json'
+import { isRecord } from '@/utils/record'
 import { normalizeFilterText as normalizeText } from '@/utils/text'
 import {
   fetchReportOptions,
@@ -609,21 +612,14 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
 
 const REPORT_CATEGORY_OPTIONS = ['ALL', 'Provincial', 'Federal', 'Cross-Module'] as const
 
-function formatLocalDate(date: Date): string {
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 function getLegacyTenureDefaultFromDate(): string {
   const today = new Date()
-  return formatLocalDate(new Date(today.getFullYear() - 1, today.getMonth(), 1))
+  return formatLocalIsoDate(new Date(today.getFullYear() - 1, today.getMonth(), 1))
 }
 
 function getLegacyTenureDefaultToDate(): string {
   const today = new Date()
-  return formatLocalDate(new Date(today.getFullYear(), today.getMonth(), 0))
+  return formatLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 0))
 }
 
 function getLegacyTenureToDateFromFromDate(fromDate: string): string {
@@ -644,7 +640,7 @@ function getLegacyTenureToDateFromFromDate(fromDate: string): string {
 
   const toDate = new Date(year + 1, month - 1, day)
   toDate.setDate(toDate.getDate() - 1)
-  return formatLocalDate(toDate)
+  return formatLocalIsoDate(toDate)
 }
 
 const mergeOptions = (...optionGroups: SearchOption[][]): SearchOption[] => {
@@ -688,22 +684,19 @@ const parseRecordParam = (value: string | null): Record<string, string> => {
     return {}
   }
 
-  try {
-    const parsed = JSON.parse(value)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return {}
-    }
-
-    return Object.entries(parsed).reduce<Record<string, string>>((acc, [key, fieldValue]) => {
-      if (typeof fieldValue === 'string') {
-        acc[key] = fieldValue
-      }
-      return acc
-    }, {})
-  } catch (error) {
+  const parsed = parseJsonValue(value, (error) => {
     console.warn('Unable to parse report values from URL state.', error)
+  })
+  if (!isRecord(parsed)) {
     return {}
   }
+
+  return Object.entries(parsed).reduce<Record<string, string>>((acc, [key, fieldValue]) => {
+    if (typeof fieldValue === 'string') {
+      acc[key] = fieldValue
+    }
+    return acc
+  }, {})
 }
 
 const sanitizeReportValues = (

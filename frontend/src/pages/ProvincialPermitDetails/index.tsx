@@ -21,6 +21,7 @@ import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUpload
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
 import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
+import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
 import {
   firstValidationError,
   getVisibleFieldError,
@@ -110,10 +111,7 @@ const ProvincialPermitDetailsPage: FC = () => {
   const documentsFilter = searchParams.get('documentsFilter') ?? ''
   const invoicesFilter = searchParams.get('invoicesFilter') ?? ''
   const withCurrentSearch = useCallback(
-    (path: string): string => {
-      const query = searchParams.toString()
-      return query.length > 0 ? `${path}?${query}` : path
-    },
+    (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
   const updateFilterParam = useCallback(
@@ -128,12 +126,7 @@ const ProvincialPermitDetailsPage: FC = () => {
         | 'invoicesFilter',
       value: string,
     ) => {
-      const nextSearchParams = new URLSearchParams(searchParams)
-      if (value.trim().length > 0) {
-        nextSearchParams.set(key, value)
-      } else {
-        nextSearchParams.delete(key)
-      }
+      const nextSearchParams = searchParamsWithValue(searchParams, key, value)
 
       if (nextSearchParams.toString() !== searchParams.toString()) {
         setSearchParams(nextSearchParams, { replace: true })

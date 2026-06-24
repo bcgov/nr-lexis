@@ -1,9 +1,8 @@
 import {
-  appendNumericSearchParams,
-  appendSearchParams,
-  appendSearchSortAndPageParams,
+  createSortedPagedSearchParams,
   getCachedSearchResponse,
   parsePagedSearchResponse,
+  requireParsedSearchResponse,
 } from '@/service/cached-search-service'
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
@@ -22,22 +21,20 @@ type BackendProvincialOfferSearchResult = {
 }
 
 const buildBackendParams = (request: ProvincialOfferSearchRequest): URLSearchParams => {
-  const params = new URLSearchParams()
-
   const { filters } = request
-  appendSearchParams(params, [
-    ['applicationNumber', filters.applicationNumber],
-    ['packageNumber', filters.packageNumber],
-    ['clientNumber', filters.clientNumber],
-    ['listingFromDate', filters.listingFromDate],
-    ['listingToDate', filters.listingToDate],
-    ['withdrawalFromDate', filters.withdrawalFromDate],
-    ['withdrawalToDate', filters.withdrawalToDate],
-  ])
-  appendNumericSearchParams(params, 'region', filters.region)
-  appendSearchSortAndPageParams(params, request)
-
-  return params
+  return createSortedPagedSearchParams(
+    request,
+    [
+      ['applicationNumber', filters.applicationNumber],
+      ['packageNumber', filters.packageNumber],
+      ['clientNumber', filters.clientNumber],
+      ['listingFromDate', filters.listingFromDate],
+      ['listingToDate', filters.listingToDate],
+      ['withdrawalFromDate', filters.withdrawalFromDate],
+      ['withdrawalToDate', filters.withdrawalToDate],
+    ],
+    [['region', filters.region]],
+  )
 }
 
 const parseBackendResponse = (payload: unknown): ProvincialOfferSearchResponse | null => {
@@ -64,12 +61,10 @@ export const searchProvincialOffers = async (
       buildBackendParams(request),
     )
 
-    const parsed = parseBackendResponse(response.data)
-    if (!parsed) {
-      throw new Error('Backend provincial offer response did not include results.')
-    }
-
-    return parsed
+    return requireParsedSearchResponse(
+      parseBackendResponse(response.data),
+      'Backend provincial offer response did not include results.',
+    )
   } catch (error) {
     throw toSearchServiceError('Unable to load provincial offer search results.', error)
   }

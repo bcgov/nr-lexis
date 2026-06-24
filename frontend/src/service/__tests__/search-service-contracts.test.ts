@@ -4,7 +4,10 @@ import {
   previewApplicationReviews,
   searchApplicationReviews,
 } from '@/service/application-review-search-service'
-import { uniqueSearchItemsByKey } from '@/service/cached-search-service'
+import {
+  requireParsedSearchResponse,
+  uniqueSearchItemsByKey,
+} from '@/service/cached-search-service'
 import {
   countFederalApplications,
   searchFederalApplications,
@@ -174,6 +177,11 @@ describe('search-service contracts', () => {
     ])
   })
 
+  it('requires parsed search responses', () => {
+    expect(requireParsedSearchResponse({ content: [] }, 'missing')).toEqual({ content: [] })
+    expect(() => requireParsedSearchResponse(null, 'missing')).toThrow('missing')
+  })
+
   it('maps provincial application results and backend query params', async () => {
     getCachedResponseMock.mockResolvedValue({
       data: {
@@ -289,6 +297,7 @@ describe('search-service contracts', () => {
     const params = readParams()
     expect(params.get('exemptionStatusCode')).toBe('NEW')
     expect(params.get('region')).toBe('22')
+    expect(params.has('sortField')).toBe(false)
     expect(result.content[0]).toEqual(
       expect.objectContaining({
         exemptionNumber: 'EX-2',
