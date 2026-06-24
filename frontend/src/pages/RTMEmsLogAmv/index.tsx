@@ -1,12 +1,13 @@
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   type ChangeEvent,
+  type DragEvent,
   type FC,
   type FormEvent,
 } from 'react'
+import { Upload } from '@carbon/icons-react'
 import {
   Button,
   Column,
@@ -77,6 +78,10 @@ const hasInvalidIsoDateValue = (retrievalDate: string, updateDate: string): bool
   )
 }
 
+const hasRequiredSearchFilters = (filters: RtmEmsLogAmvFilters): boolean => {
+  return filters.species.trim().length > 0 && filters.retrievalDate.trim().length > 0
+}
+
 const parseStatusTag = (status: string | undefined) => {
   if (!status) {
     return 'gray'
@@ -128,6 +133,7 @@ const RTMEmsLogAmvPage: FC = () => {
   const canManage = canPerform('/lexisAgentAdmin')
   const [filters, setFilters] = useState<RtmEmsLogAmvFilters>(INITIAL_FILTERS)
   const [rows, setRows] = useState<RtmEmsLogAmvRow[]>([])
+  const [hasSearched, setHasSearched] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isPreviewing, setIsPreviewing] = useState(false)
@@ -146,6 +152,8 @@ const RTMEmsLogAmvPage: FC = () => {
   const [pendingUploadValidation, setPendingUploadValidation] =
     useState<PendingUploadValidation | null>(null)
   const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
+  const [uploadInputKey, setUploadInputKey] = useState(0)
+  const [isDraggingUpload, setIsDraggingUpload] = useState(false)
 
   const hasSearchDateError = useMemo(
     () => hasInvalidIsoDateValue(filters.retrievalDate, filters.updateDate),
@@ -163,6 +171,12 @@ const RTMEmsLogAmvPage: FC = () => {
   const runSearch = useCallback(async (nextFilters: RtmEmsLogAmvFilters) => {
     setSearchError('')
 
+    if (!hasRequiredSearchFilters(nextFilters)) {
+      setRows([])
+      setSearchError('Species and retrieval date are required to query RTM AMV rows.')
+      return
+    }
+
     if (hasInvalidIsoDateValue(nextFilters.retrievalDate, nextFilters.updateDate)) {
       setSearchError('Date filters must be valid YYYY-MM-DD values.')
       return
@@ -172,6 +186,7 @@ const RTMEmsLogAmvPage: FC = () => {
     try {
       const response = await searchRtmEmsLogAmv(nextFilters)
       setRows(response)
+      setHasSearched(true)
     } catch (error) {
       console.error(error)
       setSearchError('Failed to load RTM AMV rows.')
@@ -203,8 +218,7 @@ const RTMEmsLogAmvPage: FC = () => {
     setManualResult(null)
   }
 
-  const updateUploadFile = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextFile = event.currentTarget.files?.[0] ?? null
+  const selectUploadFile = (nextFile: File | null) => {
     setSelectedUploadFile(nextFile)
     setUploadError('')
     setPreviewResult(null)
@@ -212,9 +226,28 @@ const RTMEmsLogAmvPage: FC = () => {
     setPendingUploadValidation(null)
   }
 
-  const runInitialSearch = useCallback(() => {
-    void runSearch(INITIAL_FILTERS)
-  }, [runSearch])
+  const updateUploadFile = (event: ChangeEvent<HTMLInputElement>) => {
+    selectUploadFile(event.currentTarget.files?.[0] ?? null)
+  }
+
+  const onDropUploadFile = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDraggingUpload(false)
+    if (!canManage) {
+      return
+    }
+    selectUploadFile(event.dataTransfer.files?.[0] ?? null)
+  }
+
+  const clearUploadState = () => {
+    setSelectedUploadFile(null)
+    setUploadError('')
+    setPreviewResult(null)
+    setUploadResult(null)
+    setPendingUploadValidation(null)
+    setUploadInputKey((current) => current + 1)
+    setIsDraggingUpload(false)
+  }
 
   const submitSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -357,7 +390,10 @@ const RTMEmsLogAmvPage: FC = () => {
             : 'error',
       )
       setNotification(createResultMessage(response.status, response.message, response.errors))
-      if (response.status === 'accepted' || response.status === 'validation_failed') {
+      if (
+        (response.status === 'accepted' || response.status === 'validation_failed') &&
+        filters.species.trim().length > 0
+      ) {
         await runSearch({
           ...filters,
           retrievalDate: previewResult?.retrievalDate ?? filters.retrievalDate,
@@ -406,9 +442,13 @@ const RTMEmsLogAmvPage: FC = () => {
         selectedUploadFile.type === type || selectedUploadFile.name.toLowerCase().endsWith('.xlsx'),
     )
 
-  useEffect(() => {
-    runInitialSearch()
-  }, [runInitialSearch])
+  const uploadDropZoneClassName = [
+    'admin-upload-drop-zone',
+    isDraggingUpload ? 'is-dragging' : '',
+    !canManage ? 'is-disabled' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <Grid fullWidth className="default-grid">
@@ -466,7 +506,9 @@ const RTMEmsLogAmvPage: FC = () => {
               onClick={() => {
                 const nextFilters = { ...INITIAL_FILTERS }
                 setFilters(nextFilters)
-                void runSearch(nextFilters)
+                setRows([])
+                setSearchError('')
+                setHasSearched(false)
               }}
             >
               Clear
@@ -529,7 +571,11 @@ const RTMEmsLogAmvPage: FC = () => {
 
               {rows.length === 0 && !isLoading && !searchError && (
                 <TableRow>
-                  <TableCell colSpan={8}>No rows match your current search.</TableCell>
+                  <TableCell colSpan={8}>
+                    {hasSearched
+                      ? 'No rows match your current search.'
+                      : 'Enter a species and retrieval date to query RTM AMV rows.'}
+                  </TableCell>
                 </TableRow>
               )}
 
@@ -631,14 +677,13 @@ const RTMEmsLogAmvPage: FC = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <div className="legacy-search-section-header">
+        <section className="admin-upload-panel" aria-labelledby="rtm-upload-title">
+          <div className="admin-upload-panel__header">
             <div>
-              <h2 className="dashboard-title">Upload Log Spreadsheet</h2>
-              <p className="landing-page-help-text">
-                Upload an XLSX spreadsheet to validate RTM EMS AMV rows before applying changes. The
-                first row supplies the update date; retrieval date is calculated as the previous
-                month and values are applied to both old and second growth.
+              <h2 id="rtm-upload-title">Upload Excel Spreadsheet</h2>
+              <p>
+                Select or drag and drop an XLSX spreadsheet to validate RTM EMS AMV rows before
+                applying changes.
               </p>
             </div>
             <a
@@ -650,17 +695,73 @@ const RTMEmsLogAmvPage: FC = () => {
             </a>
           </div>
 
-          <div className="legacy-search-grid">
-            <div>
-              <label htmlFor="rtm-upload-file">Choose an XLSX file to preview and apply</label>
-              <input
-                id="rtm-upload-file"
-                type="file"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                onChange={updateUploadFile}
-              />
-              {selectedUploadFile && <p>Selected: {selectedUploadFile.name}</p>}
+          <div
+            className={uploadDropZoneClassName}
+            onDragEnter={(event) => {
+              event.preventDefault()
+              if (canManage) {
+                setIsDraggingUpload(true)
+              }
+            }}
+            onDragOver={(event) => {
+              event.preventDefault()
+              if (canManage) {
+                setIsDraggingUpload(true)
+              }
+            }}
+            onDragLeave={() => setIsDraggingUpload(false)}
+            onDrop={onDropUploadFile}
+          >
+            <div className="admin-upload-drop-zone__icon" aria-hidden="true">
+              <Upload size={32} />
             </div>
+            <div className="admin-upload-drop-zone__copy">
+              <p>Drag and drop your Excel file here, or browse for files.</p>
+              <p>
+                Supported format: .xlsx. The first row supplies the update date; retrieval date is
+                calculated as the previous month and values apply to old and second growth.
+              </p>
+            </div>
+            <input
+              key={uploadInputKey}
+              id="rtm-upload-file"
+              className="admin-upload-native-input"
+              type="file"
+              aria-label="RTM upload spreadsheet"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              disabled={!canManage}
+              onChange={updateUploadFile}
+            />
+            <label
+              className={`cds--btn cds--btn--primary admin-upload-browse-button${
+                !canManage ? ' cds--btn--disabled' : ''
+              }`}
+              htmlFor={canManage ? 'rtm-upload-file' : undefined}
+              aria-disabled={!canManage}
+              onClick={(event) => {
+                if (!canManage) {
+                  event.preventDefault()
+                }
+              }}
+            >
+              Browse files
+            </label>
+          </div>
+
+          {selectedUploadFile && (
+            <div className="admin-upload-queue-summary" aria-label="Selected RTM upload file">
+              <div>
+                <span>Selected file</span>
+                <strong>{selectedUploadFile.name}</strong>
+              </div>
+              <div>
+                <span>Size</span>
+                <strong>{selectedUploadFile.size.toLocaleString()} bytes</strong>
+              </div>
+            </div>
+          )}
+
+          <div className="admin-upload-preview-footer">
             <Button
               kind="secondary"
               onClick={() => {
@@ -671,15 +772,32 @@ const RTMEmsLogAmvPage: FC = () => {
               Preview data
             </Button>
           </div>
-        </Tile>
+        </section>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Data Preview</h2>
-          <p className="landing-page-help-text">
-            Review validation results before applying the spreadsheet upload.
-          </p>
+        <section className="admin-upload-panel" aria-labelledby="rtm-preview-title">
+          <div className="admin-upload-panel__header">
+            <div>
+              <h2 id="rtm-preview-title">Data Preview</h2>
+              <p>Review validation results before applying the spreadsheet upload.</p>
+            </div>
+            <div className="admin-upload-preview-actions">
+              <Button kind="secondary" size="sm" onClick={clearUploadState}>
+                Clear
+              </Button>
+              <Button
+                kind="primary"
+                size="sm"
+                onClick={() => {
+                  void submitUpload()
+                }}
+                disabled={isUploadDisabled}
+              >
+                Apply upload
+              </Button>
+            </div>
+          </div>
           {uploadError && (
             <p className="landing-page-help-text landing-page-help-text--error">{uploadError}</p>
           )}
@@ -771,16 +889,6 @@ const RTMEmsLogAmvPage: FC = () => {
             </div>
           )}
 
-          <Button
-            kind="primary"
-            onClick={() => {
-              void submitUpload()
-            }}
-            disabled={isUploadDisabled}
-          >
-            Apply upload
-          </Button>
-
           {uploadResult && (
             <div style={{ marginTop: '0.75rem' }}>
               <Tag type={parseStatusTag(uploadResult.status)}>{uploadResult.status}</Tag>
@@ -809,7 +917,7 @@ const RTMEmsLogAmvPage: FC = () => {
               )}
             </div>
           )}
-        </Tile>
+        </section>
       </Column>
 
       {notification && (

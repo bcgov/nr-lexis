@@ -53,6 +53,9 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     String updateDate) {
     LocalDate parsedRetrievalDate = parseRetrievalDate(retrievalDate);
     LocalDate parsedUpdateDate = parseIsoOrLegacyDate(updateDate);
+    if (parsedUpdateDate == null) {
+      parsedUpdateDate = parsedRetrievalDate;
+    }
 
     return repository.find(
         trimToNull(species),

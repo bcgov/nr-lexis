@@ -41,6 +41,19 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldDefaultFindUpdateDateToRetrievalDate() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.find(anyString(), anyString(), any(LocalDate.class), any(LocalDate.class)))
+        .thenReturn(List.of());
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+
+    service.find("HE", "O", "2026-06-01", "");
+
+    verify(repository)
+        .find("HE", "O", LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 1));
+  }
+
+  @Test
   void shouldUploadMatrixWorkbookWithLegacyUpdateProcedure() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.update(

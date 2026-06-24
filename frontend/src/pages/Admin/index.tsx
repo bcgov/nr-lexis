@@ -51,7 +51,7 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
   },
   {
     id: 'rtmEmsLogAmv',
-    label: 'EMS AMV',
+    label: 'RTM',
     requiredAction: '/lexisAgentAdmin',
     description: 'Manage EMS log average market values.',
     reactPath: '/admin/rtm/emslogamv',
