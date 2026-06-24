@@ -65,8 +65,6 @@ const INITIAL_FORM = {
 type PendingUploadValidation = {
   fileName: string
   fileSize: number
-  retrievalDate: string
-  growthIndicator: string
 }
 
 const hasInvalidIsoDateValue = (retrievalDate: string, updateDate: string): boolean => {
@@ -77,29 +75,6 @@ const hasInvalidIsoDateValue = (retrievalDate: string, updateDate: string): bool
     (normalizedRetrievalDate.length > 0 && !isValidIsoDate(normalizedRetrievalDate)) ||
     (normalizedUpdateDate.length > 0 && !isValidIsoDate(normalizedUpdateDate))
   )
-}
-
-const normalizeRtmRetrievalDate = (value: string): string | null => {
-  const normalized = value.trim()
-  if (!normalized) {
-    return null
-  }
-
-  if (isValidIsoDate(normalized)) {
-    return normalized
-  }
-
-  const compactMatch = normalized.match(/^(\d{4})(\d{2})$/)
-  if (compactMatch) {
-    return `${compactMatch[1]}-${compactMatch[2]}-01`
-  }
-
-  const dashedMatch = normalized.match(/^(\d{4})-(\d{2})$/)
-  if (dashedMatch) {
-    return `${dashedMatch[1]}-${dashedMatch[2]}-01`
-  }
-
-  return null
 }
 
 const parseStatusTag = (status: string | undefined) => {
@@ -168,13 +143,6 @@ const RTMEmsLogAmvPage: FC = () => {
   const [manualForm, setManualForm] = useState<typeof INITIAL_FORM>(INITIAL_FORM)
   const [manualResult, setManualResult] = useState<RtmEmsLogAmvMutationResult | null>(null)
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
-  const [uploadMetadata, setUploadMetadata] = useState<{
-    retrievalDate: string
-    growthIndicator: string
-  }>({
-    retrievalDate: '',
-    growthIndicator: '',
-  })
   const [pendingUploadValidation, setPendingUploadValidation] =
     useState<PendingUploadValidation | null>(null)
   const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
@@ -244,26 +212,9 @@ const RTMEmsLogAmvPage: FC = () => {
     setPendingUploadValidation(null)
   }
 
-  const updateUploadMetadata = (field: 'retrievalDate' | 'growthIndicator', value: string) => {
-    setUploadMetadata((current) => ({ ...current, [field]: value }))
-    setUploadError('')
-    setPendingUploadValidation(null)
-    setPreviewResult(null)
-    setUploadResult(null)
-  }
-
   const runInitialSearch = useCallback(() => {
     void runSearch(INITIAL_FILTERS)
   }, [runSearch])
-
-  const normalizedUploadRetrievalDate = useMemo(
-    () => normalizeRtmRetrievalDate(uploadMetadata.retrievalDate),
-    [uploadMetadata.retrievalDate],
-  )
-  const normalizedUploadGrowthIndicator = useMemo(
-    () => uploadMetadata.growthIndicator.trim(),
-    [uploadMetadata.growthIndicator],
-  )
 
   const submitSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -343,29 +294,10 @@ const RTMEmsLogAmvPage: FC = () => {
       return
     }
 
-    if (!uploadMetadata.retrievalDate.trim()) {
-      setUploadError('Provide a retrieval date for preview.')
-      return
-    }
-
-    if (!normalizedUploadRetrievalDate) {
-      setUploadError('Retrieval date must be YYYY-MM-DD, YYYY-MM or YYYYMM.')
-      return
-    }
-
-    if (!normalizedUploadGrowthIndicator) {
-      setUploadError('Provide a growth indicator for preview.')
-      return
-    }
-
     setUploadError('')
     setIsPreviewing(true)
     try {
-      const response = await previewRtmEmsLogAmvUpload(
-        selectedUploadFile,
-        normalizedUploadRetrievalDate,
-        normalizedUploadGrowthIndicator,
-      )
+      const response = await previewRtmEmsLogAmvUpload(selectedUploadFile)
       setPreviewResult(response)
       if (!/\.(xlsx)$/i.test(selectedUploadFile.name)) {
         setUploadError('The selected file may not be XLSX. Rename with .xlsx and try again.')
@@ -373,8 +305,6 @@ const RTMEmsLogAmvPage: FC = () => {
         setPendingUploadValidation({
           fileName: selectedUploadFile.name,
           fileSize: selectedUploadFile.size,
-          retrievalDate: normalizedUploadRetrievalDate,
-          growthIndicator: normalizedUploadGrowthIndicator,
         })
       } else {
         setPendingUploadValidation(null)
@@ -400,31 +330,12 @@ const RTMEmsLogAmvPage: FC = () => {
       return
     }
 
-    if (!uploadMetadata.retrievalDate.trim()) {
-      setUploadError('Provide a retrieval date for upload.')
-      return
-    }
-
-    if (!normalizedUploadRetrievalDate) {
-      setUploadError('Retrieval date must be YYYY-MM-DD, YYYY-MM or YYYYMM.')
-      return
-    }
-
-    if (!normalizedUploadGrowthIndicator) {
-      setUploadError('Provide a growth indicator for upload.')
-      return
-    }
-
     if (
       !pendingUploadValidation ||
       pendingUploadValidation.fileName !== selectedUploadFile.name ||
-      pendingUploadValidation.fileSize !== selectedUploadFile.size ||
-      pendingUploadValidation.retrievalDate !== normalizedUploadRetrievalDate ||
-      pendingUploadValidation.growthIndicator !== normalizedUploadGrowthIndicator
+      pendingUploadValidation.fileSize !== selectedUploadFile.size
     ) {
-      setUploadError(
-        'Run a successful preview with this file and metadata before applying the upload.',
-      )
+      setUploadError('Run a successful preview with this file before applying the upload.')
       return
     }
 
@@ -435,8 +346,6 @@ const RTMEmsLogAmvPage: FC = () => {
     try {
       const response = await uploadRtmEmsLogAmv({
         file: selectedUploadFile,
-        retrievalDate: normalizedUploadRetrievalDate,
-        growthIndicator: normalizedUploadGrowthIndicator,
       })
 
       setUploadResult(response)
@@ -451,8 +360,8 @@ const RTMEmsLogAmvPage: FC = () => {
       if (response.status === 'accepted' || response.status === 'validation_failed') {
         await runSearch({
           ...filters,
-          retrievalDate: normalizedUploadRetrievalDate,
-          growthIndicator: normalizedUploadGrowthIndicator,
+          retrievalDate: previewResult?.retrievalDate ?? filters.retrievalDate,
+          growthIndicator: '',
         })
       }
     } catch (error) {
@@ -489,13 +398,9 @@ const RTMEmsLogAmvPage: FC = () => {
     !canManage ||
     !selectedUploadFile ||
     selectedUploadFile.size <= 0 ||
-    !normalizedUploadRetrievalDate ||
-    !normalizedUploadGrowthIndicator ||
     !pendingUploadValidation ||
     pendingUploadValidation.fileName !== selectedUploadFile.name ||
     pendingUploadValidation.fileSize !== selectedUploadFile.size ||
-    pendingUploadValidation.retrievalDate !== normalizedUploadRetrievalDate ||
-    pendingUploadValidation.growthIndicator !== normalizedUploadGrowthIndicator ||
     !RTM_UPLOAD_ACCEPT.some(
       (type) =>
         selectedUploadFile.type === type || selectedUploadFile.name.toLowerCase().endsWith('.xlsx'),
@@ -731,7 +636,9 @@ const RTMEmsLogAmvPage: FC = () => {
             <div>
               <h2 className="dashboard-title">Upload Log Spreadsheet</h2>
               <p className="landing-page-help-text">
-                Upload an XLSX spreadsheet to validate RTM EMS AMV rows before applying changes.
+                Upload an XLSX spreadsheet to validate RTM EMS AMV rows before applying changes. The
+                first row supplies the update date; retrieval date is calculated as the previous
+                month and values are applied to both old and second growth.
               </p>
             </div>
             <a
@@ -754,22 +661,6 @@ const RTMEmsLogAmvPage: FC = () => {
               />
               {selectedUploadFile && <p>Selected: {selectedUploadFile.name}</p>}
             </div>
-            <IsoDatePicker
-              id="rtm-upload-retrieval-date"
-              labelText="Retrieval date"
-              value={uploadMetadata.retrievalDate}
-              onChange={(value) => {
-                updateUploadMetadata('retrievalDate', value)
-              }}
-            />
-            <TextInput
-              id="rtm-upload-growth-indicator"
-              labelText="Growth indicator"
-              value={uploadMetadata.growthIndicator}
-              onChange={(event) => {
-                updateUploadMetadata('growthIndicator', event.target.value)
-              }}
-            />
             <Button
               kind="secondary"
               onClick={() => {
@@ -801,9 +692,7 @@ const RTMEmsLogAmvPage: FC = () => {
             selectedUploadFile &&
             (pendingUploadValidation === null ||
               pendingUploadValidation.fileName !== selectedUploadFile.name ||
-              pendingUploadValidation.fileSize !== selectedUploadFile.size ||
-              pendingUploadValidation.retrievalDate !== normalizedUploadRetrievalDate ||
-              pendingUploadValidation.growthIndicator !== normalizedUploadGrowthIndicator) && (
+              pendingUploadValidation.fileSize !== selectedUploadFile.size) && (
               <p className="landing-page-help-text landing-page-help-text--error">
                 Generate a valid preview before applying the upload.
               </p>
@@ -823,7 +712,9 @@ const RTMEmsLogAmvPage: FC = () => {
               <Tag type={parseStatusTag(previewResult.status)}>{previewResult.status}</Tag>
               <p>{previewResult.message}</p>
               {previewResult.fileName && <p>File: {previewResult.fileName}</p>}
-              <p>Row estimate: {previewResult.rowCount}</p>
+              {previewResult.updateDate && <p>Update date: {previewResult.updateDate}</p>}
+              {previewResult.retrievalDate && <p>Retrieval date: {previewResult.retrievalDate}</p>}
+              <p>Rows to apply: {previewResult.rowCount}</p>
 
               {previewResult.errors.length > 0 && (
                 <div>
@@ -845,6 +736,37 @@ const RTMEmsLogAmvPage: FC = () => {
                     ))}
                   </ul>
                 </div>
+              )}
+
+              {previewResult.rows.length > 0 && (
+                <Table useZebraStyles>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>Species code</TableHeader>
+                      <TableHeader>Grade</TableHeader>
+                      <TableHeader>Growth</TableHeader>
+                      <TableHeader>Retrieval date</TableHeader>
+                      <TableHeader>Update date</TableHeader>
+                      <TableHeader>New value</TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {previewResult.rows.map((row) => (
+                      <TableRow
+                        key={`${row.species ?? ''}-${row.grade ?? ''}-${
+                          row.growthIndicator ?? ''
+                        }-${row.retrievalDate ?? ''}-${row.updateDate ?? ''}-${row.newValue ?? ''}`}
+                      >
+                        <TableCell>{row.species ?? ''}</TableCell>
+                        <TableCell>{row.grade ?? ''}</TableCell>
+                        <TableCell>{row.growthIndicator ?? ''}</TableCell>
+                        <TableCell>{row.retrievalDate ?? ''}</TableCell>
+                        <TableCell>{row.updateDate ?? ''}</TableCell>
+                        <TableCell>{formatMoney(row.newValue)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </div>
           )}
