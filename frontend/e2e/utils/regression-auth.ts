@@ -27,6 +27,11 @@ type PostWithCsrfOptions = {
   multipart?: Record<string, string | number | boolean | MultipartFile>
 }
 
+type GetWithAuthOptions = {
+  params?: Record<string, string>
+  failOnStatusCode?: boolean
+}
+
 type RealCredentials = {
   username: string
   password: string
@@ -71,10 +76,41 @@ const credentials = ({ usernameEnv, passwordEnv }: LoginConfig): RealCredentials
   }
 }
 
+const csrfHeaders = async (page: Page): Promise<Record<string, string>> => {
+  const cookies = await page.context().cookies()
+  const xsrfCookie = cookies.find((cookie) => cookie.name === 'XSRF-TOKEN')
+  return xsrfCookie ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrfCookie.value) } : {}
+}
+
+const bearerHeaders = async (page: Page): Promise<Record<string, string>> => {
+  const cookies = await page.context().cookies()
+  const accessTokenCookie = cookies.find((cookie) =>
+    cookie.name.toLowerCase().endsWith('.accesstoken'),
+  )
+  return accessTokenCookie
+    ? { Authorization: `Bearer ${decodeURIComponent(accessTokenCookie.value)}` }
+    : {}
+}
+
+const authHeaders = async (page: Page): Promise<Record<string, string>> => ({
+  ...(await bearerHeaders(page)),
+  ...(await csrfHeaders(page)),
+})
+
+export const getWithAuth = async (
+  page: Page,
+  path: string,
+  options: GetWithAuthOptions = {},
+): Promise<APIResponse> => {
+  return page.request.get(path, {
+    ...options,
+    failOnStatusCode: options.failOnStatusCode ?? false,
+    headers: await authHeaders(page),
+  })
+}
+
 const isSessionAuthenticated = async (page: Page): Promise<boolean> => {
-  const response = await page.request
-    .get('/api/lexis/session/capabilities', { failOnStatusCode: false })
-    .catch(() => null)
+  const response = await getWithAuth(page, '/api/lexis/session/capabilities').catch(() => null)
 
   if (!response?.ok()) {
     return false
@@ -85,9 +121,7 @@ const isSessionAuthenticated = async (page: Page): Promise<boolean> => {
 }
 
 export const fetchSessionCapabilities = async (page: Page): Promise<SessionCapabilities> => {
-  const response = await page.request.get('/api/lexis/session/capabilities', {
-    failOnStatusCode: false,
-  })
+  const response = await getWithAuth(page, '/api/lexis/session/capabilities')
   expect(response.status()).toBe(200)
   return (await response.json()) as SessionCapabilities
 }
@@ -228,12 +262,6 @@ export const expectRouteUnauthorized = async (page: Page, path: string): Promise
   await expect(page.getByRole('heading', { name: 'Unauthorized' })).toBeVisible()
 }
 
-const csrfHeaders = async (page: Page): Promise<Record<string, string>> => {
-  const cookies = await page.context().cookies()
-  const xsrfCookie = cookies.find((cookie) => cookie.name === 'XSRF-TOKEN')
-  return xsrfCookie ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrfCookie.value) } : {}
-}
-
 export const postWithCsrf = async (
   page: Page,
   path: string,
@@ -241,7 +269,7 @@ export const postWithCsrf = async (
 ): Promise<APIResponse> => {
   return page.request.post(path, {
     ...options,
-    headers: await csrfHeaders(page),
+    headers: await authHeaders(page),
     failOnStatusCode: false,
   })
 }
@@ -255,7 +283,7 @@ export const deleteWithCsrf = async (
 ): Promise<APIResponse> => {
   return page.request.delete(path, {
     ...options,
-    headers: await csrfHeaders(page),
+    headers: await authHeaders(page),
     failOnStatusCode: false,
   })
 }
