@@ -56,7 +56,7 @@ const CREDENTIAL_SCREEN_TIMEOUT_MS = 5_000
 const LOGIN_SESSION_TIMEOUT_MS = 30_000
 const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 const LOGIN_ERROR_TEXT =
-  /username or password.*incorrect|invalid username|invalid password|authentication failed/i
+  /username or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed/i
 
 const idirLoginConfig: LoginConfig = {
   buttonName: /log in with idir/i,
