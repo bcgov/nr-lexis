@@ -125,6 +125,7 @@ export const previewRtmEmsLogAmvUpload = async (file: File): Promise<RtmEmsLogAm
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      validateStatus: (status) => status < 500,
     })
 
   return (
@@ -153,6 +154,7 @@ export const uploadRtmEmsLogAmv = async (
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      validateStatus: (status) => status < 500,
     })
 
   return (

@@ -173,7 +173,8 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
-          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream());
+          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+              file.getInputStream(), currentSubmissionMonth());
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
       List<RtmEmsLogAmvRowDto> previewRows = buildPreviewRows(parseResult);
@@ -188,7 +189,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
       if (parseResult.updateDate() == null || parseResult.retrievalDate() == null) {
-        errors.add("The uploaded file must include an update date in the first row.");
+        errors.add("The upload submission date could not be determined.");
       }
       if (parseResult.dataRowCount() > 0 && parseResult.dataRowCount() < 2) {
         warnings.add("The uploaded file has very few rows; confirm it contains full AMV data.");
@@ -237,7 +238,8 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
-          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream());
+          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+              file.getInputStream(), currentSubmissionMonth());
 
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
@@ -294,7 +296,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
       if (parsedUpdateDate == null || parsedRetrievalDate == null) {
-        errors.add("The uploaded file must include an update date in the first row.");
+        errors.add("The upload submission date could not be determined.");
       }
 
       if (!errors.isEmpty()) {
@@ -524,6 +526,10 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     }
 
     return buildMutationResult(RETURN_SUCCESS, "Upload row saved.", List.of(), List.of(uploadedRow));
+  }
+
+  private LocalDate currentSubmissionMonth() {
+    return LocalDate.now(clock).withDayOfMonth(1);
   }
 
   private String formatDate(LocalDate date) {

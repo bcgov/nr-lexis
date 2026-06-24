@@ -17,7 +17,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -39,10 +38,16 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final List<String> UPLOAD_GROWTH_INDICATORS = List.of("O", "S");
 
   private final OracleRtmEmsLogAmvRepository repository;
+  private final Clock clock;
 
   @Autowired
   public OracleRtmEmsLogAmvService(OracleRtmEmsLogAmvRepository repository) {
+    this(repository, Clock.systemUTC());
+  }
+
+  OracleRtmEmsLogAmvService(OracleRtmEmsLogAmvRepository repository, Clock clock) {
     this.repository = repository;
+    this.clock = clock == null ? Clock.systemUTC() : clock;
   }
 
   @Override
@@ -53,6 +58,9 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     String updateDate) {
     LocalDate parsedRetrievalDate = parseRetrievalDate(retrievalDate);
     LocalDate parsedUpdateDate = parseIsoOrLegacyDate(updateDate);
+    if (parsedUpdateDate == null) {
+      parsedUpdateDate = parsedRetrievalDate;
+    }
 
     return repository.find(
         trimToNull(species),
@@ -115,7 +123,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
           RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-              file.getInputStream(), resolvePineSpeciesCodes());
+              file.getInputStream(), currentSubmissionMonth());
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
       List<RtmEmsLogAmvRowDto> previewRows = buildPreviewRows(parseResult);
@@ -130,7 +138,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
       if (parseResult.updateDate() == null || parseResult.retrievalDate() == null) {
-        errors.add("The uploaded file must include an update date in the first row.");
+        errors.add("The upload submission date could not be determined.");
       }
       if (parseResult.dataRowCount() > 0 && parseResult.dataRowCount() < 2) {
         warnings.add("The uploaded file has very few rows; confirm it contains full AMV data.");
@@ -181,7 +189,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
           RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-              file.getInputStream(), resolvePineSpeciesCodes());
+              file.getInputStream(), currentSubmissionMonth());
 
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
@@ -240,7 +248,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
       if (parsedUpdateDate == null || parsedRetrievalDate == null) {
-        errors.add("The uploaded file must include an update date in the first row.");
+        errors.add("The upload submission date could not be determined.");
       }
 
       if (!errors.isEmpty()) {
@@ -511,32 +519,8 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       int sourceRow,
       int sourceColumn) {}
 
-  private List<String> resolvePineSpeciesCodes() {
-    List<OracleRtmEmsLogAmvRepository.SpeciesCodeRow> speciesCodes =
-        repository.findAllSpeciesCodes();
-    List<String> pineSpeciesCodes =
-        (speciesCodes == null ? List.<OracleRtmEmsLogAmvRepository.SpeciesCodeRow>of() : speciesCodes)
-            .stream()
-            .filter(row -> row != null && isPineSpeciesDescription(row.description()))
-            .map(OracleRtmEmsLogAmvRepository.SpeciesCodeRow::code)
-            .map(OracleRtmEmsLogAmvService::normalizeSpeciesCode)
-            .filter(code -> code != null && code.matches("[A-Z0-9]{1,3}"))
-            .distinct()
-            .toList();
-
-    return pineSpeciesCodes.isEmpty()
-        ? RtmEmsLogAmvUploadPreviewAnalyzer.DEFAULT_PINE_SPECIES_CODES
-        : pineSpeciesCodes;
-  }
-
-  private boolean isPineSpeciesDescription(String description) {
-    String normalized = trimToNull(description);
-    return normalized != null && normalized.toUpperCase(Locale.CANADA).contains("PINE");
-  }
-
-  private static String normalizeSpeciesCode(String code) {
-    String normalized = trimToNull(code);
-    return normalized == null ? null : normalized.toUpperCase(Locale.CANADA);
+  private LocalDate currentSubmissionMonth() {
+    return LocalDate.now(clock).withDayOfMonth(1);
   }
 
   private String columnToLetter(int index) {

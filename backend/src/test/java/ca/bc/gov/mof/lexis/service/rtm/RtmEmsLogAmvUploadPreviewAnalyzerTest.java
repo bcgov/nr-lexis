@@ -15,17 +15,18 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   void shouldParseMatrixWorkbookForUpload() throws IOException {
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-            new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook()));
+            new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook()),
+            LocalDate.of(2026, 6, 1));
 
     assertThat(result.headerDetected()).isTrue();
-    assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 7, 1));
-    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+    assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 5, 1));
     assertThat(result.dataRowCount()).isEqualTo(2);
     assertThat(result.numericCellCount()).isEqualTo(4);
     assertThat(result.errors()).isEmpty();
     assertThat(result.rows()).hasSize(6);
     assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
-        .contains("BA", "HE", "PL", "PW", "PY");
+        .contains("BA", "HE", "WH", "LO", "YE");
     assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::grade)
         .contains("A", "1");
   }
@@ -37,8 +38,8 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
             new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook()));
 
     assertThat(analysis.headerDetected()).isTrue();
-    assertThat(analysis.updateDate()).isEqualTo(LocalDate.of(2026, 7, 1));
-    assertThat(analysis.retrievalDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+    assertThat(analysis.updateDate()).isNotNull();
+    assertThat(analysis.retrievalDate()).isNotNull();
     assertThat(analysis.dataRowCount()).isEqualTo(2);
     assertThat(analysis.numericCellCount()).isEqualTo(4);
     assertThat(analysis.rows()).hasSize(6);
@@ -46,32 +47,21 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
-  void shouldUseProvidedPineSpeciesCodes() throws IOException {
-    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
-        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-            new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook()),
-            List.of("PA", "PB", "PC"));
-
-    assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
-        .contains("PA", "PB", "PC")
-        .doesNotContain("PL", "PW", "PY");
-  }
-
-  @Test
   void shouldImportOnlyRequestedGradeRows() throws IOException {
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
             new ByteArrayInputStream(
-                RtmEmsLogAmvWorkbookTestFixtures.fullGradeWorkbookWithBlankRow()));
+                RtmEmsLogAmvWorkbookTestFixtures.fullGradeWorkbookWithBlankRow()),
+            LocalDate.of(2026, 6, 1));
 
     assertThat(result.headerDetected()).isTrue();
-    assertThat(result.dataRowCount()).isEqualTo(32);
-    assertThat(result.numericCellCount()).isEqualTo(32);
-    assertThat(result.rows()).hasSize(32);
+    assertThat(result.dataRowCount()).isEqualTo(23);
+    assertThat(result.numericCellCount()).isEqualTo(23);
+    assertThat(result.rows()).hasSize(23);
     assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::grade)
         .containsExactlyElementsOf(expectedUploadGrades());
     assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::grade)
-        .doesNotContain(" ");
+        .doesNotContain(" ", "N", "O", "P", "Q", "R", "S", "T", "V", "W");
   }
 
   @Test
@@ -83,16 +73,15 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
     assertThat(analysis.headerDetected()).isFalse();
     assertThat(analysis.numericCellCount()).isZero();
     assertThat(analysis.errors())
-        .contains(
-            "The first row must include the update date.",
-            "The template header was not recognized as RTM EMS AMV data.");
+        .contains("The template header was not recognized as RTM EMS AMV data.");
   }
 
   private static List<String> expectedUploadGrades() {
     List<String> grades = new ArrayList<>();
-    for (char grade = 'A'; grade <= 'Z'; grade++) {
+    for (char grade = 'A'; grade <= 'M'; grade++) {
       grades.add(String.valueOf(grade));
     }
+    grades.addAll(List.of("U", "X", "Y", "Z"));
     for (int grade = 1; grade <= 6; grade++) {
       grades.add(String.valueOf(grade));
     }
