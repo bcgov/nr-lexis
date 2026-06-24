@@ -8,5 +8,8 @@ public record RtmEmsLogAmvUploadPreviewDto(
     long fileSize,
     String message,
     int rowCount,
+    String retrievalDate,
+    String updateDate,
     List<String> errors,
-    List<String> warnings) {}
+    List<String> warnings,
+    List<RtmEmsLogAmvRowDto> rows) {}
