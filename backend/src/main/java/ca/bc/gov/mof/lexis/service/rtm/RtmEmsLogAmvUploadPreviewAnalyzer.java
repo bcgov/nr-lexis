@@ -5,12 +5,16 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.zip.ZipEntry;
@@ -25,18 +29,12 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
   private static final String WORKSHEET_ENTRY_PREFIX = "xl/worksheets/sheet";
   private static final String XML_EXTENSION = ".xml";
-  private static final Set<String> EXPECTED_TEMPLATE_HEADERS = new HashSet<>(
-          Arrays.asList(
-          "GRADE",
-          "BALSAM",
-          "HEMLOCK",
-          "CEDAR",
-          "CYPRESS",
-          "FIR",
-          "SPRUCE",
-          "PINE**"));
-
   private static final String GRADE_HEADER = "GRADE";
+  static final List<String> DEFAULT_PINE_SPECIES_CODES = List.of("WH", "LO", "YE");
+  private static final Set<String> IMPORTABLE_GRADES =
+      Set.of(
+          "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+          "U", "X", "Y", "Z", "1", "2", "3", "4", "5", "6");
 
   private RtmEmsLogAmvUploadPreviewAnalyzer() {}
 
@@ -44,30 +42,51 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       int dataRowCount,
       int numericCellCount,
       boolean headerDetected,
+      LocalDate retrievalDate,
+      LocalDate updateDate,
       List<String> warnings,
-      List<String> errors) {}
+      List<String> errors,
+      List<UploadRow> rows) {}
 
-  record UploadRow(String species, String grade, BigDecimal newValue, int sourceRow, int sourceColumn) {}
+  record UploadRow(
+      String species, String grade, BigDecimal newValue, int sourceRow, int sourceColumn) {}
 
   record UploadParseResult(
       int dataRowCount,
       int numericCellCount,
       boolean headerDetected,
+      LocalDate retrievalDate,
+      LocalDate updateDate,
       List<String> errors,
       List<String> warnings,
       List<UploadRow> rows) {}
 
   private record ParsedCell(int column, String value) {}
   private record ParsedRow(int rowNumber, List<ParsedCell> cells) {}
+  private record ParsedWorkbook(List<ParsedRow> rows) {}
 
   static Analysis analyze(InputStream inputStream) throws IOException {
-    ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
-    return analyzeSheet(parsedWorkbook.rows());
+    UploadParseResult result = parseForUpload(inputStream);
+    return new Analysis(
+        result.dataRowCount(),
+        result.numericCellCount(),
+        result.headerDetected(),
+        result.retrievalDate(),
+        result.updateDate(),
+        result.warnings(),
+        result.errors(),
+        result.rows());
   }
 
   static UploadParseResult parseForUpload(InputStream inputStream) throws IOException {
     ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
-    return parseUploadSheet(parsedWorkbook.rows());
+    return parseUploadSheet(parsedWorkbook.rows(), LocalDate.now());
+  }
+
+  static UploadParseResult parseForUpload(
+      InputStream inputStream, LocalDate submissionMonth) throws IOException {
+    ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
+    return parseUploadSheet(parsedWorkbook.rows(), submissionMonth);
   }
 
   private static ParsedWorkbook readWorkbook(InputStream inputStream) throws IOException {
@@ -79,76 +98,50 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       while ((entry = zip.getNextEntry()) != null) {
         if ("xl/sharedStrings.xml".equals(entry.getName())) {
           sharedStringBytes = readAllBytes(zip);
-        } else if (isWorksheetEntry(entry.getName())) {
-          if (sheetBytes == null) {
-            sheetBytes = readAllBytes(zip);
-          }
+        } else if (isWorksheetEntry(entry.getName()) && sheetBytes == null) {
+          sheetBytes = readAllBytes(zip);
         }
       }
     }
 
     List<String> sharedStrings =
-        sharedStringBytes == null
-            ? Collections.emptyList()
-            : parseSharedStrings(sharedStringBytes);
+        sharedStringBytes == null ? List.of() : parseSharedStrings(sharedStringBytes);
     List<ParsedRow> rows =
-        sheetBytes == null ? Collections.emptyList() : parseSheetRows(sheetBytes, sharedStrings);
+        sheetBytes == null ? List.of() : parseSheetRows(sheetBytes, sharedStrings);
 
     return new ParsedWorkbook(rows);
   }
 
-  private static Analysis analyzeSheet(List<ParsedRow> rows) {
-    int dataRows = 0;
-    int numericCells = 0;
-    boolean foundHeader = false;
-    List<String> errors = new ArrayList<>();
-    List<String> warnings = new ArrayList<>();
-
-    for (ParsedRow row : rows) {
-      int rowNumber = row.rowNumber();
-      if (rowNumber <= 1) {
-        if (rowNumber == 1 && rowHasHeader(row.cells())) {
-          foundHeader = true;
-        }
-        continue;
-      }
-
-      if (rowHasAnyData(row.cells())) {
-        dataRows++;
-        numericCells += countNumericCells(row.cells());
-      }
-    }
-
-    if (!foundHeader) {
-      errors.add("The template header was not recognized as RTM EMS AMV data.");
-    }
-
-    return new Analysis(dataRows, numericCells, foundHeader, warnings, errors);
-  }
-
-  private static UploadParseResult parseUploadSheet(List<ParsedRow> rows) {
+  private static UploadParseResult parseUploadSheet(
+      List<ParsedRow> rows, LocalDate submissionMonth) {
     int dataRows = 0;
     int numericCells = 0;
     boolean headerDetected = false;
     int headerRow = -1;
-    Map<Integer, String> speciesByColumn = new HashMap<>();
+    LocalDate updateDate =
+        submissionMonth == null
+            ? parseUpdateDate(rows)
+            : submissionMonth.withDayOfMonth(1);
+    LocalDate retrievalDate =
+        updateDate == null ? null : updateDate.minusMonths(1).withDayOfMonth(1);
+    Map<String, List<String>> speciesHeaderAliases = speciesHeaderAliases();
+    Map<Integer, List<String>> speciesByColumn = new HashMap<>();
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
     List<UploadRow> uploadRows = new ArrayList<>();
+
     for (ParsedRow parsedRow : rows) {
       int rowNumber = parsedRow.rowNumber();
       List<ParsedCell> rowCells = parsedRow.cells();
 
-      if (!headerDetected && rowHasHeader(rowCells)) {
+      if (!headerDetected && rowHasHeader(rowCells, speciesHeaderAliases)) {
         headerDetected = true;
         headerRow = rowNumber;
-        List<String> parsedHeaderWarnings = new ArrayList<>();
-        speciesByColumn = parseSpeciesHeaders(rowCells, rowNumber, parsedHeaderWarnings);
+        speciesByColumn = parseSpeciesHeaders(rowCells, rowNumber, warnings, speciesHeaderAliases);
 
         if (speciesByColumn.isEmpty()) {
           errors.add("Header row %d does not include recognized species columns.".formatted(rowNumber));
         }
-        warnings.addAll(parsedHeaderWarnings);
         continue;
       }
 
@@ -156,36 +149,33 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         continue;
       }
 
-      dataRows++;
-
       String grade = "";
       boolean foundGrade = false;
       boolean foundNumericValue = false;
 
       for (ParsedCell cell : rowCells) {
-        int column = cell.column();
-        String value = cell.value();
-        if (column == 1) {
-          grade = value.trim();
+        if (cell.column() == 1) {
+          grade = cell.value().trim();
           foundGrade = true;
-          continue;
+          break;
         }
       }
 
       if (!foundGrade || grade.isBlank()) {
-        warnings.add(
-            "Row %d was skipped because no grade value was found.".formatted(rowNumber));
+        warnings.add("Row %d was skipped because no grade value was found.".formatted(rowNumber));
         continue;
       }
 
       if (!isUploadableGrade(grade)) {
-        warnings.add(
-            "Row %d grade '%s' was skipped because it is not an importable grade row.".formatted(
-                rowNumber,
-                grade));
+        if (!isSummaryGrade(grade)) {
+          warnings.add(
+              "Row %d grade '%s' was skipped because it is not an importable grade row."
+                  .formatted(rowNumber, grade));
+        }
         continue;
       }
 
+      dataRows++;
       for (ParsedCell cell : rowCells) {
         int column = cell.column();
         String value = cell.value();
@@ -194,52 +184,49 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
           continue;
         }
 
-        String species = speciesByColumn.get(column);
-        if (species == null) {
+        List<String> speciesCodes = speciesByColumn.get(column);
+        if (speciesCodes == null || speciesCodes.isEmpty()) {
           warnings.add(
-              "Row %d includes unmapped species column %s; value '%s' was skipped.".formatted(
-                  rowNumber,
-                  columnToLetter(column),
-                  normalizeStringValue(value)));
+              "Row %d includes unmapped species column %s; value '%s' was skipped."
+                  .formatted(rowNumber, columnToLetter(column), normalizeStringValue(value)));
           continue;
         }
 
         if (isNumeric(value)) {
-          uploadRows.add(
-              new UploadRow(
-                  species,
-                  grade,
-                  new BigDecimal(normalizeNumericValue(value)),
-                  rowNumber,
-                  column));
+          BigDecimal newValue = new BigDecimal(normalizeNumericValue(value));
+          for (String species : speciesCodes) {
+            uploadRows.add(new UploadRow(species, grade, newValue, rowNumber, column));
+          }
           numericCells++;
           foundNumericValue = true;
         } else {
           warnings.add(
-              "Row %d has non-numeric value '%s' for species '%s' at column %s; this value was skipped.".formatted(
-                  rowNumber,
-                  normalizeStringValue(value),
-                  species,
-                  columnToLetter(column)));
+              "Row %d has non-numeric value '%s' at column %s; this value was skipped."
+                  .formatted(rowNumber, normalizeStringValue(value), columnToLetter(column)));
         }
       }
 
       if (!foundNumericValue) {
         warnings.add(
-            "Row %d grade '%s' had no parseable AMV values and was skipped.".formatted(
-                rowNumber, grade));
+            "Row %d grade '%s' had no parseable AMV values and was skipped."
+                .formatted(rowNumber, grade));
       }
     }
 
+    if (!headerDetected) {
+      errors.add("The template header was not recognized as RTM EMS AMV data.");
+    }
+
     return new UploadParseResult(
-        dataRows, numericCells, headerDetected, errors, warnings, uploadRows);
+        dataRows, numericCells, headerDetected, retrievalDate, updateDate, errors, warnings, uploadRows);
   }
 
-  private static Map<Integer, String> parseSpeciesHeaders(
+  private static Map<Integer, List<String>> parseSpeciesHeaders(
       List<ParsedCell> cells,
       int rowNumber,
-      List<String> warnings) {
-    Map<Integer, String> speciesByColumn = new HashMap<>();
+      List<String> warnings,
+      Map<String, List<String>> speciesHeaderAliases) {
+    Map<Integer, List<String>> speciesByColumn = new HashMap<>();
     Set<String> observedSpecies = new HashSet<>();
 
     for (ParsedCell cell : cells) {
@@ -249,42 +236,37 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       }
 
       String value = cell.value();
-      if (!value.isBlank()) {
-        String normalizedValue = value.trim();
-        if (observedSpecies.contains(normalizedValue.toUpperCase())) {
-          warnings.add(
-              "Header row %d contains a duplicate species column for '%s'.".formatted(
-                  rowNumber,
-                  normalizedValue));
-        }
-
-        speciesByColumn.put(column, value);
-        observedSpecies.add(normalizedValue.toUpperCase());
-      }
-    }
-
-    Set<String> expectedHeaders = new HashSet<>(EXPECTED_TEMPLATE_HEADERS);
-    expectedHeaders.remove("GRADE");
-    if (!speciesByColumn.isEmpty()) {
-      Set<String> present = new HashSet<>();
-      for (String species : speciesByColumn.values()) {
-        present.add(species.trim().toUpperCase());
+      if (value.isBlank()) {
+        continue;
       }
 
-      expectedHeaders.removeAll(present);
-      if (!expectedHeaders.isEmpty()) {
+      String normalizedValue = normalizeHeader(value);
+      List<String> speciesCodes = resolveSpeciesCodes(value, speciesHeaderAliases);
+      if (speciesCodes.isEmpty()) {
         warnings.add(
-            "Header row %d does not include all expected species columns. Missing: %s".formatted(
-                rowNumber, String.join(", ", expectedHeaders)));
+            "Header row %d contains unmapped species header '%s' at column %s."
+                .formatted(rowNumber, normalizeStringValue(value), columnToLetter(column)));
+        continue;
       }
+
+      String speciesKey = String.join(",", speciesCodes);
+      if (observedSpecies.contains(speciesKey)) {
+        warnings.add(
+            "Header row %d contains a duplicate species column for '%s'."
+                .formatted(rowNumber, normalizedValue));
+      }
+
+      speciesByColumn.put(column, speciesCodes);
+      observedSpecies.add(speciesKey);
     }
 
     return speciesByColumn;
   }
 
-  private static boolean rowHasHeader(List<ParsedCell> cells) {
+  private static boolean rowHasHeader(
+      List<ParsedCell> cells, Map<String, List<String>> speciesHeaderAliases) {
     for (ParsedCell cell : cells) {
-      if (containsExpectedHeader(cell.value())) {
+      if (containsExpectedHeader(cell.value(), speciesHeaderAliases)) {
         return true;
       }
     }
@@ -302,17 +284,6 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return false;
   }
 
-  private static int countNumericCells(List<ParsedCell> cells) {
-    int count = 0;
-    for (ParsedCell cell : cells) {
-      if (isNumeric(cell.value())) {
-        count++;
-      }
-    }
-
-    return count;
-  }
-
   private static boolean isNumeric(String value) {
     String trimmed = normalizeNumericValue(value);
     if (trimmed.isBlank()) {
@@ -327,9 +298,10 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     }
   }
 
-  private static boolean containsExpectedHeader(String value) {
-    return EXPECTED_TEMPLATE_HEADERS.stream().anyMatch(
-        expected -> expected.equalsIgnoreCase(value.trim()));
+  private static boolean containsExpectedHeader(
+      String value, Map<String, List<String>> speciesHeaderAliases) {
+    String normalized = normalizeHeader(value);
+    return GRADE_HEADER.equals(normalized) || !resolveSpeciesCodes(value, speciesHeaderAliases).isEmpty();
   }
 
   private static boolean isUploadableGrade(String grade) {
@@ -338,8 +310,130 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       return false;
     }
 
-    String upperGrade = normalized.toUpperCase();
-    return !GRADE_HEADER.equalsIgnoreCase(normalized) && !upperGrade.equals("AVERAGE") && !upperGrade.startsWith("GRAND TOTAL");
+    String upperGrade = normalized.toUpperCase(Locale.CANADA);
+    return IMPORTABLE_GRADES.contains(upperGrade);
+  }
+
+  private static boolean isSummaryGrade(String grade) {
+    String normalized = trimToNull(grade);
+    if (normalized == null) {
+      return true;
+    }
+    String upperGrade = normalized.toUpperCase(Locale.CANADA);
+    return GRADE_HEADER.equals(upperGrade)
+        || upperGrade.equals("AVERAGE")
+        || upperGrade.startsWith("GRAND TOTAL");
+  }
+
+  private static LocalDate parseUpdateDate(List<ParsedRow> rows) {
+    for (ParsedRow row : rows) {
+      if (row.rowNumber() != 1) {
+        continue;
+      }
+      for (ParsedCell cell : row.cells()) {
+        LocalDate parsedDate = parseWorkbookDate(cell.value());
+        if (parsedDate != null) {
+          return parsedDate.withDayOfMonth(1);
+        }
+      }
+    }
+    return null;
+  }
+
+  private static LocalDate parseWorkbookDate(String value) {
+    String normalized = normalizeStringValue(value);
+    if (normalized.isBlank()) {
+      return null;
+    }
+
+    String digitsOnly = normalized.replaceAll("[^0-9]", "");
+    if (digitsOnly.length() == 6) {
+      try {
+        return YearMonth.parse(digitsOnly, DateTimeFormatter.ofPattern("yyyyMM")).atDay(1);
+      } catch (DateTimeParseException ignored) {
+        // Try other date formats below.
+      }
+    }
+    if (digitsOnly.length() == 8) {
+      try {
+        return LocalDate.parse(digitsOnly, DateTimeFormatter.ofPattern("yyyyMMdd"));
+      } catch (DateTimeParseException ignored) {
+        // Try other date formats below.
+      }
+    }
+
+    try {
+      return LocalDate.parse(normalized);
+    } catch (DateTimeParseException ignored) {
+      // Try year-month below.
+    }
+
+    try {
+      return YearMonth.parse(normalized, DateTimeFormatter.ofPattern("yyyy-MM")).atDay(1);
+    } catch (DateTimeParseException ignored) {
+      // Try Excel serial below.
+    }
+
+    try {
+      BigDecimal numericValue = new BigDecimal(normalized);
+      int excelSerial = numericValue.intValueExact();
+      if (excelSerial >= 20000 && excelSerial <= 60000) {
+        return LocalDate.of(1899, 12, 30).plusDays(excelSerial);
+      }
+    } catch (ArithmeticException | NumberFormatException ignored) {
+      // Not an Excel serial date.
+    }
+
+    return null;
+  }
+
+  private static List<String> resolveSpeciesCodes(
+      String value, Map<String, List<String>> speciesHeaderAliases) {
+    String normalized = normalizeHeader(value);
+    if (normalized.isBlank() || GRADE_HEADER.equals(normalized)) {
+      return List.of();
+    }
+
+    List<String> alias = speciesHeaderAliases.get(normalized);
+    if (alias != null) {
+      return alias;
+    }
+
+    if (normalized.matches("[A-Z0-9]{1,3}")) {
+      return List.of(normalized);
+    }
+
+    return List.of();
+  }
+
+  private static String normalizeHeader(String value) {
+    return normalizeStringValue(value)
+        .toUpperCase(Locale.CANADA)
+        .replace("(CODE)", "")
+        .replace("*", "")
+        .strip();
+  }
+
+  private static Map<String, List<String>> speciesHeaderAliases() {
+    Map<String, List<String>> aliases = new LinkedHashMap<>();
+    aliases.put("BA", List.of("BA"));
+    aliases.put("BALSAM", List.of("BA"));
+    aliases.put("HE", List.of("HE"));
+    aliases.put("HEMLOCK", List.of("HE"));
+    aliases.put("CE", List.of("CE"));
+    aliases.put("CEDAR", List.of("CE"));
+    aliases.put("CY", List.of("CY"));
+    aliases.put("CYPRESS", List.of("CY"));
+    aliases.put("FI", List.of("FI"));
+    aliases.put("FIR", List.of("FI"));
+    aliases.put("SP", List.of("SP"));
+    aliases.put("SPRUCE", List.of("SP"));
+    aliases.put("P", DEFAULT_PINE_SPECIES_CODES);
+    aliases.put("PINE", DEFAULT_PINE_SPECIES_CODES);
+    for (String pineCode : DEFAULT_PINE_SPECIES_CODES) {
+      aliases.put(pineCode, DEFAULT_PINE_SPECIES_CODES);
+    }
+    return aliases;
   }
 
   private static String trimToNull(String value) {
@@ -442,7 +536,8 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
               cells.add(
                   new ParsedCell(
                       cellColumn,
-                      resolveCellValue(cellValue == null ? "" : cellValue.toString(), cellType, sharedStrings)));
+                      resolveCellValue(
+                          cellValue == null ? "" : cellValue.toString(), cellType, sharedStrings)));
             }
             cellColumn = -1;
             cellType = null;
@@ -587,6 +682,4 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
     return buffer.toByteArray();
   }
-
-  private record ParsedWorkbook(List<ParsedRow> rows) {}
 }

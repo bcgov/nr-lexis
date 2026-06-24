@@ -41,14 +41,15 @@ export type RtmEmsLogAmvUploadPreview = {
   fileSize?: number
   message: string
   rowCount: number
+  retrievalDate?: string | null
+  updateDate?: string | null
   errors: string[]
   warnings: string[]
+  rows: RtmEmsLogAmvRow[]
 }
 
 export type RtmEmsLogAmvUploadRequest = {
   file: File
-  retrievalDate: string
-  growthIndicator: string
 }
 
 export type RtmEmsLogAmvUploadResult = {
@@ -114,15 +115,9 @@ export const saveRtmEmsLogAmv = async (
   return response.data ?? { status: 'failed', message: '', errors: [], rows: [] }
 }
 
-export const previewRtmEmsLogAmvUpload = async (
-  file: File,
-  retrievalDate: string,
-  growthIndicator: string,
-): Promise<RtmEmsLogAmvUploadPreview> => {
+export const previewRtmEmsLogAmvUpload = async (file: File): Promise<RtmEmsLogAmvUploadPreview> => {
   const payload = new FormData()
   payload.append('file', file)
-  payload.append('retrievalDate', retrievalDate)
-  payload.append('growthIndicator', growthIndicator)
 
   const response = await apiService
     .getAxiosInstance()
@@ -130,6 +125,7 @@ export const previewRtmEmsLogAmvUpload = async (
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      validateStatus: (status) => status < 500,
     })
 
   return (
@@ -137,8 +133,11 @@ export const previewRtmEmsLogAmvUpload = async (
       status: 'failed',
       message: '',
       rowCount: 0,
+      retrievalDate: null,
+      updateDate: null,
       errors: ['No preview response was returned.'],
       warnings: [],
+      rows: [],
     }
   )
 }
@@ -148,8 +147,6 @@ export const uploadRtmEmsLogAmv = async (
 ): Promise<RtmEmsLogAmvUploadResult> => {
   const payload = new FormData()
   payload.append('file', request.file)
-  payload.append('retrievalDate', request.retrievalDate)
-  payload.append('growthIndicator', request.growthIndicator)
 
   const response = await apiService
     .getAxiosInstance()
@@ -157,6 +154,7 @@ export const uploadRtmEmsLogAmv = async (
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      validateStatus: (status) => status < 500,
     })
 
   return (

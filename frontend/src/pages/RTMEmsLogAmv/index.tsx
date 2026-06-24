@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type FormEvent,
+} from 'react'
+import { Upload } from '@carbon/icons-react'
 import {
   Button,
   Column,
@@ -67,8 +75,6 @@ const INITIAL_FORM: ManualFormState = {
 type PendingUploadValidation = {
   fileName: string
   fileSize: number
-  retrievalDate: string
-  growthIndicator: string
 }
 
 const hasInvalidIsoDateValue = (retrievalDate: string, updateDate: string): boolean => {
@@ -81,27 +87,8 @@ const hasInvalidIsoDateValue = (retrievalDate: string, updateDate: string): bool
   )
 }
 
-const normalizeRtmRetrievalDate = (value: string): string | null => {
-  const normalized = value.trim()
-  if (!normalized) {
-    return null
-  }
-
-  if (isValidIsoDate(normalized)) {
-    return normalized
-  }
-
-  const compactMatch = normalized.match(/^(\d{4})(\d{2})$/)
-  if (compactMatch) {
-    return `${compactMatch[1]}-${compactMatch[2]}-01`
-  }
-
-  const dashedMatch = normalized.match(/^(\d{4})-(\d{2})$/)
-  if (dashedMatch) {
-    return `${dashedMatch[1]}-${dashedMatch[2]}-01`
-  }
-
-  return null
+const hasRequiredSearchFilters = (filters: RtmEmsLogAmvFilters): boolean => {
+  return filters.species.trim().length > 0 && filters.retrievalDate.trim().length > 0
 }
 
 const parseStatusTag = (status: string | undefined) => {
@@ -144,6 +131,8 @@ const createResultMessage = (status: string, message: string, errors: string[]):
 }
 
 const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
+const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 
 const RTM_MODULE_DESCRIPTION =
   'Query current and historical RTM AMV rows, make manual create/update entries, and generate an upload preview from XLSX files.'
@@ -153,6 +142,7 @@ const RTMEmsLogAmvPage = () => {
   const canManage = canPerform('/lexisAgentAdmin')
   const [filters, setFilters] = useState<RtmEmsLogAmvFilters>(INITIAL_FILTERS)
   const [rows, setRows] = useState<RtmEmsLogAmvRow[]>([])
+  const [hasSearched, setHasSearched] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isPreviewing, setIsPreviewing] = useState(false)
@@ -168,16 +158,11 @@ const RTMEmsLogAmvPage = () => {
   const [manualForm, setManualForm] = useState<typeof INITIAL_FORM>(INITIAL_FORM)
   const [manualResult, setManualResult] = useState<RtmEmsLogAmvMutationResult | null>(null)
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
-  const [uploadMetadata, setUploadMetadata] = useState<{
-    retrievalDate: string
-    growthIndicator: string
-  }>({
-    retrievalDate: '',
-    growthIndicator: '',
-  })
   const [pendingUploadValidation, setPendingUploadValidation] =
     useState<PendingUploadValidation | null>(null)
   const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
+  const [uploadInputKey, setUploadInputKey] = useState(0)
+  const [isDraggingUpload, setIsDraggingUpload] = useState(false)
 
   const hasSearchDateError = useMemo(
     () => hasInvalidIsoDateValue(filters.retrievalDate, filters.updateDate),
@@ -195,6 +180,12 @@ const RTMEmsLogAmvPage = () => {
   const runSearch = useCallback(async (nextFilters: RtmEmsLogAmvFilters) => {
     setSearchError('')
 
+    if (!hasRequiredSearchFilters(nextFilters)) {
+      setRows([])
+      setSearchError('Species and retrieval date are required to query RTM AMV rows.')
+      return
+    }
+
     if (hasInvalidIsoDateValue(nextFilters.retrievalDate, nextFilters.updateDate)) {
       setSearchError('Date filters must be valid YYYY-MM-DD values.')
       return
@@ -204,6 +195,7 @@ const RTMEmsLogAmvPage = () => {
     try {
       const response = await searchRtmEmsLogAmv(nextFilters)
       setRows(response)
+      setHasSearched(true)
     } catch (error) {
       console.error(error)
       setSearchError('Failed to load RTM AMV rows.')
@@ -235,8 +227,7 @@ const RTMEmsLogAmvPage = () => {
     setManualResult(null)
   }
 
-  const updateUploadFile = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextFile = event.currentTarget.files?.[0] ?? null
+  const selectUploadFile = (nextFile: File | null) => {
     setSelectedUploadFile(nextFile)
     setUploadError('')
     setPreviewResult(null)
@@ -244,26 +235,28 @@ const RTMEmsLogAmvPage = () => {
     setPendingUploadValidation(null)
   }
 
-  const updateUploadMetadata = (field: 'retrievalDate' | 'growthIndicator', value: string) => {
-    setUploadMetadata((current) => ({ ...current, [field]: value }))
-    setUploadError('')
-    setPendingUploadValidation(null)
-    setPreviewResult(null)
-    setUploadResult(null)
+  const updateUploadFile = (event: ChangeEvent<HTMLInputElement>) => {
+    selectUploadFile(event.currentTarget.files?.[0] ?? null)
   }
 
-  const runInitialSearch = useCallback(() => {
-    void runSearch(INITIAL_FILTERS)
-  }, [runSearch])
+  const onDropUploadFile = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDraggingUpload(false)
+    if (!canManage) {
+      return
+    }
+    selectUploadFile(event.dataTransfer.files?.[0] ?? null)
+  }
 
-  const normalizedUploadRetrievalDate = useMemo(
-    () => normalizeRtmRetrievalDate(uploadMetadata.retrievalDate),
-    [uploadMetadata.retrievalDate],
-  )
-  const normalizedUploadGrowthIndicator = useMemo(
-    () => uploadMetadata.growthIndicator.trim(),
-    [uploadMetadata.growthIndicator],
-  )
+  const clearUploadState = () => {
+    setSelectedUploadFile(null)
+    setUploadError('')
+    setPreviewResult(null)
+    setUploadResult(null)
+    setPendingUploadValidation(null)
+    setUploadInputKey((current) => current + 1)
+    setIsDraggingUpload(false)
+  }
 
   const submitSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -343,29 +336,10 @@ const RTMEmsLogAmvPage = () => {
       return
     }
 
-    if (!uploadMetadata.retrievalDate.trim()) {
-      setUploadError('Provide a retrieval date for preview.')
-      return
-    }
-
-    if (!normalizedUploadRetrievalDate) {
-      setUploadError('Retrieval date must be YYYY-MM-DD, YYYY-MM or YYYYMM.')
-      return
-    }
-
-    if (!normalizedUploadGrowthIndicator) {
-      setUploadError('Provide a growth indicator for preview.')
-      return
-    }
-
     setUploadError('')
     setIsPreviewing(true)
     try {
-      const response = await previewRtmEmsLogAmvUpload(
-        selectedUploadFile,
-        normalizedUploadRetrievalDate,
-        normalizedUploadGrowthIndicator,
-      )
+      const response = await previewRtmEmsLogAmvUpload(selectedUploadFile)
       setPreviewResult(response)
       if (!/\.(xlsx)$/i.test(selectedUploadFile.name)) {
         setUploadError('The selected file may not be XLSX. Rename with .xlsx and try again.')
@@ -373,8 +347,6 @@ const RTMEmsLogAmvPage = () => {
         setPendingUploadValidation({
           fileName: selectedUploadFile.name,
           fileSize: selectedUploadFile.size,
-          retrievalDate: normalizedUploadRetrievalDate,
-          growthIndicator: normalizedUploadGrowthIndicator,
         })
       } else {
         setPendingUploadValidation(null)
@@ -400,31 +372,12 @@ const RTMEmsLogAmvPage = () => {
       return
     }
 
-    if (!uploadMetadata.retrievalDate.trim()) {
-      setUploadError('Provide a retrieval date for upload.')
-      return
-    }
-
-    if (!normalizedUploadRetrievalDate) {
-      setUploadError('Retrieval date must be YYYY-MM-DD, YYYY-MM or YYYYMM.')
-      return
-    }
-
-    if (!normalizedUploadGrowthIndicator) {
-      setUploadError('Provide a growth indicator for upload.')
-      return
-    }
-
     if (
       !pendingUploadValidation ||
       pendingUploadValidation.fileName !== selectedUploadFile.name ||
-      pendingUploadValidation.fileSize !== selectedUploadFile.size ||
-      pendingUploadValidation.retrievalDate !== normalizedUploadRetrievalDate ||
-      pendingUploadValidation.growthIndicator !== normalizedUploadGrowthIndicator
+      pendingUploadValidation.fileSize !== selectedUploadFile.size
     ) {
-      setUploadError(
-        'Run a successful preview with this file and metadata before applying the upload.',
-      )
+      setUploadError('Run a successful preview with this file before applying the upload.')
       return
     }
 
@@ -435,8 +388,6 @@ const RTMEmsLogAmvPage = () => {
     try {
       const response = await uploadRtmEmsLogAmv({
         file: selectedUploadFile,
-        retrievalDate: normalizedUploadRetrievalDate,
-        growthIndicator: normalizedUploadGrowthIndicator,
       })
 
       setUploadResult(response)
@@ -448,11 +399,14 @@ const RTMEmsLogAmvPage = () => {
             : 'error',
       )
       setNotification(createResultMessage(response.status, response.message, response.errors))
-      if (response.status === 'accepted' || response.status === 'validation_failed') {
+      if (
+        (response.status === 'accepted' || response.status === 'validation_failed') &&
+        filters.species.trim().length > 0
+      ) {
         await runSearch({
           ...filters,
-          retrievalDate: normalizedUploadRetrievalDate,
-          growthIndicator: normalizedUploadGrowthIndicator,
+          retrievalDate: previewResult?.retrievalDate ?? filters.retrievalDate,
+          growthIndicator: '',
         })
       }
     } catch (error) {
@@ -489,21 +443,21 @@ const RTMEmsLogAmvPage = () => {
     !canManage ||
     !selectedUploadFile ||
     selectedUploadFile.size <= 0 ||
-    !normalizedUploadRetrievalDate ||
-    !normalizedUploadGrowthIndicator ||
     !pendingUploadValidation ||
     pendingUploadValidation.fileName !== selectedUploadFile.name ||
     pendingUploadValidation.fileSize !== selectedUploadFile.size ||
-    pendingUploadValidation.retrievalDate !== normalizedUploadRetrievalDate ||
-    pendingUploadValidation.growthIndicator !== normalizedUploadGrowthIndicator ||
     !RTM_UPLOAD_ACCEPT.some(
       (type) =>
         selectedUploadFile.type === type || selectedUploadFile.name.toLowerCase().endsWith('.xlsx'),
     )
 
-  useEffect(() => {
-    runInitialSearch()
-  }, [runInitialSearch])
+  const uploadDropZoneClassName = [
+    'admin-upload-drop-zone',
+    isDraggingUpload ? 'is-dragging' : '',
+    !canManage ? 'is-disabled' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <Grid fullWidth className="default-grid">
@@ -561,7 +515,9 @@ const RTMEmsLogAmvPage = () => {
               onClick={() => {
                 const nextFilters = { ...INITIAL_FILTERS }
                 setFilters(nextFilters)
-                void runSearch(nextFilters)
+                setRows([])
+                setSearchError('')
+                setHasSearched(false)
               }}
             >
               Clear
@@ -624,7 +580,11 @@ const RTMEmsLogAmvPage = () => {
 
               {rows.length === 0 && !isLoading && !searchError && (
                 <TableRow>
-                  <TableCell colSpan={8}>No rows match your current search.</TableCell>
+                  <TableCell colSpan={8}>
+                    {hasSearched
+                      ? 'No rows match your current search.'
+                      : 'Enter a species and retrieval date to query RTM AMV rows.'}
+                  </TableCell>
                 </TableRow>
               )}
 
@@ -726,19 +686,91 @@ const RTMEmsLogAmvPage = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Upload preview</h2>
-          <div className="legacy-search-grid">
+        <section className="admin-upload-panel" aria-labelledby="rtm-upload-title">
+          <div className="admin-upload-panel__header">
             <div>
-              <label htmlFor="rtm-upload-file">Choose an XLSX file to preview and apply</label>
-              <input
-                id="rtm-upload-file"
-                type="file"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                onChange={updateUploadFile}
-              />
-              {selectedUploadFile && <p>Selected: {selectedUploadFile.name}</p>}
+              <h2 id="rtm-upload-title">Upload Excel Spreadsheet</h2>
+              <p>
+                Select or drag and drop an XLSX spreadsheet to validate RTM EMS AMV rows before
+                applying changes.
+              </p>
             </div>
+            <a
+              className="cds--btn cds--btn--ghost"
+              href={RTM_TEMPLATE_DOWNLOAD_PATH}
+              download={RTM_TEMPLATE_DOWNLOAD_NAME}
+            >
+              Download template
+            </a>
+          </div>
+
+          <div
+            className={uploadDropZoneClassName}
+            onDragEnter={(event) => {
+              event.preventDefault()
+              if (canManage) {
+                setIsDraggingUpload(true)
+              }
+            }}
+            onDragOver={(event) => {
+              event.preventDefault()
+              if (canManage) {
+                setIsDraggingUpload(true)
+              }
+            }}
+            onDragLeave={() => setIsDraggingUpload(false)}
+            onDrop={onDropUploadFile}
+          >
+            <div className="admin-upload-drop-zone__icon" aria-hidden="true">
+              <Upload size={32} />
+            </div>
+            <div className="admin-upload-drop-zone__copy">
+              <p>Drag and drop your Excel file here, or browse for files.</p>
+              <p>
+                Supported format: .xlsx. The update date is assigned from the submission month,
+                retrieval date is calculated internally, and values apply to old and second growth.
+              </p>
+            </div>
+            <input
+              key={uploadInputKey}
+              id="rtm-upload-file"
+              className="admin-upload-native-input"
+              type="file"
+              aria-label="RTM upload spreadsheet"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              disabled={!canManage}
+              onChange={updateUploadFile}
+            />
+            <label
+              className={`cds--btn cds--btn--primary admin-upload-browse-button${
+                !canManage ? ' cds--btn--disabled' : ''
+              }`}
+              htmlFor={canManage ? 'rtm-upload-file' : undefined}
+              aria-disabled={!canManage}
+              onClick={(event) => {
+                if (!canManage) {
+                  event.preventDefault()
+                }
+              }}
+            >
+              Browse files
+            </label>
+          </div>
+
+          {selectedUploadFile && (
+            <div className="admin-upload-queue-summary" aria-label="Selected RTM upload file">
+              <div>
+                <span>Selected file</span>
+                <strong>{selectedUploadFile.name}</strong>
+              </div>
+              <div>
+                <span>Size</span>
+                <strong>{selectedUploadFile.size.toLocaleString()} bytes</strong>
+              </div>
+            </div>
+          )}
+
+          <div className="admin-upload-preview-footer">
             <Button
               kind="secondary"
               onClick={() => {
@@ -746,38 +778,35 @@ const RTMEmsLogAmvPage = () => {
               }}
               disabled={isPreviewDisabled}
             >
-              Preview
+              Preview data
             </Button>
           </div>
+        </section>
+      </Column>
 
-          <div className="legacy-search-grid" style={{ marginTop: '0.75rem' }}>
-            <IsoDatePicker
-              id="rtm-upload-retrieval-date"
-              labelText="Retrieval date"
-              value={uploadMetadata.retrievalDate}
-              onChange={(value) => {
-                updateUploadMetadata('retrievalDate', value)
-              }}
-            />
-            <TextInput
-              id="rtm-upload-growth-indicator"
-              labelText="Growth indicator"
-              value={uploadMetadata.growthIndicator}
-              onChange={(event) => {
-                updateUploadMetadata('growthIndicator', event.target.value)
-              }}
-            />
-            <Button
-              kind="primary"
-              onClick={() => {
-                void submitUpload()
-              }}
-              disabled={isUploadDisabled}
-            >
-              Apply upload
-            </Button>
+      <Column sm={4} md={8} lg={16}>
+        <section className="admin-upload-panel" aria-labelledby="rtm-preview-title">
+          <div className="admin-upload-panel__header">
+            <div>
+              <h2 id="rtm-preview-title">Data Preview</h2>
+              <p>Review validation results before applying the spreadsheet upload.</p>
+            </div>
+            <div className="admin-upload-preview-actions">
+              <Button kind="secondary" size="sm" onClick={clearUploadState}>
+                Clear
+              </Button>
+              <Button
+                kind="primary"
+                size="sm"
+                onClick={() => {
+                  void submitUpload()
+                }}
+                disabled={isUploadDisabled}
+              >
+                Apply upload
+              </Button>
+            </div>
           </div>
-
           {uploadError && (
             <p className="landing-page-help-text landing-page-help-text--error">{uploadError}</p>
           )}
@@ -790,20 +819,28 @@ const RTMEmsLogAmvPage = () => {
             selectedUploadFile &&
             (pendingUploadValidation === null ||
               pendingUploadValidation.fileName !== selectedUploadFile.name ||
-              pendingUploadValidation.fileSize !== selectedUploadFile.size ||
-              pendingUploadValidation.retrievalDate !== normalizedUploadRetrievalDate ||
-              pendingUploadValidation.growthIndicator !== normalizedUploadGrowthIndicator) && (
+              pendingUploadValidation.fileSize !== selectedUploadFile.size) && (
               <p className="landing-page-help-text landing-page-help-text--error">
                 Generate a valid preview before applying the upload.
               </p>
             )}
+
+          {!previewResult && (
+            <div style={{ marginTop: '0.75rem', padding: '2rem 1rem', textAlign: 'center' }}>
+              <p>No preview data yet.</p>
+              <p className="landing-page-help-text">
+                Upload an XLSX file above and select Preview data to validate it.
+              </p>
+            </div>
+          )}
 
           {previewResult && (
             <div style={{ marginTop: '0.75rem' }}>
               <Tag type={parseStatusTag(previewResult.status)}>{previewResult.status}</Tag>
               <p>{previewResult.message}</p>
               {previewResult.fileName && <p>File: {previewResult.fileName}</p>}
-              <p>Row estimate: {previewResult.rowCount}</p>
+              {previewResult.updateDate && <p>Update date: {previewResult.updateDate}</p>}
+              <p>Rows to apply: {previewResult.rowCount}</p>
 
               {previewResult.errors.length > 0 && (
                 <div>
@@ -825,6 +862,33 @@ const RTMEmsLogAmvPage = () => {
                     ))}
                   </ul>
                 </div>
+              )}
+
+              {previewResult.rows.length > 0 && (
+                <Table useZebraStyles>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>Species code</TableHeader>
+                      <TableHeader>Grade</TableHeader>
+                      <TableHeader>Growth</TableHeader>
+                      <TableHeader>New value</TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {previewResult.rows.map((row) => (
+                      <TableRow
+                        key={`${row.species ?? ''}-${row.grade ?? ''}-${
+                          row.growthIndicator ?? ''
+                        }-${row.newValue ?? ''}`}
+                      >
+                        <TableCell>{row.species ?? ''}</TableCell>
+                        <TableCell>{row.grade ?? ''}</TableCell>
+                        <TableCell>{row.growthIndicator ?? ''}</TableCell>
+                        <TableCell>{formatMoney(row.newValue)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </div>
           )}
@@ -857,7 +921,7 @@ const RTMEmsLogAmvPage = () => {
               )}
             </div>
           )}
-        </Tile>
+        </section>
       </Column>
 
       {notification && (

@@ -159,7 +159,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/admin/rtm/emslogamv',
-        label: 'EMS AMV',
+        label: 'RTM',
         requiredActions: ['/lexisAgentAdmin'],
       },
     ],

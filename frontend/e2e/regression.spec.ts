@@ -110,7 +110,7 @@ type JsonWithStatus<T> = {
 const missingApplicationNumber = '999999999'
 const rtmSuccessWorkbook = readFileSync(
   new URL(
-    '../../backend/src/test/resources/rtm-upload-samples/data_upload_template-success.xlsx',
+    '../public/templates/rtm-ems-log-amv-template.xlsx',
     import.meta.url,
   ),
 )
@@ -710,7 +710,7 @@ test.describe.serial('TEST IDIR admin regression', () => {
       await postWithCsrf(page, '/api/lexis/rtm/emslogamv/preview', {
         multipart: {
           file: {
-            name: 'data_upload_template-success.xlsx',
+            name: 'rtm-ems-log-amv-template.xlsx',
             mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             buffer: rtmSuccessWorkbook,
           },
