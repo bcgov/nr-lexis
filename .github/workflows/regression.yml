@@ -42,15 +42,15 @@ jobs:
 
       - name: Check AWS Secrets Manager config
         env:
-          AWS_SECRETS_MANAGER_ROLE_ARN: ${{ vars.AWS_SECRETS_MANAGER_ROLE_ARN }}
+          AWS_SECRETS_MANAGER_ROLE_ARN: ${{ secrets.AWS_SECRETS_MANAGER_ROLE_ARN }}
         run: |
-          test -n "$AWS_SECRETS_MANAGER_ROLE_ARN" || (echo "AWS_SECRETS_MANAGER_ROLE_ARN test environment variable is required." && exit 1)
+          test -n "$AWS_SECRETS_MANAGER_ROLE_ARN" || (echo "AWS_SECRETS_MANAGER_ROLE_ARN test environment secret is required." && exit 1)
           command -v aws >/dev/null || (echo "AWS CLI is required on the runner." && exit 1)
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_SECRETS_MANAGER_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_SECRETS_MANAGER_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Load IDIR credentials from AWS Secrets Manager

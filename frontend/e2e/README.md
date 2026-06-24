@@ -22,7 +22,7 @@ regression coverage uses a separate TEST-only Playwright config.
 
 - The scheduled/manual `Regression` workflow reads TEST IDIR credentials from AWS Secrets Manager
   before running Playwright.
-- The `test` GitHub environment must define `AWS_SECRETS_MANAGER_ROLE_ARN` as a variable for a
+- The `test` GitHub environment must define `AWS_SECRETS_MANAGER_ROLE_ARN` as a secret for a
   GitHub OIDC assumable AWS role with `secretsmanager:GetSecretValue` access to the IDIR secret.
 - The workflow fetches the `test/mof_famt` secret from AWS Secrets Manager in `ca-central-1`.
 - Do not configure IDIR username/password as GitHub secrets. The workflow masks the values returned
