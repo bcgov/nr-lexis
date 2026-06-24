@@ -8,6 +8,7 @@ import {
   expectInvalidApplicationCreateValidation,
   expectRouteUnauthorized,
   fetchSessionCapabilities,
+  getWithAuth,
   hasBusinessBceidCredentials,
   hasIdirCredentials,
   loginWithBusinessBceid,
@@ -378,9 +379,8 @@ const cleanupRegressionPackage = async (
   packageNumber: string,
 ): Promise<void> => {
   const scales = await readJsonResponse<PackageScaleResponse[]>(
-    await page.request.get('/api/lexis/rpc/application-details/package-scales', {
+    await getWithAuth(page, '/api/lexis/rpc/application-details/package-scales', {
       params: { packageNumber },
-      failOnStatusCode: false,
     }),
   )
 
@@ -525,10 +525,12 @@ test.describe('TEST IDIR admin regression', () => {
     expect(emailResponse.success).toBe(false)
     expect(emailResponse.message ?? '').toContain('Application status email could not be prepared.')
 
-    const rtmSearchResponse = await page.request.get(
-      '/api/lexis/rtm/emslogamv?retrievalDate=2026-01-01&growthIndicator=S',
-      { failOnStatusCode: false },
-    )
+    const rtmSearchResponse = await getWithAuth(page, '/api/lexis/rtm/emslogamv', {
+      params: {
+        retrievalDate: '2026-01-01',
+        growthIndicator: 'S',
+      },
+    })
     const rtmSearchText = await rtmSearchResponse.text()
     expect(rtmSearchResponse.status(), rtmSearchText.slice(0, 500)).toBe(200)
     expect(JSON.parse(rtmSearchText)).toEqual(expect.any(Array))
