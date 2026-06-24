@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   AsleepFilled,
   Close,
@@ -18,7 +18,7 @@ import {
 import { useAuth } from '@/context/auth/useAuth'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
 
-type Props = {
+export type LayoutProps = {
   children: ReactNode
 }
 
@@ -235,7 +235,7 @@ const canShowRoleScopedLink = (
   return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
 }
 
-const Layout: FC<Props> = ({ children }) => {
+function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { capabilities, canPerform, defaultRoute, logout } = useAuth()

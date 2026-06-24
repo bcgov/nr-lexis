@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Column,
@@ -16,11 +16,11 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
-import { ApiSourceTag } from '@/components/AbbreviatedSourceTag'
-import { AppNotification } from '@/components/AppNotification'
-import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
+import { ApiSourceTag } from '../../components/AbbreviatedSourceTag'
+import { AppNotification } from '../../components/AppNotification'
+import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { DetailFieldTile } from '../shared/DetailSections'
 import {
   displayValue,
   matchesFilter,
@@ -37,7 +37,7 @@ import {
 } from '@/service/federal-application-documents-service'
 import { triggerBrowserDownload } from '@/utils/download'
 
-const FederalApplicationDetailsPage: FC = () => {
+const FederalApplicationDetailsPage = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const { applicationNumber } = useParams()

@@ -92,8 +92,9 @@ export const searchProvincialPermits = async (
 ): Promise<ProvincialPermitSearchResponse> => {
   try {
     const params = buildBackendParams(request)
-    if (Number.isInteger(options.knownTotal) && options.knownTotal >= 0) {
-      params.append('knownTotal', String(options.knownTotal))
+    const knownTotal = options.knownTotal
+    if (Number.isInteger(knownTotal) && knownTotal !== undefined && knownTotal >= 0) {
+      params.append('knownTotal', String(knownTotal))
     }
 
     const response = await getCachedSearchResponse<unknown>('/lexis/permits/search', params)

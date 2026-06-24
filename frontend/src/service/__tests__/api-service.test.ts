@@ -259,13 +259,13 @@ describe('api-service cached GET support', () => {
       .mockResolvedValueOnce(buildResponse({ count: 1 }))
       .mockResolvedValueOnce(buildResponse({ count: 2 }))
 
-    const config = {
+    const config: AxiosRequestConfig = {
       headers: {
         get: (name: string) =>
           name.toLowerCase() === 'authorization' ? 'Bearer external-token' : undefined,
         has: (name: string) => name.toLowerCase() === 'authorization',
         toJSON: () => ({}),
-      },
+      } as unknown as AxiosRequestConfig['headers'],
     }
 
     await expect(
@@ -383,7 +383,7 @@ describe('api-service cached GET support', () => {
           headerValues[name] = value
         },
         toJSON: () => headerValues,
-      },
+      } as unknown as AxiosRequestConfig['headers'],
     })
 
     expect(headerValues.Authorization).toBe('Bearer token')

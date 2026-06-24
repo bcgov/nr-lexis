@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Column,
@@ -69,9 +69,9 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
-import DetailDocumentUploadPanel from '@/components/uploads/DetailDocumentUploadPanel'
-import IsoDatePicker from '@/components/IsoDatePicker'
-import SearchableSelect from '@/components/SearchableSelect'
+import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
+import IsoDatePicker from '../../components/IsoDatePicker'
+import SearchableSelect from '../../components/SearchableSelect'
 import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
 import {
   isAgentApplicant,
@@ -99,8 +99,8 @@ import {
   normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
 } from '@/utils/text'
-import { ApiSourceTag } from '@/components/AbbreviatedSourceTag'
-import { AppNotification } from '@/components/AppNotification'
+import { ApiSourceTag } from '../../components/AbbreviatedSourceTag'
+import { AppNotification } from '../../components/AppNotification'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
@@ -138,13 +138,13 @@ const OIC_INDICATOR_OPTIONS: SearchOption[] = [
 const optionLabel = (option: SearchOption): string =>
   option.label === option.value ? option.label : `${option.value} - ${option.label}`
 
-type ClientDataSummaryProps = {
+export type ClientDataSummaryProps = {
   title: string
   clientData: ApplicationClientData | null
   isLoading: boolean
 }
 
-const ClientDataSummary: FC<ClientDataSummaryProps> = ({ title, clientData, isLoading }) => {
+function ClientDataSummary({ title, clientData, isLoading }: ClientDataSummaryProps) {
   const clientLookupMessage = clientData?.notfound ?? ''
   const clientLookupMessageKey = `${clientData?.clientNumber ?? ''}:${clientLookupMessage}`
   const [dismissedClientLookupMessageKey, setDismissedClientLookupMessageKey] = useState<
@@ -438,7 +438,7 @@ const latestPersistedReviewRemark = (
   return latestPersistedRemark(detail?.remarks)
 }
 
-const ProvincialApplicationDetailsPage: FC = () => {
+const ProvincialApplicationDetailsPage = () => {
   const navigate = useNavigate()
   const { canPerform, capabilities } = useAuth()
   const { applicationNumber } = useParams()
@@ -918,22 +918,23 @@ const ProvincialApplicationDetailsPage: FC = () => {
     return {
       ownerClientNumber:
         requiredFieldError(summaryForm.ownerClientNumber, 'Owner client number') ?? undefined,
-      ownerClientLocationCode: requiredMaxLengthFieldError(
-        summaryForm.ownerClientLocationCode,
-        2,
-        'Owner client location code',
-      ),
+      ownerClientLocationCode:
+        requiredMaxLengthFieldError(
+          summaryForm.ownerClientLocationCode,
+          2,
+          'Owner client location code',
+        ) ?? undefined,
       ownerContactName:
         requiredFieldError(summaryForm.ownerContactName, 'Owner contact name') ?? undefined,
       agentClientNumber: isAgentApplicant(summaryForm.applicantTypeCode)
         ? (requiredFieldError(summaryForm.agentClientNumber, 'Agent client number') ?? undefined)
         : undefined,
       agentClientLocationCode: isAgentApplicant(summaryForm.applicantTypeCode)
-        ? requiredMaxLengthFieldError(
+        ? (requiredMaxLengthFieldError(
             summaryForm.agentClientLocationCode,
             2,
             'Agent client location code',
-          )
+          ) ?? undefined)
         : undefined,
       agentContactName: isAgentApplicant(summaryForm.applicantTypeCode)
         ? (requiredFieldError(summaryForm.agentContactName, 'Agent contact name') ?? undefined)
@@ -949,12 +950,13 @@ const ProvincialApplicationDetailsPage: FC = () => {
       growthTypeCode: productTypeRequiresGrowthType(summaryForm.productTypeCode)
         ? (requiredFieldError(summaryForm.growthTypeCode, 'Growth type') ?? undefined)
         : undefined,
-      exemptionReasonCode: requiredMaxLengthFieldError(
-        summaryForm.exemptionReasonCode,
-        1,
-        'Exemption reason code',
-        'Exemption reason',
-      ),
+      exemptionReasonCode:
+        requiredMaxLengthFieldError(
+          summaryForm.exemptionReasonCode,
+          1,
+          'Exemption reason code',
+          'Exemption reason',
+        ) ?? undefined,
       orgUnitNumber: requiredFieldError(summaryForm.orgUnitNumber, 'Region') ?? undefined,
       applicationDate: firstValidationError(
         () => requiredFieldError(summaryForm.applicationDate, 'Application date'),

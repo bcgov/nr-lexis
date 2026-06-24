@@ -1,8 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { type FC } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '@/context/auth/AuthProvider'
+import { AuthProvider } from '../AuthProvider'
 import { useAuth } from '@/context/auth/useAuth'
 import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
 
@@ -18,7 +17,7 @@ type ProbeProps = {
   actionChecks: string[]
 }
 
-const AuthProbe: FC<ProbeProps> = ({ actionChecks }) => {
+function AuthProbe({ actionChecks }: ProbeProps) {
   const {
     capabilities,
     canPerform,

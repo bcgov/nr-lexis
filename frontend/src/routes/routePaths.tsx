@@ -1,6 +1,6 @@
-import type { FC, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Navigate, type RouteObject } from 'react-router-dom'
-import Layout from '@/components/Layout'
+import Layout from '../components/Layout'
 import {
   hasFederalSubmitterRole,
   hasProvincialSubmitterRole,
@@ -43,12 +43,12 @@ export type RouteDescription = {
   roleScope?: RouteRoleScope
 } & RouteObject
 
-const ProtectedRootRedirect: FC = () => {
+function ProtectedRootRedirect() {
   const { defaultRoute } = useAuth()
   return <Navigate to={defaultRoute} replace />
 }
 
-type RouteGuardProps = {
+export type RouteGuardProps = {
   requiredActions?: string[]
   requiredActionsMatch?: RouteActionMatch
   roleScope?: RouteDescription['roleScope']
@@ -86,12 +86,12 @@ const canAccessRoleScope = (
   return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
 }
 
-const RouteActionGuard: FC<RouteGuardProps> = ({
+function RouteActionGuard({
   children,
   requiredActions,
   requiredActionsMatch = 'any',
   roleScope,
-}) => {
+}: RouteGuardProps) {
   const { capabilities, canPerform } = useAuth()
 
   if (!requiredActions || requiredActions.length === 0) {

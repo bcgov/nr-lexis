@@ -90,9 +90,12 @@ describe('Reports Page Actions', () => {
     vi.clearAllMocks()
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
       exemptionTypes: [],
+      exemptionReasons: [],
       applicationStatuses: [],
       productTypes: [],
+      growthTypes: [],
       regions: [],
+      currentSchedules: [],
     })
     mockedFetchProvincialExemptionOptions.mockResolvedValue({
       exemptionTypes: [],

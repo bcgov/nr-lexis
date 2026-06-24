@@ -10,7 +10,7 @@ import {
 } from '@carbon/react'
 import type { CreateDraftRecord } from '@/service/create-draft-service'
 
-type Props = {
+export type CreateDraftHistoryProps = {
   title: string
   drafts: CreateDraftRecord<unknown>[]
   summarize: (payload: unknown) => string
@@ -18,7 +18,13 @@ type Props = {
   onDeleteDraft?: (draftId: string) => void
 }
 
-const CreateDraftHistory = ({ title, drafts, summarize, onUseDraft, onDeleteDraft }: Props) => {
+const CreateDraftHistory = ({
+  title,
+  drafts,
+  summarize,
+  onUseDraft,
+  onDeleteDraft,
+}: CreateDraftHistoryProps) => {
   const showActions = Boolean(onUseDraft || onDeleteDraft)
 
   return (

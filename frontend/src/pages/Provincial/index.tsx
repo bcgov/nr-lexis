@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type FC } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Button,
   Column,
@@ -14,7 +14,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
-import { AppNotification } from '@/components/AppNotification'
+import { AppNotification } from '../../components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { countApplicationReviews } from '@/service/application-review-search-service'
@@ -149,7 +149,7 @@ const WORKFLOW_TOTAL_ACTION_REQUIREMENTS: Record<WorkflowMetricKey, string[]> = 
   reviewQueue: ['/applicationsReview'],
 }
 
-const ProvincialPage: FC = () => {
+const ProvincialPage = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const [searchText, setSearchText] = useState('')

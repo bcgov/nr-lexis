@@ -1,8 +1,7 @@
-import type { FC } from 'react'
 import { Button } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
 
-const NotFound: FC = () => {
+const NotFound = () => {
   const navigate = useNavigate()
   const buttonClicked = () => {
     navigate('/')

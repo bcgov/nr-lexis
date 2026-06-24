@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Column,
@@ -15,7 +15,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { useAuth } from '@/context/auth/useAuth'
-import { AppNotification } from '@/components/AppNotification'
+import { AppNotification } from '../../components/AppNotification'
 import {
   firstValidationError,
   getVisibleFieldError,
@@ -35,7 +35,7 @@ import {
   upsertFeePolicy as upsertFeePolicyRequest,
   upsertFilPolicy as upsertFilPolicyRequest,
 } from '@/service/admin-policy-service'
-import IsoDatePicker from '@/components/IsoDatePicker'
+import IsoDatePicker from '../../components/IsoDatePicker'
 import { getResponseStatus } from '@/utils/http-error'
 
 type PolicyField =
@@ -45,7 +45,7 @@ type PolicyField =
   | 'filEffectiveDate'
   | 'filPolicyPercentage'
 
-const AdminPoliciesPage: FC = () => {
+const AdminPoliciesPage = () => {
   const { canPerform } = useAuth()
   const canManageFeePolicy = canPerform('/lexisPolicyAdmin')
   const canManageFilPolicy = canPerform('/lexisFILAdmin')

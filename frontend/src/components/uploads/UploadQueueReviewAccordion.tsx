@@ -1,4 +1,3 @@
-import { type FC } from 'react'
 import { Tag } from '@carbon/react'
 import { displayValue } from '@/utils/text'
 import {
@@ -10,7 +9,7 @@ import {
 } from './uploadQueueHelpers'
 import type { UploadQueueItem } from './uploadQueueTypes'
 
-type UploadQueueReviewAccordionProps = {
+export type UploadQueueReviewAccordionProps = {
   items: UploadQueueItem[]
   targetSummary: string
   idPrefix?: string
@@ -35,12 +34,12 @@ const reviewEmptyResultMessage = (
   return hasMetadata ? 'No validation issues returned.' : summary
 }
 
-const UploadQueueReviewAccordion: FC<UploadQueueReviewAccordionProps> = ({
+function UploadQueueReviewAccordion({
   items,
   targetSummary,
   idPrefix = 'adminUploadReview',
   itemNoun = 'file',
-}) => {
+}: UploadQueueReviewAccordionProps) {
   if (items.length === 0) {
     return null
   }

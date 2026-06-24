@@ -1,7 +1,6 @@
-import type { FC } from 'react'
 import NotFound from '@/components/NotFound'
 
-const NotFoundPage: FC = () => {
+const NotFoundPage = () => {
   return <NotFound />
 }
 

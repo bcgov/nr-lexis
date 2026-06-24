@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Column,
@@ -14,7 +14,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
-import { AppNotification } from '@/components/AppNotification'
+import { AppNotification } from '../../components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   buildPageDataCacheKey,
@@ -130,7 +130,7 @@ const INITIAL_METRICS: SummaryMetric[] = [
   },
 ]
 
-const ProvincialSummaryPage: FC = () => {
+const ProvincialSummaryPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform } = useAuth()
   const [metrics, setMetrics] = useState<SummaryMetric[]>(INITIAL_METRICS)

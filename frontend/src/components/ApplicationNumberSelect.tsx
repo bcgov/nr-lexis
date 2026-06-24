@@ -6,7 +6,7 @@ import {
 } from '@/service/provincial-application-search-service'
 import { leadingDigits } from '@/utils/text'
 
-type ApplicationNumberSelectProps = {
+export type ApplicationNumberSelectProps = {
   id: string
   labelText: ReactNode
   value: string
@@ -16,6 +16,17 @@ type ApplicationNumberSelectProps = {
   onBlur?: () => void
   onChange: (value: string) => void
 }
+
+const createManualApplicationNumberOption = (value: string): ProvincialApplicationNumberOption => ({
+  value,
+  label: value,
+  status: '',
+  applicantClientNumber: '',
+  ownerClientNumber: '',
+  region: '',
+  listingDate: '',
+  exemptionNumber: '',
+})
 
 const itemToString = (item: ProvincialApplicationNumberOption | string | null | undefined) => {
   if (typeof item === 'string') {
@@ -91,7 +102,7 @@ export default function ApplicationNumberSelect({
     if (matchingOption) {
       return matchingOption
     }
-    return value ? { value, label: value } : null
+    return value ? createManualApplicationNumberOption(value) : null
   }, [options, value])
 
   return (

@@ -245,8 +245,6 @@ describe('create-submit-service', () => {
     })
 
     await submitProvincialApplicationCreate({
-      applicationNumber: '1001',
-      packageNumber: 'PKG-1',
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',

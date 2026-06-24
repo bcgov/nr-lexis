@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -15,8 +15,8 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
-import IsoDatePicker from '@/components/IsoDatePicker'
+import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
+import IsoDatePicker from '../../components/IsoDatePicker'
 import type {
   ProvincialOfferSearchFilters,
   ProvincialOfferSearchRequest,
@@ -109,7 +109,7 @@ const buildSearchParams = (
     ['pageSize', pageSize],
   ])
 
-const ProvincialOffersPage: FC = () => {
+const ProvincialOffersPage = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
@@ -374,7 +374,7 @@ const ProvincialOffersPage: FC = () => {
                 titleText="Region"
                 items={regionOptions}
                 itemToString={(item) => (item ? item.text : '')}
-                label="Select region(s)"
+                placeholder="Select region(s)"
                 selectionFeedback="fixed"
                 selectedItems={selectedRegions}
                 onChange={(event) => {

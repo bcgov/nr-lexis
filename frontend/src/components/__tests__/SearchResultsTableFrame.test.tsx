@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import SearchResultsTableFrame from '../SearchResultsTableFrame'
 
 describe('SearchResultsTableFrame', () => {
   it('marks the table frame busy and shows centered loading copy while loading', () => {
