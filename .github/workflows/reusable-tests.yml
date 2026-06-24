@@ -51,7 +51,7 @@ jobs:
       - name: Wait for deployed frontend
         env:
           E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
-        run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL"
+        run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL" 17 5 '<div id="root"' 30
 
       - name: Run basic Playwright smoke suite
         env:
