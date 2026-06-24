@@ -27,7 +27,7 @@ const loadConfig = async (): Promise<AmplifyConfig> => {
   return configModule.default as AmplifyConfig
 }
 
-const getProviderRedirectUri = (logoffUrl: string): string | null => {
+const getProviderLogoutRedirectUri = (logoffUrl: string): string | null => {
   const configuredLogoffUrl = new URL(logoffUrl)
   const providerLogoutUrl = configuredLogoffUrl.searchParams.get('returl')
 
@@ -35,7 +35,7 @@ const getProviderRedirectUri = (logoffUrl: string): string | null => {
     return null
   }
 
-  return new URL(providerLogoutUrl).searchParams.get('redirect_uri')
+  return new URL(providerLogoutUrl).searchParams.get('post_logout_redirect_uri')
 }
 
 describe('FAM auth config', () => {
@@ -60,7 +60,7 @@ describe('FAM auth config', () => {
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
     expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/`])
-    expect(getProviderRedirectUri(oauth?.redirectSignOut[0] ?? '')).toBe(
+    expect(getProviderLogoutRedirectUri(oauth?.redirectSignOut[0] ?? '')).toBe(
       `${window.location.origin}/`,
     )
   })
@@ -85,7 +85,7 @@ describe('FAM auth config', () => {
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
     expect(oauth?.redirectSignOut[0]).toContain('https://logontest7.gov.bc.ca')
-    expect(getProviderRedirectUri(oauth?.redirectSignOut[0] ?? '')).toBe(
+    expect(getProviderLogoutRedirectUri(oauth?.redirectSignOut[0] ?? '')).toBe(
       `${window.location.origin}/`,
     )
   })

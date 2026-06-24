@@ -801,10 +801,16 @@ test.describe.serial('TEST IDIR admin regression', () => {
       page
         .waitForURL(/amazoncognito\.com\/error/i, { timeout: 60_000 })
         .then(() => 'cognito-error' as const),
+      page
+        .waitForURL(/loginproxy\.gov\.bc\.ca\/.*\/logout-confirm/i, { timeout: 60_000 })
+        .then(() => 'loginproxy-confirm' as const),
     ])
 
     if (logoutResult === 'cognito-error') {
       throw new Error(`Cognito rejected the configured logout redirect: ${page.url()}`)
+    }
+    if (logoutResult === 'loginproxy-confirm') {
+      throw new Error(`LoginProxy required logout confirmation: ${page.url()}`)
     }
 
     expect(new URL(page.url()).origin).toBe(baseOrigin)

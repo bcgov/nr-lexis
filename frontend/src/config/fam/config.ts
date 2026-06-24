@@ -50,7 +50,11 @@ const resolveSignOutRedirect = (value: string | undefined): string => {
 
     const providerLogoutUrl = new URL(returl)
     if (providerLogoutUrl.searchParams.has('redirect_uri')) {
-      providerLogoutUrl.searchParams.set('redirect_uri', `${window.location.origin}/`)
+      providerLogoutUrl.searchParams.delete('redirect_uri')
+      providerLogoutUrl.searchParams.set('post_logout_redirect_uri', `${window.location.origin}/`)
+      logoffUrl.searchParams.set('returl', providerLogoutUrl.toString())
+    } else if (providerLogoutUrl.searchParams.has('post_logout_redirect_uri')) {
+      providerLogoutUrl.searchParams.set('post_logout_redirect_uri', `${window.location.origin}/`)
       logoffUrl.searchParams.set('returl', providerLogoutUrl.toString())
     }
 
