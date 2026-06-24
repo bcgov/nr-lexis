@@ -11,14 +11,18 @@ const authMocks = vi.hoisted(() => ({
   signOut: vi.fn(),
 }))
 
+const mockRedirectSignOut = vi.hoisted(
+  () =>
+    'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Ftest.loginproxy.gov.bc.ca%2Fauth%2Frealms%2Fstandard%2Fprotocol%2Fopenid-connect%2Flogout%3Fpost_logout_redirect_uri%3Dhttp%253A%252F%252Flocalhost%253A3000%252F',
+)
+
 vi.mock('aws-amplify/auth', () => authMocks)
 
 vi.mock('@/config/fam/config', () => ({
   businessBceidProviderName: 'DEV-BCEIDBUSINESS',
   idirProviderName: 'DEV-IDIR',
   isCognitoConfigured: true,
-  redirectSignOut:
-    'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Ftest.loginproxy.gov.bc.ca%2Fauth%2Frealms%2Fstandard%2Fprotocol%2Fopenid-connect%2Flogout%3Fpost_logout_redirect_uri%3Dhttp%253A%252F%252Flocalhost%253A3000%252F',
+  redirectSignOut: mockRedirectSignOut,
 }))
 
 vi.mock('@/service/session-service', () => ({
@@ -98,8 +102,7 @@ describe('AuthProvider logout', () => {
     expect(authMocks.signOut).toHaveBeenCalledWith({
       global: false,
       oauth: {
-        redirectUrl:
-          'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Ftest.loginproxy.gov.bc.ca%2Fauth%2Frealms%2Fstandard%2Fprotocol%2Fopenid-connect%2Flogout%3Fpost_logout_redirect_uri%3Dhttp%253A%252F%252Flocalhost%253A3000%252F',
+        redirectUrl: mockRedirectSignOut,
       },
     })
     expect(mockedPerformLogoff).toHaveBeenCalledTimes(1)
