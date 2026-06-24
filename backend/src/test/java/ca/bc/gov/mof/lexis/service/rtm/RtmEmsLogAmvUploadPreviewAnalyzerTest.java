@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class RtmEmsLogAmvUploadPreviewAnalyzerTest {
@@ -44,6 +46,23 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void shouldImportOnlyRequestedGradeRows() throws IOException {
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(
+                RtmEmsLogAmvWorkbookTestFixtures.fullGradeWorkbookWithBlankRow()));
+
+    assertThat(result.headerDetected()).isTrue();
+    assertThat(result.dataRowCount()).isEqualTo(32);
+    assertThat(result.numericCellCount()).isEqualTo(32);
+    assertThat(result.rows()).hasSize(32);
+    assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::grade)
+        .containsExactlyElementsOf(expectedUploadGrades());
+    assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::grade)
+        .doesNotContain(" ");
+  }
+
+  @Test
   void shouldRejectWorkbookWithoutDateAndHeader() throws IOException {
     RtmEmsLogAmvUploadPreviewAnalyzer.Analysis analysis =
         RtmEmsLogAmvUploadPreviewAnalyzer.analyze(
@@ -55,5 +74,16 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
         .contains(
             "The first row must include the update date.",
             "The template header was not recognized as RTM EMS AMV data.");
+  }
+
+  private static List<String> expectedUploadGrades() {
+    List<String> grades = new ArrayList<>();
+    for (char grade = 'A'; grade <= 'Z'; grade++) {
+      grades.add(String.valueOf(grade));
+    }
+    for (int grade = 1; grade <= 6; grade++) {
+      grades.add(String.valueOf(grade));
+    }
+    return grades;
   }
 }

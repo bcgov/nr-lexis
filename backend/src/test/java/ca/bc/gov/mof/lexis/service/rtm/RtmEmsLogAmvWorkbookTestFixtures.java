@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.rtm;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -25,6 +26,33 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
         List.of(
             row(1, text("A1", "not a date")),
             row(2, text("A2", "not a template"), text("B2", "still not a template"))));
+  }
+
+  static byte[] fullGradeWorkbookWithBlankRow() throws IOException {
+    List<String> rows = new ArrayList<>();
+    rows.add(row(1, text("A1", "Date:first day of the month/year"), text("B1", "202607")));
+    rows.add(row(2, text("A2", "GRADE"), text("B2", "BA")));
+
+    int rowNumber = 3;
+    for (char grade = 'A'; grade <= 'Z'; grade++) {
+      rows.add(
+          row(
+              rowNumber,
+              text("A" + rowNumber, String.valueOf(grade)),
+              number("B" + rowNumber, "10")));
+      rowNumber++;
+    }
+    for (int grade = 1; grade <= 6; grade++) {
+      rows.add(
+          row(
+              rowNumber,
+              text("A" + rowNumber, String.valueOf(grade)),
+              number("B" + rowNumber, "20")));
+      rowNumber++;
+    }
+    rows.add(row(rowNumber, text("A" + rowNumber, " "), number("B" + rowNumber, "30")));
+
+    return workbook(rows);
   }
 
   private static String row(int number, String... cells) {
