@@ -201,9 +201,7 @@ describe('Provincial Permit Search Actions', () => {
     await waitFor(() => {
       expect(
         mockedSearchProvincialPermits.mock.calls.some(
-          ([request]) =>
-            request.sortField === 'permitNumber' &&
-            request.sortDirection === 'desc',
+          ([request]) => request.sortField === 'permitNumber' && request.sortDirection === 'desc',
         ),
       ).toBe(true)
     })
