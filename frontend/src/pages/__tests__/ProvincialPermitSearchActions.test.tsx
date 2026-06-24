@@ -199,12 +199,13 @@ describe('Provincial Permit Search Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Permit (ASC)' }))
 
     await waitFor(() => {
-      expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sortField: 'permitNumber',
-          sortDirection: 'desc',
-        }),
-      )
+      expect(
+        mockedSearchProvincialPermits.mock.calls.some(
+          ([request]) =>
+            request.sortField === 'permitNumber' &&
+            request.sortDirection === 'desc',
+        ),
+      ).toBe(true)
     })
   })
 })
