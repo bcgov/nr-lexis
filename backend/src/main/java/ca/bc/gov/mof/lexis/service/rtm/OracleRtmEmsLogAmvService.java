@@ -37,16 +37,10 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final String RETURN_VALIDATION = "validation_failed";
 
   private final OracleRtmEmsLogAmvRepository repository;
-  private final Clock clock;
 
   @Autowired
   public OracleRtmEmsLogAmvService(OracleRtmEmsLogAmvRepository repository) {
-    this(repository, Clock.systemUTC());
-  }
-
-  OracleRtmEmsLogAmvService(OracleRtmEmsLogAmvRepository repository, Clock clock) {
     this.repository = repository;
-    this.clock = clock == null ? Clock.systemUTC() : clock;
   }
 
   @Override
@@ -255,7 +249,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
         if (existingRowExists(species, grade, normalizedGrowthIndicator, parsedRetrievalDate)) {
           effectiveMode = SAVE_MODE_UPDATE;
-          requestUpdateDate = formatDate(LocalDate.now(clock));
+          requestUpdateDate = formatDate(LocalDate.now(Clock.systemUTC()));
           warnings.add(
               "Existing record found for species '%s', grade '%s' (source row %d); row will be updated."
                   .formatted(species, grade, row.sourceRow()));
