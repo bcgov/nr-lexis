@@ -67,4 +67,32 @@ public record ApplicationSubmissionImportResultDto(
         null,
         submissionSummary);
   }
+
+  public ApplicationSubmissionImportResultDto(
+      String uploadType,
+      String fileName,
+      long fileSize,
+      String status,
+      String message,
+      Long applicationNumber,
+      String packageNumber,
+      int scaleRows,
+      List<String> errors,
+      List<String> warnings,
+      String userReference) {
+    this(
+        uploadType,
+        fileName,
+        fileSize,
+        status,
+        message,
+        applicationNumber,
+        packageNumber,
+        scaleRows,
+        errors,
+        warnings,
+        userReference,
+        null);
+  }
+
 }

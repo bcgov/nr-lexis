@@ -157,6 +157,11 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
           '/fileInvoiceUpload',
         ],
       },
+      {
+        to: '/admin/rtm/emslogamv',
+        label: 'EMS AMV',
+        requiredActions: ['/lexisAgentAdmin'],
+      },
     ],
   },
 ]
@@ -179,6 +184,7 @@ const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
   { path: '/admin/uploads', section: 'Administration' },
   { path: '/admin/policies', section: 'Administration' },
   { path: '/admin', section: 'Administration' },
+  { path: '/admin/rtm/emslogamv', section: 'Administration' },
   { path: '/unauthorized', section: 'LEXIS' },
 ]
 

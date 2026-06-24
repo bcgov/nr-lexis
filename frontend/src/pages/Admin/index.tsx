@@ -49,6 +49,13 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
     description: 'Fee-in-lieu percent policy administration.',
     reactPath: '/admin/policies',
   },
+  {
+    id: 'rtmEmsLogAmv',
+    label: 'EMS AMV',
+    requiredAction: '/lexisAgentAdmin',
+    description: 'Manage EMS log average market values.',
+    reactPath: '/admin/rtm/emslogamv',
+  },
 ]
 
 const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [

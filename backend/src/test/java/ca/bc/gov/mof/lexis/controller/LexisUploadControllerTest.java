@@ -371,7 +371,7 @@ class LexisUploadControllerTest {
     when(applicationSubmissionImportService.validateApplicationSubmission(file, "CLIENT-REF-1")).thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
-        controller.applicationSubmissionValidation(file, null, "CLIENT-REF-1");
+        controller.applicationSubmissionValidation(file, null, "CLIENT-REF-1", null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
@@ -398,7 +398,7 @@ class LexisUploadControllerTest {
     when(applicationSubmissionImportService.validateApplicationSubmission(file, null)).thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> response =
-        controller.applicationSubmissionValidation(file, null, null);
+        controller.applicationSubmissionValidation(file, null, null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
     assertThat(response.getBody()).isEqualTo(payload);
@@ -426,6 +426,8 @@ class LexisUploadControllerTest {
         .when(applicationEditLockService.snapshot(any(), any(), anyBoolean()))
         .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
     return new LexisUploadController(
-        uploadServiceProvider, applicationSubmissionImportServiceProvider, applicationEditLockService);
+        uploadServiceProvider,
+        applicationSubmissionImportServiceProvider,
+        applicationEditLockService);
   }
 }
