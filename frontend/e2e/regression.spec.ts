@@ -799,6 +799,11 @@ test.describe.serial('TEST IDIR admin regression', () => {
         .waitFor({ state: 'visible', timeout: 60_000 })
         .then(() => 'login-shell' as const),
       page
+        .waitForURL(/loginproxy\.gov\.bc\.ca\/.*\/openid-connect\/logout\?/i, {
+          timeout: 60_000,
+        })
+        .then(() => 'loginproxy-logout' as const),
+      page
         .waitForURL(/amazoncognito\.com\/error/i, { timeout: 60_000 })
         .then(() => 'cognito-error' as const),
       page
@@ -808,6 +813,9 @@ test.describe.serial('TEST IDIR admin regression', () => {
 
     if (logoutResult === 'cognito-error') {
       throw new Error(`Cognito rejected the configured logout redirect: ${page.url()}`)
+    }
+    if (logoutResult === 'loginproxy-logout') {
+      throw new Error(`LoginProxy did not return to the LEXIS login shell: ${page.url()}`)
     }
     if (logoutResult === 'loginproxy-confirm') {
       throw new Error(`LoginProxy required logout confirmation: ${page.url()}`)

@@ -27,17 +27,6 @@ const loadConfig = async (): Promise<AmplifyConfig> => {
   return configModule.default as AmplifyConfig
 }
 
-const getProviderLogoutRedirectUri = (logoffUrl: string): string | null => {
-  const configuredLogoffUrl = new URL(logoffUrl)
-  const providerLogoutUrl = configuredLogoffUrl.searchParams.get('returl')
-
-  if (!providerLogoutUrl) {
-    return null
-  }
-
-  return new URL(providerLogoutUrl).searchParams.get('post_logout_redirect_uri')
-}
-
 describe('FAM auth config', () => {
   beforeEach(() => {
     window.config = { ...configuredRuntimeAuth }
@@ -47,22 +36,20 @@ describe('FAM auth config', () => {
     window.config = {}
   })
 
-  it('keeps sign-in on the current origin and points logoff back to the app root', async () => {
-    const logoffUrl =
-      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/'
+  it('keeps sign-in on the current origin and uses the configured sign-out chain', async () => {
+    const signOutUrl =
+      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-test.apps.silver.devops.gov.bc.ca'
     window.config = {
       ...configuredRuntimeAuth,
-      VITE_REDIRECT_SIGN_IN: 'https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/',
-      VITE_REDIRECT_SIGN_OUT: logoffUrl,
+      VITE_REDIRECT_SIGN_IN: 'https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/dashboard',
+      VITE_REDIRECT_SIGN_OUT: signOutUrl,
     }
 
     const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
-    expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/`])
-    expect(getProviderLogoutRedirectUri(oauth?.redirectSignOut[0] ?? '')).toBe(
-      `${window.location.origin}/`,
-    )
+    expect(oauth?.redirectSignIn).toEqual([`${window.location.origin}/dashboard`])
+    expect(oauth?.redirectSignOut).toEqual([signOutUrl])
   })
 
   it('leaves sign-out blank when no runtime sign-out URL is configured', async () => {
@@ -73,20 +60,17 @@ describe('FAM auth config', () => {
     expect(oauth?.redirectSignOut).toEqual([''])
   })
 
-  it('normalizes the configured BC Gov sign-out URL before Cognito logout', async () => {
+  it('trims the configured BC Gov sign-out URL without rewriting nested parameters', async () => {
     const signOutUrl =
-      ' https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Ftest.loginproxy.gov.bc.ca%2Fauth%2Frealms%2Fstandard%2Fprotocol%2Fopenid-connect%2Flogout%3Fredirect_uri%3Dhttps%253A%252F%252Fnr-lexis-test.apps.silver.devops.gov.bc.ca '
+      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-test.apps.silver.devops.gov.bc.ca'
     window.config = {
       ...configuredRuntimeAuth,
-      VITE_REDIRECT_SIGN_OUT: signOutUrl,
+      VITE_REDIRECT_SIGN_OUT: ` ${signOutUrl} `,
     }
 
     const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 
-    expect(oauth?.redirectSignOut[0]).toContain('https://logontest7.gov.bc.ca')
-    expect(getProviderLogoutRedirectUri(oauth?.redirectSignOut[0] ?? '')).toBe(
-      `${window.location.origin}/`,
-    )
+    expect(oauth?.redirectSignOut).toEqual([signOutUrl])
   })
 })

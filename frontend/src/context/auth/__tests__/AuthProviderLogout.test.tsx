@@ -13,7 +13,7 @@ const authMocks = vi.hoisted(() => ({
 
 const mockRedirectSignOut = vi.hoisted(
   () =>
-    'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Ftest.loginproxy.gov.bc.ca%2Fauth%2Frealms%2Fstandard%2Fprotocol%2Fopenid-connect%2Flogout%3Fpost_logout_redirect_uri%3Dhttp%253A%252F%252Flocalhost%253A3000%252F',
+    'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=http://localhost:3000/',
 )
 
 vi.mock('aws-amplify/auth', () => authMocks)
