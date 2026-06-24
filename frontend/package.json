@@ -19,6 +19,7 @@
     "pree2e": "playwright install chromium",
     "e2e": "playwright test --project=chromium",
     "e2e:regression": "playwright test --config=playwright.regression.config.ts --project=chromium",
+    "e2e:regression:idir": "playwright test --config=playwright.regression.config.ts --project=chromium --grep \"TEST IDIR admin regression\"",
     "e2e:ui": "playwright test --project=chromium --ui",
     "e2e:report": "playwright show-report"
   },

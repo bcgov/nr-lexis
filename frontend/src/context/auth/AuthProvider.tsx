@@ -4,6 +4,7 @@ import {
   businessBceidProviderName,
   idirProviderName,
   isCognitoConfigured,
+  redirectSignOut,
 } from '@/config/fam/config'
 import { AuthContext } from '@/context/auth/AuthContext'
 import { hasRole } from '@/context/auth/role-utils'
@@ -323,7 +324,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     try {
       if (isCognitoConfigured) {
-        await signOut()
+        if (redirectSignOut) {
+          await signOut({ global: false, oauth: { redirectUrl: redirectSignOut } })
+        } else {
+          await signOut()
+        }
       }
     } catch (error) {
       console.warn('Unable to complete Cognito sign-out. Clearing local auth state.', error)
