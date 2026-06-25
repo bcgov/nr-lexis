@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type ChangeEvent,
@@ -25,6 +26,7 @@ import {
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import SearchableSelect, { type SearchableSelectOption } from '../../components/SearchableSelect'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   isValidIsoDate,
@@ -32,6 +34,10 @@ import {
   requiredFieldError,
   requiredNumericFieldError,
 } from '@/pages/shared/create-form-utils'
+import {
+  fetchApplicationSpeciesCodes,
+  type ApplicationCodeOption,
+} from '@/service/provincial-application-items-service'
 import {
   previewRtmEmsLogAmvUpload,
   uploadRtmEmsLogAmv,
@@ -137,11 +143,22 @@ const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 const RTM_MODULE_DESCRIPTION =
   'Query current and historical RTM AMV rows, make manual create/update entries, and generate an upload preview from XLSX files.'
 
+const toSpeciesOption = (item: ApplicationCodeOption): SearchableSelectOption => {
+  const code = item.code.trim()
+  const description = item.description.trim()
+  return {
+    value: code,
+    label: description && description !== code ? `${code} - ${description}` : code,
+  }
+}
+
 const RTMEmsLogAmvPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
   const [filters, setFilters] = useState<RtmEmsLogAmvFilters>(INITIAL_FILTERS)
   const [rows, setRows] = useState<RtmEmsLogAmvRow[]>([])
+  const [speciesOptions, setSpeciesOptions] = useState<SearchableSelectOption[]>([])
+  const [hasSpeciesLookupFailed, setHasSpeciesLookupFailed] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -168,6 +185,42 @@ const RTMEmsLogAmvPage = () => {
     () => hasInvalidIsoDateValue(filters.retrievalDate, filters.updateDate),
     [filters],
   )
+
+  useEffect(() => {
+    let isCurrent = true
+
+    const loadSpeciesOptions = async () => {
+      try {
+        const speciesCodes = await fetchApplicationSpeciesCodes()
+        if (!isCurrent) {
+          return
+        }
+        const nextOptionsByCode = new Map<string, SearchableSelectOption>()
+        speciesCodes.map(toSpeciesOption).forEach((option) => {
+          if (option.value) {
+            nextOptionsByCode.set(option.value, option)
+          }
+        })
+        setSpeciesOptions(
+          [...nextOptionsByCode.values()].sort((left, right) =>
+            left.value.localeCompare(right.value),
+          ),
+        )
+        setHasSpeciesLookupFailed(false)
+      } catch (error) {
+        console.error(error)
+        if (isCurrent) {
+          setHasSpeciesLookupFailed(true)
+        }
+      }
+    }
+
+    void loadSpeciesOptions()
+
+    return () => {
+      isCurrent = false
+    }
+  }, [])
 
   const pageSummary = useMemo(
     () => ({
@@ -471,12 +524,24 @@ const RTMEmsLogAmvPage = () => {
           <h2 className="dashboard-title">Query rows</h2>
 
           <div className="legacy-search-grid">
-            <TextInput
-              id="rtm-species"
-              labelText="Species"
-              value={filters.species}
-              onChange={(event) => updateFilter('species', event.target.value)}
-            />
+            {speciesOptions.length > 0 ? (
+              <SearchableSelect
+                id="rtm-species"
+                labelText="Species"
+                value={filters.species}
+                options={speciesOptions}
+                placeholder="Search species code"
+                onChange={(value) => updateFilter('species', value)}
+              />
+            ) : (
+              <TextInput
+                id="rtm-species"
+                labelText="Species"
+                value={filters.species}
+                onChange={(event) => updateFilter('species', event.target.value)}
+                helperText={hasSpeciesLookupFailed ? 'Species lookup unavailable.' : undefined}
+              />
+            )}
 
             <TextInput
               id="rtm-growth-indicator"
@@ -603,13 +668,26 @@ const RTMEmsLogAmvPage = () => {
           <h2 className="dashboard-title">Manual entry</h2>
           <form onSubmit={submitSave}>
             <div className="legacy-search-grid">
-              <TextInput
-                id="rtm-manual-species"
-                labelText="Species"
-                value={manualForm.species}
-                onChange={(event) => updateManualField('species', event.target.value)}
-                disabled={!canManage}
-              />
+              {speciesOptions.length > 0 ? (
+                <SearchableSelect
+                  id="rtm-manual-species"
+                  labelText="Species"
+                  value={manualForm.species}
+                  options={speciesOptions}
+                  placeholder="Search species code"
+                  onChange={(value) => updateManualField('species', value)}
+                  disabled={!canManage}
+                />
+              ) : (
+                <TextInput
+                  id="rtm-manual-species"
+                  labelText="Species"
+                  value={manualForm.species}
+                  onChange={(event) => updateManualField('species', event.target.value)}
+                  disabled={!canManage}
+                  helperText={hasSpeciesLookupFailed ? 'Species lookup unavailable.' : undefined}
+                />
+              )}
               <TextInput
                 id="rtm-manual-grade"
                 labelText="Grade"
