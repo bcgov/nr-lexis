@@ -273,7 +273,8 @@ const ProvincialOffersPage = () => {
       ])
       setRegionOptions(mapValueLabelOptionsToIdTextOptions(offerOptions.regions))
       setDefaultListingToDate(
-        applicationOptions.currentSchedules[0]?.value ?? formatLocalIsoDate(new Date()),
+        applicationOptions.currentSchedules.find((option) => option.value.trim())?.label ??
+          formatLocalIsoDate(new Date()),
       )
       setIsOptionsLoaded(true)
     }

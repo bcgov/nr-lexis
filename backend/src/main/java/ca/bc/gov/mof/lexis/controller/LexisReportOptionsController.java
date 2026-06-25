@@ -92,18 +92,19 @@ public class LexisReportOptionsController {
   private List<CodeNameDto> toCurrentScheduleOptions(
       LexisReportScheduleRepository scheduleRepository) {
     List<CodeNameDto> options = new ArrayList<>();
-    options.add(new CodeNameDto("", "Blank"));
     LocalDate today = LocalDate.now(clock);
     options.addAll(
-        scheduleRepository.findCurrentSchedules().stream()
+        scheduleRepository.findUpcomingExportSchedules().stream()
         .filter(row -> row.exportScheduleId() != null && row.advertisingDate() != null)
         .filter(row -> !row.advertisingDate().isBefore(today))
+        .limit(2)
         .map(
             row ->
                 new CodeNameDto(
                     String.valueOf(row.exportScheduleId()),
                     row.advertisingDate().format(DISPLAY_DATE_FORMATTER)))
         .toList());
+    options.add(new CodeNameDto("", "Blank"));
     return options;
   }
 

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
@@ -57,13 +58,13 @@ class OracleLexisApplicationServiceTest {
     when(repository.loadProductTypeOptions()).thenReturn(List.of(new CodeNameDto("S", "Standing")));
     when(repository.loadGrowthTypeOptions()).thenReturn(List.of(new CodeNameDto("O", "Old Growth")));
     when(repository.loadRegionOptions()).thenReturn(List.of(new CodeNameDto("12", "Coast")));
-    when(scheduleRepository.findCurrentSchedules())
+    when(scheduleRepository.findUpcomingExportSchedules())
         .thenReturn(
             List.of(
-                new LexisReportScheduleRepository.CurrentScheduleRow(
-                    986L, LocalDate.of(2026, 1, 11)),
-                new LexisReportScheduleRepository.CurrentScheduleRow(
-                    987L, LocalDate.of(2026, 7, 11))));
+                scheduleRow(986L, LocalDate.of(2026, 1, 11)),
+                scheduleRow(987L, LocalDate.of(2026, 7, 11)),
+                scheduleRow(988L, LocalDate.of(2026, 7, 25)),
+                scheduleRow(989L, LocalDate.of(2026, 8, 8))));
 
     LexisApplicationSearchOptionsDto response = service.searchOptions();
 
@@ -74,7 +75,10 @@ class OracleLexisApplicationServiceTest {
     assertThat(response.growthTypes()).hasSize(1);
     assertThat(response.regions()).hasSize(1);
     assertThat(response.currentSchedules())
-        .containsExactly(new CodeNameDto("", "Blank"), new CodeNameDto("987", "2026-07-11"));
+        .containsExactly(
+            new CodeNameDto("987", "2026-07-11"),
+            new CodeNameDto("988", "2026-07-25"),
+            new CodeNameDto("", "Blank"));
   }
 
   @Test
@@ -268,6 +272,10 @@ class OracleLexisApplicationServiceTest {
         95.0,
         false,
         false);
+  }
+
+  private static ExportScheduleRowDto scheduleRow(Long exportScheduleId, LocalDate advertisingDate) {
+    return new ExportScheduleRowDto(exportScheduleId, advertisingDate, null, null, null, null, null);
   }
 
   private static <T> Page<T> page(List<T> content, long total) {

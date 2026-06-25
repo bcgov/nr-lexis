@@ -169,8 +169,9 @@ const expectCurrentScheduleOptions = (value: unknown, source: string): void => {
     schedules.length,
     `${source} should include blank plus future dates`,
   ).toBeGreaterThanOrEqual(3)
-  expect(optionCode(schedules[0]), `${source} first schedule option should be blank`).toBe('')
-  expect(optionName(schedules[0]), `${source} first schedule option should be labeled Blank`).toBe(
+  const blankSchedule = schedules[schedules.length - 1]
+  expect(optionCode(blankSchedule), `${source} last schedule option should be blank`).toBe('')
+  expect(optionName(blankSchedule), `${source} last schedule option should be labeled Blank`).toBe(
     'Blank',
   )
   expect(

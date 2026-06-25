@@ -405,9 +405,9 @@ describe('Create Page Core Flows', () => {
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
       currentSchedules: [
-        { value: '', label: 'Blank' },
         { value: '1001', label: '2026-07-01' },
         { value: '1002', label: '2026-07-15' },
+        { value: '', label: 'Blank' },
       ],
     } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>)
 
