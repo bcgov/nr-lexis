@@ -38,7 +38,7 @@ describe('FAM auth config', () => {
 
   it('keeps sign-in on the current origin and uses the configured sign-out chain', async () => {
     const signOutUrl =
-      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-test.apps.silver.devops.gov.bc.ca'
+      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.silver.devops.gov.bc.ca%2F'
     window.config = {
       ...configuredRuntimeAuth,
       VITE_REDIRECT_SIGN_IN: 'https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/dashboard',
@@ -60,9 +60,9 @@ describe('FAM auth config', () => {
     expect(oauth?.redirectSignOut).toEqual([''])
   })
 
-  it('trims the configured BC Gov sign-out URL without rewriting nested parameters', async () => {
+  it('trims the configured BC Gov sign-out URL without rewriting the encoded return URL', async () => {
     const signOutUrl =
-      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=https://nr-lexis-test.apps.silver.devops.gov.bc.ca'
+      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.silver.devops.gov.bc.ca%2F'
     window.config = {
       ...configuredRuntimeAuth,
       VITE_REDIRECT_SIGN_OUT: ` ${signOutUrl} `,

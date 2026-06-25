@@ -37,8 +37,9 @@ const userPoolId = env.VITE_USER_POOLS_ID?.trim() ?? ''
 const userPoolClientId = env.VITE_USER_POOLS_WEB_CLIENT_ID?.trim() ?? ''
 const domain = env.VITE_COGNITO_DOMAIN?.trim()?.replace(/^https?:\/\//, '') ?? ''
 const redirectSignIn = resolveSameOriginRedirect(env.VITE_REDIRECT_SIGN_IN, '/')
-// Full BC Gov logoff chain URL. This must match one of the Cognito app
-// client's allowed sign-out URLs for the current environment.
+// Full BC Gov logoff URL registered in the Cognito app client. The returl
+// should point back to this app's root rather than chaining through
+// LoginProxy's OIDC logout endpoint, which can stop on a logout-confirm page.
 export const redirectSignOut = env.VITE_REDIRECT_SIGN_OUT?.trim() ?? ''
 const scopes = resolveScopes(splitScopes(env.VITE_COGNITO_SCOPES))
 

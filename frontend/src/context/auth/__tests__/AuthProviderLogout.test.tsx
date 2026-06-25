@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
 import { useAuth } from '@/context/auth/useAuth'
-import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
+import { fetchSessionCapabilities } from '@/service/session-service'
 
 const authMocks = vi.hoisted(() => ({
   fetchAuthSession: vi.fn(),
@@ -21,11 +21,9 @@ vi.mock('@/config/fam/config', () => ({
 
 vi.mock('@/service/session-service', () => ({
   fetchSessionCapabilities: vi.fn(),
-  performLogoff: vi.fn(),
 }))
 
 const mockedFetchSessionCapabilities = vi.mocked(fetchSessionCapabilities)
-const mockedPerformLogoff = vi.mocked(performLogoff)
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>
 
 const LogoutProbe = () => {
@@ -78,9 +76,7 @@ describe('AuthProvider logout', () => {
     consoleWarnSpy.mockRestore()
   })
 
-  it('still signs out of Cognito when backend logoff fails', async () => {
-    mockedPerformLogoff.mockRejectedValue(new Error('backend unavailable'))
-
+  it('signs out of Cognito', async () => {
     renderProbe()
 
     await waitFor(() => {
@@ -94,13 +90,11 @@ describe('AuthProvider logout', () => {
       expect(authMocks.signOut).toHaveBeenCalledTimes(1)
     })
     expect(authMocks.signOut).toHaveBeenCalledWith()
-    expect(mockedPerformLogoff).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
   })
 
-  it('signs out of Cognito after backend logoff succeeds', async () => {
-    mockedPerformLogoff.mockResolvedValue(undefined)
-
+  it('clears local auth state after Cognito signout fails', async () => {
+    authMocks.signOut.mockRejectedValue(new Error('cognito unavailable'))
     renderProbe()
 
     await waitFor(() => {
@@ -113,7 +107,10 @@ describe('AuthProvider logout', () => {
       expect(authMocks.signOut).toHaveBeenCalledTimes(1)
     })
     expect(authMocks.signOut).toHaveBeenCalledWith()
-    expect(mockedPerformLogoff).toHaveBeenCalledTimes(1)
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      'Unable to complete Cognito sign-out. Clearing local auth state.',
+      expect.any(Error),
+    )
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
   })
 })
