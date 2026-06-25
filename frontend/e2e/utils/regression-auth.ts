@@ -330,7 +330,15 @@ const responseBodySnippet = async (response: APIResponse | null): Promise<string
   }
 
   const text = await response.text().catch(() => '')
-  const normalized = text.replace(/\s+/g, ' ').trim()
+  const normalized = text
+    .replace(/Bearer\s+eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/gi, 'Bearer [redacted]')
+    .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[jwt-redacted]')
+    .replace(
+      /([?&](?:password|token|code|state|session_state|id_token_hint)=)[^&\s"']+/gi,
+      '$1[redacted]',
+    )
+    .replace(/\s+/g, ' ')
+    .trim()
   return normalized ? normalized.slice(0, 500) : null
 }
 

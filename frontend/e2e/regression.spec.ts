@@ -28,6 +28,15 @@ const hasGrantedAction = (actions: string[], action: string): boolean => {
   return actions.some((item) => item.toLowerCase().replace(/^\//, '') === normalizedAction)
 }
 
+const safeUrlForLog = (rawUrl: string): string => {
+  try {
+    const url = new URL(rawUrl)
+    return `${url.origin}${url.pathname}`
+  } catch {
+    return '[unparseable-url]'
+  }
+}
+
 type ReviewStatusResponse = {
   updated?: boolean
   valid?: boolean
@@ -786,13 +795,19 @@ test.describe.serial('TEST IDIR admin regression', () => {
     } catch (error) {
       const currentUrl = page.url()
       if (/amazoncognito\.com\/error/i.test(currentUrl)) {
-        throw new Error(`Cognito rejected the configured logout redirect: ${currentUrl}`)
+        throw new Error(
+          `Cognito rejected the configured logout redirect: ${safeUrlForLog(currentUrl)}`,
+        )
       }
       if (/loginproxy\.gov\.bc\.ca/i.test(currentUrl)) {
-        throw new Error(`LoginProxy did not return to the LEXIS login shell: ${currentUrl}`)
+        throw new Error(
+          `LoginProxy did not return to the LEXIS login shell: ${safeUrlForLog(currentUrl)}`,
+        )
       }
       if (currentUrl.startsWith(`${baseOrigin}/unauthorized`)) {
-        throw new Error(`Logout landed on the LEXIS unauthorized page: ${currentUrl}`)
+        throw new Error(
+          `Logout landed on the LEXIS unauthorized page: ${safeUrlForLog(currentUrl)}`,
+        )
       }
       throw error
     }
