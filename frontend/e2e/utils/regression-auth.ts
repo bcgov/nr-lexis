@@ -54,6 +54,8 @@ type AuthTokenSnapshot = {
 const baseOrigin = new URL(E2E_BASE_URL).origin
 const CREDENTIAL_SCREEN_TIMEOUT_MS = 5_000
 const LOGIN_SESSION_TIMEOUT_MS = 30_000
+const APP_ROOT_NAVIGATION_ATTEMPTS = 4
+const APP_ROOT_NAVIGATION_TIMEOUT_MS = 20_000
 const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 const LOGIN_ERROR_TEXT =
   /username or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed/i
@@ -374,6 +376,29 @@ const visibleLoginError = async (page: Page): Promise<string | null> => {
   return text?.trim() || 'Login form reported an authentication error.'
 }
 
+const gotoAppRoot = async (page: Page): Promise<void> => {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= APP_ROOT_NAVIGATION_ATTEMPTS; attempt += 1) {
+    try {
+      await page.goto('/', {
+        waitUntil: 'domcontentloaded',
+        timeout: APP_ROOT_NAVIGATION_TIMEOUT_MS,
+      })
+      return
+    } catch (error) {
+      lastError = error
+      if (attempt < APP_ROOT_NAVIGATION_ATTEMPTS) {
+        await page.waitForTimeout(2_000)
+      }
+    }
+  }
+
+  throw new Error(
+    `Unable to load LEXIS app root after ${APP_ROOT_NAVIGATION_ATTEMPTS} attempts. Last error: ${String(lastError)}`,
+  )
+}
+
 const fillCredentialScreen = async (
   page: Page,
   username: string,
@@ -430,7 +455,7 @@ const fillCredentialScreen = async (
 const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> => {
   const { label } = config
   const { username, password } = credentials(config)
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await gotoAppRoot(page)
 
   if (await isSessionAuthenticated(page)) {
     return
@@ -514,7 +539,7 @@ const currentRoutePath = (page: Page): string | null => {
 
 const navigateSpaRoute = async (page: Page, path: string): Promise<void> => {
   if (!page.url().startsWith(baseOrigin)) {
-    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await gotoAppRoot(page)
   }
 
   if (currentRoutePath(page) === path) {

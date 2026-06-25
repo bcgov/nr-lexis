@@ -101,6 +101,7 @@ type GenericSearchResponse = {
 }
 
 type GenericOptionsResponse = Record<string, unknown>
+type ReferenceDataResponse = unknown[]
 
 type JsonWithStatus<T> = {
   status: number
@@ -606,6 +607,65 @@ test.describe.serial('TEST IDIR admin regression', () => {
     expect(federalCount.total).toEqual(expect.any(Number))
   })
 
+  test('can query exemption, offer, and permit search contracts', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const [optionsPath, searchPath, countPath] of [
+      [
+        '/api/lexis/exemptions/search/options',
+        '/api/lexis/exemptions/search',
+        '/api/lexis/exemptions/search/count',
+      ],
+      [
+        '/api/lexis/purchase-offers/search/options',
+        '/api/lexis/purchase-offers/search',
+        '/api/lexis/purchase-offers/search/count',
+      ],
+      [
+        '/api/lexis/permits/search/options',
+        '/api/lexis/permits/search',
+        '/api/lexis/permits/search/count',
+      ],
+    ] as const) {
+      const options = await readJsonResponse<GenericOptionsResponse>(
+        await getWithAuth(page, optionsPath),
+      )
+      expect(options).toEqual(expect.any(Object))
+
+      const search = await readJsonResponse<GenericSearchResponse>(
+        await getWithAuth(page, searchPath, {
+          params: {
+            page: '0',
+            size: '2',
+          },
+        }),
+      )
+      expect(Array.isArray(search.results)).toBe(true)
+      expect(search.total).toEqual(expect.any(Number))
+      expect(search.page).toBe(0)
+      expect(search.size).toBe(2)
+
+      const count = await readJsonResponse<SearchCountResponse>(await getWithAuth(page, countPath))
+      expect(count.total).toEqual(expect.any(Number))
+    }
+  })
+
+  test('can query application maintenance reference data contracts', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const path of [
+      '/api/lexis/rpc/application-details/species-codes',
+      '/api/lexis/rpc/application-details/package-status-codes',
+      '/api/lexis/rpc/application-details/grade-codes',
+    ]) {
+      const referenceData = await readJsonResponse<ReferenceDataResponse>(
+        await getWithAuth(page, path),
+      )
+      expect(Array.isArray(referenceData)).toBe(true)
+      expect(referenceData.length).toBeGreaterThan(0)
+    }
+  })
+
   test('can query admin policy and report option contracts', async () => {
     const page = await authenticatedIdirPage()
 
@@ -793,32 +853,22 @@ test.describe.serial('TEST IDIR admin regression', () => {
     await page.getByRole('button', { name: /open profile panel/i }).click()
     await page.getByRole('button', { name: /sign out/i }).click()
 
-    const logoutResult = await Promise.race([
-      page
-        .getByRole('button', { name: /log in with idir/i })
-        .waitFor({ state: 'visible', timeout: 60_000 })
-        .then(() => 'login-shell' as const),
-      page
-        .waitForURL(/loginproxy\.gov\.bc\.ca\/.*\/openid-connect\/logout\?/i, {
-          timeout: 60_000,
-        })
-        .then(() => 'loginproxy-logout' as const),
-      page
-        .waitForURL(/amazoncognito\.com\/error/i, { timeout: 60_000 })
-        .then(() => 'cognito-error' as const),
-      page
-        .waitForURL(/loginproxy\.gov\.bc\.ca\/.*\/logout-confirm/i, { timeout: 60_000 })
-        .then(() => 'loginproxy-confirm' as const),
-    ])
-
-    if (logoutResult === 'cognito-error') {
-      throw new Error(`Cognito rejected the configured logout redirect: ${page.url()}`)
-    }
-    if (logoutResult === 'loginproxy-logout') {
-      throw new Error(`LoginProxy did not return to the LEXIS login shell: ${page.url()}`)
-    }
-    if (logoutResult === 'loginproxy-confirm') {
-      throw new Error(`LoginProxy required logout confirmation: ${page.url()}`)
+    try {
+      await expect(page.getByRole('button', { name: /log in with idir/i })).toBeVisible({
+        timeout: 60_000,
+      })
+    } catch (error) {
+      const currentUrl = page.url()
+      if (/amazoncognito\.com\/error/i.test(currentUrl)) {
+        throw new Error(`Cognito rejected the configured logout redirect: ${currentUrl}`)
+      }
+      if (/loginproxy\.gov\.bc\.ca/i.test(currentUrl)) {
+        throw new Error(`LoginProxy did not return to the LEXIS login shell: ${currentUrl}`)
+      }
+      if (currentUrl.startsWith(`${baseOrigin}/unauthorized`)) {
+        throw new Error(`Logout landed on the LEXIS unauthorized page: ${currentUrl}`)
+      }
+      throw error
     }
 
     expect(new URL(page.url()).origin).toBe(baseOrigin)
