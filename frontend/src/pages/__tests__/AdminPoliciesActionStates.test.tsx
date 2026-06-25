@@ -4,10 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminPoliciesPage from '@/pages/AdminPolicies'
-import {
-  createExportSchedule,
-  fetchExportSchedules,
-} from '@/service/admin-schedule-service'
+import { createExportSchedule, fetchExportSchedules } from '@/service/admin-schedule-service'
 import {
   deleteFeePolicy,
   deleteFilPolicy,
@@ -204,19 +201,17 @@ describe('Admin policy action states', () => {
   })
 
   it('submits export schedule rows when all schedule dates are valid', async () => {
-    mockedFetchExportSchedules
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          exportScheduleId: '1002',
-          advertisingDate: '2026-07-15',
-          applicationReceiptDate: '2026-07-08',
-          offerReceiptDate: '2026-07-22',
-          offerEndDate: '2026-07-23',
-          offerWithdrawalDate: '2026-07-24',
-          teacMeetingDate: '2026-07-29',
-        },
-      ])
+    mockedFetchExportSchedules.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        exportScheduleId: '1002',
+        advertisingDate: '2026-07-15',
+        applicationReceiptDate: '2026-07-08',
+        offerReceiptDate: '2026-07-22',
+        offerEndDate: '2026-07-23',
+        offerWithdrawalDate: '2026-07-24',
+        teacMeetingDate: '2026-07-29',
+      },
+    ])
 
     renderPage()
 

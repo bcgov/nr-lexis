@@ -144,14 +144,6 @@ const renderPage = (initialEntry = '/provincial/review') => {
   )
 }
 
-const chooseComboBoxOption = async (labelText: string, optionName: string): Promise<void> => {
-  const combobox = screen.getByRole('combobox', { name: labelText })
-  await userEvent.click(combobox)
-  fireEvent.change(combobox, { target: { value: optionName } })
-  const options = await screen.findAllByRole('option', { name: optionName })
-  await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
-}
-
 Element.prototype.scrollIntoView = vi.fn()
 
 describe('Provincial Review Action State Smoke', () => {

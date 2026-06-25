@@ -6,6 +6,17 @@ export type SearchOption = {
   label: string
 }
 
+const NATURAL_RESOURCE_REGION_CODES = new Set([
+  '1903',
+  '1904',
+  '1905',
+  '1906',
+  '1907',
+  '1908',
+  '1909',
+  '1910',
+])
+
 const parseOptions = (input: unknown, allowEmptyCode = false): SearchOption[] => {
   return mapRecordArray(input, (item) => {
     const code = stringField(item, 'code')
@@ -20,6 +31,9 @@ const parseOptions = (input: unknown, allowEmptyCode = false): SearchOption[] =>
     }
   })
 }
+
+const parseRegionOptions = (input: unknown): SearchOption[] =>
+  parseOptions(input).filter((option) => NATURAL_RESOURCE_REGION_CODES.has(option.value))
 
 const fetchOptions = async (path: string): Promise<Record<string, unknown> | null> => {
   try {
@@ -66,7 +80,7 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
     applicationStatuses: parseOptions(data.applicationStatuses),
     productTypes: parseOptions(data.productTypes),
     growthTypes: parseOptions(data.growthTypes),
-    regions: parseOptions(data.regions),
+    regions: parseRegionOptions(data.regions),
     currentSchedules: parseOptions(data.currentSchedules, true),
   }
 }
@@ -88,7 +102,7 @@ export const fetchProvincialExemptionOptions = async (): Promise<{
   return {
     exemptionTypes: parseOptions(data.exemptionTypes),
     exemptionStatuses: parseOptions(data.exemptionStatuses),
-    regions: parseOptions(data.regions),
+    regions: parseRegionOptions(data.regions),
   }
 }
 
@@ -106,7 +120,7 @@ export const fetchProvincialPermitOptions = async (): Promise<{
 
   return {
     permitStatuses: parseOptions(data.permitStatuses),
-    regions: parseOptions(data.regions),
+    regions: parseRegionOptions(data.regions),
   }
 }
 
@@ -148,10 +162,13 @@ export const fetchReportOptions = async (): Promise<{
     }
   }
 
+  const regions = parseRegionOptions(data.regions)
+  const defaultRegion = stringField(data, 'defaultRegion')
+
   return {
     currentSchedules: parseOptions(data.currentSchedules, true),
-    defaultRegion: stringField(data, 'defaultRegion'),
-    regions: parseOptions(data.regions),
+    defaultRegion: regions.some((region) => region.value === defaultRegion) ? defaultRegion : '',
+    regions,
     reportJurisdictions: parseOptions(data.reportJurisdictions, true),
     biweeklyJurisdictions: parseOptions(data.biweeklyJurisdictions, true),
     teacJurisdictions: parseOptions(data.teacJurisdictions),
@@ -178,7 +195,7 @@ export const fetchProvincialOfferOptions = async (): Promise<{
   }
 
   return {
-    regions: parseOptions(data.regions),
+    regions: parseRegionOptions(data.regions),
   }
 }
 
@@ -213,7 +230,7 @@ export const fetchApplicationReviewOptions = async (): Promise<{
 
   return {
     productTypes: parseOptions(data.productTypes),
-    regions: parseOptions(data.regions),
+    regions: parseRegionOptions(data.regions),
     reviewStatuses: parseOptions(data.reviewStatuses),
   }
 }

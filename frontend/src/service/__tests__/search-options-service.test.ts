@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchApplicationReviewOptions,
   fetchFederalApplicationOptions,
+  fetchProvincialExemptionOptions,
   fetchProvincialApplicationOptions,
+  fetchProvincialOfferOptions,
+  fetchProvincialPermitOptions,
   fetchReportOptions,
 } from '@/service/search-options-service'
 
@@ -35,7 +38,12 @@ describe('search-options-service', () => {
       applicationStatuses: [{ code: 'NEW', name: 'New' }],
       productTypes: [{ code: 'LOG', name: 'Logs' }],
       growthTypes: [{ code: 'O', name: 'Old Growth' }],
-      regions: [{ code: '11', name: 'Cariboo' }, { code: '12' }],
+      regions: [
+        { code: '11', name: 'District' },
+        { code: '1903', name: 'Cariboo Natural Resource Region' },
+        { code: '1911', name: 'Not Natural Resource Region' },
+        { code: '12' },
+      ],
       currentSchedules: [
         { code: '987', name: '2026-01-11' },
         { code: '', name: 'Blank' },
@@ -61,7 +69,7 @@ describe('search-options-service', () => {
       applicationStatuses: [{ value: 'NEW', label: 'New' }],
       productTypes: [{ value: 'LOG', label: 'Logs' }],
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
-      regions: [{ value: '11', label: 'Cariboo' }],
+      regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
       currentSchedules: [
         { value: '987', label: '2026-01-11' },
         { value: '', label: 'Blank' },
@@ -93,8 +101,9 @@ describe('search-options-service', () => {
       ],
       defaultRegion: '12',
       regions: [
-        { code: '12', name: 'Coast' },
-        { code: '24', name: 'Skeena' },
+        { code: '12', name: 'District' },
+        { code: '1903', name: 'Cariboo Natural Resource Region' },
+        { code: '1908', name: 'Skeena Natural Resource Region' },
       ],
       reportJurisdictions: [
         { code: '', name: 'All' },
@@ -159,10 +168,10 @@ describe('search-options-service', () => {
         { value: '1001', label: '2026-06-15' },
         { value: '1002', label: '2026-06-29' },
       ],
-      defaultRegion: '12',
+      defaultRegion: '',
       regions: [
-        { value: '12', label: 'Coast' },
-        { value: '24', label: 'Skeena' },
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1908', label: 'Skeena Natural Resource Region' },
       ],
       reportJurisdictions: [
         { value: '', label: 'All' },
@@ -239,5 +248,58 @@ describe('search-options-service', () => {
     expect(warnSpy).toHaveBeenCalledTimes(1)
 
     warnSpy.mockRestore()
+  })
+
+  it('filters all region option payloads to natural resource regions', async () => {
+    const regionPayload = [
+      { code: '12', name: 'District' },
+      { code: '1904', name: 'Kootenay-Boundary Natural Resource Region' },
+      { code: '1909', name: 'South Coast Natural Resource Region' },
+      { code: '1911', name: 'Other Org Unit' },
+    ]
+
+    getCachedDataMock
+      .mockResolvedValueOnce({
+        exemptionTypes: [],
+        exemptionStatuses: [],
+        regions: regionPayload,
+      })
+      .mockResolvedValueOnce({
+        permitStatuses: [],
+        regions: regionPayload,
+      })
+      .mockResolvedValueOnce({
+        regions: regionPayload,
+      })
+      .mockResolvedValueOnce({
+        productTypes: [],
+        regions: regionPayload,
+        reviewStatuses: [],
+      })
+
+    await expect(fetchProvincialExemptionOptions()).resolves.toMatchObject({
+      regions: [
+        { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+        { value: '1909', label: 'South Coast Natural Resource Region' },
+      ],
+    })
+    await expect(fetchProvincialPermitOptions()).resolves.toMatchObject({
+      regions: [
+        { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+        { value: '1909', label: 'South Coast Natural Resource Region' },
+      ],
+    })
+    await expect(fetchProvincialOfferOptions()).resolves.toMatchObject({
+      regions: [
+        { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+        { value: '1909', label: 'South Coast Natural Resource Region' },
+      ],
+    })
+    await expect(fetchApplicationReviewOptions()).resolves.toMatchObject({
+      regions: [
+        { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+        { value: '1909', label: 'South Coast Natural Resource Region' },
+      ],
+    })
   })
 })

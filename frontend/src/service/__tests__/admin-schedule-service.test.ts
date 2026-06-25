@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  createExportSchedule,
-  fetchExportSchedules,
-} from '@/service/admin-schedule-service'
+import { createExportSchedule, fetchExportSchedules } from '@/service/admin-schedule-service'
 
 const { getCachedResponseMock, postMock } = vi.hoisted(() => ({
   getCachedResponseMock: vi.fn(),

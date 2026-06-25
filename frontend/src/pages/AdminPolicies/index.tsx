@@ -169,11 +169,11 @@ const AdminPoliciesPage = () => {
   )
   const scheduleHasValidationError = Boolean(
     fieldErrors.scheduleAdvertisingDate ||
-      fieldErrors.scheduleApplicationReceiptDate ||
-      fieldErrors.scheduleOfferReceiptDate ||
-      fieldErrors.scheduleOfferEndDate ||
-      fieldErrors.scheduleOfferWithdrawalDate ||
-      fieldErrors.scheduleTeacMeetingDate,
+    fieldErrors.scheduleApplicationReceiptDate ||
+    fieldErrors.scheduleOfferReceiptDate ||
+    fieldErrors.scheduleOfferEndDate ||
+    fieldErrors.scheduleOfferWithdrawalDate ||
+    fieldErrors.scheduleTeacMeetingDate,
   )
 
   const markFieldTouched = (field: PolicyField): void => {
