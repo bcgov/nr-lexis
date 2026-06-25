@@ -60,7 +60,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   private static final String FIND_DUPLICATE_ADVERTISING_DATE_COUNT =
       "SELECT COUNT(*) FROM EXPORT_SCHEDULE WHERE TRUNC(ADVERTISING_DATE) = ?";
   private static final String NEXT_EXPORT_SCHEDULE_ID =
-      "SELECT NVL(MAX(EXPORT_SCHEDULE_ID), 0) + 1 FROM EXPORT_SCHEDULE";
+      "SELECT EXPORT_SCHEDULE_SEQ.NEXTVAL FROM DUAL";
   private static final String INSERT_EXPORT_SCHEDULE =
       """
       INSERT INTO EXPORT_SCHEDULE (
@@ -105,7 +105,6 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public ExportScheduleRowDto insertExportSchedule(ExportScheduleCreateRequestDto request) {
-    jdbcTemplate.execute("LOCK TABLE EXPORT_SCHEDULE IN EXCLUSIVE MODE");
     Long scheduleId = jdbcTemplate.queryForObject(NEXT_EXPORT_SCHEDULE_ID, Long.class);
     long finalScheduleId = scheduleId == null ? 1L : scheduleId;
     jdbcTemplate.update(
