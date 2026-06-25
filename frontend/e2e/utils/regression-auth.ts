@@ -51,6 +51,13 @@ type AuthTokenSnapshot = {
   storageCandidateCount: number
 }
 
+type AccessTokenDiagnostics = {
+  clientId?: string
+  expiresInSeconds?: number
+  issuer?: string
+  tokenUse?: string
+}
+
 const baseOrigin = new URL(E2E_BASE_URL).origin
 const CREDENTIAL_SCREEN_TIMEOUT_MS = 5_000
 const LOGIN_SESSION_TIMEOUT_MS = 30_000
@@ -58,7 +65,7 @@ const APP_ROOT_NAVIGATION_ATTEMPTS = 4
 const APP_ROOT_NAVIGATION_TIMEOUT_MS = 20_000
 const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 const LOGIN_ERROR_TEXT =
-  /username or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed/i
+  /username or password.*incorrect|user id or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed/i
 
 const idirLoginConfig: LoginConfig = {
   buttonName: /log in with idir/i,
@@ -68,20 +75,10 @@ const idirLoginConfig: LoginConfig = {
   passwordEnv: 'E2E_IDIR_PASSWORD',
 }
 
-const businessBceidLoginConfig: LoginConfig = {
-  buttonName: /log in with business bceid/i,
-  label: 'Business BCeID',
-  testId: 'landing-button__bceid',
-  usernameEnv: 'E2E_BCEID_USER',
-  passwordEnv: 'E2E_BCEID_PASSWORD',
-}
-
 const hasCredentials = ({ usernameEnv, passwordEnv }: LoginConfig): boolean =>
   Boolean(process.env[usernameEnv]?.trim() && process.env[passwordEnv]?.trim())
 
 export const hasIdirCredentials = (): boolean => hasCredentials(idirLoginConfig)
-
-export const hasBusinessBceidCredentials = (): boolean => hasCredentials(businessBceidLoginConfig)
 
 const credentials = ({ usernameEnv, passwordEnv }: LoginConfig): RealCredentials => {
   return {
@@ -301,22 +298,70 @@ export const getWithAuth = async (
   })
 }
 
+const base64UrlDecode = (value: string): string => {
+  const padded = `${value}${'='.repeat((4 - (value.length % 4)) % 4)}`
+  return Buffer.from(padded.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
+}
+
+const accessTokenDiagnostics = (accessToken?: string): AccessTokenDiagnostics | null => {
+  if (!accessToken) {
+    return null
+  }
+
+  try {
+    const [, payloadSegment] = accessToken.split('.')
+    const payload = JSON.parse(base64UrlDecode(payloadSegment)) as Record<string, unknown>
+    const exp = typeof payload.exp === 'number' ? payload.exp : undefined
+
+    return {
+      clientId: typeof payload.client_id === 'string' ? payload.client_id : undefined,
+      expiresInSeconds: exp ? exp - Math.floor(Date.now() / 1000) : undefined,
+      issuer: typeof payload.iss === 'string' ? payload.iss : undefined,
+      tokenUse: typeof payload.token_use === 'string' ? payload.token_use : undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
+const responseBodySnippet = async (response: APIResponse | null): Promise<string | null> => {
+  if (!response) {
+    return null
+  }
+
+  const text = await response.text().catch(() => '')
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  return normalized ? normalized.slice(0, 500) : null
+}
+
 const authDiagnostics = async (page: Page): Promise<string> => {
   const [browserSnapshot, contextSnapshot] = await Promise.all([
     browserAuthSnapshot(page),
     contextAuthSnapshot(page),
   ])
+  const accessToken = browserSnapshot.accessToken ?? contextSnapshot.accessToken
+  const tokenDiagnostics = accessTokenDiagnostics(accessToken)
   const sessionResponse = await getWithAuth(page, '/api/lexis/session/capabilities').catch(
     () => null,
   )
+  const sessionBody = await responseBodySnippet(sessionResponse)
 
   return [
     `browserCookieTokenCandidates=${browserSnapshot.cookieCandidateCount}`,
     `browserStorageTokenCandidates=${browserSnapshot.storageCandidateCount}`,
     `contextCookieTokenCandidates=${contextSnapshot.cookieCandidateCount}`,
-    `bearerTokenFound=${Boolean(browserSnapshot.accessToken ?? contextSnapshot.accessToken)}`,
+    `bearerTokenFound=${Boolean(accessToken)}`,
+    tokenDiagnostics?.issuer ? `tokenIssuer=${tokenDiagnostics.issuer}` : null,
+    tokenDiagnostics?.clientId ? `tokenClientId=${tokenDiagnostics.clientId}` : null,
+    tokenDiagnostics?.tokenUse ? `tokenUse=${tokenDiagnostics.tokenUse}` : null,
+    typeof tokenDiagnostics?.expiresInSeconds === 'number'
+      ? `tokenExpiresInSeconds=${tokenDiagnostics.expiresInSeconds}`
+      : null,
     `sessionStatus=${sessionResponse?.status() ?? 'request-failed'}`,
-  ].join(', ')
+    sessionBody ? `sessionBody=${JSON.stringify(sessionBody)}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ')
 }
 
 const isSessionAuthenticated = async (page: Page): Promise<boolean> => {
@@ -509,10 +554,6 @@ export const loginWithIdir = async (page: Page): Promise<void> => {
   await loginWithConfig(page, idirLoginConfig)
 }
 
-export const loginWithBusinessBceid = async (page: Page): Promise<void> => {
-  await loginWithConfig(page, businessBceidLoginConfig)
-}
-
 export const collectApiServerErrors = (page: Page): string[] => {
   const errors: string[] = []
   page.on('response', (response) => {
@@ -542,12 +583,12 @@ const navigateSpaRoute = async (page: Page, path: string): Promise<void> => {
     await gotoAppRoot(page)
   }
 
-  if (currentRoutePath(page) === path) {
-    return
-  }
-
   await page.evaluate((nextPath) => {
-    window.history.pushState({}, '', nextPath)
+    if (`${window.location.pathname}${window.location.search}` === nextPath) {
+      window.history.replaceState({}, '', nextPath)
+    } else {
+      window.history.pushState({}, '', nextPath)
+    }
     window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }))
   }, path)
 

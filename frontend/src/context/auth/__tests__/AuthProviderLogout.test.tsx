@@ -11,18 +11,12 @@ const authMocks = vi.hoisted(() => ({
   signOut: vi.fn(),
 }))
 
-const mockRedirectSignOut = vi.hoisted(
-  () =>
-    'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https://test.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout?redirect_uri=http://localhost:3000/',
-)
-
 vi.mock('aws-amplify/auth', () => authMocks)
 
 vi.mock('@/config/fam/config', () => ({
   businessBceidProviderName: 'DEV-BCEIDBUSINESS',
   idirProviderName: 'DEV-IDIR',
   isCognitoConfigured: true,
-  redirectSignOut: mockRedirectSignOut,
 }))
 
 vi.mock('@/service/session-service', () => ({
@@ -99,12 +93,26 @@ describe('AuthProvider logout', () => {
     await waitFor(() => {
       expect(authMocks.signOut).toHaveBeenCalledTimes(1)
     })
-    expect(authMocks.signOut).toHaveBeenCalledWith({
-      global: false,
-      oauth: {
-        redirectUrl: mockRedirectSignOut,
-      },
+    expect(authMocks.signOut).toHaveBeenCalledWith()
+    expect(mockedPerformLogoff).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+  })
+
+  it('signs out of Cognito after backend logoff succeeds', async () => {
+    mockedPerformLogoff.mockResolvedValue(undefined)
+
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
     })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Logout' }))
+
+    await waitFor(() => {
+      expect(authMocks.signOut).toHaveBeenCalledTimes(1)
+    })
+    expect(authMocks.signOut).toHaveBeenCalledWith()
     expect(mockedPerformLogoff).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
   })

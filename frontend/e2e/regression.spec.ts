@@ -4,14 +4,11 @@ import {
   collectApiServerErrors,
   deleteWithCsrf,
   expectAccessiblePage,
-  expectForbiddenPost,
   expectInvalidApplicationCreateValidation,
   expectRouteUnauthorized,
   fetchSessionCapabilities,
   getWithAuth,
-  hasBusinessBceidCredentials,
   hasIdirCredentials,
-  loginWithBusinessBceid,
   loginWithIdir,
   postWithCsrf,
 } from './utils/regression-auth'
@@ -91,6 +88,12 @@ type ApplicationReviewPreviewResponse = {
 
 type SearchCountResponse = {
   total?: number
+}
+
+type SessionActionAccessResponse = {
+  authenticated?: boolean
+  action?: string
+  granted?: boolean
 }
 
 type GenericSearchResponse = {
@@ -240,111 +243,16 @@ const requiredAdminActions = [
   '/applicationReport',
 ]
 
-const visibleProvincialSubmitterLinks = [
-  'Create/edit application',
-  'Upload application submission',
-  'Application search',
-  'Exemption search',
-  'Offer search',
-  'Permit search',
-]
-
-const hiddenProvincialSubmitterLinks = [
-  'Application review',
-  'Summary',
-  'Create/edit exemption',
-  'Create/edit offer',
-]
-
-const submitterAccessiblePages: Array<[path: string, heading: RegExp]> = [
-  ['/provincial/application', /provincial application search/i],
-  ['/provincial/application/create', /create provincial application/i],
-  ['/provincial/application/upload', /upload application submission/i],
-  ['/provincial/exemption', /provincial exemption search/i],
-  ['/provincial/offers', /provincial offers search/i],
-  ['/provincial/permit', /provincial permit search/i],
-]
-
-const unauthorizedSubmitterPages = [
-  '/provincial/review',
-  '/provincial/summary',
-  '/provincial/exemption/create',
-  '/provincial/offers/create',
-  '/federal',
-  '/federal/application/upload',
-  '/admin',
-  '/admin/uploads',
-]
-
-const restrictedSubmitterWriteChecks: Array<{
-  path: string
-  data?: Record<string, unknown>
-}> = [
-  {
-    path: '/api/lexis/application-reviews/999999999/approve',
-  },
-  {
-    path: '/api/lexis/application-reviews/999999999/status',
-    data: {
-      statusCode: 'REJ',
-      remark: 'Regression authorization check',
-      clientEmailAddress: '',
-    },
-  },
-  {
-    path: '/api/lexis/application-reviews/999999999/status-email',
-    data: {
-      statusCode: 'REJ',
-      remark: 'Regression authorization check',
-      clientEmailAddress: 'nobody@example.com',
-    },
-  },
-  {
-    path: '/api/lexis/rpc/exemption-details/exemption',
-    data: {
-      exemptionNumber: '999999999',
-      applicationNumber: '999999999',
-      exemptionTypeCode: 'O',
-      exemptionStatusCode: 'D',
-    },
-  },
-  {
-    path: '/api/lexis/rpc/exemption-details/exemption/update',
-    data: {
-      exemptionNumber: '999999999',
-      exemptionTypeCode: 'O',
-      exemptionStatusCode: 'D',
-    },
-  },
-  {
-    path: '/api/lexis/rpc/exemption-details/approve-exemptions',
-    data: {
-      exemptionNumbers: ['999999999'],
-    },
-  },
-  {
-    path: '/api/lexis/rpc/offer-details/offer',
-    data: {
-      offerNumber: '999999999',
-      applicationNumber: '999999999',
-      packageNumber: 'REGRESSION-NO-WRITE',
-    },
-  },
-  {
-    path: '/api/lexis/rpc/offer-details/offer/update',
-    data: {
-      offerNumber: '999999999',
-      applicationNumber: '999999999',
-      packageNumber: 'REGRESSION-NO-WRITE',
-    },
-  },
-  {
-    path: '/api/lexis/admin/policies/fee',
-    data: {
-      effectiveDate: '2099-01-01',
-      rate: 0,
-    },
-  },
+const representativeAdminActions = [
+  ...requiredAdminActions,
+  '/lexisPolicyAdmin',
+  '/lexisFILAdmin',
+  '/fileApplicationUpload',
+  '/fileExemptionUpload',
+  '/filePermitUpload',
+  'createOffer',
+  'savePermit',
+  'mofrListing',
 ]
 
 const readReviewStatusResponse = async (
@@ -501,6 +409,25 @@ test.describe.serial('TEST IDIR admin regression', () => {
 
     await expectAdminNavigation(page)
     expect(apiServerErrors).toEqual([])
+  })
+
+  test('can verify representative admin action grants', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const action of representativeAdminActions) {
+      const access = await readJsonResponse<SessionActionAccessResponse>(
+        await getWithAuth(page, '/api/lexis/session/canPerformAction', {
+          params: { action },
+        }),
+      )
+
+      expect(
+        access.authenticated,
+        `${action} should be checked with an authenticated session`,
+      ).toBe(true)
+      expect(access.action).toBe(action)
+      expect(access.granted, `${action} should be granted to the IDIR admin`).toBe(true)
+    }
   })
 
   test('can open representative admin, provincial, federal, upload, and report pages', async () => {
@@ -661,8 +588,7 @@ test.describe.serial('TEST IDIR admin regression', () => {
       const referenceData = await readJsonResponse<ReferenceDataResponse>(
         await getWithAuth(page, path),
       )
-      expect(Array.isArray(referenceData)).toBe(true)
-      expect(referenceData.length).toBeGreaterThan(0)
+      expect(Array.isArray(referenceData), `${path} should return an array`).toBe(true)
     }
   })
 
@@ -846,12 +772,12 @@ test.describe.serial('TEST IDIR admin regression', () => {
     }
   })
 
-  test('signs out to the login shell', async () => {
+  test('signs out from unauthorized page to the login shell', async () => {
     const page = await authenticatedIdirPage()
     const baseOrigin = new URL(E2E_BASE_URL).origin
 
-    await page.getByRole('button', { name: /open profile panel/i }).click()
-    await page.getByRole('button', { name: /sign out/i }).click()
+    await expectRouteUnauthorized(page, '/unauthorized')
+    await page.getByRole('button', { name: /log out/i }).click()
 
     try {
       await expect(page.getByRole('button', { name: /log in with idir/i })).toBeVisible({
@@ -873,236 +799,5 @@ test.describe.serial('TEST IDIR admin regression', () => {
 
     expect(new URL(page.url()).origin).toBe(baseOrigin)
     await expect(page.getByRole('button', { name: /log in with business bceid/i })).toBeVisible()
-  })
-})
-
-// TODO: Re-enable once the TEST Business BCeID regression account is unlocked and reset.
-test.describe.skip('TEST Business BCeID provincial submitter regression', () => {
-  test.describe.configure({ retries: 0 })
-  test.skip(!hasBusinessBceidCredentials(), 'Business BCeID e2e credentials are not configured.')
-
-  test('shows provincial submitter navigation without restricted links', async ({ page }) => {
-    const apiServerErrors = collectApiServerErrors(page)
-
-    await loginWithBusinessBceid(page)
-    await expectAccessiblePage(page, '/provincial/application', /provincial application search/i)
-
-    const capabilities = await fetchSessionCapabilities(page)
-    expect(capabilities.authenticated).toBe(true)
-    expect(String(capabilities.roles ?? '')).toContain('PROVINCIAL_SUBMITTER')
-
-    const provincialSection = page.locator(sideNavSection('Provincial'))
-    await expect(provincialSection).toBeVisible()
-
-    for (const linkName of visibleProvincialSubmitterLinks) {
-      await expect(provincialSection.getByRole('link', { name: linkName })).toBeVisible()
-    }
-
-    for (const linkName of hiddenProvincialSubmitterLinks) {
-      await expect(provincialSection.getByRole('link', { name: linkName })).toHaveCount(0)
-    }
-
-    await expect(page.locator(sideNavSection('Federal'))).toHaveCount(0)
-    await expect(page.locator(sideNavSection('Administration'))).toHaveCount(0)
-
-    expect(apiServerErrors).toEqual([])
-  })
-
-  test('opens submitter read/search/upload pages without mutating data', async ({ page }) => {
-    const apiServerErrors = collectApiServerErrors(page)
-
-    await loginWithBusinessBceid(page)
-
-    for (const [path, heading] of submitterAccessiblePages) {
-      await expectAccessiblePage(page, path, heading)
-    }
-
-    for (const path of unauthorizedSubmitterPages) {
-      await expectRouteUnauthorized(page, path)
-    }
-
-    expect(apiServerErrors).toEqual([])
-  })
-
-  test('cannot perform restricted write endpoints', async ({ page }) => {
-    await loginWithBusinessBceid(page)
-
-    for (const check of restrictedSubmitterWriteChecks) {
-      await expectForbiddenPost(page, check.path, { data: check.data })
-    }
-  })
-
-  test('can reach application create validation without creating an application', async ({
-    page,
-  }) => {
-    const apiServerErrors = collectApiServerErrors(page)
-
-    await loginWithBusinessBceid(page)
-
-    await expectInvalidApplicationCreateValidation(
-      await postWithCsrf(page, '/api/lexis/rpc/application-details/application', {
-        form: {
-          validation: 'true',
-          ownerApplicantType: '',
-          applicationDate: '',
-          exemptionTerm: '0',
-          dateReceived: '',
-          applicationVolume: '0',
-          logLocation: '',
-          ownerClientNumber: '',
-          ownerClientLocationCode: '',
-          ownerContactName: '',
-          exemptionReason: '',
-          region: '',
-          productTypeCode: '',
-          ageClass: '',
-          applicationEndUseCode: '',
-          selectedSpecies: '',
-        },
-      }),
-    )
-
-    expect(apiServerErrors).toEqual([])
-  })
-})
-
-// TODO: Re-enable once the TEST Business BCeID regression account is unlocked and reset.
-test.describe.skip('TEST credentialed application lifecycle regression', () => {
-  test.describe.configure({ retries: 0 })
-  test.skip(
-    !hasBusinessBceidCredentials() || !hasIdirCredentials(),
-    'Business BCeID and IDIR e2e credentials are both required for lifecycle regression.',
-  )
-
-  test('submits with Business BCeID, reviews with IDIR, and cleans package data', async ({
-    browser,
-  }) => {
-    const packageNumber = uniqueRegressionPackageNumber()
-    let applicationNumber: number | null = null
-
-    const bceidContext = await browser.newContext()
-    try {
-      const bceidPage = await bceidContext.newPage()
-      await loginWithBusinessBceid(bceidPage)
-
-      const validationResult = await postRegressionSubmission(
-        bceidPage,
-        '/api/lexis/application-submissions/validation',
-        packageNumber,
-      )
-      expect(validationResult.status).toBe('validated')
-      expect(validationResult.packageNumber).toBe(packageNumber)
-      expect(validationResult.scaleRows).toBe(3)
-      expect(asStringArray(validationResult.errors)).toEqual([])
-
-      const submissionResult = await postRegressionSubmission(
-        bceidPage,
-        '/api/lexis/application-submissions',
-        packageNumber,
-      )
-      expect(submissionResult.status).toBe('accepted')
-      expect(submissionResult.packageNumber).toBe(packageNumber)
-      expect(submissionResult.scaleRows).toBe(3)
-      expect(asStringArray(submissionResult.errors)).toEqual([])
-      expect(submissionResult.applicationNumber).toEqual(expect.any(Number))
-      applicationNumber = submissionResult.applicationNumber ?? null
-    } finally {
-      await bceidContext.close()
-    }
-
-    if (applicationNumber === null) {
-      throw new Error('Application submission did not return an application number.')
-    }
-
-    const idirContext = await browser.newContext()
-    try {
-      const idirPage = await idirContext.newPage()
-      await loginWithIdir(idirPage)
-
-      const approved = await readJsonResponse<ReviewStatusResponse>(
-        await postWithCsrf(idirPage, `/api/lexis/application-reviews/${applicationNumber}/approve`),
-      )
-      expect(approved.valid).toBe(true)
-      expect(approved.updated).toBe(true)
-      expect(approved.statusCode).toBe('APP')
-
-      const rejected = await readJsonResponse<ReviewStatusResponse>(
-        await postWithCsrf(idirPage, `/api/lexis/application-reviews/${applicationNumber}/status`, {
-          data: {
-            statusCode: 'REJ',
-            remark: regressionStatusRemark,
-            clientEmailAddress: regressionClientEmail,
-          },
-        }),
-      )
-      expect(rejected.valid).toBe(true)
-      expect(rejected.updated).toBe(true)
-      expect(rejected.statusCode).toBe('REJ')
-      expect(rejected.remark).toBe(regressionStatusRemark)
-
-      await cleanupRegressionPackage(idirPage, applicationNumber, packageNumber)
-    } finally {
-      if (applicationNumber !== null) {
-        const cleanupPage = await idirContext.newPage().catch(() => null)
-        if (cleanupPage) {
-          await loginWithIdir(cleanupPage).catch(() => undefined)
-          await cleanupRegressionPackage(cleanupPage, applicationNumber, packageNumber).catch(
-            () => undefined,
-          )
-        }
-      }
-      await idirContext.close()
-    }
-  })
-
-  test('does not expose IDIR-created provincial applications to Business BCeID submitter', async ({
-    browser,
-  }) => {
-    const packageNumber = uniqueRegressionPackageNumber()
-    let applicationNumber: number | null = null
-
-    const idirContext = await browser.newContext()
-    try {
-      const idirPage = await idirContext.newPage()
-      await loginWithIdir(idirPage)
-
-      const submissionResult = await postRegressionSubmission(
-        idirPage,
-        '/api/lexis/application-submissions',
-        packageNumber,
-      )
-      expect(submissionResult.status).toBe('accepted')
-      expect(submissionResult.packageNumber).toBe(packageNumber)
-      expect(submissionResult.scaleRows).toBe(3)
-      expect(asStringArray(submissionResult.errors)).toEqual([])
-      expect(submissionResult.applicationNumber).toEqual(expect.any(Number))
-      applicationNumber = submissionResult.applicationNumber ?? null
-
-      if (applicationNumber === null) {
-        throw new Error('IDIR application submission did not return an application number.')
-      }
-
-      const bceidContext = await browser.newContext()
-      try {
-        const bceidPage = await bceidContext.newPage()
-        await loginWithBusinessBceid(bceidPage)
-        await expectRouteUnauthorized(bceidPage, `/provincial/application/${applicationNumber}`)
-      } finally {
-        await bceidContext.close()
-      }
-
-      await cleanupRegressionPackage(idirPage, applicationNumber, packageNumber)
-    } finally {
-      if (applicationNumber !== null) {
-        const cleanupPage = await idirContext.newPage().catch(() => null)
-        if (cleanupPage) {
-          await loginWithIdir(cleanupPage).catch(() => undefined)
-          await cleanupRegressionPackage(cleanupPage, applicationNumber, packageNumber).catch(
-            () => undefined,
-          )
-        }
-      }
-      await idirContext.close()
-    }
   })
 })

@@ -125,8 +125,8 @@ If the backend starts but authenticated API calls fail, check network access, `a
 
 The `Regression` GitHub Actions workflow runs weekly and manually against TEST. It currently reads
 TEST IDIR credentials from GitHub `test` environment secrets and passes the masked values into the
-`npm run e2e:regression` command. Business BCeID regression tests remain in the repo but are skipped
-until the TEST Business BCeID regression account is unlocked and reset. See
+`npm run e2e:regression` command. Business BCeID browser regression is intentionally not scheduled
+because repeated automated login attempts can lock the TEST account. See
 [frontend/e2e/README.md](frontend/e2e/README.md) for the required GitHub environment secrets.
 
 ## Component docs

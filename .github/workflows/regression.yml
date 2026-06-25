@@ -13,7 +13,7 @@ permissions: {}
 
 jobs:
   credentialed-regression:
-    name: TEST IDIR Regression (${{ matrix.project }})
+    name: TEST Regression (${{ matrix.project }})
     environment: test
     defaults:
       run:
@@ -53,13 +53,13 @@ jobs:
       - name: Wait for deployed frontend
         run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL"
 
-      - name: Run TEST IDIR regression suite
+      - name: Run TEST regression suite
         env:
           CI: "true"
           E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
           E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
         run: |
-          npm run e2e:regression:idir -- --reporter=html,list
+          npm run e2e:regression -- --reporter=html,list
 
       - uses: actions/upload-artifact@v7
         if: (! cancelled())

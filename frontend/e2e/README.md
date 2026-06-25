@@ -16,7 +16,7 @@ regression coverage uses a separate TEST-only Playwright config.
 - If `E2E_BASE_URL` is a deployed URL in CI, Playwright does not start a local `webServer`.
 - The default config only runs `smoke.spec.ts`. Local role simulation is intentionally not
   supported.
-- `playwright.regression.config.ts` runs the scheduled TEST IDIR admin regression specs.
+- `playwright.regression.config.ts` runs the scheduled TEST credentialed regression specs.
 
 ## CI setup
 
@@ -25,13 +25,12 @@ regression coverage uses a separate TEST-only Playwright config.
 - Required `test` environment secrets:
   - `E2E_IDIR_USER`
   - `E2E_IDIR_PASSWORD`
-- The IDIR suite asserts the account establishes an authenticated session and has admin grants.
-- The IDIR suite also validates, submits, reviews, and cleans up a fresh TEST application at
-  runtime, so static application-number variables are not required for the active regression path.
-- The scheduled workflow selects only the IDIR suite with Playwright `--grep` while BCeID is paused.
-- TODO: Re-enable the Business BCeID and mixed BCeID/IDIR lifecycle suites once the TEST Business
-  BCeID regression account is unlocked and reset. Those skipped suites will require `E2E_BCEID_USER`
-  and `E2E_BCEID_PASSWORD` in the GitHub `test` environment.
+- The IDIR suite asserts the account establishes an authenticated session, has admin grants, can
+  reach representative UI/API contracts, and can validate/submit/review/clean fresh TEST application
+  data at runtime.
+- Business BCeID browser regression is intentionally not scheduled because repeated automated login
+  attempts can lock the TEST account. BCeID button and routing behavior stay covered by smoke and
+  unit tests.
 - Credentialed regression jobs are scoped to the `test` GitHub environment, so dev preview deploys
   stay on smoke coverage.
 - CI suppresses Playwright screenshots, video, and traces for the credentialed regression suite
