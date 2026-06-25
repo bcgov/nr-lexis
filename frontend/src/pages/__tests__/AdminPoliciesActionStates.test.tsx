@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminPoliciesPage from '@/pages/AdminPolicies'
 import {
+  createExportSchedule,
+  fetchExportSchedules,
+} from '@/service/admin-schedule-service'
+import {
   deleteFeePolicy,
   deleteFilPolicy,
   fetchFeePolicies,
@@ -27,7 +31,14 @@ vi.mock('@/service/admin-policy-service', () => ({
   deleteFilPolicy: vi.fn(),
 }))
 
+vi.mock('@/service/admin-schedule-service', () => ({
+  fetchExportSchedules: vi.fn(),
+  createExportSchedule: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedFetchExportSchedules = vi.mocked(fetchExportSchedules)
+const mockedCreateExportSchedule = vi.mocked(createExportSchedule)
 const mockedFetchFeePolicies = vi.mocked(fetchFeePolicies)
 const mockedFetchFilPolicies = vi.mocked(fetchFilPolicies)
 const mockedUpsertFeePolicy = vi.mocked(upsertFeePolicy)
@@ -81,11 +92,35 @@ describe('Admin policy action states', () => {
         updateTimestamp: '2026-01-01T00:00:00.000Z',
       },
     ])
+    mockedFetchExportSchedules.mockResolvedValue([
+      {
+        exportScheduleId: '1001',
+        advertisingDate: '2026-07-01',
+        applicationReceiptDate: '2026-06-25',
+        offerReceiptDate: '2026-07-08',
+        offerEndDate: '2026-07-09',
+        offerWithdrawalDate: '2026-07-10',
+        teacMeetingDate: '2026-07-15',
+      },
+    ])
 
     mockedUpsertFeePolicy.mockResolvedValue([])
     mockedUpsertFilPolicy.mockResolvedValue([])
     mockedDeleteFeePolicy.mockResolvedValue([])
     mockedDeleteFilPolicy.mockResolvedValue([])
+    mockedCreateExportSchedule.mockResolvedValue({
+      success: true,
+      message: 'Export schedule added.',
+      schedule: {
+        exportScheduleId: '1002',
+        advertisingDate: '2026-07-15',
+        applicationReceiptDate: '2026-07-08',
+        offerReceiptDate: '2026-07-22',
+        offerEndDate: '2026-07-23',
+        offerWithdrawalDate: '2026-07-24',
+        teacMeetingDate: '2026-07-29',
+      },
+    })
   })
 
   it('submits fee policy add when required fields are valid', async () => {
@@ -162,9 +197,64 @@ describe('Admin policy action states', () => {
 
     await screen.findByText('Policy center')
 
-    expect(screen.getAllByText('Not Granted')).toHaveLength(2)
+    expect(screen.getAllByText('Not Granted')).toHaveLength(3)
     expect(screen.getByRole('button', { name: 'Add Fee Policy' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add fee in lieu policy' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Export Schedule' })).toBeDisabled()
+  })
+
+  it('submits export schedule rows when all schedule dates are valid', async () => {
+    mockedFetchExportSchedules
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          exportScheduleId: '1002',
+          advertisingDate: '2026-07-15',
+          applicationReceiptDate: '2026-07-08',
+          offerReceiptDate: '2026-07-22',
+          offerEndDate: '2026-07-23',
+          offerWithdrawalDate: '2026-07-24',
+          teacMeetingDate: '2026-07-29',
+        },
+      ])
+
+    renderPage()
+
+    await screen.findByText('Export schedule administration')
+
+    fireEvent.change(screen.getByLabelText('Advertising date'), {
+      target: { value: '2026-07-15' },
+    })
+    fireEvent.change(screen.getByLabelText('Application receipt date'), {
+      target: { value: '2026-07-08' },
+    })
+    fireEvent.change(screen.getByLabelText('Offer receipt date'), {
+      target: { value: '2026-07-22' },
+    })
+    fireEvent.change(screen.getByLabelText('Offer end date'), {
+      target: { value: '2026-07-23' },
+    })
+    fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
+      target: { value: '2026-07-24' },
+    })
+    fireEvent.change(screen.getByLabelText('TEAC meeting date'), {
+      target: { value: '2026-07-29' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Add Export Schedule' }))
+
+    await waitFor(() => {
+      expect(mockedCreateExportSchedule).toHaveBeenCalledWith({
+        advertisingDate: '2026-07-15',
+        applicationReceiptDate: '2026-07-08',
+        offerReceiptDate: '2026-07-22',
+        offerEndDate: '2026-07-23',
+        offerWithdrawalDate: '2026-07-24',
+        teacMeetingDate: '2026-07-29',
+      })
+    })
+
+    expect(await screen.findByText('Export schedule added.')).toBeInTheDocument()
+    expect(await screen.findByText('1002')).toBeInTheDocument()
   })
 
   it('shows validation contract when fee policy fields are incomplete', async () => {

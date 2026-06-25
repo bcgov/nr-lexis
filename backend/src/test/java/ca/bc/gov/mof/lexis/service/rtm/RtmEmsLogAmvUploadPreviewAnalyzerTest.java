@@ -32,6 +32,22 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void shouldPreferWorkbookMetadataDatesWhenPresent() throws IOException {
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(
+                RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbookWithMetadataRows()),
+            LocalDate.of(2026, 8, 1));
+
+    assertThat(result.headerDetected()).isTrue();
+    assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 5, 1));
+    assertThat(result.dataRowCount()).isEqualTo(2);
+    assertThat(result.numericCellCount()).isEqualTo(4);
+    assertThat(result.errors()).isEmpty();
+  }
+
+  @Test
   void shouldAnalyzeMatrixWorkbook() throws IOException {
     RtmEmsLogAmvUploadPreviewAnalyzer.Analysis analysis =
         RtmEmsLogAmvUploadPreviewAnalyzer.analyze(

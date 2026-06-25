@@ -26,6 +26,11 @@ import {
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
 import {
+  createExportSchedule as createExportScheduleRequest,
+  fetchExportSchedules,
+  type ExportScheduleRow,
+} from '@/service/admin-schedule-service'
+import {
   deleteFeePolicy as deleteFeePolicyRequest,
   deleteFilPolicy as deleteFilPolicyRequest,
   fetchFeePolicies,
@@ -44,6 +49,12 @@ type PolicyField =
   | 'feePolicyPercentage'
   | 'filEffectiveDate'
   | 'filPolicyPercentage'
+  | 'scheduleAdvertisingDate'
+  | 'scheduleApplicationReceiptDate'
+  | 'scheduleOfferReceiptDate'
+  | 'scheduleOfferEndDate'
+  | 'scheduleOfferWithdrawalDate'
+  | 'scheduleTeacMeetingDate'
 
 const AdminPoliciesPage = () => {
   const { canPerform } = useAuth()
@@ -52,6 +63,7 @@ const AdminPoliciesPage = () => {
 
   const [feePolicies, setFeePolicies] = useState<FeePolicyRow[]>([])
   const [filPolicies, setFilPolicies] = useState<FilPolicyRow[]>([])
+  const [exportSchedules, setExportSchedules] = useState<ExportScheduleRow[]>([])
 
   const [feeEffectiveDate, setFeeEffectiveDate] = useState('')
   const [feeOrgUnitCode, setFeeOrgUnitCode] = useState('')
@@ -63,6 +75,13 @@ const AdminPoliciesPage = () => {
   const [filPolicyPercentage, setFilPolicyPercentage] = useState('')
   const [editingFilPolicyId, setEditingFilPolicyId] = useState<string | null>(null)
 
+  const [scheduleAdvertisingDate, setScheduleAdvertisingDate] = useState('')
+  const [scheduleApplicationReceiptDate, setScheduleApplicationReceiptDate] = useState('')
+  const [scheduleOfferReceiptDate, setScheduleOfferReceiptDate] = useState('')
+  const [scheduleOfferEndDate, setScheduleOfferEndDate] = useState('')
+  const [scheduleOfferWithdrawalDate, setScheduleOfferWithdrawalDate] = useState('')
+  const [scheduleTeacMeetingDate, setScheduleTeacMeetingDate] = useState('')
+
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [isLoadingPolicies, setIsLoadingPolicies] = useState(true)
@@ -70,9 +89,11 @@ const AdminPoliciesPage = () => {
   const [touchedFields, setTouchedFields] = useState<TouchedFields<PolicyField>>({})
   const [showFeeValidationErrors, setShowFeeValidationErrors] = useState(false)
   const [showFilValidationErrors, setShowFilValidationErrors] = useState(false)
+  const [showScheduleValidationErrors, setShowScheduleValidationErrors] = useState(false)
 
   const feePolicyCount = useMemo(() => feePolicies.length, [feePolicies.length])
   const filPolicyCount = useMemo(() => filPolicies.length, [filPolicies.length])
+  const exportScheduleCount = useMemo(() => exportSchedules.length, [exportSchedules.length])
   const fieldErrors = useMemo<FieldErrors<PolicyField>>(
     () => ({
       feeEffectiveDate:
@@ -94,8 +115,50 @@ const AdminPoliciesPage = () => {
         () => requiredFieldError(filPolicyPercentage, 'Fee in lieu percentage'),
         () => numericFieldError(filPolicyPercentage, 'Fee in lieu policy percentage'),
       ),
+      scheduleAdvertisingDate:
+        firstValidationError(
+          () => requiredFieldError(scheduleAdvertisingDate, 'Advertising date'),
+          () => isoDateFieldError(scheduleAdvertisingDate),
+        ) ?? undefined,
+      scheduleApplicationReceiptDate:
+        firstValidationError(
+          () => requiredFieldError(scheduleApplicationReceiptDate, 'Application receipt date'),
+          () => isoDateFieldError(scheduleApplicationReceiptDate),
+        ) ?? undefined,
+      scheduleOfferReceiptDate:
+        firstValidationError(
+          () => requiredFieldError(scheduleOfferReceiptDate, 'Offer receipt date'),
+          () => isoDateFieldError(scheduleOfferReceiptDate),
+        ) ?? undefined,
+      scheduleOfferEndDate:
+        firstValidationError(
+          () => requiredFieldError(scheduleOfferEndDate, 'Offer end date'),
+          () => isoDateFieldError(scheduleOfferEndDate),
+        ) ?? undefined,
+      scheduleOfferWithdrawalDate:
+        firstValidationError(
+          () => requiredFieldError(scheduleOfferWithdrawalDate, 'Offer withdrawal date'),
+          () => isoDateFieldError(scheduleOfferWithdrawalDate),
+        ) ?? undefined,
+      scheduleTeacMeetingDate:
+        firstValidationError(
+          () => requiredFieldError(scheduleTeacMeetingDate, 'TEAC meeting date'),
+          () => isoDateFieldError(scheduleTeacMeetingDate),
+        ) ?? undefined,
     }),
-    [feeEffectiveDate, feeOrgUnitCode, feePolicyPercentage, filEffectiveDate, filPolicyPercentage],
+    [
+      feeEffectiveDate,
+      feeOrgUnitCode,
+      feePolicyPercentage,
+      filEffectiveDate,
+      filPolicyPercentage,
+      scheduleAdvertisingDate,
+      scheduleApplicationReceiptDate,
+      scheduleOfferReceiptDate,
+      scheduleOfferEndDate,
+      scheduleOfferWithdrawalDate,
+      scheduleTeacMeetingDate,
+    ],
   )
 
   const feeHasValidationError = Boolean(
@@ -103,6 +166,14 @@ const AdminPoliciesPage = () => {
   )
   const filHasValidationError = Boolean(
     fieldErrors.filEffectiveDate || fieldErrors.filPolicyPercentage,
+  )
+  const scheduleHasValidationError = Boolean(
+    fieldErrors.scheduleAdvertisingDate ||
+      fieldErrors.scheduleApplicationReceiptDate ||
+      fieldErrors.scheduleOfferReceiptDate ||
+      fieldErrors.scheduleOfferEndDate ||
+      fieldErrors.scheduleOfferWithdrawalDate ||
+      fieldErrors.scheduleTeacMeetingDate,
   )
 
   const markFieldTouched = (field: PolicyField): void => {
@@ -114,6 +185,9 @@ const AdminPoliciesPage = () => {
 
   const filFieldError = (field: PolicyField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showFilValidationErrors)
+
+  const scheduleFieldError = (field: PolicyField): string | undefined =>
+    getVisibleFieldError(field, fieldErrors, touchedFields, showScheduleValidationErrors)
 
   const clearNotifications = (): void => {
     setErrorMessage('')
@@ -136,6 +210,16 @@ const AdminPoliciesPage = () => {
     setShowFilValidationErrors(false)
   }
 
+  const resetScheduleForm = (): void => {
+    setScheduleAdvertisingDate('')
+    setScheduleApplicationReceiptDate('')
+    setScheduleOfferReceiptDate('')
+    setScheduleOfferEndDate('')
+    setScheduleOfferWithdrawalDate('')
+    setScheduleTeacMeetingDate('')
+    setShowScheduleValidationErrors(false)
+  }
+
   const loadPolicies = useCallback(async () => {
     setIsLoadingPolicies(true)
     clearNotifications()
@@ -143,8 +227,10 @@ const AdminPoliciesPage = () => {
     try {
       const loadedFeePolicies = await fetchFeePolicies()
       const loadedFilPolicies = await fetchFilPolicies()
+      const loadedExportSchedules = canManageFeePolicy ? await fetchExportSchedules() : []
       setFeePolicies(loadedFeePolicies)
       setFilPolicies(loadedFilPolicies)
+      setExportSchedules(loadedExportSchedules)
     } catch (error) {
       console.error(error)
       const status = getResponseStatus(error)
@@ -158,7 +244,7 @@ const AdminPoliciesPage = () => {
     } finally {
       setIsLoadingPolicies(false)
     }
-  }, [])
+  }, [canManageFeePolicy])
 
   useEffect(() => {
     void loadPolicies()
@@ -322,6 +408,54 @@ const AdminPoliciesPage = () => {
     }
   }
 
+  const createExportSchedule = async (): Promise<void> => {
+    clearNotifications()
+
+    if (!canManageFeePolicy) {
+      setErrorMessage('Your session does not include /lexisPolicyAdmin.')
+      return
+    }
+
+    if (scheduleHasValidationError) {
+      setShowScheduleValidationErrors(true)
+      setErrorMessage('Export schedule requires all schedule dates in YYYY-MM-DD format.')
+      return
+    }
+
+    setIsMutatingPolicies(true)
+
+    try {
+      const result = await createExportScheduleRequest({
+        advertisingDate: scheduleAdvertisingDate,
+        applicationReceiptDate: scheduleApplicationReceiptDate,
+        offerReceiptDate: scheduleOfferReceiptDate,
+        offerEndDate: scheduleOfferEndDate,
+        offerWithdrawalDate: scheduleOfferWithdrawalDate,
+        teacMeetingDate: scheduleTeacMeetingDate,
+      })
+      if (!result.success) {
+        setErrorMessage(result.message || 'Unable to add export schedule.')
+        return
+      }
+      const loadedExportSchedules = await fetchExportSchedules()
+      setExportSchedules(loadedExportSchedules)
+      setSuccessMessage(result.message || 'Export schedule added.')
+      resetScheduleForm()
+    } catch (error) {
+      console.error(error)
+      const status = getResponseStatus(error)
+      if (status) {
+        setErrorMessage(
+          'Unable to add the export schedule. Check the dates and try again, or contact support if this continues.',
+        )
+      } else {
+        setErrorMessage('Unable to add the export schedule. Please try again or contact support.')
+      }
+    } finally {
+      setIsMutatingPolicies(false)
+    }
+  }
+
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
@@ -340,6 +474,12 @@ const AdminPoliciesPage = () => {
             Fee in lieu policy access:{' '}
             <Tag type={canManageFilPolicy ? 'green' : 'red'}>
               {canManageFilPolicy ? 'Allowed' : 'Not Granted'}
+            </Tag>
+          </div>
+          <div>
+            Export schedule access:{' '}
+            <Tag type={canManageFeePolicy ? 'green' : 'red'}>
+              {canManageFeePolicy ? 'Allowed' : 'Not Granted'}
             </Tag>
           </div>
           {isLoadingPolicies && <InlineLoading description="Loading policy data..." />}
@@ -563,6 +703,119 @@ const AdminPoliciesPage = () => {
               {filPolicies.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7}>No fee in lieu policy rows yet.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Tile>
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
+        <Tile>
+          <h2 className="dashboard-title">Export schedule administration</h2>
+          <p>
+            Upcoming rows: <strong>{exportScheduleCount}</strong>
+          </p>
+          <div className="legacy-search-grid">
+            <IsoDatePicker
+              id="scheduleAdvertisingDate"
+              labelText="Advertising date"
+              value={scheduleAdvertisingDate}
+              invalid={!!scheduleFieldError('scheduleAdvertisingDate')}
+              invalidText={scheduleFieldError('scheduleAdvertisingDate')}
+              onBlur={() => markFieldTouched('scheduleAdvertisingDate')}
+              onChange={setScheduleAdvertisingDate}
+            />
+            <IsoDatePicker
+              id="scheduleApplicationReceiptDate"
+              labelText="Application receipt date"
+              value={scheduleApplicationReceiptDate}
+              invalid={!!scheduleFieldError('scheduleApplicationReceiptDate')}
+              invalidText={scheduleFieldError('scheduleApplicationReceiptDate')}
+              onBlur={() => markFieldTouched('scheduleApplicationReceiptDate')}
+              onChange={setScheduleApplicationReceiptDate}
+            />
+            <IsoDatePicker
+              id="scheduleOfferReceiptDate"
+              labelText="Offer receipt date"
+              value={scheduleOfferReceiptDate}
+              invalid={!!scheduleFieldError('scheduleOfferReceiptDate')}
+              invalidText={scheduleFieldError('scheduleOfferReceiptDate')}
+              onBlur={() => markFieldTouched('scheduleOfferReceiptDate')}
+              onChange={setScheduleOfferReceiptDate}
+            />
+            <IsoDatePicker
+              id="scheduleOfferEndDate"
+              labelText="Offer end date"
+              value={scheduleOfferEndDate}
+              invalid={!!scheduleFieldError('scheduleOfferEndDate')}
+              invalidText={scheduleFieldError('scheduleOfferEndDate')}
+              onBlur={() => markFieldTouched('scheduleOfferEndDate')}
+              onChange={setScheduleOfferEndDate}
+            />
+            <IsoDatePicker
+              id="scheduleOfferWithdrawalDate"
+              labelText="Offer withdrawal date"
+              value={scheduleOfferWithdrawalDate}
+              invalid={!!scheduleFieldError('scheduleOfferWithdrawalDate')}
+              invalidText={scheduleFieldError('scheduleOfferWithdrawalDate')}
+              onBlur={() => markFieldTouched('scheduleOfferWithdrawalDate')}
+              onChange={setScheduleOfferWithdrawalDate}
+            />
+            <IsoDatePicker
+              id="scheduleTeacMeetingDate"
+              labelText="TEAC meeting date"
+              value={scheduleTeacMeetingDate}
+              invalid={!!scheduleFieldError('scheduleTeacMeetingDate')}
+              invalidText={scheduleFieldError('scheduleTeacMeetingDate')}
+              onBlur={() => markFieldTouched('scheduleTeacMeetingDate')}
+              onChange={setScheduleTeacMeetingDate}
+            />
+          </div>
+          <div className="legacy-search-actions">
+            <Button
+              kind="primary"
+              onClick={() => void createExportSchedule()}
+              disabled={isLoadingPolicies || isMutatingPolicies || !canManageFeePolicy}
+            >
+              Add Export Schedule
+            </Button>
+            <Button
+              kind="ghost"
+              onClick={resetScheduleForm}
+              disabled={isLoadingPolicies || isMutatingPolicies}
+            >
+              Clear Schedule
+            </Button>
+          </div>
+
+          <Table useZebraStyles>
+            <TableHead>
+              <TableRow>
+                <TableHeader>ID</TableHeader>
+                <TableHeader>Advertising date</TableHeader>
+                <TableHeader>Application receipt</TableHeader>
+                <TableHeader>Offer receipt</TableHeader>
+                <TableHeader>Offer end</TableHeader>
+                <TableHeader>Offer withdrawal</TableHeader>
+                <TableHeader>TEAC meeting</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {exportSchedules.map((row) => (
+                <TableRow key={row.exportScheduleId || row.advertisingDate}>
+                  <TableCell>{row.exportScheduleId}</TableCell>
+                  <TableCell>{row.advertisingDate}</TableCell>
+                  <TableCell>{row.applicationReceiptDate}</TableCell>
+                  <TableCell>{row.offerReceiptDate}</TableCell>
+                  <TableCell>{row.offerEndDate}</TableCell>
+                  <TableCell>{row.offerWithdrawalDate}</TableCell>
+                  <TableCell>{row.teacMeetingDate}</TableCell>
+                </TableRow>
+              ))}
+              {exportSchedules.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7}>No upcoming export schedule rows found.</TableCell>
                 </TableRow>
               )}
             </TableBody>

@@ -1,0 +1,84 @@
+package ca.bc.gov.mof.lexis.service.admin;
+
+import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
+import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleMutationResultDto;
+import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
+import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@Profile("oracle")
+public class LexisAdminScheduleService {
+
+  private final LexisReportScheduleRepository repository;
+  private final Clock clock;
+
+  @Autowired
+  public LexisAdminScheduleService(LexisReportScheduleRepository repository) {
+    this(repository, Clock.systemDefaultZone());
+  }
+
+  LexisAdminScheduleService(LexisReportScheduleRepository repository, Clock clock) {
+    this.repository = repository;
+    this.clock = clock == null ? Clock.systemDefaultZone() : clock;
+  }
+
+  public List<ExportScheduleRowDto> upcomingSchedules() {
+    return repository.findUpcomingExportSchedules();
+  }
+
+  @Transactional
+  public ExportScheduleMutationResultDto createSchedule(ExportScheduleCreateRequestDto request) {
+    String validationError = validate(request);
+    if (validationError != null) {
+      return new ExportScheduleMutationResultDto(false, validationError, null);
+    }
+
+    if (repository.advertisingDateExists(request.advertisingDate())) {
+      return new ExportScheduleMutationResultDto(
+          false,
+          "A schedule already exists for that advertising date.",
+          null);
+    }
+
+    ExportScheduleRowDto row = repository.insertExportSchedule(request);
+    return new ExportScheduleMutationResultDto(true, "Export schedule added.", row);
+  }
+
+  private String validate(ExportScheduleCreateRequestDto request) {
+    if (request == null) {
+      return "Export schedule details are required.";
+    }
+
+    LocalDate advertisingDate = request.advertisingDate();
+    if (advertisingDate == null) {
+      return "Advertising date is required.";
+    }
+    if (advertisingDate.isBefore(LocalDate.now(clock))) {
+      return "Advertising date must be today or a future date.";
+    }
+    if (request.applicationReceiptDate() != null
+        && request.applicationReceiptDate().isAfter(advertisingDate)) {
+      return "Application receipt date cannot be after the advertising date.";
+    }
+    if (request.offerReceiptDate() != null && request.offerReceiptDate().isBefore(advertisingDate)) {
+      return "Offer receipt date cannot be before the advertising date.";
+    }
+    if (request.offerEndDate() != null
+        && request.offerReceiptDate() != null
+        && request.offerEndDate().isBefore(request.offerReceiptDate())) {
+      return "Offer end date cannot be before the offer receipt date.";
+    }
+    if (request.offerWithdrawalDate() != null
+        && request.offerWithdrawalDate().isBefore(advertisingDate)) {
+      return "Offer withdrawal date cannot be before the advertising date.";
+    }
+    return null;
+  }
+}

@@ -13,9 +13,13 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -28,11 +32,21 @@ public class OracleLexisApplicationService implements LexisApplicationService {
 
   private final LexisApplicationRepository repository;
   private final LexisReportScheduleRepository scheduleRepository;
+  private final Clock clock;
 
+  @Autowired
   public OracleLexisApplicationService(
       LexisApplicationRepository repository, LexisReportScheduleRepository scheduleRepository) {
+    this(repository, scheduleRepository, Clock.systemDefaultZone());
+  }
+
+  OracleLexisApplicationService(
+      LexisApplicationRepository repository,
+      LexisReportScheduleRepository scheduleRepository,
+      Clock clock) {
     this.repository = repository;
     this.scheduleRepository = scheduleRepository;
+    this.clock = clock == null ? Clock.systemDefaultZone() : clock;
   }
 
   @Override
@@ -129,15 +143,19 @@ public class OracleLexisApplicationService implements LexisApplicationService {
   }
 
   private List<CodeNameDto> currentScheduleOptions() {
-    return safeList(scheduleRepository.findCurrentSchedules()).stream()
-        .filter(row -> row.exportScheduleId() != null)
+    List<CodeNameDto> options = new ArrayList<>();
+    options.add(new CodeNameDto("", "Blank"));
+    LocalDate today = LocalDate.now(clock);
+    options.addAll(
+        safeList(scheduleRepository.findCurrentSchedules()).stream()
+        .filter(row -> row.exportScheduleId() != null && row.advertisingDate() != null)
+        .filter(row -> !row.advertisingDate().isBefore(today))
         .map(
             row ->
                 new CodeNameDto(
                     String.valueOf(row.exportScheduleId()),
-                    row.advertisingDate() == null
-                        ? String.valueOf(row.exportScheduleId())
-                        : row.advertisingDate().format(DISPLAY_DATE_FORMATTER)))
-        .toList();
+                    row.advertisingDate().format(DISPLAY_DATE_FORMATTER)))
+        .toList());
+    return options;
   }
 }

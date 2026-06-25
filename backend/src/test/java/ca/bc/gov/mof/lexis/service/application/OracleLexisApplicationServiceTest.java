@@ -15,15 +15,18 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -34,9 +37,17 @@ import org.springframework.data.domain.PageRequest;
 @DisplayName("Unit Test | OracleLexisApplicationService")
 class OracleLexisApplicationServiceTest {
 
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-06-25T00:00:00Z"), ZoneOffset.UTC);
+
   @Mock private LexisApplicationRepository repository;
   @Mock private LexisReportScheduleRepository scheduleRepository;
-  @InjectMocks private OracleLexisApplicationService service;
+  private OracleLexisApplicationService service;
+
+  @BeforeEach
+  void setUp() {
+    service = new OracleLexisApplicationService(repository, scheduleRepository, FIXED_CLOCK);
+  }
 
   @Test
   void searchOptionsShouldReturnRepositoryValues() {
@@ -50,7 +61,9 @@ class OracleLexisApplicationServiceTest {
         .thenReturn(
             List.of(
                 new LexisReportScheduleRepository.CurrentScheduleRow(
-                    987L, LocalDate.of(2026, 1, 11))));
+                    986L, LocalDate.of(2026, 1, 11)),
+                new LexisReportScheduleRepository.CurrentScheduleRow(
+                    987L, LocalDate.of(2026, 7, 11))));
 
     LexisApplicationSearchOptionsDto response = service.searchOptions();
 
@@ -61,7 +74,7 @@ class OracleLexisApplicationServiceTest {
     assertThat(response.growthTypes()).hasSize(1);
     assertThat(response.regions()).hasSize(1);
     assertThat(response.currentSchedules())
-        .containsExactly(new CodeNameDto("987", "2026-01-11"));
+        .containsExactly(new CodeNameDto("", "Blank"), new CodeNameDto("987", "2026-07-11"));
   }
 
   @Test

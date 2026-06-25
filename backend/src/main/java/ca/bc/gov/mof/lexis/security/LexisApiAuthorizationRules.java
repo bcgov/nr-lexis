@@ -273,7 +273,8 @@ final class LexisApiAuthorizationRules {
               "/lexisPolicyAdmin",
               "/api/lexis/admin/policy",
               "/api/lexis/admin/lexisPolicyAdmin",
-              "/api/lexis/admin/policies/fee"),
+              "/api/lexis/admin/policies/fee",
+              "/api/lexis/admin/schedules"),
           action(
               HttpMethod.GET,
               "/lexisPolicyAdmin",
@@ -295,7 +296,8 @@ final class LexisApiAuthorizationRules {
               "/lexisPolicyAdmin",
               "/api/lexis/admin/policy/rpc",
               "/api/lexis/admin/lexisPolicyAdminRPC",
-              "/api/lexis/admin/policies/fee"),
+              "/api/lexis/admin/policies/fee",
+              "/api/lexis/admin/schedules"),
           action(
               HttpMethod.PUT, "/lexisPolicyAdmin", "/api/lexis/admin/policies/fee/*"),
           action(

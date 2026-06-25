@@ -28,7 +28,6 @@ const DEFAULT_CAPABILITIES: LexisSessionCapabilities = {
 }
 
 const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
-  summary: '/provincial/summary',
   applicationsreview: '/provincial/review',
   applicationsearch: '/provincial/application',
   createapplication: '/provincial/application/upload',
@@ -41,7 +40,6 @@ const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
 
 const ACTION_PRIORITY: string[] = [
   'applicationsReview',
-  'summary',
   'applicationSearch',
   'uploadApplicationSubmission',
   'exemptionSearch',
@@ -200,9 +198,6 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     }
     if (hasGrantedAction('uploadApplicationSubmission')) {
       return '/provincial/application/upload'
-    }
-    if (hasGrantedAction('/summary')) {
-      return '/provincial/summary'
     }
     return '/unauthorized'
   }

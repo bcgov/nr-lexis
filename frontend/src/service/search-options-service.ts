@@ -67,7 +67,7 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
     productTypes: parseOptions(data.productTypes),
     growthTypes: parseOptions(data.growthTypes),
     regions: parseOptions(data.regions),
-    currentSchedules: parseOptions(data.currentSchedules),
+    currentSchedules: parseOptions(data.currentSchedules, true),
   }
 }
 
@@ -149,7 +149,7 @@ export const fetchReportOptions = async (): Promise<{
   }
 
   return {
-    currentSchedules: parseOptions(data.currentSchedules),
+    currentSchedules: parseOptions(data.currentSchedules, true),
     defaultRegion: stringField(data, 'defaultRegion'),
     regions: parseOptions(data.regions),
     reportJurisdictions: parseOptions(data.reportJurisdictions, true),

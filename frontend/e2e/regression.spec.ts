@@ -28,6 +28,17 @@ const hasGrantedAction = (actions: string[], action: string): boolean => {
   return actions.some((item) => item.toLowerCase().replace(/^\//, '') === normalizedAction)
 }
 
+const asRecordArray = (value: unknown): Record<string, unknown>[] =>
+  Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+      )
+    : []
+
+const optionCode = (option: Record<string, unknown>): string => String(option.code ?? '').trim()
+const optionName = (option: Record<string, unknown>): string => String(option.name ?? '').trim()
+
 const safeUrlForLog = (rawUrl: string): string => {
   try {
     const url = new URL(rawUrl)
@@ -48,6 +59,12 @@ type ReviewStatusResponse = {
 type ReviewStatusEmailResponse = {
   success?: boolean
   message?: string | null
+}
+
+type ExportScheduleMutationResponse = {
+  success?: boolean
+  message?: string | null
+  schedule?: unknown
 }
 
 type ApplicationSubmissionResponse = {
@@ -126,6 +143,47 @@ const rtmSuccessWorkbook = readFileSync(
 )
 const regressionStatusRemark = 'Weekly credentialed regression status check'
 const regressionClientEmail = 'lexis-regression@example.test'
+const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
+const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
+
+const expectNaturalResourceRegions = (value: unknown, source: string): void => {
+  const regions = asRecordArray(value)
+  const codes = regions.map(optionCode).sort()
+
+  expect(codes, `${source} should expose only the eight natural resource regions`).toEqual(
+    naturalResourceRegionCodes,
+  )
+  for (const region of regions) {
+    expect(optionName(region), `${source} region names should be explicit`).toContain(
+      'Natural Resource Region',
+    )
+  }
+}
+
+const expectCurrentScheduleOptions = (value: unknown, source: string): void => {
+  const schedules = asRecordArray(value)
+  const datedSchedules = schedules.filter((schedule) => optionCode(schedule))
+  const today = new Date().toISOString().slice(0, 10)
+
+  expect(
+    schedules.length,
+    `${source} should include blank plus future dates`,
+  ).toBeGreaterThanOrEqual(3)
+  expect(optionCode(schedules[0]), `${source} first schedule option should be blank`).toBe('')
+  expect(optionName(schedules[0]), `${source} first schedule option should be labeled Blank`).toBe(
+    'Blank',
+  )
+  expect(
+    datedSchedules.length,
+    `${source} should expose at least two future list dates`,
+  ).toBeGreaterThanOrEqual(2)
+
+  for (const schedule of datedSchedules) {
+    const scheduleDate = optionName(schedule)
+    expect(scheduleDate, `${source} schedule names should be ISO dates`).toMatch(isoDatePattern)
+    expect(scheduleDate >= today, `${source} should not expose previous list dates`).toBe(true)
+  }
+}
 
 const uniqueRegressionPackageNumber = (): string => {
   const timestamp = Date.now().toString(36).toUpperCase().slice(-7)
@@ -203,7 +261,6 @@ const adminNavigationSections: Array<{
     section: 'Provincial',
     links: [
       'Application review',
-      'Summary',
       'Create/edit application',
       'Upload application submission',
       'Application search',
@@ -224,7 +281,12 @@ const adminNavigationSections: Array<{
   },
   {
     section: 'Administration',
-    links: ['LEXIS administration', 'Fee policy administration', 'Data upload', 'RTM'],
+    links: [
+      'LEXIS administration',
+      'Fee policy administration',
+      'Data upload',
+      'Average Monthly Values',
+    ],
   },
 ]
 
@@ -239,7 +301,7 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/federal', /federal application search/i],
   ['/federal/application/upload', /upload federal application submission/i],
   ['/reports', /reports/i],
-  ['/admin/rtm/emslogamv', /rtm ems log amv/i],
+  ['/admin/rtm/emslogamv', /average monthly values/i],
 ]
 
 const requiredAdminActions = [
@@ -262,6 +324,111 @@ const representativeAdminActions = [
   'createOffer',
   'savePermit',
   'mofrListing',
+]
+
+const visibleProvincialSubmitterLinks = [
+  'Create/edit application',
+  'Upload application submission',
+  'Application search',
+  'Exemption search',
+  'Offer search',
+  'Permit search',
+]
+
+const hiddenProvincialSubmitterLinks = [
+  'Application review',
+  'Create/edit exemption',
+  'Create/edit offer',
+]
+
+const submitterAccessiblePages: Array<[path: string, heading: RegExp]> = [
+  ['/provincial/application', /provincial application search/i],
+  ['/provincial/application/create', /create provincial application/i],
+  ['/provincial/application/upload', /upload application submission/i],
+  ['/provincial/exemption', /provincial exemption search/i],
+  ['/provincial/offers', /provincial offers search/i],
+  ['/provincial/permit', /provincial permit search/i],
+]
+
+const unauthorizedSubmitterPages = [
+  '/provincial/review',
+  '/provincial/exemption/create',
+  '/provincial/offers/create',
+  '/federal',
+  '/federal/application/upload',
+  '/admin',
+  '/admin/uploads',
+]
+
+const restrictedSubmitterWriteChecks: Array<{
+  path: string
+  data?: Record<string, unknown>
+}> = [
+  {
+    path: '/api/lexis/application-reviews/999999999/approve',
+  },
+  {
+    path: '/api/lexis/application-reviews/999999999/status',
+    data: {
+      statusCode: 'REJ',
+      remark: 'Regression authorization check',
+      clientEmailAddress: '',
+    },
+  },
+  {
+    path: '/api/lexis/application-reviews/999999999/status-email',
+    data: {
+      statusCode: 'REJ',
+      remark: 'Regression authorization check',
+      clientEmailAddress: 'nobody@example.com',
+    },
+  },
+  {
+    path: '/api/lexis/rpc/exemption-details/exemption',
+    data: {
+      exemptionNumber: '999999999',
+      applicationNumber: '999999999',
+      exemptionTypeCode: 'O',
+      exemptionStatusCode: 'D',
+    },
+  },
+  {
+    path: '/api/lexis/rpc/exemption-details/exemption/update',
+    data: {
+      exemptionNumber: '999999999',
+      exemptionTypeCode: 'O',
+      exemptionStatusCode: 'D',
+    },
+  },
+  {
+    path: '/api/lexis/rpc/exemption-details/approve-exemptions',
+    data: {
+      exemptionNumbers: ['999999999'],
+    },
+  },
+  {
+    path: '/api/lexis/rpc/offer-details/offer',
+    data: {
+      offerNumber: '999999999',
+      applicationNumber: '999999999',
+      packageNumber: 'REGRESSION-NO-WRITE',
+    },
+  },
+  {
+    path: '/api/lexis/rpc/offer-details/offer/update',
+    data: {
+      offerNumber: '999999999',
+      applicationNumber: '999999999',
+      packageNumber: 'REGRESSION-NO-WRITE',
+    },
+  },
+  {
+    path: '/api/lexis/admin/policies/fee',
+    data: {
+      effectiveDate: '2099-01-01',
+      rate: 0,
+    },
+  },
 ]
 
 const readReviewStatusResponse = async (
@@ -417,6 +584,7 @@ test.describe.serial('TEST IDIR admin regression', () => {
     }
 
     await expectAdminNavigation(page)
+    await expect(page.getByRole('link', { name: /^Summary$/ })).toHaveCount(0)
     expect(apiServerErrors).toEqual([])
   })
 
@@ -459,6 +627,7 @@ test.describe.serial('TEST IDIR admin regression', () => {
     expect(Array.isArray(options.productTypes)).toBe(true)
     expect(Array.isArray(options.regions)).toBe(true)
     expect(Array.isArray(options.reviewStatuses)).toBe(true)
+    expectNaturalResourceRegions(options.regions, 'application review search options')
 
     const search = await readJsonResponse<ApplicationReviewSearchResponse>(
       await getWithAuth(page, '/api/lexis/application-reviews/search', {
@@ -500,6 +669,11 @@ test.describe.serial('TEST IDIR admin regression', () => {
     )
     expect(Array.isArray(provincialOptions.productTypes)).toBe(true)
     expect(Array.isArray(provincialOptions.regions)).toBe(true)
+    expectNaturalResourceRegions(provincialOptions.regions, 'provincial application options')
+    expectCurrentScheduleOptions(
+      provincialOptions.currentSchedules,
+      'provincial application list dates',
+    )
 
     const provincialSearch = await readJsonResponse<GenericSearchResponse>(
       await getWithAuth(page, '/api/lexis/applications/search', {
@@ -567,6 +741,7 @@ test.describe.serial('TEST IDIR admin regression', () => {
         await getWithAuth(page, optionsPath),
       )
       expect(options).toEqual(expect.any(Object))
+      expectNaturalResourceRegions(options.regions, `${optionsPath} region options`)
 
       const search = await readJsonResponse<GenericSearchResponse>(
         await getWithAuth(page, searchPath, {
@@ -619,6 +794,13 @@ test.describe.serial('TEST IDIR admin regression', () => {
     )
     expect(Array.isArray(reportOptions.regions)).toBe(true)
     expect(Array.isArray(reportOptions.reportJurisdictions)).toBe(true)
+    expectNaturalResourceRegions(reportOptions.regions, 'report options')
+    expectCurrentScheduleOptions(reportOptions.currentSchedules, 'report list dates')
+
+    const exportSchedules = await readJsonResponse<unknown>(
+      await getWithAuth(page, '/api/lexis/admin/schedules'),
+    )
+    expect(Array.isArray(exportSchedules)).toBe(true)
   })
 
   test('can reach protected write validation endpoints without mutating real data', async () => {
@@ -687,6 +869,15 @@ test.describe.serial('TEST IDIR admin regression', () => {
     )
     expect(emailResponse.success).toBe(false)
     expect(emailResponse.message ?? '').toContain('Status code and client email are required.')
+
+    const invalidScheduleResponse = await readJsonResponse<ExportScheduleMutationResponse>(
+      await postWithCsrf(page, '/api/lexis/admin/schedules', {
+        data: {},
+      }),
+      400,
+    )
+    expect(invalidScheduleResponse.success).toBe(false)
+    expect(invalidScheduleResponse.message ?? '').toContain('Advertising date is required.')
 
     const rtmSearchResponse = await getWithAuth(page, '/api/lexis/rtm/emslogamv', {
       params: {

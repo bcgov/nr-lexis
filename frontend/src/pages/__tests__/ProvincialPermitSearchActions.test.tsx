@@ -170,7 +170,7 @@ describe('Provincial Permit Search Actions', () => {
       2,
       expect.objectContaining({
         page: 1,
-        pageSize: 10,
+        pageSize: 20,
       }),
       { knownTotal: 25 },
     )

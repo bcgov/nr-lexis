@@ -49,7 +49,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         label: 'Application review',
         requiredActions: ['/applicationsReview'],
       },
-      { to: '/provincial/summary', label: 'Summary', requiredActions: ['/summary'] },
       {
         to: '/provincial/application/create',
         label: 'Create/edit application',
@@ -159,7 +158,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/admin/rtm/emslogamv',
-        label: 'RTM',
+        label: 'Average Monthly Values',
         requiredActions: ['/lexisAgentAdmin'],
       },
     ],
@@ -167,7 +166,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
 ]
 
 const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
-  { path: '/provincial/summary', section: 'Provincial' },
   { path: '/provincial/review', section: 'Provincial' },
   { path: '/provincial/application/create', section: 'Provincial' },
   { path: '/provincial/application/upload', section: 'Provincial' },

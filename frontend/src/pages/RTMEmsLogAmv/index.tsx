@@ -141,7 +141,7 @@ const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 
 const RTM_MODULE_DESCRIPTION =
-  'Query current and historical RTM AMV rows, make manual create/update entries, and generate an upload preview from XLSX files.'
+  'Query current and historical average monthly value rows, make manual create/update entries, and generate an upload preview from XLSX files.'
 
 const RTM_GROWTH_INDICATOR_OPTIONS: SearchableSelectOption[] = [
   { value: 'O', label: 'O - Old growth' },
@@ -240,7 +240,7 @@ const RTMEmsLogAmvPage = () => {
 
     if (!hasRequiredSearchFilters(nextFilters)) {
       setRows([])
-      setSearchError('Species and retrieval date are required to query RTM AMV rows.')
+      setSearchError('Species and retrieval date are required to query average monthly value rows.')
       return
     }
 
@@ -256,7 +256,7 @@ const RTMEmsLogAmvPage = () => {
       setHasSearched(true)
     } catch (error) {
       console.error(error)
-      setSearchError('Failed to load RTM AMV rows.')
+      setSearchError('Failed to load average monthly value rows.')
       setRows([])
     } finally {
       setIsLoading(false)
@@ -319,7 +319,7 @@ const RTMEmsLogAmvPage = () => {
   const submitSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!canManage) {
-      setManualError('You do not have permission to save RTM rows.')
+      setManualError('You do not have permission to save average monthly value rows.')
       return
     }
 
@@ -374,7 +374,7 @@ const RTMEmsLogAmvPage = () => {
       }
     } catch (error) {
       console.error(error)
-      const message = 'Unable to save RTM AMV row.'
+      const message = 'Unable to save average monthly value row.'
       setNotificationKind('error')
       setNotification(message)
       setManualResult({
@@ -421,7 +421,7 @@ const RTMEmsLogAmvPage = () => {
 
   const submitUpload = async () => {
     if (!canManage) {
-      setUploadError('You do not have permission to upload RTM rows.')
+      setUploadError('You do not have permission to upload average monthly value rows.')
       return
     }
 
@@ -469,7 +469,7 @@ const RTMEmsLogAmvPage = () => {
       }
     } catch (error) {
       console.error(error)
-      const message = 'Unable to apply RTM AMV upload.'
+      const message = 'Unable to apply average monthly value upload.'
       setNotificationKind('error')
       setNotification(message)
       setUploadResult({
@@ -520,7 +520,7 @@ const RTMEmsLogAmvPage = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>RTM EMS Log AMV</h1>
+        <h1>Average Monthly Values</h1>
         <p>{RTM_MODULE_DESCRIPTION}</p>
       </Column>
 
@@ -655,7 +655,7 @@ const RTMEmsLogAmvPage = () => {
                   <TableCell colSpan={8}>
                     {hasSearched
                       ? 'No rows match your current search.'
-                      : 'Enter a species and retrieval date to query RTM AMV rows.'}
+                      : 'Enter a species and retrieval date to query average monthly value rows.'}
                   </TableCell>
                 </TableRow>
               )}
@@ -778,8 +778,8 @@ const RTMEmsLogAmvPage = () => {
             <div>
               <h2 id="rtm-upload-title">Upload Excel Spreadsheet</h2>
               <p>
-                Select or drag and drop an XLSX spreadsheet to validate RTM EMS AMV rows before
-                applying changes.
+                Select or drag and drop an XLSX spreadsheet to validate average monthly value rows
+                before applying changes.
               </p>
             </div>
             <a
@@ -814,8 +814,8 @@ const RTMEmsLogAmvPage = () => {
             <div className="admin-upload-drop-zone__copy">
               <p>Drag and drop your Excel file here, or browse for files.</p>
               <p>
-                Supported format: .xlsx. The update date is assigned from the submission month,
-                retrieval date is calculated internally, and values apply to old and second growth.
+                Supported format: .xlsx. The template includes retrieval and update date rows, and
+                values apply to old and second growth.
               </p>
             </div>
             <input
@@ -823,7 +823,7 @@ const RTMEmsLogAmvPage = () => {
               id="rtm-upload-file"
               className="admin-upload-native-input"
               type="file"
-              aria-label="RTM upload spreadsheet"
+              aria-label="Average monthly values upload spreadsheet"
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               disabled={!canManage}
               onChange={updateUploadFile}
@@ -845,7 +845,10 @@ const RTMEmsLogAmvPage = () => {
           </div>
 
           {selectedUploadFile && (
-            <div className="admin-upload-queue-summary" aria-label="Selected RTM upload file">
+            <div
+              className="admin-upload-queue-summary"
+              aria-label="Selected average monthly values upload file"
+            >
               <div>
                 <span>Selected file</span>
                 <strong>{selectedUploadFile.name}</strong>
@@ -1016,7 +1019,7 @@ const RTMEmsLogAmvPage = () => {
           <AppNotification
             kind={notificationKind}
             role="status"
-            title="RTM AMV"
+            title="Average monthly values"
             subtitle={notification}
             onCloseButtonClick={() => {
               setNotification('')

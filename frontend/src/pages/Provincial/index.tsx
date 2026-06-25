@@ -90,14 +90,6 @@ const WORKFLOWS: ProvincialWorkflowDefinition[] = [
     requiredActions: ['/applicationsReview'],
     metricKey: 'reviewQueue',
   },
-  {
-    id: 'summary',
-    title: 'Summary',
-    description: 'Cross-module summary metrics and queue preview.',
-    path: '/provincial/summary',
-    requiredActions: ['/summary'],
-    metricKey: null,
-  },
 ]
 
 const EMPTY_TOTALS: WorkflowTotals = {
@@ -348,11 +340,6 @@ const ProvincialPage = () => {
             <Button kind="secondary" onClick={() => void loadTotals()} disabled={loadingTotals}>
               Refresh Totals
             </Button>
-            {canPerform('/summary') && (
-              <Button kind="ghost" onClick={() => navigate('/provincial/summary')}>
-                Open Summary
-              </Button>
-            )}
           </div>
         </Tile>
       </Column>

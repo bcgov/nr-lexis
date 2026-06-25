@@ -38,7 +38,7 @@ describe('search-options-service', () => {
       regions: [{ code: '11', name: 'Cariboo' }, { code: '12' }],
       currentSchedules: [
         { code: '987', name: '2026-01-11' },
-        { code: '', name: 'Bad Schedule' },
+        { code: '', name: 'Blank' },
       ],
     })
 
@@ -62,7 +62,10 @@ describe('search-options-service', () => {
       productTypes: [{ value: 'LOG', label: 'Logs' }],
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '11', label: 'Cariboo' }],
-      currentSchedules: [{ value: '987', label: '2026-01-11' }],
+      currentSchedules: [
+        { value: '987', label: '2026-01-11' },
+        { value: '', label: 'Blank' },
+      ],
     })
   })
 

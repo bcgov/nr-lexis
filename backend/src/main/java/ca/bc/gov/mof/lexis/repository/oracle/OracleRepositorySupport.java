@@ -49,6 +49,8 @@ public abstract class OracleRepositorySupport {
   private static final int LEGACY_DYNAMIC_PAGE_SIZE = 10;
   private static final int AUDIT_USER_MAX_LENGTH = 30;
   private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
+  private static final List<String> NATURAL_RESOURCE_REGION_CODES =
+      List.of("1903", "1904", "1905", "1906", "1907", "1908", "1909", "1910");
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final JdbcTemplate jdbcTemplate;
@@ -127,9 +129,15 @@ public abstract class OracleRepositorySupport {
                       : firstPresent(regionCode, regionName));
             });
     if (!options.isEmpty()) {
-      return options;
+      return naturalResourceRegions(options);
     }
-    return fallbackOrgUnitOptions(displayName);
+    return naturalResourceRegions(fallbackOrgUnitOptions(displayName));
+  }
+
+  private List<CodeNameDto> naturalResourceRegions(List<CodeNameDto> options) {
+    return options.stream()
+        .filter(option -> NATURAL_RESOURCE_REGION_CODES.contains(option.code()))
+        .toList();
   }
 
   protected <T> List<T> queryCursorProcedure(
@@ -553,17 +561,14 @@ public abstract class OracleRepositorySupport {
   private List<CodeNameDto> fallbackOrgUnitOptions(boolean displayName) {
     List<CodeNameDto> regions =
         List.of(
-            new CodeNameDto("1833", "RNI - Northern Interior"),
-            new CodeNameDto("1834", "RSI - Southern Interior"),
-            new CodeNameDto("1835", "RCO - Coastal Forest"),
-            new CodeNameDto("1903", "RCB - Cariboo Region"),
-            new CodeNameDto("1904", "RKB - Kootenay-Boundary Region"),
-            new CodeNameDto("1905", "RNO - Northeast Region"),
-            new CodeNameDto("1906", "ROM - Omineca Region"),
-            new CodeNameDto("1907", "RTO - Thompson-Okanagan Region"),
-            new CodeNameDto("1908", "RSK - Skeena Region"),
-            new CodeNameDto("1909", "RSC - South Coast Region"),
-            new CodeNameDto("1910", "RWC - West Coast Region"));
+            new CodeNameDto("1903", "Cariboo Natural Resource Region"),
+            new CodeNameDto("1904", "Kootenay-Boundary Natural Resource Region"),
+            new CodeNameDto("1905", "Northeast Natural Resource Region"),
+            new CodeNameDto("1906", "Omineca Natural Resource Region"),
+            new CodeNameDto("1907", "Thompson-Okanagan Natural Resource Region"),
+            new CodeNameDto("1908", "Skeena Natural Resource Region"),
+            new CodeNameDto("1909", "South Coast Natural Resource Region"),
+            new CodeNameDto("1910", "West Coast Natural Resource Region"));
     if (displayName) {
       return regions;
     }

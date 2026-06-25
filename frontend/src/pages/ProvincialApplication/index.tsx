@@ -220,6 +220,10 @@ const ProvincialApplicationPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
+  const selectedRegionHelperText =
+    selectedRegions.length > 0
+      ? `Selected: ${selectedRegions.map((region) => region.text).join(', ')}`
+      : undefined
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(filters.listingFromDate, filters.listingToDate)
@@ -464,7 +468,7 @@ const ProvincialApplicationPage = () => {
                 items={regionOptions}
                 itemToString={(item) => (item ? item.text : '')}
                 placeholder="Select region(s)"
-                selectionFeedback="fixed"
+                helperText={selectedRegionHelperText}
                 selectedItems={selectedRegions}
                 onChange={(event) => {
                   const nextSelected = (event.selectedItems ?? []) as IdTextOption[]

@@ -10,6 +10,8 @@ import {
   sendApplicationReviewStatusEmail,
   updateApplicationReviewStatus,
 } from '@/service/application-review-search-service'
+import { fetchApplicationClientData } from '@/service/application-client-lookup-service'
+import { fetchApplicationSummarySnapshot } from '@/service/provincial-application-items-service'
 import { fetchApplicationReviewOptions } from '@/service/search-options-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
@@ -28,11 +30,21 @@ vi.mock('@/service/search-options-service', () => ({
   fetchApplicationReviewOptions: vi.fn(),
 }))
 
+vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientData: vi.fn(),
+}))
+
+vi.mock('@/service/provincial-application-items-service', () => ({
+  fetchApplicationSummarySnapshot: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearchApplicationReviews = vi.mocked(searchApplicationReviews)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
 const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewStatus)
 const mockedSendApplicationReviewStatusEmail = vi.mocked(sendApplicationReviewStatusEmail)
+const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
+const mockedFetchApplicationSummarySnapshot = vi.mocked(fetchApplicationSummarySnapshot)
 const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOptions)
 
 const reviewResponse = {
@@ -58,7 +70,7 @@ const reviewResponse = {
   ],
   page: {
     number: 0,
-    size: 10,
+    size: 20,
     totalElements: 2,
     totalPages: 1,
   },
@@ -87,10 +99,39 @@ const twoNewReviewResponse = {
   ],
   page: {
     number: 0,
-    size: 10,
+    size: 20,
     totalElements: 2,
     totalPages: 1,
   },
+}
+
+const applicationSummary = {
+  applicationNumber: '1000123',
+  federalApplicationNumber: '',
+  applicationDate: '2026-02-01',
+  termDays: '14',
+  receivedDate: '2026-02-01',
+  applicationVolume: '210.5',
+  averageLogVolume: '1.2',
+  productLocation: 'BC',
+  exportScheduleId: '1001',
+  agentClientNumber: '',
+  agentClientLocationCode: '',
+  ownerClientNumber: '00012345',
+  ownerClientLocationCode: '00',
+  exemptionNumber: '',
+  exemptionReasonCode: 'S',
+  applicationStatusCode: 'NEW',
+  applicantTypeCode: 'O',
+  orgUnitNumber: '1903',
+  productTypeCode: 'H',
+  jurisdictionCode: 'P',
+  growthTypeCode: 'S',
+  agentContactName: '',
+  ownerContactName: 'Owner Contact',
+  oicIndicator: '',
+  endUseCode: '',
+  speciesCodes: [],
 }
 
 const renderPage = (initialEntry = '/provincial/review') => {
@@ -152,65 +193,100 @@ describe('Provincial Review Action State Smoke', () => {
       success: true,
       message: 'Sent',
     })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue(applicationSummary)
+    mockedFetchApplicationClientData.mockResolvedValue({
+      clientNumber: '00012345',
+      companyName: 'Client Ltd.',
+      address: '',
+      city: '',
+      province: '',
+      postalCode: '',
+      country: '',
+      phone: '',
+      fax: '',
+      email: 'client@example.com',
+      notfound: '',
+    })
   })
 
-  it('shows review status validation only after NEW rows are selected', async () => {
+  it('keeps bulk status controls out and only enables single-row rejection for NEW rows', async () => {
     renderPage()
     await screen.findByText('1000123')
 
     const approveButton = screen.getByRole('button', { name: 'Approve Selected Applications' })
-    const updateStatusButton = screen.getByRole('button', { name: 'Update Selected Status' })
-    const updateAndEmailButton = screen.getByRole('button', {
-      name: 'Update Status and Send Email',
-    })
-
     expect(approveButton).toBeDisabled()
-    expect(updateStatusButton).toBeDisabled()
-    expect(updateAndEmailButton).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Update Selected Status' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Update Status and Send Email' }),
+    ).not.toBeInTheDocument()
 
     const newRowCheckbox = screen.getByRole('checkbox', { name: 'Select 1000123' })
     const reviewedRowCheckbox = screen.getByRole('checkbox', { name: 'Select 1000456' })
     expect(newRowCheckbox).toBeEnabled()
     expect(reviewedRowCheckbox).toBeDisabled()
 
+    const rejectButtons = screen.getAllByRole('button', { name: 'Reject' })
+    expect(rejectButtons[0]).toBeEnabled()
+    expect(rejectButtons[1]).toBeDisabled()
+
     await userEvent.click(newRowCheckbox)
 
     expect(approveButton).toBeEnabled()
-    expect(updateStatusButton).toBeDisabled()
-    expect(updateAndEmailButton).toBeDisabled()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
-
-    await chooseComboBoxOption('Update status code', 'Rejected')
-
-    expect(updateStatusButton).toBeDisabled()
-    expect(updateAndEmailButton).toBeDisabled()
-    expect(screen.getByText('Status remark is required.')).toBeInTheDocument()
-
-    await userEvent.type(
-      screen.getByLabelText('Status remark (required for rejected or withdrawn)'),
-      'Rejecting from review queue',
-    )
-
-    expect(updateStatusButton).toBeEnabled()
-    expect(updateAndEmailButton).toBeDisabled()
   })
 
-  it('does not allow sending status email without a valid client email', async () => {
+  it('rejects a single NEW row with editable client-account email', async () => {
     renderPage()
     await screen.findByText('1000123')
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000123' }))
-    await chooseComboBoxOption('Update status code', 'Withdrawn')
-    await userEvent.type(
-      screen.getByLabelText('Status remark (required for rejected or withdrawn)'),
-      'Withdrawing from review queue',
-    )
-    const updateAndEmailButton = screen.getByRole('button', {
-      name: 'Update Status and Send Email',
-    })
-    await waitFor(() => expect(updateAndEmailButton).toBeDisabled())
-    await userEvent.click(updateAndEmailButton)
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
 
+    await waitFor(() => {
+      expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000123')
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com')
+    })
+
+    await userEvent.clear(screen.getByLabelText('Client email address'))
+    await userEvent.type(screen.getByLabelText('Client email address'), 'edited@example.com')
+    await userEvent.type(screen.getByLabelText('Rejection remark'), 'Rejected from review queue')
+    await userEvent.click(screen.getByRole('button', { name: 'Reject Application' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
+        '1000123',
+        expect.objectContaining({
+          statusCode: 'REJ',
+          remark: 'Rejected from review queue',
+          clientEmailAddress: 'edited@example.com',
+        }),
+      )
+      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
+        '1000123',
+        expect.objectContaining({
+          statusCode: 'REJ',
+          remark: 'Rejected from review queue',
+          clientEmailAddress: 'edited@example.com',
+        }),
+      )
+    })
+    expect(
+      await screen.findByText('Rejected application 1000123 and sent email.'),
+    ).toBeInTheDocument()
+  })
+
+  it('validates single-row rejection before status update', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+    await waitFor(() =>
+      expect(screen.getByLabelText('Client email address')).toHaveValue('client@example.com'),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Reject Application' }))
+
+    expect(screen.getByText('Rejection remark is required.')).toBeInTheDocument()
     expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
@@ -292,110 +368,6 @@ describe('Provincial Review Action State Smoke', () => {
     expect(await screen.findByText('Approved 2 application(s).')).toBeInTheDocument()
   })
 
-  it('updates status and sends emails sequentially per selected application', async () => {
-    mockedSearchApplicationReviews.mockResolvedValue(twoNewReviewResponse)
-    let resolveFirstEmail:
-      | ((value: Awaited<ReturnType<typeof sendApplicationReviewStatusEmail>>) => void)
-      | undefined
-    mockedSendApplicationReviewStatusEmail
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveFirstEmail = resolve
-          }),
-      )
-      .mockResolvedValueOnce({
-        success: true,
-        message: 'Sent second',
-      })
-
-    renderPage()
-    await screen.findByText('2000001')
-
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await chooseComboBoxOption('Update status code', 'Rejected')
-    await userEvent.type(
-      screen.getByLabelText('Status remark (required for rejected or withdrawn)'),
-      'Rejecting from review queue',
-    )
-    await userEvent.type(
-      screen.getByLabelText('Client email address (required for status email)'),
-      'client@example.com',
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Update Status and Send Email' }))
-
-    await waitFor(() => {
-      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(1)
-      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledTimes(1)
-    })
-    expect(mockedUpdateApplicationReviewStatus).toHaveBeenNthCalledWith(
-      1,
-      '2000001',
-      expect.objectContaining({
-        statusCode: 'REJ',
-        clientEmailAddress: 'client@example.com',
-      }),
-    )
-
-    await act(async () => {
-      resolveFirstEmail?.({
-        success: true,
-        message: 'Sent first',
-      })
-    })
-
-    await waitFor(() => {
-      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(2)
-      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledTimes(2)
-    })
-    expect(mockedUpdateApplicationReviewStatus).toHaveBeenNthCalledWith(
-      2,
-      '2000002',
-      expect.objectContaining({
-        statusCode: 'REJ',
-        clientEmailAddress: 'client@example.com',
-      }),
-    )
-
-    expect(
-      await screen.findByText('Updated status and sent email for 2 application(s).'),
-    ).toBeInTheDocument()
-  })
-
-  it('reports status updates separately when status email is unavailable', async () => {
-    mockedSearchApplicationReviews.mockResolvedValue(twoNewReviewResponse)
-    mockedSendApplicationReviewStatusEmail.mockResolvedValue({
-      success: false,
-      message: 'Application status email is not configured yet. No email was sent.',
-    })
-
-    renderPage()
-    await screen.findByText('2000001')
-
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await chooseComboBoxOption('Update status code', 'Rejected')
-    await userEvent.type(
-      screen.getByLabelText('Status remark (required for rejected or withdrawn)'),
-      'Rejecting from review queue',
-    )
-    await userEvent.type(
-      screen.getByLabelText('Client email address (required for status email)'),
-      'client@example.com',
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Update Status and Send Email' }))
-
-    await waitFor(() => {
-      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(2)
-      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledTimes(2)
-    })
-
-    expect(
-      await screen.findByText(
-        'Updated status for 2 application(s), but 2 email(s) were not sent. Application status email is not configured yet. No email was sent.',
-      ),
-    ).toBeInTheDocument()
-  })
-
   it('sends selected region org unit numbers to the review search request', async () => {
     mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
       productTypes: [{ value: 'LOG', label: 'Logs' }],
@@ -416,7 +388,7 @@ describe('Provincial Review Action State Smoke', () => {
     const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
     await userEvent.click(regionComboBox)
     fireEvent.change(regionComboBox, { target: { value: 'TST' } })
-    await userEvent.click(await screen.findByRole('option', { name: 'TST (1818)' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'TST' }))
 
     await waitFor(() => {
       expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
@@ -444,7 +416,6 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByRole('checkbox', { name: 'Select 1000123' })).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: 'Select all rows on this page' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Update Selected Status' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Update Status and Send Email' })).toBeDisabled()
+    expect(screen.getAllByRole('button', { name: 'Reject' })[0]).toBeDisabled()
   })
 })

@@ -10,8 +10,8 @@ export const parseCsvParam = (value: string | null): string[] => {
 }
 
 export const DEFAULT_SEARCH_PAGE = 1
-export const DEFAULT_SEARCH_PAGE_SIZE = 10
-export const SEARCH_PAGE_SIZE_OPTIONS = [10, 20, 30] as const
+export const DEFAULT_SEARCH_PAGE_SIZE = 20
+export const SEARCH_PAGE_SIZE_OPTIONS = [20, 50, 100, 200] as const
 
 type SearchParamValue = string | number | string[] | null | undefined
 
@@ -71,7 +71,7 @@ export type ValueLabelOption = {
 export const mapValueLabelOptionsToIdTextOptions = (options: ValueLabelOption[]): IdTextOption[] =>
   options.map((option) => ({
     id: option.value,
-    text: `${option.label} (${option.value})`,
+    text: option.label,
   }))
 
 export const mapSelectedOptionsById = <TOption extends IdTextOption>(
