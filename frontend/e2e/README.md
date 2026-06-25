@@ -35,6 +35,10 @@ regression coverage uses a separate TEST-only Playwright config.
   stay on smoke coverage.
 - CI suppresses Playwright screenshots, video, and traces for the credentialed regression suite
   because those runs type real test credentials.
+- TEST logout regression expects the Cognito app client and GitHub `test` environment variable
+  `VITE_REDIRECT_SIGN_OUT` to use a direct BC Gov logoff return to the deployed app root.
+  Do not point the `returl` at LoginProxy's OIDC logout endpoint; that can stop on the
+  Pathfinder `logout-confirm` page instead of returning to LEXIS.
 
 ## Run commands
 
