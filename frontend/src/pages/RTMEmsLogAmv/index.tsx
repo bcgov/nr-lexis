@@ -143,6 +143,11 @@ const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 const RTM_MODULE_DESCRIPTION =
   'Query current and historical RTM AMV rows, make manual create/update entries, and generate an upload preview from XLSX files.'
 
+const RTM_GROWTH_INDICATOR_OPTIONS: SearchableSelectOption[] = [
+  { value: 'O', label: 'O - Old growth' },
+  { value: 'S', label: 'S - Second growth' },
+]
+
 const toSpeciesOption = (item: ApplicationCodeOption): SearchableSelectOption => {
   const code = item.code.trim()
   const description = item.description.trim()
@@ -543,11 +548,13 @@ const RTMEmsLogAmvPage = () => {
               />
             )}
 
-            <TextInput
+            <SearchableSelect
               id="rtm-growth-indicator"
               labelText="Growth indicator"
               value={filters.growthIndicator}
-              onChange={(event) => updateFilter('growthIndicator', event.target.value)}
+              options={RTM_GROWTH_INDICATOR_OPTIONS}
+              placeholder="Search growth indicator"
+              onChange={(value) => updateFilter('growthIndicator', value)}
             />
 
             <IsoDatePicker
@@ -695,11 +702,13 @@ const RTMEmsLogAmvPage = () => {
                 onChange={(event) => updateManualField('grade', event.target.value)}
                 disabled={!canManage}
               />
-              <TextInput
+              <SearchableSelect
                 id="rtm-manual-growth"
                 labelText="Growth indicator"
                 value={manualForm.growthIndicator}
-                onChange={(event) => updateManualField('growthIndicator', event.target.value)}
+                options={RTM_GROWTH_INDICATOR_OPTIONS}
+                placeholder="Search growth indicator"
+                onChange={(value) => updateManualField('growthIndicator', value)}
                 disabled={!canManage}
               />
               <IsoDatePicker
