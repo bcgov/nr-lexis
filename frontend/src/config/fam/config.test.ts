@@ -52,7 +52,7 @@ describe('FAM auth config', () => {
     expect(oauth?.redirectSignOut).toEqual([signOutUrl])
   })
 
-  it('leaves sign-out blank when no runtime sign-out URL is configured', async () => {
+  it('uses an empty sign-out URL when no runtime sign-out URL is configured', async () => {
     const config = await loadConfig()
     const oauth = config.Auth?.Cognito?.loginWith?.oauth
 

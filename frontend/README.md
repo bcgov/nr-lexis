@@ -30,7 +30,7 @@ Mirrors `frontend/.env.example`. Vite bundles these values at dev/build time; ch
 | `VITE_USER_POOLS_WEB_CLIENT_ID` | Cognito app client id | - |
 | `VITE_COGNITO_DOMAIN` | Cognito hosted UI domain, without protocol | - |
 | `VITE_REDIRECT_SIGN_IN` | OAuth callback URL | http://localhost:3000/ |
-| `VITE_REDIRECT_SIGN_OUT` | OAuth sign-out redirect URL | http://localhost:3000 |
+| `VITE_REDIRECT_SIGN_OUT` | BC Gov logoff chain URL registered in Cognito; use the LoginProxy `logout?redirect_uri=<app-origin>` form | - |
 | `VITE_COGNITO_SCOPES` | OAuth scopes | openid profile email |
 | `VITE_ZONE` | Environment zone used for IDIR provider selection | dev |
 
@@ -66,7 +66,7 @@ These are read by `vite.config.ts` and only matter when running `npm run dev` or
 | `npm run test:unit` | Run unit tests |
 | `npm run test:cov` | Run tests with coverage |
 | `npm run e2e` | Run Playwright smoke E2E in Chromium |
-| `npm run e2e:regression` | Run TEST-only IDIR admin regression E2E |
+| `npm run e2e:regression` | Run TEST credentialed regression E2E |
 | `npm run e2e:ui` | Run Playwright UI mode |
 | `npm run e2e:report` | Open the last Playwright HTML report |
 
@@ -78,9 +78,9 @@ npm run test:cov
 npm run e2e
 ```
 
-The scheduled/manual GitHub `Regression` workflow loads TEST IDIR credentials from AWS Secrets
-Manager before running `npm run e2e:regression`. Local runs of `npm run e2e:regression` require
-`E2E_IDIR_USER`, `E2E_IDIR_PASSWORD`, and `E2E_IDIR_EXPECTED_PRINCIPAL` to be exported in your shell.
+The scheduled/manual GitHub `Regression` workflow loads TEST IDIR credentials from GitHub `test`
+environment secrets before running `npm run e2e:regression`. Local runs require `E2E_IDIR_USER` and
+`E2E_IDIR_PASSWORD` to be exported in your shell.
 
 ### Testing Libraries
 

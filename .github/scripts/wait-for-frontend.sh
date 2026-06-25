@@ -11,7 +11,16 @@ response_file="/tmp/frontend-index.html"
 echo "Waiting for frontend route: ${frontend_url}/"
 
 for ((attempt = 1; attempt <= attempts; attempt += 1)); do
-  if curl --fail --silent --show-error --location --connect-timeout 10 --max-time "${curl_max_seconds}" "${frontend_url}/" > "${response_file}"; then
+  if curl --ipv4 \
+    --fail \
+    --silent \
+    --show-error \
+    --location \
+    --connect-timeout 10 \
+    --max-time "${curl_max_seconds}" \
+    --user-agent "nr-lexis-ci-route-check/1.0" \
+    --header "Accept: text/html,application/xhtml+xml" \
+    "${frontend_url}/" > "${response_file}"; then
     if grep -q "${shell_marker}" "${response_file}"; then
       echo "Frontend route is ready."
       exit 0
