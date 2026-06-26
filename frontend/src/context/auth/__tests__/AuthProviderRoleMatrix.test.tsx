@@ -3,15 +3,13 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
 import { useAuth } from '@/context/auth/useAuth'
-import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
+import { fetchSessionCapabilities } from '@/service/session-service'
 
 vi.mock('@/service/session-service', () => ({
   fetchSessionCapabilities: vi.fn(),
-  performLogoff: vi.fn(),
 }))
 
 const mockedFetchSessionCapabilities = vi.mocked(fetchSessionCapabilities)
-const mockedPerformLogoff = vi.mocked(performLogoff)
 
 type ProbeProps = {
   actionChecks: string[]
@@ -68,7 +66,6 @@ const waitForAuthLoad = async () => {
 describe('Auth Provider Role Matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedPerformLogoff.mockResolvedValue({ invalidated: true })
   })
 
   it('normalizes modern submitter roles without routing to retired summary', async () => {

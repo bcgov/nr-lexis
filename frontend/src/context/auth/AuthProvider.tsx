@@ -11,7 +11,7 @@ import type { AuthContextType, LoginProvider } from '@/context/auth/types'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import apiService from '@/service/api-service'
-import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
+import { fetchSessionCapabilities } from '@/service/session-service'
 
 export type AuthProviderProps = {
   children: ReactNode
@@ -309,12 +309,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = useCallback(async () => {
     sessionGenerationRef.current += 1
     refreshPromiseRef.current = null
-
-    try {
-      await performLogoff()
-    } catch (error) {
-      console.warn('Unable to complete backend logoff before Cognito sign-out.', error)
-    }
 
     try {
       if (isCognitoConfigured) {
