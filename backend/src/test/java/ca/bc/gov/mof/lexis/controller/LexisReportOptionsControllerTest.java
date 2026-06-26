@@ -6,10 +6,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportOptionsDto;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,6 +29,9 @@ import org.springframework.security.core.Authentication;
 @DisplayName("Unit Test | LexisReportOptionsController")
 class LexisReportOptionsControllerTest {
 
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-06-25T00:00:00Z"), ZoneOffset.UTC);
+
   @Mock private ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider;
   @Mock private LexisReportScheduleRepository scheduleRepository;
   @Mock private LexisSessionService sessionService;
@@ -34,7 +41,7 @@ class LexisReportOptionsControllerTest {
   void optionsShouldReturnNoContentWhenScheduleRepositoryMissing() {
     when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(null);
     LexisReportOptionsController controller =
-        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService);
+        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService, FIXED_CLOCK);
 
     ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
 
@@ -45,15 +52,14 @@ class LexisReportOptionsControllerTest {
   @Test
   void optionsShouldReturnCurrentScheduleCodesAndAdvertisingDateLabels() {
     when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
-    when(scheduleRepository.findCurrentSchedules())
+    when(scheduleRepository.findUpcomingExportSchedules())
         .thenReturn(
             List.of(
-                new LexisReportScheduleRepository.CurrentScheduleRow(
-                    1001L, LocalDate.of(2026, 6, 15)),
-                new LexisReportScheduleRepository.CurrentScheduleRow(
-                    1002L, LocalDate.of(2026, 6, 29)),
-                new LexisReportScheduleRepository.CurrentScheduleRow(
-                    null, LocalDate.of(2026, 7, 13))));
+                scheduleRow(1001L, LocalDate.of(2026, 6, 15)),
+                scheduleRow(1002L, LocalDate.of(2026, 6, 29)),
+                scheduleRow(1003L, LocalDate.of(2026, 7, 13)),
+                scheduleRow(1004L, LocalDate.of(2026, 7, 27)),
+                scheduleRow(null, LocalDate.of(2026, 8, 10))));
     when(scheduleRepository.loadRegionOptions())
         .thenReturn(
             List.of(
@@ -92,7 +98,7 @@ class LexisReportOptionsControllerTest {
     when(scheduleRepository.loadReportPortOfExportOptions())
         .thenReturn(List.of(new CodeNameDto("", "All"), new CodeNameDto("PAC", "Pacific")));
     LexisReportOptionsController controller =
-        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService);
+        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService, FIXED_CLOCK);
 
     ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
 
@@ -101,8 +107,9 @@ class LexisReportOptionsControllerTest {
     assertThat(response.getBody().currentSchedules())
         .extracting("code", "name")
         .containsExactly(
-            org.assertj.core.groups.Tuple.tuple("1001", "2026-06-15"),
-            org.assertj.core.groups.Tuple.tuple("1002", "2026-06-29"));
+            org.assertj.core.groups.Tuple.tuple("1002", "2026-06-29"),
+            org.assertj.core.groups.Tuple.tuple("1003", "2026-07-13"),
+            org.assertj.core.groups.Tuple.tuple("", "Blank"));
     assertThat(response.getBody().defaultRegion()).isNull();
     assertThat(response.getBody().regions())
         .extracting("code", "name")
@@ -171,7 +178,7 @@ class LexisReportOptionsControllerTest {
         .containsExactly(
             org.assertj.core.groups.Tuple.tuple("", "All"),
             org.assertj.core.groups.Tuple.tuple("PAC", "Pacific"));
-    verify(scheduleRepository).findCurrentSchedules();
+    verify(scheduleRepository).findUpcomingExportSchedules();
     verify(scheduleRepository).loadRegionOptions();
     verify(scheduleRepository).loadReportJurisdictionOptions();
     verify(scheduleRepository).loadBiweeklyJurisdictionOptions();
@@ -190,7 +197,7 @@ class LexisReportOptionsControllerTest {
   @Test
   void optionsShouldExposeDefaultRegionWhenOnlyOneConcreteRegionIsAvailable() {
     when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
-    when(scheduleRepository.findCurrentSchedules()).thenReturn(List.of());
+    when(scheduleRepository.findUpcomingExportSchedules()).thenReturn(List.of());
     when(scheduleRepository.loadRegionOptions())
         .thenReturn(List.of(new CodeNameDto("12", "Coast")));
     when(scheduleRepository.loadReportExemptionTypeOptions()).thenReturn(List.of());
@@ -202,7 +209,7 @@ class LexisReportOptionsControllerTest {
     when(scheduleRepository.loadReportDestinationCountryOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportPortOfExportOptions()).thenReturn(List.of());
     LexisReportOptionsController controller =
-        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService);
+        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService, FIXED_CLOCK);
 
     ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
 
@@ -214,7 +221,7 @@ class LexisReportOptionsControllerTest {
   @Test
   void optionsShouldExposeLegacyForestClientDefaultRegionWhenResolvedRegionIsAvailable() {
     when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
-    when(scheduleRepository.findCurrentSchedules()).thenReturn(List.of());
+    when(scheduleRepository.findUpcomingExportSchedules()).thenReturn(List.of());
     when(scheduleRepository.loadRegionOptions())
         .thenReturn(
             List.of(
@@ -232,7 +239,7 @@ class LexisReportOptionsControllerTest {
     when(scheduleRepository.loadReportDestinationCountryOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportPortOfExportOptions()).thenReturn(List.of());
     LexisReportOptionsController controller =
-        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService);
+        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService, FIXED_CLOCK);
 
     ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
 
@@ -244,7 +251,7 @@ class LexisReportOptionsControllerTest {
   @Test
   void optionsShouldIgnoreLegacyForestClientDefaultRegionWhenRegionIsUnavailable() {
     when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
-    when(scheduleRepository.findCurrentSchedules()).thenReturn(List.of());
+    when(scheduleRepository.findUpcomingExportSchedules()).thenReturn(List.of());
     when(scheduleRepository.loadRegionOptions())
         .thenReturn(
             List.of(
@@ -262,12 +269,16 @@ class LexisReportOptionsControllerTest {
     when(scheduleRepository.loadReportDestinationCountryOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportPortOfExportOptions()).thenReturn(List.of());
     LexisReportOptionsController controller =
-        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService);
+        new LexisReportOptionsController(scheduleRepositoryProvider, sessionService, FIXED_CLOCK);
 
     ResponseEntity<LexisReportOptionsDto> response = controller.options(authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().defaultRegion()).isNull();
+  }
+
+  private static ExportScheduleRowDto scheduleRow(Long exportScheduleId, LocalDate advertisingDate) {
+    return new ExportScheduleRowDto(exportScheduleId, advertisingDate, null, null, null, null, null);
   }
 }

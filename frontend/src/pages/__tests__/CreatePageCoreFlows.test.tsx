@@ -31,6 +31,7 @@ import {
   fetchOfferPackageVolume,
 } from '@/service/provincial-offer-create-service'
 import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
+import { formatLocalIsoDate } from '@/utils/date'
 
 const mockNavigate = vi.fn()
 
@@ -392,6 +393,53 @@ describe('Create Page Core Flows', () => {
       ownerClientNumber: '',
       productLocation: '',
       applicantTypeCode: 'O',
+    })
+  })
+
+  it('prefills new provincial applications with legacy defaults and next listing date', async () => {
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      productTypes: [{ value: 'H', label: 'Harvested Timber' }],
+      exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
+      exemptionReasons: [{ value: 'S', label: 'Surplus' }],
+      applicationStatuses: [],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
+      currentSchedules: [
+        { value: '1001', label: '2026-07-01' },
+        { value: '1002', label: '2026-07-15' },
+        { value: '', label: 'Blank' },
+      ],
+    } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const today = formatLocalIsoDate(new Date())
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Product type (required)' })).toHaveValue(
+        'Harvested Timber',
+      )
+      expect(screen.getByRole('combobox', { name: 'Exemption reason (required)' })).toHaveValue(
+        'Surplus',
+      )
+      expect(screen.getByRole('combobox', { name: 'Region (required)' })).toHaveValue(
+        'Cariboo Natural Resource Region',
+      )
+      expect(
+        screen.getByRole('textbox', { name: 'Application date (YYYY-MM-DD) (required)' }),
+      ).toHaveValue(today)
+      expect(
+        screen.getByRole('textbox', { name: 'Received date (YYYY-MM-DD) (required)' }),
+      ).toHaveValue(today)
+      expect(screen.getByRole('combobox', { name: 'Listing date' })).toHaveValue('2026-07-01')
     })
   })
 

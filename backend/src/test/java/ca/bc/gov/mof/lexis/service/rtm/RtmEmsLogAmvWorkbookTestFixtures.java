@@ -20,6 +20,16 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
             row(3, text("A3", "1"), number("B3", "1.25"))));
   }
 
+  static byte[] matrixWorkbookWithMetadataRows() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Retrieval Date"), text("B1", "2026-05-15")),
+            row(2, text("A2", "Update Date"), text("B2", "2026-06-20")),
+            row(4, text("A4", "GRADE"), text("B4", "BA"), text("C4", "HE"), text("D4", "PINE**")),
+            row(5, text("A5", "A"), number("B5", "10.25"), number("C5", "20.50"), number("D5", "30.75")),
+            row(6, text("A6", "1"), number("B6", "1.25"))));
+  }
+
   static byte[] invalidWorkbook() throws IOException {
     return workbook(
         List.of(

@@ -164,7 +164,6 @@ class LexisAuthorizationMatrixParityTest {
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .containsAll(REPORT_ACTIONS)
         .contains(
-            "/summary",
             "/applicationsReview",
             "/applicationRemarks",
             "/createExemption",
@@ -175,6 +174,7 @@ class LexisAuthorizationMatrixParityTest {
             "savePermit",
             "uploadApplicationSubmission")
         .doesNotContain(
+            "/summary",
             "/federalApplicationSearch",
             "/federalApplicationDetails",
             "/lexisAgentAdmin",

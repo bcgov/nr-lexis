@@ -12,6 +12,15 @@ spring:
         jwt:
           issuer-uri: ${AWS_COGNITO_ISSUER_URI:}
           jwk-set-uri: ${AWS_COGNITO_JWK_SET_URI:${AWS_COGNITO_ISSUER_URI:}/.well-known/jwks.json}
+  mail:
+    host: ${SMTP_HOST:apps.smtp.gov.bc.ca}
+    port: ${SMTP_PORT:25}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
 
 server:
   port: 8080
@@ -28,6 +37,8 @@ management:
         include: health,info,prometheus
 
 lexis:
+  mail:
+    from: ${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}
   auth:
     cognito:
       userinfo-uri: ${COGNITO_USERINFO_URI:}
@@ -50,7 +61,6 @@ lexis:
         - "/federalApplicationDetails"
         - "viewFederalApplication"
       LEXIS_APPLICATION_APPROVER:
-        - "/summary"
         - "/applicationsReview"
         - "/applicationSearch"
         - "/applicationDetails"

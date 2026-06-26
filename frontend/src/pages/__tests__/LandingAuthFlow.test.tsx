@@ -42,7 +42,7 @@ describe('Landing auth flow smoke', () => {
 
     mockedUseAuth.mockReturnValue(
       createLoggedOutTestAuthContext({
-        defaultRoute: '/provincial/summary',
+        defaultRoute: '/provincial/application',
       }),
     )
   })
@@ -51,7 +51,7 @@ describe('Landing auth flow smoke', () => {
     const login = vi.fn().mockResolvedValue(undefined)
     mockedUseAuth.mockReturnValue(
       createLoggedOutTestAuthContext({
-        defaultRoute: '/provincial/summary',
+        defaultRoute: '/provincial/application',
         login,
       }),
     )
@@ -73,7 +73,7 @@ describe('Landing auth flow smoke', () => {
     const login = vi.fn().mockResolvedValue(undefined)
     mockedUseAuth.mockReturnValue(
       createLoggedOutTestAuthContext({
-        defaultRoute: '/provincial/summary',
+        defaultRoute: '/provincial/application',
         login,
       }),
     )
@@ -96,11 +96,11 @@ describe('Landing auth flow smoke', () => {
           authenticated: true,
           principal: 'idir\\analyst',
           roles: ['PROVINCIAL_SUBMITTER_00012345'],
-          welcomeTarget: '/summary',
+          welcomeTarget: '/applicationSearch',
           legacyPath: null,
-          grantedActions: ['/summary', '/applicationSearch'],
+          grantedActions: ['/applicationSearch'],
         }),
-        defaultRoute: '/provincial/summary',
+        defaultRoute: '/provincial/application',
         isLoggedIn: true,
         hasAnyRole: true,
         login,
@@ -112,7 +112,7 @@ describe('Landing auth flow smoke', () => {
     renderPage()
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/provincial/summary', { replace: true })
+      expect(mockNavigate).toHaveBeenCalledWith('/provincial/application', { replace: true })
     })
 
     expect(screen.queryByText('idir\\analyst')).not.toBeInTheDocument()
@@ -127,7 +127,7 @@ describe('Landing auth flow smoke', () => {
   it('surfaces inline error when login initiation fails', async () => {
     mockedUseAuth.mockReturnValue(
       createLoggedOutTestAuthContext({
-        defaultRoute: '/provincial/summary',
+        defaultRoute: '/provincial/application',
         login: vi.fn().mockRejectedValue(new Error('boom')),
       }),
     )

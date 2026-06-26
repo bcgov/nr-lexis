@@ -21,8 +21,8 @@ import {
 describe('search-query-utils', () => {
   it('defines shared search pagination defaults', () => {
     expect(DEFAULT_SEARCH_PAGE).toBe(1)
-    expect(DEFAULT_SEARCH_PAGE_SIZE).toBe(10)
-    expect(SEARCH_PAGE_SIZE_OPTIONS).toEqual([10, 20, 30])
+    expect(DEFAULT_SEARCH_PAGE_SIZE).toBe(100)
+    expect(SEARCH_PAGE_SIZE_OPTIONS).toEqual([20, 50, 100, 200])
   })
 
   it('creates empty paged search responses', () => {
@@ -30,7 +30,7 @@ describe('search-query-utils', () => {
       content: [],
       page: {
         number: 0,
-        size: 10,
+        size: 100,
         totalElements: 0,
         totalPages: 1,
       },
@@ -72,8 +72,8 @@ describe('search-query-utils', () => {
 
   it('parses constrained page sizes with fallback', () => {
     expect(parsePageSizeParam('20', DEFAULT_SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE_OPTIONS)).toBe(20)
-    expect(parsePageSizeParam('25', DEFAULT_SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE_OPTIONS)).toBe(10)
-    expect(parsePageSizeParam('0', DEFAULT_SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE_OPTIONS)).toBe(10)
+    expect(parsePageSizeParam('25', DEFAULT_SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE_OPTIONS)).toBe(100)
+    expect(parsePageSizeParam('0', DEFAULT_SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE_OPTIONS)).toBe(100)
   })
 
   it('parses constrained enum and sort direction values', () => {
@@ -132,8 +132,8 @@ describe('search-query-utils', () => {
         { value: 'RSC', label: 'Cariboo Natural Resource Region' },
       ]),
     ).toEqual([
-      { id: 'RSI', text: 'South Island Natural Resource Region (RSI)' },
-      { id: 'RSC', text: 'Cariboo Natural Resource Region (RSC)' },
+      { id: 'RSI', text: 'South Island Natural Resource Region' },
+      { id: 'RSC', text: 'Cariboo Natural Resource Region' },
     ])
   })
 })

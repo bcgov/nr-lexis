@@ -633,6 +633,18 @@ export const postWithCsrf = async (
   })
 }
 
+export const putWithCsrf = async (
+  page: Page,
+  path: string,
+  options: PostWithCsrfOptions = {},
+): Promise<APIResponse> => {
+  return page.request.put(path, {
+    ...options,
+    headers: await authHeaders(page),
+    failOnStatusCode: false,
+  })
+}
+
 export const deleteWithCsrf = async (
   page: Page,
   path: string,

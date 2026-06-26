@@ -53,6 +53,7 @@ import {
   type ApplicationCodeOption,
 } from '@/service/provincial-application-items-service'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import { formatLocalIsoDate } from '@/utils/date'
 
 type ProvincialApplicationCreateForm = {
   ownerClientNumber: string
@@ -93,10 +94,10 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   agentClientLocationCode: '',
   agentContactName: '',
   applicantTypeCode: 'O',
-  productTypeCode: '',
+  productTypeCode: 'H',
   ageClass: '',
-  exemptionType: '',
-  region: '',
+  exemptionType: 'S',
+  region: '1903',
   applicationDate: '',
   applicationTermDays: '',
   applicationTermMonths: '',
@@ -113,6 +114,7 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
 }
 
 const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicationCreateForm => {
+  const today = formatLocalIsoDate(new Date())
   return {
     ...INITIAL_FORM,
     ownerClientNumber: query.get('ownerClientNumber') ?? '',
@@ -124,16 +126,19 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
       query.get('agentClientLocationCode') ?? query.get('agentClientLocation') ?? '',
     agentContactName: query.get('agentContactName') ?? '',
     applicantTypeCode: query.get('ownerApplicantType') ?? query.get('applicantType') ?? 'O',
-    productTypeCode: query.get('productTypeCode') ?? '',
+    productTypeCode: query.get('productTypeCode') ?? INITIAL_FORM.productTypeCode,
     ageClass: query.get('ageClass') ?? query.get('growthTypeCode') ?? '',
-    exemptionType: query.get('exemptionReason') ?? query.get('exemptionReasonCode') ?? '',
-    region: query.get('region') ?? query.get('orgUnitNumber') ?? '',
-    applicationDate: query.get('applicationDate') ?? '',
+    exemptionType:
+      query.get('exemptionReason') ??
+      query.get('exemptionReasonCode') ??
+      INITIAL_FORM.exemptionType,
+    region: query.get('region') ?? query.get('orgUnitNumber') ?? INITIAL_FORM.region,
+    applicationDate: query.get('applicationDate') ?? today,
     applicationTermDays:
       query.get('applicationTermDays') ?? query.get('exemptionTerm') ?? query.get('termDays') ?? '',
     applicationTermMonths: query.get('applicationTermMonths') ?? query.get('termMonths') ?? '',
     applicationTermYears: query.get('applicationTermYears') ?? query.get('termYears') ?? '',
-    receivedDate: query.get('receivedDate') ?? '',
+    receivedDate: query.get('receivedDate') ?? today,
     exportScheduleId: query.get('exportScheduleId') ?? query.get('legacyExportScheduleId') ?? '',
     listingDate: query.get('listingDate') ?? '',
     productLocation: query.get('productLocation') ?? query.get('logLocation') ?? '',
@@ -248,6 +253,15 @@ const ProvincialApplicationCreatePage = () => {
       }
 
       setForm((current) => {
+        const nextListingSchedule = currentSchedules.find((option) => option.value.trim())
+        if (!current.exportScheduleId && !current.listingDate && nextListingSchedule) {
+          return {
+            ...current,
+            exportScheduleId: nextListingSchedule.value,
+            listingDate: nextListingSchedule.label,
+          }
+        }
+
         if (
           current.exportScheduleId ||
           !current.listingDate ||
@@ -1304,8 +1318,9 @@ const ProvincialApplicationCreatePage = () => {
                 setForm((current) => ({
                   ...current,
                   exportScheduleId: value,
-                  listingDate:
-                    currentSchedules.find((option) => option.value === value)?.label ?? '',
+                  listingDate: value
+                    ? (currentSchedules.find((option) => option.value === value)?.label ?? '')
+                    : '',
                 }))
               }
             />

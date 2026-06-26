@@ -27,7 +27,6 @@ import ProvincialPage from '@/pages/Provincial'
 import ProvincialPermitPage from '@/pages/ProvincialPermit'
 import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
 import ProvincialReviewPage from '@/pages/ProvincialReview'
-import ProvincialSummaryPage from '@/pages/ProvincialSummary'
 import ReportsPage from '@/pages/Reports'
 import UnauthorizedPage from '@/pages/Unauthorized'
 import RTMEmsLogAmvPage from '@/pages/RTMEmsLogAmv'
@@ -158,7 +157,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     id: 'Provincial',
     roleScope: 'provincial',
     requiredActions: [
-      '/summary',
       '/applicationsReview',
       '/applicationSearch',
       'uploadApplicationSubmission',
@@ -313,17 +311,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
-    path: '/provincial/summary',
-    id: 'Provincial Summary',
-    requiredActions: ['/summary'],
-    element: (
-      <Layout>
-        <ProvincialSummaryPage />
-      </Layout>
-    ),
-    isNavigation: false,
-  },
-  {
     path: '/federal',
     id: 'Federal',
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
@@ -396,7 +383,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   },
   {
     path: '/admin/rtm/emslogamv',
-    id: 'Admin - RTM EMS AMV',
+    id: 'Admin - Average Monthly Values',
     requiredActions: ['/lexisAgentAdmin'],
     element: (
       <Layout>

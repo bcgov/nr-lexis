@@ -1349,6 +1349,10 @@ const ReportsPage = () => {
                     const selectedItems = dynamicOptions.filter((option) =>
                       selectedValues.has(option.value),
                     )
+                    const selectedItemsHelperText =
+                      selectedItems.length > 0
+                        ? `Selected: ${selectedItems.map((option) => option.label).join(', ')}`
+                        : undefined
 
                     return (
                       <FilterableMultiSelect
@@ -1358,7 +1362,7 @@ const ReportsPage = () => {
                         items={dynamicOptions}
                         itemToString={(item) => (item ? item.label : '')}
                         placeholder="Select region(s)"
-                        selectionFeedback="fixed"
+                        helperText={selectedItemsHelperText}
                         selectedItems={selectedItems}
                         onChange={(event) => {
                           const nextSelected = (event.selectedItems ?? []) as SearchOption[]

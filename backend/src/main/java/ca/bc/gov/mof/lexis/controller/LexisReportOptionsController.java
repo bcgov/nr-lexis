@@ -4,8 +4,12 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportOptionsDto;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -21,12 +25,22 @@ public class LexisReportOptionsController {
 
   private final ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider;
   private final LexisSessionService sessionService;
+  private final Clock clock;
 
+  @Autowired
   public LexisReportOptionsController(
       ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider,
       LexisSessionService sessionService) {
+    this(scheduleRepositoryProvider, sessionService, Clock.systemDefaultZone());
+  }
+
+  LexisReportOptionsController(
+      ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider,
+      LexisSessionService sessionService,
+      Clock clock) {
     this.scheduleRepositoryProvider = scheduleRepositoryProvider;
     this.sessionService = sessionService;
+    this.clock = clock == null ? Clock.systemDefaultZone() : clock;
   }
 
   @GetMapping("/options")
@@ -77,16 +91,21 @@ public class LexisReportOptionsController {
 
   private List<CodeNameDto> toCurrentScheduleOptions(
       LexisReportScheduleRepository scheduleRepository) {
-    return scheduleRepository.findCurrentSchedules().stream()
-        .filter(row -> row.exportScheduleId() != null)
+    List<CodeNameDto> options = new ArrayList<>();
+    LocalDate today = LocalDate.now(clock);
+    options.addAll(
+        scheduleRepository.findUpcomingExportSchedules().stream()
+        .filter(row -> row.exportScheduleId() != null && row.advertisingDate() != null)
+        .filter(row -> !row.advertisingDate().isBefore(today))
+        .limit(2)
         .map(
             row ->
                 new CodeNameDto(
                     String.valueOf(row.exportScheduleId()),
-                    row.advertisingDate() == null
-                        ? String.valueOf(row.exportScheduleId())
-                        : row.advertisingDate().format(DISPLAY_DATE_FORMATTER)))
-        .toList();
+                    row.advertisingDate().format(DISPLAY_DATE_FORMATTER)))
+        .toList());
+    options.add(new CodeNameDto("", "Blank"));
+    return options;
   }
 
   private String resolveSingleDefaultRegion(List<CodeNameDto> regions) {

@@ -21,7 +21,6 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
   {
     path: '/provincial',
     requiredActions: [
-      '/summary',
       '/applicationsReview',
       '/applicationSearch',
       'uploadApplicationSubmission',

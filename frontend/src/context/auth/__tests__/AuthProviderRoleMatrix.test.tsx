@@ -68,7 +68,7 @@ describe('Auth Provider Role Matrix', () => {
     vi.clearAllMocks()
   })
 
-  it('normalizes modern submitter roles to canonical frontend forms', async () => {
+  it('normalizes modern submitter roles without routing to retired summary', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\tester',
@@ -84,7 +84,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('roles')).toHaveTextContent(
       'PROVINCIAL_SUBMITTER_00012345,FEDERAL_SUBMITTER',
     )
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/summary')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
   })
 
@@ -260,7 +260,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
-  it('prioritizes the review queue over summary when both actions are granted', async () => {
+  it('prioritizes the review queue over retired summary when both actions are granted', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\reviewer',

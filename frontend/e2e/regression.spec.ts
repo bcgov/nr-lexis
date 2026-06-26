@@ -10,6 +10,7 @@ import {
   hasIdirCredentials,
   loginWithIdir,
   postWithCsrf,
+  putWithCsrf,
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
 
@@ -25,6 +26,70 @@ const hasAdminRole = (roles: string[]): boolean =>
 const hasGrantedAction = (actions: string[], action: string): boolean => {
   const normalizedAction = action.toLowerCase().replace(/^\//, '')
   return actions.some((item) => item.toLowerCase().replace(/^\//, '') === normalizedAction)
+}
+
+const asRecordArray = (value: unknown): Record<string, unknown>[] =>
+  Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+      )
+    : []
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+
+const optionCode = (option: Record<string, unknown>): string => String(option.code ?? '').trim()
+const optionName = (option: Record<string, unknown>): string => String(option.name ?? '').trim()
+
+const isoDate = (date: Date): string => date.toISOString().slice(0, 10)
+
+const addUtcDays = (date: Date, days: number): Date => {
+  const next = new Date(date.getTime())
+  next.setUTCDate(next.getUTCDate() + days)
+  return next
+}
+
+const scheduleRequestForAdvertisingDate = (advertisingDate: string): ExportScheduleRequest => {
+  const date = new Date(`${advertisingDate}T00:00:00.000Z`)
+  return {
+    advertisingDate,
+    applicationReceiptDate: isoDate(addUtcDays(date, -1)),
+    offerReceiptDate: isoDate(addUtcDays(date, 14)),
+    offerEndDate: isoDate(addUtcDays(date, 21)),
+    offerWithdrawalDate: isoDate(addUtcDays(date, 28)),
+    teacMeetingDate: isoDate(addUtcDays(date, 19)),
+  }
+}
+
+const uniqueRegressionScheduleRequests = (
+  schedules: Record<string, unknown>[],
+): {
+  createRequest: ExportScheduleRequest
+  updateRequest: ExportScheduleRequest
+} => {
+  const usedDates = new Set(
+    schedules
+      .map((schedule) => String(schedule.advertisingDate ?? '').slice(0, 10))
+      .filter(Boolean),
+  )
+  const baseDate = new Date(Date.UTC(2090, 0, 1))
+  const seed = Date.now() % 1500
+
+  for (let offset = 0; offset < 5000; offset += 1) {
+    const createDate = isoDate(addUtcDays(baseDate, seed + offset * 2))
+    const updateDate = isoDate(addUtcDays(baseDate, seed + offset * 2 + 1))
+    if (!usedDates.has(createDate) && !usedDates.has(updateDate)) {
+      return {
+        createRequest: scheduleRequestForAdvertisingDate(createDate),
+        updateRequest: scheduleRequestForAdvertisingDate(updateDate),
+      }
+    }
+  }
+
+  throw new Error('Unable to find unused future export schedule dates for regression.')
 }
 
 const safeUrlForLog = (rawUrl: string): string => {
@@ -47,6 +112,21 @@ type ReviewStatusResponse = {
 type ReviewStatusEmailResponse = {
   success?: boolean
   message?: string | null
+}
+
+type ExportScheduleMutationResponse = {
+  success?: boolean
+  message?: string | null
+  schedule?: unknown
+}
+
+type ExportScheduleRequest = {
+  advertisingDate: string
+  applicationReceiptDate: string
+  offerReceiptDate: string
+  offerEndDate: string
+  offerWithdrawalDate: string
+  teacMeetingDate: string
 }
 
 type ApplicationSubmissionResponse = {
@@ -125,6 +205,48 @@ const rtmSuccessWorkbook = readFileSync(
 )
 const regressionStatusRemark = 'Weekly credentialed regression status check'
 const regressionClientEmail = 'lexis-regression@example.test'
+const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
+const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
+
+const expectNaturalResourceRegions = (value: unknown, source: string): void => {
+  const regions = asRecordArray(value)
+  const codes = regions.map(optionCode).sort()
+
+  expect(codes, `${source} should expose only the eight natural resource regions`).toEqual(
+    naturalResourceRegionCodes,
+  )
+  for (const region of regions) {
+    expect(optionName(region), `${source} region names should be explicit`).toContain(
+      'Natural Resource Region',
+    )
+  }
+}
+
+const expectCurrentScheduleOptions = (value: unknown, source: string): void => {
+  const schedules = asRecordArray(value)
+  const datedSchedules = schedules.filter((schedule) => optionCode(schedule))
+  const today = new Date().toISOString().slice(0, 10)
+
+  expect(
+    schedules.length,
+    `${source} should include blank plus future dates`,
+  ).toBeGreaterThanOrEqual(3)
+  const blankSchedule = schedules[schedules.length - 1]
+  expect(optionCode(blankSchedule), `${source} last schedule option should be blank`).toBe('')
+  expect(optionName(blankSchedule), `${source} last schedule option should be labeled Blank`).toBe(
+    'Blank',
+  )
+  expect(
+    datedSchedules.length,
+    `${source} should expose at least two future list dates`,
+  ).toBeGreaterThanOrEqual(2)
+
+  for (const schedule of datedSchedules) {
+    const scheduleDate = optionName(schedule)
+    expect(scheduleDate, `${source} schedule names should be ISO dates`).toMatch(isoDatePattern)
+    expect(scheduleDate >= today, `${source} should not expose previous list dates`).toBe(true)
+  }
+}
 
 const uniqueRegressionPackageNumber = (): string => {
   const timestamp = Date.now().toString(36).toUpperCase().slice(-7)
@@ -202,7 +324,6 @@ const adminNavigationSections: Array<{
     section: 'Provincial',
     links: [
       'Application review',
-      'Summary',
       'Create/edit application',
       'Upload application submission',
       'Application search',
@@ -223,7 +344,12 @@ const adminNavigationSections: Array<{
   },
   {
     section: 'Administration',
-    links: ['LEXIS administration', 'Fee policy administration', 'Data upload', 'RTM'],
+    links: [
+      'LEXIS administration',
+      'Fee policy administration',
+      'Data upload',
+      'Average Monthly Values',
+    ],
   },
 ]
 
@@ -238,7 +364,7 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/federal', /federal application search/i],
   ['/federal/application/upload', /upload federal application submission/i],
   ['/reports', /reports/i],
-  ['/admin/rtm/emslogamv', /rtm ems log amv/i],
+  ['/admin/rtm/emslogamv', /average monthly values/i],
 ]
 
 const requiredAdminActions = [
@@ -261,6 +387,111 @@ const representativeAdminActions = [
   'createOffer',
   'savePermit',
   'mofrListing',
+]
+
+const visibleProvincialSubmitterLinks = [
+  'Create/edit application',
+  'Upload application submission',
+  'Application search',
+  'Exemption search',
+  'Offer search',
+  'Permit search',
+]
+
+const hiddenProvincialSubmitterLinks = [
+  'Application review',
+  'Create/edit exemption',
+  'Create/edit offer',
+]
+
+const submitterAccessiblePages: Array<[path: string, heading: RegExp]> = [
+  ['/provincial/application', /provincial application search/i],
+  ['/provincial/application/create', /create provincial application/i],
+  ['/provincial/application/upload', /upload application submission/i],
+  ['/provincial/exemption', /provincial exemption search/i],
+  ['/provincial/offers', /provincial offers search/i],
+  ['/provincial/permit', /provincial permit search/i],
+]
+
+const unauthorizedSubmitterPages = [
+  '/provincial/review',
+  '/provincial/exemption/create',
+  '/provincial/offers/create',
+  '/federal',
+  '/federal/application/upload',
+  '/admin',
+  '/admin/uploads',
+]
+
+const restrictedSubmitterWriteChecks: Array<{
+  path: string
+  data?: Record<string, unknown>
+}> = [
+  {
+    path: '/api/lexis/application-reviews/999999999/approve',
+  },
+  {
+    path: '/api/lexis/application-reviews/999999999/status',
+    data: {
+      statusCode: 'REJ',
+      remark: 'Regression authorization check',
+      clientEmailAddress: '',
+    },
+  },
+  {
+    path: '/api/lexis/application-reviews/999999999/status-email',
+    data: {
+      statusCode: 'REJ',
+      remark: 'Regression authorization check',
+      clientEmailAddress: 'nobody@example.com',
+    },
+  },
+  {
+    path: '/api/lexis/rpc/exemption-details/exemption',
+    data: {
+      exemptionNumber: '999999999',
+      applicationNumber: '999999999',
+      exemptionTypeCode: 'O',
+      exemptionStatusCode: 'D',
+    },
+  },
+  {
+    path: '/api/lexis/rpc/exemption-details/exemption/update',
+    data: {
+      exemptionNumber: '999999999',
+      exemptionTypeCode: 'O',
+      exemptionStatusCode: 'D',
+    },
+  },
+  {
+    path: '/api/lexis/rpc/exemption-details/approve-exemptions',
+    data: {
+      exemptionNumbers: ['999999999'],
+    },
+  },
+  {
+    path: '/api/lexis/rpc/offer-details/offer',
+    data: {
+      offerNumber: '999999999',
+      applicationNumber: '999999999',
+      packageNumber: 'REGRESSION-NO-WRITE',
+    },
+  },
+  {
+    path: '/api/lexis/rpc/offer-details/offer/update',
+    data: {
+      offerNumber: '999999999',
+      applicationNumber: '999999999',
+      packageNumber: 'REGRESSION-NO-WRITE',
+    },
+  },
+  {
+    path: '/api/lexis/admin/policies/fee',
+    data: {
+      effectiveDate: '2099-01-01',
+      rate: 0,
+    },
+  },
 ]
 
 const readReviewStatusResponse = async (
@@ -416,6 +647,7 @@ test.describe.serial('TEST IDIR admin regression', () => {
     }
 
     await expectAdminNavigation(page)
+    await expect(page.getByRole('link', { name: /^Summary$/ })).toHaveCount(0)
     expect(apiServerErrors).toEqual([])
   })
 
@@ -458,6 +690,7 @@ test.describe.serial('TEST IDIR admin regression', () => {
     expect(Array.isArray(options.productTypes)).toBe(true)
     expect(Array.isArray(options.regions)).toBe(true)
     expect(Array.isArray(options.reviewStatuses)).toBe(true)
+    expectNaturalResourceRegions(options.regions, 'application review search options')
 
     const search = await readJsonResponse<ApplicationReviewSearchResponse>(
       await getWithAuth(page, '/api/lexis/application-reviews/search', {
@@ -499,6 +732,11 @@ test.describe.serial('TEST IDIR admin regression', () => {
     )
     expect(Array.isArray(provincialOptions.productTypes)).toBe(true)
     expect(Array.isArray(provincialOptions.regions)).toBe(true)
+    expectNaturalResourceRegions(provincialOptions.regions, 'provincial application options')
+    expectCurrentScheduleOptions(
+      provincialOptions.currentSchedules,
+      'provincial application list dates',
+    )
 
     const provincialSearch = await readJsonResponse<GenericSearchResponse>(
       await getWithAuth(page, '/api/lexis/applications/search', {
@@ -566,6 +804,7 @@ test.describe.serial('TEST IDIR admin regression', () => {
         await getWithAuth(page, optionsPath),
       )
       expect(options).toEqual(expect.any(Object))
+      expectNaturalResourceRegions(options.regions, `${optionsPath} region options`)
 
       const search = await readJsonResponse<GenericSearchResponse>(
         await getWithAuth(page, searchPath, {
@@ -618,6 +857,87 @@ test.describe.serial('TEST IDIR admin regression', () => {
     )
     expect(Array.isArray(reportOptions.regions)).toBe(true)
     expect(Array.isArray(reportOptions.reportJurisdictions)).toBe(true)
+    expectNaturalResourceRegions(reportOptions.regions, 'report options')
+    expectCurrentScheduleOptions(reportOptions.currentSchedules, 'report list dates')
+
+    const exportSchedules = await readJsonResponse<unknown>(
+      await getWithAuth(page, '/api/lexis/admin/schedules'),
+    )
+    expect(Array.isArray(exportSchedules)).toBe(true)
+  })
+
+  test('can create, update, and delete future export schedule rows', async () => {
+    const page = await authenticatedIdirPage()
+    const existingSchedules = asRecordArray(
+      await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
+    )
+    const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(existingSchedules)
+    let scheduleId: string | null = null
+    let deleted = false
+
+    try {
+      const created = await readJsonResponse<ExportScheduleMutationResponse>(
+        await postWithCsrf(page, '/api/lexis/admin/schedules', {
+          data: createRequest,
+        }),
+      )
+      expect(created.success).toBe(true)
+      expect(created.message ?? '').toContain('added')
+
+      const createdSchedule = asRecord(created.schedule)
+      scheduleId = String(createdSchedule.exportScheduleId ?? '').trim()
+      expect(scheduleId).not.toBe('')
+      expect(createdSchedule.advertisingDate).toBe(createRequest.advertisingDate)
+      expect(Number(createdSchedule.applicationCount ?? 0)).toBe(0)
+      expect(createdSchedule.mutable).toBe(true)
+
+      const updated = await readJsonResponse<ExportScheduleMutationResponse>(
+        await putWithCsrf(page, `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`, {
+          data: updateRequest,
+        }),
+      )
+      expect(updated.success).toBe(true)
+      expect(updated.message ?? '').toContain('updated')
+
+      const updatedSchedule = asRecord(updated.schedule)
+      expect(String(updatedSchedule.exportScheduleId ?? '')).toBe(scheduleId)
+      expect(updatedSchedule.advertisingDate).toBe(updateRequest.advertisingDate)
+      expect(Number(updatedSchedule.applicationCount ?? 0)).toBe(0)
+      expect(updatedSchedule.mutable).toBe(true)
+
+      const schedulesAfterUpdate = asRecordArray(
+        await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
+      )
+      const persistedSchedule = schedulesAfterUpdate.find(
+        (schedule) => String(schedule.exportScheduleId ?? '') === scheduleId,
+      )
+      expect(persistedSchedule).toBeTruthy()
+      expect(persistedSchedule?.advertisingDate).toBe(updateRequest.advertisingDate)
+      expect(persistedSchedule?.mutable).toBe(true)
+
+      const deleteResponse = await readJsonResponse<ExportScheduleMutationResponse>(
+        await deleteWithCsrf(page, `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`),
+      )
+      expect(deleteResponse.success).toBe(true)
+      expect(deleteResponse.message ?? '').toContain('deleted')
+      deleted = true
+
+      const schedulesAfterDelete = asRecordArray(
+        await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
+      )
+      expect(
+        schedulesAfterDelete.some(
+          (schedule) => String(schedule.exportScheduleId ?? '') === scheduleId,
+        ),
+      ).toBe(false)
+    } finally {
+      if (scheduleId && !deleted) {
+        await deleteWithCsrf(
+          page,
+          `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`,
+        ).catch(() => undefined)
+      }
+    }
   })
 
   test('can reach protected write validation endpoints without mutating real data', async () => {
@@ -686,6 +1006,15 @@ test.describe.serial('TEST IDIR admin regression', () => {
     )
     expect(emailResponse.success).toBe(false)
     expect(emailResponse.message ?? '').toContain('Status code and client email are required.')
+
+    const invalidScheduleResponse = await readJsonResponse<ExportScheduleMutationResponse>(
+      await postWithCsrf(page, '/api/lexis/admin/schedules', {
+        data: {},
+      }),
+      400,
+    )
+    expect(invalidScheduleResponse.success).toBe(false)
+    expect(invalidScheduleResponse.message ?? '').toContain('Advertising date is required.')
 
     const rtmSearchResponse = await getWithAuth(page, '/api/lexis/rtm/emslogamv', {
       params: {

@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -32,12 +33,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mail.MailSendException;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ApplicationReviewOracleService")
 class ApplicationReviewOracleServiceTest {
 
   @Mock private ApplicationReviewRepository repository;
+  @Mock private ApplicationReviewStatusEmailSender emailSender;
   @InjectMocks private ApplicationReviewOracleService service;
 
   @Test
@@ -262,7 +265,20 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
-  void sendStatusEmailShouldStageRequestAndReportEmailUnavailableWhenInputValid() {
+  void sendStatusEmailShouldShortCircuitWhenEmailAddressInvalid() {
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto("REJ", "not-an-email", "Missing docs"));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Client email must be a valid email address.");
+    verifyNoInteractions(repository);
+    verifyNoInteractions(emailSender);
+  }
+
+  @Test
+  void sendStatusEmailShouldStageRequestAndSendEmailWhenInputValid() {
     ApplicationReviewStatusEmailRequestDto request =
         new ApplicationReviewStatusEmailRequestDto(" REJ ", " client@gov.bc.ca ", " Missing docs ");
     when(repository.sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs"))
@@ -270,9 +286,26 @@ class ApplicationReviewOracleServiceTest {
 
     ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
 
-    assertThat(result.success()).isFalse();
-    assertThat(result.message()).isEqualTo("Application status email is not configured yet. No email was sent.");
+    assertThat(result.success()).isTrue();
+    assertThat(result.message()).isEqualTo("Application status email sent.");
     verify(repository).sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs");
+    verify(emailSender).sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs");
+  }
+
+  @Test
+  void sendStatusEmailShouldReportMailSenderFailure() {
+    ApplicationReviewStatusEmailRequestDto request =
+        new ApplicationReviewStatusEmailRequestDto("REJ", "client@gov.bc.ca", "Missing docs");
+    when(repository.sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs"))
+        .thenReturn(true);
+    doThrow(new MailSendException("SMTP unavailable"))
+        .when(emailSender)
+        .sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs");
+
+    ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Application status email failed to send.");
   }
 
   @Test

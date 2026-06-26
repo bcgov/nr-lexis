@@ -50,10 +50,17 @@ const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
     reactPath: '/admin/policies',
   },
   {
+    id: 'exportScheduleAdmin',
+    label: 'Export schedule administration',
+    requiredAction: '/lexisPolicyAdmin',
+    description: 'Manage upcoming advertising list dates in EXPORT_SCHEDULE.',
+    reactPath: '/admin/policies',
+  },
+  {
     id: 'rtmEmsLogAmv',
-    label: 'RTM',
+    label: 'Average Monthly Values',
     requiredAction: '/lexisAgentAdmin',
-    description: 'Manage EMS log average market values.',
+    description: 'Manage EMS log average monthly values.',
     reactPath: '/admin/rtm/emslogamv',
   },
 ]
@@ -128,7 +135,6 @@ const LEGACY_ACTION_CATALOG = [
   '/permitSearch',
   '/permitsReview',
   '/speciesGradeReport',
-  '/summary',
   '/teacReport',
   '/tenureReport',
   '/transportReport',
@@ -143,7 +149,6 @@ const LEGACY_ACTION_CATALOG = [
 ] as const
 
 const ROUTE_ACCESS_CHECKS = [
-  { label: 'Provincial summary', action: '/summary' },
   { label: 'Provincial review', action: '/applicationsReview' },
   { label: 'Provincial application search', action: '/applicationSearch' },
   { label: 'Provincial exemption search', action: '/exemptionSearch' },

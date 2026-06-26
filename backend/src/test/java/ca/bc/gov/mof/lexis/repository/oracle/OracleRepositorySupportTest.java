@@ -278,10 +278,15 @@ class OracleRepositorySupportTest {
     List<CodeNameDto> options = repository.loadRegions();
 
     assertThat(options)
-        .contains(
-            new CodeNameDto("1833", "RNI"),
-            new CodeNameDto("1908", "RSK"),
-            new CodeNameDto("1910", "RWC"));
+        .containsExactly(
+            new CodeNameDto("1903", "Cariboo Natural Resource Region"),
+            new CodeNameDto("1904", "Kootenay-Boundary Natural Resource Region"),
+            new CodeNameDto("1905", "Northeast Natural Resource Region"),
+            new CodeNameDto("1906", "Omineca Natural Resource Region"),
+            new CodeNameDto("1907", "Thompson-Okanagan Natural Resource Region"),
+            new CodeNameDto("1908", "Skeena Natural Resource Region"),
+            new CodeNameDto("1909", "South Coast Natural Resource Region"),
+            new CodeNameDto("1910", "West Coast Natural Resource Region"));
   }
 
   private static final class TestRepository extends OracleRepositorySupport {

@@ -58,10 +58,6 @@ const EXPECTED_CORE_PAGES: RouteExpectation[] = [
     requiredActions: ['/applicationsReview'],
   },
   {
-    path: '/provincial/summary',
-    requiredActions: ['/summary'],
-  },
-  {
     path: '/federal',
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
   },

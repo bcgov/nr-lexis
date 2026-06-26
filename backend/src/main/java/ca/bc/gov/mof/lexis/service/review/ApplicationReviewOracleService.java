@@ -15,10 +15,14 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
+import jakarta.mail.internet.AddressException;
+import jakarta.mail.internet.InternetAddress;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Slice;
+import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,14 +33,18 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 public class ApplicationReviewOracleService implements ApplicationReviewService {
 
   private static final List<String> EMAIL_SUPPORTED_STATUS_CODES = List.of("REJ", "WDN");
-  private static final String EMAIL_NOT_CONFIGURED_MESSAGE =
-      "Application status email is not configured yet. No email was sent.";
   private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN");
+  private static final Pattern SIMPLE_EMAIL_PATTERN =
+      Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
   private final ApplicationReviewRepository repository;
+  private final ApplicationReviewStatusEmailSender emailSender;
 
-  public ApplicationReviewOracleService(ApplicationReviewRepository repository) {
+  public ApplicationReviewOracleService(
+      ApplicationReviewRepository repository,
+      ApplicationReviewStatusEmailSender emailSender) {
     this.repository = repository;
+    this.emailSender = emailSender;
   }
 
   @Override
@@ -227,6 +235,11 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           false,
           "Status code and client email are required.");
     }
+    if (!isValidEmailAddress(clientEmail)) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "Client email must be a valid email address.");
+    }
 
     if (!EMAIL_SUPPORTED_STATUS_CODES.contains(statusCode)) {
       return new ApplicationReviewStatusEmailResultDto(
@@ -240,11 +253,26 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
             statusCode,
             clientEmail,
             request == null ? null : trimToNull(request.remark()));
-    return new ApplicationReviewStatusEmailResultDto(
-        false,
-        staged
-            ? EMAIL_NOT_CONFIGURED_MESSAGE
-            : "Application status email could not be prepared.");
+    if (!staged) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "Application status email could not be prepared.");
+    }
+
+    try {
+      emailSender.sendStatusEmail(
+          applicationNumber,
+          statusCode,
+          clientEmail,
+          request == null ? null : trimToNull(request.remark()));
+      return new ApplicationReviewStatusEmailResultDto(
+          true,
+          "Application status email sent.");
+    } catch (MailException ex) {
+      return new ApplicationReviewStatusEmailResultDto(
+          false,
+          "Application status email failed to send.");
+    }
   }
 
   private ApplicationReviewSearchCriteria normalizeCriteria(ApplicationReviewSearchCriteria input) {
@@ -268,6 +296,18 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
 
   private String defaultMutationUser(String userId) {
     return defaultSystemUser(userId);
+  }
+
+  private static boolean isValidEmailAddress(String value) {
+    if (!SIMPLE_EMAIL_PATTERN.matcher(value).matches()) {
+      return false;
+    }
+    try {
+      InternetAddress[] addresses = InternetAddress.parse(value, true);
+      return addresses.length == 1 && value.equals(addresses[0].getAddress());
+    } catch (AddressException ex) {
+      return false;
+    }
   }
 
   private void markRollbackOnly() {

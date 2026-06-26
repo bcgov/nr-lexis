@@ -4,18 +4,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
 import java.sql.CallableStatement;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Types;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementSetter;
 
 @ExtendWith(MockitoExtension.class)
 class LexisReportScheduleRepositoryTest {
@@ -25,6 +30,7 @@ class LexisReportScheduleRepositoryTest {
   @Mock private ResultSet resultSet;
   @Mock private ResultSet clientResultSet;
   @Mock private ResultSet orgUnitResultSet;
+  @Mock private PreparedStatement preparedStatement;
 
   @Test
   void loadRegionOptionsShouldUseOrgUnitNameLabelsLikeLegacyReportSelects() throws Exception {
@@ -243,6 +249,95 @@ class LexisReportScheduleRepositoryTest {
     assertThat(defaultRegion).isEmpty();
     verify(callableStatement).setString(1, "00077881");
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void insertExportScheduleShouldUseLegacySequenceAndBindScheduleDates() throws Exception {
+    when(jdbcTemplate.queryForObject("SELECT EXPORT_SCHEDULE_SEQ.NEXTVAL FROM DUAL", Long.class))
+        .thenReturn(1002L);
+    when(jdbcTemplate.update(any(String.class), any(PreparedStatementSetter.class)))
+        .thenAnswer(
+            invocation -> {
+              PreparedStatementSetter setter = invocation.getArgument(1);
+              setter.setValues(preparedStatement);
+              return 1;
+            });
+    ExportScheduleCreateRequestDto request =
+        new ExportScheduleCreateRequestDto(
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 29),
+            LocalDate.of(2026, 8, 7),
+            LocalDate.of(2026, 8, 14),
+            LocalDate.of(2026, 8, 4));
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    var row = repository.insertExportSchedule(request);
+
+    assertThat(row.exportScheduleId()).isEqualTo(1002L);
+    assertThat(row.advertisingDate()).isEqualTo(LocalDate.of(2026, 7, 15));
+    verify(jdbcTemplate, never()).execute("LOCK TABLE EXPORT_SCHEDULE IN EXCLUSIVE MODE");
+    verify(preparedStatement).setLong(1, 1002L);
+    verify(preparedStatement).setDate(2, java.sql.Date.valueOf("2026-07-15"));
+    verify(preparedStatement).setDate(3, java.sql.Date.valueOf("2026-07-15"));
+    verify(preparedStatement).setDate(4, java.sql.Date.valueOf("2026-07-29"));
+    verify(preparedStatement).setDate(5, java.sql.Date.valueOf("2026-08-07"));
+    verify(preparedStatement).setDate(6, java.sql.Date.valueOf("2026-08-14"));
+    verify(preparedStatement).setDate(7, java.sql.Date.valueOf("2026-08-04"));
+  }
+
+  @Test
+  void updateExportScheduleShouldBindScheduleDatesAndId() throws Exception {
+    when(jdbcTemplate.update(any(String.class), any(PreparedStatementSetter.class)))
+        .thenAnswer(
+            invocation -> {
+              PreparedStatementSetter setter = invocation.getArgument(1);
+              setter.setValues(preparedStatement);
+              return 1;
+            });
+    ExportScheduleCreateRequestDto request =
+        new ExportScheduleCreateRequestDto(
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 29),
+            LocalDate.of(2026, 8, 7),
+            LocalDate.of(2026, 8, 14),
+            LocalDate.of(2026, 8, 4));
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    var row = repository.updateExportSchedule(1002L, request);
+
+    assertThat(row.exportScheduleId()).isEqualTo(1002L);
+    verify(preparedStatement).setDate(1, java.sql.Date.valueOf("2026-07-15"));
+    verify(preparedStatement).setDate(2, java.sql.Date.valueOf("2026-07-15"));
+    verify(preparedStatement).setDate(3, java.sql.Date.valueOf("2026-07-29"));
+    verify(preparedStatement).setDate(4, java.sql.Date.valueOf("2026-08-07"));
+    verify(preparedStatement).setDate(5, java.sql.Date.valueOf("2026-08-14"));
+    verify(preparedStatement).setDate(6, java.sql.Date.valueOf("2026-08-04"));
+    verify(preparedStatement).setLong(7, 1002L);
+  }
+
+  @Test
+  void countApplicationsForExportScheduleShouldQueryLegacyApplicationTable() {
+    when(jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM EXPORT_EXEMPTION_APPLICATION WHERE EXPORT_SCHEDULE_ID = ?",
+            Long.class,
+            1002L))
+        .thenReturn(3L);
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    long count = repository.countApplicationsForExportSchedule(1002L);
+
+    assertThat(count).isEqualTo(3L);
+  }
+
+  @Test
+  void deleteExportScheduleShouldReturnTrueWhenRowDeleted() {
+    when(jdbcTemplate.update("DELETE FROM EXPORT_SCHEDULE WHERE EXPORT_SCHEDULE_ID = ?", 1002L))
+        .thenReturn(1);
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.deleteExportSchedule(1002L)).isTrue();
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})

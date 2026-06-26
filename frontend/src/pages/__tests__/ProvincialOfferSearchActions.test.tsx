@@ -122,6 +122,36 @@ describe('Provincial Offer Search Actions', () => {
     )
   })
 
+  it('defaults listing to date from the first list-date label and leaves blank last', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionReasons: [],
+      applicationStatuses: [],
+      productTypes: [],
+      growthTypes: [],
+      regions: [],
+      currentSchedules: [
+        { value: '987', label: '2026-07-11' },
+        { value: '988', label: '2026-07-25' },
+        { value: '', label: 'Blank' },
+      ],
+    })
+
+    renderPage()
+    await screen.findByText('OFF-1001')
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialOffers).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            listingToDate: '2026-07-11',
+          }),
+        }),
+      )
+    })
+  })
+
   it('disables search for invalid dates and updates search sort direction from header click', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
