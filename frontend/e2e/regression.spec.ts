@@ -5,7 +5,6 @@ import {
   deleteWithCsrf,
   expectAccessiblePage,
   expectInvalidApplicationCreateValidation,
-  expectRouteUnauthorized,
   fetchSessionCapabilities,
   getWithAuth,
   hasIdirCredentials,
@@ -781,12 +780,20 @@ test.describe.serial('TEST IDIR admin regression', () => {
     }
   })
 
-  test('signs out from unauthorized page to the login shell', async () => {
+  test('signs out to the login shell', async () => {
     const page = await authenticatedIdirPage()
     const baseOrigin = new URL(E2E_BASE_URL).origin
 
-    await expectRouteUnauthorized(page, '/unauthorized')
-    await page.getByRole('button', { name: /log out/i }).click()
+    await expectAccessiblePage(page, '/admin', /administration/i)
+    const profileButton = page.locator('button[aria-controls="profile-panel"]')
+    if ((await profileButton.getAttribute('aria-expanded')) !== 'true') {
+      await profileButton.click()
+    }
+    const openProfilePanel = page.locator('#profile-panel.is-open')
+    await expect(openProfilePanel).toBeVisible()
+    const signOutButton = openProfilePanel.getByRole('button', { name: /sign out/i })
+    await expect(signOutButton).toBeVisible()
+    await signOutButton.click()
 
     try {
       await expect(page.getByRole('button', { name: /log in with idir/i })).toBeVisible({
