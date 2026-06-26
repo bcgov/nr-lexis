@@ -7,9 +7,9 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
+import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPagedResponseDto;
 import ca.bc.gov.mof.lexis.service.admin.LexisAdminScheduleService;
 import java.time.LocalDate;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -29,7 +29,7 @@ class LexisAdminScheduleControllerTest {
     LexisAdminScheduleController controller =
         new LexisAdminScheduleController(scheduleServiceProvider);
 
-    var response = controller.upcomingSchedules();
+    var response = controller.upcomingSchedules(0, 100);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
   }
@@ -39,15 +39,17 @@ class LexisAdminScheduleControllerTest {
     when(scheduleServiceProvider.getIfAvailable()).thenReturn(scheduleService);
     ExportScheduleRowDto row =
         new ExportScheduleRowDto(1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null);
-    when(scheduleService.upcomingSchedules()).thenReturn(List.of(row));
+    LexisAdminPagedResponseDto<ExportScheduleRowDto> payload =
+        new LexisAdminPagedResponseDto<>(java.util.List.of(row), 1, 0, 100);
+    when(scheduleService.upcomingSchedules(0, 100)).thenReturn(payload);
     LexisAdminScheduleController controller =
         new LexisAdminScheduleController(scheduleServiceProvider);
 
-    var response = controller.upcomingSchedules();
+    var response = controller.upcomingSchedules(0, 100);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).containsExactly(row);
-    verify(scheduleService).upcomingSchedules();
+    assertThat(response.getBody()).isEqualTo(payload);
+    verify(scheduleService).upcomingSchedules(0, 100);
   }
 
   @Test
@@ -89,6 +91,42 @@ class LexisAdminScheduleControllerTest {
   }
 
   @Test
+  void updateScheduleShouldReturnNoContentWhenServiceMissing() {
+    when(scheduleServiceProvider.getIfAvailable()).thenReturn(null);
+    ExportScheduleCreateRequestDto request =
+        new ExportScheduleCreateRequestDto(
+            LocalDate.of(2026, 7, 15), null, null, null, null, null);
+    LexisAdminScheduleController controller =
+        new LexisAdminScheduleController(scheduleServiceProvider);
+
+    var response = controller.updateSchedule(1001L, request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+  }
+
+  @Test
+  void updateScheduleShouldReturnBadRequestForGuardrailFailure() {
+    when(scheduleServiceProvider.getIfAvailable()).thenReturn(scheduleService);
+    ExportScheduleCreateRequestDto request =
+        new ExportScheduleCreateRequestDto(
+            LocalDate.of(2026, 7, 15), null, null, null, null, null);
+    when(scheduleService.updateSchedule(1001L, request))
+        .thenReturn(
+            new ExportScheduleMutationResultDto(
+                false, "A schedule already exists for that advertising date.", null));
+    LexisAdminScheduleController controller =
+        new LexisAdminScheduleController(scheduleServiceProvider);
+
+    var response = controller.updateSchedule(1001L, request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+    assertThat(response.getBody().message())
+        .isEqualTo("A schedule already exists for that advertising date.");
+  }
+
+  @Test
   void updateScheduleShouldReturnOkForSuccess() {
     when(scheduleServiceProvider.getIfAvailable()).thenReturn(scheduleService);
     ExportScheduleCreateRequestDto request =
@@ -106,6 +144,17 @@ class LexisAdminScheduleControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().schedule()).isEqualTo(row);
+  }
+
+  @Test
+  void deleteScheduleShouldReturnNoContentWhenServiceMissing() {
+    when(scheduleServiceProvider.getIfAvailable()).thenReturn(null);
+    LexisAdminScheduleController controller =
+        new LexisAdminScheduleController(scheduleServiceProvider);
+
+    var response = controller.deleteSchedule(1001L);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
   }
 
   @Test

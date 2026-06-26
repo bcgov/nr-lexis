@@ -72,15 +72,31 @@ const legacyTenureDefaultDates = (): { fromDate: string; toDate: string } => {
   }
 }
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 const getComboBox = (labelText: string): HTMLElement =>
-  screen.getByRole('combobox', { name: labelText })
+  screen.getByRole('combobox', { name: new RegExp(`^${escapeRegExp(labelText)}`) })
 
 const chooseComboBoxOption = async (labelText: string, optionName: string): Promise<void> => {
   const combobox = getComboBox(labelText)
   await userEvent.click(combobox)
   fireEvent.change(combobox, { target: { value: optionName } })
-  const options = await screen.findAllByRole('option', { name: optionName })
+  const listboxId = combobox.getAttribute('aria-controls')
+  const listbox = listboxId ? document.getElementById(listboxId) : null
+  const options = listbox
+    ? await within(listbox).findAllByRole('option', { name: optionName })
+    : await screen.findAllByRole('option', { name: optionName })
   await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
+}
+
+const openComboBoxOptionNames = async (labelText: string): Promise<string[]> => {
+  const combobox = getComboBox(labelText)
+  await userEvent.click(combobox)
+  fireEvent.change(combobox, { target: { value: '' } })
+  return screen
+    .getAllByRole('option')
+    .map((option) => option.textContent?.trim() ?? '')
+    .filter(Boolean)
 }
 
 Element.prototype.scrollIntoView = vi.fn()
@@ -426,6 +442,36 @@ describe('Reports Page Actions', () => {
         },
       })
     })
+  })
+
+  it('shows selected report region names instead of only the selected count', async () => {
+    mockReportPermissions()
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=offerReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Offer Report' })
+
+    await chooseComboBoxOption('Region', 'Cariboo Natural Resource Region')
+    await chooseComboBoxOption('Region', 'Kootenay-Boundary Natural Resource Region')
+
+    expect(
+      await screen.findByText(
+        'Selected: Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('defaults species and grade permit status to complete like legacy Struts', async () => {
@@ -816,6 +862,155 @@ describe('Reports Page Actions', () => {
           outputFormat: 'CSV',
           fromDate: '2026-06-01',
           toDate: '2026-06-30',
+        },
+      })
+    })
+    expect(anchorClickSpy).toHaveBeenCalled()
+    expect(window.open).not.toHaveBeenCalled()
+  })
+
+  it('uses current list date options for advertising list date range fields', async () => {
+    mockReportPermissions()
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      currentSchedules: [
+        { value: '1001', label: '2026-07-02' },
+        { value: '1002', label: '2026-07-08' },
+        { value: '', label: 'Blank' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=biweeklyListing']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Advertising List' })
+    expect(getComboBox('Listing from date')).toBeInTheDocument()
+    expect(getComboBox('Listing to date')).toBeInTheDocument()
+    expect(await openComboBoxOptionNames('Listing from date')).toEqual([
+      '2026-07-02',
+      '2026-07-08',
+      'Blank',
+    ])
+    await userEvent.keyboard('{Escape}')
+
+    await chooseComboBoxOption('Listing from date', '2026-07-02')
+    expect(await openComboBoxOptionNames('Listing to date')).toEqual([
+      '2026-07-02',
+      '2026-07-08',
+      'Blank',
+    ])
+    await userEvent.keyboard('{Escape}')
+    await chooseComboBoxOption('Listing to date', '2026-07-08')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'biweeklyListing',
+        actionMapping: 'generate',
+        values: {
+          fromDate: '2026-07-02',
+          toDate: '2026-07-08',
+        },
+      })
+    })
+  })
+
+  it('allows explicit blank advertising list dates to use legacy schedule defaults', async () => {
+    mockReportPermissions()
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      currentSchedules: [
+        { value: '1001', label: '2026-07-02' },
+        { value: '1002', label: '2026-07-08' },
+        { value: '', label: 'Blank' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=biweeklyListing']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Advertising List' })
+    await chooseComboBoxOption('Listing from date', 'Blank')
+    await chooseComboBoxOption('Listing to date', 'Blank')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'biweeklyListing',
+        actionMapping: 'generate',
+        values: {
+          fromDate: '',
+          toDate: '',
+        },
+      })
+    })
+    expect(screen.queryByText(/Choose a Listing from date/i)).not.toBeInTheDocument()
+  })
+
+  it('allows BCEID advertising-list-only users to use current list dates', async () => {
+    mockReportPermissions((action: string) => action === 'mofrListing')
+    mockedRunReport.mockResolvedValueOnce({
+      source: 'api',
+      blob: new Blob(['report']),
+      filename: 'biweeklyListing.csv',
+      contentType: 'text/csv',
+    })
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      currentSchedules: [
+        { value: '1001', label: '2026-07-02' },
+        { value: '1002', label: '2026-07-08' },
+        { value: '', label: 'Blank' },
+      ],
+    })
+    const anchorClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=biweeklyListing']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Advertising List' })
+    expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offer Report')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
+    expect(screen.getByText('Required action:')).toBeInTheDocument()
+    expect(screen.getAllByText('mofrListing').length).toBeGreaterThan(0)
+    expect(await openComboBoxOptionNames('Listing from date')).toEqual([
+      '2026-07-02',
+      '2026-07-08',
+      'Blank',
+    ])
+    await userEvent.keyboard('{Escape}')
+
+    await chooseComboBoxOption('Output format', 'CSV')
+    await chooseComboBoxOption('Listing from date', '2026-07-02')
+    await chooseComboBoxOption('Listing to date', '2026-07-08')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'biweeklyListing',
+        actionMapping: 'generate',
+        values: {
+          outputFormat: 'CSV',
+          fromDate: '2026-07-02',
+          toDate: '2026-07-08',
         },
       })
     })

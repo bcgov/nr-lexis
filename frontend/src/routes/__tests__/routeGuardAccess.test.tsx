@@ -9,6 +9,10 @@ vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
+vi.mock('@/pages/Reports', () => ({
+  default: () => <h1>Reports</h1>,
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 
 const renderWithPath = (path: string) => {
@@ -161,6 +165,25 @@ describe('Protected route guard access', () => {
     renderWithPath('/provincial/application/upload')
 
     expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
+  })
+
+  it('allows BCEID advertising-list-only users to open the reports route', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['PROVINCIAL_SUBMITTER'],
+          welcomeTarget: '/reports',
+          grantedActions: ['mofrListing'],
+        }),
+        defaultRoute: '/reports',
+        canPerform: (action: string) => action === 'mofrListing',
+      }),
+    )
+
+    renderWithPath('/reports?report=biweeklyListing')
+
+    expect(await screen.findByRole('heading', { name: 'Reports' })).toBeInTheDocument()
   })
 
   it('allows admin users to open the application submission upload route', async () => {

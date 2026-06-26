@@ -1,6 +1,7 @@
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import axios from 'axios'
 import { fetchAuthSession } from 'aws-amplify/auth'
+import { notifySessionExpired } from '@/context/auth/session-expiry'
 
 type CachedGetOptions = {
   ttlMs?: number
@@ -57,7 +58,7 @@ class APIService {
             this.setHeader(requestConfig.headers, 'Authorization', `Bearer ${accessToken}`)
           }
         } catch {
-          // No active Cognito session yet; continue without bearer token.
+          notifySessionExpired('token-unavailable')
         }
       }
 
@@ -68,6 +69,18 @@ class APIService {
 
       return requestConfig
     })
+
+    this.client.interceptors.response.use(
+      (response) => response,
+      (error: unknown) => {
+        const status = this.responseStatus(error)
+        if (status === 401 || status === 403) {
+          this.clearCachedGetData()
+          notifySessionExpired('api-unauthorized')
+        }
+        return Promise.reject(error)
+      },
+    )
   }
 
   public getAxiosInstance(): AxiosInstance {
@@ -276,6 +289,15 @@ class APIService {
     }
 
     ;(headers as Record<string, unknown>)[headerName] = value
+  }
+
+  private responseStatus(error: unknown): number | undefined {
+    if (!error || typeof error !== 'object') {
+      return undefined
+    }
+
+    const status = (error as { response?: { status?: unknown } }).response?.status
+    return typeof status === 'number' ? status : undefined
   }
 
   private toHeaderRecord(headers: unknown): Record<string, unknown> {

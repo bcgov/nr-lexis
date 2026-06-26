@@ -293,6 +293,21 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void sendStatusEmailShouldNotSendWhenRepositoryCannotStageRequest() {
+    ApplicationReviewStatusEmailRequestDto request =
+        new ApplicationReviewStatusEmailRequestDto("REJ", "client@example.test", "Missing docs");
+    when(repository.sendStatusEmail(1000456L, "REJ", "client@example.test", "Missing docs"))
+        .thenReturn(false);
+
+    ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Application status email could not be prepared.");
+    verify(repository).sendStatusEmail(1000456L, "REJ", "client@example.test", "Missing docs");
+    verifyNoInteractions(emailSender);
+  }
+
+  @Test
   void sendStatusEmailShouldReportMailSenderFailure() {
     ApplicationReviewStatusEmailRequestDto request =
         new ApplicationReviewStatusEmailRequestDto("REJ", "client@gov.bc.ca", "Missing docs");

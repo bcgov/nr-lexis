@@ -108,6 +108,15 @@ describe('Protected route access matrix', () => {
     expect(routePaths.some((path) => path.includes('advertising'))).toBe(false)
   })
 
+  it('does not expose retired provincial summary route', () => {
+    const routePaths = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES].map((route) =>
+      route.path.toLowerCase(),
+    )
+
+    expect(routePaths.some((path) => path === '/provincial/summary')).toBe(false)
+    expect(routePaths.some((path) => path.startsWith('/provincial/summary/'))).toBe(false)
+  })
+
   it('keeps legacy dashboard URL as a redirect instead of a page', () => {
     const publicDashboardRoute = PUBLIC_ROUTES.find((entry) => entry.path === '/dashboard')
 

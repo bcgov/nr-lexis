@@ -1204,6 +1204,35 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
   })
 
+  it('blocks duplicate package numbers before creating a package', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createPackageSection = (
+      await screen.findByRole('heading', { name: 'Create Package' })
+    ).closest('section')
+    expect(createPackageSection).toBeTruthy()
+    const createPackageControls = within(createPackageSection as HTMLElement)
+    const packageNumberInput = createPackageControls.getByLabelText(
+      'Package Number',
+    ) as HTMLInputElement
+
+    await userEvent.type(packageNumberInput, 'pkg-1')
+    expect(packageNumberInput.value).toBe('PKG-1')
+    await userEvent.click(createPackageControls.getByRole('button', { name: 'Create Package' }))
+
+    expect(screen.getAllByText('Package PKG-1 already exists.').length).toBeGreaterThan(0)
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+  })
+
   it('shows legacy package validation before creating an invalid package', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -1222,7 +1251,7 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(createPackageSection).toBeTruthy()
     const createPackageControls = within(createPackageSection as HTMLElement)
 
-    await userEvent.type(createPackageControls.getByLabelText('Package Number'), 'PKG-NEW')
+    await userEvent.type(createPackageControls.getByLabelText('Package Number'), 'pkg-new')
     await userEvent.type(createPackageControls.getByLabelText('Package Volume'), '25.55')
     await userEvent.type(createPackageControls.getByLabelText('Average Length'), '100')
     await userEvent.type(createPackageControls.getByLabelText('Average Diameter'), '100')
@@ -1992,6 +2021,138 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
+  it('uses natural resource region names in application summary edits', async () => {
+    const detailWithNaturalResourceRegion: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      orgUnitNumber: 1903,
+      orgUnitName: 'Cariboo Natural Resource Region',
+    }
+    mockedFetchProvincialApplicationDetail.mockResolvedValue(detailWithNaturalResourceRegion)
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      applicationNumber: '321',
+      federalApplicationNumber: '',
+      applicationDate: '2026-01-01',
+      receivedDate: '2026-01-02',
+      termDays: '30',
+      applicationVolume: '100',
+      averageLogVolume: '2',
+      exemptionReasonCode: 'U',
+      productLocation: 'BC',
+      exportScheduleId: '987',
+      agentClientNumber: '00033344',
+      agentClientLocationCode: '01',
+      ownerClientNumber: '00011122',
+      ownerClientLocationCode: '00',
+      exemptionNumber: 'EX-555',
+      applicationStatusCode: 'ACTIVE',
+      applicantTypeCode: 'A',
+      orgUnitNumber: '1903',
+      productTypeCode: 'LOG',
+      jurisdictionCode: 'P',
+      growthTypeCode: 'O',
+      agentContactName: 'Agent Contact',
+      ownerContactName: 'Owner Contact',
+      oicIndicator: 'N',
+      endUseCode: 'LU',
+      speciesCodes: ['FI'],
+    })
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionReasons: [{ value: 'U', label: 'Utilization' }],
+      applicationStatuses: [{ value: 'ACTIVE', label: 'Active' }],
+      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1908', label: 'Skeena Natural Resource Region' },
+      ],
+      currentSchedules: [{ value: '987', label: '2026-01-11' }],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await waitFor(() => getApplicationSummaryTile())
+    const summaryControls = within(summaryTile)
+    const regionComboBox = getSummaryComboBox(summaryControls, 'Region')
+
+    await waitFor(() => {
+      expect(regionComboBox).toHaveValue('Cariboo Natural Resource Region')
+    })
+
+    await chooseComboBoxOption(regionComboBox, 'Skeena Natural Resource Region')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicationNumber: '321',
+          orgUnitNumber: '1908',
+        }),
+      )
+    })
+  })
+
+  it('can clear application summary listing date with the blank schedule option', async () => {
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionReasons: [{ value: 'U', label: 'Utilization' }],
+      applicationStatuses: [{ value: 'ACTIVE', label: 'Active' }],
+      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [{ value: '12', label: 'Coast' }],
+      currentSchedules: [
+        { value: '987', label: '2026-01-11' },
+        { value: '988', label: '2026-01-25' },
+        { value: '989', label: '2026-02-08' },
+        { value: '', label: 'Blank' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await waitFor(() => getApplicationSummaryTile())
+    const summaryControls = within(summaryTile)
+    const listingDateComboBox = getSummaryComboBox(summaryControls, 'Listing date')
+
+    await waitFor(() => {
+      expect(listingDateComboBox).toHaveValue('2026-01-11')
+    })
+
+    await chooseComboBoxOption(listingDateComboBox, '2026-02-08')
+    await waitFor(() => {
+      expect(listingDateComboBox).toHaveValue('2026-02-08')
+    })
+    await chooseComboBoxOption(listingDateComboBox, 'Blank')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicationNumber: '321',
+          exportScheduleId: '',
+        }),
+      )
+    })
+  })
+
   it('validates application summary volume ranges before saving', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -2183,6 +2344,58 @@ describe('Provincial Application Detail Document Actions', () => {
     })
   })
 
+  it('updates a single rejection with the loaded client email without sending email', async () => {
+    mockedUpdateApplicationReviewStatus.mockResolvedValueOnce({
+      updated: true,
+      valid: true,
+      statusCode: 'REJ',
+      clientEmail: 'agent@example.test',
+      remark: 'Cannot approve this application',
+      remarkId: 99,
+      remarkUser: 'idir\\reviewer',
+      remarkDate: '2026-01-05T10:15:00Z',
+      message: 'Application status updated.',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
+    const reviewTile = getApplicationReviewTile()
+    const reviewControls = within(reviewTile)
+    await chooseComboBoxOption(
+      reviewControls.getByRole('combobox', { name: /application status/i }),
+      'Rejected',
+    )
+    await waitFor(() => {
+      expect(reviewControls.getByLabelText(/client email address/i)).toHaveValue(
+        'agent@example.test',
+      )
+    })
+    fireEvent.change(reviewControls.getByLabelText(/review remark/i), {
+      target: { value: 'Cannot approve this application' },
+    })
+    await userEvent.click(reviewControls.getByRole('button', { name: 'Update Review Status' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith('321', {
+        statusCode: 'REJ',
+        remark: 'Cannot approve this application',
+        clientEmailAddress: 'agent@example.test',
+      })
+    })
+    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+    expect(await screen.findByText('Application status updated.')).toBeInTheDocument()
+  })
+
   it('loads persisted review status remark without treating placeholder email as persisted', async () => {
     const expiredDetail: ProvincialApplicationDetail = {
       ...applicationDetail,
@@ -2245,6 +2458,17 @@ describe('Provincial Application Detail Document Actions', () => {
     mockedFetchProvincialApplicationDetail
       .mockResolvedValueOnce(applicationDetail)
       .mockResolvedValueOnce(detailAfterStatusUpdate)
+    mockedUpdateApplicationReviewStatus.mockResolvedValueOnce({
+      updated: true,
+      valid: true,
+      statusCode: 'REJ',
+      clientEmail: 'edited.client@example.test',
+      remark: 'Needs correction',
+      remarkId: 99,
+      remarkUser: 'idir\\reviewer',
+      remarkDate: '2026-01-05T10:15:00Z',
+      message: 'Application status updated.',
+    })
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -2268,6 +2492,14 @@ describe('Provincial Application Detail Document Actions', () => {
       within(reviewTile).getByRole('combobox', { name: /application status/i }),
       'Rejected',
     )
+    fireEvent.change(within(reviewTile).getByLabelText(/client email address/i), {
+      target: { value: 'edited.client@example.test' },
+    })
+    await waitFor(() => {
+      expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
+        'edited.client@example.test',
+      )
+    })
     await userEvent.type(within(reviewTile).getByLabelText(/review remark/i), 'Needs correction')
     mockedSendApplicationReviewStatusEmail.mockResolvedValueOnce({
       success: false,
@@ -2281,12 +2513,12 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith('321', {
         statusCode: 'REJ',
         remark: 'Needs correction',
-        clientEmailAddress: 'agent@example.test',
+        clientEmailAddress: 'edited.client@example.test',
       })
       expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith('321', {
         statusCode: 'REJ',
         remark: 'Needs correction',
-        clientEmailAddress: 'agent@example.test',
+        clientEmailAddress: 'edited.client@example.test',
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
@@ -2296,7 +2528,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ),
     ).toBeInTheDocument()
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
-      'agent@example.test',
+      'edited.client@example.test',
     )
     expect(within(reviewTile).getByLabelText(/review remark/i)).toHaveValue('Needs correction')
     expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0)

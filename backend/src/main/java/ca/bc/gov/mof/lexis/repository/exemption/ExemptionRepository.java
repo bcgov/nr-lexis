@@ -77,7 +77,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return loadOrgUnitOptions(false);
+    return loadOrgUnitOptions(true);
   }
 
   public Page<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {

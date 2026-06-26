@@ -98,6 +98,7 @@ describe('search-options-service', () => {
       currentSchedules: [
         { code: '1001', name: '2026-06-15' },
         { code: '1002', name: '2026-06-29' },
+        { code: '', name: 'Blank' },
       ],
       defaultRegion: '12',
       regions: [
@@ -167,6 +168,7 @@ describe('search-options-service', () => {
       currentSchedules: [
         { value: '1001', label: '2026-06-15' },
         { value: '1002', label: '2026-06-29' },
+        { value: '', label: 'Blank' },
       ],
       defaultRegion: '',
       regions: [
@@ -301,5 +303,41 @@ describe('search-options-service', () => {
         { value: '1909', label: 'South Coast Natural Resource Region' },
       ],
     })
+  })
+
+  it('keeps all eight natural resource region codes and filters districts', async () => {
+    getCachedDataMock.mockResolvedValue({
+      exemptionTypes: [],
+      exemptionReasons: [],
+      applicationStatuses: [],
+      productTypes: [],
+      growthTypes: [],
+      regions: [
+        { code: '1903', name: 'Cariboo Natural Resource Region' },
+        { code: '1904', name: 'Kootenay-Boundary Natural Resource Region' },
+        { code: '1905', name: 'Northeast Natural Resource Region' },
+        { code: '1906', name: 'Omineca Natural Resource Region' },
+        { code: '1907', name: 'Thompson-Okanagan Natural Resource Region' },
+        { code: '1908', name: 'Skeena Natural Resource Region' },
+        { code: '1909', name: 'South Coast Natural Resource Region' },
+        { code: '1910', name: 'West Coast Natural Resource Region' },
+        { code: '1835', name: 'Coast Area District' },
+        { code: '1911', name: 'Not a Natural Resource Region' },
+      ],
+      currentSchedules: [],
+    })
+
+    const result = await fetchProvincialApplicationOptions()
+
+    expect(result.regions).toEqual([
+      { value: '1903', label: 'Cariboo Natural Resource Region' },
+      { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+      { value: '1905', label: 'Northeast Natural Resource Region' },
+      { value: '1906', label: 'Omineca Natural Resource Region' },
+      { value: '1907', label: 'Thompson-Okanagan Natural Resource Region' },
+      { value: '1908', label: 'Skeena Natural Resource Region' },
+      { value: '1909', label: 'South Coast Natural Resource Region' },
+      { value: '1910', label: 'West Coast Natural Resource Region' },
+    ])
   })
 })

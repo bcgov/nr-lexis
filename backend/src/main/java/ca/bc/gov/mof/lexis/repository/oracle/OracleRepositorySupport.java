@@ -128,8 +128,9 @@ public abstract class OracleRepositorySupport {
                       ? firstPresent(regionName, regionCode)
                       : firstPresent(regionCode, regionName));
             });
-    if (!options.isEmpty()) {
-      return naturalResourceRegions(options);
+    List<CodeNameDto> naturalResourceRegions = naturalResourceRegions(options);
+    if (!naturalResourceRegions.isEmpty()) {
+      return naturalResourceRegions;
     }
     return naturalResourceRegions(fallbackOrgUnitOptions(displayName));
   }

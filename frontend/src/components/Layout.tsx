@@ -141,9 +141,19 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         requiredActions: ['/lexisAgentAdmin'],
       },
       {
-        to: '/admin/policies',
+        to: '/admin/policies/fee',
         label: 'Fee policy administration',
-        requiredActions: ['/lexisAgentAdmin'],
+        requiredActions: ['/lexisPolicyAdmin'],
+      },
+      {
+        to: '/admin/policies/fil',
+        label: 'Fee in lieu percent administration',
+        requiredActions: ['/lexisFILAdmin'],
+      },
+      {
+        to: '/admin/schedules',
+        label: 'Export schedule administration',
+        requiredActions: ['/lexisPolicyAdmin'],
       },
       {
         to: '/admin/uploads',
@@ -179,6 +189,9 @@ const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
   { path: '/federal/application/upload', section: 'Federal' },
   { path: '/federal', section: 'Federal' },
   { path: '/reports', section: 'Reports' },
+  { path: '/admin/policies/fee', section: 'Administration' },
+  { path: '/admin/policies/fil', section: 'Administration' },
+  { path: '/admin/schedules', section: 'Administration' },
   { path: '/admin/uploads', section: 'Administration' },
   { path: '/admin/policies', section: 'Administration' },
   { path: '/admin', section: 'Administration' },

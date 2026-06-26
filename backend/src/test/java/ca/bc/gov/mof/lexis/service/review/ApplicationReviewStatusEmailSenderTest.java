@@ -50,4 +50,25 @@ class ApplicationReviewStatusEmailSenderTest {
         .contains("Application #108512 status was changed to WITHDRAWN")
         .contains("Withdrawn by client");
   }
+
+  @Test
+  void sendStatusEmailShouldUseOneTrimmedFromAddressWithoutReplyHeaders() {
+    JavaMailSender mailSender = org.mockito.Mockito.mock(JavaMailSender.class);
+    ApplicationReviewStatusEmailSender sender =
+        new ApplicationReviewStatusEmailSender(
+            mailSender, "  Provincial.Log.Export.Analyst@gov.bc.ca  ");
+
+    sender.sendStatusEmail(108513L, "REJ", "client@example.test", "Missing documents");
+
+    ArgumentCaptor<SimpleMailMessage> messageCaptor =
+        ArgumentCaptor.forClass(SimpleMailMessage.class);
+    verify(mailSender).send(messageCaptor.capture());
+    SimpleMailMessage message = messageCaptor.getValue();
+
+    assertThat(message.getFrom()).isEqualTo("Provincial.Log.Export.Analyst@gov.bc.ca");
+    assertThat(message.getReplyTo()).isNull();
+    assertThat(message.getTo()).containsExactly("client@example.test");
+    assertThat(message.getCc()).isNull();
+    assertThat(message.getBcc()).isNull();
+  }
 }

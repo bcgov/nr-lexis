@@ -103,7 +103,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return loadOrgUnitOptions(false);
+    return loadOrgUnitOptions(true);
   }
 
   public Page<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {

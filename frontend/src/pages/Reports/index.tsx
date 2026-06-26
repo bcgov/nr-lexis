@@ -599,11 +599,13 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
         key: 'fromDate',
         label: 'Listing from date',
         type: 'date',
+        optionKey: 'currentScheduleDates',
       },
       {
         key: 'toDate',
         label: 'Listing to date',
         type: 'date',
+        optionKey: 'currentScheduleDates',
       },
       OUTPUT_FORMAT_FIELD,
     ],
@@ -611,6 +613,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
 ]
 
 const REPORT_CATEGORY_OPTIONS = ['ALL', 'Provincial', 'Federal', 'Cross-Module'] as const
+const BLANK_SCHEDULE_DATE_VALUE = '__blank_schedule_date__'
 
 function getLegacyTenureDefaultFromDate(): string {
   const today = new Date()
@@ -651,6 +654,13 @@ const mergeOptions = (...optionGroups: SearchOption[][]): SearchOption[] => {
     }
   })
   return Array.from(byCode.values())
+}
+
+const toScheduleDateOptions = (options: SearchOption[]): SearchOption[] => {
+  return options.map((option) => ({
+    value: option.value ? option.label : BLANK_SCHEDULE_DATE_VALUE,
+    label: option.label,
+  }))
 }
 
 const getRequiredReportOptionSources = (report: ReportDefinition): ReportOptionSource[] => {
@@ -711,6 +721,12 @@ const sanitizeReportValues = (
     return acc
   }, {})
 }
+
+const hasOwnValue = (values: Record<string, string>, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(values, key)
+
+const isExplicitBlankBiweeklyDateValue = (value: string | undefined): boolean =>
+  value === BLANK_SCHEDULE_DATE_VALUE || value === ''
 
 const appendSelectedOptionLabels = (
   report: ReportDefinition,
@@ -774,7 +790,12 @@ const buildEffectiveReportValues = (
       return
     }
 
-    if (field.key === 'outputFormat' || field.type !== 'select' || effectiveValues[field.key]) {
+    if (
+      field.key === 'outputFormat' ||
+      field.type !== 'select' ||
+      effectiveValues[field.key] ||
+      hasOwnValue(values, field.key)
+    ) {
       return
     }
 
@@ -783,10 +804,23 @@ const buildEffectiveReportValues = (
       effectiveValues[field.key] = options[0].value
     }
   })
+  if (report.id === 'biweeklyListing') {
+    for (const key of ['fromDate', 'toDate'] as const) {
+      if (effectiveValues[key] === BLANK_SCHEDULE_DATE_VALUE) {
+        effectiveValues[key] = ''
+      }
+    }
+  }
   return Object.entries(appendSelectedOptionLabels(report, effectiveValues, optionsByKey)).reduce<
     Record<string, string>
   >((acc, [key, value]) => {
-    if (value.trim()) {
+    const shouldPreserveExplicitBlankBiweeklyDate =
+      report.id === 'biweeklyListing' &&
+      (key === 'fromDate' || key === 'toDate') &&
+      hasOwnValue(values, key) &&
+      isExplicitBlankBiweeklyDateValue(values[key]) &&
+      !value.trim()
+    if (value.trim() || shouldPreserveExplicitBlankBiweeklyDate) {
       acc[key] = value
     }
     return acc
@@ -885,7 +919,20 @@ const validateReportLaunch = (
     return APPLICATION_REPORT_LIMITER_MESSAGE
   }
 
-  if (report.id === 'biweeklyListing' && (!values.fromDate?.trim() || !values.toDate?.trim())) {
+  const hasExplicitBlankBiweeklyDateRange =
+    report.id === 'biweeklyListing' &&
+    hasOwnValue(values, 'fromDate') &&
+    hasOwnValue(values, 'toDate') &&
+    isExplicitBlankBiweeklyDateValue(values.fromDate) &&
+    isExplicitBlankBiweeklyDateValue(values.toDate) &&
+    !values.fromDate.trim() &&
+    !values.toDate.trim()
+
+  if (
+    report.id === 'biweeklyListing' &&
+    !hasExplicitBlankBiweeklyDateRange &&
+    (!values.fromDate?.trim() || !values.toDate?.trim())
+  ) {
     return BIWEEKLY_DATE_RANGE_MESSAGE
   }
 
@@ -1036,7 +1083,10 @@ const ReportsPage = () => {
         : {}),
       ...(reportOptions?.portsOfExport.length ? { portOfExport: reportOptions.portsOfExport } : {}),
       ...(reportOptions?.currentSchedules.length
-        ? { exportSchedule: reportOptions.currentSchedules }
+        ? {
+            exportSchedule: reportOptions.currentSchedules,
+            currentScheduleDates: toScheduleDateOptions(reportOptions.currentSchedules),
+          }
         : {}),
       ...(reportOptions?.reportJurisdictions.length
         ? {
@@ -1323,9 +1373,11 @@ const ReportsPage = () => {
                     (field.key === 'region' || field.key === 'orgUnitNumber') && defaultReportRegion
                       ? defaultReportRegion
                       : ''
+                  const hasSelectedFieldValue = hasOwnValue(selectedReportValues, field.key)
                   const currentValue =
-                    selectedReportValues[field.key] ??
-                    field.defaultValue ??
+                    (hasSelectedFieldValue
+                      ? selectedReportValues[field.key]
+                      : field.defaultValue) ??
                     (defaultMultiselectValue || (field.key === 'outputFormat' ? 'PDF' : ''))
                   const dynamicOptions = reportFieldOptionsByKey[field.optionKey ?? field.key] ?? []
                   const selectOptions =
@@ -1333,6 +1385,7 @@ const ReportsPage = () => {
                   const resolvedCurrentValue =
                     field.type === 'select' &&
                     field.key !== 'outputFormat' &&
+                    !hasSelectedFieldValue &&
                     !currentValue &&
                     selectOptions.length > 0 &&
                     selectOptions[0].value !== ''

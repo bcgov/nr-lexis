@@ -60,6 +60,14 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
        WHERE ES.ADVERTISING_DATE >= TRUNC(SYSDATE)
        ORDER BY ES.ADVERTISING_DATE ASC
       """;
+  private static final String COUNT_UPCOMING_EXPORT_SCHEDULES =
+      """
+      SELECT COUNT(*)
+        FROM EXPORT_SCHEDULE ES
+       WHERE ES.ADVERTISING_DATE >= TRUNC(SYSDATE)
+      """;
+  private static final String FIND_UPCOMING_EXPORT_SCHEDULES_PAGE =
+      FIND_UPCOMING_EXPORT_SCHEDULES + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
   private static final String FIND_EXPORT_SCHEDULE_BY_ID =
       """
       SELECT ES.EXPORT_SCHEDULE_ID,
@@ -130,6 +138,28 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
 
   public List<ExportScheduleRowDto> findUpcomingExportSchedules() {
     return jdbcTemplate.query(FIND_UPCOMING_EXPORT_SCHEDULES, this::mapExportScheduleRow);
+  }
+
+  public List<ExportScheduleRowDto> findUpcomingExportSchedules(int page, int size) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    long offsetLong = (long) normalizedPage * normalizedSize;
+    if (offsetLong > Integer.MAX_VALUE) {
+      return List.of();
+    }
+    int offset = (int) offsetLong;
+    return jdbcTemplate.query(
+        FIND_UPCOMING_EXPORT_SCHEDULES_PAGE,
+        ps -> {
+          ps.setInt(1, offset);
+          ps.setInt(2, normalizedSize);
+        },
+        this::mapExportScheduleRow);
+  }
+
+  public int countUpcomingExportSchedules() {
+    Integer count = jdbcTemplate.queryForObject(COUNT_UPCOMING_EXPORT_SCHEDULES, Integer.class);
+    return count == null ? 0 : Math.max(0, count);
   }
 
   public Optional<ExportScheduleRowDto> findExportScheduleById(long exportScheduleId) {

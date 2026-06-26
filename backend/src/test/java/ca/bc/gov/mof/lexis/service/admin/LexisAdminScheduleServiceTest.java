@@ -1,6 +1,9 @@
 package ca.bc.gov.mof.lexis.service.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -35,6 +38,51 @@ class LexisAdminScheduleServiceTest {
     when(repository.findUpcomingExportSchedules()).thenReturn(List.of(row));
 
     assertThat(service.upcomingSchedules()).containsExactly(row);
+  }
+
+  @Test
+  void upcomingSchedulesPageShouldDelegatePagingToRepository() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleRowDto row =
+        new ExportScheduleRowDto(1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null);
+    when(repository.findUpcomingExportSchedules(1, 50)).thenReturn(List.of(row));
+    when(repository.countUpcomingExportSchedules()).thenReturn(73);
+
+    var result = service.upcomingSchedules(1, 50);
+
+    assertThat(result.results()).containsExactly(row);
+    assertThat(result.total()).isEqualTo(73);
+    assertThat(result.page()).isEqualTo(1);
+    assertThat(result.size()).isEqualTo(50);
+  }
+
+  @Test
+  void upcomingSchedulesPageShouldNormalizeInvalidPaging() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    when(repository.findUpcomingExportSchedules(0, 100)).thenReturn(List.of());
+    when(repository.countUpcomingExportSchedules()).thenReturn(0);
+
+    var result = service.upcomingSchedules(-3, 0);
+
+    assertThat(result.results()).isEmpty();
+    assertThat(result.total()).isZero();
+    assertThat(result.page()).isZero();
+    assertThat(result.size()).isEqualTo(100);
+    verify(repository).findUpcomingExportSchedules(0, 100);
+  }
+
+  @Test
+  void upcomingSchedulesPageShouldCapPageSizeAtTwoHundred() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    when(repository.findUpcomingExportSchedules(2, 200)).thenReturn(List.of());
+    when(repository.countUpcomingExportSchedules()).thenReturn(0);
+
+    var result = service.upcomingSchedules(2, 500);
+
+    assertThat(result.results()).isEmpty();
+    assertThat(result.page()).isEqualTo(2);
+    assertThat(result.size()).isEqualTo(200);
+    verify(repository).findUpcomingExportSchedules(2, 200);
   }
 
   @Test
@@ -119,6 +167,48 @@ class LexisAdminScheduleServiceTest {
     assertThat(result.success()).isFalse();
     assertThat(result.message())
         .isEqualTo("Export schedule is used by existing applications and cannot be changed.");
+    verify(repository, never()).updateExportSchedule(anyLong(), any());
+  }
+
+  @Test
+  void updateScheduleShouldRejectInvalidScheduleIdBeforeRepositoryLookup() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+
+    var result =
+        service.updateSchedule(
+            0L,
+            request(
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 6, 25),
+                LocalDate.of(2026, 7, 8)));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("A valid export schedule id is required.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void updateScheduleShouldRejectDuplicateAdvertisingDateBeforeMutation() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleCreateRequestDto request =
+        request(
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 8),
+            LocalDate.of(2026, 7, 22));
+    when(repository.findExportScheduleById(1001L))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
+    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
+    when(repository.advertisingDateExistsForOtherSchedule(LocalDate.of(2026, 7, 15), 1001L))
+        .thenReturn(true);
+
+    var result = service.updateSchedule(1001L, request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("A schedule already exists for that advertising date.");
+    verify(repository, never()).updateExportSchedule(1001L, request);
   }
 
   @Test
@@ -168,6 +258,24 @@ class LexisAdminScheduleServiceTest {
 
     assertThat(result.success()).isFalse();
     assertThat(result.message()).isEqualTo("Only current or future export schedules can be changed.");
+  }
+
+  @Test
+  void deleteScheduleShouldRejectReferencedFutureScheduleBeforeDelete() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    when(repository.findExportScheduleById(1001L))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
+    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(1L);
+
+    var result = service.deleteSchedule(1001L);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .isEqualTo("Export schedule is used by existing applications and cannot be changed.");
+    verify(repository, never()).deleteExportSchedule(1001L);
   }
 
   @Test

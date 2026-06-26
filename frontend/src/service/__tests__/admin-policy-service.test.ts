@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchFeePolicies, fetchFilPolicies, upsertFeePolicy } from '@/service/admin-policy-service'
+import {
+  fetchFeePolicies,
+  fetchFeePolicyPage,
+  fetchFilPolicies,
+  fetchFilPolicyPage,
+  upsertFeePolicy,
+} from '@/service/admin-policy-service'
 
 const { deleteMock, getCachedResponseMock, getMock, postMock, putMock } = vi.hoisted(() => ({
   deleteMock: vi.fn(),
@@ -45,10 +51,19 @@ describe('admin-policy-service', () => {
 
     const result = await fetchFeePolicies()
 
-    expect(getCachedResponseMock).toHaveBeenCalledWith('/lexis/admin/policies/fee', undefined, {
-      cacheKey: 'admin-policies:fee',
-      ttlMs: 30_000,
-    })
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/admin/policies/fee',
+      {
+        params: {
+          page: 0,
+          size: 100,
+        },
+      },
+      {
+        cacheKey: 'admin-policies:fee:0:100',
+        ttlMs: 30_000,
+      },
+    )
     expect(getMock).not.toHaveBeenCalled()
     expect(result).toEqual([
       expect.objectContaining({
@@ -59,6 +74,51 @@ describe('admin-policy-service', () => {
         policyPercentage: '3.5',
       }),
     ])
+  })
+
+  it('normalizes paginated fee policy metadata', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          {
+            policyId: 'fee-1',
+            policyEffectiveDate: '2026-02-01',
+            regionCode: 'co',
+            feeIncreasePercentage: '3.5',
+          },
+        ],
+        total: 42,
+        page: 1,
+        size: 20,
+      },
+    })
+
+    const result = await fetchFeePolicyPage(1, 20)
+
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/admin/policies/fee',
+      {
+        params: {
+          page: 1,
+          size: 20,
+        },
+      },
+      {
+        cacheKey: 'admin-policies:fee:1:20',
+        ttlMs: 30_000,
+      },
+    )
+    expect(result).toEqual({
+      rows: [
+        expect.objectContaining({
+          id: 'fee-1',
+          orgUnitCode: 'CO',
+        }),
+      ],
+      total: 42,
+      page: 1,
+      size: 20,
+    })
   })
 
   it('normalizes legacy fee policy RPC rows', async () => {
@@ -114,6 +174,61 @@ describe('admin-policy-service', () => {
         filPercentage: '12',
       }),
     ])
+  })
+
+  it('normalizes paginated FIL policy metadata', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          {
+            policyId: 'fil-1',
+            policyEffectiveDate: '2026-03-01',
+            policyPercentage: '17',
+          },
+          {
+            lexisFILPolicyId: 22,
+            effectiveDate: '2026-02-01',
+            filPercent: 16,
+          },
+        ],
+        total: 24,
+        page: 2,
+        size: 10,
+      },
+    })
+
+    const result = await fetchFilPolicyPage(2, 10)
+
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/admin/policies/fil',
+      {
+        params: {
+          page: 2,
+          size: 10,
+        },
+      },
+      {
+        cacheKey: 'admin-policies:fil:2:10',
+        ttlMs: 30_000,
+      },
+    )
+    expect(result).toEqual({
+      rows: [
+        expect.objectContaining({
+          id: 'fil-1',
+          effectiveDate: '2026-03-01',
+          filPercentage: '17',
+        }),
+        expect.objectContaining({
+          id: '22',
+          effectiveDate: '2026-02-01',
+          filPercentage: '16',
+        }),
+      ],
+      total: 24,
+      page: 2,
+      size: 10,
+    })
   })
 
   it('throws API errors when fee policy API request fails', async () => {

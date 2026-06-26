@@ -7,9 +7,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPageDto;
+import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPagedResponseDto;
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcRequestDto;
 import ca.bc.gov.mof.lexis.service.admin.LexisAdminRpcService;
 import ca.bc.gov.mof.lexis.service.admin.LexisAdminService;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -124,14 +126,16 @@ class LexisAdminControllerTest {
     when(adminRpcServiceProvider.getIfAvailable()).thenReturn(adminRpcService);
     LexisAdminController controller =
         new LexisAdminController(adminServiceProvider, adminRpcServiceProvider);
-    when(adminRpcService.executeFeePolicyRpc(any(LexisAdminRpcRequestDto.class)))
-        .thenReturn(Optional.of(Map.of("rows", "ok")));
+    LexisAdminPagedResponseDto<Map<String, Object>> payload =
+        new LexisAdminPagedResponseDto<>(List.of(Map.of("rows", "ok")), 1, 0, 100);
+    when(adminRpcService.listFeePolicies(0, 100, null, null)).thenReturn(Optional.of(payload));
 
-    ResponseEntity<Object> response = controller.feePolicies();
+    ResponseEntity<LexisAdminPagedResponseDto<Map<String, Object>>> response =
+        controller.feePolicies(0, 100, null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    verify(adminRpcService)
-        .executeFeePolicyRpc(new LexisAdminRpcRequestDto("view", Map.of("actionMapping", "view")));
+    assertThat(response.getBody()).isEqualTo(payload);
+    verify(adminRpcService).listFeePolicies(0, 100, null, null);
   }
 
   @Test
@@ -185,14 +189,16 @@ class LexisAdminControllerTest {
     when(adminRpcServiceProvider.getIfAvailable()).thenReturn(adminRpcService);
     LexisAdminController controller =
         new LexisAdminController(adminServiceProvider, adminRpcServiceProvider);
-    when(adminRpcService.executeFilPolicyRpc(any(LexisAdminRpcRequestDto.class)))
-        .thenReturn(Optional.of(Map.of("rows", "ok")));
+    LexisAdminPagedResponseDto<Map<String, Object>> payload =
+        new LexisAdminPagedResponseDto<>(List.of(Map.of("rows", "ok")), 1, 0, 100);
+    when(adminRpcService.listFilPolicies(0, 100, null, null)).thenReturn(Optional.of(payload));
 
-    ResponseEntity<Object> response = controller.filPolicies();
+    ResponseEntity<LexisAdminPagedResponseDto<Map<String, Object>>> response =
+        controller.filPolicies(0, 100, null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    verify(adminRpcService)
-        .executeFilPolicyRpc(new LexisAdminRpcRequestDto("view", Map.of("actionMapping", "view")));
+    assertThat(response.getBody()).isEqualTo(payload);
+    verify(adminRpcService).listFilPolicies(0, 100, null, null);
   }
 
   @Test

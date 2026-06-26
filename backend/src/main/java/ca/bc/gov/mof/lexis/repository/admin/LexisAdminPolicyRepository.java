@@ -136,7 +136,10 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
   }
 
   public long countFeePolicies() {
-    return queryCursorProcedure(COUNT_FEE_POLICIES, null, 1, rs -> Integer.valueOf(1)).size();
+    return queryCursorProcedure(COUNT_FEE_POLICIES, null, 1, rs -> {
+      long value = rs.getLong(1);
+      return rs.wasNull() ? 0L : value;
+    }).stream().findFirst().orElse(0L);
   }
 
   public List<FilPolicyRow> findFilPolicies(String sortOrder, int page) {
@@ -218,7 +221,10 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
   }
 
   public long countFilPolicies() {
-    return queryCursorProcedure(COUNT_FIL_POLICIES, null, 1, rs -> Integer.valueOf(1)).size();
+    return queryCursorProcedure(COUNT_FIL_POLICIES, null, 1, rs -> {
+      long value = rs.getLong(1);
+      return rs.wasNull() ? 0L : value;
+    }).stream().findFirst().orElse(0L);
   }
 
   public Optional<OrgUnitRow> findOrgUnitByNumber(Long orgUnitNo) {

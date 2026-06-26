@@ -29,7 +29,16 @@ export type ExportScheduleMutationResult = {
   schedule: ExportScheduleRow | null
 }
 
+export type ExportSchedulePage = {
+  rows: ExportScheduleRow[]
+  total: number
+  page: number
+  size: number
+}
+
 const SCHEDULE_CACHE_TTL_MS = 30_000
+const DEFAULT_ADMIN_PAGE = 0
+const DEFAULT_ADMIN_PAGE_SIZE = 100
 
 const normalizeScheduleRow = (row: unknown): ExportScheduleRow => {
   const source = recordOrEmpty(row)
@@ -57,20 +66,49 @@ const normalizeMutationResult = (payload: unknown): ExportScheduleMutationResult
   }
 }
 
-export const fetchExportSchedules = async (): Promise<ExportScheduleRow[]> => {
-  const response = await apiService.getCachedResponse<unknown>(
-    '/lexis/admin/schedules',
-    undefined,
-    {
-      cacheKey: 'admin-schedules:upcoming',
-      ttlMs: SCHEDULE_CACHE_TTL_MS,
-    },
-  )
-  const rows = parsePayloadArray(response.data)
+const normalizeSchedulePage = (
+  payload: unknown,
+  defaultPage: number,
+  defaultSize: number,
+): ExportSchedulePage => {
+  const source = recordOrEmpty(payload)
+  const rows = parsePayloadArray(payload)
   if (!rows) {
     throw new Error('Export schedule response is not a list.')
   }
-  return rows.map(normalizeScheduleRow)
+  const total = Number(source.total ?? rows.length)
+  const page = Number(source.page ?? defaultPage)
+  const size = Number(source.size ?? defaultSize)
+  return {
+    rows: rows.map(normalizeScheduleRow),
+    total: Number.isFinite(total) ? total : rows.length,
+    page: Number.isFinite(page) ? page : defaultPage,
+    size: Number.isFinite(size) ? size : defaultSize,
+  }
+}
+
+export const fetchExportSchedulePage = async (
+  page = DEFAULT_ADMIN_PAGE,
+  size = DEFAULT_ADMIN_PAGE_SIZE,
+): Promise<ExportSchedulePage> => {
+  const response = await apiService.getCachedResponse<unknown>(
+    '/lexis/admin/schedules',
+    {
+      params: {
+        page,
+        size,
+      },
+    },
+    {
+      cacheKey: `admin-schedules:upcoming:${page}:${size}`,
+      ttlMs: SCHEDULE_CACHE_TTL_MS,
+    },
+  )
+  return normalizeSchedulePage(response.data, page, size)
+}
+
+export const fetchExportSchedules = async (): Promise<ExportScheduleRow[]> => {
+  return (await fetchExportSchedulePage()).rows
 }
 
 export const createExportSchedule = async (

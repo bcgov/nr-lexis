@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -256,6 +256,42 @@ describe('Provincial Application Search Actions', () => {
         }),
       )
     })
+  })
+
+  it('shows selected application search region names instead of only the selected count', async () => {
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
+      exemptionReasons: [],
+      applicationStatuses: [{ value: 'NEW', label: 'New' }],
+      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      growthTypes: [],
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1908', label: 'Skeena Natural Resource Region' },
+      ],
+      currentSchedules: [],
+    })
+
+    renderPage()
+    await screen.findByText('321')
+
+    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
+    )
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'Skeena' } })
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'Skeena Natural Resource Region' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Selected: Cariboo Natural Resource Region, Skeena Natural Resource Region',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('ignores stale search responses that resolve after a newer search', async () => {

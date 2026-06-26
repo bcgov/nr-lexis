@@ -21,6 +21,19 @@ describe('IsoDatePicker', () => {
     expect(input).toHaveAttribute('data-lpignore', 'true')
   })
 
+  it('renders an initial ISO date value', () => {
+    render(
+      <IsoDatePicker
+        id="retrievalDate"
+        labelText="Retrieval date"
+        value="2026-06-26"
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByLabelText('Retrieval date')).toHaveValue('2026-06-26')
+  })
+
   it('still supports typed ISO dates', async () => {
     const StatefulDatePicker = () => {
       const [value, setValue] = useState('')

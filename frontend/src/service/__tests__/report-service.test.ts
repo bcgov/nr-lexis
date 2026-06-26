@@ -224,6 +224,29 @@ describe('report-service', () => {
     expect(payload).toEqual({ parameters: {}, format: 'CSV' })
   })
 
+  it('omits explicit blank biweekly listing dates so backend legacy schedule defaults apply', async () => {
+    postMock.mockResolvedValue({
+      data: new Blob(['report']),
+      headers: {},
+    })
+
+    await runReport({
+      reportId: 'biweeklyListing',
+      actionMapping: 'generate',
+      values: {
+        fromDate: '',
+        toDate: '',
+      },
+    })
+
+    expect(postMock.mock.calls[0][1]).toEqual({
+      parameters: {
+        legacyActionMapping: 'generate',
+      },
+      format: 'PDF',
+    })
+  })
+
   it('surfaces plain text report validation errors from blob responses', async () => {
     postMock.mockRejectedValue({
       isAxiosError: true,
