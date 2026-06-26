@@ -51,6 +51,66 @@ public class LexisAdminScheduleService {
     return new ExportScheduleMutationResultDto(true, "Export schedule added.", row);
   }
 
+  @Transactional
+  public ExportScheduleMutationResultDto updateSchedule(
+      long exportScheduleId, ExportScheduleCreateRequestDto request) {
+    String rowValidationError = validateMutableSchedule(exportScheduleId);
+    if (rowValidationError != null) {
+      return new ExportScheduleMutationResultDto(false, rowValidationError, null);
+    }
+
+    String validationError = validate(request);
+    if (validationError != null) {
+      return new ExportScheduleMutationResultDto(false, validationError, null);
+    }
+
+    if (repository.advertisingDateExistsForOtherSchedule(
+        request.advertisingDate(), exportScheduleId)) {
+      return new ExportScheduleMutationResultDto(
+          false, "A schedule already exists for that advertising date.", null);
+    }
+
+    ExportScheduleRowDto row = repository.updateExportSchedule(exportScheduleId, request);
+    return new ExportScheduleMutationResultDto(true, "Export schedule updated.", row);
+  }
+
+  @Transactional
+  public ExportScheduleMutationResultDto deleteSchedule(long exportScheduleId) {
+    String rowValidationError = validateMutableSchedule(exportScheduleId);
+    if (rowValidationError != null) {
+      return new ExportScheduleMutationResultDto(false, rowValidationError, null);
+    }
+
+    boolean deleted = repository.deleteExportSchedule(exportScheduleId);
+    return deleted
+        ? new ExportScheduleMutationResultDto(true, "Export schedule deleted.", null)
+        : new ExportScheduleMutationResultDto(false, "Export schedule not found.", null);
+  }
+
+  private String validateMutableSchedule(long exportScheduleId) {
+    if (exportScheduleId < 1) {
+      return "A valid export schedule id is required.";
+    }
+
+    ExportScheduleRowDto existing =
+        repository.findExportScheduleById(exportScheduleId).orElse(null);
+    if (existing == null) {
+      return "Export schedule not found.";
+    }
+
+    LocalDate today = LocalDate.now(clock);
+    if (existing.advertisingDate() == null || existing.advertisingDate().isBefore(today)) {
+      return "Only current or future export schedules can be changed.";
+    }
+
+    long usageCount = repository.countApplicationsForExportSchedule(exportScheduleId);
+    if (usageCount > 0L) {
+      return "Export schedule is used by existing applications and cannot be changed.";
+    }
+
+    return null;
+  }
+
   private String validate(ExportScheduleCreateRequestDto request) {
     if (request == null) {
       return "Export schedule details are required.";

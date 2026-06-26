@@ -286,6 +286,60 @@ class LexisReportScheduleRepositoryTest {
     verify(preparedStatement).setDate(7, java.sql.Date.valueOf("2026-08-04"));
   }
 
+  @Test
+  void updateExportScheduleShouldBindScheduleDatesAndId() throws Exception {
+    when(jdbcTemplate.update(any(String.class), any(PreparedStatementSetter.class)))
+        .thenAnswer(
+            invocation -> {
+              PreparedStatementSetter setter = invocation.getArgument(1);
+              setter.setValues(preparedStatement);
+              return 1;
+            });
+    ExportScheduleCreateRequestDto request =
+        new ExportScheduleCreateRequestDto(
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 29),
+            LocalDate.of(2026, 8, 7),
+            LocalDate.of(2026, 8, 14),
+            LocalDate.of(2026, 8, 4));
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    var row = repository.updateExportSchedule(1002L, request);
+
+    assertThat(row.exportScheduleId()).isEqualTo(1002L);
+    verify(preparedStatement).setDate(1, java.sql.Date.valueOf("2026-07-15"));
+    verify(preparedStatement).setDate(2, java.sql.Date.valueOf("2026-07-15"));
+    verify(preparedStatement).setDate(3, java.sql.Date.valueOf("2026-07-29"));
+    verify(preparedStatement).setDate(4, java.sql.Date.valueOf("2026-08-07"));
+    verify(preparedStatement).setDate(5, java.sql.Date.valueOf("2026-08-14"));
+    verify(preparedStatement).setDate(6, java.sql.Date.valueOf("2026-08-04"));
+    verify(preparedStatement).setLong(7, 1002L);
+  }
+
+  @Test
+  void countApplicationsForExportScheduleShouldQueryLegacyApplicationTable() {
+    when(jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM EXPORT_EXEMPTION_APPLICATION WHERE EXPORT_SCHEDULE_ID = ?",
+            Long.class,
+            1002L))
+        .thenReturn(3L);
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    long count = repository.countApplicationsForExportSchedule(1002L);
+
+    assertThat(count).isEqualTo(3L);
+  }
+
+  @Test
+  void deleteExportScheduleShouldReturnTrueWhenRowDeleted() {
+    when(jdbcTemplate.update("DELETE FROM EXPORT_SCHEDULE WHERE EXPORT_SCHEDULE_ID = ?", 1002L))
+        .thenReturn(1);
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.deleteExportSchedule(1002L)).isTrue();
+  }
+
   @SuppressWarnings({"rawtypes", "unchecked"})
   private void stubCursorProcedure(String call) throws Exception {
     stubCursorProcedure(call, 1);

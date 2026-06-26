@@ -1,16 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createExportSchedule, fetchExportSchedules } from '@/service/admin-schedule-service'
+import {
+  createExportSchedule,
+  deleteExportSchedule,
+  fetchExportSchedules,
+  updateExportSchedule,
+} from '@/service/admin-schedule-service'
 
-const { getCachedResponseMock, postMock } = vi.hoisted(() => ({
+const { deleteMock, getCachedResponseMock, postMock, putMock } = vi.hoisted(() => ({
+  deleteMock: vi.fn(),
   getCachedResponseMock: vi.fn(),
   postMock: vi.fn(),
+  putMock: vi.fn(),
 }))
 
 vi.mock('@/service/api-service', () => ({
   default: {
     getCachedResponse: getCachedResponseMock,
     getAxiosInstance: () => ({
+      delete: deleteMock,
       post: postMock,
+      put: putMock,
     }),
   },
 }))
@@ -31,6 +40,8 @@ describe('admin-schedule-service', () => {
           offerEndDate: '2026-07-09',
           offerWithdrawalDate: '2026-07-10',
           teacMeetingDate: '2026-07-15',
+          applicationCount: 2,
+          mutable: false,
         },
       ],
     })
@@ -50,6 +61,8 @@ describe('admin-schedule-service', () => {
         offerEndDate: '2026-07-09',
         offerWithdrawalDate: '2026-07-10',
         teacMeetingDate: '2026-07-15',
+        applicationCount: 2,
+        mutable: false,
       },
     ])
   })
@@ -93,5 +106,65 @@ describe('admin-schedule-service', () => {
         }),
       }),
     )
+  })
+
+  it('puts export schedule update payloads', async () => {
+    putMock.mockResolvedValue({
+      data: {
+        success: true,
+        message: 'Export schedule updated.',
+        schedule: {
+          exportScheduleId: 1002,
+          advertisingDate: '2026-07-15',
+        },
+      },
+    })
+
+    const result = await updateExportSchedule('1002', {
+      advertisingDate: '2026-07-15',
+      applicationReceiptDate: '2026-07-08',
+      offerReceiptDate: '2026-07-22',
+      offerEndDate: '2026-07-23',
+      offerWithdrawalDate: '2026-07-24',
+      teacMeetingDate: '2026-07-29',
+    })
+
+    expect(putMock).toHaveBeenCalledWith('/lexis/admin/schedules/1002', {
+      advertisingDate: '2026-07-15',
+      applicationReceiptDate: '2026-07-08',
+      offerReceiptDate: '2026-07-22',
+      offerEndDate: '2026-07-23',
+      offerWithdrawalDate: '2026-07-24',
+      teacMeetingDate: '2026-07-29',
+    })
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        message: 'Export schedule updated.',
+        schedule: expect.objectContaining({
+          exportScheduleId: '1002',
+          advertisingDate: '2026-07-15',
+        }),
+      }),
+    )
+  })
+
+  it('deletes export schedules by id', async () => {
+    deleteMock.mockResolvedValue({
+      data: {
+        success: true,
+        message: 'Export schedule deleted.',
+        schedule: null,
+      },
+    })
+
+    const result = await deleteExportSchedule('1002')
+
+    expect(deleteMock).toHaveBeenCalledWith('/lexis/admin/schedules/1002')
+    expect(result).toEqual({
+      success: true,
+      message: 'Export schedule deleted.',
+      schedule: null,
+    })
   })
 })

@@ -87,4 +87,43 @@ class LexisAdminScheduleControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().schedule()).isEqualTo(row);
   }
+
+  @Test
+  void updateScheduleShouldReturnOkForSuccess() {
+    when(scheduleServiceProvider.getIfAvailable()).thenReturn(scheduleService);
+    ExportScheduleCreateRequestDto request =
+        new ExportScheduleCreateRequestDto(
+            LocalDate.of(2026, 7, 15), null, null, null, null, null);
+    ExportScheduleRowDto row =
+        new ExportScheduleRowDto(1001L, LocalDate.of(2026, 7, 15), null, null, null, null, null);
+    when(scheduleService.updateSchedule(1001L, request))
+        .thenReturn(new ExportScheduleMutationResultDto(true, "Export schedule updated.", row));
+    LexisAdminScheduleController controller =
+        new LexisAdminScheduleController(scheduleServiceProvider);
+
+    var response = controller.updateSchedule(1001L, request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().schedule()).isEqualTo(row);
+  }
+
+  @Test
+  void deleteScheduleShouldReturnBadRequestForGuardrailFailure() {
+    when(scheduleServiceProvider.getIfAvailable()).thenReturn(scheduleService);
+    when(scheduleService.deleteSchedule(1001L))
+        .thenReturn(
+            new ExportScheduleMutationResultDto(
+                false,
+                "Export schedule is used by existing applications and cannot be changed.",
+                null));
+    LexisAdminScheduleController controller =
+        new LexisAdminScheduleController(scheduleServiceProvider);
+
+    var response = controller.deleteSchedule(1001L);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+  }
 }

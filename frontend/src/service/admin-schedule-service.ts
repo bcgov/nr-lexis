@@ -10,6 +10,8 @@ export type ExportScheduleRow = {
   offerEndDate: string
   offerWithdrawalDate: string
   teacMeetingDate: string
+  applicationCount: number
+  mutable: boolean
 }
 
 export type ExportScheduleCreateRequest = {
@@ -31,6 +33,7 @@ const SCHEDULE_CACHE_TTL_MS = 30_000
 
 const normalizeScheduleRow = (row: unknown): ExportScheduleRow => {
   const source = recordOrEmpty(row)
+  const applicationCount = Number(asString(source.applicationCount)) || 0
   return {
     exportScheduleId: asString(source.exportScheduleId || source.id),
     advertisingDate: asString(source.advertisingDate),
@@ -39,6 +42,8 @@ const normalizeScheduleRow = (row: unknown): ExportScheduleRow => {
     offerEndDate: asString(source.offerEndDate),
     offerWithdrawalDate: asString(source.offerWithdrawalDate),
     teacMeetingDate: asString(source.teacMeetingDate),
+    applicationCount,
+    mutable: source.mutable === undefined ? applicationCount === 0 : source.mutable === true,
   }
 }
 
@@ -79,5 +84,31 @@ export const createExportSchedule = async (
     offerWithdrawalDate: request.offerWithdrawalDate,
     teacMeetingDate: request.teacMeetingDate,
   })
+  return normalizeMutationResult(response.data)
+}
+
+export const updateExportSchedule = async (
+  exportScheduleId: string,
+  request: ExportScheduleCreateRequest,
+): Promise<ExportScheduleMutationResult> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .put(`/lexis/admin/schedules/${encodeURIComponent(exportScheduleId)}`, {
+      advertisingDate: request.advertisingDate,
+      applicationReceiptDate: request.applicationReceiptDate,
+      offerReceiptDate: request.offerReceiptDate,
+      offerEndDate: request.offerEndDate,
+      offerWithdrawalDate: request.offerWithdrawalDate,
+      teacMeetingDate: request.teacMeetingDate,
+    })
+  return normalizeMutationResult(response.data)
+}
+
+export const deleteExportSchedule = async (
+  exportScheduleId: string,
+): Promise<ExportScheduleMutationResult> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .delete(`/lexis/admin/schedules/${encodeURIComponent(exportScheduleId)}`)
   return normalizeMutationResult(response.data)
 }

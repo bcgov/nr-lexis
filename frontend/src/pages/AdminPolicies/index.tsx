@@ -27,7 +27,9 @@ import {
 } from '@/pages/shared/create-form-utils'
 import {
   createExportSchedule as createExportScheduleRequest,
+  deleteExportSchedule as deleteExportScheduleRequest,
   fetchExportSchedules,
+  updateExportSchedule as updateExportScheduleRequest,
   type ExportScheduleRow,
 } from '@/service/admin-schedule-service'
 import {
@@ -81,6 +83,7 @@ const AdminPoliciesPage = () => {
   const [scheduleOfferEndDate, setScheduleOfferEndDate] = useState('')
   const [scheduleOfferWithdrawalDate, setScheduleOfferWithdrawalDate] = useState('')
   const [scheduleTeacMeetingDate, setScheduleTeacMeetingDate] = useState('')
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null)
 
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -217,6 +220,7 @@ const AdminPoliciesPage = () => {
     setScheduleOfferEndDate('')
     setScheduleOfferWithdrawalDate('')
     setScheduleTeacMeetingDate('')
+    setEditingScheduleId(null)
     setShowScheduleValidationErrors(false)
   }
 
@@ -408,7 +412,19 @@ const AdminPoliciesPage = () => {
     }
   }
 
-  const createExportSchedule = async (): Promise<void> => {
+  const editExportSchedule = (row: ExportScheduleRow): void => {
+    setScheduleAdvertisingDate(row.advertisingDate)
+    setScheduleApplicationReceiptDate(row.applicationReceiptDate)
+    setScheduleOfferReceiptDate(row.offerReceiptDate)
+    setScheduleOfferEndDate(row.offerEndDate)
+    setScheduleOfferWithdrawalDate(row.offerWithdrawalDate)
+    setScheduleTeacMeetingDate(row.teacMeetingDate)
+    setEditingScheduleId(row.exportScheduleId)
+    setShowScheduleValidationErrors(false)
+    clearNotifications()
+  }
+
+  const upsertExportSchedule = async (): Promise<void> => {
     clearNotifications()
 
     if (!canManageFeePolicy) {
@@ -425,31 +441,70 @@ const AdminPoliciesPage = () => {
     setIsMutatingPolicies(true)
 
     try {
-      const result = await createExportScheduleRequest({
+      const request = {
         advertisingDate: scheduleAdvertisingDate,
         applicationReceiptDate: scheduleApplicationReceiptDate,
         offerReceiptDate: scheduleOfferReceiptDate,
         offerEndDate: scheduleOfferEndDate,
         offerWithdrawalDate: scheduleOfferWithdrawalDate,
         teacMeetingDate: scheduleTeacMeetingDate,
-      })
+      }
+      const result = editingScheduleId
+        ? await updateExportScheduleRequest(editingScheduleId, request)
+        : await createExportScheduleRequest(request)
       if (!result.success) {
-        setErrorMessage(result.message || 'Unable to add export schedule.')
+        setErrorMessage(result.message || 'Unable to save export schedule.')
         return
       }
       const loadedExportSchedules = await fetchExportSchedules()
       setExportSchedules(loadedExportSchedules)
-      setSuccessMessage(result.message || 'Export schedule added.')
+      setSuccessMessage(
+        result.message ||
+          (editingScheduleId ? 'Export schedule updated.' : 'Export schedule added.'),
+      )
       resetScheduleForm()
     } catch (error) {
       console.error(error)
       const status = getResponseStatus(error)
       if (status) {
         setErrorMessage(
-          'Unable to add the export schedule. Check the dates and try again, or contact support if this continues.',
+          'Unable to save the export schedule. Check the dates and try again, or contact support if this continues.',
         )
       } else {
-        setErrorMessage('Unable to add the export schedule. Please try again or contact support.')
+        setErrorMessage('Unable to save the export schedule. Please try again or contact support.')
+      }
+    } finally {
+      setIsMutatingPolicies(false)
+    }
+  }
+
+  const deleteExportSchedule = async (row: ExportScheduleRow): Promise<void> => {
+    clearNotifications()
+    setIsMutatingPolicies(true)
+
+    try {
+      const result = await deleteExportScheduleRequest(row.exportScheduleId)
+      if (!result.success) {
+        setErrorMessage(result.message || 'Unable to delete export schedule.')
+        return
+      }
+      const loadedExportSchedules = await fetchExportSchedules()
+      setExportSchedules(loadedExportSchedules)
+      if (editingScheduleId === row.exportScheduleId) {
+        resetScheduleForm()
+      }
+      setSuccessMessage(result.message || 'Export schedule deleted.')
+    } catch (error) {
+      console.error(error)
+      const status = getResponseStatus(error)
+      if (status) {
+        setErrorMessage(
+          'Unable to delete the export schedule. Refresh and try again, or contact support if the issue persists.',
+        )
+      } else {
+        setErrorMessage(
+          'Unable to delete the export schedule. Please try again or contact support.',
+        )
       }
     } finally {
       setIsMutatingPolicies(false)
@@ -775,17 +830,17 @@ const AdminPoliciesPage = () => {
           <div className="legacy-search-actions">
             <Button
               kind="primary"
-              onClick={() => void createExportSchedule()}
+              onClick={() => void upsertExportSchedule()}
               disabled={isLoadingPolicies || isMutatingPolicies || !canManageFeePolicy}
             >
-              Add Export Schedule
+              {editingScheduleId ? 'Update Export Schedule' : 'Add Export Schedule'}
             </Button>
             <Button
               kind="ghost"
               onClick={resetScheduleForm}
               disabled={isLoadingPolicies || isMutatingPolicies}
             >
-              Clear Schedule
+              {editingScheduleId ? 'Cancel Edit' : 'Clear Schedule'}
             </Button>
           </div>
 
@@ -799,6 +854,8 @@ const AdminPoliciesPage = () => {
                 <TableHeader>Offer end</TableHeader>
                 <TableHeader>Offer withdrawal</TableHeader>
                 <TableHeader>TEAC meeting</TableHeader>
+                <TableHeader>Applications</TableHeader>
+                <TableHeader>Actions</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -811,11 +868,30 @@ const AdminPoliciesPage = () => {
                   <TableCell>{row.offerEndDate}</TableCell>
                   <TableCell>{row.offerWithdrawalDate}</TableCell>
                   <TableCell>{row.teacMeetingDate}</TableCell>
+                  <TableCell>{row.applicationCount}</TableCell>
+                  <TableCell>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      onClick={() => editExportSchedule(row)}
+                      disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      onClick={() => void deleteExportSchedule(row)}
+                      disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
+                    >
+                      Delete
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
               {exportSchedules.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7}>No upcoming export schedule rows found.</TableCell>
+                  <TableCell colSpan={9}>No upcoming export schedule rows found.</TableCell>
                 </TableRow>
               )}
             </TableBody>

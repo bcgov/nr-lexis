@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -95,6 +96,95 @@ class LexisAdminScheduleServiceTest {
     assertThat(result.message()).isEqualTo("Export schedule added.");
     assertThat(result.schedule()).isEqualTo(inserted);
     verify(repository).insertExportSchedule(request);
+  }
+
+  @Test
+  void updateScheduleShouldRejectReferencedSchedule() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    when(repository.findExportScheduleById(1001L))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
+    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(2L);
+
+    var result =
+        service.updateSchedule(
+            1001L,
+            request(
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 6, 25),
+                LocalDate.of(2026, 7, 8)));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .isEqualTo("Export schedule is used by existing applications and cannot be changed.");
+  }
+
+  @Test
+  void updateScheduleShouldUpdateFutureUnreferencedSchedule() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleCreateRequestDto request =
+        request(
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 8),
+            LocalDate.of(2026, 7, 22));
+    ExportScheduleRowDto updated =
+        new ExportScheduleRowDto(
+            1001L,
+            request.advertisingDate(),
+            request.applicationReceiptDate(),
+            request.offerReceiptDate(),
+            request.offerEndDate(),
+            request.offerWithdrawalDate(),
+            request.teacMeetingDate());
+    when(repository.findExportScheduleById(1001L))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
+    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
+    when(repository.advertisingDateExistsForOtherSchedule(LocalDate.of(2026, 7, 15), 1001L))
+        .thenReturn(false);
+    when(repository.updateExportSchedule(1001L, request)).thenReturn(updated);
+
+    var result = service.updateSchedule(1001L, request);
+
+    assertThat(result.success()).isTrue();
+    assertThat(result.message()).isEqualTo("Export schedule updated.");
+    assertThat(result.schedule()).isEqualTo(updated);
+  }
+
+  @Test
+  void deleteScheduleShouldRejectPastSchedules() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    when(repository.findExportScheduleById(1001L))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1001L, LocalDate.of(2026, 6, 24), null, null, null, null, null)));
+
+    var result = service.deleteSchedule(1001L);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Only current or future export schedules can be changed.");
+  }
+
+  @Test
+  void deleteScheduleShouldDeleteFutureUnreferencedSchedule() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    when(repository.findExportScheduleById(1001L))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
+    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
+    when(repository.deleteExportSchedule(1001L)).thenReturn(true);
+
+    var result = service.deleteSchedule(1001L);
+
+    assertThat(result.success()).isTrue();
+    assertThat(result.message()).isEqualTo("Export schedule deleted.");
   }
 
   private static ExportScheduleCreateRequestDto request(
