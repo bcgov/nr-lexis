@@ -49,6 +49,7 @@ class LexisRouteAuthorizationIntegrationTest {
           "exemptionNumber", "EX-100",
           "offerNumber", "3000123",
           "permitNumber", "7000123",
+          "exportScheduleId", "1001",
           "policyId", "123");
 
   @Autowired private MockMvc mockMvc;
@@ -832,6 +833,36 @@ class LexisRouteAuthorizationIntegrationTest {
   void modernFeePoliciesShouldRejectReadOnlyRole() throws Exception {
     mockMvc.perform(
             get("/api/lexis/admin/policies/fee")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void modernExportSchedulesShouldAllowPolicyAdminMutationsForAdminRole() throws Exception {
+    mockMvc.perform(
+            put("/api/lexis/admin/schedules/1001")
+                .with(csrf())
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().is2xxSuccessful());
+
+    mockMvc.perform(
+            delete("/api/lexis/admin/schedules/1001")
+                .with(csrf())
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @Test
+  void modernExportSchedulesShouldRejectReadOnlyMutations() throws Exception {
+    mockMvc.perform(
+            put("/api/lexis/admin/schedules/1001")
+                .with(csrf())
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+
+    mockMvc.perform(
+            delete("/api/lexis/admin/schedules/1001")
+                .with(csrf())
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
   }

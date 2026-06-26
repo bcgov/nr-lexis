@@ -10,6 +10,7 @@ import {
   hasIdirCredentials,
   loginWithIdir,
   postWithCsrf,
+  putWithCsrf,
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
 
@@ -35,8 +36,61 @@ const asRecordArray = (value: unknown): Record<string, unknown>[] =>
       )
     : []
 
+const asRecord = (value: unknown): Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+
 const optionCode = (option: Record<string, unknown>): string => String(option.code ?? '').trim()
 const optionName = (option: Record<string, unknown>): string => String(option.name ?? '').trim()
+
+const isoDate = (date: Date): string => date.toISOString().slice(0, 10)
+
+const addUtcDays = (date: Date, days: number): Date => {
+  const next = new Date(date.getTime())
+  next.setUTCDate(next.getUTCDate() + days)
+  return next
+}
+
+const scheduleRequestForAdvertisingDate = (advertisingDate: string): ExportScheduleRequest => {
+  const date = new Date(`${advertisingDate}T00:00:00.000Z`)
+  return {
+    advertisingDate,
+    applicationReceiptDate: isoDate(addUtcDays(date, -1)),
+    offerReceiptDate: isoDate(addUtcDays(date, 14)),
+    offerEndDate: isoDate(addUtcDays(date, 21)),
+    offerWithdrawalDate: isoDate(addUtcDays(date, 28)),
+    teacMeetingDate: isoDate(addUtcDays(date, 19)),
+  }
+}
+
+const uniqueRegressionScheduleRequests = (
+  schedules: Record<string, unknown>[],
+): {
+  createRequest: ExportScheduleRequest
+  updateRequest: ExportScheduleRequest
+} => {
+  const usedDates = new Set(
+    schedules
+      .map((schedule) => String(schedule.advertisingDate ?? '').slice(0, 10))
+      .filter(Boolean),
+  )
+  const baseDate = new Date(Date.UTC(2090, 0, 1))
+  const seed = Date.now() % 1500
+
+  for (let offset = 0; offset < 5000; offset += 1) {
+    const createDate = isoDate(addUtcDays(baseDate, seed + offset * 2))
+    const updateDate = isoDate(addUtcDays(baseDate, seed + offset * 2 + 1))
+    if (!usedDates.has(createDate) && !usedDates.has(updateDate)) {
+      return {
+        createRequest: scheduleRequestForAdvertisingDate(createDate),
+        updateRequest: scheduleRequestForAdvertisingDate(updateDate),
+      }
+    }
+  }
+
+  throw new Error('Unable to find unused future export schedule dates for regression.')
+}
 
 const safeUrlForLog = (rawUrl: string): string => {
   try {
@@ -64,6 +118,15 @@ type ExportScheduleMutationResponse = {
   success?: boolean
   message?: string | null
   schedule?: unknown
+}
+
+type ExportScheduleRequest = {
+  advertisingDate: string
+  applicationReceiptDate: string
+  offerReceiptDate: string
+  offerEndDate: string
+  offerWithdrawalDate: string
+  teacMeetingDate: string
 }
 
 type ApplicationSubmissionResponse = {
@@ -801,6 +864,80 @@ test.describe.serial('TEST IDIR admin regression', () => {
       await getWithAuth(page, '/api/lexis/admin/schedules'),
     )
     expect(Array.isArray(exportSchedules)).toBe(true)
+  })
+
+  test('can create, update, and delete future export schedule rows', async () => {
+    const page = await authenticatedIdirPage()
+    const existingSchedules = asRecordArray(
+      await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
+    )
+    const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(existingSchedules)
+    let scheduleId: string | null = null
+    let deleted = false
+
+    try {
+      const created = await readJsonResponse<ExportScheduleMutationResponse>(
+        await postWithCsrf(page, '/api/lexis/admin/schedules', {
+          data: createRequest,
+        }),
+      )
+      expect(created.success).toBe(true)
+      expect(created.message ?? '').toContain('added')
+
+      const createdSchedule = asRecord(created.schedule)
+      scheduleId = String(createdSchedule.exportScheduleId ?? '').trim()
+      expect(scheduleId).not.toBe('')
+      expect(createdSchedule.advertisingDate).toBe(createRequest.advertisingDate)
+      expect(Number(createdSchedule.applicationCount ?? 0)).toBe(0)
+      expect(createdSchedule.mutable).toBe(true)
+
+      const updated = await readJsonResponse<ExportScheduleMutationResponse>(
+        await putWithCsrf(page, `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`, {
+          data: updateRequest,
+        }),
+      )
+      expect(updated.success).toBe(true)
+      expect(updated.message ?? '').toContain('updated')
+
+      const updatedSchedule = asRecord(updated.schedule)
+      expect(String(updatedSchedule.exportScheduleId ?? '')).toBe(scheduleId)
+      expect(updatedSchedule.advertisingDate).toBe(updateRequest.advertisingDate)
+      expect(Number(updatedSchedule.applicationCount ?? 0)).toBe(0)
+      expect(updatedSchedule.mutable).toBe(true)
+
+      const schedulesAfterUpdate = asRecordArray(
+        await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
+      )
+      const persistedSchedule = schedulesAfterUpdate.find(
+        (schedule) => String(schedule.exportScheduleId ?? '') === scheduleId,
+      )
+      expect(persistedSchedule).toBeTruthy()
+      expect(persistedSchedule?.advertisingDate).toBe(updateRequest.advertisingDate)
+      expect(persistedSchedule?.mutable).toBe(true)
+
+      const deleteResponse = await readJsonResponse<ExportScheduleMutationResponse>(
+        await deleteWithCsrf(page, `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`),
+      )
+      expect(deleteResponse.success).toBe(true)
+      expect(deleteResponse.message ?? '').toContain('deleted')
+      deleted = true
+
+      const schedulesAfterDelete = asRecordArray(
+        await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
+      )
+      expect(
+        schedulesAfterDelete.some(
+          (schedule) => String(schedule.exportScheduleId ?? '') === scheduleId,
+        ),
+      ).toBe(false)
+    } finally {
+      if (scheduleId && !deleted) {
+        await deleteWithCsrf(
+          page,
+          `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`,
+        ).catch(() => undefined)
+      }
+    }
   })
 
   test('can reach protected write validation endpoints without mutating real data', async () => {

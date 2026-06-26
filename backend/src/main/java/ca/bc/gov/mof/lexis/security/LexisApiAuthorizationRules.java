@@ -299,9 +299,15 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/admin/policies/fee",
               "/api/lexis/admin/schedules"),
           action(
-              HttpMethod.PUT, "/lexisPolicyAdmin", "/api/lexis/admin/policies/fee/*"),
+              HttpMethod.PUT,
+              "/lexisPolicyAdmin",
+              "/api/lexis/admin/policies/fee/*",
+              "/api/lexis/admin/schedules/*"),
           action(
-              HttpMethod.DELETE, "/lexisPolicyAdmin", "/api/lexis/admin/policies/fee/*"),
+              HttpMethod.DELETE,
+              "/lexisPolicyAdmin",
+              "/api/lexis/admin/policies/fee/*",
+              "/api/lexis/admin/schedules/*"),
           action(
               HttpMethod.GET,
               "/lexisPolicyAdmin",
