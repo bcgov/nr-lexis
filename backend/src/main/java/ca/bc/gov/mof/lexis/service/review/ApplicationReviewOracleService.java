@@ -18,7 +18,6 @@ import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import jakarta.mail.internet.AddressException;
 import jakarta.mail.internet.InternetAddress;
 import java.util.List;
-import java.util.regex.Pattern;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Slice;
@@ -34,8 +33,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
 
   private static final List<String> EMAIL_SUPPORTED_STATUS_CODES = List.of("REJ", "WDN");
   private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN");
-  private static final Pattern SIMPLE_EMAIL_PATTERN =
-      Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+  private static final int MAX_EMAIL_ADDRESS_LENGTH = 254;
 
   private final ApplicationReviewRepository repository;
   private final ApplicationReviewStatusEmailSender emailSender;
@@ -299,7 +297,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
   }
 
   private static boolean isValidEmailAddress(String value) {
-    if (!SIMPLE_EMAIL_PATTERN.matcher(value).matches()) {
+    if (!hasValidEmailAddressShape(value)) {
       return false;
     }
     try {
@@ -308,6 +306,34 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     } catch (AddressException ex) {
       return false;
     }
+  }
+
+  private static boolean hasValidEmailAddressShape(String value) {
+    if (value == null || value.isBlank() || value.length() > MAX_EMAIL_ADDRESS_LENGTH) {
+      return false;
+    }
+
+    int atIndex = -1;
+    int dotAfterAt = -1;
+    for (int index = 0; index < value.length(); index += 1) {
+      char character = value.charAt(index);
+      if (Character.isWhitespace(character) || Character.isISOControl(character)) {
+        return false;
+      }
+      if (character == '@') {
+        if (atIndex >= 0) {
+          return false;
+        }
+        atIndex = index;
+      } else if (character == '.' && atIndex >= 0) {
+        dotAfterAt = index;
+      }
+    }
+
+    return atIndex > 0
+        && atIndex < value.length() - 1
+        && dotAfterAt > atIndex + 1
+        && dotAfterAt < value.length() - 1;
   }
 
   private void markRollbackOnly() {
