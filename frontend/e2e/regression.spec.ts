@@ -66,17 +66,15 @@ const scheduleRequestForAdvertisingDate = (advertisingDate: string): ExportSched
 }
 
 const uniqueRegressionScheduleRequests = (
+  latestAdvertisingDate: string,
   attempt = 0,
 ): {
   createRequest: ExportScheduleRequest
   updateRequest: ExportScheduleRequest
 } => {
-  const baseDate = new Date(Date.UTC(2027, 1, 1))
-  const runSeed = Number(process.env.GITHUB_RUN_ID ?? Date.now()) % 1_825
-  const timeSeed = Math.floor(Date.now() / 1000) % 365
-  const seed = runSeed + timeSeed + attempt * 2
-  const createDate = isoDate(addUtcDays(baseDate, seed))
-  const updateDate = isoDate(addUtcDays(baseDate, seed + 1))
+  const latestDate = new Date(`${latestAdvertisingDate}T00:00:00.000Z`)
+  const createDate = isoDate(addUtcDays(latestDate, 7 + attempt * 14))
+  const updateDate = isoDate(addUtcDays(latestDate, 14 + attempt * 14))
 
   return {
     createRequest: scheduleRequestForAdvertisingDate(createDate),
@@ -581,6 +579,24 @@ const readJsonResponseWithStatuses = async <T>(
   }
 }
 
+const latestExportScheduleAdvertisingDate = async (page: Page): Promise<string> => {
+  const schedulePage = await readJsonResponse<GenericSearchResponse>(
+    await getWithAuth(page, '/api/lexis/admin/schedules', {
+      params: {
+        page: '0',
+        size: '200',
+      },
+    }),
+  )
+  const dates = asRecordArray(schedulePage.results)
+    .map((schedule) => String(schedule.advertisingDate ?? '').trim())
+    .filter((date) => isoDatePattern.test(date))
+    .sort()
+
+  expect(dates.length, 'export schedule regression needs at least one existing schedule row').toBeGreaterThan(0)
+  return dates[dates.length - 1]
+}
+
 const postRegressionSubmission = async (
   page: Page,
   path: string,
@@ -608,8 +624,12 @@ const createRegressionExportSchedule = async (
   updateRequest: ExportScheduleRequest
   createdSchedule: Record<string, unknown>
 }> => {
+  const latestAdvertisingDate = await latestExportScheduleAdvertisingDate(page)
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(attempt)
+    const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(
+      latestAdvertisingDate,
+      attempt,
+    )
     const created = await readJsonResponseWithStatuses<ExportScheduleMutationResponse>(
       await postWithCsrf(page, '/api/lexis/admin/schedules', {
         data: createRequest,
