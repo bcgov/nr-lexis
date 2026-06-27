@@ -57,26 +57,24 @@ const scheduleRequestForAdvertisingDate = (advertisingDate: string): ExportSched
   const date = new Date(`${advertisingDate}T00:00:00.000Z`)
   return {
     advertisingDate,
-    applicationReceiptDate: isoDate(addUtcDays(date, -1)),
+    applicationReceiptDate: advertisingDate,
     offerReceiptDate: isoDate(addUtcDays(date, 14)),
-    offerEndDate: isoDate(addUtcDays(date, 21)),
-    offerWithdrawalDate: isoDate(addUtcDays(date, 28)),
-    teacMeetingDate: isoDate(addUtcDays(date, 19)),
+    offerEndDate: isoDate(addUtcDays(date, 43)),
+    offerWithdrawalDate: isoDate(addUtcDays(date, 33)),
+    teacMeetingDate: isoDate(addUtcDays(date, 36)),
   }
 }
 
 const uniqueRegressionScheduleRequests = (
+  latestAdvertisingDate: string,
   attempt = 0,
 ): {
   createRequest: ExportScheduleRequest
   updateRequest: ExportScheduleRequest
 } => {
-  const baseDate = new Date(Date.UTC(2090, 0, 1))
-  const runSeed = Number(process.env.GITHUB_RUN_ID ?? '0') % 20_000
-  const timeSeed = Math.floor(Date.now() / 1000) % 20_000
-  const seed = runSeed + timeSeed + attempt * 2
-  const createDate = isoDate(addUtcDays(baseDate, seed))
-  const updateDate = isoDate(addUtcDays(baseDate, seed + 1))
+  const latestDate = new Date(`${latestAdvertisingDate}T00:00:00.000Z`)
+  const createDate = isoDate(addUtcDays(latestDate, 7 + attempt * 14))
+  const updateDate = isoDate(addUtcDays(latestDate, 14 + attempt * 14))
 
   return {
     createRequest: scheduleRequestForAdvertisingDate(createDate),
@@ -581,6 +579,24 @@ const readJsonResponseWithStatuses = async <T>(
   }
 }
 
+const latestExportScheduleAdvertisingDate = async (page: Page): Promise<string> => {
+  const schedulePage = await readJsonResponse<GenericSearchResponse>(
+    await getWithAuth(page, '/api/lexis/admin/schedules', {
+      params: {
+        page: '0',
+        size: '200',
+      },
+    }),
+  )
+  const dates = asRecordArray(schedulePage.results)
+    .map((schedule) => String(schedule.advertisingDate ?? '').trim())
+    .filter((date) => isoDatePattern.test(date))
+    .sort()
+
+  expect(dates.length, 'export schedule regression needs at least one existing schedule row').toBeGreaterThan(0)
+  return dates[dates.length - 1]
+}
+
 const postRegressionSubmission = async (
   page: Page,
   path: string,
@@ -608,8 +624,12 @@ const createRegressionExportSchedule = async (
   updateRequest: ExportScheduleRequest
   createdSchedule: Record<string, unknown>
 }> => {
+  const latestAdvertisingDate = await latestExportScheduleAdvertisingDate(page)
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(attempt)
+    const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(
+      latestAdvertisingDate,
+      attempt,
+    )
     const created = await readJsonResponseWithStatuses<ExportScheduleMutationResponse>(
       await postWithCsrf(page, '/api/lexis/admin/schedules', {
         data: createRequest,
@@ -1198,7 +1218,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('heading', { name: 'Advertising List' })).toBeVisible()
     await expect(page.getByText('Advertising list output in PDF or CSV format.')).toBeVisible()
     await expect(page.getByText('Required action:')).toBeVisible()
-    await expect(page.getByText('mofrListing')).toBeVisible()
+    await expect(page.getByRole('table').getByText('mofrListing')).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Jurisdiction' })).toBeVisible()
     await expect(page.getByLabel('Listing from date')).toBeVisible()
     await expect(page.getByLabel('Listing to date')).toBeVisible()

@@ -62,6 +62,18 @@ class RegressionWorkflowDefaultsTest {
         .doesNotContain("test.describe.serial('TEST IDIR admin regression'");
   }
 
+  @Test
+  void waitForFrontendShouldTolerateTransientRunnerNetworkIssues() throws IOException {
+    String script = Files.readString(resolveWaitForFrontendScript());
+
+    assertThat(script)
+        .doesNotContain("--ipv4")
+        .contains("--retry \"${curl_retries}\"")
+        .contains("--retry-all-errors")
+        .contains("getent ahosts")
+        .contains("curl exit ${curl_status}");
+  }
+
   private static Path resolveRegressionWorkflow() {
     Path fromRepositoryRoot = Path.of(".github", "workflows", "regression.yml");
     if (Files.exists(fromRepositoryRoot)) {
@@ -84,5 +96,13 @@ class RegressionWorkflowDefaultsTest {
       return fromRepositoryRoot;
     }
     return Path.of("..", "frontend", "e2e", "regression.spec.ts");
+  }
+
+  private static Path resolveWaitForFrontendScript() {
+    Path fromRepositoryRoot = Path.of(".github", "scripts", "wait-for-frontend.sh");
+    if (Files.exists(fromRepositoryRoot)) {
+      return fromRepositoryRoot;
+    }
+    return Path.of("..", ".github", "scripts", "wait-for-frontend.sh");
   }
 }

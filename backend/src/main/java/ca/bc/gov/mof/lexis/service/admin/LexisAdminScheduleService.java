@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,8 @@ public class LexisAdminScheduleService {
 
   private static final int DEFAULT_PAGE_SIZE = 100;
   private static final int MAX_PAGE_SIZE = 200;
+  private static final String SCHEDULE_CONSTRAINT_MESSAGE =
+      "Export schedule dates are invalid or conflict with an existing schedule.";
 
   private final LexisReportScheduleRepository repository;
   private final Clock clock;
@@ -61,8 +64,12 @@ public class LexisAdminScheduleService {
           null);
     }
 
-    ExportScheduleRowDto row = repository.insertExportSchedule(request);
-    return new ExportScheduleMutationResultDto(true, "Export schedule added.", row);
+    try {
+      ExportScheduleRowDto row = repository.insertExportSchedule(request);
+      return new ExportScheduleMutationResultDto(true, "Export schedule added.", row);
+    } catch (DataIntegrityViolationException ex) {
+      return new ExportScheduleMutationResultDto(false, SCHEDULE_CONSTRAINT_MESSAGE, null);
+    }
   }
 
   @Transactional
@@ -84,8 +91,12 @@ public class LexisAdminScheduleService {
           false, "A schedule already exists for that advertising date.", null);
     }
 
-    ExportScheduleRowDto row = repository.updateExportSchedule(exportScheduleId, request);
-    return new ExportScheduleMutationResultDto(true, "Export schedule updated.", row);
+    try {
+      ExportScheduleRowDto row = repository.updateExportSchedule(exportScheduleId, request);
+      return new ExportScheduleMutationResultDto(true, "Export schedule updated.", row);
+    } catch (DataIntegrityViolationException ex) {
+      return new ExportScheduleMutationResultDto(false, SCHEDULE_CONSTRAINT_MESSAGE, null);
+    }
   }
 
   @Transactional
@@ -152,6 +163,19 @@ public class LexisAdminScheduleService {
     if (request.offerWithdrawalDate() != null
         && request.offerWithdrawalDate().isBefore(advertisingDate)) {
       return "Offer withdrawal date cannot be before the advertising date.";
+    }
+    if (request.offerEndDate() != null
+        && request.offerWithdrawalDate() != null
+        && request.offerWithdrawalDate().isAfter(request.offerEndDate())) {
+      return "Offer withdrawal date cannot be after the offer end date.";
+    }
+    if (request.teacMeetingDate() != null && request.teacMeetingDate().isBefore(advertisingDate)) {
+      return "TEAC meeting date cannot be before the advertising date.";
+    }
+    if (request.offerEndDate() != null
+        && request.teacMeetingDate() != null
+        && request.teacMeetingDate().isAfter(request.offerEndDate())) {
+      return "TEAC meeting date cannot be after the offer end date.";
     }
     return null;
   }
