@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createExportSchedule,
   deleteExportSchedule,
+  fetchExportSchedulePage,
   fetchExportSchedules,
   updateExportSchedule,
 } from '@/service/admin-schedule-service'
@@ -48,10 +49,19 @@ describe('admin-schedule-service', () => {
 
     const result = await fetchExportSchedules()
 
-    expect(getCachedResponseMock).toHaveBeenCalledWith('/lexis/admin/schedules', undefined, {
-      cacheKey: 'admin-schedules:upcoming',
-      ttlMs: 30_000,
-    })
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/admin/schedules',
+      {
+        params: {
+          page: 0,
+          size: 100,
+        },
+      },
+      {
+        cacheKey: 'admin-schedules:upcoming:0:100',
+        ttlMs: 30_000,
+      },
+    )
     expect(result).toEqual([
       {
         exportScheduleId: '1001',
@@ -65,6 +75,37 @@ describe('admin-schedule-service', () => {
         mutable: false,
       },
     ])
+  })
+
+  it('normalizes export schedule page metadata', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          {
+            exportScheduleId: 1001,
+            advertisingDate: '2026-07-01',
+            applicationCount: 0,
+          },
+        ],
+        total: 27,
+        page: 1,
+        size: 20,
+      },
+    })
+
+    const result = await fetchExportSchedulePage(1, 20)
+
+    expect(result).toEqual({
+      rows: [
+        expect.objectContaining({
+          exportScheduleId: '1001',
+          advertisingDate: '2026-07-01',
+        }),
+      ],
+      total: 27,
+      page: 1,
+      size: 20,
+    })
   })
 
   it('posts export schedule create payloads', async () => {

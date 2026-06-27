@@ -50,12 +50,16 @@ import {
   type RtmEmsLogAmvUploadPreview,
   type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
+import { formatLocalIsoDate } from '@/utils/date'
 
-const INITIAL_FILTERS: RtmEmsLogAmvFilters = {
-  species: '',
-  growthIndicator: '',
-  retrievalDate: '',
-  updateDate: '',
+const createInitialFilters = (): RtmEmsLogAmvFilters => {
+  const today = formatLocalIsoDate(new Date())
+  return {
+    species: '',
+    growthIndicator: '',
+    retrievalDate: today,
+    updateDate: today,
+  }
 }
 
 type ManualFormState = {
@@ -68,14 +72,17 @@ type ManualFormState = {
   saveMode: 'create' | 'update'
 }
 
-const INITIAL_FORM: ManualFormState = {
-  species: '',
-  grade: '',
-  growthIndicator: '',
-  retrievalDate: '',
-  updateDate: '',
-  newValue: '',
-  saveMode: 'create',
+const createInitialForm = (): ManualFormState => {
+  const today = formatLocalIsoDate(new Date())
+  return {
+    species: '',
+    grade: '',
+    growthIndicator: '',
+    retrievalDate: today,
+    updateDate: today,
+    newValue: '',
+    saveMode: 'create',
+  }
 }
 
 type PendingUploadValidation = {
@@ -160,7 +167,7 @@ const toSpeciesOption = (item: ApplicationCodeOption): SearchableSelectOption =>
 const RTMEmsLogAmvPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
-  const [filters, setFilters] = useState<RtmEmsLogAmvFilters>(INITIAL_FILTERS)
+  const [filters, setFilters] = useState<RtmEmsLogAmvFilters>(() => createInitialFilters())
   const [rows, setRows] = useState<RtmEmsLogAmvRow[]>([])
   const [speciesOptions, setSpeciesOptions] = useState<SearchableSelectOption[]>([])
   const [hasSpeciesLookupFailed, setHasSpeciesLookupFailed] = useState(false)
@@ -177,7 +184,7 @@ const RTMEmsLogAmvPage = () => {
     'success' | 'error' | 'warning' | 'info'
   >('info')
   const [previewResult, setPreviewResult] = useState<RtmEmsLogAmvUploadPreview | null>(null)
-  const [manualForm, setManualForm] = useState<typeof INITIAL_FORM>(INITIAL_FORM)
+  const [manualForm, setManualForm] = useState<ManualFormState>(() => createInitialForm())
   const [manualResult, setManualResult] = useState<RtmEmsLogAmvMutationResult | null>(null)
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
   const [pendingUploadValidation, setPendingUploadValidation] =
@@ -267,7 +274,7 @@ const RTMEmsLogAmvPage = () => {
     setFilters((current) => ({ ...current, [field]: value }))
   }
 
-  const updateManualField = (field: keyof typeof INITIAL_FORM, value: string) => {
+  const updateManualField = (field: keyof ManualFormState, value: string) => {
     setManualForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -585,7 +592,7 @@ const RTMEmsLogAmvPage = () => {
               kind="secondary"
               size="sm"
               onClick={() => {
-                const nextFilters = { ...INITIAL_FILTERS }
+                const nextFilters = createInitialFilters()
                 setFilters(nextFilters)
                 setRows([])
                 setSearchError('')
@@ -673,7 +680,7 @@ const RTMEmsLogAmvPage = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <h2 className="dashboard-title">Manual entry</h2>
-          <form onSubmit={submitSave}>
+          <form onSubmit={submitSave} noValidate>
             <div className="legacy-search-grid">
               {speciesOptions.length > 0 ? (
                 <SearchableSelect

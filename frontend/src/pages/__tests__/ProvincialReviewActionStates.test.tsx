@@ -268,6 +268,75 @@ describe('Provincial Review Action State Smoke', () => {
     ).toBeInTheDocument()
   })
 
+  it('prefills the agent client email when rejecting an agent application', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      ...applicationSummary,
+      applicantTypeCode: 'A',
+      agentClientNumber: '00054321',
+      agentClientLocationCode: '02',
+    })
+    mockedFetchApplicationClientData
+      .mockResolvedValueOnce({
+        clientNumber: '00012345',
+        companyName: 'Owner Ltd.',
+        address: '',
+        city: '',
+        province: '',
+        postalCode: '',
+        country: '',
+        phone: '',
+        fax: '',
+        email: 'owner@example.com',
+        notfound: '',
+      })
+      .mockResolvedValueOnce({
+        clientNumber: '00054321',
+        companyName: 'Agent Ltd.',
+        address: '',
+        city: '',
+        province: '',
+        postalCode: '',
+        country: '',
+        phone: '',
+        fax: '',
+        email: 'agent@example.com',
+        notfound: '',
+      })
+
+    renderPage()
+    await screen.findByText('1000123')
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00012345', '00')
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00054321', '02')
+      expect(screen.getByLabelText('Client email address')).toHaveValue('agent@example.com')
+    })
+
+    await userEvent.type(screen.getByLabelText('Rejection remark'), 'Rejected from review queue')
+    await userEvent.click(screen.getByRole('button', { name: 'Reject Application' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
+        '1000123',
+        expect.objectContaining({
+          statusCode: 'REJ',
+          remark: 'Rejected from review queue',
+          clientEmailAddress: 'agent@example.com',
+        }),
+      )
+      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
+        '1000123',
+        expect.objectContaining({
+          statusCode: 'REJ',
+          remark: 'Rejected from review queue',
+          clientEmailAddress: 'agent@example.com',
+        }),
+      )
+    })
+  })
+
   it('validates single-row rejection before status update', async () => {
     renderPage()
     await screen.findByText('1000123')
@@ -280,6 +349,42 @@ describe('Provincial Review Action State Smoke', () => {
 
     expect(screen.getByText('Rejection remark is required.')).toBeInTheDocument()
     expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
+    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+  })
+
+  it('requires a valid client email before rejecting when the client account has no email', async () => {
+    mockedFetchApplicationClientData.mockResolvedValueOnce({
+      clientNumber: '00012345',
+      companyName: 'Client Ltd.',
+      address: '',
+      city: '',
+      province: '',
+      postalCode: '',
+      country: '',
+      phone: '',
+      fax: '',
+      email: '',
+      notfound: '',
+    })
+
+    renderPage()
+    await screen.findByText('1000123')
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
+
+    expect(
+      await screen.findByText(
+        'No client email was found for this application. Enter one before rejecting.',
+      ),
+    ).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Rejection remark'), 'Rejected from review queue')
+    await userEvent.click(screen.getByRole('button', { name: 'Reject Application' }))
+
+    expect(
+      await screen.findByText('Enter a valid client email address before rejecting.'),
+    ).toBeInTheDocument()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
@@ -392,6 +497,38 @@ describe('Provincial Review Action State Smoke', () => {
         }),
       )
     })
+  })
+
+  it('shows selected review search region names instead of only the selected count', async () => {
+    mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
+      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1908', label: 'Skeena Natural Resource Region' },
+      ],
+      reviewStatuses: [{ value: 'REJ', label: 'Rejected' }],
+    })
+
+    renderPage()
+    await screen.findByText('1000123')
+
+    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
+    )
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'Skeena' } })
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'Skeena Natural Resource Region' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Selected: Cariboo Natural Resource Region, Skeena Natural Resource Region',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('disables selection and action buttons when user lacks review permission', async () => {

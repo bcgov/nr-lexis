@@ -280,6 +280,59 @@ describe('Create Page Core Flows', () => {
     )
   })
 
+  it('submits selected natural resource region org unit code from the region label', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('905'))
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
+      exemptionReasons: [{ value: 'U', label: 'Unadvertised' }],
+      applicationStatuses: [],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1910', label: 'West Coast Natural Resource Region' },
+      ],
+      currentSchedules: [{ value: '987', label: '2026-01-11' }],
+    } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>)
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=1903&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const regionComboBox = await screen.findByRole('combobox', { name: 'Region (required)' })
+    await waitFor(() => {
+      expect(regionComboBox).toHaveValue('Cariboo Natural Resource Region')
+    })
+
+    await chooseComboBoxOption(regionComboBox, 'West Coast Natural Resource Region')
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Application species (required)' }),
+      'HE - Hemlock',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Add Application species' }))
+    expect(await screen.findByText('HE')).toBeInTheDocument()
+    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: '1910',
+      }),
+    )
+  })
+
   it('submits provincial application with agent applicant fields', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('902'))
     mockedFetchApplicationClientLocations.mockImplementation(async (clientNumber, applicantType) =>

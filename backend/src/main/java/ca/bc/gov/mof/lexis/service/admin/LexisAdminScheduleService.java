@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.admin;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
+import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPagedResponseDto;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -15,6 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Profile("oracle")
 public class LexisAdminScheduleService {
+
+  private static final int DEFAULT_PAGE_SIZE = 100;
+  private static final int MAX_PAGE_SIZE = 200;
 
   private final LexisReportScheduleRepository repository;
   private final Clock clock;
@@ -31,6 +35,16 @@ public class LexisAdminScheduleService {
 
   public List<ExportScheduleRowDto> upcomingSchedules() {
     return repository.findUpcomingExportSchedules();
+  }
+
+  public LexisAdminPagedResponseDto<ExportScheduleRowDto> upcomingSchedules(int page, int size) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = size < 1 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+    return new LexisAdminPagedResponseDto<>(
+        repository.findUpcomingExportSchedules(normalizedPage, normalizedSize),
+        repository.countUpcomingExportSchedules(),
+        normalizedPage,
+        normalizedSize);
   }
 
   @Transactional

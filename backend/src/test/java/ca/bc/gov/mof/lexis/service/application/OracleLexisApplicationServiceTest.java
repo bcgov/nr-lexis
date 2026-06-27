@@ -62,6 +62,8 @@ class OracleLexisApplicationServiceTest {
         .thenReturn(
             List.of(
                 scheduleRow(986L, LocalDate.of(2026, 1, 11)),
+                scheduleRow(null, LocalDate.of(2026, 7, 4)),
+                scheduleRow(990L, null),
                 scheduleRow(987L, LocalDate.of(2026, 7, 11)),
                 scheduleRow(988L, LocalDate.of(2026, 7, 25)),
                 scheduleRow(989L, LocalDate.of(2026, 8, 8))));

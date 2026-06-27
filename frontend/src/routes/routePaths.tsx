@@ -427,10 +427,43 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/admin/policies',
     id: 'Policy Center',
-    requiredActions: ['/lexisAgentAdmin'],
+    requiredActions: ['/lexisPolicyAdmin'],
     element: (
       <Layout>
-        <AdminPoliciesPage />
+        <Navigate to="/admin/policies/fee" replace />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/admin/policies/fee',
+    id: 'Fee Policy Administration',
+    requiredActions: ['/lexisPolicyAdmin'],
+    element: (
+      <Layout>
+        <AdminPoliciesPage area="fee" />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/admin/policies/fil',
+    id: 'Fee In Lieu Policy Administration',
+    requiredActions: ['/lexisFILAdmin'],
+    element: (
+      <Layout>
+        <AdminPoliciesPage area="fil" />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/admin/schedules',
+    id: 'Export Schedule Administration',
+    requiredActions: ['/lexisPolicyAdmin'],
+    element: (
+      <Layout>
+        <AdminPoliciesPage area="schedule" />
       </Layout>
     ),
     isNavigation: false,

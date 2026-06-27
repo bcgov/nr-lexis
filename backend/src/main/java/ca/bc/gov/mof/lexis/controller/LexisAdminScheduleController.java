@@ -3,8 +3,8 @@ package ca.bc.gov.mof.lexis.controller;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
+import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPagedResponseDto;
 import ca.bc.gov.mof.lexis.service.admin.LexisAdminScheduleService;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -31,13 +32,15 @@ public class LexisAdminScheduleController {
   }
 
   @GetMapping
-  public ResponseEntity<List<ExportScheduleRowDto>> upcomingSchedules() {
+  public ResponseEntity<LexisAdminPagedResponseDto<ExportScheduleRowDto>> upcomingSchedules(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "100") int size) {
     LexisAdminScheduleService service = scheduleServiceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Admin schedule service unavailable - returning no content for schedules");
       return ResponseEntity.noContent().build();
     }
-    return ResponseEntity.ok(service.upcomingSchedules());
+    return ResponseEntity.ok(service.upcomingSchedules(page, size));
   }
 
   @PostMapping

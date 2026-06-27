@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
+import { SESSION_EXPIRED_EVENT, SESSION_IDLE_TIMEOUT_MS } from '@/context/auth/session-expiry'
 import { useAuth } from '@/context/auth/useAuth'
 import { fetchSessionCapabilities } from '@/service/session-service'
 
@@ -74,6 +75,8 @@ describe('AuthProvider logout', () => {
 
   afterEach(() => {
     consoleWarnSpy.mockRestore()
+    vi.useRealTimers()
+    window.history.replaceState({}, document.title, '/')
   })
 
   it('signs out of Cognito', async () => {
@@ -91,6 +94,10 @@ describe('AuthProvider logout', () => {
     })
     expect(authMocks.signOut).toHaveBeenCalledWith()
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+  })
+
+  it('uses the standard 15 minute idle timeout', () => {
+    expect(SESSION_IDLE_TIMEOUT_MS).toBe(15 * 60 * 1000)
   })
 
   it('clears local auth state after Cognito signout fails', async () => {
@@ -112,5 +119,92 @@ describe('AuthProvider logout', () => {
       expect.any(Error),
     )
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+  })
+
+  it('expires authenticated sessions after 15 minutes of inactivity', async () => {
+    window.history.replaceState({}, document.title, '/admin')
+    let pathnameWhenSignOutStarted = ''
+    authMocks.signOut.mockImplementation(async () => {
+      pathnameWhenSignOutStarted = window.location.pathname
+    })
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+
+    vi.useFakeTimers()
+    window.dispatchEvent(new Event('keydown'))
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - 1)
+    })
+    expect(authMocks.signOut).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+
+    expect(authMocks.signOut).toHaveBeenCalledTimes(1)
+    expect(pathnameWhenSignOutStarted).toBe('/')
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+    expect(window.location.pathname).toBe('/')
+  })
+
+  it('resets the 15 minute inactivity timer when the user interacts with the page', async () => {
+    window.history.replaceState({}, document.title, '/admin')
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+
+    vi.useFakeTimers()
+    window.dispatchEvent(new Event('keydown'))
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - 1)
+    })
+    window.dispatchEvent(new KeyboardEvent('keydown'))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    expect(authMocks.signOut).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS)
+    })
+
+    expect(authMocks.signOut).toHaveBeenCalledTimes(1)
+    expect(window.location.pathname).toBe('/')
+  })
+
+  it.each([
+    ['the API reports session expiry', 'api-unauthorized'],
+    ['the auth token cannot be resolved', 'token-unavailable'],
+  ] as const)('returns authenticated users to the login shell when %s', async (_label, reason) => {
+    window.history.replaceState({}, document.title, '/admin')
+    let pathnameWhenSignOutStarted = ''
+    authMocks.signOut.mockImplementation(async () => {
+      pathnameWhenSignOutStarted = window.location.pathname
+    })
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+
+    window.dispatchEvent(
+      new CustomEvent(SESSION_EXPIRED_EVENT, {
+        detail: { reason },
+      }),
+    )
+
+    await waitFor(() => {
+      expect(authMocks.signOut).toHaveBeenCalledTimes(1)
+    })
+    expect(pathnameWhenSignOutStarted).toBe('/')
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+    expect(window.location.pathname).toBe('/')
   })
 })

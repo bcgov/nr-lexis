@@ -40,6 +40,7 @@ jobs:
       CUTOFF: "1 week ago"
     runs-on: ubuntu-slim
     timeout-minutes: 10
+    environment: dev
     steps:
       - name: Clean up PR Deployments
         uses: bcgov/action-oc-runner@d2fc921aaa9d70684c186dbb7754e6985d44d86f # v1.4.1

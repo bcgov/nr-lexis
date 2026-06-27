@@ -4,6 +4,7 @@ import {
   Column,
   Grid,
   InlineLoading,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -28,15 +29,15 @@ import {
 import {
   createExportSchedule as createExportScheduleRequest,
   deleteExportSchedule as deleteExportScheduleRequest,
-  fetchExportSchedules,
+  fetchExportSchedulePage,
   updateExportSchedule as updateExportScheduleRequest,
   type ExportScheduleRow,
 } from '@/service/admin-schedule-service'
 import {
   deleteFeePolicy as deleteFeePolicyRequest,
   deleteFilPolicy as deleteFilPolicyRequest,
-  fetchFeePolicies,
-  fetchFilPolicies,
+  fetchFeePolicyPage,
+  fetchFilPolicyPage,
   type FeePolicyRow,
   type FilPolicyRow,
   upsertFeePolicy as upsertFeePolicyRequest,
@@ -58,14 +59,27 @@ type PolicyField =
   | 'scheduleOfferWithdrawalDate'
   | 'scheduleTeacMeetingDate'
 
-const AdminPoliciesPage = () => {
+export type AdminPolicyArea = 'fee' | 'fil' | 'schedule'
+
+type AdminPoliciesPageProps = {
+  area: AdminPolicyArea
+}
+
+const ADMIN_PAGE_SIZES = [20, 50, 100, 200]
+const DEFAULT_ADMIN_PAGE_SIZE = 100
+
+const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const { canPerform } = useAuth()
   const canManageFeePolicy = canPerform('/lexisPolicyAdmin')
   const canManageFilPolicy = canPerform('/lexisFILAdmin')
+  const canAccessArea = area === 'fil' ? canManageFilPolicy : canManageFeePolicy
 
   const [feePolicies, setFeePolicies] = useState<FeePolicyRow[]>([])
   const [filPolicies, setFilPolicies] = useState<FilPolicyRow[]>([])
   const [exportSchedules, setExportSchedules] = useState<ExportScheduleRow[]>([])
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(DEFAULT_ADMIN_PAGE_SIZE)
+  const [totalRows, setTotalRows] = useState(0)
 
   const [feeEffectiveDate, setFeeEffectiveDate] = useState('')
   const [feeOrgUnitCode, setFeeOrgUnitCode] = useState('')
@@ -94,9 +108,20 @@ const AdminPoliciesPage = () => {
   const [showFilValidationErrors, setShowFilValidationErrors] = useState(false)
   const [showScheduleValidationErrors, setShowScheduleValidationErrors] = useState(false)
 
-  const feePolicyCount = useMemo(() => feePolicies.length, [feePolicies.length])
-  const filPolicyCount = useMemo(() => filPolicies.length, [filPolicies.length])
-  const exportScheduleCount = useMemo(() => exportSchedules.length, [exportSchedules.length])
+  const pageTitle =
+    area === 'fee'
+      ? 'Fee policy administration'
+      : area === 'fil'
+        ? 'Fee in lieu percent policy administration'
+        : 'Export schedule administration'
+  const loadingDescription =
+    area === 'schedule'
+      ? 'Loading export schedules...'
+      : area === 'fil'
+        ? 'Loading fee in lieu policies...'
+        : 'Loading fee policies...'
+  const notificationTitle = area === 'schedule' ? 'Schedule update' : 'Policy update'
+  const errorTitle = area === 'schedule' ? 'Schedule error' : 'Policy error'
   const fieldErrors = useMemo<FieldErrors<PolicyField>>(
     () => ({
       feeEffectiveDate:
@@ -229,12 +254,27 @@ const AdminPoliciesPage = () => {
     clearNotifications()
 
     try {
-      const loadedFeePolicies = await fetchFeePolicies()
-      const loadedFilPolicies = await fetchFilPolicies()
-      const loadedExportSchedules = canManageFeePolicy ? await fetchExportSchedules() : []
-      setFeePolicies(loadedFeePolicies)
-      setFilPolicies(loadedFilPolicies)
-      setExportSchedules(loadedExportSchedules)
+      if (!canAccessArea) {
+        setFeePolicies([])
+        setFilPolicies([])
+        setExportSchedules([])
+        setTotalRows(0)
+        return
+      }
+
+      if (area === 'fee') {
+        const loadedPage = await fetchFeePolicyPage(page, pageSize)
+        setFeePolicies(loadedPage.rows)
+        setTotalRows(loadedPage.total)
+      } else if (area === 'fil') {
+        const loadedPage = await fetchFilPolicyPage(page, pageSize)
+        setFilPolicies(loadedPage.rows)
+        setTotalRows(loadedPage.total)
+      } else {
+        const loadedPage = await fetchExportSchedulePage(page, pageSize)
+        setExportSchedules(loadedPage.rows)
+        setTotalRows(loadedPage.total)
+      }
     } catch (error) {
       console.error(error)
       const status = getResponseStatus(error)
@@ -248,7 +288,7 @@ const AdminPoliciesPage = () => {
     } finally {
       setIsLoadingPolicies(false)
     }
-  }, [canManageFeePolicy])
+  }, [area, canAccessArea, page, pageSize])
 
   useEffect(() => {
     void loadPolicies()
@@ -271,14 +311,14 @@ const AdminPoliciesPage = () => {
     setIsMutatingPolicies(true)
 
     try {
-      const updatedRows = await upsertFeePolicyRequest({
+      await upsertFeePolicyRequest({
         id: editingFeePolicyId,
         effectiveDate: feeEffectiveDate,
         orgUnitCode: feeOrgUnitCode,
         orgUnitName: feeOrgUnitName,
         policyPercentage: feePolicyPercentage,
       })
-      setFeePolicies(updatedRows)
+      await loadPolicies()
       setSuccessMessage(editingFeePolicyId ? 'Fee policy updated.' : 'Fee policy added.')
       resetFeeForm()
     } catch (error) {
@@ -311,8 +351,8 @@ const AdminPoliciesPage = () => {
     setIsMutatingPolicies(true)
 
     try {
-      const updatedRows = await deleteFeePolicyRequest(rowId)
-      setFeePolicies(updatedRows)
+      await deleteFeePolicyRequest(rowId)
+      await loadPolicies()
       if (editingFeePolicyId === rowId) {
         resetFeeForm()
       }
@@ -349,12 +389,12 @@ const AdminPoliciesPage = () => {
     setIsMutatingPolicies(true)
 
     try {
-      const updatedRows = await upsertFilPolicyRequest({
+      await upsertFilPolicyRequest({
         id: editingFilPolicyId,
         effectiveDate: filEffectiveDate,
         filPercentage: filPolicyPercentage,
       })
-      setFilPolicies(updatedRows)
+      await loadPolicies()
       setSuccessMessage(
         editingFilPolicyId ? 'Fee in lieu policy updated.' : 'Fee in lieu policy added.',
       )
@@ -389,8 +429,8 @@ const AdminPoliciesPage = () => {
     setIsMutatingPolicies(true)
 
     try {
-      const updatedRows = await deleteFilPolicyRequest(rowId)
-      setFilPolicies(updatedRows)
+      await deleteFilPolicyRequest(rowId)
+      await loadPolicies()
       if (editingFilPolicyId === rowId) {
         resetFilForm()
       }
@@ -456,8 +496,7 @@ const AdminPoliciesPage = () => {
         setErrorMessage(result.message || 'Unable to save export schedule.')
         return
       }
-      const loadedExportSchedules = await fetchExportSchedules()
-      setExportSchedules(loadedExportSchedules)
+      await loadPolicies()
       setSuccessMessage(
         result.message ||
           (editingScheduleId ? 'Export schedule updated.' : 'Export schedule added.'),
@@ -488,8 +527,7 @@ const AdminPoliciesPage = () => {
         setErrorMessage(result.message || 'Unable to delete export schedule.')
         return
       }
-      const loadedExportSchedules = await fetchExportSchedules()
-      setExportSchedules(loadedExportSchedules)
+      await loadPolicies()
       if (editingScheduleId === row.exportScheduleId) {
         resetScheduleForm()
       }
@@ -511,37 +549,41 @@ const AdminPoliciesPage = () => {
     }
   }
 
+  const renderPagination = () => (
+    <Pagination
+      backwardText="Previous page"
+      forwardText="Next page"
+      itemsPerPageText="Rows per page"
+      page={page + 1}
+      pageSize={pageSize}
+      pageSizes={ADMIN_PAGE_SIZES}
+      totalItems={totalRows}
+      onChange={({ page: nextPage, pageSize: nextPageSize }) => {
+        setPage(Math.max(0, nextPage - 1))
+        setPageSize(nextPageSize)
+      }}
+    />
+  )
+
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Policy center</h1>
+        <h1>{pageTitle}</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <div>
-            Fee policy access:{' '}
-            <Tag type={canManageFeePolicy ? 'green' : 'red'}>
-              {canManageFeePolicy ? 'Allowed' : 'Not Granted'}
+            Access:{' '}
+            <Tag type={canAccessArea ? 'green' : 'red'}>
+              {canAccessArea ? 'Allowed' : 'Not Granted'}
             </Tag>
           </div>
-          <div>
-            Fee in lieu policy access:{' '}
-            <Tag type={canManageFilPolicy ? 'green' : 'red'}>
-              {canManageFilPolicy ? 'Allowed' : 'Not Granted'}
-            </Tag>
-          </div>
-          <div>
-            Export schedule access:{' '}
-            <Tag type={canManageFeePolicy ? 'green' : 'red'}>
-              {canManageFeePolicy ? 'Allowed' : 'Not Granted'}
-            </Tag>
-          </div>
-          {isLoadingPolicies && <InlineLoading description="Loading policy data..." />}
+          {isLoadingPolicies && <InlineLoading description={loadingDescription} />}
           {successMessage && (
             <AppNotification
               kind="success"
-              title="Policy update"
+              title={notificationTitle}
               subtitle={successMessage}
               lowContrast
               autoDismissMs={8000}
@@ -551,7 +593,7 @@ const AdminPoliciesPage = () => {
           {errorMessage && (
             <AppNotification
               kind="error"
-              title="Policy error"
+              title={errorTitle}
               subtitle={errorMessage}
               lowContrast
               onCloseButtonClick={() => setErrorMessage('')}
@@ -560,344 +602,353 @@ const AdminPoliciesPage = () => {
         </Tile>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Fee policy administration</h2>
-          <p>
-            Records: <strong>{feePolicyCount}</strong>
-          </p>
-          <div className="legacy-search-grid">
-            <IsoDatePicker
-              id="feeEffectiveDate"
-              labelText="Policy effective date"
-              value={feeEffectiveDate}
-              invalid={!!feeFieldError('feeEffectiveDate')}
-              invalidText={feeFieldError('feeEffectiveDate')}
-              onBlur={() => markFieldTouched('feeEffectiveDate')}
-              onChange={setFeeEffectiveDate}
-            />
-            <TextInput
-              id="feeOrgUnitCode"
-              labelText="Region code"
-              value={feeOrgUnitCode}
-              invalid={!!feeFieldError('feeOrgUnitCode')}
-              invalidText={feeFieldError('feeOrgUnitCode')}
-              onBlur={() => markFieldTouched('feeOrgUnitCode')}
-              onChange={(event) => setFeeOrgUnitCode(event.target.value)}
-            />
-            <TextInput
-              id="feeOrgUnitName"
-              labelText="Region name"
-              value={feeOrgUnitName}
-              onChange={(event) => setFeeOrgUnitName(event.target.value)}
-            />
-            <TextInput
-              id="feePolicyPercentage"
-              labelText="Fee increase percentage"
-              value={feePolicyPercentage}
-              invalid={!!feeFieldError('feePolicyPercentage')}
-              invalidText={feeFieldError('feePolicyPercentage')}
-              onBlur={() => markFieldTouched('feePolicyPercentage')}
-              onChange={(event) => setFeePolicyPercentage(event.target.value)}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={() => void upsertFeePolicy()}
-              disabled={isLoadingPolicies || isMutatingPolicies || !canManageFeePolicy}
-            >
-              {editingFeePolicyId ? 'Update Fee Policy' : 'Add Fee Policy'}
-            </Button>
-            <Button
-              kind="ghost"
-              onClick={resetFeeForm}
-              disabled={isLoadingPolicies || isMutatingPolicies}
-            >
-              Cancel Edit
-            </Button>
-          </div>
+      {area === 'fee' && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">Fee policy administration</h2>
+            <p>
+              Records: <strong>{totalRows}</strong>
+            </p>
+            <div className="legacy-search-grid">
+              <IsoDatePicker
+                id="feeEffectiveDate"
+                labelText="Policy effective date"
+                value={feeEffectiveDate}
+                invalid={!!feeFieldError('feeEffectiveDate')}
+                invalidText={feeFieldError('feeEffectiveDate')}
+                onBlur={() => markFieldTouched('feeEffectiveDate')}
+                onChange={setFeeEffectiveDate}
+              />
+              <TextInput
+                id="feeOrgUnitCode"
+                labelText="Region code"
+                value={feeOrgUnitCode}
+                invalid={!!feeFieldError('feeOrgUnitCode')}
+                invalidText={feeFieldError('feeOrgUnitCode')}
+                onBlur={() => markFieldTouched('feeOrgUnitCode')}
+                onChange={(event) => setFeeOrgUnitCode(event.target.value)}
+              />
+              <TextInput
+                id="feeOrgUnitName"
+                labelText="Region name"
+                value={feeOrgUnitName}
+                onChange={(event) => setFeeOrgUnitName(event.target.value)}
+              />
+              <TextInput
+                id="feePolicyPercentage"
+                labelText="Fee increase percentage"
+                value={feePolicyPercentage}
+                invalid={!!feeFieldError('feePolicyPercentage')}
+                invalidText={feeFieldError('feePolicyPercentage')}
+                onBlur={() => markFieldTouched('feePolicyPercentage')}
+                onChange={(event) => setFeePolicyPercentage(event.target.value)}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={() => void upsertFeePolicy()}
+                disabled={isLoadingPolicies || isMutatingPolicies || !canManageFeePolicy}
+              >
+                {editingFeePolicyId ? 'Update Fee Policy' : 'Add Fee Policy'}
+              </Button>
+              <Button
+                kind="ghost"
+                onClick={resetFeeForm}
+                disabled={isLoadingPolicies || isMutatingPolicies}
+              >
+                Cancel Edit
+              </Button>
+            </div>
 
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Effective Date</TableHeader>
-                <TableHeader>Region</TableHeader>
-                <TableHeader>Fee Increase %</TableHeader>
-                <TableHeader>Entry User</TableHeader>
-                <TableHeader>Entry Timestamp</TableHeader>
-                <TableHeader>Update User</TableHeader>
-                <TableHeader>Update Timestamp</TableHeader>
-                <TableHeader>Actions</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {feePolicies.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell>{row.effectiveDate}</TableCell>
-                  <TableCell title={row.orgUnitName}>{row.orgUnitCode}</TableCell>
-                  <TableCell>{row.policyPercentage}</TableCell>
-                  <TableCell>{row.entryUserId}</TableCell>
-                  <TableCell>{row.entryTimestamp}</TableCell>
-                  <TableCell>{row.updateUserId}</TableCell>
-                  <TableCell>{row.updateTimestamp}</TableCell>
-                  <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      onClick={() => editFeePolicy(row)}
-                      disabled={isLoadingPolicies || isMutatingPolicies}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      onClick={() => void deleteFeePolicy(row.id)}
-                      disabled={isLoadingPolicies || isMutatingPolicies}
-                    >
-                      Delete
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {feePolicies.length === 0 && (
+            <Table useZebraStyles>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={8}>No fee policy rows yet.</TableCell>
+                  <TableHeader>Effective Date</TableHeader>
+                  <TableHeader>Region</TableHeader>
+                  <TableHeader>Fee Increase %</TableHeader>
+                  <TableHeader>Entry User</TableHeader>
+                  <TableHeader>Entry Timestamp</TableHeader>
+                  <TableHeader>Update User</TableHeader>
+                  <TableHeader>Update Timestamp</TableHeader>
+                  <TableHeader>Actions</TableHeader>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Tile>
-      </Column>
+              </TableHead>
+              <TableBody>
+                {feePolicies.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>{row.effectiveDate}</TableCell>
+                    <TableCell title={row.orgUnitName}>{row.orgUnitCode}</TableCell>
+                    <TableCell>{row.policyPercentage}</TableCell>
+                    <TableCell>{row.entryUserId}</TableCell>
+                    <TableCell>{row.entryTimestamp}</TableCell>
+                    <TableCell>{row.updateUserId}</TableCell>
+                    <TableCell>{row.updateTimestamp}</TableCell>
+                    <TableCell>
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => editFeePolicy(row)}
+                        disabled={isLoadingPolicies || isMutatingPolicies}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => void deleteFeePolicy(row.id)}
+                        disabled={isLoadingPolicies || isMutatingPolicies}
+                      >
+                        Delete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {feePolicies.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8}>No fee policy rows yet.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            {renderPagination()}
+          </Tile>
+        </Column>
+      )}
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Fee in lieu percent policy administration</h2>
-          <p>
-            Records: <strong>{filPolicyCount}</strong>
-          </p>
-          <div className="legacy-search-grid">
-            <IsoDatePicker
-              id="filEffectiveDate"
-              labelText="Policy effective date"
-              value={filEffectiveDate}
-              invalid={!!filFieldError('filEffectiveDate')}
-              invalidText={filFieldError('filEffectiveDate')}
-              onBlur={() => markFieldTouched('filEffectiveDate')}
-              onChange={setFilEffectiveDate}
-            />
-            <TextInput
-              id="filPolicyPercentage"
-              labelText="Fee in lieu percentage"
-              value={filPolicyPercentage}
-              invalid={!!filFieldError('filPolicyPercentage')}
-              invalidText={filFieldError('filPolicyPercentage')}
-              onBlur={() => markFieldTouched('filPolicyPercentage')}
-              onChange={(event) => setFilPolicyPercentage(event.target.value)}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={() => void upsertFilPolicy()}
-              disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
-            >
-              {editingFilPolicyId ? 'Update fee in lieu policy' : 'Add fee in lieu policy'}
-            </Button>
-            <Button
-              kind="ghost"
-              onClick={resetFilForm}
-              disabled={isLoadingPolicies || isMutatingPolicies}
-            >
-              Cancel Edit
-            </Button>
-          </div>
+      {area === 'fil' && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">Fee in lieu percent policy administration</h2>
+            <p>
+              Records: <strong>{totalRows}</strong>
+            </p>
+            <div className="legacy-search-grid">
+              <IsoDatePicker
+                id="filEffectiveDate"
+                labelText="Policy effective date"
+                value={filEffectiveDate}
+                invalid={!!filFieldError('filEffectiveDate')}
+                invalidText={filFieldError('filEffectiveDate')}
+                onBlur={() => markFieldTouched('filEffectiveDate')}
+                onChange={setFilEffectiveDate}
+              />
+              <TextInput
+                id="filPolicyPercentage"
+                labelText="Fee in lieu percentage"
+                value={filPolicyPercentage}
+                invalid={!!filFieldError('filPolicyPercentage')}
+                invalidText={filFieldError('filPolicyPercentage')}
+                onBlur={() => markFieldTouched('filPolicyPercentage')}
+                onChange={(event) => setFilPolicyPercentage(event.target.value)}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={() => void upsertFilPolicy()}
+                disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
+              >
+                {editingFilPolicyId ? 'Update fee in lieu policy' : 'Add fee in lieu policy'}
+              </Button>
+              <Button
+                kind="ghost"
+                onClick={resetFilForm}
+                disabled={isLoadingPolicies || isMutatingPolicies}
+              >
+                Cancel Edit
+              </Button>
+            </div>
 
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Effective date</TableHeader>
-                <TableHeader>Fee in lieu %</TableHeader>
-                <TableHeader>Entry user</TableHeader>
-                <TableHeader>Entry timestamp</TableHeader>
-                <TableHeader>Update user</TableHeader>
-                <TableHeader>Update timestamp</TableHeader>
-                <TableHeader>Actions</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filPolicies.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell>{row.effectiveDate}</TableCell>
-                  <TableCell>{row.filPercentage}</TableCell>
-                  <TableCell>{row.entryUserId}</TableCell>
-                  <TableCell>{row.entryTimestamp}</TableCell>
-                  <TableCell>{row.updateUserId}</TableCell>
-                  <TableCell>{row.updateTimestamp}</TableCell>
-                  <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      onClick={() => editFilPolicy(row)}
-                      disabled={isLoadingPolicies || isMutatingPolicies}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      onClick={() => void deleteFilPolicy(row.id)}
-                      disabled={isLoadingPolicies || isMutatingPolicies}
-                    >
-                      Delete
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filPolicies.length === 0 && (
+            <Table useZebraStyles>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={7}>No fee in lieu policy rows yet.</TableCell>
+                  <TableHeader>Effective date</TableHeader>
+                  <TableHeader>Fee in lieu %</TableHeader>
+                  <TableHeader>Entry user</TableHeader>
+                  <TableHeader>Entry timestamp</TableHeader>
+                  <TableHeader>Update user</TableHeader>
+                  <TableHeader>Update timestamp</TableHeader>
+                  <TableHeader>Actions</TableHeader>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Tile>
-      </Column>
+              </TableHead>
+              <TableBody>
+                {filPolicies.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>{row.effectiveDate}</TableCell>
+                    <TableCell>{row.filPercentage}</TableCell>
+                    <TableCell>{row.entryUserId}</TableCell>
+                    <TableCell>{row.entryTimestamp}</TableCell>
+                    <TableCell>{row.updateUserId}</TableCell>
+                    <TableCell>{row.updateTimestamp}</TableCell>
+                    <TableCell>
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => editFilPolicy(row)}
+                        disabled={isLoadingPolicies || isMutatingPolicies}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => void deleteFilPolicy(row.id)}
+                        disabled={isLoadingPolicies || isMutatingPolicies}
+                      >
+                        Delete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filPolicies.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7}>No fee in lieu policy rows yet.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            {renderPagination()}
+          </Tile>
+        </Column>
+      )}
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Export schedule administration</h2>
-          <p>
-            Upcoming rows: <strong>{exportScheduleCount}</strong>
-          </p>
-          <div className="legacy-search-grid">
-            <IsoDatePicker
-              id="scheduleAdvertisingDate"
-              labelText="Advertising date"
-              value={scheduleAdvertisingDate}
-              invalid={!!scheduleFieldError('scheduleAdvertisingDate')}
-              invalidText={scheduleFieldError('scheduleAdvertisingDate')}
-              onBlur={() => markFieldTouched('scheduleAdvertisingDate')}
-              onChange={setScheduleAdvertisingDate}
-            />
-            <IsoDatePicker
-              id="scheduleApplicationReceiptDate"
-              labelText="Application receipt date"
-              value={scheduleApplicationReceiptDate}
-              invalid={!!scheduleFieldError('scheduleApplicationReceiptDate')}
-              invalidText={scheduleFieldError('scheduleApplicationReceiptDate')}
-              onBlur={() => markFieldTouched('scheduleApplicationReceiptDate')}
-              onChange={setScheduleApplicationReceiptDate}
-            />
-            <IsoDatePicker
-              id="scheduleOfferReceiptDate"
-              labelText="Offer receipt date"
-              value={scheduleOfferReceiptDate}
-              invalid={!!scheduleFieldError('scheduleOfferReceiptDate')}
-              invalidText={scheduleFieldError('scheduleOfferReceiptDate')}
-              onBlur={() => markFieldTouched('scheduleOfferReceiptDate')}
-              onChange={setScheduleOfferReceiptDate}
-            />
-            <IsoDatePicker
-              id="scheduleOfferEndDate"
-              labelText="Offer end date"
-              value={scheduleOfferEndDate}
-              invalid={!!scheduleFieldError('scheduleOfferEndDate')}
-              invalidText={scheduleFieldError('scheduleOfferEndDate')}
-              onBlur={() => markFieldTouched('scheduleOfferEndDate')}
-              onChange={setScheduleOfferEndDate}
-            />
-            <IsoDatePicker
-              id="scheduleOfferWithdrawalDate"
-              labelText="Offer withdrawal date"
-              value={scheduleOfferWithdrawalDate}
-              invalid={!!scheduleFieldError('scheduleOfferWithdrawalDate')}
-              invalidText={scheduleFieldError('scheduleOfferWithdrawalDate')}
-              onBlur={() => markFieldTouched('scheduleOfferWithdrawalDate')}
-              onChange={setScheduleOfferWithdrawalDate}
-            />
-            <IsoDatePicker
-              id="scheduleTeacMeetingDate"
-              labelText="TEAC meeting date"
-              value={scheduleTeacMeetingDate}
-              invalid={!!scheduleFieldError('scheduleTeacMeetingDate')}
-              invalidText={scheduleFieldError('scheduleTeacMeetingDate')}
-              onBlur={() => markFieldTouched('scheduleTeacMeetingDate')}
-              onChange={setScheduleTeacMeetingDate}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={() => void upsertExportSchedule()}
-              disabled={isLoadingPolicies || isMutatingPolicies || !canManageFeePolicy}
-            >
-              {editingScheduleId ? 'Update Export Schedule' : 'Add Export Schedule'}
-            </Button>
-            <Button
-              kind="ghost"
-              onClick={resetScheduleForm}
-              disabled={isLoadingPolicies || isMutatingPolicies}
-            >
-              {editingScheduleId ? 'Cancel Edit' : 'Clear Schedule'}
-            </Button>
-          </div>
+      {area === 'schedule' && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">Export schedule administration</h2>
+            <p>
+              Upcoming rows: <strong>{totalRows}</strong>
+            </p>
+            <div className="legacy-search-grid">
+              <IsoDatePicker
+                id="scheduleAdvertisingDate"
+                labelText="Advertising date"
+                value={scheduleAdvertisingDate}
+                invalid={!!scheduleFieldError('scheduleAdvertisingDate')}
+                invalidText={scheduleFieldError('scheduleAdvertisingDate')}
+                onBlur={() => markFieldTouched('scheduleAdvertisingDate')}
+                onChange={setScheduleAdvertisingDate}
+              />
+              <IsoDatePicker
+                id="scheduleApplicationReceiptDate"
+                labelText="Application receipt date"
+                value={scheduleApplicationReceiptDate}
+                invalid={!!scheduleFieldError('scheduleApplicationReceiptDate')}
+                invalidText={scheduleFieldError('scheduleApplicationReceiptDate')}
+                onBlur={() => markFieldTouched('scheduleApplicationReceiptDate')}
+                onChange={setScheduleApplicationReceiptDate}
+              />
+              <IsoDatePicker
+                id="scheduleOfferReceiptDate"
+                labelText="Offer receipt date"
+                value={scheduleOfferReceiptDate}
+                invalid={!!scheduleFieldError('scheduleOfferReceiptDate')}
+                invalidText={scheduleFieldError('scheduleOfferReceiptDate')}
+                onBlur={() => markFieldTouched('scheduleOfferReceiptDate')}
+                onChange={setScheduleOfferReceiptDate}
+              />
+              <IsoDatePicker
+                id="scheduleOfferEndDate"
+                labelText="Offer end date"
+                value={scheduleOfferEndDate}
+                invalid={!!scheduleFieldError('scheduleOfferEndDate')}
+                invalidText={scheduleFieldError('scheduleOfferEndDate')}
+                onBlur={() => markFieldTouched('scheduleOfferEndDate')}
+                onChange={setScheduleOfferEndDate}
+              />
+              <IsoDatePicker
+                id="scheduleOfferWithdrawalDate"
+                labelText="Offer withdrawal date"
+                value={scheduleOfferWithdrawalDate}
+                invalid={!!scheduleFieldError('scheduleOfferWithdrawalDate')}
+                invalidText={scheduleFieldError('scheduleOfferWithdrawalDate')}
+                onBlur={() => markFieldTouched('scheduleOfferWithdrawalDate')}
+                onChange={setScheduleOfferWithdrawalDate}
+              />
+              <IsoDatePicker
+                id="scheduleTeacMeetingDate"
+                labelText="TEAC meeting date"
+                value={scheduleTeacMeetingDate}
+                invalid={!!scheduleFieldError('scheduleTeacMeetingDate')}
+                invalidText={scheduleFieldError('scheduleTeacMeetingDate')}
+                onBlur={() => markFieldTouched('scheduleTeacMeetingDate')}
+                onChange={setScheduleTeacMeetingDate}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={() => void upsertExportSchedule()}
+                disabled={isLoadingPolicies || isMutatingPolicies || !canManageFeePolicy}
+              >
+                {editingScheduleId ? 'Update Export Schedule' : 'Add Export Schedule'}
+              </Button>
+              <Button
+                kind="ghost"
+                onClick={resetScheduleForm}
+                disabled={isLoadingPolicies || isMutatingPolicies}
+              >
+                {editingScheduleId ? 'Cancel Edit' : 'Clear Schedule'}
+              </Button>
+            </div>
 
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>ID</TableHeader>
-                <TableHeader>Advertising date</TableHeader>
-                <TableHeader>Application receipt</TableHeader>
-                <TableHeader>Offer receipt</TableHeader>
-                <TableHeader>Offer end</TableHeader>
-                <TableHeader>Offer withdrawal</TableHeader>
-                <TableHeader>TEAC meeting</TableHeader>
-                <TableHeader>Applications</TableHeader>
-                <TableHeader>Actions</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {exportSchedules.map((row) => (
-                <TableRow key={row.exportScheduleId || row.advertisingDate}>
-                  <TableCell>{row.exportScheduleId}</TableCell>
-                  <TableCell>{row.advertisingDate}</TableCell>
-                  <TableCell>{row.applicationReceiptDate}</TableCell>
-                  <TableCell>{row.offerReceiptDate}</TableCell>
-                  <TableCell>{row.offerEndDate}</TableCell>
-                  <TableCell>{row.offerWithdrawalDate}</TableCell>
-                  <TableCell>{row.teacMeetingDate}</TableCell>
-                  <TableCell>{row.applicationCount}</TableCell>
-                  <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      onClick={() => editExportSchedule(row)}
-                      disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      onClick={() => void deleteExportSchedule(row)}
-                      disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
-                    >
-                      Delete
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {exportSchedules.length === 0 && (
+            <Table useZebraStyles>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={9}>No upcoming export schedule rows found.</TableCell>
+                  <TableHeader>ID</TableHeader>
+                  <TableHeader>Advertising date</TableHeader>
+                  <TableHeader>Application receipt</TableHeader>
+                  <TableHeader>Offer receipt</TableHeader>
+                  <TableHeader>Offer end</TableHeader>
+                  <TableHeader>Offer withdrawal</TableHeader>
+                  <TableHeader>TEAC meeting</TableHeader>
+                  <TableHeader>Applications</TableHeader>
+                  <TableHeader>Actions</TableHeader>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Tile>
-      </Column>
+              </TableHead>
+              <TableBody>
+                {exportSchedules.map((row) => (
+                  <TableRow key={row.exportScheduleId || row.advertisingDate}>
+                    <TableCell>{row.exportScheduleId}</TableCell>
+                    <TableCell>{row.advertisingDate}</TableCell>
+                    <TableCell>{row.applicationReceiptDate}</TableCell>
+                    <TableCell>{row.offerReceiptDate}</TableCell>
+                    <TableCell>{row.offerEndDate}</TableCell>
+                    <TableCell>{row.offerWithdrawalDate}</TableCell>
+                    <TableCell>{row.teacMeetingDate}</TableCell>
+                    <TableCell>{row.applicationCount}</TableCell>
+                    <TableCell>
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => editExportSchedule(row)}
+                        disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => void deleteExportSchedule(row)}
+                        disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
+                      >
+                        Delete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {exportSchedules.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={9}>No upcoming export schedule rows found.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            {renderPagination()}
+          </Tile>
+        </Column>
+      )}
     </Grid>
   )
 }

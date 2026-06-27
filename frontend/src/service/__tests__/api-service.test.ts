@@ -1,33 +1,50 @@
 import type { AxiosRequestConfig } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SESSION_EXPIRED_EVENT } from '@/context/auth/session-expiry'
 import apiService from '@/service/api-service'
 
 type RequestInterceptor = (
   config: AxiosRequestConfig,
 ) => AxiosRequestConfig | Promise<AxiosRequestConfig>
+type ResponseRejectedInterceptor = (error: unknown) => Promise<never>
 
-const { axiosClientMock, fetchAuthSessionMock, getRegisteredRequestInterceptor, getMock } =
-  vi.hoisted(() => {
-    const getMock = vi.fn()
-    let registeredRequestInterceptor: RequestInterceptor | undefined
-    const requestInterceptorUseMock = vi.fn((interceptor: RequestInterceptor) => {
-      registeredRequestInterceptor = interceptor
-    })
+const {
+  axiosClientMock,
+  fetchAuthSessionMock,
+  getRegisteredRequestInterceptor,
+  getRegisteredResponseRejectedInterceptor,
+  getMock,
+} = vi.hoisted(() => {
+  const getMock = vi.fn()
+  let registeredRequestInterceptor: RequestInterceptor | undefined
+  let registeredResponseRejectedInterceptor: ResponseRejectedInterceptor | undefined
+  const requestInterceptorUseMock = vi.fn((interceptor: RequestInterceptor) => {
+    registeredRequestInterceptor = interceptor
+  })
+  const responseInterceptorUseMock = vi.fn(
+    (_resolved: unknown, rejected: ResponseRejectedInterceptor) => {
+      registeredResponseRejectedInterceptor = rejected
+    },
+  )
 
-    return {
-      fetchAuthSessionMock: vi.fn(),
-      getRegisteredRequestInterceptor: () => registeredRequestInterceptor,
-      getMock,
-      axiosClientMock: {
-        get: getMock,
-        interceptors: {
-          request: {
-            use: requestInterceptorUseMock,
-          },
+  return {
+    fetchAuthSessionMock: vi.fn(),
+    getRegisteredRequestInterceptor: () => registeredRequestInterceptor,
+    getRegisteredResponseRejectedInterceptor: () => registeredResponseRejectedInterceptor,
+    getMock,
+    axiosClientMock: {
+      get: getMock,
+      interceptors: {
+        request: {
+          use: requestInterceptorUseMock,
+        },
+        response: {
+          use: responseInterceptorUseMock,
         },
       },
-    }
-  })
+    },
+  }
+})
 
 vi.mock('axios', () => ({
   default: {
@@ -77,6 +94,17 @@ const registeredRequestInterceptor = (): RequestInterceptor => {
   }
 
   return requestInterceptor
+}
+
+const registeredResponseRejectedInterceptor = (): ResponseRejectedInterceptor => {
+  const responseRejectedInterceptor = getRegisteredResponseRejectedInterceptor()
+  expect(responseRejectedInterceptor).toBeInstanceOf(Function)
+
+  if (!responseRejectedInterceptor) {
+    throw new Error('Expected API service to register a response rejected interceptor.')
+  }
+
+  return responseRejectedInterceptor
 }
 
 describe('api-service cached GET support', () => {
@@ -370,6 +398,59 @@ describe('api-service cached GET support', () => {
       }),
     )
   })
+
+  it('emits a session-expired event when an auth token cannot be resolved', async () => {
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    fetchAuthSessionMock.mockRejectedValueOnce(new Error('session unavailable'))
+
+    const result = await registeredRequestInterceptor()({
+      method: 'get',
+      headers: {},
+    })
+
+    expect(result.headers).toEqual({})
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        detail: { reason: 'token-unavailable' },
+      }),
+    )
+
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+  })
+
+  it.each([401, 403])(
+    'emits a session-expired event and clears cached GETs on API %s responses',
+    async (status) => {
+      const listener = vi.fn()
+      window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+      getMock
+        .mockResolvedValueOnce(buildResponse({ count: 1 }))
+        .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+      await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+        count: 1,
+      })
+
+      const unauthorizedError = { response: { status } }
+      await expect(registeredResponseRejectedInterceptor()(unauthorizedError)).rejects.toBe(
+        unauthorizedError,
+      )
+
+      await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+        count: 2,
+      })
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect(listener.mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          detail: { reason: 'api-unauthorized' },
+        }),
+      )
+
+      window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+    },
+  )
 
   it('adds auth headers through AxiosHeaders-style setters when available', async () => {
     const headerValues: Record<string, string> = {}

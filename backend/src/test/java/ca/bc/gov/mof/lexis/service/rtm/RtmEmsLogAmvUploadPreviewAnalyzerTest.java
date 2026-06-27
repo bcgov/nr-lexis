@@ -4,9 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import org.junit.jupiter.api.Test;
 
 class RtmEmsLogAmvUploadPreviewAnalyzerTest {
@@ -63,6 +68,32 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void publishedTemplateShouldKeepDateRowsAndImportableMatrix() throws IOException {
+    byte[] templateBytes = Files.readAllBytes(resolvePublishedTemplate());
+    String sheetXml = workbookEntryText(templateBytes, "xl/worksheets/sheet1.xml");
+
+    assertThat(sheetXml)
+        .contains("<t>Retrieval Date</t>")
+        .contains("<t>Update Date</t>")
+        .contains("<f>TODAY()</f>")
+        .contains("<t>GRADE</t>");
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(templateBytes), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.headerDetected()).isTrue();
+    assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 7, 1));
+    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+    assertThat(result.dataRowCount()).isEqualTo(23);
+    assertThat(result.numericCellCount()).isEqualTo(4);
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.rows()).hasSize(6);
+    assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
+        .contains("BA", "HE", "WH", "LO", "YE");
+  }
+
+  @Test
   void shouldImportOnlyRequestedGradeRows() throws IOException {
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
@@ -102,5 +133,26 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
       grades.add(String.valueOf(grade));
     }
     return grades;
+  }
+
+  private static Path resolvePublishedTemplate() {
+    Path fromBackendModule =
+        Path.of("..", "frontend", "public", "templates", "rtm-ems-log-amv-template.xlsx");
+    if (Files.exists(fromBackendModule)) {
+      return fromBackendModule;
+    }
+    return Path.of("frontend", "public", "templates", "rtm-ems-log-amv-template.xlsx");
+  }
+
+  private static String workbookEntryText(byte[] workbook, String entryName) throws IOException {
+    try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(workbook))) {
+      ZipEntry entry;
+      while ((entry = zip.getNextEntry()) != null) {
+        if (entryName.equals(entry.getName())) {
+          return new String(zip.readAllBytes(), StandardCharsets.UTF_8);
+        }
+      }
+    }
+    throw new IOException("Workbook entry not found: " + entryName);
   }
 }

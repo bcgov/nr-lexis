@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.controller;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPageDto;
+import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPagedResponseDto;
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcRequestDto;
 import ca.bc.gov.mof.lexis.service.admin.LexisAdminRpcService;
 import ca.bc.gov.mof.lexis.service.admin.LexisAdminService;
@@ -78,8 +79,19 @@ public class LexisAdminController {
   }
 
   @GetMapping("/policies/fee")
-  public ResponseEntity<Object> feePolicies() {
-    return executeFeePolicyRpc(new LexisAdminRpcRequestDto("view", Map.of("actionMapping", "view")));
+  public ResponseEntity<LexisAdminPagedResponseDto<Map<String, Object>>> feePolicies(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "100") int size,
+      @RequestParam(required = false) String sortField,
+      @RequestParam(required = false) String sortDirection) {
+    LexisAdminRpcService service = adminRpcServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Admin RPC service unavailable - returning no content for modern fee policy list");
+      return ResponseEntity.noContent().build();
+    }
+    return service.listFeePolicies(page, size, sortField, sortDirection)
+        .map(ResponseEntity::ok)
+        .orElseGet(() -> ResponseEntity.noContent().build());
   }
 
   @PostMapping("/policies/fee")
@@ -118,8 +130,19 @@ public class LexisAdminController {
   }
 
   @GetMapping("/policies/fil")
-  public ResponseEntity<Object> filPolicies() {
-    return executeFilPolicyRpc(new LexisAdminRpcRequestDto("view", Map.of("actionMapping", "view")));
+  public ResponseEntity<LexisAdminPagedResponseDto<Map<String, Object>>> filPolicies(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "100") int size,
+      @RequestParam(required = false) String sortField,
+      @RequestParam(required = false) String sortDirection) {
+    LexisAdminRpcService service = adminRpcServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Admin RPC service unavailable - returning no content for modern FIL policy list");
+      return ResponseEntity.noContent().build();
+    }
+    return service.listFilPolicies(page, size, sortField, sortDirection)
+        .map(ResponseEntity::ok)
+        .orElseGet(() -> ResponseEntity.noContent().build());
   }
 
   @PostMapping("/policies/fil")

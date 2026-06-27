@@ -56,9 +56,14 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
 
   private static final List<CodeNameDto> REGIONS =
       List.of(
-          new CodeNameDto("11", "Cariboo"),
-          new CodeNameDto("12", "Coast"),
-          new CodeNameDto("24", "Skeena"));
+          new CodeNameDto("1903", "Cariboo Natural Resource Region"),
+          new CodeNameDto("1904", "Kootenay-Boundary Natural Resource Region"),
+          new CodeNameDto("1905", "Northeast Natural Resource Region"),
+          new CodeNameDto("1906", "Omineca Natural Resource Region"),
+          new CodeNameDto("1907", "Thompson-Okanagan Natural Resource Region"),
+          new CodeNameDto("1908", "Skeena Natural Resource Region"),
+          new CodeNameDto("1909", "South Coast Natural Resource Region"),
+          new CodeNameDto("1910", "West Coast Natural Resource Region"));
 
   private static final List<ApplicationRecord> APPLICATIONS =
       List.of(

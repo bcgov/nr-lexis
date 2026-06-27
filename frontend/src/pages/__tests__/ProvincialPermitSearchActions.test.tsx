@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -174,6 +174,38 @@ describe('Provincial Permit Search Actions', () => {
       }),
       { knownTotal: 125 },
     )
+  })
+
+  it('shows selected permit search region names instead of only the selected count', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedFetchProvincialPermitOptions.mockResolvedValueOnce({
+      permitStatuses: [{ value: 'Issued', label: 'Issued' }],
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1908', label: 'Skeena Natural Resource Region' },
+      ],
+    })
+
+    renderPage()
+    await screen.findByText('7001')
+
+    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
+    )
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'Skeena' } })
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'Skeena Natural Resource Region' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Selected: Cariboo Natural Resource Region, Skeena Natural Resource Region',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('disables search for invalid dates and requests descending sort when permit header is clicked', async () => {

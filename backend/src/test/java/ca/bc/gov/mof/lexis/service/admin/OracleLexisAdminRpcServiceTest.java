@@ -1,8 +1,12 @@
 package ca.bc.gov.mof.lexis.service.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcRequestDto;
@@ -82,6 +86,132 @@ class OracleLexisAdminRpcServiceTest {
     String paginationHtml = (String) payload.get("paginationHTML");
     assertThat(paginationHtml).contains("setPage(");
     assertThat(paginationHtml).contains("23 fee policies found");
+  }
+
+  @Test
+  void shouldComposeModernFeePolicyPagesFromLegacyPages() {
+    OracleLexisAdminRpcService service = new OracleLexisAdminRpcService(repository);
+
+    List<LexisAdminPolicyRepository.FeePolicyRow> firstLegacyPage =
+        java.util.stream.LongStream.rangeClosed(1, 10)
+            .mapToObj(
+                id ->
+                    new LexisAdminPolicyRepository.FeePolicyRow(
+                        id,
+                        LocalDate.of(2026, 7, 1).plusDays(id),
+                        1903L,
+                        id,
+                        "idir\\admin",
+                        LocalDate.of(2026, 7, 1),
+                        "idir\\admin",
+                        LocalDate.of(2026, 7, 1)))
+            .toList();
+    List<LexisAdminPolicyRepository.FeePolicyRow> secondLegacyPage =
+        java.util.stream.LongStream.rangeClosed(11, 20)
+            .mapToObj(
+                id ->
+                    new LexisAdminPolicyRepository.FeePolicyRow(
+                        id,
+                        LocalDate.of(2026, 7, 1).plusDays(id),
+                        1903L,
+                        id,
+                        "idir\\admin",
+                        LocalDate.of(2026, 7, 1),
+                        "idir\\admin",
+                        LocalDate.of(2026, 7, 1)))
+            .toList();
+
+    when(repository.countFeePolicies()).thenReturn(23L);
+    when(repository.findFeePolicies("effective_date desc", 0)).thenReturn(firstLegacyPage);
+    when(repository.findFeePolicies("effective_date desc", 1)).thenReturn(secondLegacyPage);
+    when(repository.findOrgUnitByNumber(1903L))
+        .thenReturn(Optional.of(new LexisAdminPolicyRepository.OrgUnitRow(1903L, "RCO", "Cariboo")));
+
+    var response = service.listFeePolicies(0, 15, null, null).orElseThrow();
+
+    assertThat(response.total()).isEqualTo(23);
+    assertThat(response.page()).isZero();
+    assertThat(response.size()).isEqualTo(15);
+    assertThat(response.results()).hasSize(15);
+  }
+
+  @Test
+  void shouldNormalizeInvalidModernFeePolicyPagination() {
+    OracleLexisAdminRpcService service = new OracleLexisAdminRpcService(repository);
+
+    when(repository.countFeePolicies()).thenReturn(0L);
+
+    var response = service.listFeePolicies(-3, 0, "effective_date;drop", "sideways").orElseThrow();
+
+    assertThat(response.total()).isZero();
+    assertThat(response.page()).isZero();
+    assertThat(response.size()).isEqualTo(100);
+    assertThat(response.results()).isEmpty();
+    verify(repository, never()).findFeePolicies(anyString(), anyInt());
+  }
+
+  @Test
+  void shouldCapModernFilPolicyPaginationAndSkipOutOfRangeLegacyFetches() {
+    OracleLexisAdminRpcService service = new OracleLexisAdminRpcService(repository);
+
+    when(repository.countFilPolicies()).thenReturn(250L);
+
+    var response = service.listFilPolicies(9, 500, null, null).orElseThrow();
+
+    assertThat(response.total()).isEqualTo(250);
+    assertThat(response.page()).isEqualTo(9);
+    assertThat(response.size()).isEqualTo(200);
+    assertThat(response.results()).isEmpty();
+    verify(repository, never()).findFilPolicies(anyString(), anyInt());
+  }
+
+  @Test
+  void shouldComposeModernFilPolicyPagesFromLegacyPages() {
+    OracleLexisAdminRpcService service = new OracleLexisAdminRpcService(repository);
+
+    List<LexisAdminPolicyRepository.FilPolicyRow> firstLegacyPage =
+        java.util.stream.LongStream.rangeClosed(1, 10)
+            .mapToObj(
+                id ->
+                    new LexisAdminPolicyRepository.FilPolicyRow(
+                        id,
+                        LocalDate.of(2026, 8, 1).plusDays(id),
+                        id,
+                        "idir\\admin",
+                        LocalDate.of(2026, 8, 1),
+                        "idir\\admin",
+                        LocalDate.of(2026, 8, 1)))
+            .toList();
+    List<LexisAdminPolicyRepository.FilPolicyRow> secondLegacyPage =
+        java.util.stream.LongStream.rangeClosed(11, 20)
+            .mapToObj(
+                id ->
+                    new LexisAdminPolicyRepository.FilPolicyRow(
+                        id,
+                        LocalDate.of(2026, 8, 1).plusDays(id),
+                        id,
+                        "idir\\admin",
+                        LocalDate.of(2026, 8, 1),
+                        "idir\\admin",
+                        LocalDate.of(2026, 8, 1)))
+            .toList();
+
+    when(repository.countFilPolicies()).thenReturn(30L);
+    when(repository.findFilPolicies("fil_percent asc", 0)).thenReturn(firstLegacyPage);
+    when(repository.findFilPolicies("fil_percent asc", 1)).thenReturn(secondLegacyPage);
+
+    var response = service.listFilPolicies(0, 15, "fil_percent", "asc").orElseThrow();
+
+    assertThat(response.total()).isEqualTo(30);
+    assertThat(response.page()).isZero();
+    assertThat(response.size()).isEqualTo(15);
+    assertThat(response.results()).hasSize(15);
+    assertThat(response.results().get(0))
+        .containsEntry("lexisFeePolicyId", 1L)
+        .containsEntry("filPercent", "1");
+    assertThat(response.results().get(14))
+        .containsEntry("lexisFeePolicyId", 15L)
+        .containsEntry("filPercent", "15");
   }
 
   @Test

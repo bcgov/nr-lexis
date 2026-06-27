@@ -11,6 +11,7 @@ import {
   loginWithIdir,
   postWithCsrf,
   putWithCsrf,
+  redactedTextSnippet,
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
 
@@ -40,6 +41,11 @@ const asRecord = (value: unknown): Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {}
+
+const asPagedRecordArray = (value: unknown): Record<string, unknown>[] => {
+  const source = asRecord(value)
+  return asRecordArray(source.results ?? value)
+}
 
 const optionCode = (option: Record<string, unknown>): string => String(option.code ?? '').trim()
 const optionName = (option: Record<string, unknown>): string => String(option.name ?? '').trim()
@@ -98,6 +104,22 @@ const safeUrlForLog = (rawUrl: string): string => {
     return `${url.origin}${url.pathname}`
   } catch {
     return '[unparseable-url]'
+  }
+}
+
+const isSafeCredentialedRegressionBaseUrl = (rawUrl: string): boolean => {
+  try {
+    const hostname = new URL(rawUrl).hostname.toLowerCase()
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]' ||
+      hostname === 'nr-lexis-dev.apps.silver.devops.gov.bc.ca' ||
+      hostname === 'nr-lexis-test.apps.silver.devops.gov.bc.ca' ||
+      /^nr-lexis-\d+\.apps\.silver\.devops\.gov\.bc\.ca$/.test(hostname)
+    )
+  } catch {
+    return false
   }
 }
 
@@ -206,6 +228,9 @@ const rtmSuccessWorkbook = readFileSync(
 const regressionStatusRemark = 'Weekly credentialed regression status check'
 const regressionClientEmail = 'lexis-regression@example.test'
 const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
+const selectedNaturalResourceRegionText =
+  'Selected: Cariboo Natural Resource Region, Skeena Natural Resource Region'
+const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
@@ -246,6 +271,45 @@ const expectCurrentScheduleOptions = (value: unknown, source: string): void => {
     expect(scheduleDate, `${source} schedule names should be ISO dates`).toMatch(isoDatePattern)
     expect(scheduleDate >= today, `${source} should not expose previous list dates`).toBe(true)
   }
+}
+
+const expectLoginShell = async (page: Page, source: string): Promise<void> => {
+  const baseOrigin = new URL(E2E_BASE_URL).origin
+
+  try {
+    await expect(page.getByRole('button', { name: /log in with idir/i })).toBeVisible({
+      timeout: 60_000,
+    })
+  } catch (error) {
+    const currentUrl = page.url()
+    if (/amazoncognito\.com\/error/i.test(currentUrl)) {
+      throw new Error(`${source} landed on a Cognito error page: ${safeUrlForLog(currentUrl)}`)
+    }
+    if (/loginproxy\.gov\.bc\.ca/i.test(currentUrl)) {
+      throw new Error(
+        `${source} did not return from LoginProxy to the LEXIS login shell: ${safeUrlForLog(currentUrl)}`,
+      )
+    }
+    if (currentUrl.startsWith(`${baseOrigin}/unauthorized`)) {
+      throw new Error(
+        `${source} landed on the LEXIS unauthorized page: ${safeUrlForLog(currentUrl)}`,
+      )
+    }
+    throw error
+  }
+
+  expect(new URL(page.url()).origin).toBe(baseOrigin)
+  await expect(page.getByRole('button', { name: /log in with business bceid/i })).toBeVisible()
+}
+
+const browserLocalIsoToday = async (page: Page): Promise<string> => {
+  return page.evaluate(() => {
+    const date = new Date()
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  })
 }
 
 const uniqueRegressionPackageNumber = (): string => {
@@ -347,6 +411,8 @@ const adminNavigationSections: Array<{
     links: [
       'LEXIS administration',
       'Fee policy administration',
+      'Fee in lieu percent administration',
+      'Export schedule administration',
       'Data upload',
       'Average Monthly Values',
     ],
@@ -355,7 +421,9 @@ const adminNavigationSections: Array<{
 
 const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/admin', /administration/i],
-  ['/admin/policies', /policy center/i],
+  ['/admin/policies/fee', /fee policy administration/i],
+  ['/admin/policies/fil', /fee in lieu percent policy administration/i],
+  ['/admin/schedules', /export schedule administration/i],
   ['/admin/uploads', /data upload/i],
   ['/provincial/review', /provincial review/i],
   ['/provincial/application/create', /create provincial application/i],
@@ -365,6 +433,95 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/federal/application/upload', /upload federal application submission/i],
   ['/reports', /reports/i],
   ['/admin/rtm/emslogamv', /average monthly values/i],
+]
+
+const regionFilterPages: Array<[path: string, heading: RegExp]> = [
+  ['/provincial/review?region=1903,1908', /provincial review/i],
+  ['/provincial/application?region=1903,1908', /provincial application search/i],
+  ['/provincial/exemption?region=1903,1908', /provincial exemption search/i],
+  ['/provincial/offers?region=1903,1908', /provincial offers search/i],
+  ['/provincial/permit?region=1903,1908', /provincial permit search/i],
+]
+
+const searchPageSizeContracts: Array<{
+  source: string
+  path: string
+  params: Record<string, string>
+}> = [
+  {
+    source: 'application review search',
+    path: '/api/lexis/application-reviews/search',
+    params: { applicationNumber: missingApplicationNumber },
+  },
+  {
+    source: 'provincial application search',
+    path: '/api/lexis/applications/search',
+    params: { applicationNumber: missingApplicationNumber },
+  },
+  {
+    source: 'federal application search',
+    path: '/api/lexis/federal/applications/search',
+    params: { applicationNumber: missingApplicationNumber },
+  },
+  {
+    source: 'exemption search',
+    path: '/api/lexis/exemptions/search',
+    params: { exemptionNumber: 'LEXIS-E2E-MISSING' },
+  },
+  {
+    source: 'purchase offer search',
+    path: '/api/lexis/purchase-offers/search',
+    params: { packageNumber: 'LEXIS-E2E-MISSING' },
+  },
+  {
+    source: 'permit search',
+    path: '/api/lexis/permits/search',
+    params: { permitNumber: 'LEXIS-E2E-MISSING' },
+  },
+]
+
+const searchDefaultPageSizePages: Array<{
+  source: string
+  pagePath: string
+  heading: RegExp
+  searchPath: string
+}> = [
+  {
+    source: 'application review search',
+    pagePath: `/provincial/review?applicationNumber=${missingApplicationNumber}`,
+    heading: /provincial review/i,
+    searchPath: '/api/lexis/application-reviews/search',
+  },
+  {
+    source: 'provincial application search',
+    pagePath: `/provincial/application?applicationNumber=${missingApplicationNumber}`,
+    heading: /provincial application search/i,
+    searchPath: '/api/lexis/applications/search',
+  },
+  {
+    source: 'federal application search',
+    pagePath: `/federal?applicationNumber=${missingApplicationNumber}`,
+    heading: /federal application search/i,
+    searchPath: '/api/lexis/federal/applications/search',
+  },
+  {
+    source: 'exemption search',
+    pagePath: '/provincial/exemption?exemptionNumber=LEXIS-E2E-MISSING',
+    heading: /provincial exemption search/i,
+    searchPath: '/api/lexis/exemptions/search',
+  },
+  {
+    source: 'purchase offer search',
+    pagePath: '/provincial/offers?packageNumber=LEXIS-E2E-MISSING',
+    heading: /provincial offers search/i,
+    searchPath: '/api/lexis/purchase-offers/search',
+  },
+  {
+    source: 'permit search',
+    pagePath: '/provincial/permit?permitNumber=LEXIS-E2E-MISSING',
+    heading: /provincial permit search/i,
+    searchPath: '/api/lexis/permits/search',
+  },
 ]
 
 const requiredAdminActions = [
@@ -389,116 +546,11 @@ const representativeAdminActions = [
   'mofrListing',
 ]
 
-const visibleProvincialSubmitterLinks = [
-  'Create/edit application',
-  'Upload application submission',
-  'Application search',
-  'Exemption search',
-  'Offer search',
-  'Permit search',
-]
-
-const hiddenProvincialSubmitterLinks = [
-  'Application review',
-  'Create/edit exemption',
-  'Create/edit offer',
-]
-
-const submitterAccessiblePages: Array<[path: string, heading: RegExp]> = [
-  ['/provincial/application', /provincial application search/i],
-  ['/provincial/application/create', /create provincial application/i],
-  ['/provincial/application/upload', /upload application submission/i],
-  ['/provincial/exemption', /provincial exemption search/i],
-  ['/provincial/offers', /provincial offers search/i],
-  ['/provincial/permit', /provincial permit search/i],
-]
-
-const unauthorizedSubmitterPages = [
-  '/provincial/review',
-  '/provincial/exemption/create',
-  '/provincial/offers/create',
-  '/federal',
-  '/federal/application/upload',
-  '/admin',
-  '/admin/uploads',
-]
-
-const restrictedSubmitterWriteChecks: Array<{
-  path: string
-  data?: Record<string, unknown>
-}> = [
-  {
-    path: '/api/lexis/application-reviews/999999999/approve',
-  },
-  {
-    path: '/api/lexis/application-reviews/999999999/status',
-    data: {
-      statusCode: 'REJ',
-      remark: 'Regression authorization check',
-      clientEmailAddress: '',
-    },
-  },
-  {
-    path: '/api/lexis/application-reviews/999999999/status-email',
-    data: {
-      statusCode: 'REJ',
-      remark: 'Regression authorization check',
-      clientEmailAddress: 'nobody@example.com',
-    },
-  },
-  {
-    path: '/api/lexis/rpc/exemption-details/exemption',
-    data: {
-      exemptionNumber: '999999999',
-      applicationNumber: '999999999',
-      exemptionTypeCode: 'O',
-      exemptionStatusCode: 'D',
-    },
-  },
-  {
-    path: '/api/lexis/rpc/exemption-details/exemption/update',
-    data: {
-      exemptionNumber: '999999999',
-      exemptionTypeCode: 'O',
-      exemptionStatusCode: 'D',
-    },
-  },
-  {
-    path: '/api/lexis/rpc/exemption-details/approve-exemptions',
-    data: {
-      exemptionNumbers: ['999999999'],
-    },
-  },
-  {
-    path: '/api/lexis/rpc/offer-details/offer',
-    data: {
-      offerNumber: '999999999',
-      applicationNumber: '999999999',
-      packageNumber: 'REGRESSION-NO-WRITE',
-    },
-  },
-  {
-    path: '/api/lexis/rpc/offer-details/offer/update',
-    data: {
-      offerNumber: '999999999',
-      applicationNumber: '999999999',
-      packageNumber: 'REGRESSION-NO-WRITE',
-    },
-  },
-  {
-    path: '/api/lexis/admin/policies/fee',
-    data: {
-      effectiveDate: '2099-01-01',
-      rate: 0,
-    },
-  },
-]
-
 const readReviewStatusResponse = async (
   response: Awaited<ReturnType<typeof postWithCsrf>>,
 ): Promise<ReviewStatusResponse> => {
   const text = await response.text()
-  expect(response.status(), text.slice(0, 500)).toBe(200)
+  expect(response.status(), redactedTextSnippet(text)).toBe(200)
   return JSON.parse(text) as ReviewStatusResponse
 }
 
@@ -506,7 +558,7 @@ const readReviewStatusEmailResponse = async (
   response: Awaited<ReturnType<typeof postWithCsrf>>,
 ): Promise<ReviewStatusEmailResponse> => {
   const text = await response.text()
-  expect(response.status(), text.slice(0, 500)).toBe(200)
+  expect(response.status(), redactedTextSnippet(text)).toBe(200)
   return JSON.parse(text) as ReviewStatusEmailResponse
 }
 
@@ -526,7 +578,7 @@ const expectAdminNavigation = async (page: Page): Promise<void> => {
 
 const readJsonResponse = async <T>(response: APIResponse, expectedStatus = 200): Promise<T> => {
   const text = await response.text()
-  expect(response.status(), text.slice(0, 500)).toBe(expectedStatus)
+  expect(response.status(), redactedTextSnippet(text)).toBe(expectedStatus)
   return JSON.parse(text) as T
 }
 
@@ -536,7 +588,7 @@ const readJsonResponseWithStatuses = async <T>(
 ): Promise<JsonWithStatus<T>> => {
   const text = await response.text()
   const status = response.status()
-  expect(expectedStatuses, text.slice(0, 500)).toContain(status)
+  expect(expectedStatuses, redactedTextSnippet(text)).toContain(status)
   return {
     status,
     payload: JSON.parse(text) as T,
@@ -617,6 +669,12 @@ test.describe.serial('TEST IDIR admin regression', () => {
   }
 
   test.beforeAll(async ({ browser }) => {
+    if (!isSafeCredentialedRegressionBaseUrl(E2E_BASE_URL)) {
+      throw new Error(
+        `Credentialed IDIR regression is blocked for ${safeUrlForLog(E2E_BASE_URL)}. Use localhost, DEV, TEST, or a numeric PR preview route.`,
+      )
+    }
+
     idirContext = await browser.newContext()
     idirPage = await idirContext.newPage()
     await loginWithIdir(idirPage)
@@ -679,6 +737,139 @@ test.describe.serial('TEST IDIR admin regression', () => {
     }
 
     expect(apiServerErrors).toEqual([])
+  })
+
+  test('can load admin routes through document navigation', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const [path, heading] of adminAccessiblePages.filter(([routePath]) =>
+      routePath.startsWith('/admin'),
+    )) {
+      const response = await page.goto(new URL(path, E2E_BASE_URL).toString(), {
+        waitUntil: 'domcontentloaded',
+      })
+
+      expect(response?.status(), `${path} should not be blocked by the frontend WAF`).toBe(200)
+      await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Unauthorized' })).toHaveCount(0)
+    }
+  })
+
+  test('does not expose the retired provincial summary page', async () => {
+    const page = await authenticatedIdirPage()
+
+    await page.goto(new URL('/provincial/summary', E2E_BASE_URL).toString(), {
+      waitUntil: 'domcontentloaded',
+    })
+
+    await expect(page.getByRole('heading', { name: '404' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Unauthorized' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /log in with idir/i })).toHaveCount(0)
+  })
+
+  test('keeps review queue bulk actions limited to approve', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/provincial/review', /provincial review/i)
+
+    const approveSelectedButton = page.getByRole('button', {
+      name: 'Approve Selected Applications',
+    })
+    await expect(approveSelectedButton).toBeVisible()
+    await expect(approveSelectedButton).toBeDisabled()
+    await expect(page.getByRole('checkbox', { name: 'Select all rows on this page' })).toBeVisible()
+
+    await expect(page.getByRole('button', { name: /reject selected/i })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /update selected/i })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /change selected/i })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /^Update Status$/i })).toHaveCount(0)
+    await expect(page.getByRole('textbox', { name: /update reason/i })).toHaveCount(0)
+    await expect(page.getByRole('textbox', { name: /update status/i })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Reject Application' })).toHaveCount(0)
+  })
+
+  test('shows average monthly values date and template controls', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average monthly values/i)
+    await expect(
+      page.getByText(
+        'Query current and historical average monthly value rows, make manual create/update entries, and generate an upload preview from XLSX files.',
+      ),
+    ).toBeVisible()
+    await expect(page.locator('#rtm-retrieval-date')).toBeVisible()
+    await expect(page.locator('#rtm-update-date')).toBeVisible()
+
+    const today = await browserLocalIsoToday(page)
+    await expect(page.locator('#rtm-retrieval-date')).toHaveValue(today)
+    await expect(page.locator('#rtm-update-date')).toHaveValue(today)
+    await expect(page.locator('#rtm-manual-retrieval-date')).toHaveValue(today)
+    await page.locator('#rtm-save-mode').selectOption('update')
+    await expect(page.locator('#rtm-manual-update-date')).toHaveValue(today)
+
+    const templateLink = page.getByRole('link', { name: 'Download template' })
+    await expect(templateLink).toHaveAttribute('href', '/templates/rtm-ems-log-amv-template.xlsx')
+    await expect(templateLink).toHaveAttribute('download', 'rtm-ems-log-amv-template.xlsx')
+    await expect(
+      page.getByText(
+        'Supported format: .xlsx. The template includes retrieval and update date rows, and values apply to old and second growth.',
+      ),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Preview data' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Apply upload' })).toBeDisabled()
+  })
+
+  test('shows selected natural resource region names across search filters', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const [path, heading] of regionFilterPages) {
+      await expectAccessiblePage(page, path, heading)
+      await expect(
+        page.getByText(selectedNaturalResourceRegionText, { exact: true }),
+        `${path} should show selected region names, not only a selected count`,
+      ).toBeVisible({ timeout: 30_000 })
+    }
+  })
+
+  test('prefills create application with legacy defaults and next list date', async () => {
+    const page = await authenticatedIdirPage()
+
+    const options = await readJsonResponse<GenericOptionsResponse>(
+      await getWithAuth(page, '/api/lexis/applications/search/options'),
+    )
+    const currentSchedules = asRecordArray(options.currentSchedules)
+    expectCurrentScheduleOptions(currentSchedules, 'create application list dates')
+    const nextListDate = optionName(currentSchedules.find((schedule) => optionCode(schedule)) ?? {})
+    expect(nextListDate, 'create application should have a next list date option').toMatch(
+      isoDatePattern,
+    )
+
+    await expectAccessiblePage(
+      page,
+      '/provincial/application/create',
+      /create provincial application/i,
+    )
+    const today = await browserLocalIsoToday(page)
+
+    await expect(page.getByRole('combobox', { name: 'Applicant type (required)' })).toHaveValue(
+      'Owner',
+    )
+    await expect(page.getByRole('combobox', { name: 'Product type (required)' })).toHaveValue(
+      'Harvested Timber',
+    )
+    await expect(page.getByRole('combobox', { name: 'Exemption reason (required)' })).toHaveValue(
+      'Surplus',
+    )
+    await expect(page.getByRole('combobox', { name: 'Region (required)' })).toHaveValue(
+      'Cariboo Natural Resource Region',
+    )
+    await expect(
+      page.getByRole('textbox', { name: 'Application date (YYYY-MM-DD) (required)' }),
+    ).toHaveValue(today)
+    await expect(
+      page.getByRole('textbox', { name: 'Received date (YYYY-MM-DD) (required)' }),
+    ).toHaveValue(today)
+    await expect(page.getByRole('combobox', { name: 'Listing date' })).toHaveValue(nextListDate)
   })
 
   test('can query application review search contracts', async () => {
@@ -824,6 +1015,63 @@ test.describe.serial('TEST IDIR admin regression', () => {
     }
   })
 
+  test('supports the working group search page sizes', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const contract of searchPageSizeContracts) {
+      for (const size of ['20', '50', '100', '200']) {
+        const response = await readJsonResponse<GenericSearchResponse>(
+          await getWithAuth(page, contract.path, {
+            params: {
+              ...contract.params,
+              page: '0',
+              size,
+            },
+          }),
+        )
+
+        expect(Array.isArray(response.results), `${contract.source} should return results`).toBe(
+          true,
+        )
+        expect(response.page, `${contract.source} should echo the requested first page`).toBe(0)
+        expect(response.size, `${contract.source} should support page size ${size}`).toBe(
+          Number(size),
+        )
+      }
+    }
+  })
+
+  test('uses 100 as the default browser search page size', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const contract of searchDefaultPageSizePages) {
+      const searchResponsePromise = page.waitForResponse((response) => {
+        if (response.request().method() !== 'GET') {
+          return false
+        }
+
+        try {
+          return new URL(response.url()).pathname === contract.searchPath
+        } catch {
+          return false
+        }
+      })
+
+      await expectAccessiblePage(page, contract.pagePath, contract.heading)
+
+      const searchResponse = await searchResponsePromise
+      const searchUrl = new URL(searchResponse.url())
+      expect(searchResponse.ok(), `${contract.source} initial request should succeed`).toBe(true)
+      expect(searchUrl.searchParams.get('page'), `${contract.source} should start on page 0`).toBe(
+        '0',
+      )
+      expect(
+        searchUrl.searchParams.get('size'),
+        `${contract.source} should request the WG default page size`,
+      ).toBe('100')
+    }
+  })
+
   test('can query application maintenance reference data contracts', async () => {
     const page = await authenticatedIdirPage()
 
@@ -842,15 +1090,21 @@ test.describe.serial('TEST IDIR admin regression', () => {
   test('can query admin policy and report option contracts', async () => {
     const page = await authenticatedIdirPage()
 
-    const feePolicies = await readJsonResponse<unknown>(
+    const feePolicies = await readJsonResponse<GenericSearchResponse>(
       await getWithAuth(page, '/api/lexis/admin/policies/fee'),
     )
-    expect(feePolicies).toBeTruthy()
+    expect(Array.isArray(feePolicies.results)).toBe(true)
+    expect(feePolicies.total).toEqual(expect.any(Number))
+    expect(feePolicies.page).toBe(0)
+    expect(feePolicies.size).toBe(100)
 
-    const filPolicies = await readJsonResponse<unknown>(
+    const filPolicies = await readJsonResponse<GenericSearchResponse>(
       await getWithAuth(page, '/api/lexis/admin/policies/fil'),
     )
-    expect(filPolicies).toBeTruthy()
+    expect(Array.isArray(filPolicies.results)).toBe(true)
+    expect(filPolicies.total).toEqual(expect.any(Number))
+    expect(filPolicies.page).toBe(0)
+    expect(filPolicies.size).toBe(100)
 
     const reportOptions = await readJsonResponse<GenericOptionsResponse>(
       await getWithAuth(page, '/api/lexis/reports/options'),
@@ -860,15 +1114,66 @@ test.describe.serial('TEST IDIR admin regression', () => {
     expectNaturalResourceRegions(reportOptions.regions, 'report options')
     expectCurrentScheduleOptions(reportOptions.currentSchedules, 'report list dates')
 
-    const exportSchedules = await readJsonResponse<unknown>(
+    const exportSchedules = await readJsonResponse<GenericSearchResponse>(
       await getWithAuth(page, '/api/lexis/admin/schedules'),
     )
-    expect(Array.isArray(exportSchedules)).toBe(true)
+    expect(Array.isArray(exportSchedules.results)).toBe(true)
+    expect(exportSchedules.total).toEqual(expect.any(Number))
+    expect(exportSchedules.page).toBe(0)
+    expect(exportSchedules.size).toBe(100)
+  })
+
+  test('shows report advertising date selector from current list dates', async () => {
+    const page = await authenticatedIdirPage()
+
+    const reportOptions = await readJsonResponse<GenericOptionsResponse>(
+      await getWithAuth(page, '/api/lexis/reports/options'),
+    )
+    const currentSchedules = asRecordArray(reportOptions.currentSchedules)
+    expectCurrentScheduleOptions(currentSchedules, 'report advertising date selector')
+
+    const datedSchedules = currentSchedules.filter((schedule) => optionCode(schedule))
+    const firstScheduleDate = optionName(datedSchedules[0] ?? {})
+    expect(firstScheduleDate).toMatch(isoDatePattern)
+
+    await expectAccessiblePage(page, '/reports?report=teacReport', /reports/i)
+    await expect(
+      page.getByRole('heading', {
+        name: 'Timber Export Advisory Committee package report',
+      }),
+    ).toBeVisible()
+
+    const advertisingDate = page.getByRole('combobox', { name: 'Advertising date' })
+    await expect(advertisingDate).toBeVisible()
+    await expect(advertisingDate).toHaveValue(firstScheduleDate)
+
+    await advertisingDate.click()
+    for (const schedule of datedSchedules.slice(0, 2)) {
+      await expect(page.getByRole('option', { name: optionName(schedule) })).toBeVisible()
+    }
+    await expect(page.getByRole('option', { name: 'Blank' })).toBeVisible()
+  })
+
+  test('shows advertising list report listing date controls', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/reports?report=biweeklyListing', /reports/i)
+
+    await expect(page.getByRole('heading', { name: 'Advertising List' })).toBeVisible()
+    await expect(page.getByText('Advertising list output in PDF or CSV format.')).toBeVisible()
+    await expect(page.getByText('Required action:')).toBeVisible()
+    await expect(page.getByText('mofrListing')).toBeVisible()
+    await expect(page.getByRole('combobox', { name: 'Jurisdiction' })).toBeVisible()
+    await expect(page.getByLabel('Listing from date')).toBeVisible()
+    await expect(page.getByLabel('Listing to date')).toBeVisible()
+    await expect(page.getByRole('combobox', { name: 'Output format' })).toHaveValue('PDF')
+    await expect(page.getByRole('button', { name: 'Generate Report' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Reset Fields' })).toBeVisible()
   })
 
   test('can create, update, and delete future export schedule rows', async () => {
     const page = await authenticatedIdirPage()
-    const existingSchedules = asRecordArray(
+    const existingSchedules = asPagedRecordArray(
       await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
     )
     const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(existingSchedules)
@@ -905,33 +1210,53 @@ test.describe.serial('TEST IDIR admin regression', () => {
       expect(Number(updatedSchedule.applicationCount ?? 0)).toBe(0)
       expect(updatedSchedule.mutable).toBe(true)
 
-      const schedulesAfterUpdate = asRecordArray(
-        await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
-      )
-      const persistedSchedule = schedulesAfterUpdate.find(
-        (schedule) => String(schedule.exportScheduleId ?? '') === scheduleId,
-      )
-      expect(persistedSchedule).toBeTruthy()
-      expect(persistedSchedule?.advertisingDate).toBe(updateRequest.advertisingDate)
-      expect(persistedSchedule?.mutable).toBe(true)
-
       const deleteResponse = await readJsonResponse<ExportScheduleMutationResponse>(
         await deleteWithCsrf(page, `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`),
       )
       expect(deleteResponse.success).toBe(true)
       expect(deleteResponse.message ?? '').toContain('deleted')
       deleted = true
-
-      const schedulesAfterDelete = asRecordArray(
-        await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
-      )
-      expect(
-        schedulesAfterDelete.some(
-          (schedule) => String(schedule.exportScheduleId ?? '') === scheduleId,
-        ),
-      ).toBe(false)
     } finally {
       if (scheduleId && !deleted) {
+        await deleteWithCsrf(
+          page,
+          `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`,
+        ).catch(() => undefined)
+      }
+    }
+  })
+
+  test('rejects duplicate future export schedule advertising dates', async () => {
+    const page = await authenticatedIdirPage()
+    const existingSchedules = asPagedRecordArray(
+      await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
+    )
+    const { createRequest } = uniqueRegressionScheduleRequests(existingSchedules)
+    let scheduleId: string | null = null
+
+    try {
+      const created = await readJsonResponse<ExportScheduleMutationResponse>(
+        await postWithCsrf(page, '/api/lexis/admin/schedules', {
+          data: createRequest,
+        }),
+      )
+      expect(created.success).toBe(true)
+      scheduleId = String(asRecord(created.schedule).exportScheduleId ?? '').trim()
+      expect(scheduleId).not.toBe('')
+
+      const duplicate = await readJsonResponse<ExportScheduleMutationResponse>(
+        await postWithCsrf(page, '/api/lexis/admin/schedules', {
+          data: createRequest,
+        }),
+        400,
+      )
+      expect(duplicate.success).toBe(false)
+      expect(duplicate.message ?? '').toContain(
+        'A schedule already exists for that advertising date.',
+      )
+      expect(duplicate.schedule ?? null).toBeNull()
+    } finally {
+      if (scheduleId) {
         await deleteWithCsrf(
           page,
           `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`,
@@ -1023,7 +1348,7 @@ test.describe.serial('TEST IDIR admin regression', () => {
       },
     })
     const rtmSearchText = await rtmSearchResponse.text()
-    expect(rtmSearchResponse.status(), rtmSearchText.slice(0, 500)).toBe(200)
+    expect(rtmSearchResponse.status(), redactedTextSnippet(rtmSearchText)).toBe(200)
     expect(JSON.parse(rtmSearchText)).toEqual(expect.any(Array))
 
     const rtmPreviewResponse = await readJsonResponseWithStatuses<RtmUploadPreviewResponse>(
@@ -1109,9 +1434,23 @@ test.describe.serial('TEST IDIR admin regression', () => {
     }
   })
 
+  test('returns an expired IDIR admin session to the login shell', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/admin', /administration/i)
+    await page.evaluate((eventName) => {
+      window.dispatchEvent(
+        new CustomEvent(eventName, {
+          detail: { reason: 'idle-timeout' },
+        }),
+      )
+    }, sessionExpiredEventName)
+
+    await expectLoginShell(page, 'Expired IDIR admin session')
+  })
+
   test('signs out to the login shell', async () => {
     const page = await authenticatedIdirPage()
-    const baseOrigin = new URL(E2E_BASE_URL).origin
 
     await expectAccessiblePage(page, '/admin', /administration/i)
     const profileButton = page.locator('button[aria-controls="profile-panel"]')
@@ -1124,31 +1463,6 @@ test.describe.serial('TEST IDIR admin regression', () => {
     await expect(signOutButton).toBeVisible()
     await signOutButton.click()
 
-    try {
-      await expect(page.getByRole('button', { name: /log in with idir/i })).toBeVisible({
-        timeout: 60_000,
-      })
-    } catch (error) {
-      const currentUrl = page.url()
-      if (/amazoncognito\.com\/error/i.test(currentUrl)) {
-        throw new Error(
-          `Cognito rejected the configured logout redirect: ${safeUrlForLog(currentUrl)}`,
-        )
-      }
-      if (/loginproxy\.gov\.bc\.ca/i.test(currentUrl)) {
-        throw new Error(
-          `LoginProxy did not return to the LEXIS login shell: ${safeUrlForLog(currentUrl)}`,
-        )
-      }
-      if (currentUrl.startsWith(`${baseOrigin}/unauthorized`)) {
-        throw new Error(
-          `Logout landed on the LEXIS unauthorized page: ${safeUrlForLog(currentUrl)}`,
-        )
-      }
-      throw error
-    }
-
-    expect(new URL(page.url()).origin).toBe(baseOrigin)
-    await expect(page.getByRole('button', { name: /log in with business bceid/i })).toBeVisible()
+    await expectLoginShell(page, 'Logout')
   })
 })

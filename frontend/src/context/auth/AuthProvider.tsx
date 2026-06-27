@@ -7,6 +7,13 @@ import {
 } from '@/config/fam/config'
 import { AuthContext } from '@/context/auth/AuthContext'
 import { hasRole } from '@/context/auth/role-utils'
+import {
+  redirectToLoginShell,
+  SESSION_EXPIRED_EVENT,
+  SESSION_IDLE_TIMEOUT_MS,
+  type SessionExpiredEventDetail,
+  type SessionExpiredReason,
+} from '@/context/auth/session-expiry'
 import type { AuthContextType, LoginProvider } from '@/context/auth/types'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
@@ -83,6 +90,7 @@ const ROLE_PROVINCIAL_SUBMITTER = 'PROVINCIAL_SUBMITTER'
 const ROLE_FEDERAL_SUBMITTER = 'FEDERAL_SUBMITTER'
 
 const INDUSTRY_ROLE_NAMES = new Set<string>([ROLE_PROVINCIAL_SUBMITTER, ROLE_FEDERAL_SUBMITTER])
+const SESSION_ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'scroll', 'focus']
 
 const normalizeAction = (action: string): string => {
   return action.trim().toLowerCase().replace(/\.do$/i, '').replace(/^\//, '')
@@ -225,7 +233,38 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true)
   const refreshPromiseRef = useRef<Promise<void> | null>(null)
   const sessionGenerationRef = useRef(0)
+  const sessionExpiryInFlightRef = useRef(false)
+  const authenticatedSessionRef = useRef(false)
   const usesExternalLogin = isCognitoConfigured
+
+  const expireSession = useCallback(async (reason: SessionExpiredReason) => {
+    if (sessionExpiryInFlightRef.current) {
+      return
+    }
+
+    sessionExpiryInFlightRef.current = true
+    sessionGenerationRef.current += 1
+    refreshPromiseRef.current = null
+    const shouldSignOut =
+      isCognitoConfigured && (authenticatedSessionRef.current || reason === 'idle-timeout')
+
+    try {
+      apiService.clearCachedGetData()
+      clearAllPageDataCache()
+      authenticatedSessionRef.current = false
+      setCapabilities(DEFAULT_CAPABILITIES)
+      setIsLoading(false)
+      redirectToLoginShell()
+
+      if (shouldSignOut) {
+        await signOut()
+      }
+    } catch (error) {
+      console.warn(`Unable to complete Cognito sign-out after ${reason}.`, error)
+    } finally {
+      sessionExpiryInFlightRef.current = false
+    }
+  }, [])
 
   const refresh = useCallback(async () => {
     if (refreshPromiseRef.current) {
@@ -265,6 +304,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         const data = await fetchSessionCapabilities()
         if (sessionGenerationRef.current === refreshGeneration) {
+          sessionExpiryInFlightRef.current = false
           setCapabilities(sanitizeCapabilities(data, orgUnitNo))
         }
       } catch (error) {
@@ -293,8 +333,54 @@ export function AuthProvider({ children }: AuthProviderProps) {
     void refresh()
   }, [refresh])
 
+  useEffect(() => {
+    authenticatedSessionRef.current = capabilities.authenticated
+  }, [capabilities.authenticated])
+
+  useEffect(() => {
+    const onSessionExpired = (event: Event) => {
+      const reason =
+        (event as CustomEvent<SessionExpiredEventDetail>).detail?.reason ?? 'api-unauthorized'
+      void expireSession(reason)
+    }
+
+    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired)
+  }, [expireSession])
+
+  useEffect(() => {
+    if (!isCognitoConfigured || !capabilities.authenticated) {
+      return undefined
+    }
+
+    let timeoutId: number | undefined
+    const resetIdleTimer = () => {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId)
+      }
+      timeoutId = window.setTimeout(() => {
+        void expireSession('idle-timeout')
+      }, SESSION_IDLE_TIMEOUT_MS)
+    }
+
+    resetIdleTimer()
+    SESSION_ACTIVITY_EVENTS.forEach((eventName) => {
+      window.addEventListener(eventName, resetIdleTimer, { passive: true })
+    })
+
+    return () => {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId)
+      }
+      SESSION_ACTIVITY_EVENTS.forEach((eventName) => {
+        window.removeEventListener(eventName, resetIdleTimer)
+      })
+    }
+  }, [capabilities.authenticated, expireSession])
+
   const login = useCallback(
     async (provider: LoginProvider = 'idir') => {
+      sessionExpiryInFlightRef.current = false
       if (isCognitoConfigured) {
         const providerName =
           provider === 'business-bceid' ? businessBceidProviderName : idirProviderName
@@ -311,17 +397,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
     refreshPromiseRef.current = null
 
     try {
+      apiService.clearCachedGetData()
+      clearAllPageDataCache()
+      authenticatedSessionRef.current = false
+      setCapabilities(DEFAULT_CAPABILITIES)
+      setIsLoading(false)
+      redirectToLoginShell()
+
       if (isCognitoConfigured) {
         await signOut()
       }
     } catch (error) {
       console.warn('Unable to complete Cognito sign-out. Clearing local auth state.', error)
     }
-
-    apiService.clearCachedGetData()
-    clearAllPageDataCache()
-    setCapabilities(DEFAULT_CAPABILITIES)
-    setIsLoading(false)
   }, [])
 
   const grantedActionSet = useMemo(() => {

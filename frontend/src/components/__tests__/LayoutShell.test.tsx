@@ -52,6 +52,41 @@ describe('Layout shell', () => {
     expect(adminLink).not.toHaveAttribute('aria-current')
   })
 
+  it('renders split admin side-nav areas with distinct active routes', () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          grantedActions: ['/lexisAgentAdmin', '/lexisPolicyAdmin', '/lexisFILAdmin'],
+        }),
+        canPerform: (action: string) =>
+          ['/lexisAgentAdmin', '/lexisPolicyAdmin', '/lexisFILAdmin'].includes(action),
+      }),
+    )
+
+    renderLayout('/admin/schedules')
+
+    const feePolicyLink = screen.getByRole('link', { name: /Fee policy administration/i })
+    const filPolicyLink = screen.getByRole('link', {
+      name: /Fee in lieu percent administration/i,
+    })
+    const scheduleLink = screen.getByRole('link', {
+      name: /Export schedule administration/i,
+    })
+    const averageMonthlyValuesLink = screen.getByRole('link', {
+      name: /Average Monthly Values/i,
+    })
+
+    expect(feePolicyLink).toHaveAttribute('href', '/admin/policies/fee')
+    expect(filPolicyLink).toHaveAttribute('href', '/admin/policies/fil')
+    expect(scheduleLink).toHaveAttribute('href', '/admin/schedules')
+    expect(averageMonthlyValuesLink).toHaveAttribute('href', '/admin/rtm/emslogamv')
+    expect(scheduleLink).toHaveClass('cds--side-nav__link--active')
+    expect(scheduleLink).toHaveAttribute('aria-current', 'page')
+    expect(feePolicyLink).not.toHaveClass('cds--side-nav__link--active')
+    expect(filPolicyLink).not.toHaveClass('cds--side-nav__link--active')
+    expect(averageMonthlyValuesLink).not.toHaveClass('cds--side-nav__link--active')
+  })
+
   it('renders side-nav links as text without repeated search icons', () => {
     renderLayout('/admin/uploads')
 

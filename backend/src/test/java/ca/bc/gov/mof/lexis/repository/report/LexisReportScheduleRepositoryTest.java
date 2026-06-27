@@ -14,13 +14,16 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Types;
 import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.PreparedStatementSetter;
+import org.springframework.jdbc.core.RowMapper;
 
 @ExtendWith(MockitoExtension.class)
 class LexisReportScheduleRepositoryTest {
@@ -249,6 +252,55 @@ class LexisReportScheduleRepositoryTest {
     assertThat(defaultRegion).isEmpty();
     verify(callableStatement).setString(1, "00077881");
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void findCurrentSchedulesShouldUseLegacyCursorProcedureForReportListDates() throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_CURRENT_SCHEDULES(?) }");
+    when(resultSet.next()).thenReturn(true, true, false);
+    when(resultSet.getLong("EXPORT_SCHEDULE_ID")).thenReturn(1001L, 1002L);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getDate("ADVERTISING_DATE"))
+        .thenReturn(java.sql.Date.valueOf("2026-07-02"), java.sql.Date.valueOf("2026-07-08"));
+
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    var schedules = repository.findCurrentSchedules();
+
+    assertThat(schedules)
+        .extracting("exportScheduleId", "advertisingDate")
+        .containsExactly(
+            tuple(1001L, LocalDate.of(2026, 7, 2)),
+            tuple(1002L, LocalDate.of(2026, 7, 8)));
+    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void findUpcomingExportSchedulesPageShouldFilterPastRowsAndBindOffsetLimit() throws Exception {
+    when(jdbcTemplate.query(
+            any(String.class),
+            any(PreparedStatementSetter.class),
+            any(RowMapper.class)))
+        .thenAnswer(
+            invocation -> {
+              PreparedStatementSetter setter = invocation.getArgument(1);
+              setter.setValues(preparedStatement);
+              return List.of();
+            });
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    repository.findUpcomingExportSchedules(2, 50);
+
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sqlCaptor.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
+    assertThat(sqlCaptor.getValue())
+        .contains("WHERE ES.ADVERTISING_DATE >= TRUNC(SYSDATE)")
+        .contains("ORDER BY ES.ADVERTISING_DATE ASC")
+        .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+    verify(preparedStatement).setInt(1, 100);
+    verify(preparedStatement).setInt(2, 50);
   }
 
   @Test

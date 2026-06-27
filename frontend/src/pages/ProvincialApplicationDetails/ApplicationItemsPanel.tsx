@@ -143,6 +143,26 @@ const emptyScaleForm: ScaleFormState = {
   volume: '',
 }
 
+const normalizePackageNumberInput = (value: string): string => value.toUpperCase()
+
+const existingPackageNumberError = (
+  value: string,
+  packageNumbers: string[],
+  excludePackageNumber = '',
+): string | undefined => {
+  const normalized = value.trim().toUpperCase()
+  if (!normalized) {
+    return undefined
+  }
+  const excluded = excludePackageNumber.trim().toUpperCase()
+  const exists = packageNumbers.some(
+    (packageNumber) =>
+      packageNumber.trim().toUpperCase() === normalized &&
+      packageNumber.trim().toUpperCase() !== excluded,
+  )
+  return exists ? `Package ${normalized} already exists.` : undefined
+}
+
 const asOptionText = (option: ApplicationCodeOption): string =>
   option.description && option.description !== option.code
     ? `${option.code} - ${option.description}`
@@ -347,7 +367,12 @@ function ProvincialApplicationItemsPanel({
   const itemFieldErrors = useMemo<FieldErrors<ApplicationItemField>>(
     () => ({
       packageNewPackageNumber:
-        requiredFieldError(packageForm.newPackageNumber, 'Package number') ?? undefined,
+        requiredFieldError(packageForm.newPackageNumber, 'Package number') ??
+        existingPackageNumberError(
+          packageForm.newPackageNumber,
+          packageNumbers,
+          selectedPackageNumber,
+        ),
       packageVolume: firstValidationError(
         () => requiredNumericFieldError(packageForm.volume, 'Package volume'),
         () => greaterThanOrEqualFieldError(packageForm.volume, 'Package volume', 0),
@@ -369,7 +394,8 @@ function ProvincialApplicationItemsPanel({
         ? (requiredFieldError(packageForm.ageClass, 'Age class') ?? undefined)
         : undefined,
       createPackageNumber:
-        requiredFieldError(createPackageForm.packageNumber, 'Package number') ?? undefined,
+        requiredFieldError(createPackageForm.packageNumber, 'Package number') ??
+        existingPackageNumberError(createPackageForm.packageNumber, packageNumbers),
       createPackageVolume: firstValidationError(
         () => requiredNumericFieldError(createPackageForm.volume, 'Package volume'),
         () => greaterThanOrEqualFieldError(createPackageForm.volume, 'Package volume', 0),
@@ -412,7 +438,14 @@ function ProvincialApplicationItemsPanel({
           scaleVolumeWithinPackageFieldError(scaleForm.volume, selectedPackageRemainingScaleVolume),
       ),
     }),
-    [createPackageForm, packageForm, scaleForm, selectedPackageRemainingScaleVolume],
+    [
+      createPackageForm,
+      packageForm,
+      packageNumbers,
+      scaleForm,
+      selectedPackageRemainingScaleVolume,
+      selectedPackageNumber,
+    ],
   )
 
   const hasPackageValidationError = Boolean(
@@ -730,11 +763,17 @@ function ProvincialApplicationItemsPanel({
   }, [detail.orgUnitNumber, scaleForm.speciesCode])
 
   const setPackageField = (field: keyof PackageFormState, value: string) => {
-    setPackageForm((current) => ({ ...current, [field]: value }))
+    setPackageForm((current) => ({
+      ...current,
+      [field]: field === 'newPackageNumber' ? normalizePackageNumberInput(value) : value,
+    }))
   }
 
   const setCreatePackageField = (field: keyof PackageFormState, value: string) => {
-    setCreatePackageForm((current) => ({ ...current, [field]: value }))
+    setCreatePackageForm((current) => ({
+      ...current,
+      [field]: field === 'packageNumber' ? normalizePackageNumberInput(value) : value,
+    }))
   }
 
   const setScaleField = (field: keyof ScaleFormState, value: string) => {

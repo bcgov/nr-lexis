@@ -52,9 +52,7 @@ type AuthTokenSnapshot = {
 }
 
 type AccessTokenDiagnostics = {
-  clientId?: string
   expiresInSeconds?: number
-  issuer?: string
   tokenUse?: string
 }
 
@@ -66,6 +64,8 @@ const APP_ROOT_NAVIGATION_TIMEOUT_MS = 20_000
 const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 const LOGIN_ERROR_TEXT =
   /username or password.*incorrect|user id or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed/i
+const SENSITIVE_URL_PARAM_PATTERN =
+  /^(password|token|access_token|refresh_token|id_token|code|state|session_state|id_token_hint|email|user|username)$/i
 
 const idirLoginConfig: LoginConfig = {
   buttonName: /log in with idir/i,
@@ -314,14 +314,30 @@ const accessTokenDiagnostics = (accessToken?: string): AccessTokenDiagnostics | 
     const exp = typeof payload.exp === 'number' ? payload.exp : undefined
 
     return {
-      clientId: typeof payload.client_id === 'string' ? payload.client_id : undefined,
       expiresInSeconds: exp ? exp - Math.floor(Date.now() / 1000) : undefined,
-      issuer: typeof payload.iss === 'string' ? payload.iss : undefined,
       tokenUse: typeof payload.token_use === 'string' ? payload.token_use : undefined,
     }
   } catch {
     return null
   }
+}
+
+export const redactedTextSnippet = (text: string, maxLength = 500): string => {
+  const normalized = text
+    .replace(/Bearer\s+eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/gi, 'Bearer [redacted]')
+    .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[jwt-redacted]')
+    .replace(
+      /("(?:accessToken|access_token|clientEmail|clientEmailAddress|email|idToken|id_token|password|principal|refreshToken|refresh_token|token|user|username)"\s*:\s*")[^"]*"/gi,
+      '$1[redacted]"',
+    )
+    .replace(
+      /([?&](?:password|token|access_token|refresh_token|id_token|code|state|session_state|id_token_hint|email|user|username)=)[^&\s"']+/gi,
+      '$1[redacted]',
+    )
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return normalized.slice(0, maxLength)
 }
 
 const responseBodySnippet = async (response: APIResponse | null): Promise<string | null> => {
@@ -330,16 +346,22 @@ const responseBodySnippet = async (response: APIResponse | null): Promise<string
   }
 
   const text = await response.text().catch(() => '')
-  const normalized = text
-    .replace(/Bearer\s+eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/gi, 'Bearer [redacted]')
-    .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[jwt-redacted]')
-    .replace(
-      /([?&](?:password|token|code|state|session_state|id_token_hint)=)[^&\s"']+/gi,
-      '$1[redacted]',
-    )
-    .replace(/\s+/g, ' ')
-    .trim()
+  const normalized = redactedTextSnippet(text)
   return normalized ? normalized.slice(0, 500) : null
+}
+
+const redactedUrlForLog = (rawUrl: string): string => {
+  try {
+    const url = new URL(rawUrl)
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (SENSITIVE_URL_PARAM_PATTERN.test(key)) {
+        url.searchParams.set(key, '[redacted]')
+      }
+    }
+    return url.toString()
+  } catch {
+    return redactedTextSnippet(rawUrl, 1_000)
+  }
 }
 
 const authDiagnostics = async (page: Page): Promise<string> => {
@@ -359,8 +381,6 @@ const authDiagnostics = async (page: Page): Promise<string> => {
     `browserStorageTokenCandidates=${browserSnapshot.storageCandidateCount}`,
     `contextCookieTokenCandidates=${contextSnapshot.cookieCandidateCount}`,
     `bearerTokenFound=${Boolean(accessToken)}`,
-    tokenDiagnostics?.issuer ? `tokenIssuer=${tokenDiagnostics.issuer}` : null,
-    tokenDiagnostics?.clientId ? `tokenClientId=${tokenDiagnostics.clientId}` : null,
     tokenDiagnostics?.tokenUse ? `tokenUse=${tokenDiagnostics.tokenUse}` : null,
     typeof tokenDiagnostics?.expiresInSeconds === 'number'
       ? `tokenExpiresInSeconds=${tokenDiagnostics.expiresInSeconds}`
@@ -568,22 +588,10 @@ export const collectApiServerErrors = (page: Page): string[] => {
     const url = response.url()
     const status = response.status()
     if (url.includes('/api/lexis/') && status >= 500) {
-      errors.push(`${status} ${url}`)
+      errors.push(`${status} ${redactedUrlForLog(url)}`)
     }
   })
   return errors
-}
-
-const currentRoutePath = (page: Page): string | null => {
-  try {
-    const url = new URL(page.url())
-    if (url.origin !== baseOrigin) {
-      return null
-    }
-    return `${url.pathname}${url.search}`
-  } catch {
-    return null
-  }
 }
 
 const navigateSpaRoute = async (page: Page, path: string): Promise<void> => {
@@ -672,7 +680,7 @@ export const expectInvalidApplicationCreateValidation = async (
   response: APIResponse,
 ): Promise<void> => {
   const responseText = await response.text()
-  expect(response.status(), responseText.slice(0, 500)).toBe(200)
+  expect(response.status(), redactedTextSnippet(responseText)).toBe(200)
 
   const payload = JSON.parse(responseText) as ValidationResponse
   const errors = Array.isArray(payload.errors) ? payload.errors.map(String) : []
