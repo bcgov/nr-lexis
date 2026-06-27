@@ -57,11 +57,11 @@ const scheduleRequestForAdvertisingDate = (advertisingDate: string): ExportSched
   const date = new Date(`${advertisingDate}T00:00:00.000Z`)
   return {
     advertisingDate,
-    applicationReceiptDate: isoDate(addUtcDays(date, -1)),
+    applicationReceiptDate: advertisingDate,
     offerReceiptDate: isoDate(addUtcDays(date, 14)),
-    offerEndDate: isoDate(addUtcDays(date, 21)),
-    offerWithdrawalDate: isoDate(addUtcDays(date, 28)),
-    teacMeetingDate: isoDate(addUtcDays(date, 19)),
+    offerEndDate: isoDate(addUtcDays(date, 43)),
+    offerWithdrawalDate: isoDate(addUtcDays(date, 33)),
+    teacMeetingDate: isoDate(addUtcDays(date, 36)),
   }
 }
 
@@ -71,9 +71,9 @@ const uniqueRegressionScheduleRequests = (
   createRequest: ExportScheduleRequest
   updateRequest: ExportScheduleRequest
 } => {
-  const baseDate = new Date(Date.UTC(2090, 0, 1))
-  const runSeed = Number(process.env.GITHUB_RUN_ID ?? '0') % 20_000
-  const timeSeed = Math.floor(Date.now() / 1000) % 20_000
+  const baseDate = new Date(Date.UTC(2027, 1, 1))
+  const runSeed = Number(process.env.GITHUB_RUN_ID ?? Date.now()) % 1_825
+  const timeSeed = Math.floor(Date.now() / 1000) % 365
   const seed = runSeed + timeSeed + attempt * 2
   const createDate = isoDate(addUtcDays(baseDate, seed))
   const updateDate = isoDate(addUtcDays(baseDate, seed + 1))
@@ -1198,7 +1198,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('heading', { name: 'Advertising List' })).toBeVisible()
     await expect(page.getByText('Advertising list output in PDF or CSV format.')).toBeVisible()
     await expect(page.getByText('Required action:')).toBeVisible()
-    await expect(page.getByText('mofrListing')).toBeVisible()
+    await expect(page.getByRole('table').getByText('mofrListing')).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Jurisdiction' })).toBeVisible()
     await expect(page.getByLabel('Listing from date')).toBeVisible()
     await expect(page.getByLabel('Listing to date')).toBeVisible()

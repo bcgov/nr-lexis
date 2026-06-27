@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -102,6 +103,44 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
+  void createScheduleShouldRejectOfferWithdrawalAfterOfferEndBeforeRepositoryMutation() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleCreateRequestDto request =
+        new ExportScheduleCreateRequestDto(
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 8, 7),
+            LocalDate.of(2026, 8, 14),
+            LocalDate.of(2026, 8, 4));
+
+    var result = service.createSchedule(request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Offer withdrawal date cannot be after the offer end date.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void createScheduleShouldRejectTeacAfterOfferEndBeforeRepositoryMutation() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleCreateRequestDto request =
+        new ExportScheduleCreateRequestDto(
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 8, 7),
+            LocalDate.of(2026, 8, 4),
+            LocalDate.of(2026, 8, 14));
+
+    var result = service.createSchedule(request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("TEAC meeting date cannot be after the offer end date.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
   void createScheduleShouldRejectDuplicateAdvertisingDate() {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
     ExportScheduleCreateRequestDto request =
@@ -144,6 +183,26 @@ class LexisAdminScheduleServiceTest {
     assertThat(result.message()).isEqualTo("Export schedule added.");
     assertThat(result.schedule()).isEqualTo(inserted);
     verify(repository).insertExportSchedule(request);
+  }
+
+  @Test
+  void createScheduleShouldReturnValidationMessageForDatabaseConstraintViolation() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleCreateRequestDto request =
+        request(
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 15));
+    when(repository.advertisingDateExists(LocalDate.of(2026, 7, 1))).thenReturn(false);
+    when(repository.insertExportSchedule(request))
+        .thenThrow(new DataIntegrityViolationException("constraint"));
+
+    var result = service.createSchedule(request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .isEqualTo("Export schedule dates are invalid or conflict with an existing schedule.");
+    assertThat(result.schedule()).isNull();
   }
 
   @Test
@@ -246,6 +305,33 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
+  void updateScheduleShouldReturnValidationMessageForDatabaseConstraintViolation() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleCreateRequestDto request =
+        request(
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 29));
+    when(repository.findExportScheduleById(1001L))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
+    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
+    when(repository.advertisingDateExistsForOtherSchedule(LocalDate.of(2026, 7, 15), 1001L))
+        .thenReturn(false);
+    when(repository.updateExportSchedule(1001L, request))
+        .thenThrow(new DataIntegrityViolationException("constraint"));
+
+    var result = service.updateSchedule(1001L, request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .isEqualTo("Export schedule dates are invalid or conflict with an existing schedule.");
+    assertThat(result.schedule()).isNull();
+  }
+
+  @Test
   void deleteScheduleShouldRejectPastSchedules() {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
     when(repository.findExportScheduleById(1001L))
@@ -303,8 +389,8 @@ class LexisAdminScheduleServiceTest {
         advertisingDate,
         applicationReceiptDate,
         offerReceiptDate,
-        offerReceiptDate.plusDays(1),
-        offerReceiptDate.plusDays(2),
-        offerReceiptDate.plusDays(3));
+        offerReceiptDate.plusDays(29),
+        offerReceiptDate.plusDays(19),
+        offerReceiptDate.plusDays(22));
   }
 }
