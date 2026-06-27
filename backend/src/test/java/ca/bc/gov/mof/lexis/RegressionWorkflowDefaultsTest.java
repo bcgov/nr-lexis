@@ -39,6 +39,15 @@ class RegressionWorkflowDefaultsTest {
         .contains("video: 'off'");
   }
 
+  @Test
+  void regressionSpecShouldKeepIndependentChecksRunningAfterFailure() throws IOException {
+    String spec = Files.readString(resolveRegressionSpec());
+
+    assertThat(spec)
+        .contains("test.describe('TEST IDIR admin regression'")
+        .doesNotContain("test.describe.serial('TEST IDIR admin regression'");
+  }
+
   private static Path resolveRegressionWorkflow() {
     Path fromRepositoryRoot = Path.of(".github", "workflows", "regression.yml");
     if (Files.exists(fromRepositoryRoot)) {
@@ -53,5 +62,13 @@ class RegressionWorkflowDefaultsTest {
       return fromRepositoryRoot;
     }
     return Path.of("..", "frontend", "playwright.regression.config.ts");
+  }
+
+  private static Path resolveRegressionSpec() {
+    Path fromRepositoryRoot = Path.of("frontend", "e2e", "regression.spec.ts");
+    if (Files.exists(fromRepositoryRoot)) {
+      return fromRepositoryRoot;
+    }
+    return Path.of("..", "frontend", "e2e", "regression.spec.ts");
   }
 }

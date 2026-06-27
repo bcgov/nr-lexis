@@ -653,7 +653,7 @@ const cleanupRegressionPackage = async (
   expect(deletePackage.success, `Expected package ${packageNumber} cleanup to succeed`).toBe(true)
 }
 
-test.describe.serial('TEST IDIR admin regression', () => {
+test.describe('TEST IDIR admin regression', () => {
   test.describe.configure({ retries: 0 })
   test.skip(!hasIdirCredentials(), 'IDIR e2e credentials are not configured.')
 
@@ -1147,11 +1147,11 @@ test.describe.serial('TEST IDIR admin regression', () => {
     await expect(advertisingDate).toBeVisible()
     await expect(advertisingDate).toHaveValue(firstScheduleDate)
 
-    await advertisingDate.click()
-    for (const schedule of datedSchedules.slice(0, 2)) {
-      await expect(page.getByRole('option', { name: optionName(schedule) })).toBeVisible()
+    for (const optionLabel of [...datedSchedules.slice(0, 2).map(optionName), 'Blank']) {
+      await advertisingDate.click()
+      await advertisingDate.fill(optionLabel)
+      await expect(page.getByRole('option', { name: optionLabel, exact: true })).toBeVisible()
     }
-    await expect(page.getByRole('option', { name: 'Blank' })).toBeVisible()
   })
 
   test('shows advertising list report listing date controls', async () => {
