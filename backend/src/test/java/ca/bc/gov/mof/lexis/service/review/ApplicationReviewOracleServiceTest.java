@@ -278,6 +278,21 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void sendStatusEmailShouldRejectOverlongMalformedEmailBeforeSideEffects() {
+    String overlongEmail = "client@" + "a".repeat(300) + ".test";
+
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto("REJ", overlongEmail, "Missing docs"));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Client email must be a valid email address.");
+    verifyNoInteractions(repository);
+    verifyNoInteractions(emailSender);
+  }
+
+  @Test
   void sendStatusEmailShouldStageRequestAndSendEmailWhenInputValid() {
     ApplicationReviewStatusEmailRequestDto request =
         new ApplicationReviewStatusEmailRequestDto(" REJ ", " client@gov.bc.ca ", " Missing docs ");
