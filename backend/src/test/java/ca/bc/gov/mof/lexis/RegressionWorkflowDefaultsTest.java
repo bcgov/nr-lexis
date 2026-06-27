@@ -15,14 +15,15 @@ class RegressionWorkflowDefaultsTest {
 
     assertThat(workflow)
         .contains("name: Regression")
-        .contains("environment: test")
         .contains(
             "E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.silver.devops.gov.bc.ca")
         .contains("E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}")
         .contains("E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}")
+        .contains("repository or organization secret is required")
         .contains("test -n \"$E2E_IDIR_USER\"")
         .contains("test -n \"$E2E_IDIR_PASSWORD\"")
         .contains("npm run e2e:regression -- --reporter=html,list")
+        .doesNotContain("environment: test")
         .doesNotContain("E2E_BCEID")
         .doesNotContain("BCEID_PASSWORD")
         .doesNotContain("BCEID_USER");
