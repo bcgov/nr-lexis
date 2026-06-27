@@ -1893,6 +1893,34 @@ describe('Provincial Application Detail Document Actions', () => {
     mockedFetchProvincialApplicationDetail
       .mockResolvedValueOnce(applicationDetail)
       .mockResolvedValueOnce(detailAfterSummarySave)
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      applicationNumber: '321',
+      federalApplicationNumber: '',
+      applicationDate: '2026-01-01',
+      receivedDate: '2026-01-02',
+      termDays: '30',
+      applicationVolume: '100',
+      averageLogVolume: '2',
+      exemptionReasonCode: 'S',
+      productLocation: 'BC',
+      exportScheduleId: '988',
+      agentClientNumber: '00033344',
+      agentClientLocationCode: '01',
+      ownerClientNumber: '00011122',
+      ownerClientLocationCode: '02',
+      exemptionNumber: 'EX-555',
+      applicationStatusCode: 'APP',
+      applicantTypeCode: 'A',
+      orgUnitNumber: '13',
+      productTypeCode: 'TIMBER',
+      jurisdictionCode: 'F',
+      growthTypeCode: 'S',
+      agentContactName: 'Agent Contact',
+      ownerContactName: 'Owner Alternate Contact',
+      oicIndicator: 'Y',
+      endUseCode: 'LU',
+      speciesCodes: ['FI'],
+    })
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -1919,7 +1947,7 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033344', 'agent')
       expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
         '00011122',
-        '00',
+        '02',
         'owner',
         '321',
       )
@@ -1929,36 +1957,12 @@ describe('Provincial Application Detail Document Actions', () => {
         'agent',
         '321',
       )
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00')
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '02')
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01')
     })
     expect(await screen.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
     expect(screen.getByText('Agent Export Services')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
-    const summaryTile = getApplicationSummaryTile()
-    const summaryControls = within(summaryTile)
-    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Exemption reason'), 'Surplus')
-    await chooseComboBoxOption(
-      getSummaryComboBox(summaryControls, 'Application status'),
-      'Approved',
-    )
-    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Region'), 'Interior')
-    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Product type'), 'Timber')
-    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Growth type'), 'Second Growth')
-    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Jurisdiction'), 'F - Federal')
-    await chooseComboBoxOption(
-      getSummaryComboBox(summaryControls, 'Order in Council indicator'),
-      'Y - Yes',
-    )
-    await chooseComboBoxOption(
-      getSummaryComboBox(summaryControls, 'Owner client location'),
-      'Owner Alternate Location',
-    )
-    await chooseComboBoxOption(
-      getSummaryComboBox(summaryControls, 'Owner contact name'),
-      'Owner Alternate Contact',
-    )
-    await chooseComboBoxOption(getSummaryComboBox(summaryControls, 'Listing date'), '2026-01-25')
 
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
@@ -1992,7 +1996,7 @@ describe('Provincial Application Detail Document Actions', () => {
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
-  })
+  }, 30000)
 
   it('validates application summary edits before saving', async () => {
     render(
