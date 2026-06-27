@@ -42,11 +42,6 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {}
 
-const asPagedRecordArray = (value: unknown): Record<string, unknown>[] => {
-  const source = asRecord(value)
-  return asRecordArray(source.results ?? value)
-}
-
 const optionCode = (option: Record<string, unknown>): string => String(option.code ?? '').trim()
 const optionName = (option: Record<string, unknown>): string => String(option.name ?? '').trim()
 
@@ -71,31 +66,22 @@ const scheduleRequestForAdvertisingDate = (advertisingDate: string): ExportSched
 }
 
 const uniqueRegressionScheduleRequests = (
-  schedules: Record<string, unknown>[],
+  attempt = 0,
 ): {
   createRequest: ExportScheduleRequest
   updateRequest: ExportScheduleRequest
 } => {
-  const usedDates = new Set(
-    schedules
-      .map((schedule) => String(schedule.advertisingDate ?? '').slice(0, 10))
-      .filter(Boolean),
-  )
   const baseDate = new Date(Date.UTC(2090, 0, 1))
-  const seed = Date.now() % 1500
+  const runSeed = Number(process.env.GITHUB_RUN_ID ?? '0') % 20_000
+  const timeSeed = Math.floor(Date.now() / 1000) % 20_000
+  const seed = runSeed + timeSeed + attempt * 2
+  const createDate = isoDate(addUtcDays(baseDate, seed))
+  const updateDate = isoDate(addUtcDays(baseDate, seed + 1))
 
-  for (let offset = 0; offset < 5000; offset += 1) {
-    const createDate = isoDate(addUtcDays(baseDate, seed + offset * 2))
-    const updateDate = isoDate(addUtcDays(baseDate, seed + offset * 2 + 1))
-    if (!usedDates.has(createDate) && !usedDates.has(updateDate)) {
-      return {
-        createRequest: scheduleRequestForAdvertisingDate(createDate),
-        updateRequest: scheduleRequestForAdvertisingDate(updateDate),
-      }
-    }
+  return {
+    createRequest: scheduleRequestForAdvertisingDate(createDate),
+    updateRequest: scheduleRequestForAdvertisingDate(updateDate),
   }
-
-  throw new Error('Unable to find unused future export schedule dates for regression.')
 }
 
 const safeUrlForLog = (rawUrl: string): string => {
@@ -612,6 +598,56 @@ const postRegressionSubmission = async (
       },
     }),
   )
+}
+
+const createRegressionExportSchedule = async (
+  page: Page,
+): Promise<{
+  scheduleId: string
+  createRequest: ExportScheduleRequest
+  updateRequest: ExportScheduleRequest
+  createdSchedule: Record<string, unknown>
+}> => {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(attempt)
+    const created = await readJsonResponseWithStatuses<ExportScheduleMutationResponse>(
+      await postWithCsrf(page, '/api/lexis/admin/schedules', {
+        data: createRequest,
+      }),
+      [200, 400],
+    )
+
+    if (created.status === 400) {
+      expect(created.payload.message ?? '').toContain(
+        'A schedule already exists for that advertising date.',
+      )
+      continue
+    }
+
+    expect(created.payload.success).toBe(true)
+    expect(created.payload.message ?? '').toContain('added')
+
+    const createdSchedule = asRecord(created.payload.schedule)
+    const scheduleId = String(createdSchedule.exportScheduleId ?? '').trim()
+    expect(scheduleId).not.toBe('')
+
+    return {
+      scheduleId,
+      createRequest,
+      updateRequest,
+      createdSchedule,
+    }
+  }
+
+  throw new Error('Unable to find an unused future export schedule date for regression.')
+}
+
+const deleteRegressionExportSchedule = async (page: Page, scheduleId: string): Promise<void> => {
+  const deleteResponse = await readJsonResponse<ExportScheduleMutationResponse>(
+    await deleteWithCsrf(page, `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`),
+  )
+  expect(deleteResponse.success).toBe(true)
+  expect(deleteResponse.message ?? '').toContain('deleted')
 }
 
 const cleanupRegressionPackage = async (
@@ -1173,25 +1209,17 @@ test.describe('TEST IDIR admin regression', () => {
 
   test('can create, update, and delete future export schedule rows', async () => {
     const page = await authenticatedIdirPage()
-    const existingSchedules = asPagedRecordArray(
-      await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
-    )
-    const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(existingSchedules)
     let scheduleId: string | null = null
     let deleted = false
 
     try {
-      const created = await readJsonResponse<ExportScheduleMutationResponse>(
-        await postWithCsrf(page, '/api/lexis/admin/schedules', {
-          data: createRequest,
-        }),
-      )
-      expect(created.success).toBe(true)
-      expect(created.message ?? '').toContain('added')
-
-      const createdSchedule = asRecord(created.schedule)
-      scheduleId = String(createdSchedule.exportScheduleId ?? '').trim()
-      expect(scheduleId).not.toBe('')
+      const {
+        createRequest,
+        updateRequest,
+        createdSchedule,
+        scheduleId: createdScheduleId,
+      } = await createRegressionExportSchedule(page)
+      scheduleId = createdScheduleId
       expect(createdSchedule.advertisingDate).toBe(createRequest.advertisingDate)
       expect(Number(createdSchedule.applicationCount ?? 0)).toBe(0)
       expect(createdSchedule.mutable).toBe(true)
@@ -1210,39 +1238,23 @@ test.describe('TEST IDIR admin regression', () => {
       expect(Number(updatedSchedule.applicationCount ?? 0)).toBe(0)
       expect(updatedSchedule.mutable).toBe(true)
 
-      const deleteResponse = await readJsonResponse<ExportScheduleMutationResponse>(
-        await deleteWithCsrf(page, `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`),
-      )
-      expect(deleteResponse.success).toBe(true)
-      expect(deleteResponse.message ?? '').toContain('deleted')
+      await deleteRegressionExportSchedule(page, scheduleId)
       deleted = true
     } finally {
       if (scheduleId && !deleted) {
-        await deleteWithCsrf(
-          page,
-          `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`,
-        ).catch(() => undefined)
+        await deleteRegressionExportSchedule(page, scheduleId)
       }
     }
   })
 
   test('rejects duplicate future export schedule advertising dates', async () => {
     const page = await authenticatedIdirPage()
-    const existingSchedules = asPagedRecordArray(
-      await readJsonResponse<unknown>(await getWithAuth(page, '/api/lexis/admin/schedules')),
-    )
-    const { createRequest } = uniqueRegressionScheduleRequests(existingSchedules)
     let scheduleId: string | null = null
 
     try {
-      const created = await readJsonResponse<ExportScheduleMutationResponse>(
-        await postWithCsrf(page, '/api/lexis/admin/schedules', {
-          data: createRequest,
-        }),
-      )
-      expect(created.success).toBe(true)
-      scheduleId = String(asRecord(created.schedule).exportScheduleId ?? '').trim()
-      expect(scheduleId).not.toBe('')
+      const { createRequest, scheduleId: createdScheduleId } =
+        await createRegressionExportSchedule(page)
+      scheduleId = createdScheduleId
 
       const duplicate = await readJsonResponse<ExportScheduleMutationResponse>(
         await postWithCsrf(page, '/api/lexis/admin/schedules', {
@@ -1257,10 +1269,7 @@ test.describe('TEST IDIR admin regression', () => {
       expect(duplicate.schedule ?? null).toBeNull()
     } finally {
       if (scheduleId) {
-        await deleteWithCsrf(
-          page,
-          `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`,
-        ).catch(() => undefined)
+        await deleteRegressionExportSchedule(page, scheduleId)
       }
     }
   })
