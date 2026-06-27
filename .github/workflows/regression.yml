@@ -14,7 +14,6 @@ permissions: {}
 jobs:
   credentialed-regression:
     name: TEST Regression (${{ matrix.project }})
-    environment: test
     defaults:
       run:
         working-directory: frontend
@@ -42,8 +41,8 @@ jobs:
           E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
           E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
         run: |
-          test -n "$E2E_IDIR_USER" || (echo "E2E_IDIR_USER test environment secret is required." && exit 1)
-          test -n "$E2E_IDIR_PASSWORD" || (echo "E2E_IDIR_PASSWORD test environment secret is required." && exit 1)
+          test -n "$E2E_IDIR_USER" || (echo "E2E_IDIR_USER repository or organization secret is required." && exit 1)
+          test -n "$E2E_IDIR_PASSWORD" || (echo "E2E_IDIR_PASSWORD repository or organization secret is required." && exit 1)
 
       - name: Install dependencies
         run: |

@@ -595,22 +595,10 @@ export const collectApiServerErrors = (page: Page): string[] => {
 }
 
 const navigateSpaRoute = async (page: Page, path: string): Promise<void> => {
-  if (!page.url().startsWith(baseOrigin)) {
-    await gotoAppRoot(page)
-  }
-
-  await page.evaluate((nextPath) => {
-    if (`${window.location.pathname}${window.location.search}` === nextPath) {
-      window.history.replaceState({}, '', nextPath)
-    } else {
-      window.history.pushState({}, '', nextPath)
-    }
-    window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }))
-  }, path)
-
-  await page
-    .waitForURL((url) => `${url.pathname}${url.search}` === path, { timeout: 5_000 })
-    .catch(() => undefined)
+  await page.goto(new URL(path, E2E_BASE_URL).toString(), {
+    waitUntil: 'domcontentloaded',
+    timeout: 30_000,
+  })
 }
 
 export const expectAccessiblePage = async (
@@ -619,7 +607,9 @@ export const expectAccessiblePage = async (
   heading: RegExp | string,
 ): Promise<void> => {
   await navigateSpaRoute(page, path)
-  await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible({
+    timeout: 30_000,
+  })
   await expect(page.getByRole('heading', { name: 'Unauthorized' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
 }

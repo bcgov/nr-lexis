@@ -15,14 +15,15 @@ class RegressionWorkflowDefaultsTest {
 
     assertThat(workflow)
         .contains("name: Regression")
-        .contains("environment: test")
         .contains(
             "E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.silver.devops.gov.bc.ca")
         .contains("E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}")
         .contains("E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}")
+        .contains("repository or organization secret is required")
         .contains("test -n \"$E2E_IDIR_USER\"")
         .contains("test -n \"$E2E_IDIR_PASSWORD\"")
         .contains("npm run e2e:regression -- --reporter=html,list")
+        .doesNotContain("environment: test")
         .doesNotContain("E2E_BCEID")
         .doesNotContain("BCEID_PASSWORD")
         .doesNotContain("BCEID_USER");
@@ -39,6 +40,15 @@ class RegressionWorkflowDefaultsTest {
         .contains("video: 'off'");
   }
 
+  @Test
+  void regressionSpecShouldKeepIndependentChecksRunningAfterFailure() throws IOException {
+    String spec = Files.readString(resolveRegressionSpec());
+
+    assertThat(spec)
+        .contains("test.describe('TEST IDIR admin regression'")
+        .doesNotContain("test.describe.serial('TEST IDIR admin regression'");
+  }
+
   private static Path resolveRegressionWorkflow() {
     Path fromRepositoryRoot = Path.of(".github", "workflows", "regression.yml");
     if (Files.exists(fromRepositoryRoot)) {
@@ -53,5 +63,13 @@ class RegressionWorkflowDefaultsTest {
       return fromRepositoryRoot;
     }
     return Path.of("..", "frontend", "playwright.regression.config.ts");
+  }
+
+  private static Path resolveRegressionSpec() {
+    Path fromRepositoryRoot = Path.of("frontend", "e2e", "regression.spec.ts");
+    if (Files.exists(fromRepositoryRoot)) {
+      return fromRepositoryRoot;
+    }
+    return Path.of("..", "frontend", "e2e", "regression.spec.ts");
   }
 }
