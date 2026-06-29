@@ -58,7 +58,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/provincial/review',
-        label: 'Application Review',
+        label: 'Review',
         icon: TaskComplete,
         requiredActions: ['/applicationsReview'],
       },
@@ -71,14 +71,14 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/provincial/application/upload',
-        label: 'Upload Application',
+        label: 'Upload',
         icon: Upload,
         requiredActions: ['uploadApplicationSubmission'],
         roleScope: 'provincialApplicationSubmission',
       },
       {
         to: '/provincial/application',
-        label: 'Application Search',
+        label: 'Applications',
         icon: Search,
         requiredActions: ['/applicationSearch'],
       },
@@ -91,7 +91,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/provincial/exemption',
-        label: 'Exemption Search',
+        label: 'Exemptions',
         icon: Search,
         requiredActions: ['/exemptionSearch'],
       },
@@ -104,13 +104,13 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/provincial/offers',
-        label: 'Offer Search',
+        label: 'Offers',
         icon: Search,
         requiredActions: ['/offersSearch'],
       },
       {
         to: '/provincial/permit',
-        label: 'Permit Search',
+        label: 'Permits',
         icon: Certificate,
         requiredActions: ['/permitSearch'],
       },
@@ -121,13 +121,13 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/federal',
-        label: 'Application Search',
+        label: 'Search',
         icon: Search,
         requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
       },
       {
         to: '/federal/application/upload',
-        label: 'Upload Application',
+        label: 'Upload',
         icon: Upload,
         requiredActions: ['uploadApplicationSubmission'],
         roleScope: 'federalApplicationSubmission',
@@ -139,7 +139,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/reports',
-        label: 'Reports',
+        label: 'Menu',
         icon: Report,
         requiredActions: [
           '/applicationReport',
@@ -161,7 +161,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/admin',
-        label: 'Admin',
+        label: 'Users & Access',
         icon: Settings,
         requiredActions: ['/lexisAgentAdmin'],
       },
@@ -173,7 +173,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/admin/policies/fil',
-        label: 'Fee in Lieu Policy',
+        label: 'Fee in Lieu',
         icon: Finance,
         requiredActions: ['/lexisFILAdmin'],
       },
@@ -185,7 +185,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/admin/uploads',
-        label: 'Data Upload',
+        label: 'Uploads',
         icon: Upload,
         requiredActions: [
           '/lexisAgentAdmin',
