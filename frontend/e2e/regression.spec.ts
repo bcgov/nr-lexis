@@ -638,9 +638,12 @@ const createRegressionExportSchedule = async (
     )
 
     if (created.status === 400) {
-      expect(created.payload.message ?? '').toContain(
-        'A schedule already exists for that advertising date.',
-      )
+      const message = created.payload.message ?? ''
+      if (!message.includes('A schedule already exists for that advertising date.')) {
+        throw new Error(
+          `Export schedule create failed for ${createRequest.advertisingDate}: ${message}`,
+        )
+      }
       continue
     }
 

@@ -19,9 +19,10 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @ExtendWith(MockitoExtension.class)
 class LexisAdminScheduleServiceTest {
@@ -206,6 +207,46 @@ class LexisAdminScheduleServiceTest {
   }
 
   @Test
+  void createScheduleShouldReturnDatabaseMessageForDataAccessFailure() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleCreateRequestDto request =
+        request(
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 15));
+    when(repository.advertisingDateExists(LocalDate.of(2026, 7, 1))).thenReturn(false);
+    when(repository.insertExportSchedule(request))
+        .thenThrow(new DataAccessResourceFailureException("sequence unavailable"));
+
+    var result = service.createSchedule(request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .isEqualTo("Export schedule could not be saved. Contact support if the problem persists.");
+    assertThat(result.schedule()).isNull();
+  }
+
+  @Test
+  void createScheduleShouldReturnDatabaseMessageWhenDuplicateCheckFails() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleCreateRequestDto request =
+        request(
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 1),
+            LocalDate.of(2026, 7, 15));
+    when(repository.advertisingDateExists(LocalDate.of(2026, 7, 1)))
+        .thenThrow(new DataAccessResourceFailureException("duplicate check unavailable"));
+
+    var result = service.createSchedule(request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .isEqualTo("Export schedule could not be saved. Contact support if the problem persists.");
+    assertThat(result.schedule()).isNull();
+    verify(repository, never()).insertExportSchedule(any());
+  }
+
+  @Test
   void updateScheduleShouldRejectReferencedSchedule() {
     LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
     when(repository.findExportScheduleById(1001L))
@@ -328,6 +369,33 @@ class LexisAdminScheduleServiceTest {
     assertThat(result.success()).isFalse();
     assertThat(result.message())
         .isEqualTo("Export schedule dates are invalid or conflict with an existing schedule.");
+    assertThat(result.schedule()).isNull();
+  }
+
+  @Test
+  void updateScheduleShouldReturnDatabaseMessageForDataAccessFailure() {
+    LexisAdminScheduleService service = new LexisAdminScheduleService(repository, FIXED_CLOCK);
+    ExportScheduleCreateRequestDto request =
+        request(
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 15),
+            LocalDate.of(2026, 7, 29));
+    when(repository.findExportScheduleById(1001L))
+        .thenReturn(
+            Optional.of(
+                new ExportScheduleRowDto(
+                    1001L, LocalDate.of(2026, 7, 1), null, null, null, null, null)));
+    when(repository.countApplicationsForExportSchedule(1001L)).thenReturn(0L);
+    when(repository.advertisingDateExistsForOtherSchedule(LocalDate.of(2026, 7, 15), 1001L))
+        .thenReturn(false);
+    when(repository.updateExportSchedule(1001L, request))
+        .thenThrow(new DataAccessResourceFailureException("update unavailable"));
+
+    var result = service.updateSchedule(1001L, request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .isEqualTo("Export schedule could not be saved. Contact support if the problem persists.");
     assertThat(result.schedule()).isNull();
   }
 
