@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -33,6 +33,12 @@ import {
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
+import {
+  buildSearchTotalCacheKey,
+  getCachedSearchTotal,
+  setCachedSearchTotal,
+  type SearchTotalCache,
+} from '@/pages/shared/search-total-cache'
 import {
   DEFAULT_SEARCH_PAGE,
   DEFAULT_SEARCH_PAGE_SIZE,
@@ -146,6 +152,7 @@ const ProvincialApplicationPage = () => {
     Record<string, ProvincialApplicationSearchItem>
   >({})
   const [exemptionStatus, setExemptionStatus] = useState<ExemptionStatus | null>(null)
+  const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canCreateApplication = canPerform('createApplication')
   const canUploadApplicationSubmission = canPerform('uploadApplicationSubmission')
@@ -241,6 +248,11 @@ const ProvincialApplicationPage = () => {
       if (!options.force) {
         const cachedResults = getPageDataCache<ProvincialApplicationSearchResponse>(pageCacheKey)
         if (cachedResults) {
+          setCachedSearchTotal(
+            totalCacheRef.current,
+            buildSearchTotalCacheKey(request.filters),
+            cachedResults.page.totalElements,
+          )
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -256,8 +268,14 @@ const ProvincialApplicationPage = () => {
       setLoading(true)
       setErrorMessage('')
       try {
-        const response = await searchProvincialApplications(request)
+        const totalCacheKey = buildSearchTotalCacheKey(request.filters)
+        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const response =
+          cachedTotal === undefined
+            ? await searchProvincialApplications(request)
+            : await searchProvincialApplications(request, { knownTotal: cachedTotal })
         if (isLatestRequest()) {
+          setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
           setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
@@ -411,20 +429,28 @@ const ProvincialApplicationPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid provincial-application-search-page">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial application search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--filters">
+        <section className="legacy-search-section legacy-search-section--filters provincial-application-search-filters">
           <Tile>
-            <div className="legacy-search-grid">
+            <div className="legacy-search-grid provincial-application-search-grid">
               <TextInput
                 id="applicationNumber"
                 labelText="Application number"
                 value={filters.applicationNumber}
                 onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+              />
+              <SearchableSelect
+                id="applicationStatus"
+                labelText="Application status"
+                value={filters.applicationStatus}
+                placeholder="All statuses"
+                options={applicationStatusOptions}
+                onChange={(value) => updateFilter('applicationStatus', value)}
               />
               <TextInput
                 id="packageNumber"
@@ -445,14 +471,6 @@ const ProvincialApplicationPage = () => {
                 labelText="Exemption number"
                 value={filters.exemptionNumber}
                 onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
-              />
-              <SearchableSelect
-                id="applicationStatus"
-                labelText="Application status"
-                value={filters.applicationStatus}
-                placeholder="All statuses"
-                options={applicationStatusOptions}
-                onChange={(value) => updateFilter('applicationStatus', value)}
               />
               <SearchableSelect
                 id="productTypeCode"
@@ -478,22 +496,6 @@ const ProvincialApplicationPage = () => {
                   )
                 }}
               />
-              <IsoDatePicker
-                id="listingFromDate"
-                labelText="Listing from date (YYYY-MM-DD)"
-                value={filters.listingFromDate}
-                invalid={!isValidIsoDate(filters.listingFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listingFromDate', value)}
-              />
-              <IsoDatePicker
-                id="listingToDate"
-                labelText="Listing to date (YYYY-MM-DD)"
-                value={filters.listingToDate}
-                invalid={!isValidIsoDate(filters.listingToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listingToDate', value)}
-              />
               <TextInput
                 id="applicantClientNumber"
                 labelText="Applicant client number"
@@ -505,6 +507,22 @@ const ProvincialApplicationPage = () => {
                 labelText="Owner client number"
                 value={filters.ownerClientNumber}
                 onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+              />
+              <IsoDatePicker
+                id="listingFromDate"
+                labelText="Listing from date"
+                value={filters.listingFromDate}
+                invalid={!isValidIsoDate(filters.listingFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingFromDate', value)}
+              />
+              <IsoDatePicker
+                id="listingToDate"
+                labelText="Listing to date"
+                value={filters.listingToDate}
+                invalid={!isValidIsoDate(filters.listingToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingToDate', value)}
               />
             </div>
             <div className="legacy-search-actions">

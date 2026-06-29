@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -33,6 +33,12 @@ import {
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
+import {
+  buildSearchTotalCacheKey,
+  getCachedSearchTotal,
+  setCachedSearchTotal,
+  type SearchTotalCache,
+} from '@/pages/shared/search-total-cache'
 import {
   DEFAULT_SEARCH_PAGE,
   DEFAULT_SEARCH_PAGE_SIZE,
@@ -127,6 +133,7 @@ const FederalPage = () => {
   >({})
   const [exemptionSelectionStatus, setExemptionSelectionStatus] =
     useState<ExemptionSelectionStatus | null>(null)
+  const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
@@ -212,6 +219,11 @@ const FederalPage = () => {
       if (!options.force) {
         const cachedResults = getPageDataCache<FederalApplicationSearchResponse>(pageCacheKey)
         if (cachedResults) {
+          setCachedSearchTotal(
+            totalCacheRef.current,
+            buildSearchTotalCacheKey(request.filters),
+            cachedResults.page.totalElements,
+          )
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -235,8 +247,14 @@ const FederalPage = () => {
       setLoading(true)
       setErrorMessage('')
       try {
-        const response = await searchFederalApplications(request)
+        const totalCacheKey = buildSearchTotalCacheKey(request.filters)
+        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const response =
+          cachedTotal === undefined
+            ? await searchFederalApplications(request)
+            : await searchFederalApplications(request, { knownTotal: cachedTotal })
         if (isLatestRequest()) {
+          setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
           setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
@@ -256,6 +274,10 @@ const FederalPage = () => {
   )
 
   useEffect(() => {
+    if (searchParams.toString().length === 0) {
+      return
+    }
+
     void runSearch({
       filters: debouncedUrlState.filters,
       sortField: debouncedUrlState.sortField,
@@ -263,7 +285,7 @@ const FederalPage = () => {
       page: debouncedUrlState.page - 1,
       pageSize: debouncedUrlState.pageSize,
     })
-  }, [debouncedUrlState, runSearch])
+  }, [debouncedUrlState, runSearch, searchParams])
 
   useEffect(() => {
     const hasSearchQuery = searchParams.toString().length > 0

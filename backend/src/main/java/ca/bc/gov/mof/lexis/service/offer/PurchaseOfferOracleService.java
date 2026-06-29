@@ -47,11 +47,18 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
 
   @Override
   public PurchaseOfferSearchResponseDto search(PurchaseOfferSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  @Override
+  public PurchaseOfferSearchResponseDto search(
+      PurchaseOfferSearchCriteria criteria, Integer knownTotal) {
     PurchaseOfferSearchCriteria normalized = normalizeCriteria(criteria);
     int page = normalized.page();
     int size = normalized.size();
 
-    Page<PurchaseOfferSearchResultDto> searchPage = repository.search(normalized);
+    Page<PurchaseOfferSearchResultDto> searchPage =
+        knownTotal == null ? repository.search(normalized) : repository.search(normalized, knownTotal);
     List<PurchaseOfferSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.getContent());
 
     return new PurchaseOfferSearchResponseDto(

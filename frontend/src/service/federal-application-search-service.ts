@@ -25,6 +25,10 @@ type BackendFederalApplicationSearchResult = {
   listingDate: string
 }
 
+type FederalApplicationSearchOptions = {
+  knownTotal?: number
+}
+
 const buildBackendParams = (request: FederalApplicationSearchRequest): URLSearchParams => {
   const { filters } = request
   return createSortedPagedSearchParams(request, [
@@ -68,11 +72,18 @@ const parseBackendResponse = (payload: unknown): FederalApplicationSearchRespons
 
 export const searchFederalApplications = async (
   request: FederalApplicationSearchRequest,
+  options: FederalApplicationSearchOptions = {},
 ): Promise<FederalApplicationSearchResponse> => {
   try {
+    const params = buildBackendParams(request)
+    const knownTotal = options.knownTotal
+    if (Number.isInteger(knownTotal) && knownTotal !== undefined && knownTotal >= 0) {
+      params.append('knownTotal', String(knownTotal))
+    }
+
     const response = await getCachedSearchResponse<unknown>(
       '/lexis/federal/applications/search',
-      buildBackendParams(request),
+      params,
     )
 
     return requireParsedSearchResponse(

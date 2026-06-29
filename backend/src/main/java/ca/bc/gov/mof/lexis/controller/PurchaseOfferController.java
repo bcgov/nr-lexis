@@ -76,6 +76,7 @@ public class PurchaseOfferController {
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal,
       Authentication authentication) {
     PurchaseOfferService service = serviceProvider.getIfAvailable();
     if (service == null) {
@@ -104,6 +105,9 @@ public class PurchaseOfferController {
             page,
             size);
 
+    if (knownTotal != null) {
+      return ResponseEntity.ok(service.search(criteria, knownTotal));
+    }
     return ResponseEntity.ok(service.search(criteria));
   }
 

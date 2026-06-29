@@ -70,9 +70,17 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   }
 
   public Page<ApplicationReviewSearchResultDto> search(ApplicationReviewSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  public Page<ApplicationReviewSearchResultDto> search(
+      ApplicationReviewSearchCriteria criteria, Integer knownTotal) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     int totalElements =
-        queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+        knownTotal == null
+            ? queryLegacyDynamicCountProcedure(
+                COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues())
+            : Math.max(0, knownTotal);
     return queryLegacyDynamicPage(
         FIND_APPLICATIONS_BY_CRITERIA,
         sqlWhere.sql(),

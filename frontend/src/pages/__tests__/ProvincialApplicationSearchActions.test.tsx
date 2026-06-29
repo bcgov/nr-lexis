@@ -136,6 +136,34 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
+  it('renders application search filters in the legacy order', async () => {
+    renderPage()
+    await screen.findByText('321')
+
+    const filterGrid = document.querySelector('.provincial-application-search-grid')
+    expect(filterGrid).toBeTruthy()
+    const fieldLabels = Array.from((filterGrid as HTMLElement).children).map((field) =>
+      field
+        .querySelector('label, .cds--label')
+        ?.textContent?.replace(/Total items selected:.*/, '')
+        .trim(),
+    )
+
+    expect(fieldLabels).toEqual([
+      'Application number',
+      'Application status',
+      'Package number',
+      'Exemption type',
+      'Exemption number',
+      'Product type',
+      'Region',
+      'Applicant client number',
+      'Owner client number',
+      'Listing from date',
+      'Listing to date',
+    ])
+  })
+
   it('shows validation when selected rows do not share client numbers', async () => {
     mockedSearchProvincialApplications.mockResolvedValue({
       content: [

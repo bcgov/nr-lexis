@@ -202,6 +202,32 @@ describe('Provincial Exemption Search Actions', () => {
     ).toBeInTheDocument()
   })
 
+  it('uses the application search filter order and labels', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage()
+    await screen.findByText('EX-1001')
+
+    const filterGrid = document.querySelector('.provincial-exemption-search-grid')
+    expect(filterGrid).toBeInTheDocument()
+
+    const filterLabels = Array.from(filterGrid?.querySelectorAll('label') ?? []).map((label) =>
+      label.textContent?.replace(/Total items selected:.*$/, '').trim(),
+    )
+    expect(filterLabels).toEqual([
+      'Application number',
+      'Exemption status',
+      'Package number',
+      'Exemption type',
+      'Exemption number',
+      'Region',
+      'Applicant client number',
+      'Owner client number',
+      'Listing from date',
+      'Listing to date',
+    ])
+  })
+
   it('disables search button for invalid date filters', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
@@ -211,7 +237,7 @@ describe('Provincial Exemption Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('List from date (YYYY-MM-DD)'), '2026-99-99')
+    await userEvent.type(screen.getByLabelText('Listing from date'), '2026-99-99')
 
     await waitFor(() => {
       expect(searchButton).toBeDisabled()

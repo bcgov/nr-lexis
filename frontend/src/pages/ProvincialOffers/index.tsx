@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -30,6 +30,12 @@ import {
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
+import {
+  buildSearchTotalCacheKey,
+  getCachedSearchTotal,
+  setCachedSearchTotal,
+  type SearchTotalCache,
+} from '@/pages/shared/search-total-cache'
 import {
   DEFAULT_SEARCH_PAGE,
   DEFAULT_SEARCH_PAGE_SIZE,
@@ -118,6 +124,7 @@ const ProvincialOffersPage = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [defaultListingToDate, setDefaultListingToDate] = useState('')
   const [isOptionsLoaded, setIsOptionsLoaded] = useState(false)
+  const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateOffer = canPerform('createOffer')
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
@@ -212,6 +219,11 @@ const ProvincialOffersPage = () => {
       if (!options.force) {
         const cachedResults = getPageDataCache<ProvincialOfferSearchResponse>(pageCacheKey)
         if (cachedResults) {
+          setCachedSearchTotal(
+            totalCacheRef.current,
+            buildSearchTotalCacheKey(request.filters),
+            cachedResults.page.totalElements,
+          )
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -235,8 +247,14 @@ const ProvincialOffersPage = () => {
       setLoading(true)
       setErrorMessage('')
       try {
-        const response = await searchProvincialOffers(request)
+        const totalCacheKey = buildSearchTotalCacheKey(request.filters)
+        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const response =
+          cachedTotal === undefined
+            ? await searchProvincialOffers(request)
+            : await searchProvincialOffers(request, { knownTotal: cachedTotal })
         if (isLatestRequest()) {
+          setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
           setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
@@ -256,6 +274,10 @@ const ProvincialOffersPage = () => {
   )
 
   useEffect(() => {
+    if (searchParams.toString().length === 0) {
+      return
+    }
+
     void runSearch({
       filters: debouncedUrlState.filters,
       page: debouncedUrlState.page - 1,
@@ -263,7 +285,7 @@ const ProvincialOffersPage = () => {
       sortField: debouncedUrlState.sortField,
       sortDirection: debouncedUrlState.sortDirection,
     })
-  }, [debouncedUrlState, runSearch])
+  }, [debouncedUrlState, runSearch, searchParams])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -331,15 +353,15 @@ const ProvincialOffersPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid provincial-offer-search-page">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial offers search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--filters">
+        <section className="legacy-search-section legacy-search-section--filters provincial-offer-search-filters">
           <Tile>
-            <div className="legacy-search-grid">
+            <div className="legacy-search-grid provincial-offer-search-grid">
               <TextInput
                 id="applicationNumber"
                 labelText="Application number"
@@ -360,7 +382,7 @@ const ProvincialOffersPage = () => {
               />
               <IsoDatePicker
                 id="listingFromDate"
-                labelText="Listing from date (YYYY-MM-DD)"
+                labelText="Listing from date"
                 value={filters.listingFromDate}
                 invalid={!isValidIsoDate(filters.listingFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -368,7 +390,7 @@ const ProvincialOffersPage = () => {
               />
               <IsoDatePicker
                 id="listingToDate"
-                labelText="Listing to date (YYYY-MM-DD)"
+                labelText="Listing to date"
                 value={filters.listingToDate}
                 invalid={!isValidIsoDate(filters.listingToDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -392,7 +414,7 @@ const ProvincialOffersPage = () => {
               />
               <IsoDatePicker
                 id="withdrawalFromDate"
-                labelText="Withdrawn from date (YYYY-MM-DD)"
+                labelText="Withdrawn from date"
                 value={filters.withdrawalFromDate}
                 invalid={!isValidIsoDate(filters.withdrawalFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -400,7 +422,7 @@ const ProvincialOffersPage = () => {
               />
               <IsoDatePicker
                 id="withdrawalToDate"
-                labelText="Withdrawn to date (YYYY-MM-DD)"
+                labelText="Withdrawn to date"
                 value={filters.withdrawalToDate}
                 invalid={!isValidIsoDate(filters.withdrawalToDate)}
                 invalidText="Date must be YYYY-MM-DD"

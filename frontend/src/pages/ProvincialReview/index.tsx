@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -38,6 +38,12 @@ import {
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
+import {
+  buildSearchTotalCacheKey,
+  getCachedSearchTotal,
+  setCachedSearchTotal,
+  type SearchTotalCache,
+} from '@/pages/shared/search-total-cache'
 import {
   DEFAULT_SEARCH_PAGE,
   DEFAULT_SEARCH_PAGE_SIZE,
@@ -185,6 +191,7 @@ const ProvincialReviewPage = () => {
   const [loadingRejectEmail, setLoadingRejectEmail] = useState(false)
   const [submittingReject, setSubmittingReject] = useState(false)
   const [reviewActionStatus, setReviewActionStatus] = useState<ReviewActionStatus | null>(null)
+  const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canApproveApplications = canPerform('/applicationsReview')
   const canOpenApplicationDetails =
     canPerform('/applicationSearch') && canPerform('/applicationDetails')
@@ -310,6 +317,11 @@ const ProvincialReviewPage = () => {
       if (!options.force) {
         const cachedResults = getPageDataCache<ApplicationReviewSearchResponse>(pageCacheKey)
         if (cachedResults) {
+          setCachedSearchTotal(
+            totalCacheRef.current,
+            buildSearchTotalCacheKey(request.filters),
+            cachedResults.page.totalElements,
+          )
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -333,8 +345,14 @@ const ProvincialReviewPage = () => {
       setLoading(true)
       setErrorMessage('')
       try {
-        const response = await searchApplicationReviews(request)
+        const totalCacheKey = buildSearchTotalCacheKey(request.filters)
+        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const response =
+          cachedTotal === undefined
+            ? await searchApplicationReviews(request)
+            : await searchApplicationReviews(request, { knownTotal: cachedTotal })
         if (isLatestRequest()) {
+          setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
           setPageDataCache(pageCacheKey, response)
           setResults(response)
         }

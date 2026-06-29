@@ -25,6 +25,10 @@ type BackendProvincialExemptionSearchResult = {
   locked: boolean
 }
 
+type ProvincialExemptionSearchOptions = {
+  knownTotal?: number
+}
+
 export type ProvincialExemptionNumberOption = {
   value: string
   label: string
@@ -102,12 +106,16 @@ const parseBackendResponse = (payload: unknown): ProvincialExemptionSearchRespon
 
 export const searchProvincialExemptions = async (
   request: ProvincialExemptionSearchRequest,
+  options: ProvincialExemptionSearchOptions = {},
 ): Promise<ProvincialExemptionSearchResponse> => {
   try {
-    const response = await getCachedSearchResponse<unknown>(
-      '/lexis/exemptions/search',
-      buildBackendParams(request),
-    )
+    const params = buildBackendParams(request)
+    const knownTotal = options.knownTotal
+    if (Number.isInteger(knownTotal) && knownTotal !== undefined && knownTotal >= 0) {
+      params.append('knownTotal', String(knownTotal))
+    }
+
+    const response = await getCachedSearchResponse<unknown>('/lexis/exemptions/search', params)
 
     return requireParsedSearchResponse(
       parseBackendResponse(response.data),
