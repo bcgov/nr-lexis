@@ -181,7 +181,7 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   const hasGrantedAction = (action: string): boolean => grantedSet.has(normalizeAction(action))
 
   if (isAdminUser) {
-    return '/admin'
+    return '/provincial/review'
   }
 
   if (isReadOnlyUser) {

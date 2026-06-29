@@ -126,7 +126,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('false')
   })
 
-  it('maps legacy admin alias to canonical admin role and admin route', async () => {
+  it('maps legacy admin alias to canonical admin role and review route', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\admin',
@@ -140,13 +140,13 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/admin')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/fileApplicationUpload')).toHaveTextContent('true')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
   })
 
-  it('keeps admin routing and actions when read-only is also present', async () => {
+  it('keeps admin review routing and actions when read-only is also present', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\admin',
@@ -160,7 +160,7 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN,READ_ONLY')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/admin')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('true')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')

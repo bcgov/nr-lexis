@@ -42,7 +42,7 @@ const LandingPage = () => {
             <div className="landing-title-group">
               <h1 className="landing-title">Welcome to LEXIS</h1>
               <p className="landing-subtitle">
-                Request exemptions, place offers, and obtain export permits
+                Create and manage applications, view offers and permits
               </p>
             </div>
 

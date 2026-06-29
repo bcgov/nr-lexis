@@ -61,7 +61,7 @@ describe('Landing auth flow smoke', () => {
     expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'false')
     expect(screen.getByRole('heading', { name: 'Welcome to LEXIS' })).toBeInTheDocument()
     expect(
-      screen.getByText('Request exemptions, place offers, and obtain export permits'),
+      screen.getByText('Create and manage applications, view offers and permits'),
     ).toBeInTheDocument()
 
     const loginButton = screen.getByRole('button', { name: 'Log in with IDIR' })
