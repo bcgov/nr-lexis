@@ -947,6 +947,23 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.provincial-review-filters-panel {
+  max-inline-size: 100%;
+  overflow-x: visible;
+}
+
+.provincial-review-search-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.provincial-review-search-grid > * {
+  min-inline-size: 0;
+}
+
+.provincial-review-search-grid > :nth-child(3) {
+  grid-column: span 2;
+}
+
 .legacy-search-grid .cds--date-picker,
 .legacy-search-grid .cds--date-picker-container,
 .legacy-search-grid .cds--date-picker-input__wrapper,
@@ -1060,6 +1077,15 @@ body {
 }
 
 .legacy-search-table-toolbar {
+  margin-bottom: 0.75rem;
+}
+
+.provincial-review-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   margin-bottom: 0.75rem;
 }
 
@@ -1974,11 +2000,29 @@ body {
 }
 
 @media (max-width: 1055px) {
+  .provincial-review-search-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .provincial-review-search-grid > :nth-child(3) {
+    grid-column: span 2;
+  }
+
   .application-detail-header-metrics,
   .application-detail-documents .legacy-search-grid,
   .application-detail-remarks .legacy-search-actions,
   .application-detail-action-bar {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 671px) {
+  .provincial-review-search-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .provincial-review-search-grid > :nth-child(3) {
+    grid-column: auto;
   }
 }
 

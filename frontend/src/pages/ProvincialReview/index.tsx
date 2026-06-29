@@ -20,7 +20,6 @@ import {
   TableRow,
   TextArea,
   TextInput,
-  Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
@@ -669,8 +668,8 @@ const ProvincialReviewPage = () => {
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters">
-          <Tile>
-            <div className="legacy-search-grid">
+          <div className="provincial-review-filters-panel">
+            <div className="legacy-search-grid provincial-review-search-grid">
               <TextInput
                 id="applicationNumber"
                 labelText="Application number"
@@ -703,7 +702,7 @@ const ProvincialReviewPage = () => {
               />
               <IsoDatePicker
                 id="receivedFromDate"
-                labelText="Received from date (YYYY-MM-DD)"
+                labelText="Received from date"
                 value={filters.receivedFromDate}
                 invalid={!isValidIsoDate(filters.receivedFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -711,7 +710,7 @@ const ProvincialReviewPage = () => {
               />
               <IsoDatePicker
                 id="receivedToDate"
-                labelText="Received to date (YYYY-MM-DD)"
+                labelText="Received to date"
                 value={filters.receivedToDate}
                 invalid={!isValidIsoDate(filters.receivedToDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -719,7 +718,7 @@ const ProvincialReviewPage = () => {
               />
               <IsoDatePicker
                 id="listingFromDate"
-                labelText="Listing from date (YYYY-MM-DD)"
+                labelText="Listing from date"
                 value={filters.listingFromDate}
                 invalid={!isValidIsoDate(filters.listingFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -727,7 +726,7 @@ const ProvincialReviewPage = () => {
               />
               <IsoDatePicker
                 id="listingToDate"
-                labelText="Listing to date (YYYY-MM-DD)"
+                labelText="Listing to date"
                 value={filters.listingToDate}
                 invalid={!isValidIsoDate(filters.listingToDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -745,21 +744,8 @@ const ProvincialReviewPage = () => {
               <Button kind="tertiary" onClick={onClearFilters} disabled={loading}>
                 Clear Filters
               </Button>
-              <Button
-                kind="secondary"
-                onClick={() => void onApproveSelectedClick()}
-                disabled={
-                  loading ||
-                  submittingApproval ||
-                  submittingReject ||
-                  selectedRowsCount === 0 ||
-                  !canApproveApplications
-                }
-              >
-                Approve Selected Applications
-              </Button>
             </div>
-          </Tile>
+          </div>
         </section>
       </Column>
 
@@ -876,11 +862,23 @@ const ProvincialReviewPage = () => {
         <section className="legacy-search-section legacy-search-section--results">
           <h2 className="dashboard-title">Review queue</h2>
           {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-          <SearchResultsTableFrame
-            loading={loading}
-            loadingDescription="Loading review queue..."
-            totalItems={results.page.totalElements}
-          >
+          <div className="provincial-review-table-toolbar">
+            <p className="legacy-search-result-count">{results.page.totalElements} results found</p>
+            <Button
+              kind="secondary"
+              onClick={() => void onApproveSelectedClick()}
+              disabled={
+                loading ||
+                submittingApproval ||
+                submittingReject ||
+                selectedRowsCount === 0 ||
+                !canApproveApplications
+              }
+            >
+              Approve Selected Applications
+            </Button>
+          </div>
+          <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue...">
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
