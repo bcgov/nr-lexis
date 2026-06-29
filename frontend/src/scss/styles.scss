@@ -1108,6 +1108,16 @@ body {
   margin-top: 1rem;
 }
 
+.review-reject-modal__grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.review-reject-modal__grid .cds--inline-notification {
+  margin-block: 0;
+  max-inline-size: none;
+}
+
 .app-notification-region {
   position: fixed;
   z-index: 9000;
