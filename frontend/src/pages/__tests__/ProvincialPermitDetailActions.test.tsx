@@ -114,6 +114,13 @@ const tabsResult: ProvincialPermitDetailTabsData = {
   boicItems: [],
 }
 
+const selectPermitDetailTab = async (name: string) => {
+  const tab = await screen.findByRole('tab', { name })
+  if (tab.getAttribute('aria-selected') !== 'true') {
+    await userEvent.click(tab)
+  }
+}
+
 describe('Provincial Permit Detail Action Smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -197,6 +204,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    for (const tabName of [
+      'Summary',
+      'Items',
+      'Fees',
+      'Billing',
+      'Orders',
+      'Documents',
+      'Invoices',
+    ]) {
+      expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
+    }
+    await selectPermitDetailTab('Items')
     const invoiceNumberInput = await screen.findByLabelText('Invoice number')
     const exportValueInput = await screen.findByLabelText('Export value')
     const addInvoiceButton = await screen.findByRole('button', { name: 'Add Invoice' })
@@ -229,6 +248,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Items')
     const addInvoiceButton = await screen.findByRole('button', { name: 'Add Invoice' })
     await userEvent.click(addInvoiceButton)
 
@@ -249,6 +269,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Items')
     await userEvent.type(await screen.findByLabelText('Invoice number'), '1234567890')
     await userEvent.type(screen.getByLabelText('Export value'), '100')
     await userEvent.click(await screen.findByRole('button', { name: 'Add Invoice' }))
@@ -275,7 +296,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    await waitFor(() => {
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    })
     expect(await screen.findByText('Upload permit documents')).toBeInTheDocument()
   })
 
@@ -303,8 +326,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() => {
       expect(mockedFetchPermitInvoiceConversionRate).toHaveBeenCalledTimes(1)
       expect(screen.getByLabelText('Upload invoice conversion rate')).toHaveValue('1.37')
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
     })
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
   it('uploads invoice files inline and refreshes permit document data', async () => {
@@ -319,6 +342,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Invoices')
     const invoicePanel = (await screen.findByText('Upload invoices')).closest(
       '.detail-document-upload',
     )
@@ -379,6 +403,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Documents')
     await screen.findByText('permit-doc.pdf')
     const openDocumentButton = await screen.findByRole('button', { name: 'Open' })
     await userEvent.click(openDocumentButton)
@@ -419,6 +444,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Documents')
     await screen.findByText('permit-doc.pdf')
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     expect(deleteButton).toBeEnabled()
@@ -461,6 +487,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Documents')
     await screen.findByText('locked-invoice-doc.pdf')
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     expect(deleteButton).toBeDisabled()
@@ -497,6 +524,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Documents')
     await screen.findByText('application-doc.pdf')
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     await userEvent.click(deleteButton)
@@ -604,7 +632,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
   })
 
-  it('keeps permit table sections visible without an unavailable warning when tab data fails', async () => {
+  it('keeps permit table tabs available without an unavailable warning when tab data fails', async () => {
     mockedFetchProvincialPermitDetailTabs.mockRejectedValue(new Error('tables unavailable'))
 
     render(
@@ -618,6 +646,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Items')
     expect(await screen.findByRole('heading', { name: /Permit items/ })).toBeInTheDocument()
     expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
       permitNumber: '777',
