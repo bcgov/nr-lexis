@@ -101,7 +101,6 @@ describe('Layout shell', () => {
     const uploadLinks = screen.getAllByRole('link', { name: /^Upload$/i })
     expect(uploadLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/provincial/application/upload',
-      '/federal/application/upload',
     ])
     expect(screen.getByRole('link', { name: /Users & Access/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /^Uploads$/i })).toBeVisible()
@@ -205,20 +204,20 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
   })
 
-  it('shows federal application submission upload at the bottom of the provincial nav', () => {
+  it('shows only federal search for federal submitters', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
           principal: 'bceid\\federal',
           roles: ['FEDERAL_SUBMITTER'],
-          welcomeTarget: '/federal/application/upload',
+          welcomeTarget: '/federal',
           grantedActions: [
             '/federalApplicationSearch',
             'viewFederalApplication',
             'uploadApplicationSubmission',
           ],
         }),
-        defaultRoute: '/federal/application/upload',
+        defaultRoute: '/federal',
         canPerform: (action: string) =>
           [
             '/federalApplicationSearch',
@@ -228,15 +227,11 @@ describe('Layout shell', () => {
       }),
     )
 
-    renderLayout('/federal/application/upload')
+    renderLayout('/federal')
 
     expect(document.querySelector('.page-header__eyebrow')).not.toBeInTheDocument()
-    expect(screen.getByText('Provincial')).toBeVisible()
     expect(screen.getByRole('link', { name: /^Search$/i })).toBeVisible()
-    expect(screen.getByRole('link', { name: /^Upload$/i })).toHaveAttribute(
-      'href',
-      '/federal/application/upload',
-    )
+    expect(screen.queryByRole('link', { name: /^Upload$/i })).not.toBeInTheDocument()
   })
 
   it('defaults the side nav open and supports collapsing it', async () => {

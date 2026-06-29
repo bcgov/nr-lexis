@@ -109,13 +109,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         icon: Certificate,
         requiredActions: ['/permitSearch'],
       },
-      {
-        to: '/federal/application/upload',
-        label: 'Upload',
-        icon: Upload,
-        requiredActions: ['uploadApplicationSubmission'],
-        roleScope: 'federalApplicationSubmission',
-      },
     ],
   },
   {
@@ -231,10 +224,6 @@ const canShowRoleScopedLink = (
   const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
   const hasProvincialStaffRole =
     hasRole(roles, 'APPLICATION_APPROVER') || hasRole(roles, 'EXEMPTION_APPROVER')
-
-  if (link.roleScope === 'federalApplicationSubmission') {
-    return hasFederalSubmitter && !hasProvincialSubmitter && !hasProvincialStaffRole
-  }
 
   return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
 }

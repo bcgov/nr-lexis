@@ -195,14 +195,14 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     if (isProvincialSubmitterUser && hasGrantedAction('createApplication')) {
       return '/provincial/application/create'
     }
-    if (isFederalSubmitterUser && hasGrantedAction('uploadApplicationSubmission')) {
-      return '/federal/application/upload'
-    }
     if (
       hasGrantedAction('/federalApplicationSearch') ||
       hasGrantedAction('viewFederalApplication')
     ) {
       return '/federal'
+    }
+    if (isFederalSubmitterUser && !isProvincialSubmitterUser) {
+      return '/unauthorized'
     }
     if (hasGrantedAction('uploadApplicationSubmission')) {
       return '/provincial/application/upload'

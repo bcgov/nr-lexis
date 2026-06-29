@@ -321,7 +321,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
-  it('routes federal submitters to application submission upload with federal search access', async () => {
+  it('routes federal submitters to federal search instead of application submission upload', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'bceid\\federal',
@@ -345,7 +345,7 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('FEDERAL_SUBMITTER')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/federal/application/upload')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/federal')
     expect(screen.getByTestId('action-/federalApplicationSearch')).toHaveTextContent('true')
     expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
