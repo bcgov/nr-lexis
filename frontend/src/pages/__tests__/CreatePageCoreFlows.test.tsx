@@ -32,6 +32,8 @@ import {
 } from '@/service/provincial-offer-create-service'
 import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 import { formatLocalIsoDate } from '@/utils/date'
+import { useAuth } from '@/context/auth/useAuth'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -76,6 +78,10 @@ vi.mock('@/service/provincial-application-search-service', () => ({
   searchProvincialApplicationNumberOptions: vi.fn(),
 }))
 
+vi.mock('@/context/auth/useAuth', () => ({
+  useAuth: vi.fn(),
+}))
+
 Element.prototype.scrollIntoView = vi.fn()
 
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
@@ -97,6 +103,7 @@ const mockedFetchOfferPackageVolume = vi.mocked(fetchOfferPackageVolume)
 const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
   searchProvincialApplicationNumberOptions,
 )
+const mockedUseAuth = vi.mocked(useAuth)
 
 const successfulCreate = (createdId: string): CreateSubmissionResult => ({
   success: true,
@@ -122,6 +129,11 @@ describe('Create Page Core Flows', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.localStorage.clear()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ principal: 'idir\\admin' }),
+      }),
+    )
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
       productTypes: [{ value: 'LOG', label: 'Logs' }],
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
@@ -750,30 +762,38 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Create provincial offer')
+    await screen.findByText('Provincial offers')
     const newOfferState = screen.getByRole('group', { name: 'New offer state' })
     expect(within(newOfferState).getByText('Offer number')).toBeInTheDocument()
     expect(within(newOfferState).getByText('New')).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /offer number/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Application details' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Offering company details' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Offer details' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Offer withdrawals' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Approval' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'See Scale Detail' })).toBeEnabled()
     expect(await screen.findByDisplayValue('PKG-9')).toBeInTheDocument()
     expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
     expect(screen.getByDisplayValue('H/SA')).toBeInTheDocument()
     expect(screen.getByDisplayValue('03/01/2026')).toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('Company name (required)'), 'Example Lumber')
-    await userEvent.type(screen.getByLabelText('Contact name (required)'), 'Alex Example')
-    await userEvent.type(screen.getByLabelText('Offer amount (required)'), '25000')
-    await userEvent.type(screen.getByLabelText('Offer date (YYYY-MM-DD) (required)'), '2026-03-10')
-    await userEvent.type(screen.getByLabelText('Withdrawal date (YYYY-MM-DD)'), '2026-03-20')
-    await userEvent.type(
-      screen.getByLabelText('Withdraw reason (required when withdrawn)'),
-      'Withdrawn by buyer',
-    )
-    await userEvent.type(screen.getByLabelText('Pickup location (required)'), 'Yard A')
+    await userEvent.type(screen.getByLabelText('Company'), 'Example Lumber')
+    await userEvent.type(screen.getByLabelText('Contact name'), 'Alex Example')
+    await userEvent.type(screen.getByLabelText('Offer volume (m³)'), '99.9')
+    await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
+    await userEvent.type(screen.getByLabelText('Offer received date'), '2026-03-10')
+    await userEvent.type(screen.getByLabelText('Offer withdrawal date'), '2026-03-20')
+    await userEvent.type(screen.getByLabelText('Offer withdrawal reason'), 'Withdrawn by buyer')
+    await userEvent.type(screen.getByLabelText('Pickup location'), 'Yard A')
     await userEvent.type(screen.getByLabelText('Offer conditions / remarks'), 'No partial loads')
+    await userEvent.type(screen.getByLabelText('Offer remarks'), 'Ready for review')
 
-    const submitButton = screen.getByRole('button', { name: 'Submit' })
-    expect(submitButton).toBeEnabled()
-    await userEvent.click(submitButton)
+    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Back to Search' })).not.toBeInTheDocument()
+    const saveButton = screen.getByRole('button', { name: 'Save' })
+    expect(saveButton).toBeEnabled()
+    await userEvent.click(saveButton)
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith({
@@ -783,12 +803,19 @@ describe('Create Page Core Flows', () => {
         companyName: 'Example Lumber',
         contactName: 'Alex Example',
         region: '11',
+        offerVolume: '99.9',
         purchaseOfferAmount: '25000',
         purchaseOfferDate: '2026-03-10',
-        offerEndDate: '2026-03-20',
+        offerWithdrawalDate: '2026-03-20',
         withdrawReason: 'Withdrawn by buyer',
+        teacReviewDate: '',
+        fairOfferIndicator: '',
+        validOfferIndicator: '',
+        approvalIndicator: '',
+        offerRemark: 'Ready for review',
         pickupLocation: 'Yard A',
         offerCondition: 'No partial loads',
+        offerInEffectUntil: '',
       })
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8080')
@@ -811,16 +838,13 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Create provincial offer')
+    await screen.findByText('Provincial offers')
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Bell Pole Company')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Dave Kohlen')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Van')).toBeInTheDocument()
 
-    await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Package number (required)' }),
-      'PKG-11',
-    )
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Package number' }), 'PKG-11')
     expect(screen.getByDisplayValue('PKG-11')).toBeInTheDocument()
   })
 
@@ -841,12 +865,12 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Create provincial offer')
+    await screen.findByText('Provincial offers')
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
 
-    await userEvent.type(screen.getByLabelText('Offer amount (required)'), '25000')
-    await userEvent.type(screen.getByLabelText('Offer date (YYYY-MM-DD) (required)'), '2026-03-10')
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
+    await userEvent.type(screen.getByLabelText('Offer received date'), '2026-03-10')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
