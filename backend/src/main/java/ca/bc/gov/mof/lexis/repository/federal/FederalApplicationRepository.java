@@ -154,7 +154,25 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
                     List.of(),
                     List.of(),
                     List.of(),
-                    null));
+                    null,
+                    getString(rs, "EXPORT_APPLICANT_TYPE_CODE"),
+                    getString(rs, "OWNER_CONTACT_NAME"),
+                    getString(rs, "OWNER_COMPANY_NAME"),
+                    getString(rs, "EXPORT_APPLICANT_TYPE_CODE"),
+                    getString(rs, "AGENT_CONTACT_NAME"),
+                    getString(rs, "AGENT_COMPANY_NAME"),
+                    firstNonNull(
+                        firstNonNull(getString(rs, "REGION"), getString(rs, "REGION_CODE")),
+                        getString(rs, "ORG_UNIT_CODE")),
+                    getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
+                    getLocalDate(rs, "APPLICATION_DATE"),
+                    getLong(rs, "TERM_DAYS"),
+                    getString(rs, "PRODUCT_LOCATION"),
+                    getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+                    getDouble(rs, "AVERAGE_LOG_VOLUME"),
+                    firstNonNull(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME")),
+                    getString(rs, "END_USE_SORT"),
+                    firstNonNull(getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID"))));
 
     if (detail.isEmpty()) {
       return Optional.empty();
@@ -181,7 +199,23 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
             dto.packages(),
             dto.remarks(),
             dto.offers(),
-            permit.orElse(null)));
+            permit.orElse(null),
+            dto.ownerApplicantType(),
+            dto.ownerContactName(),
+            dto.ownerCompanyName(),
+            dto.agentApplicantType(),
+            dto.agentContactName(),
+            dto.agentCompanyName(),
+            dto.region(),
+            dto.productType(),
+            dto.applicationDate(),
+            dto.termDays(),
+            dto.logLocation(),
+            dto.ageClass(),
+            dto.averageLogVolume(),
+            dto.applicationVolume(),
+            dto.endUse(),
+            dto.author()));
   }
 
   public Optional<FederalApplicationPermitDto> findPermitByApplicationNumber(Long applicationNumber) {
