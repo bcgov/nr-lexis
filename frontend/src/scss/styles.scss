@@ -939,7 +939,8 @@ body {
 .provincial-application-search-filters .cds--tile,
 .provincial-exemption-search-filters .cds--tile,
 .provincial-offer-search-filters .cds--tile,
-.provincial-permit-search-filters .cds--tile {
+.provincial-permit-search-filters .cds--tile,
+.federal-application-search-filters .cds--tile {
   border: 0;
   overflow: visible;
 }
@@ -947,14 +948,16 @@ body {
 .provincial-application-search-grid,
 .provincial-exemption-search-grid,
 .provincial-offer-search-grid,
-.provincial-permit-search-grid {
+.provincial-permit-search-grid,
+.federal-application-search-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .provincial-application-search-grid > *,
 .provincial-exemption-search-grid > *,
 .provincial-offer-search-grid > *,
-.provincial-permit-search-grid > * {
+.provincial-permit-search-grid > *,
+.federal-application-search-grid > * {
   min-inline-size: 0;
 }
 
@@ -962,7 +965,8 @@ body {
   .provincial-application-search-grid,
   .provincial-exemption-search-grid,
   .provincial-offer-search-grid,
-  .provincial-permit-search-grid {
+  .provincial-permit-search-grid,
+  .federal-application-search-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2076,7 +2080,8 @@ body {
   .provincial-application-search-grid,
   .provincial-exemption-search-grid,
   .provincial-offer-search-grid,
-  .provincial-permit-search-grid {
+  .provincial-permit-search-grid,
+  .federal-application-search-grid {
     grid-template-columns: 1fr;
   }
 

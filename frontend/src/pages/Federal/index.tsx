@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
-  Checkbox,
   Column,
   Grid,
   Pagination,
@@ -16,12 +15,10 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
-import { AppNotification } from '../../components/AppNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import type {
   FederalApplicationSearchFilters,
-  FederalApplicationSearchItem,
   FederalApplicationSearchRequest,
   FederalApplicationSearchResponse,
   FederalApplicationSearchSortField,
@@ -109,33 +106,14 @@ const buildSearchParams = (
     ['pageSize', pageSize],
   ])
 
-type ExemptionSelectionStatus = {
-  kind: 'error' | 'success'
-  message: string
-}
-
-type ExemptionCreatePrefillState = {
-  selectedApplicationNumbers: string[]
-  applicantClientNumber: string
-  ownerClientNumber: string
-}
-
 const FederalPage = () => {
-  const navigate = useNavigate()
-  const { capabilities, canPerform, isLoading } = useAuth()
+  const { capabilities, isLoading } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
   const [results, setResults] = useState<FederalApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [selectedRowsById, setSelectedRowsById] = useState<
-    Record<string, FederalApplicationSearchItem>
-  >({})
-  const [exemptionSelectionStatus, setExemptionSelectionStatus] =
-    useState<ExemptionSelectionStatus | null>(null)
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
-  const canCreateExemption = canPerform('/createExemption')
-  const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
@@ -177,20 +155,15 @@ const FederalPage = () => {
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
-  const clearSelection = useCallback(() => {
-    setSelectedRowsById({})
-    setExemptionSelectionStatus(null)
-  }, [])
   const updateFilter = useCallback(
     (key: keyof FederalApplicationSearchFilters, value: string) => {
       const nextFilters = { ...filters, [key]: value }
-      clearSelection()
       setSearchParams(
         buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
         { replace: true },
       )
     },
-    [clearSelection, filters, pageSize, setSearchParams, sortDirection, sortField],
+    [filters, pageSize, setSearchParams, sortDirection, sortField],
   )
 
   const hasDateValidationError = useMemo(() => {
@@ -313,14 +286,12 @@ const FederalPage = () => {
   }, [])
 
   const onSearch = () => {
-    clearSelection()
     setSearchParams(
       buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
     )
   }
 
   const onClearFilters = () => {
-    clearSelection()
     setSearchParams(
       buildSearchParams(
         INITIAL_FILTERS,
@@ -334,103 +305,21 @@ const FederalPage = () => {
 
   const onHeaderClick = (column: FederalApplicationSearchSortField) => {
     const nextDirection = getNextSortDirection(sortField, sortDirection, column)
-    clearSelection()
     setSearchParams(
       buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
     )
   }
 
-  const selectableRows = useMemo(() => {
-    if (!canCreateExemption) {
-      return []
-    }
-    return results.content.filter((item) => item.allowCreateExemption)
-  }, [canCreateExemption, results.content])
-
-  const allSelectableRowsAreSelected = useMemo(() => {
-    if (selectableRows.length === 0) return false
-    return selectableRows.every((item) => Boolean(selectedRowsById[item.applicationNumber]))
-  }, [selectableRows, selectedRowsById])
-
-  const toggleRowSelection = (row: FederalApplicationSearchItem, checked: boolean) => {
-    setExemptionSelectionStatus(null)
-    setSelectedRowsById((current) => {
-      const next = { ...current }
-      if (checked) {
-        next[row.applicationNumber] = row
-      } else {
-        delete next[row.applicationNumber]
-      }
-      return next
-    })
-  }
-
-  const toggleSelectAllRowsOnPage = (checked: boolean) => {
-    setExemptionSelectionStatus(null)
-    setSelectedRowsById((current) => {
-      const next = { ...current }
-      selectableRows.forEach((row) => {
-        if (checked) {
-          next[row.applicationNumber] = row
-        } else {
-          delete next[row.applicationNumber]
-        }
-      })
-      return next
-    })
-  }
-
-  const onCreateExemptionClick = () => {
-    if (!canCreateExemption) {
-      setExemptionSelectionStatus({
-        kind: 'error',
-        message: 'Your account is not authorized to create exemptions.',
-      })
-      return
-    }
-
-    const selectedRows = Object.values(selectedRowsById)
-    if (selectedRows.length === 0) {
-      setExemptionSelectionStatus({
-        kind: 'error',
-        message: 'Select at least one federal application before creating an exemption.',
-      })
-      return
-    }
-
-    const firstRow = selectedRows[0]
-    const allRowsMatchClientNumbers = selectedRows.every(
-      (row) => row.clientNumber === firstRow.clientNumber,
-    )
-
-    if (!allRowsMatchClientNumbers) {
-      setExemptionSelectionStatus({
-        kind: 'error',
-        message:
-          'Selected federal applications do not share the same client number. Multi-application exemptions require matching clients.',
-      })
-      return
-    }
-
-    const prefillState: ExemptionCreatePrefillState = {
-      selectedApplicationNumbers: selectedRows.map((row) => row.applicationNumber),
-      applicantClientNumber: firstRow.clientNumber,
-      ownerClientNumber: firstRow.clientNumber,
-    }
-
-    navigate('/provincial/exemption/create', { state: prefillState })
-  }
-
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid federal-application-search-page">
       <Column sm={4} md={8} lg={16}>
         <h1>Federal application search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--filters">
+        <section className="legacy-search-section legacy-search-section--filters federal-application-search-filters">
           <Tile>
-            <div className="legacy-search-grid">
+            <div className="legacy-search-grid federal-application-search-grid">
               <TextInput
                 id="applicationNumber"
                 labelText="Application number"
@@ -459,7 +348,7 @@ const FederalPage = () => {
               />
               <IsoDatePicker
                 id="receivedFromDate"
-                labelText="Received from date (YYYY-MM-DD)"
+                labelText="Received from date"
                 value={filters.receivedFromDate}
                 invalid={!isValidIsoDate(filters.receivedFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -467,7 +356,7 @@ const FederalPage = () => {
               />
               <IsoDatePicker
                 id="receivedToDate"
-                labelText="Received to date (YYYY-MM-DD)"
+                labelText="Received to date"
                 value={filters.receivedToDate}
                 invalid={!isValidIsoDate(filters.receivedToDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -475,7 +364,7 @@ const FederalPage = () => {
               />
               <IsoDatePicker
                 id="listingFromDate"
-                labelText="Listing from date (YYYY-MM-DD)"
+                labelText="Listing from date"
                 value={filters.listingFromDate}
                 invalid={!isValidIsoDate(filters.listingFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -483,7 +372,7 @@ const FederalPage = () => {
               />
               <IsoDatePicker
                 id="listingToDate"
-                labelText="Listing to date (YYYY-MM-DD)"
+                labelText="Listing to date"
                 value={filters.listingToDate}
                 invalid={!isValidIsoDate(filters.listingToDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -502,29 +391,7 @@ const FederalPage = () => {
               <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
                 Clear Filters
               </Button>
-              <Button
-                kind="secondary"
-                size="md"
-                onClick={onCreateExemptionClick}
-                disabled={selectedRowsCount === 0 || !canCreateExemption}
-              >
-                Create exemption for Selected Applications
-              </Button>
             </div>
-            {exemptionSelectionStatus && (
-              <AppNotification
-                className="legacy-inline-notification"
-                kind={exemptionSelectionStatus.kind}
-                title={
-                  exemptionSelectionStatus.kind === 'error'
-                    ? 'Validation failed'
-                    : 'Selection ready'
-                }
-                subtitle={exemptionSelectionStatus.message}
-                autoDismissMs={exemptionSelectionStatus.kind === 'success' ? 8000 : undefined}
-                onCloseButtonClick={() => setExemptionSelectionStatus(null)}
-              />
-            )}
           </Tile>
         </section>
       </Column>
@@ -541,16 +408,6 @@ const FederalPage = () => {
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
-                  <TableHeader>
-                    <Checkbox
-                      id="selectAllCurrentPageRows"
-                      hideLabel
-                      labelText="Select all rows on this page"
-                      checked={allSelectableRowsAreSelected}
-                      disabled={selectableRows.length === 0}
-                      onChange={(_, payload) => toggleSelectAllRowsOnPage(Boolean(payload.checked))}
-                    />
-                  </TableHeader>
                   {SORT_COLUMNS.map((column) => (
                     <TableHeader key={column.id}>
                       <button
@@ -571,16 +428,6 @@ const FederalPage = () => {
                 {results.content.map((row) => (
                   <TableRow key={row.applicationNumber}>
                     <TableCell>
-                      <Checkbox
-                        id={`selectRow-${row.applicationNumber}`}
-                        hideLabel
-                        labelText={`Select ${row.applicationNumber}`}
-                        checked={Boolean(selectedRowsById[row.applicationNumber])}
-                        disabled={!canCreateExemption || !row.allowCreateExemption}
-                        onChange={(_, payload) => toggleRowSelection(row, Boolean(payload.checked))}
-                      />
-                    </TableCell>
-                    <TableCell>
                       <Link
                         className="cds--link"
                         to={withCurrentSearch(`/federal/application/${row.applicationNumber}`)}
@@ -591,6 +438,8 @@ const FederalPage = () => {
                     <TableCell>{row.status}</TableCell>
                     <TableCell>{row.clientNumber}</TableCell>
                     <TableCell>{row.reason}</TableCell>
+                    <TableCell>{row.receivedDate}</TableCell>
+                    <TableCell>{row.listingDate}</TableCell>
                     <TableCell>{row.exemptionType || '-'}</TableCell>
                     <TableCell>
                       {row.exemptionNumber ? (
@@ -604,13 +453,11 @@ const FederalPage = () => {
                         '-'
                       )}
                     </TableCell>
-                    <TableCell>{row.receivedDate}</TableCell>
-                    <TableCell>{row.listingDate}</TableCell>
                   </TableRow>
                 ))}
                 {results.content.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9}>
+                    <TableCell colSpan={8}>
                       No federal applications found for the selected criteria.
                     </TableCell>
                   </TableRow>
@@ -623,7 +470,6 @@ const FederalPage = () => {
               pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
-                clearSelection()
                 setSearchParams(
                   buildSearchParams(filters, sortField, sortDirection, page, nextPageSize),
                 )
