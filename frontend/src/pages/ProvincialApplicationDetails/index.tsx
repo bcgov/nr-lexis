@@ -304,6 +304,18 @@ const withApplicationSpecies = (
   return { ...form, speciesCodes, endUseCode }
 }
 
+const normalizeSummaryAgentFields = (
+  form: ApplicationSummaryFormState,
+): ApplicationSummaryFormState =>
+  isAgentApplicant(form.applicantTypeCode)
+    ? form
+    : {
+        ...form,
+        agentClientNumber: '',
+        agentClientLocationCode: '',
+        agentContactName: '',
+      }
+
 const APPLICATION_STATUS_EXPIRED = 'EXP'
 const APPLICATION_STATUS_PERMITTED = 'PMT'
 const COMPLETE_PERMIT_STATUS_TEXT = 'COMPLETE'
@@ -559,7 +571,9 @@ const ProvincialApplicationDetailsPage = () => {
       if (!isLatestRequest()) {
         return
       }
-      let editableSummaryForm = response ? toSummaryFormState(response) : null
+      let editableSummaryForm = response
+        ? normalizeSummaryAgentFields(toSummaryFormState(response))
+        : null
       setDetail(response)
       setSummaryForm(editableSummaryForm)
       setSummaryBaselineForm(editableSummaryForm)
@@ -600,7 +614,9 @@ const ProvincialApplicationDetailsPage = () => {
         try {
           const summarySnapshot = await fetchApplicationSummarySnapshot(applicationNumber)
           if (isLatestRequest() && summarySnapshot) {
-            editableSummaryForm = toSummarySnapshotFormState(summarySnapshot)
+            editableSummaryForm = normalizeSummaryAgentFields(
+              toSummarySnapshotFormState(summarySnapshot),
+            )
             setSummaryForm(editableSummaryForm)
             setSummaryBaselineForm(editableSummaryForm)
           }
@@ -756,9 +772,14 @@ const ProvincialApplicationDetailsPage = () => {
     !isReviewEmailInvalid
   const hasSummaryForm = summaryForm !== null
   const summaryOwnerClientNumber = summaryForm?.ownerClientNumber.trim() ?? ''
-  const summaryAgentClientNumber = summaryForm?.agentClientNumber.trim() ?? ''
+  const isSummaryAgentApplicant = isAgentApplicant(summaryForm?.applicantTypeCode ?? '')
+  const summaryAgentClientNumber = isSummaryAgentApplicant
+    ? (summaryForm?.agentClientNumber.trim() ?? '')
+    : ''
   const summaryOwnerClientLocationCode = summaryForm?.ownerClientLocationCode.trim() ?? ''
-  const summaryAgentClientLocationCode = summaryForm?.agentClientLocationCode.trim() ?? ''
+  const summaryAgentClientLocationCode = isSummaryAgentApplicant
+    ? (summaryForm?.agentClientLocationCode.trim() ?? '')
+    : ''
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
@@ -1749,7 +1770,14 @@ const ProvincialApplicationDetailsPage = () => {
 
   const onSummaryFormChange = useCallback(
     (key: keyof ApplicationSummaryFormState, value: string) => {
-      setSummaryForm((current) => (current ? { ...current, [key]: value } : current))
+      setSummaryForm((current) => {
+        if (!current) {
+          return current
+        }
+
+        const next = { ...current, [key]: value }
+        return key === 'applicantTypeCode' ? normalizeSummaryAgentFields(next) : next
+      })
       setSummaryVolumeWarningAccepted(false)
       setActionWarningMessage('')
     },
@@ -1816,31 +1844,32 @@ const ProvincialApplicationDetailsPage = () => {
         }
       }
 
+      const summaryRequestForm = normalizeSummaryAgentFields(summaryForm)
       const result = await updateApplicationSummary({
         applicationNumber: String(detail.applicationNumber),
-        applicationDate: summaryForm.applicationDate,
-        receivedDate: summaryForm.receivedDate,
+        applicationDate: summaryRequestForm.applicationDate,
+        receivedDate: summaryRequestForm.receivedDate,
         termDays: calculatedSummaryTermDays,
-        applicationVolume: summaryForm.applicationVolume,
-        averageLogVolume: summaryForm.averageLogVolume,
-        exemptionReasonCode: summaryForm.exemptionReasonCode,
-        productLocation: summaryForm.productLocation,
-        exportScheduleId: summaryForm.exportScheduleId,
-        agentClientNumber: summaryForm.agentClientNumber,
-        agentClientLocationCode: summaryForm.agentClientLocationCode,
-        ownerClientNumber: summaryForm.ownerClientNumber,
-        ownerClientLocationCode: summaryForm.ownerClientLocationCode,
-        applicationStatusCode: summaryForm.applicationStatusCode,
-        applicantTypeCode: summaryForm.applicantTypeCode,
-        orgUnitNumber: summaryForm.orgUnitNumber,
-        productTypeCode: summaryForm.productTypeCode,
-        jurisdictionCode: summaryForm.jurisdictionCode,
-        growthTypeCode: summaryForm.growthTypeCode,
-        agentContactName: summaryForm.agentContactName,
-        ownerContactName: summaryForm.ownerContactName,
-        oicIndicator: summaryForm.oicIndicator,
-        endUseCode: summaryForm.endUseCode,
-        speciesCodes: summaryForm.speciesCodes,
+        applicationVolume: summaryRequestForm.applicationVolume,
+        averageLogVolume: summaryRequestForm.averageLogVolume,
+        exemptionReasonCode: summaryRequestForm.exemptionReasonCode,
+        productLocation: summaryRequestForm.productLocation,
+        exportScheduleId: summaryRequestForm.exportScheduleId,
+        agentClientNumber: summaryRequestForm.agentClientNumber,
+        agentClientLocationCode: summaryRequestForm.agentClientLocationCode,
+        ownerClientNumber: summaryRequestForm.ownerClientNumber,
+        ownerClientLocationCode: summaryRequestForm.ownerClientLocationCode,
+        applicationStatusCode: summaryRequestForm.applicationStatusCode,
+        applicantTypeCode: summaryRequestForm.applicantTypeCode,
+        orgUnitNumber: summaryRequestForm.orgUnitNumber,
+        productTypeCode: summaryRequestForm.productTypeCode,
+        jurisdictionCode: summaryRequestForm.jurisdictionCode,
+        growthTypeCode: summaryRequestForm.growthTypeCode,
+        agentContactName: summaryRequestForm.agentContactName,
+        ownerContactName: summaryRequestForm.ownerContactName,
+        oicIndicator: summaryRequestForm.oicIndicator,
+        endUseCode: summaryRequestForm.endUseCode,
+        speciesCodes: summaryRequestForm.speciesCodes,
       })
       if (!result.valid) {
         setActionErrorMessage(
@@ -2423,67 +2452,73 @@ const ProvincialApplicationDetailsPage = () => {
                         onSummaryFormChange('applicantTypeCode', value.toUpperCase())
                       }
                     />
-                    <TextInput
-                      id="applicationSummaryAgentClientNumber"
-                      labelText="Agent client number"
-                      value={summaryForm.agentClientNumber}
-                      invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
-                      invalidText={visibleSummaryFieldError('agentClientNumber')}
-                      onChange={(event) =>
-                        onSummaryFormChange('agentClientNumber', event.target.value)
-                      }
-                    />
-                    <SearchableSelect
-                      id="applicationSummaryAgentClientLocationCode"
-                      labelText="Agent client location"
-                      value={summaryForm.agentClientLocationCode}
-                      invalid={Boolean(visibleSummaryFieldError('agentClientLocationCode'))}
-                      invalidText={visibleSummaryFieldError('agentClientLocationCode')}
-                      disabled={
-                        !summaryForm.agentClientNumber.trim() || isLoadingAgentClientLocations
-                      }
-                      placeholder={agentClientLocationPlaceholder}
-                      options={agentClientLocations
-                        .filter(isSelectableClientLocation)
-                        .map((location) => ({
-                          value: location.locationCode,
-                          label: location.locationName,
-                        }))}
-                      onChange={(value) => onSummaryFormChange('agentClientLocationCode', value)}
-                    />
-                    {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
-                      <SearchableSelect
-                        id="applicationSummaryAgentContactName"
-                        labelText="Agent contact name"
-                        value={summaryForm.agentContactName}
-                        invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
-                        invalidText={visibleSummaryFieldError('agentContactName')}
-                        disabled={
-                          !summaryForm.agentClientLocationCode.trim() ||
-                          isLoadingAgentClientContacts
-                        }
-                        placeholder={agentContactPlaceholder}
-                        options={agentClientContacts
-                          .filter(isSelectableClientContact)
-                          .map((contact) => ({
-                            value: contact.contactName,
-                            label: contact.contactName,
-                          }))}
-                        onChange={(value) => onSummaryFormChange('agentContactName', value)}
-                      />
-                    ) : (
-                      <TextInput
-                        id="applicationSummaryAgentContactName"
-                        labelText="Agent contact name"
-                        value={summaryForm.agentContactName}
-                        invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
-                        invalidText={visibleSummaryFieldError('agentContactName')}
-                        disabled={!summaryForm.agentClientLocationCode.trim()}
-                        placeholder="Enter agent contact name"
-                        onChange={(event) =>
-                          onSummaryFormChange('agentContactName', event.target.value)
-                        }
-                      />
+                    {isSummaryAgentApplicant && (
+                      <>
+                        <TextInput
+                          id="applicationSummaryAgentClientNumber"
+                          labelText="Agent client number"
+                          value={summaryForm.agentClientNumber}
+                          invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
+                          invalidText={visibleSummaryFieldError('agentClientNumber')}
+                          onChange={(event) =>
+                            onSummaryFormChange('agentClientNumber', event.target.value)
+                          }
+                        />
+                        <SearchableSelect
+                          id="applicationSummaryAgentClientLocationCode"
+                          labelText="Agent client location"
+                          value={summaryForm.agentClientLocationCode}
+                          invalid={Boolean(visibleSummaryFieldError('agentClientLocationCode'))}
+                          invalidText={visibleSummaryFieldError('agentClientLocationCode')}
+                          disabled={
+                            !summaryForm.agentClientNumber.trim() || isLoadingAgentClientLocations
+                          }
+                          placeholder={agentClientLocationPlaceholder}
+                          options={agentClientLocations
+                            .filter(isSelectableClientLocation)
+                            .map((location) => ({
+                              value: location.locationCode,
+                              label: location.locationName,
+                            }))}
+                          onChange={(value) =>
+                            onSummaryFormChange('agentClientLocationCode', value)
+                          }
+                        />
+                        {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
+                          <SearchableSelect
+                            id="applicationSummaryAgentContactName"
+                            labelText="Agent contact name"
+                            value={summaryForm.agentContactName}
+                            invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
+                            invalidText={visibleSummaryFieldError('agentContactName')}
+                            disabled={
+                              !summaryForm.agentClientLocationCode.trim() ||
+                              isLoadingAgentClientContacts
+                            }
+                            placeholder={agentContactPlaceholder}
+                            options={agentClientContacts
+                              .filter(isSelectableClientContact)
+                              .map((contact) => ({
+                                value: contact.contactName,
+                                label: contact.contactName,
+                              }))}
+                            onChange={(value) => onSummaryFormChange('agentContactName', value)}
+                          />
+                        ) : (
+                          <TextInput
+                            id="applicationSummaryAgentContactName"
+                            labelText="Agent contact name"
+                            value={summaryForm.agentContactName}
+                            invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
+                            invalidText={visibleSummaryFieldError('agentContactName')}
+                            disabled={!summaryForm.agentClientLocationCode.trim()}
+                            placeholder="Enter agent contact name"
+                            onChange={(event) =>
+                              onSummaryFormChange('agentContactName', event.target.value)
+                            }
+                          />
+                        )}
+                      </>
                     )}
                     <SearchableSelect
                       id="applicationSummaryRegion"

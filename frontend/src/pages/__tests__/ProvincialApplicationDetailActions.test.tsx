@@ -1998,6 +1998,75 @@ describe('Provincial Application Detail Document Actions', () => {
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
   }, 30000)
 
+  it('hides and clears stale agent fields when editing an owner application summary', async () => {
+    const ownerApplicationDetail: ProvincialApplicationDetail = {
+      ...applicationDetail,
+      agentClientNumber: null,
+    }
+    mockedFetchProvincialApplicationDetail.mockResolvedValue(ownerApplicationDetail)
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      applicationNumber: '321',
+      federalApplicationNumber: '',
+      applicationDate: '2026-01-01',
+      receivedDate: '2026-01-02',
+      termDays: '30',
+      applicationVolume: '100',
+      averageLogVolume: '2',
+      exemptionReasonCode: 'U',
+      productLocation: 'BC',
+      exportScheduleId: '987',
+      agentClientNumber: '00033344',
+      agentClientLocationCode: '01',
+      ownerClientNumber: '00011122',
+      ownerClientLocationCode: '00',
+      exemptionNumber: 'EX-555',
+      applicationStatusCode: 'ACTIVE',
+      applicantTypeCode: 'O',
+      orgUnitNumber: '12',
+      productTypeCode: 'LOG',
+      jurisdictionCode: 'P',
+      growthTypeCode: 'O',
+      agentContactName: 'Agent Contact',
+      ownerContactName: 'Owner Contact',
+      oicIndicator: 'N',
+      endUseCode: 'LU',
+      speciesCodes: ['FI'],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await waitFor(() => getApplicationSummaryTile())
+    const summaryControls = within(summaryTile)
+
+    await waitFor(() => {
+      expect(summaryControls.queryByLabelText('Agent client number')).not.toBeInTheDocument()
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner')
+    })
+    expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033344', 'agent')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicantTypeCode: 'O',
+          agentClientNumber: '',
+          agentClientLocationCode: '',
+          agentContactName: '',
+        }),
+      )
+    })
+  })
+
   it('validates application summary edits before saving', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
