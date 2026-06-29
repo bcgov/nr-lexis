@@ -1728,12 +1728,21 @@ body {
   min-width: 0;
 }
 
+.application-tabs__list {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+}
+
 .application-detail-tab-list {
   background: var(--csp-layer-01);
 }
 
 .application-detail-tab-panel {
   padding: 1rem 0 0;
+}
+
+.application-create-actions {
+  margin-top: 1rem;
 }
 
 .application-detail-tab-grid {

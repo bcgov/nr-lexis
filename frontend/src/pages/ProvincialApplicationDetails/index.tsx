@@ -2271,9 +2271,8 @@ const ProvincialApplicationDetailsPage = () => {
               <TabList
                 aria-label="Application detail sections"
                 contained
-                fullWidth
                 size="md"
-                className="application-detail-tab-list"
+                className="application-tabs__list application-detail-tab-list"
               >
                 <Tab>Summary</Tab>
                 <Tab>Clients</Tab>

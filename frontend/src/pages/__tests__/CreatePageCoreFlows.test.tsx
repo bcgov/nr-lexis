@@ -114,6 +114,10 @@ const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) =
   await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
 }
 
+const selectApplicationCreateTab = async (name: string) => {
+  await userEvent.click(await screen.findByRole('tab', { name }))
+}
+
 describe('Create Page Core Flows', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -214,6 +218,17 @@ describe('Create Page Core Flows', () => {
     expect(within(newApplicationState).getByText('Status')).toBeInTheDocument()
     expect(within(newApplicationState).getAllByText('New')).toHaveLength(2)
     expect(screen.queryByRole('textbox', { name: /application number/i })).not.toBeInTheDocument()
+    for (const tabName of [
+      'Summary',
+      'Clients',
+      'Packages / Scales',
+      'Permits',
+      'Offers',
+      'Documents',
+      'Remarks',
+    ]) {
+      expect(screen.getByRole('tab', { name: tabName })).toBeInTheDocument()
+    }
 
     const submitButton = await screen.findByRole('button', { name: 'Submit' })
     await waitFor(() => expect(submitButton).toBeEnabled())
@@ -316,6 +331,7 @@ describe('Create Page Core Flows', () => {
     })
 
     await chooseComboBoxOption(regionComboBox, 'West Coast Natural Resource Region')
+    await selectApplicationCreateTab('Packages / Scales')
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Application species (required)' }),
       'HE - Hemlock',
