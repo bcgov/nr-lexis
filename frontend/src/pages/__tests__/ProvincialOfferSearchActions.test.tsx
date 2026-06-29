@@ -206,12 +206,11 @@ describe('Provincial Offer Search Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Listing date (ASC)' }))
 
     await waitFor(() => {
-      expect(mockedSearchProvincialOffers).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sortField: 'listingDate',
-          sortDirection: 'desc',
-        }),
-      )
+      expect(
+        mockedSearchProvincialOffers.mock.calls.some(
+          ([request]) => request.sortField === 'listingDate' && request.sortDirection === 'desc',
+        ),
+      ).toBe(true)
     })
   })
 })
