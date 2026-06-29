@@ -456,6 +456,10 @@ body {
   white-space: nowrap;
 }
 
+.csp-side-nav__link.cds--side-nav__link--nested {
+  padding-left: 32px;
+}
+
 .csp-side-nav__link:hover,
 .csp-side-nav__link:focus-visible {
   background-color: var(--csp-layer-hover);

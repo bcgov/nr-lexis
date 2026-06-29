@@ -40,11 +40,11 @@ describe('Layout shell', () => {
   it('marks only the exact side-nav route as active', () => {
     renderLayout('/admin/uploads')
 
-    const adminLink = screen.getByRole('link', { name: /LEXIS administration/i })
-    const uploadsLink = screen.getByRole('link', { name: /Data upload/i })
+    const adminLink = screen.getByRole('link', { name: /^Admin$/i })
+    const uploadsLink = screen.getByRole('link', { name: /Data Upload/i })
     const activeLinks = document.querySelectorAll('.csp-side-nav__link.cds--side-nav__link--active')
 
-    expect(document.querySelector('.page-header__eyebrow')).toHaveTextContent('Administration')
+    expect(document.querySelector('.page-header__eyebrow')).toHaveTextContent('Admin')
     expect(activeLinks).toHaveLength(1)
     expect(uploadsLink).toHaveClass('cds--side-nav__link--active')
     expect(uploadsLink).toHaveAttribute('aria-current', 'page')
@@ -65,12 +65,12 @@ describe('Layout shell', () => {
 
     renderLayout('/admin/schedules')
 
-    const feePolicyLink = screen.getByRole('link', { name: /Fee policy administration/i })
+    const feePolicyLink = screen.getByRole('link', { name: /Fee Policy/i })
     const filPolicyLink = screen.getByRole('link', {
-      name: /Fee in lieu percent administration/i,
+      name: /Fee in Lieu Policy/i,
     })
     const scheduleLink = screen.getByRole('link', {
-      name: /Export schedule administration/i,
+      name: /Export Schedule/i,
     })
     const averageMonthlyValuesLink = screen.getByRole('link', {
       name: /Average Monthly Values/i,
@@ -98,19 +98,19 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: 'Advertising List (PDF)' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Advertising List (CSV)' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Help/i })).not.toBeInTheDocument()
-    const uploadLinks = screen.getAllByRole('link', { name: /Upload application submission/i })
+    const uploadLinks = screen.getAllByRole('link', { name: /Upload Application/i })
     expect(uploadLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/provincial/application/upload',
       '/federal/application/upload',
     ])
-    expect(screen.getByRole('link', { name: /LEXIS administration/i })).toBeVisible()
-    expect(screen.getByRole('link', { name: /Data upload/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /^Admin$/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Data Upload/i })).toBeVisible()
     const navLinks = sideNav.querySelectorAll('.csp-side-nav__link')
     const navIcons = sideNav.querySelectorAll('.csp-side-nav__link .csp-side-nav__icon svg')
     expect(navIcons).toHaveLength(navLinks.length)
-    expect(screen.getByRole('link', { name: /Data upload/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Data Upload/i })).toHaveAttribute(
       'data-label',
-      'Data upload',
+      'Data Upload',
     )
   })
 
@@ -148,17 +148,15 @@ describe('Layout shell', () => {
 
     renderLayout('/provincial/application')
 
-    expect(screen.getByRole('link', { name: /Application search/i })).toBeVisible()
-    expect(screen.getByRole('link', { name: /Exemption search/i })).toBeVisible()
-    expect(screen.getByRole('link', { name: /Offer search/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Application Search/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Exemption Search/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Offer Search/i })).toBeVisible()
     expect(
-      screen.queryByRole('link', { name: /Create\/edit application/i }),
+      screen.queryByRole('link', { name: /Create\/Edit Application/i }),
     ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('link', { name: /Upload application submission/i }),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Create\/edit exemption/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Create\/edit offer/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Upload Application/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Create\/Edit Exemption/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Create\/Edit Offer/i })).not.toBeInTheDocument()
   })
 
   it('renders navigation when an auth mock omits roles', () => {
@@ -181,7 +179,7 @@ describe('Layout shell', () => {
     renderLayout('/reports')
 
     expect(screen.getByRole('navigation', { name: 'Side navigation' })).toBeVisible()
-    expect(screen.getByRole('link', { name: /Reports menu/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /^Reports$/i })).toBeVisible()
   })
 
   it('shows application submission upload without exposing generic data upload', () => {
@@ -200,11 +198,11 @@ describe('Layout shell', () => {
 
     renderLayout('/provincial/application/upload')
 
-    expect(screen.getByRole('link', { name: /Upload application submission/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Upload Application/i })).toBeVisible()
     expect(
-      screen.queryByRole('link', { name: /Create\/edit application/i }),
+      screen.queryByRole('link', { name: /Create\/Edit Application/i }),
     ).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Data upload/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Data Upload/i })).not.toBeInTheDocument()
   })
 
   it('shows federal application submission upload in the federal nav for federal-only users', () => {
@@ -233,8 +231,8 @@ describe('Layout shell', () => {
     renderLayout('/federal/application/upload')
 
     expect(document.querySelector('.page-header__eyebrow')).toHaveTextContent('Federal')
-    expect(screen.getByRole('link', { name: /Application search/i })).toBeVisible()
-    expect(screen.getByRole('link', { name: /Upload application submission/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Application Search/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Upload Application/i })).toHaveAttribute(
       'href',
       '/federal/application/upload',
     )

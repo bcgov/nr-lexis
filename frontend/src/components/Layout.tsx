@@ -58,59 +58,59 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/provincial/review',
-        label: 'Application review',
+        label: 'Application Review',
         icon: TaskComplete,
         requiredActions: ['/applicationsReview'],
       },
       {
         to: '/provincial/application/create',
-        label: 'Create/edit application',
+        label: 'Create/Edit Application',
         icon: DocumentAdd,
         requiredActions: ['/applicationSearch', 'createApplication'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/application/upload',
-        label: 'Upload application submission',
+        label: 'Upload Application',
         icon: Upload,
         requiredActions: ['uploadApplicationSubmission'],
         roleScope: 'provincialApplicationSubmission',
       },
       {
         to: '/provincial/application',
-        label: 'Application search',
+        label: 'Application Search',
         icon: Search,
         requiredActions: ['/applicationSearch'],
       },
       {
         to: '/provincial/exemption/create',
-        label: 'Create/edit exemption',
+        label: 'Create/Edit Exemption',
         icon: DocumentAdd,
         requiredActions: ['/exemptionSearch', '/createExemption'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/exemption',
-        label: 'Exemption search',
+        label: 'Exemption Search',
         icon: Search,
         requiredActions: ['/exemptionSearch'],
       },
       {
         to: '/provincial/offers/create',
-        label: 'Create/edit offer',
+        label: 'Create/Edit Offer',
         icon: Tag,
         requiredActions: ['/offersSearch', 'createOffer'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/offers',
-        label: 'Offer search',
+        label: 'Offer Search',
         icon: Search,
         requiredActions: ['/offersSearch'],
       },
       {
         to: '/provincial/permit',
-        label: 'Permit search',
+        label: 'Permit Search',
         icon: Certificate,
         requiredActions: ['/permitSearch'],
       },
@@ -121,13 +121,13 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/federal',
-        label: 'Application search',
+        label: 'Application Search',
         icon: Search,
         requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
       },
       {
         to: '/federal/application/upload',
-        label: 'Upload application submission',
+        label: 'Upload Application',
         icon: Upload,
         requiredActions: ['uploadApplicationSubmission'],
         roleScope: 'federalApplicationSubmission',
@@ -139,7 +139,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/reports',
-        label: 'Reports menu',
+        label: 'Reports',
         icon: Report,
         requiredActions: [
           '/applicationReport',
@@ -157,35 +157,35 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     ],
   },
   {
-    label: 'Administration',
+    label: 'Admin',
     links: [
       {
         to: '/admin',
-        label: 'LEXIS administration',
+        label: 'Admin',
         icon: Settings,
         requiredActions: ['/lexisAgentAdmin'],
       },
       {
         to: '/admin/policies/fee',
-        label: 'Fee policy administration',
+        label: 'Fee Policy',
         icon: Finance,
         requiredActions: ['/lexisPolicyAdmin'],
       },
       {
         to: '/admin/policies/fil',
-        label: 'Fee in lieu percent administration',
+        label: 'Fee in Lieu Policy',
         icon: Finance,
         requiredActions: ['/lexisFILAdmin'],
       },
       {
         to: '/admin/schedules',
-        label: 'Export schedule administration',
+        label: 'Export Schedule',
         icon: Calendar,
         requiredActions: ['/lexisPolicyAdmin'],
       },
       {
         to: '/admin/uploads',
-        label: 'Data upload',
+        label: 'Data Upload',
         icon: Upload,
         requiredActions: [
           '/lexisAgentAdmin',
@@ -219,13 +219,13 @@ const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
   { path: '/federal/application/upload', section: 'Federal' },
   { path: '/federal', section: 'Federal' },
   { path: '/reports', section: 'Reports' },
-  { path: '/admin/policies/fee', section: 'Administration' },
-  { path: '/admin/policies/fil', section: 'Administration' },
-  { path: '/admin/schedules', section: 'Administration' },
-  { path: '/admin/uploads', section: 'Administration' },
-  { path: '/admin/policies', section: 'Administration' },
-  { path: '/admin', section: 'Administration' },
-  { path: '/admin/rtm/emslogamv', section: 'Administration' },
+  { path: '/admin/policies/fee', section: 'Admin' },
+  { path: '/admin/policies/fil', section: 'Admin' },
+  { path: '/admin/schedules', section: 'Admin' },
+  { path: '/admin/uploads', section: 'Admin' },
+  { path: '/admin/policies', section: 'Admin' },
+  { path: '/admin', section: 'Admin' },
+  { path: '/admin/rtm/emslogamv', section: 'Admin' },
   { path: '/unauthorized', section: 'LEXIS' },
 ]
 
