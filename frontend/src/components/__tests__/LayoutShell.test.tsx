@@ -87,7 +87,7 @@ describe('Layout shell', () => {
     expect(averageMonthlyValuesLink).not.toHaveClass('cds--side-nav__link--active')
   })
 
-  it('renders side-nav links as text without repeated search icons', () => {
+  it('renders side-nav links with standard icons and collapsed labels', () => {
     renderLayout('/admin/uploads')
 
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
@@ -105,8 +105,13 @@ describe('Layout shell', () => {
     ])
     expect(screen.getByRole('link', { name: /LEXIS administration/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /Data upload/i })).toBeVisible()
-    expect(document.querySelector('.csp-side-nav__icon')).not.toBeInTheDocument()
-    expect(sideNav.querySelector('.csp-side-nav__link svg')).not.toBeInTheDocument()
+    const navLinks = sideNav.querySelectorAll('.csp-side-nav__link')
+    const navIcons = sideNav.querySelectorAll('.csp-side-nav__link .csp-side-nav__icon svg')
+    expect(navIcons).toHaveLength(navLinks.length)
+    expect(screen.getByRole('link', { name: /Data upload/i })).toHaveAttribute(
+      'data-label',
+      'Data upload',
+    )
   })
 
   it('navigates the app name to the resolved default route', async () => {

@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   AsleepFilled,
+  Calendar,
+  Certificate,
+  ChevronLeft,
   Close,
+  DataBase,
+  DocumentAdd,
+  Finance,
   LightFilled,
   Logout,
-  SidePanelClose,
-  SidePanelOpen,
+  Report,
+  Search,
+  Settings,
+  Tag,
+  TaskComplete,
+  Upload,
   UserAvatar,
+  type CarbonIconType,
 } from '@carbon/icons-react'
 import { IconButton, SkipToContent, Theme } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
@@ -25,6 +36,7 @@ export type LayoutProps = {
 type NavigationLink = {
   to: string
   label: string
+  icon: CarbonIconType
   requiredActions?: string[]
   requiredActionsMatch?: RouteActionMatch
   roleScope?: NavigationRoleScope
@@ -47,50 +59,59 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/provincial/review',
         label: 'Application review',
+        icon: TaskComplete,
         requiredActions: ['/applicationsReview'],
       },
       {
         to: '/provincial/application/create',
         label: 'Create/edit application',
+        icon: DocumentAdd,
         requiredActions: ['/applicationSearch', 'createApplication'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/application/upload',
         label: 'Upload application submission',
+        icon: Upload,
         requiredActions: ['uploadApplicationSubmission'],
         roleScope: 'provincialApplicationSubmission',
       },
       {
         to: '/provincial/application',
         label: 'Application search',
+        icon: Search,
         requiredActions: ['/applicationSearch'],
       },
       {
         to: '/provincial/exemption/create',
         label: 'Create/edit exemption',
+        icon: DocumentAdd,
         requiredActions: ['/exemptionSearch', '/createExemption'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/exemption',
         label: 'Exemption search',
+        icon: Search,
         requiredActions: ['/exemptionSearch'],
       },
       {
         to: '/provincial/offers/create',
         label: 'Create/edit offer',
+        icon: Tag,
         requiredActions: ['/offersSearch', 'createOffer'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/offers',
         label: 'Offer search',
+        icon: Search,
         requiredActions: ['/offersSearch'],
       },
       {
         to: '/provincial/permit',
         label: 'Permit search',
+        icon: Certificate,
         requiredActions: ['/permitSearch'],
       },
     ],
@@ -101,11 +122,13 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/federal',
         label: 'Application search',
+        icon: Search,
         requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
       },
       {
         to: '/federal/application/upload',
         label: 'Upload application submission',
+        icon: Upload,
         requiredActions: ['uploadApplicationSubmission'],
         roleScope: 'federalApplicationSubmission',
       },
@@ -117,6 +140,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/reports',
         label: 'Reports menu',
+        icon: Report,
         requiredActions: [
           '/applicationReport',
           '/offerReport',
@@ -138,26 +162,31 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/admin',
         label: 'LEXIS administration',
+        icon: Settings,
         requiredActions: ['/lexisAgentAdmin'],
       },
       {
         to: '/admin/policies/fee',
         label: 'Fee policy administration',
+        icon: Finance,
         requiredActions: ['/lexisPolicyAdmin'],
       },
       {
         to: '/admin/policies/fil',
         label: 'Fee in lieu percent administration',
+        icon: Finance,
         requiredActions: ['/lexisFILAdmin'],
       },
       {
         to: '/admin/schedules',
         label: 'Export schedule administration',
+        icon: Calendar,
         requiredActions: ['/lexisPolicyAdmin'],
       },
       {
         to: '/admin/uploads',
         label: 'Data upload',
+        icon: Upload,
         requiredActions: [
           '/lexisAgentAdmin',
           '/fileApplicationUpload',
@@ -169,6 +198,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/admin/rtm/emslogamv',
         label: 'Average Monthly Values',
+        icon: DataBase,
         requiredActions: ['/lexisAgentAdmin'],
       },
     ],
@@ -396,9 +426,11 @@ function Layout({ children }: LayoutProps) {
             onClick={() => setIsSideNavCollapsed((current) => !current)}
           >
             <span className="csp-side-nav__toggle-icon" aria-hidden="true">
-              {isSideNavCollapsed ? <SidePanelOpen size={18} /> : <SidePanelClose size={18} />}
+              <ChevronLeft size={16} />
             </span>
-            <span className="csp-side-nav__toggle-text">LEXIS Menu</span>
+            <span className="cds--side-nav__toggle-label csp-side-nav__toggle-text">
+              {isSideNavCollapsed ? 'Expand' : 'Collapse'}
+            </span>
           </button>
 
           <ul id="side-navigation-list" className="cds--side-nav__items csp-side-nav__items">
@@ -408,26 +440,36 @@ function Layout({ children }: LayoutProps) {
                   {section.label}
                 </span>
                 <ul className="csp-side-nav__section-list">
-                  {section.links.map((link) => (
-                    <li key={link.to}>
-                      <NavLink
-                        end
-                        to={link.to}
-                        className={({ isActive }) =>
-                          isActive
-                            ? 'cds--side-nav__link csp-side-nav__link cds--side-nav__link--active'
-                            : 'cds--side-nav__link csp-side-nav__link'
-                        }
-                        aria-current={location.pathname === link.to ? 'page' : undefined}
-                        aria-label={isSideNavCollapsed ? link.label : undefined}
-                        title={isSideNavCollapsed ? link.label : undefined}
-                      >
-                        <span className="cds--side-nav__link-text csp-side-nav__link-text">
-                          {link.label}
-                        </span>
-                      </NavLink>
-                    </li>
-                  ))}
+                  {section.links.map((link) => {
+                    const LinkIcon = link.icon
+                    return (
+                      <li key={link.to}>
+                        <NavLink
+                          end
+                          to={link.to}
+                          className={({ isActive }) =>
+                            isActive
+                              ? 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link cds--side-nav__link--active'
+                              : 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link'
+                          }
+                          aria-current={location.pathname === link.to ? 'page' : undefined}
+                          aria-label={isSideNavCollapsed ? link.label : undefined}
+                          title={isSideNavCollapsed ? link.label : undefined}
+                          data-label={link.label}
+                        >
+                          <span
+                            className="cds--side-nav__icon csp-side-nav__icon"
+                            aria-hidden="true"
+                          >
+                            <LinkIcon size={16} />
+                          </span>
+                          <span className="cds--side-nav__link-text csp-side-nav__link-text">
+                            {link.label}
+                          </span>
+                        </NavLink>
+                      </li>
+                    )
+                  })}
                 </ul>
               </li>
             ))}
