@@ -4,15 +4,19 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import java.sql.CallableStatement;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -94,19 +98,20 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
       """;
   private static final String COUNT_APPLICATIONS_FOR_EXPORT_SCHEDULE =
       "SELECT COUNT(*) FROM EXPORT_EXEMPTION_APPLICATION WHERE EXPORT_SCHEDULE_ID = ?";
-  private static final String NEXT_EXPORT_SCHEDULE_ID =
-      "SELECT EXPORT_SCHEDULE_SEQ.NEXTVAL FROM DUAL";
   private static final String INSERT_EXPORT_SCHEDULE =
       """
-      INSERT INTO EXPORT_SCHEDULE (
-        EXPORT_SCHEDULE_ID,
-        ADVERTISING_DATE,
-        APPLICATION_RECEIPT_DATE,
-        OFFER_RECEIPT_DATE,
-        OFFER_END_DATE,
-        OFFER_WITHDRAWAL_DATE,
-        TEAC_MEETING_DATE
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      BEGIN
+        INSERT INTO EXPORT_SCHEDULE (
+          EXPORT_SCHEDULE_ID,
+          ADVERTISING_DATE,
+          APPLICATION_RECEIPT_DATE,
+          OFFER_RECEIPT_DATE,
+          OFFER_END_DATE,
+          OFFER_WITHDRAWAL_DATE,
+          TEAC_MEETING_DATE
+        ) VALUES (EXPORT_SCHEDULE_SEQ.NEXTVAL, ?, ?, ?, ?, ?, ?)
+        RETURNING EXPORT_SCHEDULE_ID INTO ?;
+      END;
       """;
   private static final String UPDATE_EXPORT_SCHEDULE =
       """
@@ -206,13 +211,13 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public ExportScheduleRowDto insertExportSchedule(ExportScheduleCreateRequestDto request) {
-    Long scheduleId = jdbcTemplate.queryForObject(NEXT_EXPORT_SCHEDULE_ID, Long.class);
-    long finalScheduleId = scheduleId == null ? 1L : scheduleId;
-    jdbcTemplate.update(
-        INSERT_EXPORT_SCHEDULE,
-        ps -> bindExportScheduleInsert(ps, finalScheduleId, request));
+    Long scheduleId =
+        jdbcTemplate.execute((Connection connection) -> insertExportSchedule(connection, request));
+    if (scheduleId == null) {
+      throw new DataRetrievalFailureException("Export schedule insert did not return an id.");
+    }
     return new ExportScheduleRowDto(
-        finalScheduleId,
+        scheduleId,
         request.advertisingDate(),
         request.applicationReceiptDate(),
         request.offerReceiptDate(),
@@ -327,17 +332,25 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   private void bindExportScheduleInsert(
-      PreparedStatement ps,
-      long exportScheduleId,
-      ExportScheduleCreateRequestDto request)
+      PreparedStatement ps, ExportScheduleCreateRequestDto request)
       throws SQLException {
-    ps.setLong(1, exportScheduleId);
-    setDateOrNull(ps, 2, request.advertisingDate());
-    setDateOrNull(ps, 3, request.applicationReceiptDate());
-    setDateOrNull(ps, 4, request.offerReceiptDate());
-    setDateOrNull(ps, 5, request.offerEndDate());
-    setDateOrNull(ps, 6, request.offerWithdrawalDate());
-    setDateOrNull(ps, 7, request.teacMeetingDate());
+    setDateOrNull(ps, 1, request.advertisingDate());
+    setDateOrNull(ps, 2, request.applicationReceiptDate());
+    setDateOrNull(ps, 3, request.offerReceiptDate());
+    setDateOrNull(ps, 4, request.offerEndDate());
+    setDateOrNull(ps, 5, request.offerWithdrawalDate());
+    setDateOrNull(ps, 6, request.teacMeetingDate());
+  }
+
+  private Long insertExportSchedule(Connection connection, ExportScheduleCreateRequestDto request)
+      throws SQLException {
+    try (CallableStatement statement = connection.prepareCall(INSERT_EXPORT_SCHEDULE)) {
+      bindExportScheduleInsert(statement, request);
+      statement.registerOutParameter(7, Types.NUMERIC);
+      statement.executeUpdate();
+      long exportScheduleId = statement.getLong(7);
+      return statement.wasNull() ? null : exportScheduleId;
+    }
   }
 
   private void bindExportScheduleUpdate(
