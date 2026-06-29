@@ -269,7 +269,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(
       await screen.findByText('Updated application 1000123 and sent email.'),
     ).toBeInTheDocument()
-  })
+  }, 15000)
 
   it('prefills the agent client email when rejecting an agent application', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({

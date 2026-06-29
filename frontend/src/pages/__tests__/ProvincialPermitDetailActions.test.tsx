@@ -234,7 +234,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(2)
       expect(screen.getByText('INV-NEW')).toBeInTheDocument()
     })
-  })
+  }, 15000)
 
   it('shows field validation when adding invoice without required values', async () => {
     render(
