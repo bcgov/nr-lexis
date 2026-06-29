@@ -205,7 +205,7 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
   })
 
-  it('shows federal application submission upload in the federal nav for federal-only users', () => {
+  it('shows federal application submission upload at the bottom of the provincial nav', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -231,12 +231,12 @@ describe('Layout shell', () => {
     renderLayout('/federal/application/upload')
 
     expect(document.querySelector('.page-header__eyebrow')).not.toBeInTheDocument()
+    expect(screen.getByText('Provincial')).toBeVisible()
     expect(screen.getByRole('link', { name: /^Search$/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /^Upload$/i })).toHaveAttribute(
       'href',
       '/federal/application/upload',
     )
-    expect(screen.queryByText('Provincial')).not.toBeInTheDocument()
   })
 
   it('defaults the side nav open and supports collapsing it', async () => {

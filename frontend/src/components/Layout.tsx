@@ -109,6 +109,13 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         icon: Certificate,
         requiredActions: ['/permitSearch'],
       },
+      {
+        to: '/federal/application/upload',
+        label: 'Upload',
+        icon: Upload,
+        requiredActions: ['uploadApplicationSubmission'],
+        roleScope: 'federalApplicationSubmission',
+      },
     ],
   },
   {
@@ -119,13 +126,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         label: 'Search',
         icon: Search,
         requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
-      },
-      {
-        to: '/federal/application/upload',
-        label: 'Upload',
-        icon: Upload,
-        requiredActions: ['uploadApplicationSubmission'],
-        roleScope: 'federalApplicationSubmission',
       },
     ],
   },
