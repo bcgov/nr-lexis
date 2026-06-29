@@ -102,10 +102,10 @@
   --csp-link-hover: var(--csp-brand-blue-hover);
   --csp-category-label: var(--csp-text-secondary);
   --csp-tile-border: #999999;
-  --csp-table-border: #000000;
-  --csp-table-header-bg: var(--csp-brand-blue);
-  --csp-table-header-text: #ffffff;
-  --csp-table-row-alt-bg: #e0e0e0;
+  --csp-table-border: var(--csp-border-subtle-01);
+  --csp-table-header-bg: #e0e0e0;
+  --csp-table-header-text: #161616;
+  --csp-table-row-alt-bg: #f4f4f4;
   --csp-avatar-bg: var(--csp-interactive);
   --csp-avatar-text: #ffffff;
   --cds-background-brand: var(--csp-background-brand);
@@ -205,10 +205,10 @@ body {
   --csp-link-hover: #a6c8ff;
   --csp-category-label: var(--csp-text-primary);
   --csp-tile-border: #6f6f6f;
-  --csp-table-border: #8d8d8d;
-  --csp-table-header-bg: var(--csp-brand-blue);
-  --csp-table-header-text: #ffffff;
-  --csp-table-row-alt-bg: #353535;
+  --csp-table-border: var(--csp-border-subtle-01);
+  --csp-table-header-bg: #525252;
+  --csp-table-header-text: #f4f4f4;
+  --csp-table-row-alt-bg: #393939;
   --csp-avatar-bg: #a6c8ff;
   --csp-avatar-text: #161616;
 }
@@ -2047,7 +2047,7 @@ body {
 
 .cds--data-table {
   background-color: var(--csp-layer-01);
-  border: 1px solid var(--csp-table-border);
+  border: 0;
   color: var(--csp-text-primary);
   width: 100%;
 }
