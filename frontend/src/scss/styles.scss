@@ -771,53 +771,55 @@ body {
 
 .landing-content-col {
   display: flex;
-  align-items: center;
-  padding: 2rem 4rem;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 5rem 4rem;
   padding-inline: 4rem;
 }
 
 .landing-content-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 2.5rem;
-  width: min(100%, 36rem);
+  gap: 2rem;
+  width: min(100%, 42rem);
 }
 
 .landing-logo-mark {
   width: fit-content;
-  padding: 0.625rem 0.875rem;
-  background-color: #003366;
+  padding: 0;
+  background: transparent;
 }
 
 .landing-logo {
-  width: 8.5rem;
+  width: 6.25rem;
   height: auto;
   display: block;
 }
 
 .landing-title-group {
   display: grid;
-  gap: 1rem;
-}
-
-.landing-kicker {
-  color: var(--csp-accent);
-  font-size: 0.875rem;
-  font-weight: 700;
-  letter-spacing: 0.16px;
-  margin: 0;
+  gap: 0.25rem;
 }
 
 .landing-title {
   margin: 0;
   color: var(--csp-text-primary);
-  font-size: 4.25rem;
+  font-size: 2.75rem;
   font-weight: 400;
   letter-spacing: 0;
-  line-height: 1.05;
+  line-height: 1.14;
+}
+
+.landing-subtitle {
+  margin: 0;
+  color: var(--csp-link-primary);
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.4;
 }
 
 .landing-help-text {
+  flex-basis: 100%;
   max-width: 32rem;
   margin: 0;
   color: var(--csp-text-primary);
@@ -826,15 +828,20 @@ body {
 }
 
 .landing-actions {
-  display: grid;
-  gap: 1rem;
-  width: min(100%, 22rem);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  width: 100%;
 }
 
 .landing-actions .cds--btn {
-  width: 100%;
-  max-width: none;
+  flex: 0 1 13.5rem;
+  width: 13.5rem;
+  max-width: 100%;
+  min-height: 2.5rem;
+  border-radius: 4px;
   justify-content: space-between;
+  padding-inline: 1rem;
 }
 
 .landing-img-col {
@@ -869,7 +876,7 @@ body {
   }
 
   .landing-title {
-    font-size: 3rem;
+    font-size: 2.5rem;
   }
 
   .landing-img-col,
@@ -2097,6 +2104,18 @@ body {
 
   .landing-title {
     font-size: 2.25rem;
+  }
+
+  .landing-subtitle {
+    font-size: 1.125rem;
+  }
+
+  .landing-actions {
+    display: grid;
+  }
+
+  .landing-actions .cds--btn {
+    width: 100%;
   }
 
   .landing-img-col,
