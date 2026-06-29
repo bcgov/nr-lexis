@@ -115,13 +115,14 @@ const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before upda
 const REVIEW_REMARK_REQUIRED_MESSAGE =
   'Review remark is required when rejecting or withdrawing an application.'
 const APPLICATION_DETAIL_TAB_INDEX = {
-  summary: 0,
-  clients: 1,
-  packagesAndScales: 2,
-  permits: 3,
-  offers: 4,
-  documents: 5,
-  remarks: 6,
+  owner: 0,
+  agent: 1,
+  application: 2,
+  items: 3,
+  documents: 4,
+  remarks: 5,
+  offers: 6,
+  review: 7,
 } as const
 const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
   'Status email is only supported for rejected or withdrawn applications.'
@@ -156,9 +157,10 @@ export type ClientDataSummaryProps = {
   title: string
   clientData: ApplicationClientData | null
   isLoading: boolean
+  detailFields?: Array<[string, string]>
 }
 
-function ClientDataSummary({ title, clientData, isLoading }: ClientDataSummaryProps) {
+function ClientDataSummary({ title, clientData, isLoading, detailFields }: ClientDataSummaryProps) {
   const clientLookupMessage = clientData?.notfound ?? ''
   const clientLookupMessageKey = `${clientData?.clientNumber ?? ''}:${clientLookupMessage}`
   const [dismissedClientLookupMessageKey, setDismissedClientLookupMessageKey] = useState<
@@ -178,6 +180,7 @@ function ClientDataSummary({ title, clientData, isLoading }: ClientDataSummaryPr
       <h3 className="application-client-summary__title">{title}</h3>
       <dl className="detail-field-grid">
         {[
+          ...(detailFields ?? []),
           ['Company name', displayValue(clientData.companyName)],
           ['Address', displayValue(clientData.address)],
           ['City', displayValue(clientData.city)],
@@ -533,7 +536,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [focusedPackageNumber, setFocusedPackageNumber] = useState('')
   const [focusedPackageRequestId, setFocusedPackageRequestId] = useState(0)
   const [selectedApplicationTabIndex, setSelectedApplicationTabIndex] = useState(
-    APPLICATION_DETAIL_TAB_INDEX.summary,
+    APPLICATION_DETAIL_TAB_INDEX.owner,
   )
   const beginDetailRequest = useLatestRequestGuard()
   const packageFilter = searchParams.get('packageFilter') ?? ''
@@ -555,7 +558,7 @@ const ProvincialApplicationDetailsPage = () => {
     [searchParams, setSearchParams],
   )
   const focusPackageInItems = useCallback((packageNumber: string) => {
-    setSelectedApplicationTabIndex(APPLICATION_DETAIL_TAB_INDEX.packagesAndScales)
+    setSelectedApplicationTabIndex(APPLICATION_DETAIL_TAB_INDEX.items)
     setFocusedPackageNumber(packageNumber)
     setFocusedPackageRequestId((current) => current + 1)
   }, [])
@@ -631,7 +634,11 @@ const ProvincialApplicationDetailsPage = () => {
       ) {
         try {
           const summarySnapshot = await fetchApplicationSummarySnapshot(applicationNumber)
-          if (isLatestRequest() && summarySnapshot) {
+          if (
+            isLatestRequest() &&
+            summarySnapshot &&
+            String(summarySnapshot.applicationNumber) === applicationNumber
+          ) {
             editableSummaryForm = normalizeSummaryAgentFields(
               toSummarySnapshotFormState(summarySnapshot),
             )
@@ -2081,25 +2088,234 @@ const ProvincialApplicationDetailsPage = () => {
     [applyReviewStatusResult, buildReviewStatusPayload, canReviewApplication, detail],
   )
 
-  const clientSummaryContent =
-    ownerClientData || agentClientData || isLoadingOwnerClientData || isLoadingAgentClientData ? (
-      <div className="application-client-summary-grid">
-        <ClientDataSummary
-          title="Owner client details"
-          clientData={ownerClientData}
-          isLoading={isLoadingOwnerClientData}
-        />
-        {(summaryForm?.applicantTypeCode === 'A' ||
-          agentClientData ||
-          isLoadingAgentClientData) && (
-          <ClientDataSummary
-            title="Agent client details"
-            clientData={agentClientData}
-            isLoading={isLoadingAgentClientData}
+  const ownerApplicantTypeCode = summaryForm?.applicantTypeCode ?? ''
+  const ownerApplicantTypeOption = optionsWithCurrentValue(
+    APPLICANT_TYPE_OPTIONS,
+    ownerApplicantTypeCode,
+  ).find((option) => option.value === ownerApplicantTypeCode)
+  const ownerApplicantTypeLabel = ownerApplicantTypeOption
+    ? optionLabel(ownerApplicantTypeOption)
+    : ownerApplicantTypeCode
+  const ownerClientDetailFields: Array<[string, string]> = [
+    ['Client number', summaryForm?.ownerClientNumber ?? String(detail?.ownerClientNumber ?? '')],
+    ['Applicant type', ownerApplicantTypeLabel],
+    ['Client location', summaryForm?.ownerClientLocationCode ?? ''],
+    ['Contact name', summaryForm?.ownerContactName ?? ''],
+    ['I am an agent', summaryForm?.applicantTypeCode === 'A' ? 'Yes' : 'No'],
+  ]
+  const ownerClientSummaryContent =
+    ownerClientData || isLoadingOwnerClientData ? (
+      <ClientDataSummary
+        title="Owner client details"
+        clientData={ownerClientData}
+        isLoading={isLoadingOwnerClientData}
+        detailFields={ownerClientDetailFields}
+      />
+    ) : null
+  const agentClientDetailFields: Array<[string, string]> = [
+    ['Agent number', summaryForm?.agentClientNumber ?? String(detail?.agentClientNumber ?? '')],
+    ['Applicant type', 'Agent'],
+    ['Contact location', summaryForm?.agentClientLocationCode ?? ''],
+    ['Contact name', summaryForm?.agentContactName ?? ''],
+  ]
+  const agentClientSummaryContent =
+    summaryForm?.applicantTypeCode === 'A' || agentClientData || isLoadingAgentClientData ? (
+      <ClientDataSummary
+        title="Agent client details"
+        clientData={agentClientData}
+        isLoading={isLoadingAgentClientData}
+        detailFields={agentClientDetailFields}
+      />
+    ) : null
+
+  const applicationPermitsContent = detail ? (
+    <Tile id="application-permits" className="application-detail-section">
+      <h2 className="detail-tile-title">Permits</h2>
+      <Table useZebraStyles>
+        <TableHead>
+          <TableRow>
+            <TableHeader>Permit</TableHeader>
+            <TableHeader>Status</TableHeader>
+            <TableHeader>Open</TableHeader>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {permitRows.map((item) => (
+            <TableRow key={item.permitNumber}>
+              <TableCell>{item.permitNumber}</TableCell>
+              <TableCell>{item.permitStatusDescription || '-'}</TableCell>
+              <TableCell>
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  disabled={!canPerform('/permitDetails')}
+                  onClick={() =>
+                    navigate(withCurrentSearch(`/provincial/permit/${item.permitNumber}`))
+                  }
+                >
+                  Open
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+          {permitRows.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={3}>No permits found for this application.</TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </Tile>
+  ) : null
+
+  const applicationOffersContent = detail ? (
+    <Tile id="application-offers" className="application-detail-section">
+      <h2 className="detail-tile-title">Offers</h2>
+      <TextInput
+        id="applicationDetailOfferFilter"
+        labelText="Filter offers"
+        value={offerFilter}
+        onChange={(event) => updateFilterParam('offerFilter', event.target.value)}
+        placeholder="Filter by company, offer number, received date, validity, or withdrawal date"
+      />
+      <Table useZebraStyles>
+        <TableHead>
+          <TableRow>
+            <TableHeader>Offer</TableHeader>
+            <TableHeader>Company</TableHeader>
+            <TableHeader>Date Received</TableHeader>
+            <TableHeader>Valid</TableHeader>
+            <TableHeader>Withdrawal Date</TableHeader>
+            <TableHeader>Open</TableHeader>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {filteredOffers.map((item) => (
+            <TableRow key={item.offerNumber}>
+              <TableCell>{item.offerNumber}</TableCell>
+              <TableCell>{item.companyName ?? '-'}</TableCell>
+              <TableCell>{item.receivedDate ?? '-'}</TableCell>
+              <TableCell>{item.validOffer ? 'Yes' : 'No'}</TableCell>
+              <TableCell>{item.withdrawalDate ?? '-'}</TableCell>
+              <TableCell>
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  disabled={!canPerform('/offersSearch') || !canPerform('/offerDetails')}
+                  onClick={() =>
+                    navigate(withCurrentSearch(`/provincial/offers/${item.offerNumber}`))
+                  }
+                >
+                  Open
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+          {filteredOffers.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={6}>No offer rows matched the current filter.</TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </Tile>
+  ) : null
+
+  const applicationReviewContent = detail ? (
+    canReviewApplication ? (
+      <Tile
+        id="application-review"
+        className="application-detail-section application-detail-review"
+      >
+        <h2 className="detail-tile-title">Application review</h2>
+        <div className="legacy-search-grid">
+          <SearchableSelect
+            id="applicationDetailReviewStatus"
+            labelText="Application status"
+            value={reviewStatusCode}
+            placeholder="Select status"
+            options={reviewStatusOptions}
+            invalid={isReviewStatusInvalid}
+            invalidText={reviewValidationMessage}
+            onChange={(value) => {
+              setReviewStatusCode(value)
+              setReviewValidationMessage('')
+            }}
+          />
+          <TextInput
+            id="applicationDetailReviewEmail"
+            labelText="Client email address"
+            value={reviewStatusEmailAddress}
+            invalid={isReviewEmailInvalid}
+            invalidText={reviewValidationMessage}
+            onChange={(event) => {
+              setReviewStatusEmailAddress(event.target.value)
+              setReviewValidationMessage('')
+            }}
+          />
+        </div>
+        <div className="legacy-search-grid">
+          <TextArea
+            id="applicationDetailReviewRemark"
+            labelText="Review remark"
+            maxCount={250}
+            invalid={isReviewRemarkInvalid}
+            invalidText={reviewValidationMessage}
+            value={reviewStatusRemark}
+            onChange={(event) => {
+              setReviewStatusRemark(event.target.value.slice(0, 250))
+              setReviewValidationMessage('')
+            }}
+          />
+        </div>
+        {showReviewValidationNotification && (
+          <AppNotification
+            kind="error"
+            title="Review validation"
+            subtitle={reviewValidationMessage}
+            lowContrast
+            onCloseButtonClick={() => setReviewValidationMessage('')}
           />
         )}
-      </div>
-    ) : null
+        <div className="legacy-search-actions">
+          <Button
+            kind="primary"
+            size="sm"
+            disabled={isSubmittingReviewAction}
+            onClick={() => void onApproveApplication()}
+          >
+            Approve Application
+          </Button>
+          <Button
+            kind="secondary"
+            size="sm"
+            disabled={isSubmittingReviewAction}
+            onClick={() => void onUpdateReviewStatus(false)}
+          >
+            Update Review Status
+          </Button>
+          <Button
+            kind="tertiary"
+            size="sm"
+            disabled={isSubmittingReviewAction || !canSendReviewStatusEmail}
+            onClick={() => void onUpdateReviewStatus(true)}
+          >
+            Update Status and Send Email
+          </Button>
+        </div>
+      </Tile>
+    ) : (
+      <Tile
+        id="application-review"
+        className="application-detail-section application-detail-review"
+      >
+        <h2 className="detail-tile-title">Application review</h2>
+        <p className="detail-empty-message">
+          Review actions are not available for this application.
+        </p>
+      </Tile>
+    )
+  ) : null
 
   return (
     <Grid fullWidth className="default-grid provincial-application-detail">
@@ -2274,15 +2490,50 @@ const ProvincialApplicationDetailsPage = () => {
                 size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
-                <Tab>Summary</Tab>
-                <Tab>Clients</Tab>
-                <Tab>Packages / Scales</Tab>
-                <Tab>Permits</Tab>
-                <Tab>Offers</Tab>
+                <Tab>Owner</Tab>
+                <Tab>Agent</Tab>
+                <Tab>Application</Tab>
+                <Tab>Items</Tab>
                 <Tab>Documents</Tab>
                 <Tab>Remarks</Tab>
+                <Tab>Offers</Tab>
+                <Tab>Review</Tab>
               </TabList>
               <TabPanels>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile
+                        id="application-owner-details"
+                        className="application-detail-section application-detail-clients"
+                      >
+                        <h2 className="detail-tile-title">Owner</h2>
+                        {ownerClientSummaryContent ?? (
+                          <p className="detail-empty-message">
+                            No owner client lookup details are available for this application.
+                          </p>
+                        )}
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile
+                        id="application-agent-details"
+                        className="application-detail-section application-detail-clients"
+                      >
+                        <h2 className="detail-tile-title">Agent</h2>
+                        {agentClientSummaryContent ?? (
+                          <p className="detail-empty-message">
+                            No agent is assigned to this application.
+                          </p>
+                        )}
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
@@ -2828,107 +3079,8 @@ const ProvincialApplicationDetailsPage = () => {
                       </Tile>
                     </Column>
 
-                    {canReviewApplication && (
-                      <Column sm={4} md={8} lg={16}>
-                        <Tile
-                          id="application-review"
-                          className="application-detail-section application-detail-review"
-                        >
-                          <h2 className="detail-tile-title">Application review</h2>
-                          <div className="legacy-search-grid">
-                            <SearchableSelect
-                              id="applicationDetailReviewStatus"
-                              labelText="Application status"
-                              value={reviewStatusCode}
-                              placeholder="Select status"
-                              options={reviewStatusOptions}
-                              invalid={isReviewStatusInvalid}
-                              invalidText={reviewValidationMessage}
-                              onChange={(value) => {
-                                setReviewStatusCode(value)
-                                setReviewValidationMessage('')
-                              }}
-                            />
-                            <TextInput
-                              id="applicationDetailReviewEmail"
-                              labelText="Client email address"
-                              value={reviewStatusEmailAddress}
-                              invalid={isReviewEmailInvalid}
-                              invalidText={reviewValidationMessage}
-                              onChange={(event) => {
-                                setReviewStatusEmailAddress(event.target.value)
-                                setReviewValidationMessage('')
-                              }}
-                            />
-                          </div>
-                          <div className="legacy-search-grid">
-                            <TextArea
-                              id="applicationDetailReviewRemark"
-                              labelText="Review remark"
-                              maxCount={250}
-                              invalid={isReviewRemarkInvalid}
-                              invalidText={reviewValidationMessage}
-                              value={reviewStatusRemark}
-                              onChange={(event) => {
-                                setReviewStatusRemark(event.target.value.slice(0, 250))
-                                setReviewValidationMessage('')
-                              }}
-                            />
-                          </div>
-                          {showReviewValidationNotification && (
-                            <AppNotification
-                              kind="error"
-                              title="Review validation"
-                              subtitle={reviewValidationMessage}
-                              lowContrast
-                              onCloseButtonClick={() => setReviewValidationMessage('')}
-                            />
-                          )}
-                          <div className="legacy-search-actions">
-                            <Button
-                              kind="primary"
-                              size="sm"
-                              disabled={isSubmittingReviewAction}
-                              onClick={() => void onApproveApplication()}
-                            >
-                              Approve Application
-                            </Button>
-                            <Button
-                              kind="secondary"
-                              size="sm"
-                              disabled={isSubmittingReviewAction}
-                              onClick={() => void onUpdateReviewStatus(false)}
-                            >
-                              Update Review Status
-                            </Button>
-                            <Button
-                              kind="tertiary"
-                              size="sm"
-                              disabled={isSubmittingReviewAction || !canSendReviewStatusEmail}
-                              onClick={() => void onUpdateReviewStatus(true)}
-                            >
-                              Update Status and Send Email
-                            </Button>
-                          </div>
-                        </Tile>
-                      </Column>
-                    )}
-                  </Grid>
-                </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <Tile
-                        id="application-client-details"
-                        className="application-detail-section application-detail-clients"
-                      >
-                        <h2 className="detail-tile-title">Client details</h2>
-                        {clientSummaryContent ?? (
-                          <p className="detail-empty-message">
-                            No client lookup details are available for this application.
-                          </p>
-                        )}
-                      </Tile>
+                      {applicationPermitsContent}
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -2997,117 +3149,6 @@ const ProvincialApplicationDetailsPage = () => {
                         focusedPackageNumber={focusedPackageNumber}
                         focusedPackageRequestId={focusedPackageRequestId}
                       />
-                    </Column>
-                  </Grid>
-                </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile id="application-permits" className="application-detail-section">
-                        <h2 className="detail-tile-title">Permits</h2>
-                        <Table useZebraStyles>
-                          <TableHead>
-                            <TableRow>
-                              <TableHeader>Permit</TableHeader>
-                              <TableHeader>Status</TableHeader>
-                              <TableHeader>Open</TableHeader>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {permitRows.map((item) => (
-                              <TableRow key={item.permitNumber}>
-                                <TableCell>{item.permitNumber}</TableCell>
-                                <TableCell>{item.permitStatusDescription || '-'}</TableCell>
-                                <TableCell>
-                                  <Button
-                                    kind="ghost"
-                                    size="sm"
-                                    disabled={!canPerform('/permitDetails')}
-                                    onClick={() =>
-                                      navigate(
-                                        withCurrentSearch(
-                                          `/provincial/permit/${item.permitNumber}`,
-                                        ),
-                                      )
-                                    }
-                                  >
-                                    Open
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                            {permitRows.length === 0 && (
-                              <TableRow>
-                                <TableCell colSpan={3}>
-                                  No permits found for this application.
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </Tile>
-                    </Column>
-                  </Grid>
-                </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile id="application-offers" className="application-detail-section">
-                        <h2 className="detail-tile-title">Offers</h2>
-                        <TextInput
-                          id="applicationDetailOfferFilter"
-                          labelText="Filter offers"
-                          value={offerFilter}
-                          onChange={(event) => updateFilterParam('offerFilter', event.target.value)}
-                          placeholder="Filter by company, offer number, received date, validity, or withdrawal date"
-                        />
-                        <Table useZebraStyles>
-                          <TableHead>
-                            <TableRow>
-                              <TableHeader>Offer</TableHeader>
-                              <TableHeader>Company</TableHeader>
-                              <TableHeader>Date Received</TableHeader>
-                              <TableHeader>Valid</TableHeader>
-                              <TableHeader>Withdrawal Date</TableHeader>
-                              <TableHeader>Open</TableHeader>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {filteredOffers.map((item) => (
-                              <TableRow key={item.offerNumber}>
-                                <TableCell>{item.offerNumber}</TableCell>
-                                <TableCell>{item.companyName ?? '-'}</TableCell>
-                                <TableCell>{item.receivedDate ?? '-'}</TableCell>
-                                <TableCell>{item.validOffer ? 'Yes' : 'No'}</TableCell>
-                                <TableCell>{item.withdrawalDate ?? '-'}</TableCell>
-                                <TableCell>
-                                  <Button
-                                    kind="ghost"
-                                    size="sm"
-                                    disabled={
-                                      !canPerform('/offersSearch') || !canPerform('/offerDetails')
-                                    }
-                                    onClick={() =>
-                                      navigate(
-                                        withCurrentSearch(`/provincial/offers/${item.offerNumber}`),
-                                      )
-                                    }
-                                  >
-                                    Open
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                            {filteredOffers.length === 0 && (
-                              <TableRow>
-                                <TableCell colSpan={6}>
-                                  No offer rows matched the current filter.
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </Tile>
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -3314,6 +3355,20 @@ const ProvincialApplicationDetailsPage = () => {
                           </TableBody>
                         </Table>
                       </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      {applicationOffersContent}
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      {applicationReviewContent}
                     </Column>
                   </Grid>
                 </TabPanel>

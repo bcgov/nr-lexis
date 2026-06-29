@@ -47,11 +47,6 @@ type NavigationSection = {
   links: NavigationLink[]
 }
 
-type BreadcrumbRoute = {
-  path: string
-  section: string
-}
-
 const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
     label: 'Provincial',
@@ -205,38 +200,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
   },
 ]
 
-const BREADCRUMB_ROUTES: BreadcrumbRoute[] = [
-  { path: '/provincial/review', section: 'Provincial' },
-  { path: '/provincial/application/create', section: 'Provincial' },
-  { path: '/provincial/application/upload', section: 'Provincial' },
-  { path: '/provincial/application', section: 'Provincial' },
-  { path: '/provincial/exemption/create', section: 'Provincial' },
-  { path: '/provincial/exemption', section: 'Provincial' },
-  { path: '/provincial/offers/create', section: 'Provincial' },
-  { path: '/provincial/offers', section: 'Provincial' },
-  { path: '/provincial/permit', section: 'Provincial' },
-  { path: '/provincial', section: 'Provincial' },
-  { path: '/federal/application/upload', section: 'Federal' },
-  { path: '/federal', section: 'Federal' },
-  { path: '/reports', section: 'Reports' },
-  { path: '/admin/policies/fee', section: 'Admin' },
-  { path: '/admin/policies/fil', section: 'Admin' },
-  { path: '/admin/schedules', section: 'Admin' },
-  { path: '/admin/uploads', section: 'Admin' },
-  { path: '/admin/policies', section: 'Admin' },
-  { path: '/admin', section: 'Admin' },
-  { path: '/admin/rtm/emslogamv', section: 'Admin' },
-  { path: '/unauthorized', section: 'LEXIS' },
-]
-
-const getBreadcrumbRoute = (pathname: string): BreadcrumbRoute => {
-  const matchedRoute = BREADCRUMB_ROUTES.find((route) => {
-    return pathname === route.path || pathname.startsWith(`${route.path}/`)
-  })
-
-  return matchedRoute ?? { path: pathname, section: 'LEXIS' }
-}
-
 const getProfileInitials = (principal: string | null): string => {
   if (!principal) {
     return 'LX'
@@ -280,7 +243,6 @@ function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { capabilities, canPerform, defaultRoute, logout } = useAuth()
-  const breadcrumbRoute = getBreadcrumbRoute(location.pathname)
   const [isDarkTheme, setIsDarkTheme] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isSideNavCollapsed, setIsSideNavCollapsed] = useState(false)
@@ -477,11 +439,6 @@ function Layout({ children }: LayoutProps) {
         </nav>
 
         <main id="main-content" className="cds--content app-main">
-          <header className="page-header">
-            <p className="page-header__eyebrow" aria-label="Current section">
-              {breadcrumbRoute.section}
-            </p>
-          </header>
           {children}
         </main>
       </div>

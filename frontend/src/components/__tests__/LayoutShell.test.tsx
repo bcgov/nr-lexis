@@ -44,7 +44,7 @@ describe('Layout shell', () => {
     const uploadsLink = screen.getByRole('link', { name: /^Uploads$/i })
     const activeLinks = document.querySelectorAll('.csp-side-nav__link.cds--side-nav__link--active')
 
-    expect(document.querySelector('.page-header__eyebrow')).toHaveTextContent('Admin')
+    expect(document.querySelector('.page-header__eyebrow')).not.toBeInTheDocument()
     expect(activeLinks).toHaveLength(1)
     expect(uploadsLink).toHaveClass('cds--side-nav__link--active')
     expect(uploadsLink).toHaveAttribute('aria-current', 'page')
@@ -230,7 +230,7 @@ describe('Layout shell', () => {
 
     renderLayout('/federal/application/upload')
 
-    expect(document.querySelector('.page-header__eyebrow')).toHaveTextContent('Federal')
+    expect(document.querySelector('.page-header__eyebrow')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /^Search$/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /^Upload$/i })).toHaveAttribute(
       'href',
