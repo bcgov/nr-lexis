@@ -61,6 +61,13 @@ const mockedOpenExemptionDocument = vi.mocked(openExemptionDocument)
 const mockedRemoveExemptionDocument = vi.mocked(removeExemptionDocument)
 const mockedRunReport = vi.mocked(runReport)
 
+const selectDetailTab = async (name: string) => {
+  const tab = await screen.findByRole('tab', { name })
+  if (tab.getAttribute('aria-selected') !== 'true') {
+    await userEvent.click(tab)
+  }
+}
+
 const exemptionDetail: ProvincialExemptionDetail = {
   exemptionNumber: 'EX-777',
   exemptionTypeCode: 'TYPE1',
@@ -164,11 +171,16 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    for (const tabName of ['Summary', 'Permits', 'Documents', 'Remarks']) {
+      expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
+    }
     const uploadButton = await screen.findByRole('button', { name: 'Upload Exemption Document' })
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    await waitFor(() => {
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    })
     expect(await screen.findByText('Upload exemption documents')).toBeInTheDocument()
   })
 
@@ -197,6 +209,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -240,6 +253,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -287,6 +301,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const uploadButton = await screen.findByRole('button', { name: 'Upload Exemption Document' })
     expect(uploadButton).toBeDisabled()
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('locked-exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -341,11 +356,16 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    for (const tabName of ['Summary', 'Packages', 'Offers', 'Documents', 'Remarks']) {
+      expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
+    }
     const uploadButton = await screen.findByRole('button', { name: 'Upload Application Document' })
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    await waitFor(() => {
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    })
     expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
   })
 
@@ -371,6 +391,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -411,6 +432,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -455,6 +477,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const uploadButton = await screen.findByRole('button', { name: 'Upload Application Document' })
     expect(uploadButton).toBeDisabled()
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('locked-federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
