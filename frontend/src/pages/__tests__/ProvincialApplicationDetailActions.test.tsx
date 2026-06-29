@@ -264,6 +264,14 @@ const getSummaryComboBox = (
     .getAllByLabelText(labelText)
     .find((element: HTMLElement) => element.getAttribute('role') === 'combobox') as HTMLElement
 
+const selectApplicationDetailTab = async (name: string): Promise<void> => {
+  const tab = await screen.findByRole('tab', { name })
+
+  if (tab.getAttribute('aria-selected') !== 'true') {
+    await userEvent.click(tab)
+  }
+}
+
 describe('Provincial Application Detail Document Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -578,6 +586,8 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Offers')
+
     expect(await screen.findByText('Example Lumber')).toBeInTheDocument()
     expect(screen.getByText('2026-04-05')).toBeInTheDocument()
     expect(screen.getByText('OFF-77')).toBeInTheDocument()
@@ -604,6 +614,7 @@ describe('Provincial Application Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedFetchApplicationPermits).toHaveBeenCalledWith('321')
     })
+    await selectApplicationDetailTab('Permits')
     const permitRow = (await screen.findByText('900101')).closest('tr')
     expect(permitRow).toBeTruthy()
     expect(within(permitRow as HTMLElement).getByText('Complete')).toBeInTheDocument()
@@ -693,6 +704,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ),
     ).toBeInTheDocument()
 
+    await selectApplicationDetailTab('Documents')
     const [uploadButton] = screen.getAllByRole('button', {
       name: 'Upload Application Document',
     })
@@ -722,6 +734,7 @@ describe('Provincial Application Detail Document Actions', () => {
     const summaryTile = getApplicationSummaryTile()
     expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
 
+    await selectApplicationDetailTab('Packages / Scales')
     expect(await screen.findByText('Package Details')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
@@ -774,15 +787,19 @@ describe('Provincial Application Detail Document Actions', () => {
 
     const summaryTile = getApplicationSummaryTile()
     expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
+
+    await selectApplicationDetailTab('Packages / Scales')
     expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+    await selectApplicationDetailTab('Documents')
     expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
     expect(await screen.findByText('locked-doc.pdf')).toBeInTheDocument()
     screen
       .getAllByRole('button', { name: 'Delete' })
       .forEach((button) => expect(button).toBeDisabled())
+    await selectApplicationDetailTab('Remarks')
     expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
   })
@@ -816,7 +833,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Documents')).toBeInTheDocument()
+    await selectApplicationDetailTab('Documents')
     const file = new File(['test'], 'uploaded-doc.pdf', { type: 'application/pdf' })
 
     await userEvent.type(screen.getByLabelText('Document description'), 'Uploaded')
@@ -923,6 +940,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('app-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -966,6 +984,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('app-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -1021,6 +1040,7 @@ describe('Provincial Application Detail Document Actions', () => {
       ),
     ).toBeInTheDocument()
 
+    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('expired-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -1089,6 +1109,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('old-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -1136,6 +1157,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     expect(await screen.findByText('Package Details')).toBeInTheDocument()
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
@@ -1197,6 +1219,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     expect(await screen.findByRole('button', { name: 'Create Package' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Create Package' }))
 
@@ -1216,6 +1239,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -1245,6 +1269,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -1278,6 +1303,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -1314,6 +1340,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -1399,6 +1426,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: 'Package Details' })
     ).closest('section')
@@ -1445,6 +1473,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: 'Package Details' })
     ).closest('section')
@@ -1537,6 +1566,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
     })
@@ -1605,6 +1635,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     const timberMarksSection = (
       await screen.findByRole('heading', { name: 'Timber Marks' })
     ).closest('div')
@@ -1627,6 +1658,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     const detailFetchCountAfterInitialLoad =
       mockedFetchProvincialApplicationDetail.mock.calls.length
@@ -1680,6 +1712,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Scale ID or timber mark'), {
@@ -1711,6 +1744,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
 
@@ -1734,6 +1768,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
     await chooseComboBoxOption(
@@ -1762,6 +1797,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Packages / Scales')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
     await chooseComboBoxOption(
@@ -1800,6 +1836,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Remarks')
     expect(await screen.findByLabelText('New Remark')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('New Remark'), {
       target: { value: 'New application note' },
@@ -1831,8 +1868,8 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Remarks')).toBeInTheDocument()
-    const remarksTile = screen.getByText('Remarks').closest('.cds--tile')
+    await selectApplicationDetailTab('Remarks')
+    const remarksTile = screen.getByRole('heading', { name: 'Remarks' }).closest('.cds--tile')
     expect(remarksTile).toBeTruthy()
 
     const remarksControls = within(remarksTile as HTMLElement)
@@ -1863,6 +1900,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Remarks')
     const remarkRow = (await screen.findByText('ok')).closest('tr')
     expect(remarkRow).toBeTruthy()
     expect(within(remarkRow as HTMLElement).getByText('2026-01-04')).toBeInTheDocument()
@@ -2670,6 +2708,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Remarks')
     expect(await screen.findByLabelText('New Remark')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
 
@@ -2705,6 +2744,7 @@ describe('Provincial Application Detail Document Actions', () => {
     const uploadButton = await screen.findByRole('button', { name: 'Upload Application Document' })
     expect(uploadButton).toBeDisabled()
 
+    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('locked-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -2743,6 +2783,7 @@ describe('Provincial Application Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('unknown-status-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
