@@ -47,6 +47,12 @@ import {
   getPageDataCache,
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
+import {
+  buildSearchTotalCacheKey,
+  getCachedSearchTotal,
+  setCachedSearchTotal,
+  type SearchTotalCache,
+} from '@/pages/shared/search-total-cache'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -82,30 +88,9 @@ const SORT_COLUMNS: {
 
 const DEFAULT_SORT_FIELD: ProvincialPermitSearchSortField = 'permitNumber'
 const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
-const PERMIT_TOTAL_CACHE_TTL_MS = 60_000
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialPermitSearchSortField[]
-
-type PermitTotalCacheEntry = {
-  total: number
-  expiresAt: number
-}
-
-const trimFilterValue = (value: string): string => value.trim()
-
-const buildPermitTotalCacheKey = (filters: ProvincialPermitSearchFilters): string =>
-  JSON.stringify({
-    applicationNumber: trimFilterValue(filters.applicationNumber),
-    packageNumber: trimFilterValue(filters.packageNumber),
-    region: filters.region.map(trimFilterValue).filter(Boolean).sort(),
-    issuedFromDate: trimFilterValue(filters.issuedFromDate),
-    issuedToDate: trimFilterValue(filters.issuedToDate),
-    permitStatus: trimFilterValue(filters.permitStatus),
-    permitNumber: trimFilterValue(filters.permitNumber),
-    ownerClientNumber: trimFilterValue(filters.ownerClientNumber),
-    applicantClientNumber: trimFilterValue(filters.applicantClientNumber),
-  })
 
 const buildSearchParams = (
   filters: ProvincialPermitSearchFilters,
@@ -138,7 +123,7 @@ const ProvincialPermitPage = () => {
   const [results, setResults] = useState<ProvincialPermitSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const permitTotalCacheRef = useRef<Map<string, PermitTotalCacheEntry>>(new Map())
+  const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
@@ -223,10 +208,11 @@ const ProvincialPermitPage = () => {
       if (!options.force) {
         const cachedResults = getPageDataCache<ProvincialPermitSearchResponse>(pageCacheKey)
         if (cachedResults) {
-          permitTotalCacheRef.current.set(buildPermitTotalCacheKey(request.filters), {
-            total: cachedResults.page.totalElements,
-            expiresAt: Date.now() + PERMIT_TOTAL_CACHE_TTL_MS,
-          })
+          setCachedSearchTotal(
+            totalCacheRef.current,
+            buildSearchTotalCacheKey(request.filters),
+            cachedResults.page.totalElements,
+          )
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -242,23 +228,15 @@ const ProvincialPermitPage = () => {
       setLoading(true)
       setErrorMessage('')
       try {
-        const cacheKey = buildPermitTotalCacheKey(request.filters)
-        const cachedEntry = permitTotalCacheRef.current.get(cacheKey)
-        const cachedTotal =
-          cachedEntry && cachedEntry.expiresAt > Date.now() ? cachedEntry.total : undefined
-        if (cachedEntry && cachedTotal === undefined) {
-          permitTotalCacheRef.current.delete(cacheKey)
-        }
+        const cacheKey = buildSearchTotalCacheKey(request.filters)
+        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, cacheKey)
 
         const response =
           cachedTotal === undefined
             ? await searchProvincialPermits(request)
             : await searchProvincialPermits(request, { knownTotal: cachedTotal })
         if (isLatestRequest()) {
-          permitTotalCacheRef.current.set(cacheKey, {
-            total: response.page.totalElements,
-            expiresAt: Date.now() + PERMIT_TOTAL_CACHE_TTL_MS,
-          })
+          setCachedSearchTotal(totalCacheRef.current, cacheKey, response.page.totalElements)
           setPageDataCache(pageCacheKey, response)
           setResults(response)
         }
@@ -323,26 +301,40 @@ const ProvincialPermitPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid provincial-permit-search-page">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial permit search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--filters">
+        <section className="legacy-search-section legacy-search-section--filters provincial-permit-search-filters">
           <Tile>
-            <div className="legacy-search-grid">
+            <div className="legacy-search-grid provincial-permit-search-grid">
               <TextInput
                 id="applicationNumber"
                 labelText="Application number"
                 value={filters.applicationNumber}
                 onChange={(event) => updateFilter('applicationNumber', event.target.value)}
               />
+              <SearchableSelect
+                id="permitStatus"
+                labelText="Permit status"
+                value={filters.permitStatus}
+                placeholder="All statuses"
+                options={permitStatusOptions}
+                onChange={(value) => updateFilter('permitStatus', value)}
+              />
               <TextInput
                 id="packageNumber"
                 labelText="Package number"
                 value={filters.packageNumber}
                 onChange={(event) => updateFilter('packageNumber', event.target.value)}
+              />
+              <TextInput
+                id="permitNumber"
+                labelText="Permit number"
+                value={filters.permitNumber}
+                onChange={(event) => updateFilter('permitNumber', event.target.value)}
               />
               <FilterableMultiSelect
                 id="region"
@@ -360,36 +352,6 @@ const ProvincialPermitPage = () => {
                   )
                 }}
               />
-              <IsoDatePicker
-                id="issuedFromDate"
-                labelText="Issued from date (YYYY-MM-DD)"
-                value={filters.issuedFromDate}
-                invalid={!isValidIsoDate(filters.issuedFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('issuedFromDate', value)}
-              />
-              <IsoDatePicker
-                id="issuedToDate"
-                labelText="Issued to date (YYYY-MM-DD)"
-                value={filters.issuedToDate}
-                invalid={!isValidIsoDate(filters.issuedToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('issuedToDate', value)}
-              />
-              <SearchableSelect
-                id="permitStatus"
-                labelText="Permit status"
-                value={filters.permitStatus}
-                placeholder="All statuses"
-                options={permitStatusOptions}
-                onChange={(value) => updateFilter('permitStatus', value)}
-              />
-              <TextInput
-                id="permitNumber"
-                labelText="Permit number"
-                value={filters.permitNumber}
-                onChange={(event) => updateFilter('permitNumber', event.target.value)}
-              />
               <TextInput
                 id="applicantClientNumber"
                 labelText="Applicant client number"
@@ -401,6 +363,22 @@ const ProvincialPermitPage = () => {
                 labelText="Owner client number"
                 value={filters.ownerClientNumber}
                 onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+              />
+              <IsoDatePicker
+                id="issuedFromDate"
+                labelText="Issued from date"
+                value={filters.issuedFromDate}
+                invalid={!isValidIsoDate(filters.issuedFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('issuedFromDate', value)}
+              />
+              <IsoDatePicker
+                id="issuedToDate"
+                labelText="Issued to date"
+                value={filters.issuedToDate}
+                invalid={!isValidIsoDate(filters.issuedToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('issuedToDate', value)}
               />
             </div>
             <div className="legacy-search-actions">
