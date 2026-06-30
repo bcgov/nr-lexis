@@ -253,6 +253,7 @@ body {
 .csp-theme-switch:focus-visible,
 .csp-header-action:focus-visible,
 .csp-side-nav__toggle:focus-visible,
+.csp-side-nav__section-toggle:focus-visible,
 .csp-side-nav__link:focus-visible,
 .profile-panel__close:focus-visible,
 .profile-panel__signout:focus-visible {
@@ -261,6 +262,7 @@ body {
 }
 
 .csp-side-nav__toggle:focus-visible,
+.csp-side-nav__section-toggle:focus-visible,
 .csp-side-nav__link:focus-visible,
 .profile-panel__close:focus-visible,
 .profile-panel__signout:focus-visible {
@@ -437,6 +439,50 @@ body {
     opacity 0.22s cubic-bezier(0.2, 0, 0.38, 0.9),
     padding 0.22s cubic-bezier(0.2, 0, 0.38, 0.9);
   white-space: nowrap;
+}
+
+.csp-side-nav__section-toggle {
+  align-items: center;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.csp-side-nav__section-toggle:hover {
+  background-color: var(--csp-layer-hover);
+}
+
+.csp-side-nav__category-text {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.csp-side-nav__section-chevron {
+  align-items: center;
+  color: var(--csp-interactive);
+  display: flex;
+  flex: 0 0 14px;
+  height: 14px;
+  justify-content: center;
+  margin-left: 8px;
+  transition: transform 0.12s ease;
+  width: 14px;
+}
+
+.csp-side-nav__section-toggle[aria-expanded='false'] .csp-side-nav__section-chevron {
+  transform: rotate(-90deg);
+}
+
+.csp-side-nav__section-chevron svg {
+  display: block;
+  fill: currentcolor;
+  height: 14px;
+  width: 14px;
 }
 
 .csp-side-nav__link {

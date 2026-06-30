@@ -238,6 +238,37 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /^Upload$/i })).not.toBeInTheDocument()
   })
 
+  it('supports collapsing and expanding side-nav sections', async () => {
+    renderLayout('/admin/uploads')
+
+    expect(screen.getByRole('link', { name: /Applications Report/i })).toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
+
+    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^Uploads$/i })).toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
+
+    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: /Applications Report/i })).toBeVisible()
+  })
+
+  it('keeps section links available as icons when the full side nav is collapsed', async () => {
+    renderLayout('/admin/uploads')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
+    expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse side navigation' }))
+
+    expect(screen.getByRole('link', { name: /Applications Report/i })).toBeVisible()
+  })
+
   it('defaults the side nav open and supports collapsing it', async () => {
     renderLayout('/admin/uploads')
 

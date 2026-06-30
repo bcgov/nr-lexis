@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   AsleepFilled,
   Calendar,
+  ChevronDown,
   Certificate,
   ChevronLeft,
   Close,
@@ -251,6 +252,10 @@ const getProfileInitials = (principal: string | null): string => {
   return (initials || principal.slice(0, 2)).toUpperCase()
 }
 
+const getSectionListId = (sectionLabel: string): string => {
+  return `side-navigation-section-${sectionLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+}
+
 const canShowRoleScopedLink = (
   link: NavigationLink,
   roles: string[] | null | undefined,
@@ -278,31 +283,41 @@ function Layout({ children }: LayoutProps) {
   const [isDarkTheme, setIsDarkTheme] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isSideNavCollapsed, setIsSideNavCollapsed] = useState(false)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
     [capabilities.principal],
   )
 
-  const canShowLink = (link: NavigationLink): boolean => {
-    if (!canShowRoleScopedLink(link, capabilities.roles)) {
-      return false
+  const visibleNavigationSections = useMemo(() => {
+    const canShowLink = (link: NavigationLink): boolean => {
+      if (!canShowRoleScopedLink(link, capabilities.roles)) {
+        return false
+      }
+
+      if (!link.requiredActions || link.requiredActions.length === 0) {
+        return true
+      }
+
+      if (link.requiredActionsMatch === 'all') {
+        return link.requiredActions.every((action) => canPerform(action))
+      }
+
+      return link.requiredActions.some((action) => canPerform(action))
     }
 
-    if (!link.requiredActions || link.requiredActions.length === 0) {
-      return true
-    }
+    return NAVIGATION_SECTIONS.map((section) => ({
+      ...section,
+      links: section.links.filter(canShowLink),
+    })).filter((section) => section.links.length > 0)
+  }, [canPerform, capabilities.roles])
 
-    if (link.requiredActionsMatch === 'all') {
-      return link.requiredActions.every((action) => canPerform(action))
-    }
-
-    return link.requiredActions.some((action) => canPerform(action))
+  const toggleSection = (sectionLabel: string): void => {
+    setCollapsedSections((current) => ({
+      ...current,
+      [sectionLabel]: !current[sectionLabel],
+    }))
   }
-
-  const visibleNavigationSections = NAVIGATION_SECTIONS.map((section) => ({
-    ...section,
-    links: section.links.filter(canShowLink),
-  })).filter((section) => section.links.length > 0)
 
   const handleLogout = () => {
     void logout()
@@ -322,6 +337,26 @@ function Layout({ children }: LayoutProps) {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isProfileOpen])
+
+  useEffect(() => {
+    const activeSection = visibleNavigationSections.find((section) =>
+      section.links.some((link) => link.to === location.pathname),
+    )
+
+    if (!activeSection) {
+      return
+    }
+
+    setCollapsedSections((current) => {
+      if (!current[activeSection.label]) {
+        return current
+      }
+
+      const next = { ...current }
+      delete next[activeSection.label]
+      return next
+    })
+  }, [location.pathname, visibleNavigationSections])
 
   return (
     <Theme theme={isDarkTheme ? 'g100' : 'white'}>
@@ -428,45 +463,70 @@ function Layout({ children }: LayoutProps) {
           </button>
 
           <ul id="side-navigation-list" className="cds--side-nav__items csp-side-nav__items">
-            {visibleNavigationSections.map((section) => (
-              <li key={section.label} className="csp-side-nav__section">
-                <span className="cds--side-nav__category csp-side-nav__category">
-                  {section.label}
-                </span>
-                <ul className="csp-side-nav__section-list">
-                  {section.links.map((link) => {
-                    const LinkIcon = link.icon
-                    return (
-                      <li key={link.to}>
-                        <NavLink
-                          end
-                          to={link.to}
-                          className={({ isActive }) =>
-                            isActive
-                              ? 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link cds--side-nav__link--active'
-                              : 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link'
-                          }
-                          aria-current={location.pathname === link.to ? 'page' : undefined}
-                          aria-label={isSideNavCollapsed ? link.label : undefined}
-                          title={isSideNavCollapsed ? link.label : undefined}
-                          data-label={link.label}
-                        >
-                          <span
-                            className="cds--side-nav__icon csp-side-nav__icon"
-                            aria-hidden="true"
-                          >
-                            <LinkIcon size={16} />
-                          </span>
-                          <span className="cds--side-nav__link-text csp-side-nav__link-text">
-                            {link.label}
-                          </span>
-                        </NavLink>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </li>
-            ))}
+            {visibleNavigationSections.map((section) => {
+              const sectionListId = getSectionListId(section.label)
+              const isSectionCollapsed =
+                Boolean(collapsedSections[section.label]) && !isSideNavCollapsed
+              return (
+                <li
+                  key={section.label}
+                  className={`csp-side-nav__section${isSectionCollapsed ? ' is-section-collapsed' : ''}`}
+                >
+                  {isSideNavCollapsed ? (
+                    <span className="cds--side-nav__category csp-side-nav__category">
+                      {section.label}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="cds--side-nav__category csp-side-nav__category csp-side-nav__section-toggle"
+                      aria-expanded={!isSectionCollapsed}
+                      aria-controls={sectionListId}
+                      onClick={() => toggleSection(section.label)}
+                    >
+                      <span className="csp-side-nav__category-text">{section.label}</span>
+                      <span className="csp-side-nav__section-chevron" aria-hidden="true">
+                        <ChevronDown size={14} />
+                      </span>
+                    </button>
+                  )}
+                  {!isSectionCollapsed && (
+                    <ul id={sectionListId} className="csp-side-nav__section-list">
+                      {section.links.map((link) => {
+                        const LinkIcon = link.icon
+                        return (
+                          <li key={link.to}>
+                            <NavLink
+                              end
+                              to={link.to}
+                              className={({ isActive }) =>
+                                isActive
+                                  ? 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link cds--side-nav__link--active'
+                                  : 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link'
+                              }
+                              aria-current={location.pathname === link.to ? 'page' : undefined}
+                              aria-label={isSideNavCollapsed ? link.label : undefined}
+                              title={isSideNavCollapsed ? link.label : undefined}
+                              data-label={link.label}
+                            >
+                              <span
+                                className="cds--side-nav__icon csp-side-nav__icon"
+                                aria-hidden="true"
+                              >
+                                <LinkIcon size={16} />
+                              </span>
+                              <span className="cds--side-nav__link-text csp-side-nav__link-text">
+                                {link.label}
+                              </span>
+                            </NavLink>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </nav>
 
