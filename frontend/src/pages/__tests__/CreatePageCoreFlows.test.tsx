@@ -242,7 +242,15 @@ describe('Create Page Core Flows', () => {
       expect(screen.getByRole('tab', { name: tabName })).toBeInTheDocument()
     }
 
-    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    await selectApplicationCreateTab('Documents')
+    expect(screen.getByText('Upload application documents')).toBeInTheDocument()
+    expect(screen.getByText('Save the application before uploading documents.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Back to Search' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+
+    const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -294,7 +302,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -350,7 +358,7 @@ describe('Create Page Core Flows', () => {
     )
     await userEvent.click(screen.getByRole('button', { name: 'Add Application species' }))
     expect(await screen.findByText('HE')).toBeInTheDocument()
-    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -384,7 +392,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -439,7 +447,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -447,34 +455,6 @@ describe('Create Page Core Flows', () => {
       0,
     )
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
-  })
-
-  it('saves incomplete provincial application drafts without submit validation', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/create']}>
-        <Routes>
-          <Route
-            path="/provincial/application/create"
-            element={<ProvincialApplicationCreatePage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Save Draft' }))
-
-    expect(await screen.findByText('Draft saved')).toBeInTheDocument()
-    expect(screen.queryByText('Owner client number is required.')).not.toBeInTheDocument()
-    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
-    const drafts = JSON.parse(
-      localStorage.getItem('lexis.create-drafts.provincial-application') ?? '[]',
-    )
-    expect(drafts).toHaveLength(1)
-    expect(drafts[0].payload).toMatchObject({
-      ownerClientNumber: '',
-      productLocation: '',
-      applicantTypeCode: 'O',
-    })
   })
 
   it('prefills new provincial applications with legacy defaults and next listing date', async () => {
@@ -545,7 +525,7 @@ describe('Create Page Core Flows', () => {
 
     const ownerNameInput = await screen.findByLabelText('Owner name (required)')
     await userEvent.type(ownerNameInput, 'Typed Owner')
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -570,7 +550,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -606,7 +586,7 @@ describe('Create Page Core Flows', () => {
     )
     await waitFor(() => expect(screen.getByPlaceholderText('No remaining species')).toBeDisabled())
 
-    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    const submitButton = await screen.findByRole('button', { name: 'Save' })
     await userEvent.click(submitButton)
 
     const speciesErrors = await screen.findAllByText(
@@ -632,7 +612,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const submitButton = await screen.findByRole('button', { name: 'Submit' })
+    const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -672,7 +652,11 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2026-12-31')
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
 
-    const submitButton = screen.getByRole('button', { name: 'Submit' })
+    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Back to Search' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    const submitButton = screen.getByRole('button', { name: 'Save' })
     expect(submitButton).toBeEnabled()
     await userEvent.click(submitButton)
 
@@ -710,7 +694,7 @@ describe('Create Page Core Flows', () => {
       'Section 1',
     )
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(screen.getAllByText('Exemption status is required.').length).toBeGreaterThan(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
@@ -739,7 +723,7 @@ describe('Create Page Core Flows', () => {
       'New',
     )
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '121212122')
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
       await screen.findAllByText('Approved volume must be 9999999.9 or less.'),

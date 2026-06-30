@@ -1,29 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { AppNotification } from '../../components/AppNotification'
 import SearchableSelect from '../../components/SearchableSelect'
-import CreateDraftHistory from '../shared/CreateDraftHistory'
 import {
   atMostOneDecimalFieldError,
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
   maxNumericValueFieldError,
-  mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
-import {
-  deleteCreateDraft,
-  listCreateDrafts,
-  saveCreateDraft,
-  type CreateDraftRecord,
-} from '@/service/create-draft-service'
 import {
   fetchProvincialExemptionOptions,
   type SearchOption,
@@ -49,8 +41,6 @@ type ExemptionCreatePrefillState = {
   ownerClientNumber: string
   applicantClientNumber: string
 }
-
-const MODULE_KEY = 'provincial-exemption'
 
 const INITIAL_FORM: ProvincialExemptionCreateForm = {
   applicationNumber: '',
@@ -188,14 +178,9 @@ const ProvincialExemptionCreatePage = () => {
     [location.state, searchParams],
   )
   const initialForm = useMemo(() => buildInitialForm(prefillState), [prefillState])
-  const [form, setForm] = useState<ProvincialExemptionCreateForm>(() =>
-    buildInitialForm(prefillState),
-  )
+  const [form, setForm] = useState<ProvincialExemptionCreateForm>(() => initialForm)
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
   const [exemptionStatuses, setExemptionStatuses] = useState<SearchOption[]>([])
-  const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
-    listCreateDrafts(MODULE_KEY),
-  )
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [showMissingRequiredOptions, setShowMissingRequiredOptions] = useState(true)
   const [showPrefillNotice, setShowPrefillNotice] = useState(true)
@@ -255,21 +240,13 @@ const ProvincialExemptionCreatePage = () => {
     (error): error is string => !!error,
   )
 
-  const onSaveDraft = () => {
-    setStatus(null)
-    const saved = saveCreateDraft(MODULE_KEY, form)
-    setDrafts(listCreateDrafts(MODULE_KEY))
-    setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft saved', message: `Draft ${saved.id} saved.` })
-  }
-
-  const onSubmit = async () => {
+  const onSave = async () => {
     if (hasValidationError) {
       setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
-        message: firstSubmitValidationError ?? 'Please fix validation errors before submitting.',
+        message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
       })
       return
     }
@@ -290,46 +267,29 @@ const ProvincialExemptionCreatePage = () => {
         }
         setStatus({
           kind: 'success',
-          title: 'Exemption Submitted',
-          message: 'Exemption submitted successfully.',
+          title: 'Exemption Saved',
+          message: 'Exemption saved successfully.',
         })
         return
       }
 
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
+        title: 'Save Failed',
         message:
-          'Exemption submission failed. Please review the form and try again. If the problem persists, contact support.',
+          'Exemption save failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } catch (error) {
       console.error(error)
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
+        title: 'Save Failed',
         message:
-          'Exemption submission failed. Please review the form and try again. If the problem persists, contact support.',
+          'Exemption save failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } finally {
       setIsSubmitting(false)
     }
-  }
-
-  const onUseDraft = (record: CreateDraftRecord<unknown>) => {
-    setForm(mergeCreateDraftPayload(record.payload, initialForm))
-    setTouchedFields({})
-    setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft loaded', message: `Draft ${record.id} loaded.` })
-  }
-
-  const onDeleteDraft = (draftId: string) => {
-    const wasDeleted = deleteCreateDraft(MODULE_KEY, draftId)
-    setDrafts(listCreateDrafts(MODULE_KEY))
-    setStatus({
-      kind: wasDeleted ? 'success' : 'error',
-      title: wasDeleted ? 'Draft deleted' : 'Draft delete failed',
-      message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
-    })
   }
 
   return (
@@ -359,7 +319,7 @@ const ProvincialExemptionCreatePage = () => {
           <AppNotification
             kind="warning"
             title="Required options unavailable"
-            subtitle="Exemption type values are unavailable. Submit remains disabled until a valid type is available."
+            subtitle="Exemption type values are unavailable. Save remains disabled until a valid type is available."
             lowContrast
             onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
           />
@@ -481,29 +441,16 @@ const ProvincialExemptionCreatePage = () => {
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="primary" onClick={onSaveDraft}>
-              Save Draft
-            </Button>
             <Button
               kind="primary"
-              onClick={() => void onSubmit()}
+              onClick={() => void onSave()}
               disabled={missingRequiredOptions || isSubmitting}
             >
-              Submit
+              Save
             </Button>
-            <Button
-              kind="secondary"
-              onClick={() => {
-                setForm(initialForm)
-                setTouchedFields({})
-                setShowAllValidationErrors(false)
-              }}
-            >
-              Reset
+            <Button kind="secondary" onClick={() => navigate('/provincial/exemption')}>
+              Cancel
             </Button>
-            <Link className="cds--link" to="/provincial/exemption">
-              Back to Search
-            </Link>
           </div>
           <div className="legacy-search-actions">
             <TextArea
@@ -516,19 +463,6 @@ const ProvincialExemptionCreatePage = () => {
             />
           </div>
         </Tile>
-      </Column>
-
-      <Column sm={4} md={8} lg={16}>
-        <CreateDraftHistory
-          title="Recent exemption drafts"
-          drafts={drafts}
-          onUseDraft={onUseDraft}
-          onDeleteDraft={onDeleteDraft}
-          summarize={(payload) => {
-            const value = payload as ProvincialExemptionCreateForm
-            return `new exemption / application ${value.applicationNumber || 'N/A'}`
-          }}
-        />
       </Column>
     </Grid>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -15,8 +15,8 @@ import {
   Tile,
 } from '@carbon/react'
 import SearchableSelect from '../../components/SearchableSelect'
-import CreateDraftHistory from '../shared/CreateDraftHistory'
 import { AppNotification } from '../../components/AppNotification'
+import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import {
   calculateApplicationTermDays,
   nonNegativeWholeNumberFieldError,
@@ -36,19 +36,12 @@ import {
   getVisibleFieldError,
   isoDateFieldError,
   maxNumericValueFieldError,
-  mergeCreateDraftPayload,
   positiveNumericFieldError,
   requiredFieldError,
   requiredMaxLengthFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
-import {
-  deleteCreateDraft,
-  listCreateDrafts,
-  saveCreateDraft,
-  type CreateDraftRecord,
-} from '@/service/create-draft-service'
 import {
   fetchProvincialApplicationOptions,
   type SearchOption,
@@ -97,7 +90,6 @@ type ProvincialApplicationCreateForm = {
 
 type ProvincialApplicationCreateField = keyof ProvincialApplicationCreateForm & string
 
-const MODULE_KEY = 'provincial-application'
 const APPLICATION_CREATE_TAB_INDEX = {
   summary: 0,
   clients: 1,
@@ -235,9 +227,6 @@ const ProvincialApplicationCreatePage = () => {
   const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
   const [isLoadingApplicationSpecies, setIsLoadingApplicationSpecies] = useState(false)
   const [isLoadingApplicationEndUses, setIsLoadingApplicationEndUses] = useState(false)
-  const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
-    listCreateDrafts(MODULE_KEY),
-  )
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [showMissingRequiredOptions, setShowMissingRequiredOptions] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -942,15 +931,7 @@ const ProvincialApplicationCreatePage = () => {
     (field) => !!fieldErrors[field],
   )
 
-  const onSaveDraft = () => {
-    setStatus(null)
-    const saved = saveCreateDraft(MODULE_KEY, form)
-    setDrafts(listCreateDrafts(MODULE_KEY))
-    setShowAllValidationErrors(false)
-    setStatus({ kind: 'success', title: 'Draft saved', message: `Draft ${saved.id} saved.` })
-  }
-
-  const onSubmit = async () => {
+  const onSave = async () => {
     if (hasValidationError) {
       if (firstInvalidField) {
         setSelectedApplicationTabIndex(
@@ -961,7 +942,7 @@ const ProvincialApplicationCreatePage = () => {
       setStatus({
         kind: 'error',
         title: 'Validation Error',
-        message: firstSubmitValidationError ?? 'Please fix validation errors before submitting.',
+        message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
       })
       return
     }
@@ -980,47 +961,29 @@ const ProvincialApplicationCreatePage = () => {
         }
         setStatus({
           kind: 'success',
-          title: 'Application Submitted',
-          message: 'Application submitted successfully.',
+          title: 'Application Saved',
+          message: 'Application saved successfully.',
         })
         return
       }
 
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
+        title: 'Save Failed',
         message:
-          'Application submission failed. Please review the form and try again. If the problem persists, contact support.',
+          'Application save failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } catch (error) {
       console.error(error)
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
+        title: 'Save Failed',
         message:
-          'Application submission failed. Please review the form and try again. If the problem persists, contact support.',
+          'Application save failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } finally {
       setIsSubmitting(false)
     }
-  }
-
-  const onUseDraft = (record: CreateDraftRecord<unknown>) => {
-    setForm(mergeCreateDraftPayload(record.payload, INITIAL_FORM))
-    setTouchedFields({})
-    setShowAllValidationErrors(false)
-    setSelectedApplicationTabIndex(APPLICATION_CREATE_TAB_INDEX.summary)
-    setStatus({ kind: 'success', title: 'Draft loaded', message: `Draft ${record.id} loaded.` })
-  }
-
-  const onDeleteDraft = (draftId: string) => {
-    const wasDeleted = deleteCreateDraft(MODULE_KEY, draftId)
-    setDrafts(listCreateDrafts(MODULE_KEY))
-    setStatus({
-      kind: wasDeleted ? 'success' : 'error',
-      title: wasDeleted ? 'Draft deleted' : 'Draft delete failed',
-      message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
-    })
   }
 
   return (
@@ -1050,7 +1013,7 @@ const ProvincialApplicationCreatePage = () => {
           <AppNotification
             kind="warning"
             title="Required options unavailable"
-            subtitle="Product type values are unavailable. Submit remains disabled until a valid product type is available."
+            subtitle="Product type values are unavailable. Save remains disabled until a valid product type is available."
             lowContrast
             autoDismissMs={undefined}
             onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
@@ -1550,7 +1513,7 @@ const ProvincialApplicationCreatePage = () => {
               <Tile className="create-form-tile application-detail-section">
                 <h2 className="detail-tile-title">Permits</h2>
                 <p className="detail-empty-message">
-                  Permits are available after the application is submitted.
+                  Permits are available after the application is saved.
                 </p>
               </Tile>
             </TabPanel>
@@ -1558,16 +1521,20 @@ const ProvincialApplicationCreatePage = () => {
               <Tile className="create-form-tile application-detail-section">
                 <h2 className="detail-tile-title">Offers</h2>
                 <p className="detail-empty-message">
-                  Offers are available after the application is submitted.
+                  Offers are available after the application is saved.
                 </p>
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
               <Tile className="create-form-tile application-detail-section">
                 <h2 className="detail-tile-title">Documents</h2>
-                <p className="detail-empty-message">
-                  Documents are available after the application is submitted.
-                </p>
+                <DetailDocumentUploadPanel
+                  workflowType="application"
+                  targetNumber=""
+                  inputId="applicationCreateDocumentUpload"
+                  disabled
+                  disabledReason="Save the application before uploading documents."
+                />
               </Tile>
             </TabPanel>
             <TabPanel className="application-detail-tab-panel">
@@ -1588,12 +1555,9 @@ const ProvincialApplicationCreatePage = () => {
           </TabPanels>
         </Tabs>
         <div className="legacy-search-actions application-create-actions">
-          <Button kind="primary" onClick={onSaveDraft}>
-            Save Draft
-          </Button>
           <Button
             kind="primary"
-            onClick={() => void onSubmit()}
+            onClick={() => void onSave()}
             disabled={
               missingRequiredOptions ||
               isSubmitting ||
@@ -1601,36 +1565,12 @@ const ProvincialApplicationCreatePage = () => {
               isLoadingAgentClientLocations
             }
           >
-            Submit
+            Save
           </Button>
-          <Button
-            kind="secondary"
-            onClick={() => {
-              setForm(INITIAL_FORM)
-              setTouchedFields({})
-              setShowAllValidationErrors(false)
-              setSelectedApplicationTabIndex(APPLICATION_CREATE_TAB_INDEX.summary)
-            }}
-          >
-            Reset
+          <Button kind="secondary" onClick={() => navigate('/provincial/application')}>
+            Cancel
           </Button>
-          <Link className="cds--link" to="/provincial/application">
-            Back to Search
-          </Link>
         </div>
-      </Column>
-
-      <Column sm={4} md={8} lg={16}>
-        <CreateDraftHistory
-          title="Recent application drafts"
-          drafts={drafts}
-          onUseDraft={onUseDraft}
-          onDeleteDraft={onDeleteDraft}
-          summarize={(payload) => {
-            const value = payload as ProvincialApplicationCreateForm
-            return `${value.ownerClientNumber || 'N/A'} / ${value.productLocation || 'N/A'}`
-          }}
-        />
       </Column>
     </Grid>
   )

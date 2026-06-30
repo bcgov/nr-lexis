@@ -1101,8 +1101,7 @@ body {
   min-inline-size: 0;
 }
 
-.create-form-tile,
-.create-draft-history {
+.create-form-tile {
   max-inline-size: 100%;
   min-inline-size: 0;
   overflow: hidden;
@@ -1148,26 +1147,6 @@ body {
 
 .create-form-comments .cds--text-area {
   min-block-size: 5rem;
-}
-
-.create-draft-history__table-scroll {
-  inline-size: 100%;
-  overflow-x: auto;
-}
-
-.create-draft-history .cds--data-table {
-  min-inline-size: 40rem;
-  table-layout: fixed;
-}
-
-.create-draft-history .cds--data-table th,
-.create-draft-history .cds--data-table td {
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.create-draft-history .legacy-search-actions {
-  margin-top: 0;
 }
 
 .legacy-field-stack {
