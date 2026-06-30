@@ -18,6 +18,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import oracle.jdbc.OracleConnection;
 import org.slf4j.Logger;
@@ -47,10 +52,25 @@ public abstract class OracleRepositorySupport {
 
   private static final String STRING_ARRAY_TYPE = "CBR_VARCHAR2_ARRAY";
   private static final int LEGACY_DYNAMIC_PAGE_SIZE = 10;
+  private static final int LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES = 4;
   private static final int AUDIT_USER_MAX_LENGTH = 30;
   private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
   private static final List<String> NATURAL_RESOURCE_REGION_CODES =
       List.of("1903", "1904", "1905", "1906", "1907", "1908", "1909", "1910");
+  private static final AtomicInteger LEGACY_DYNAMIC_FETCH_THREAD_ID = new AtomicInteger();
+  // Legacy dynamic searches page in 10-row chunks; keep larger UI pages fast without flooding Oracle.
+  private static final ExecutorService LEGACY_DYNAMIC_FETCH_EXECUTOR =
+      Executors.newFixedThreadPool(
+          LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES,
+          runnable -> {
+            Thread thread =
+                new Thread(
+                    runnable,
+                    "lexis-legacy-page-fetcher-"
+                        + LEGACY_DYNAMIC_FETCH_THREAD_ID.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+          });
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final JdbcTemplate jdbcTemplate;
@@ -400,12 +420,21 @@ public abstract class OracleRepositorySupport {
     int firstLegacyPage = offset / LEGACY_DYNAMIC_PAGE_SIZE;
     int firstLegacyPageOffset = offset % LEGACY_DYNAMIC_PAGE_SIZE;
     int requestedRows = Math.min(normalizedSize, normalizedTotal - offset);
+    int lastLegacyPage = (offset + requestedRows - 1) / LEGACY_DYNAMIC_PAGE_SIZE;
     List<T> rows = new ArrayList<>();
     List<T> previousPage = List.of();
+    List<List<T>> legacyPages =
+        queryRequiredLegacyDynamicPages(
+            procedureSignature,
+            whereSql,
+            bindValues,
+            firstLegacyPage,
+            lastLegacyPage,
+            rowMapper);
 
-    for (int legacyPage = firstLegacyPage; legacyPage < 10_000 && rows.size() < requestedRows; legacyPage++) {
-      List<T> currentPage =
-          queryLegacyDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
+    for (int pageIndex = 0; pageIndex < legacyPages.size() && rows.size() < requestedRows; pageIndex++) {
+      int legacyPage = firstLegacyPage + pageIndex;
+      List<T> currentPage = legacyPages.get(pageIndex);
       if (currentPage.isEmpty()) {
         break;
       }
@@ -434,6 +463,59 @@ public abstract class OracleRepositorySupport {
         List.copyOf(rows.subList(0, Math.min(rows.size(), requestedRows))),
         PageRequest.of(normalizedPage, normalizedSize),
         normalizedTotal);
+  }
+
+  private <T> List<List<T>> queryRequiredLegacyDynamicPages(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues,
+      int firstLegacyPage,
+      int lastLegacyPage,
+      SqlRowMapper<T> rowMapper) {
+    int normalizedFirstLegacyPage = Math.max(0, firstLegacyPage);
+    int normalizedLastLegacyPage =
+        Math.min(Math.max(normalizedFirstLegacyPage, lastLegacyPage), 9_999);
+    int pageCount = normalizedLastLegacyPage - normalizedFirstLegacyPage + 1;
+
+    if (pageCount <= 1) {
+      return List.of(
+          queryLegacyDynamicPagedProcedure(
+              procedureSignature, whereSql, bindValues, normalizedFirstLegacyPage, rowMapper));
+    }
+
+    List<List<T>> pages = new ArrayList<>(pageCount);
+    for (
+        int batchStart = normalizedFirstLegacyPage;
+        batchStart <= normalizedLastLegacyPage;
+        batchStart += LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES) {
+      int batchEnd =
+          Math.min(
+              batchStart + LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES - 1, normalizedLastLegacyPage);
+      List<CompletableFuture<List<T>>> futures = new ArrayList<>();
+      for (int legacyPage = batchStart; legacyPage <= batchEnd; legacyPage++) {
+        int pageToFetch = legacyPage;
+        futures.add(
+            CompletableFuture.supplyAsync(
+                () ->
+                    queryLegacyDynamicPagedProcedure(
+                        procedureSignature, whereSql, bindValues, pageToFetch, rowMapper),
+                LEGACY_DYNAMIC_FETCH_EXECUTOR));
+      }
+
+      for (CompletableFuture<List<T>> future : futures) {
+        try {
+          pages.add(future.join());
+        } catch (CompletionException ex) {
+          logger.warn(
+              "Oracle dynamic page fetch failed [{}]: {}; root cause: {}",
+              procedureSignature,
+              ex.getMessage(),
+              rootCauseMessage(ex));
+          pages.add(List.of());
+        }
+      }
+    }
+    return pages;
   }
 
   protected <T> Slice<T> queryLegacyDynamicSlice(

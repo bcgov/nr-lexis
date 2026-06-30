@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import java.sql.CallableStatement;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
@@ -182,6 +184,29 @@ class OracleRepositorySupportTest {
   }
 
   @Test
+  void queryLegacyDynamicPageWithTotalShouldFetchLargeUiPagesFromRequiredLegacyWindow() {
+    List<List<String>> pages = new java.util.ArrayList<>();
+    for (int page = 0; page < 10; page++) {
+      List<String> rows = new java.util.ArrayList<>();
+      for (int row = 1; row <= 10; row++) {
+        rows.add("row-" + ((page * 10) + row));
+      }
+      pages.add(rows);
+    }
+    TestRepository repository = new TestRepository(pages);
+
+    Page<String> results = repository.loadPageWithTotal(0, 100, 100);
+
+    assertThat(results.getContent()).hasSize(100);
+    assertThat(results.getContent().get(0)).isEqualTo("row-1");
+    assertThat(results.getContent().get(99)).isEqualTo("row-100");
+    assertThat(results.getTotalElements()).isEqualTo(100);
+    assertThat(repository.pageCalls()).isEqualTo(10);
+    assertThat(repository.requestedPages())
+        .containsExactlyInAnyOrder(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+  }
+
+  @Test
   void queryLegacyDynamicSliceShouldStopAfterPreviewWindow() {
     List<String> firstPage =
         List.of(
@@ -315,8 +340,8 @@ class OracleRepositorySupportTest {
   private static final class TestRepository extends OracleRepositorySupport {
     private final List<List<String>> pages;
     private final List<CodeNameDto> orgUnitOptions;
-    private final List<Integer> requestedPages = new java.util.ArrayList<>();
-    private int pageCalls;
+    private final List<Integer> requestedPages = Collections.synchronizedList(new java.util.ArrayList<>());
+    private final AtomicInteger pageCalls = new AtomicInteger();
 
     TestRepository(List<List<String>> pages) {
       this(pages, List.of());
@@ -388,11 +413,13 @@ class OracleRepositorySupportTest {
     }
 
     int pageCalls() {
-      return pageCalls;
+      return pageCalls.get();
     }
 
     List<Integer> requestedPages() {
-      return requestedPages;
+      synchronized (requestedPages) {
+        return List.copyOf(requestedPages);
+      }
     }
 
     @Override
@@ -416,7 +443,7 @@ class OracleRepositorySupportTest {
         List<String> bindValues,
         int page,
         SqlRowMapper<T> rowMapper) {
-      pageCalls++;
+      pageCalls.incrementAndGet();
       requestedPages.add(page);
       if (page >= pages.size()) {
         return List.of();
