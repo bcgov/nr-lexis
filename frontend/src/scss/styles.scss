@@ -962,6 +962,32 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.report-parameter-panel .cds--tile {
+  overflow: visible;
+}
+
+.report-parameter-grid {
+  align-items: start;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.report-parameter-grid > * {
+  min-inline-size: 0;
+}
+
+@media (max-width: 1056px) {
+  .report-parameter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 672px) {
+  .report-parameter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .provincial-application-search-filters .cds--tile,
 .provincial-exemption-search-filters .cds--tile,
 .provincial-offer-search-filters .cds--tile,

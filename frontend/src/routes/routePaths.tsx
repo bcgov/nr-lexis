@@ -359,6 +359,28 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: true,
   },
   {
+    path: '/reports/:reportId',
+    id: 'Report Details',
+    requiredActions: [
+      '/applicationReport',
+      '/offerReport',
+      '/teacReport',
+      '/exemptionReport',
+      '/permitLedgerReport',
+      '/transportReport',
+      '/speciesGradeReport',
+      '/feeReport',
+      '/tenureReport',
+      'mofrListing',
+    ],
+    element: (
+      <Layout>
+        <ReportsPage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
     path: '/admin',
     id: 'Admin',
     requiredActions: ['/lexisAgentAdmin'],

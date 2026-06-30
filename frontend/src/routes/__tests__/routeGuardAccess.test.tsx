@@ -189,7 +189,7 @@ describe('Protected route guard access', () => {
       }),
     )
 
-    renderWithPath('/reports?report=biweeklyListing')
+    renderWithPath('/reports/biweeklyListing')
 
     expect(await screen.findByRole('heading', { name: 'Reports' })).toBeInTheDocument()
   })

@@ -88,8 +88,11 @@ describe('Protected route access matrix', () => {
 
   it('includes advertising list action in reports route requirements', () => {
     const route = findRoute('/reports')
+    const detailRoute = findRoute('/reports/:reportId')
+
     expect(route.requiredActions).toContain('mofrListing')
     expect(route.requiredActions).toContain('/applicationReport')
+    expect(detailRoute.requiredActions).toEqual(route.requiredActions)
   })
 
   it('redirects the retired federal upload URL to federal search', () => {

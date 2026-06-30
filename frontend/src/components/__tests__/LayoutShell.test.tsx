@@ -178,7 +178,11 @@ describe('Layout shell', () => {
     renderLayout('/reports')
 
     expect(screen.getByRole('navigation', { name: 'Side navigation' })).toBeVisible()
-    expect(screen.getByRole('link', { name: /^Menu$/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Applications Report/i })).toHaveAttribute(
+      'href',
+      '/reports/applicationReport',
+    )
+    expect(screen.queryByRole('link', { name: /^Menu$/i })).not.toBeInTheDocument()
   })
 
   it('shows application submission upload without exposing generic data upload', () => {

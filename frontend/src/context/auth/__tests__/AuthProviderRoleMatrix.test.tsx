@@ -321,6 +321,25 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
+  it('routes report-only users to their first available report', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\reporter',
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['mofrListing'],
+    })
+
+    renderProbe(['mofrListing', '/applicationReport', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/reports/biweeklyListing')
+    expect(screen.getByTestId('action-mofrListing')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+  })
+
   it('routes federal submitters to federal search instead of application submission upload', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
