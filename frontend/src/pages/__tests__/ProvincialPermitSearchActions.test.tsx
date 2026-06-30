@@ -34,7 +34,7 @@ const permitSearchResponse = (
   content,
   page: {
     number: 0,
-    size: 20,
+    size: 10,
     totalElements: content.length,
     totalPages: content.length > 0 ? 1 : 0,
     ...page,
@@ -172,7 +172,7 @@ describe('Provincial Permit Search Actions', () => {
       2,
       expect.objectContaining({
         page: 1,
-        pageSize: 20,
+        pageSize: 10,
       }),
       { knownTotal: 125 },
     )

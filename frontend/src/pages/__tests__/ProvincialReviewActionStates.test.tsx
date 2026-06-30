@@ -71,7 +71,7 @@ const reviewResponse = {
   ],
   page: {
     number: 0,
-    size: 20,
+    size: 100,
     totalElements: 2,
     totalPages: 1,
   },
@@ -100,7 +100,7 @@ const twoNewReviewResponse = {
   ],
   page: {
     number: 0,
-    size: 20,
+    size: 100,
     totalElements: 2,
     totalPages: 1,
   },
@@ -431,6 +431,39 @@ describe('Provincial Review Action State Smoke', () => {
         filters: expect.objectContaining({
           region: [],
         }),
+        pageSize: 100,
+      }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
+    )
+  })
+
+  it('keeps review pagination at 100 by default with expanded page size options', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+
+    expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 0,
+        pageSize: 100,
+      }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
+    )
+
+    const rowsPerPage = screen.getByLabelText('Items per page:')
+    expect(rowsPerPage).toHaveValue('100')
+    expect(
+      Array.from(rowsPerPage.querySelectorAll('option')).map((option) => option.value),
+    ).toEqual(['10', '25', '50', '100', '200'])
+  })
+
+  it('accepts supported review page sizes from the URL', async () => {
+    renderPage('/provincial/review?pageSize=200')
+    await screen.findByText('1000123')
+
+    expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 0,
+        pageSize: 200,
       }),
       expect.objectContaining({ knownTotal: expect.any(Number) }),
     )

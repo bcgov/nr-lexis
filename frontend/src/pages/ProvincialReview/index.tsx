@@ -46,8 +46,6 @@ import {
 } from '@/pages/shared/search-total-cache'
 import {
   DEFAULT_SEARCH_PAGE,
-  DEFAULT_SEARCH_PAGE_SIZE,
-  SEARCH_PAGE_SIZE_OPTIONS,
   appendSearchParamsToPath,
   createEmptyPagedSearchResponse,
   createSearchParams,
@@ -105,7 +103,12 @@ const INITIAL_FILTERS: ApplicationReviewSearchFilters = {
   listingToDate: '',
 }
 
-const EMPTY_RESULTS = createEmptyPagedSearchResponse<ApplicationReviewSearchResponse>()
+const APPLICATION_REVIEW_DEFAULT_PAGE_SIZE = 100
+const APPLICATION_REVIEW_PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200] as const
+
+const EMPTY_RESULTS = createEmptyPagedSearchResponse<ApplicationReviewSearchResponse>(
+  APPLICATION_REVIEW_DEFAULT_PAGE_SIZE,
+)
 
 const SORT_COLUMNS: {
   id: ApplicationReviewSearchSortField
@@ -229,8 +232,8 @@ const ProvincialReviewPage = () => {
       page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_SEARCH_PAGE),
       pageSize: parsePageSizeParam(
         searchParams.get('pageSize'),
-        DEFAULT_SEARCH_PAGE_SIZE,
-        SEARCH_PAGE_SIZE_OPTIONS,
+        APPLICATION_REVIEW_DEFAULT_PAGE_SIZE,
+        APPLICATION_REVIEW_PAGE_SIZE_OPTIONS,
       ),
     }
   }, [searchParams])
@@ -441,7 +444,7 @@ const ProvincialReviewPage = () => {
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
         DEFAULT_SEARCH_PAGE,
-        DEFAULT_SEARCH_PAGE_SIZE,
+        APPLICATION_REVIEW_DEFAULT_PAGE_SIZE,
       ),
     )
   }
@@ -1020,7 +1023,7 @@ const ProvincialReviewPage = () => {
             <Pagination
               page={results.page.number + 1}
               pageSize={results.page.size}
-              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+              pageSizes={[...APPLICATION_REVIEW_PAGE_SIZE_OPTIONS]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
                 clearSelection()
