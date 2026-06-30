@@ -345,7 +345,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const regionComboBox = await screen.findByRole('combobox', { name: 'Region (required)' })
+    const regionComboBox = await screen.findByRole('combobox', { name: 'Region' })
     await waitFor(() => {
       expect(regionComboBox).toHaveValue('Cariboo Natural Resource Region')
     })
@@ -353,7 +353,7 @@ describe('Create Page Core Flows', () => {
     await chooseComboBoxOption(regionComboBox, 'West Coast Natural Resource Region')
     await selectApplicationCreateTab('Packages / Scales')
     await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Application species (required)' }),
+      screen.getByRole('combobox', { name: 'Application species' }),
       'HE - Hemlock',
     )
     await userEvent.click(screen.getByRole('button', { name: 'Add Application species' }))
@@ -485,21 +485,15 @@ describe('Create Page Core Flows', () => {
 
     const today = formatLocalIsoDate(new Date())
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: 'Product type (required)' })).toHaveValue(
-        'Harvested Timber',
-      )
-      expect(screen.getByRole('combobox', { name: 'Exemption reason (required)' })).toHaveValue(
-        'Surplus',
-      )
-      expect(screen.getByRole('combobox', { name: 'Region (required)' })).toHaveValue(
+      expect(screen.getByRole('combobox', { name: 'Product type' })).toHaveValue('Harvested Timber')
+      expect(screen.getByRole('combobox', { name: 'Exemption reason' })).toHaveValue('Surplus')
+      expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue(
         'Cariboo Natural Resource Region',
       )
-      expect(
-        screen.getByRole('textbox', { name: 'Application date (YYYY-MM-DD) (required)' }),
-      ).toHaveValue(today)
-      expect(
-        screen.getByRole('textbox', { name: 'Received date (YYYY-MM-DD) (required)' }),
-      ).toHaveValue(today)
+      expect(screen.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
+        today,
+      )
+      expect(screen.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue(today)
       expect(screen.getByRole('combobox', { name: 'Listing date' })).toHaveValue('2026-07-01')
     })
   })
@@ -523,7 +517,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const ownerNameInput = await screen.findByLabelText('Owner name (required)')
+    const ownerNameInput = await screen.findByLabelText('Owner name')
     await userEvent.type(ownerNameInput, 'Typed Owner')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -641,13 +635,10 @@ describe('Create Page Core Flows', () => {
     expect(within(newExemptionState).getAllByText('New')).not.toHaveLength(0)
     expect(screen.queryByRole('textbox', { name: /exemption number/i })).not.toBeInTheDocument()
     await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption type (required)' }),
+      screen.getByRole('combobox', { name: 'Exemption type' }),
       'Section 1',
     )
-    await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption status (required)' }),
-      'New',
-    )
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-02-01')
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2026-12-31')
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
@@ -690,7 +681,7 @@ describe('Create Page Core Flows', () => {
 
     await screen.findByText('Create provincial exemption')
     await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption type (required)' }),
+      screen.getByRole('combobox', { name: 'Exemption type' }),
       'Section 1',
     )
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
@@ -715,13 +706,10 @@ describe('Create Page Core Flows', () => {
 
     await screen.findByText('Create provincial exemption')
     await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption type (required)' }),
+      screen.getByRole('combobox', { name: 'Exemption type' }),
       'Section 1',
     )
-    await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption status (required)' }),
-      'New',
-    )
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '121212122')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 

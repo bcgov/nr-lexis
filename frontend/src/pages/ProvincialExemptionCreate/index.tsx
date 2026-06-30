@@ -357,7 +357,7 @@ const ProvincialExemptionCreatePage = () => {
           <div className="legacy-search-grid">
             <ApplicationNumberSelect
               id="applicationNumber"
-              labelText="Application number (required)"
+              labelText="Application number"
               value={form.applicationNumber}
               invalid={!!fieldError('applicationNumber')}
               invalidText={fieldError('applicationNumber')}
@@ -366,7 +366,7 @@ const ProvincialExemptionCreatePage = () => {
             />
             <SearchableSelect
               id="exemptionTypeCode"
-              labelText="Exemption type (required)"
+              labelText="Exemption type"
               value={form.exemptionTypeCode}
               invalid={!!fieldError('exemptionTypeCode')}
               invalidText={fieldError('exemptionTypeCode')}
@@ -377,7 +377,7 @@ const ProvincialExemptionCreatePage = () => {
             />
             <SearchableSelect
               id="exemptionStatusCode"
-              labelText="Exemption status (required)"
+              labelText="Exemption status"
               value={form.exemptionStatusCode}
               invalid={!!fieldError('exemptionStatusCode')}
               invalidText={fieldError('exemptionStatusCode')}
@@ -390,7 +390,7 @@ const ProvincialExemptionCreatePage = () => {
             />
             <TextInput
               id="ownerClientNumber"
-              labelText="Owner client number (required)"
+              labelText="Owner client number"
               value={form.ownerClientNumber}
               invalid={!!fieldError('ownerClientNumber')}
               invalidText={fieldError('ownerClientNumber')}
@@ -401,7 +401,7 @@ const ProvincialExemptionCreatePage = () => {
             />
             <TextInput
               id="applicantClientNumber"
-              labelText="Applicant client number (required)"
+              labelText="Applicant client number"
               value={form.applicantClientNumber}
               invalid={!!fieldError('applicantClientNumber')}
               invalidText={fieldError('applicantClientNumber')}
@@ -430,7 +430,7 @@ const ProvincialExemptionCreatePage = () => {
             />
             <TextInput
               id="approvedVolume"
-              labelText="Approved volumeume (m³) (required)"
+              labelText="Approved volumeume (m³)"
               value={form.approvedVolume}
               invalid={!!fieldError('approvedVolume')}
               invalidText={fieldError('approvedVolume')}

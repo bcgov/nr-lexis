@@ -1049,7 +1049,7 @@ const ProvincialApplicationCreatePage = () => {
                 <div className="legacy-search-grid create-form-grid">
                   <SearchableSelect
                     id="productTypeCode"
-                    labelText="Product type (required)"
+                    labelText="Product type"
                     value={form.productTypeCode}
                     invalid={!!fieldError('productTypeCode')}
                     invalidText={fieldError('productTypeCode')}
@@ -1073,11 +1073,7 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <SearchableSelect
                     id="ageClass"
-                    labelText={
-                      productTypeRequiresGrowthType(form.productTypeCode)
-                        ? 'Age class (required)'
-                        : 'Age class'
-                    }
+                    labelText="Age class"
                     value={form.ageClass}
                     disabled={!productTypeRequiresGrowthType(form.productTypeCode)}
                     invalid={!!fieldError('ageClass')}
@@ -1089,7 +1085,7 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <SearchableSelect
                     id="exemptionType"
-                    labelText="Exemption reason (required)"
+                    labelText="Exemption reason"
                     value={form.exemptionType}
                     invalid={!!fieldError('exemptionType')}
                     invalidText={fieldError('exemptionType')}
@@ -1102,7 +1098,7 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <SearchableSelect
                     id="region"
-                    labelText="Region (required)"
+                    labelText="Region"
                     value={form.region}
                     invalid={!!fieldError('region')}
                     invalidText={fieldError('region')}
@@ -1125,7 +1121,7 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <IsoDatePicker
                     id="applicationDate"
-                    labelText="Application date (YYYY-MM-DD) (required)"
+                    labelText="Application date (YYYY-MM-DD)"
                     value={form.applicationDate}
                     invalid={!!fieldError('applicationDate')}
                     invalidText={fieldError('applicationDate')}
@@ -1136,7 +1132,7 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <TextInput
                     id="applicationTermDays"
-                    labelText="Application term days (required)"
+                    labelText="Application term days"
                     value={form.applicationTermDays}
                     invalid={!!fieldError('applicationTermDays')}
                     invalidText={fieldError('applicationTermDays')}
@@ -1178,7 +1174,7 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <IsoDatePicker
                     id="receivedDate"
-                    labelText="Received date (YYYY-MM-DD) (required)"
+                    labelText="Received date (YYYY-MM-DD)"
                     value={form.receivedDate}
                     invalid={!!fieldError('receivedDate')}
                     invalidText={fieldError('receivedDate')}
@@ -1206,7 +1202,7 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <TextArea
                     id="productLocation"
-                    labelText="Location of logs (required)"
+                    labelText="Location of logs"
                     maxCount={250}
                     value={form.productLocation}
                     invalid={!!fieldError('productLocation')}
@@ -1218,7 +1214,7 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <TextInput
                     id="applicationVolume"
-                    labelText="Application volume (required)"
+                    labelText="Application volume"
                     value={form.applicationVolume}
                     invalid={!!fieldError('applicationVolume')}
                     invalidText={fieldError('applicationVolume')}
@@ -1229,7 +1225,7 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <TextInput
                     id="averageLogVolume"
-                    labelText="Average log volume (required)"
+                    labelText="Average log volume"
                     value={form.averageLogVolume}
                     invalid={!!fieldError('averageLogVolume')}
                     invalidText={fieldError('averageLogVolume')}
@@ -1247,7 +1243,7 @@ const ProvincialApplicationCreatePage = () => {
                 <div className="legacy-search-grid create-form-grid">
                   <TextInput
                     id="ownerClientNumber"
-                    labelText="Owner client number (required)"
+                    labelText="Owner client number"
                     value={form.ownerClientNumber}
                     invalid={!!fieldError('ownerClientNumber')}
                     invalidText={fieldError('ownerClientNumber')}
@@ -1261,7 +1257,7 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <SearchableSelect
                     id="ownerClientLocationCode"
-                    labelText="Owner client location (required)"
+                    labelText="Owner client location"
                     value={form.ownerClientLocationCode}
                     disabled={!form.ownerClientNumber.trim() || isLoadingOwnerClientLocations}
                     invalid={!!fieldError('ownerClientLocationCode')}
@@ -1284,7 +1280,7 @@ const ProvincialApplicationCreatePage = () => {
                   {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
                     <SearchableSelect
                       id="ownerContactName"
-                      labelText="Owner name (required)"
+                      labelText="Owner name"
                       value={form.ownerContactName}
                       disabled={
                         !form.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts
@@ -1306,7 +1302,7 @@ const ProvincialApplicationCreatePage = () => {
                   ) : (
                     <TextInput
                       id="ownerContactName"
-                      labelText="Owner name (required)"
+                      labelText="Owner name"
                       value={form.ownerContactName}
                       disabled={!form.ownerClientLocationCode.trim()}
                       placeholder="Enter owner contact name"
@@ -1323,7 +1319,7 @@ const ProvincialApplicationCreatePage = () => {
                   )}
                   <SearchableSelect
                     id="applicantTypeCode"
-                    labelText="Applicant type (required)"
+                    labelText="Applicant type"
                     value={form.applicantTypeCode}
                     placeholder="Select applicant type"
                     options={[
@@ -1353,7 +1349,7 @@ const ProvincialApplicationCreatePage = () => {
                     <>
                       <TextInput
                         id="agentClientNumber"
-                        labelText="Agent client number (required)"
+                        labelText="Agent client number"
                         value={form.agentClientNumber}
                         invalid={!!fieldError('agentClientNumber')}
                         invalidText={fieldError('agentClientNumber')}
@@ -1367,7 +1363,7 @@ const ProvincialApplicationCreatePage = () => {
                       />
                       <SearchableSelect
                         id="agentClientLocationCode"
-                        labelText="Agent client location (required)"
+                        labelText="Agent client location"
                         value={form.agentClientLocationCode}
                         disabled={!form.agentClientNumber.trim() || isLoadingAgentClientLocations}
                         invalid={!!fieldError('agentClientLocationCode')}
@@ -1390,7 +1386,7 @@ const ProvincialApplicationCreatePage = () => {
                       {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
                         <SearchableSelect
                           id="agentContactName"
-                          labelText="Agent contact name (required)"
+                          labelText="Agent contact name"
                           value={form.agentContactName}
                           disabled={
                             !form.agentClientLocationCode.trim() || isLoadingAgentClientContacts
@@ -1412,7 +1408,7 @@ const ProvincialApplicationCreatePage = () => {
                       ) : (
                         <TextInput
                           id="agentContactName"
-                          labelText="Agent contact name (required)"
+                          labelText="Agent contact name"
                           value={form.agentContactName}
                           disabled={!form.agentClientLocationCode.trim()}
                           placeholder="Enter agent contact name"
@@ -1439,7 +1435,7 @@ const ProvincialApplicationCreatePage = () => {
                   <div className="legacy-field-stack">
                     <SearchableSelect
                       id="applicationSpeciesCandidate"
-                      labelText="Application species (required)"
+                      labelText="Application species"
                       value={applicationSpeciesCandidate}
                       disabled={isApplicationSpeciesSelectDisabled}
                       invalid={!!fieldError('speciesCodes')}
