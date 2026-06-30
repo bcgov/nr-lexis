@@ -23,6 +23,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/provincial-application-search-service', () => ({
+  countProvincialApplications: vi.fn(),
   searchProvincialApplications: vi.fn(),
 }))
 
@@ -226,6 +227,7 @@ describe('Provincial Application Search Actions', () => {
             applicationNumber: '9',
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })
@@ -240,6 +242,7 @@ describe('Provincial Application Search Actions', () => {
           region: [],
         }),
       }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
   })
 
@@ -258,6 +261,7 @@ describe('Provincial Application Search Actions', () => {
             applicationNumber: '987',
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })
@@ -282,6 +286,7 @@ describe('Provincial Application Search Actions', () => {
             region: ['1818'],
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })

@@ -14,6 +14,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/provincial-exemption-search-service', () => ({
+  countProvincialExemptions: vi.fn(),
   searchProvincialExemptions: vi.fn(),
 }))
 
@@ -165,6 +166,7 @@ describe('Provincial Exemption Search Actions', () => {
             region: [],
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })

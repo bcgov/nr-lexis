@@ -56,7 +56,11 @@ import {
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
+import { loadSearchWithDeferredTotal } from '@/pages/shared/deferred-search-total'
+import {
+  countProvincialPermits,
+  searchProvincialPermits,
+} from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
 
 const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
@@ -197,6 +201,9 @@ const ProvincialPermitPage = () => {
   }, [filters.issuedFromDate, filters.issuedToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
+  const commitResults = useCallback((nextResults: ProvincialPermitSearchResponse) => {
+    setResults(nextResults)
+  }, [])
 
   const runSearch = useCallback(
     async (request: ProvincialPermitSearchRequest, options: { force?: boolean } = {}) => {
@@ -230,15 +237,31 @@ const ProvincialPermitPage = () => {
       try {
         const cacheKey = buildSearchTotalCacheKey(request.filters)
         const cachedTotal = getCachedSearchTotal(totalCacheRef.current, cacheKey)
-
-        const response =
-          cachedTotal === undefined
-            ? await searchProvincialPermits(request)
-            : await searchProvincialPermits(request, { knownTotal: cachedTotal })
+        const commitSearchResponse = (
+          response: ProvincialPermitSearchResponse,
+          totalIsExact: boolean,
+        ) => {
+          if (totalIsExact) {
+            setCachedSearchTotal(totalCacheRef.current, cacheKey, response.page.totalElements)
+            setPageDataCache(pageCacheKey, response)
+          }
+          queueMicrotask(() => {
+            if (isLatestRequest()) {
+              commitResults(response)
+            }
+          })
+        }
+        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+          request,
+          cachedTotal,
+          search: searchProvincialPermits,
+          count: countProvincialPermits,
+          isLatestRequest,
+          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
+          onCountError: console.error,
+        })
         if (isLatestRequest()) {
-          setCachedSearchTotal(totalCacheRef.current, cacheKey, response.page.totalElements)
-          setPageDataCache(pageCacheKey, response)
-          setResults(response)
+          commitSearchResponse(response, totalIsExact)
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -252,7 +275,7 @@ const ProvincialPermitPage = () => {
         }
       }
     },
-    [beginSearchRequest, capabilities?.principal],
+    [beginSearchRequest, capabilities?.principal, commitResults],
   )
 
   useEffect(() => {

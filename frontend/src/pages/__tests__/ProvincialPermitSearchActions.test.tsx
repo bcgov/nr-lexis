@@ -15,6 +15,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/provincial-permit-search-service', () => ({
+  countProvincialPermits: vi.fn(),
   searchProvincialPermits: vi.fn(),
 }))
 
@@ -96,6 +97,7 @@ describe('Provincial Permit Search Actions', () => {
           region: [],
         }),
       }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
   })
 

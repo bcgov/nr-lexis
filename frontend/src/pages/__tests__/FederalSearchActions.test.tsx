@@ -13,6 +13,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/federal-application-search-service', () => ({
+  countFederalApplications: vi.fn(),
   searchFederalApplications: vi.fn(),
 }))
 

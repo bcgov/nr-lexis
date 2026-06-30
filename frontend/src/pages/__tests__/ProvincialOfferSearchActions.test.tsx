@@ -17,6 +17,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/provincial-offer-search-service', () => ({
+  countProvincialOffers: vi.fn(),
   searchProvincialOffers: vi.fn(),
 }))
 
@@ -119,6 +120,7 @@ describe('Provincial Offer Search Actions', () => {
           region: [],
         }),
       }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
   })
 
@@ -148,6 +150,7 @@ describe('Provincial Offer Search Actions', () => {
             listingToDate: '2026-07-11',
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })

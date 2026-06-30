@@ -58,7 +58,11 @@ import {
 } from '@/pages/shared/search-query-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { searchProvincialApplications } from '@/service/provincial-application-search-service'
+import { loadSearchWithDeferredTotal } from '@/pages/shared/deferred-search-total'
+import {
+  countProvincialApplications,
+  searchProvincialApplications,
+} from '@/service/provincial-application-search-service'
 import {
   fetchProvincialApplicationOptions,
   type SearchOption,
@@ -237,6 +241,9 @@ const ProvincialApplicationPage = () => {
   }, [filters.listingFromDate, filters.listingToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
+  const commitResults = useCallback((nextResults: ProvincialApplicationSearchResponse) => {
+    setResults(nextResults)
+  }, [])
 
   const runSearch = useCallback(
     async (request: ProvincialApplicationSearchRequest, options: { force?: boolean } = {}) => {
@@ -270,14 +277,31 @@ const ProvincialApplicationPage = () => {
       try {
         const totalCacheKey = buildSearchTotalCacheKey(request.filters)
         const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
-        const response =
-          cachedTotal === undefined
-            ? await searchProvincialApplications(request)
-            : await searchProvincialApplications(request, { knownTotal: cachedTotal })
+        const commitSearchResponse = (
+          response: ProvincialApplicationSearchResponse,
+          totalIsExact: boolean,
+        ) => {
+          if (totalIsExact) {
+            setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
+            setPageDataCache(pageCacheKey, response)
+          }
+          queueMicrotask(() => {
+            if (isLatestRequest()) {
+              commitResults(response)
+            }
+          })
+        }
+        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+          request,
+          cachedTotal,
+          search: searchProvincialApplications,
+          count: countProvincialApplications,
+          isLatestRequest,
+          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
+          onCountError: console.error,
+        })
         if (isLatestRequest()) {
-          setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-          setPageDataCache(pageCacheKey, response)
-          setResults(response)
+          commitSearchResponse(response, totalIsExact)
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -291,7 +315,7 @@ const ProvincialApplicationPage = () => {
         }
       }
     },
-    [beginSearchRequest, capabilities?.principal],
+    [beginSearchRequest, capabilities?.principal, commitResults],
   )
 
   useEffect(() => {

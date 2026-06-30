@@ -64,8 +64,10 @@ import {
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
+import { loadSearchWithDeferredTotal } from '@/pages/shared/deferred-search-total'
 import {
   approveApplicationReview,
+  countApplicationReviews,
   sendApplicationReviewStatusEmail,
   searchApplicationReviews,
   updateApplicationReviewStatus,
@@ -306,6 +308,9 @@ const ProvincialReviewPage = () => {
   }, [selectableRows, selectedRowsById])
 
   const beginSearchRequest = useLatestRequestGuard()
+  const commitResults = useCallback((nextResults: ApplicationReviewSearchResponse) => {
+    setResults(nextResults)
+  }, [])
 
   const runSearch = useCallback(
     async (request: ApplicationReviewSearchRequest, options: { force?: boolean } = {}) => {
@@ -347,14 +352,31 @@ const ProvincialReviewPage = () => {
       try {
         const totalCacheKey = buildSearchTotalCacheKey(request.filters)
         const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
-        const response =
-          cachedTotal === undefined
-            ? await searchApplicationReviews(request)
-            : await searchApplicationReviews(request, { knownTotal: cachedTotal })
+        const commitSearchResponse = (
+          response: ApplicationReviewSearchResponse,
+          totalIsExact: boolean,
+        ) => {
+          if (totalIsExact) {
+            setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
+            setPageDataCache(pageCacheKey, response)
+          }
+          queueMicrotask(() => {
+            if (isLatestRequest()) {
+              commitResults(response)
+            }
+          })
+        }
+        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+          request,
+          cachedTotal,
+          search: searchApplicationReviews,
+          count: countApplicationReviews,
+          isLatestRequest,
+          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
+          onCountError: console.error,
+        })
         if (isLatestRequest()) {
-          setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-          setPageDataCache(pageCacheKey, response)
-          setResults(response)
+          commitSearchResponse(response, totalIsExact)
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -368,7 +390,7 @@ const ProvincialReviewPage = () => {
         }
       }
     },
-    [beginSearchRequest, capabilities?.principal],
+    [beginSearchRequest, capabilities?.principal, commitResults],
   )
 
   useEffect(() => {

@@ -51,7 +51,11 @@ import {
 } from '@/pages/shared/search-query-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { searchFederalApplications } from '@/service/federal-application-search-service'
+import { loadSearchWithDeferredTotal } from '@/pages/shared/deferred-search-total'
+import {
+  countFederalApplications,
+  searchFederalApplications,
+} from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions, type SearchOption } from '@/service/search-options-service'
 
 const INITIAL_FILTERS: FederalApplicationSearchFilters = {
@@ -181,6 +185,9 @@ const FederalPage = () => {
   ])
 
   const beginSearchRequest = useLatestRequestGuard()
+  const commitResults = useCallback((nextResults: FederalApplicationSearchResponse) => {
+    setResults(nextResults)
+  }, [])
 
   const runSearch = useCallback(
     async (request: FederalApplicationSearchRequest, options: { force?: boolean } = {}) => {
@@ -222,14 +229,31 @@ const FederalPage = () => {
       try {
         const totalCacheKey = buildSearchTotalCacheKey(request.filters)
         const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
-        const response =
-          cachedTotal === undefined
-            ? await searchFederalApplications(request)
-            : await searchFederalApplications(request, { knownTotal: cachedTotal })
+        const commitSearchResponse = (
+          response: FederalApplicationSearchResponse,
+          totalIsExact: boolean,
+        ) => {
+          if (totalIsExact) {
+            setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
+            setPageDataCache(pageCacheKey, response)
+          }
+          queueMicrotask(() => {
+            if (isLatestRequest()) {
+              commitResults(response)
+            }
+          })
+        }
+        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+          request,
+          cachedTotal,
+          search: searchFederalApplications,
+          count: countFederalApplications,
+          isLatestRequest,
+          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
+          onCountError: console.error,
+        })
         if (isLatestRequest()) {
-          setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-          setPageDataCache(pageCacheKey, response)
-          setResults(response)
+          commitSearchResponse(response, totalIsExact)
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -243,7 +267,7 @@ const FederalPage = () => {
         }
       }
     },
-    [beginSearchRequest, capabilities?.principal],
+    [beginSearchRequest, capabilities?.principal, commitResults],
   )
 
   useEffect(() => {

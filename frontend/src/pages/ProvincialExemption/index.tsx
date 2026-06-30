@@ -58,7 +58,11 @@ import {
 } from '@/pages/shared/search-query-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
+import { loadSearchWithDeferredTotal } from '@/pages/shared/deferred-search-total'
+import {
+  countProvincialExemptions,
+  searchProvincialExemptions,
+} from '@/service/provincial-exemption-search-service'
 import {
   fetchProvincialExemptionOptions,
   type SearchOption,
@@ -231,6 +235,9 @@ const ProvincialExemptionPage = () => {
   }, [filters.listFromDate, filters.listToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
+  const commitResults = useCallback((nextResults: ProvincialExemptionSearchResponse) => {
+    setResults(nextResults)
+  }, [])
 
   const runSearch = useCallback(
     async (request: ProvincialExemptionSearchRequest, options: { force?: boolean } = {}) => {
@@ -265,14 +272,31 @@ const ProvincialExemptionPage = () => {
       try {
         const totalCacheKey = buildSearchTotalCacheKey(request.filters)
         const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
-        const response =
-          cachedTotal === undefined
-            ? await searchProvincialExemptions(request)
-            : await searchProvincialExemptions(request, { knownTotal: cachedTotal })
+        const commitSearchResponse = (
+          response: ProvincialExemptionSearchResponse,
+          totalIsExact: boolean,
+        ) => {
+          if (totalIsExact) {
+            setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
+            setPageDataCache(pageCacheKey, response)
+          }
+          queueMicrotask(() => {
+            if (isLatestRequest()) {
+              commitResults(response)
+            }
+          })
+        }
+        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+          request,
+          cachedTotal,
+          search: searchProvincialExemptions,
+          count: countProvincialExemptions,
+          isLatestRequest,
+          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
+          onCountError: console.error,
+        })
         if (isLatestRequest()) {
-          setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-          setPageDataCache(pageCacheKey, response)
-          setResults(response)
+          commitSearchResponse(response, totalIsExact)
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -286,7 +310,7 @@ const ProvincialExemptionPage = () => {
         }
       }
     },
-    [beginSearchRequest, capabilities?.principal],
+    [beginSearchRequest, capabilities?.principal, commitResults],
   )
 
   useEffect(() => {

@@ -20,6 +20,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/application-review-search-service', () => ({
+  countApplicationReviews: vi.fn(),
   searchApplicationReviews: vi.fn(),
   approveApplicationReview: vi.fn(),
   updateApplicationReviewStatus: vi.fn(),
@@ -431,6 +432,7 @@ describe('Provincial Review Action State Smoke', () => {
           region: [],
         }),
       }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
   })
 
@@ -527,6 +529,7 @@ describe('Provincial Review Action State Smoke', () => {
             region: ['1818'],
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })
