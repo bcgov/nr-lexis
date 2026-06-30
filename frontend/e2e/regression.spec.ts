@@ -445,6 +445,12 @@ const reportAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/reports/tenureReport', /tenure analysis report/i],
 ]
 
+const createWorkflowPages: Array<[path: string, heading: RegExp]> = [
+  ['/provincial/application/create', /create provincial application/i],
+  ['/provincial/exemption/create', /create provincial exemption/i],
+  ['/provincial/offers/create', /provincial offers/i],
+]
+
 const regionFilterPages: Array<[path: string, heading: RegExp]> = [
   ['/provincial/review?region=1903,1908', /provincial review/i],
   ['/provincial/application?region=1903,1908', /provincial application search/i],
@@ -576,6 +582,10 @@ const expectAdminNavigation = async (page: Page): Promise<void> => {
   for (const { section, links } of adminNavigationSections) {
     const navSection = page.locator(sideNavSection(section))
     await expect(navSection, `${section} navigation section should be visible`).toBeVisible()
+    await expect(
+      navSection.getByRole('link'),
+      `${section} navigation should not include extra links`,
+    ).toHaveCount(links.length)
 
     for (const linkName of links) {
       await expect(
@@ -791,8 +801,14 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expectAdminNavigation(page)
     await expect(page.getByRole('link', { name: /^Summary$/ })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Upload application submission' })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Data upload' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: /^Upload application submission$/i })).toHaveCount(
+      0,
+    )
+    await expect(page.getByRole('link', { name: /^Data upload$/i })).toHaveCount(0)
+    await expect(page.locator(sideNavSection('Federal')).getByRole('link')).toHaveCount(1)
+    await expect(
+      page.locator(sideNavSection('Admin')).getByRole('link', { name: /upload/i }),
+    ).toHaveCount(0)
     expect(apiServerErrors).toEqual([])
   })
 
@@ -829,6 +845,49 @@ test.describe('TEST IDIR admin regression', () => {
       'Advertising List',
     )
     await page.getByRole('button', { name: 'Expand side navigation' }).click()
+  })
+
+  test('keeps upload navigation scoped to provincial application submissions', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/provincial/review', /provincial review/i)
+
+    const provincialSection = page.locator(sideNavSection('Provincial'))
+    const federalSection = page.locator(sideNavSection('Federal'))
+    const adminSection = page.locator(sideNavSection('Admin'))
+
+    await expect(provincialSection.getByRole('link', { name: 'Upload' })).toHaveAttribute(
+      'href',
+      '/provincial/application/upload',
+    )
+    await expect(federalSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
+    await expect(adminSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
+
+    await page.goto(new URL('/federal/application/upload', E2E_BASE_URL).toString(), {
+      waitUntil: 'domcontentloaded',
+    })
+    await expect(page.getByRole('heading', { name: /federal application search/i })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: /upload federal application submission/i }),
+    ).toHaveCount(0)
+    await expect(page.getByText('Validate submissions')).toHaveCount(0)
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/federal')
+  })
+
+  test('opens reports from direct sidebar report links', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/provincial/review', /provincial review/i)
+
+    for (const [linkName, path, heading] of [
+      ['Offers Report', '/reports/offerReport', /offer report/i],
+      ['Permits Report', '/reports/permitLedgerReport', /permit ledger report/i],
+      ['Tenure Analysis', '/reports/tenureReport', /tenure analysis report/i],
+    ] as const) {
+      await page.locator(sideNavSection('Reports')).getByRole('link', { name: linkName }).click()
+      await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible()
+      await expect.poll(() => new URL(page.url()).pathname).toBe(path)
+    }
   })
 
   test('can verify representative admin action grants', async () => {
@@ -1024,12 +1083,29 @@ test.describe('TEST IDIR admin regression', () => {
     await page.getByRole('tab', { name: 'Documents' }).click()
     await expect(page.getByRole('heading', { name: 'Documents' })).toBeVisible()
     await expect(page.getByText('Upload documents')).toBeVisible()
+    await expect(
+      page.getByText('Multiple files can be queued and submitted together.'),
+    ).toBeVisible()
+    await expect(page.getByText('Queued files')).toBeVisible()
     await expect(page.getByText('Save the application before uploading documents.')).toBeVisible()
     await expect(page.getByLabel('Document File')).toBeDisabled()
     await expect(page.getByText('Browse files', { exact: true })).toHaveAttribute(
       'aria-disabled',
       'true',
     )
+  })
+
+  test('uses save and cancel workflow on provincial create/edit pages', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const [path, heading] of createWorkflowPages) {
+      await expectAccessiblePage(page, path, heading)
+      await expect(page.getByRole('button', { name: 'Save' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Save Draft' })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
+      await expect(page.getByRole('link', { name: 'Back to Search' })).toHaveCount(0)
+    }
   })
 
   test('can query application review search contracts', async () => {
@@ -1550,6 +1626,10 @@ test.describe('TEST IDIR admin regression', () => {
       await page.getByRole('tab', { name: 'Documents' }).click()
       await expect(page.getByRole('heading', { name: 'Documents' })).toBeVisible()
       await expect(page.getByText('Upload documents').first()).toBeVisible()
+      await expect(
+        page.getByText('Multiple files can be queued and submitted together.').first(),
+      ).toBeVisible()
+      await expect(page.getByText('Queued files').first()).toBeVisible()
       await expect(page.getByText('Drag and drop files here, or browse for files.')).toBeVisible()
       await expect(page.getByLabel('Document File')).toBeEnabled()
       await expect(page.getByText('Browse files', { exact: true })).toHaveAttribute(
