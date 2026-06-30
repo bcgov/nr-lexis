@@ -41,6 +41,8 @@ const renderPage = () => {
 describe('Admin tool access smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.unstubAllEnvs()
+    window.config = {}
     mockedSearchFamUserRoleAssignments.mockResolvedValue({
       results: [],
       total: 0,
@@ -229,6 +231,31 @@ describe('Admin tool access smoke', () => {
     expect(screen.getByText('LEXIS_ADMIN')).toBeInTheDocument()
     expect(screen.getByText('00012345 - ACME Timber')).toBeInTheDocument()
     expect(screen.getByText('2026-06-30')).toBeInTheDocument()
+  })
+
+  it('keeps FAM access management read-only and delegates changes to FAM', () => {
+    window.config = {
+      VITE_FAM_MANAGE_URL: 'https://fam-tst.nrs.gov.bc.ca/applications/lexis',
+    }
+
+    renderPage()
+
+    const manageLink = screen.getByRole('link', { name: 'Manage in FAM' })
+    expect(manageLink).toHaveAttribute('href', 'https://fam-tst.nrs.gov.bc.ca/applications/lexis')
+    expect(manageLink).toHaveAttribute('target', '_blank')
+    expect(screen.getByRole('button', { name: 'Search FAM Access' })).toBeVisible()
+
+    for (const name of [
+      /^Grant/i,
+      /^Revoke/i,
+      /^Add role/i,
+      /^Remove role/i,
+      /^Save access/i,
+      /^Update access/i,
+    ]) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
+    }
   })
 
   it('validates FAM user access searches before calling the backend', async () => {

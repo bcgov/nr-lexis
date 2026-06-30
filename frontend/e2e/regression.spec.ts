@@ -217,6 +217,8 @@ const selectedNaturalResourceRegionText =
 const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Create and manage applications, view offers and permits'
+const famManageUrlPattern =
+  /^https:\/\/fam(?:-(?:dev|tst|tools))?\.nrs\.gov\.bc\.ca(?:\/.*)?$/
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   const regions = asRecordArray(value)
@@ -845,6 +847,37 @@ test.describe('TEST IDIR admin regression', () => {
       'Advertising List',
     )
     await page.getByRole('button', { name: 'Expand side navigation' }).click()
+  })
+
+  test('keeps user access administration read-only and delegates changes to FAM', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/admin', /administration/i)
+
+    const famAccessSection = page.locator('.cds--tile', {
+      has: page.getByRole('heading', { name: 'FAM user access lookup' }),
+    })
+    await expect(famAccessSection).toBeVisible()
+    await expect(famAccessSection.getByText('Search IDIR or Business BCeID users')).toBeVisible()
+    await expect(famAccessSection.getByLabel('User name, name, or email')).toBeVisible()
+    await expect(famAccessSection.getByRole('button', { name: 'Search FAM Access' })).toBeVisible()
+
+    const manageLink = famAccessSection.getByRole('link', { name: 'Manage in FAM' })
+    await expect(manageLink).toBeVisible()
+    await expect(manageLink).toHaveAttribute('target', '_blank')
+    await expect(manageLink).toHaveAttribute('href', famManageUrlPattern)
+
+    for (const name of [
+      /^Grant/i,
+      /^Revoke/i,
+      /^Add role/i,
+      /^Remove role/i,
+      /^Save access/i,
+      /^Update access/i,
+    ]) {
+      await expect(famAccessSection.getByRole('button', { name })).toHaveCount(0)
+      await expect(famAccessSection.getByRole('link', { name })).toHaveCount(0)
+    }
   })
 
   test('keeps upload navigation scoped to provincial application submissions', async () => {
