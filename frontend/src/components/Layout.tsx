@@ -216,18 +216,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         requiredActions: ['/lexisPolicyAdmin'],
       },
       {
-        to: '/admin/uploads',
-        label: 'Uploads',
-        icon: Upload,
-        requiredActions: [
-          '/lexisAgentAdmin',
-          '/fileApplicationUpload',
-          '/fileExemptionUpload',
-          '/filePermitUpload',
-          '/fileInvoiceUpload',
-        ],
-      },
-      {
         to: '/admin/rtm/emslogamv',
         label: 'Average Monthly Values',
         icon: DataBase,

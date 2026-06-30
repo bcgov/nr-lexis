@@ -38,16 +38,18 @@ describe('Layout shell', () => {
   })
 
   it('marks only the exact side-nav route as active', () => {
-    renderLayout('/admin/uploads')
+    renderLayout('/admin/rtm/emslogamv')
 
     const adminLink = screen.getByRole('link', { name: /Users & Access/i })
-    const uploadsLink = screen.getByRole('link', { name: /^Uploads$/i })
+    const averageMonthlyValuesLink = screen.getByRole('link', {
+      name: /Average Monthly Values/i,
+    })
     const activeLinks = document.querySelectorAll('.csp-side-nav__link.cds--side-nav__link--active')
 
     expect(document.querySelector('.page-header__eyebrow')).not.toBeInTheDocument()
     expect(activeLinks).toHaveLength(1)
-    expect(uploadsLink).toHaveClass('cds--side-nav__link--active')
-    expect(uploadsLink).toHaveAttribute('aria-current', 'page')
+    expect(averageMonthlyValuesLink).toHaveClass('cds--side-nav__link--active')
+    expect(averageMonthlyValuesLink).toHaveAttribute('aria-current', 'page')
     expect(adminLink).not.toHaveClass('cds--side-nav__link--active')
     expect(adminLink).not.toHaveAttribute('aria-current')
   })
@@ -88,7 +90,7 @@ describe('Layout shell', () => {
   })
 
   it('renders side-nav links with standard icons and collapsed labels', () => {
-    renderLayout('/admin/uploads')
+    renderLayout('/admin/rtm/emslogamv')
 
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
 
@@ -103,18 +105,19 @@ describe('Layout shell', () => {
       '/provincial/application/upload',
     ])
     expect(screen.getByRole('link', { name: /Users & Access/i })).toBeVisible()
-    expect(screen.getByRole('link', { name: /^Uploads$/i })).toBeVisible()
+    expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toBeVisible()
     const navLinks = sideNav.querySelectorAll('.csp-side-nav__link')
     const navIcons = sideNav.querySelectorAll('.csp-side-nav__link .csp-side-nav__icon svg')
     expect(navIcons).toHaveLength(navLinks.length)
-    expect(screen.getByRole('link', { name: /^Uploads$/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toHaveAttribute(
       'data-label',
-      'Uploads',
+      'Average Monthly Values',
     )
   })
 
   it('navigates the app name to the resolved default route', async () => {
-    renderLayout('/admin/uploads')
+    renderLayout('/admin/rtm/emslogamv')
 
     expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Go to your landing page' }))
@@ -123,7 +126,7 @@ describe('Layout shell', () => {
   })
 
   it('lets pages own the only visible page title', () => {
-    renderLayout('/admin/uploads')
+    renderLayout('/admin/rtm/emslogamv')
 
     expect(document.querySelector('.page-header__title')).not.toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
@@ -239,7 +242,7 @@ describe('Layout shell', () => {
   })
 
   it('supports collapsing and expanding side-nav sections', async () => {
-    renderLayout('/admin/uploads')
+    renderLayout('/admin/rtm/emslogamv')
 
     expect(screen.getByRole('link', { name: /Applications Report/i })).toBeVisible()
 
@@ -250,7 +253,7 @@ describe('Layout shell', () => {
       'false',
     )
     expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^Uploads$/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
 
@@ -259,7 +262,7 @@ describe('Layout shell', () => {
   })
 
   it('keeps section links available as icons when the full side nav is collapsed', async () => {
-    renderLayout('/admin/uploads')
+    renderLayout('/admin/rtm/emslogamv')
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
     expect(screen.queryByRole('link', { name: /Applications Report/i })).not.toBeInTheDocument()
@@ -270,7 +273,7 @@ describe('Layout shell', () => {
   })
 
   it('defaults the side nav open and supports collapsing it', async () => {
-    renderLayout('/admin/uploads')
+    renderLayout('/admin/rtm/emslogamv')
 
     const shell = document.querySelector('.app-shell')
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
