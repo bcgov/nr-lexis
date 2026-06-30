@@ -193,6 +193,35 @@ const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialApplicatio
   }
 }
 
+const applyScheduleDefaults = (
+  form: ProvincialApplicationCreateForm,
+  schedules: SearchOption[],
+): ProvincialApplicationCreateForm => {
+  if (schedules.length === 0) {
+    return form
+  }
+
+  const nextListingSchedule = schedules.find((option) => option.value.trim())
+  if (!form.exportScheduleId && !form.listingDate && nextListingSchedule) {
+    return {
+      ...form,
+      exportScheduleId: nextListingSchedule.value,
+      listingDate: nextListingSchedule.label,
+    }
+  }
+
+  if (
+    form.exportScheduleId ||
+    !form.listingDate ||
+    !schedules.some((option) => option.label === form.listingDate)
+  ) {
+    return form
+  }
+
+  const matchingSchedule = schedules.find((option) => option.label === form.listingDate)
+  return matchingSchedule ? { ...form, exportScheduleId: matchingSchedule.value } : form
+}
+
 type PageStatus = {
   kind: 'success' | 'error'
   title: string
@@ -246,6 +275,7 @@ const ProvincialApplicationCreatePage = () => {
       setExemptionReasons(options.exemptionReasons)
       setRegions(options.regions)
       setCurrentSchedules(options.currentSchedules)
+      setForm((current) => applyScheduleDefaults(current, options.currentSchedules))
     }
 
     void loadOptions()
@@ -279,47 +309,6 @@ const ProvincialApplicationCreatePage = () => {
       isActive = false
     }
   }, [exemptionReasons])
-
-  useEffect(() => {
-    if (currentSchedules.length === 0) {
-      return
-    }
-
-    let isActive = true
-    void Promise.resolve().then(() => {
-      if (!isActive) {
-        return
-      }
-
-      setForm((current) => {
-        const nextListingSchedule = currentSchedules.find((option) => option.value.trim())
-        if (!current.exportScheduleId && !current.listingDate && nextListingSchedule) {
-          return {
-            ...current,
-            exportScheduleId: nextListingSchedule.value,
-            listingDate: nextListingSchedule.label,
-          }
-        }
-
-        if (
-          current.exportScheduleId ||
-          !current.listingDate ||
-          !currentSchedules.some((option) => option.label === current.listingDate)
-        ) {
-          return current
-        }
-
-        const matchingSchedule = currentSchedules.find(
-          (option) => option.label === current.listingDate,
-        )
-        return matchingSchedule ? { ...current, exportScheduleId: matchingSchedule.value } : current
-      })
-    })
-
-    return () => {
-      isActive = false
-    }
-  }, [currentSchedules])
 
   useEffect(() => {
     const ownerClientNumber = form.ownerClientNumber.trim()
