@@ -1085,28 +1085,39 @@ const ReportsPage = () => {
     )
     const nextAction = resolveActionMapping(nextReport, searchParams.get('action'))
 
-    setSelectedReportId((current) => (current === nextReport.id ? current : nextReport.id))
-    setReportValuesById((current) => {
-      if (!searchParams.has('values') && current[nextReport.id]) {
-        return current
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (!isActive) {
+        return
       }
 
-      return {
-        ...current,
-        [nextReport.id]: nextReportValues,
-      }
-    })
-    setSelectedActionById((current) => {
-      if (!searchParams.has('action') && current[nextReport.id]) {
-        return current
-      }
+      setSelectedReportId((current) => (current === nextReport.id ? current : nextReport.id))
+      setReportValuesById((current) => {
+        if (!searchParams.has('values') && current[nextReport.id]) {
+          return current
+        }
 
-      return {
-        ...current,
-        [nextReport.id]: nextAction,
-      }
+        return {
+          ...current,
+          [nextReport.id]: nextReportValues,
+        }
+      })
+      setSelectedActionById((current) => {
+        if (!searchParams.has('action') && current[nextReport.id]) {
+          return current
+        }
+
+        return {
+          ...current,
+          [nextReport.id]: nextAction,
+        }
+      })
+      setLaunchErrorMessage('')
     })
-    setLaunchErrorMessage('')
+
+    return () => {
+      isActive = false
+    }
   }, [requestedReportId, searchParams])
 
   useEffect(() => {

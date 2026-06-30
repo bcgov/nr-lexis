@@ -299,6 +299,11 @@ function Layout({ children }: LayoutProps) {
       links: section.links.filter(canShowLink),
     })).filter((section) => section.links.length > 0)
   }, [canPerform, capabilities.roles])
+  const activeSectionLabel = useMemo(() => {
+    return visibleNavigationSections.find((section) =>
+      section.links.some((link) => link.to === location.pathname),
+    )?.label
+  }, [location.pathname, visibleNavigationSections])
 
   const toggleSection = (sectionLabel: string): void => {
     setCollapsedSections((current) => ({
@@ -325,26 +330,6 @@ function Layout({ children }: LayoutProps) {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isProfileOpen])
-
-  useEffect(() => {
-    const activeSection = visibleNavigationSections.find((section) =>
-      section.links.some((link) => link.to === location.pathname),
-    )
-
-    if (!activeSection) {
-      return
-    }
-
-    setCollapsedSections((current) => {
-      if (!current[activeSection.label]) {
-        return current
-      }
-
-      const next = { ...current }
-      delete next[activeSection.label]
-      return next
-    })
-  }, [location.pathname, visibleNavigationSections])
 
   return (
     <Theme theme={isDarkTheme ? 'g100' : 'white'}>
@@ -454,7 +439,9 @@ function Layout({ children }: LayoutProps) {
             {visibleNavigationSections.map((section) => {
               const sectionListId = getSectionListId(section.label)
               const isSectionCollapsed =
-                Boolean(collapsedSections[section.label]) && !isSideNavCollapsed
+                section.label !== activeSectionLabel &&
+                Boolean(collapsedSections[section.label]) &&
+                !isSideNavCollapsed
               return (
                 <li
                   key={section.label}
