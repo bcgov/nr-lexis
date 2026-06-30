@@ -170,6 +170,7 @@ describe('Admin tool access smoke', () => {
     expect(adminRow).not.toBeNull()
     expect(within(adminRow as HTMLTableRowElement).getByText('Denied')).toBeInTheDocument()
     expect(screen.queryByText('FAM user access lookup')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Manage in FAM' })).not.toBeInTheDocument()
   })
 
   it('searches FAM user access and renders role assignments', async () => {
@@ -206,6 +207,10 @@ describe('Admin tool access smoke', () => {
     })
 
     renderPage()
+
+    const manageLink = screen.getByRole('link', { name: 'Manage in FAM' })
+    expect(manageLink).toHaveAttribute('href', 'https://fam-dev.nrs.gov.bc.ca')
+    expect(manageLink).toHaveAttribute('target', '_blank')
 
     await userEvent.type(screen.getByLabelText('User name, name, or email'), 'smith')
     await userEvent.click(screen.getByRole('button', { name: 'Search FAM Access' }))

@@ -23,6 +23,7 @@ import {
   type FamUserRoleAssignment,
   type FamUserRoleAssignmentSearchResponse,
 } from '@/service/fam-user-access-service'
+import { resolveFamManageUrl } from '@/service/fam-manage-url'
 import { normalizeFilterText as normalizeText } from '@/utils/text'
 
 type LegacyLaunchTool = {
@@ -221,6 +222,7 @@ const AdminPage = () => {
     return LEGACY_ACTION_CATALOG.filter((action) => canPerform(action)).length
   }, [canPerform])
   const canSearchFamUserAccess = canPerform('/lexisAgentAdmin')
+  const famManageUrl = resolveFamManageUrl()
 
   const runFamUserSearch = async (pageNumber = famPageNumber, pageSize = famPageSize) => {
     const search = famSearchText.trim()
@@ -320,8 +322,21 @@ const AdminPage = () => {
       {canSearchFamUserAccess && (
         <Column sm={4} md={8} lg={16}>
           <Tile>
-            <h2 className="dashboard-title">FAM user access lookup</h2>
-            <p>Search IDIR or Business BCeID users to view their LEXIS role assignments.</p>
+            <div className="admin-section-heading">
+              <div>
+                <h2 className="dashboard-title">FAM user access lookup</h2>
+                <p>Search IDIR or Business BCeID users to view their LEXIS role assignments.</p>
+              </div>
+              <Button
+                href={famManageUrl}
+                kind="tertiary"
+                rel="noopener noreferrer"
+                size="sm"
+                target="_blank"
+              >
+                Manage in FAM
+              </Button>
+            </div>
 
             <div className="legacy-search-grid">
               <TextInput
