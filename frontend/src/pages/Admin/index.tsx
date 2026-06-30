@@ -220,6 +220,7 @@ const AdminPage = () => {
   const grantedActionCount = useMemo(() => {
     return LEGACY_ACTION_CATALOG.filter((action) => canPerform(action)).length
   }, [canPerform])
+  const canSearchFamUserAccess = canPerform('/lexisAgentAdmin')
 
   const runFamUserSearch = async (pageNumber = famPageNumber, pageSize = famPageSize) => {
     const search = famSearchText.trim()
@@ -316,118 +317,120 @@ const AdminPage = () => {
         </Tile>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">FAM user access lookup</h2>
-          <p>Search IDIR or Business BCeID users to view their LEXIS role assignments.</p>
+      {canSearchFamUserAccess && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">FAM user access lookup</h2>
+            <p>Search IDIR or Business BCeID users to view their LEXIS role assignments.</p>
 
-          <div className="legacy-search-grid">
-            <TextInput
-              id="famUserSearch"
-              labelText="User name, name, or email"
-              value={famSearchText}
-              onChange={(event) => setFamSearchText(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  setFamPageNumber(1)
-                  void runFamUserSearch(1, famPageSize)
-                }
-              }}
-            />
-            <div className="legacy-search-actions">
-              <Button
-                type="button"
-                onClick={() => {
-                  setFamPageNumber(1)
-                  void runFamUserSearch(1, famPageSize)
+            <div className="legacy-search-grid">
+              <TextInput
+                id="famUserSearch"
+                labelText="User name, name, or email"
+                value={famSearchText}
+                onChange={(event) => setFamSearchText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    setFamPageNumber(1)
+                    void runFamUserSearch(1, famPageSize)
+                  }
                 }}
-                disabled={isFamSearchLoading}
-              >
-                Search FAM Access
-              </Button>
-            </div>
-          </div>
-
-          {famSearchError && (
-            <InlineNotification
-              kind={famSearchResponse?.configured === false ? 'warning' : 'error'}
-              lowContrast
-              title="FAM user access"
-              subtitle={famSearchError}
-            />
-          )}
-
-          <Table useZebraStyles size="sm">
-            <TableHead>
-              <TableRow>
-                <TableHeader>User</TableHeader>
-                <TableHeader>Type</TableHeader>
-                <TableHeader>Email</TableHeader>
-                <TableHeader>Role</TableHeader>
-                <TableHeader>Scope</TableHeader>
-                <TableHeader>Created</TableHeader>
-                <TableHeader>Expires</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {(famSearchResponse?.results ?? []).map((assignment) => (
-                <TableRow
-                  key={assignment.assignmentId ?? `${assignment.userName}-${assignment.roleName}`}
+              />
+              <div className="legacy-search-actions">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setFamPageNumber(1)
+                    void runFamUserSearch(1, famPageSize)
+                  }}
+                  disabled={isFamSearchLoading}
                 >
-                  <TableCell>
-                    <strong>{displayValue(assignment.userName)}</strong>
-                    <div>{displayValue(assignment.fullName)}</div>
-                  </TableCell>
-                  <TableCell>
-                    {displayValue(assignment.userTypeDescription ?? assignment.userTypeCode)}
-                  </TableCell>
-                  <TableCell>{displayValue(assignment.email)}</TableCell>
-                  <TableCell>
-                    <strong>
-                      {displayValue(assignment.roleDisplayName ?? assignment.roleName)}
-                    </strong>
-                    <div>{displayValue(assignment.roleName)}</div>
-                  </TableCell>
-                  <TableCell>{roleScopeLabel(assignment)}</TableCell>
-                  <TableCell>{formatDate(assignment.createDate)}</TableCell>
-                  <TableCell>{formatDate(assignment.expiryDate)}</TableCell>
-                </TableRow>
-              ))}
-              {famSearchResponse?.results.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7}>
-                    {famSearchResponse.configured
-                      ? 'No FAM role assignments matched the current search.'
-                      : 'FAM user access lookup is not configured.'}
-                  </TableCell>
-                </TableRow>
-              )}
-              {!famSearchResponse && (
-                <TableRow>
-                  <TableCell colSpan={7}>Search to view FAM role assignments.</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                  Search FAM Access
+                </Button>
+              </div>
+            </div>
 
-          {famSearchResponse && famSearchResponse.configured && (
-            <Pagination
-              backwardText="Previous page"
-              forwardText="Next page"
-              itemsPerPageText="Items per page"
-              page={famPageNumber}
-              pageSize={famPageSize}
-              pageSizes={FAM_USER_ROLE_PAGE_SIZES}
-              totalItems={famSearchResponse.total}
-              onChange={({ page, pageSize }) => {
-                setFamPageNumber(page)
-                setFamPageSize(pageSize)
-                void runFamUserSearch(page, pageSize)
-              }}
-            />
-          )}
-        </Tile>
-      </Column>
+            {famSearchError && (
+              <InlineNotification
+                kind={famSearchResponse?.configured === false ? 'warning' : 'error'}
+                lowContrast
+                title="FAM user access"
+                subtitle={famSearchError}
+              />
+            )}
+
+            <Table useZebraStyles size="sm">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>User</TableHeader>
+                  <TableHeader>Type</TableHeader>
+                  <TableHeader>Email</TableHeader>
+                  <TableHeader>Role</TableHeader>
+                  <TableHeader>Scope</TableHeader>
+                  <TableHeader>Created</TableHeader>
+                  <TableHeader>Expires</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(famSearchResponse?.results ?? []).map((assignment) => (
+                  <TableRow
+                    key={assignment.assignmentId ?? `${assignment.userName}-${assignment.roleName}`}
+                  >
+                    <TableCell>
+                      <strong>{displayValue(assignment.userName)}</strong>
+                      <div>{displayValue(assignment.fullName)}</div>
+                    </TableCell>
+                    <TableCell>
+                      {displayValue(assignment.userTypeDescription ?? assignment.userTypeCode)}
+                    </TableCell>
+                    <TableCell>{displayValue(assignment.email)}</TableCell>
+                    <TableCell>
+                      <strong>
+                        {displayValue(assignment.roleDisplayName ?? assignment.roleName)}
+                      </strong>
+                      <div>{displayValue(assignment.roleName)}</div>
+                    </TableCell>
+                    <TableCell>{roleScopeLabel(assignment)}</TableCell>
+                    <TableCell>{formatDate(assignment.createDate)}</TableCell>
+                    <TableCell>{formatDate(assignment.expiryDate)}</TableCell>
+                  </TableRow>
+                ))}
+                {famSearchResponse?.results.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7}>
+                      {famSearchResponse.configured
+                        ? 'No FAM role assignments matched the current search.'
+                        : 'FAM user access lookup is not configured.'}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!famSearchResponse && (
+                  <TableRow>
+                    <TableCell colSpan={7}>Search to view FAM role assignments.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+
+            {famSearchResponse && famSearchResponse.configured && (
+              <Pagination
+                backwardText="Previous page"
+                forwardText="Next page"
+                itemsPerPageText="Items per page"
+                page={famPageNumber}
+                pageSize={famPageSize}
+                pageSizes={FAM_USER_ROLE_PAGE_SIZES}
+                totalItems={famSearchResponse.total}
+                onChange={({ page, pageSize }) => {
+                  setFamPageNumber(page)
+                  setFamPageSize(pageSize)
+                  void runFamUserSearch(page, pageSize)
+                }}
+              />
+            )}
+          </Tile>
+        </Column>
+      )}
 
       <Column sm={4} md={8} lg={16}>
         <Tile>

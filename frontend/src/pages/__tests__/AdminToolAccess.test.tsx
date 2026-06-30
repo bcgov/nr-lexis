@@ -169,6 +169,7 @@ describe('Admin tool access smoke', () => {
     const adminRow = screen.getByText('LEXIS administration').closest('tr')
     expect(adminRow).not.toBeNull()
     expect(within(adminRow as HTMLTableRowElement).getByText('Denied')).toBeInTheDocument()
+    expect(screen.queryByText('FAM user access lookup')).not.toBeInTheDocument()
   })
 
   it('searches FAM user access and renders role assignments', async () => {
