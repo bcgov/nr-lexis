@@ -207,6 +207,64 @@ class OracleRepositorySupportTest {
   }
 
   @Test
+  void queryLegacyDynamicPageWithTotalShouldPreserveOffsetAcrossRequiredLegacyWindow() {
+    List<List<String>> pages = new java.util.ArrayList<>();
+    for (int page = 0; page < 5; page++) {
+      List<String> rows = new java.util.ArrayList<>();
+      for (int row = 1; row <= 10; row++) {
+        rows.add("row-" + ((page * 10) + row));
+      }
+      pages.add(rows);
+    }
+    TestRepository repository = new TestRepository(pages);
+
+    Page<String> results = repository.loadPageWithTotal(1, 25, 50);
+
+    assertThat(results.getContent())
+        .containsExactly(
+            "row-26",
+            "row-27",
+            "row-28",
+            "row-29",
+            "row-30",
+            "row-31",
+            "row-32",
+            "row-33",
+            "row-34",
+            "row-35",
+            "row-36",
+            "row-37",
+            "row-38",
+            "row-39",
+            "row-40",
+            "row-41",
+            "row-42",
+            "row-43",
+            "row-44",
+            "row-45",
+            "row-46",
+            "row-47",
+            "row-48",
+            "row-49",
+            "row-50");
+    assertThat(results.getTotalElements()).isEqualTo(50);
+    assertThat(repository.pageCalls()).isEqualTo(3);
+    assertThat(repository.requestedPages()).containsExactlyInAnyOrder(2, 3, 4);
+  }
+
+  @Test
+  void queryLegacyDynamicPageWithTotalShouldNotFetchWhenOffsetExceedsKnownTotal() {
+    TestRepository repository = new TestRepository(List.of(List.of("row-1")));
+
+    Page<String> results = repository.loadPageWithTotal(10, 10, 20);
+
+    assertThat(results.getContent()).isEmpty();
+    assertThat(results.getTotalElements()).isEqualTo(20);
+    assertThat(repository.pageCalls()).isZero();
+    assertThat(repository.requestedPages()).isEmpty();
+  }
+
+  @Test
   void queryLegacyDynamicSliceShouldStopAfterPreviewWindow() {
     List<String> firstPage =
         List.of(
