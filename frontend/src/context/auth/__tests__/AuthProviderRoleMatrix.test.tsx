@@ -126,7 +126,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('false')
   })
 
-  it('maps legacy admin alias to canonical admin role and admin route', async () => {
+  it('maps legacy admin alias to canonical admin role and review route', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\admin',
@@ -140,13 +140,13 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/admin')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/fileApplicationUpload')).toHaveTextContent('true')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
   })
 
-  it('keeps admin routing and actions when read-only is also present', async () => {
+  it('keeps admin review routing and actions when read-only is also present', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\admin',
@@ -160,7 +160,7 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN,READ_ONLY')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/admin')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('true')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
@@ -321,7 +321,26 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
-  it('routes federal submitters to application submission upload with federal search access', async () => {
+  it('routes report-only users to their first available report', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\reporter',
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['mofrListing'],
+    })
+
+    renderProbe(['mofrListing', '/applicationReport', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/reports/biweeklyListing')
+    expect(screen.getByTestId('action-mofrListing')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+  })
+
+  it('routes federal submitters to federal search instead of application submission upload', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'bceid\\federal',
@@ -345,7 +364,7 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('FEDERAL_SUBMITTER')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/federal/application/upload')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/federal')
     expect(screen.getByTestId('action-/federalApplicationSearch')).toHaveTextContent('true')
     expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')

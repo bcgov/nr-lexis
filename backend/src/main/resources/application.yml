@@ -39,6 +39,10 @@ management:
 lexis:
   mail:
     from: ${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}
+  fam:
+    admin:
+      base-url: ${LEXIS_FAM_ADMIN_BASE_URL:${FAM_ADMIN_BASE_URL:}}
+      application-id: ${LEXIS_FAM_APPLICATION_ID:}
   auth:
     cognito:
       userinfo-uri: ${COGNITO_USERINFO_URI:}

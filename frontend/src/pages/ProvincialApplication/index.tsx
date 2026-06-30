@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -34,6 +34,12 @@ import {
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
+  buildSearchTotalCacheKey,
+  getCachedSearchTotal,
+  setCachedSearchTotal,
+  type SearchTotalCache,
+} from '@/pages/shared/search-total-cache'
+import {
   DEFAULT_SEARCH_PAGE,
   DEFAULT_SEARCH_PAGE_SIZE,
   SEARCH_PAGE_SIZE_OPTIONS,
@@ -52,7 +58,14 @@ import {
 } from '@/pages/shared/search-query-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { searchProvincialApplications } from '@/service/provincial-application-search-service'
+import {
+  loadSearchWithDeferredTotal,
+  prefetchAdjacentSearchPages,
+} from '@/pages/shared/deferred-search-total'
+import {
+  countProvincialApplications,
+  searchProvincialApplications,
+} from '@/service/provincial-application-search-service'
 import {
   fetchProvincialApplicationOptions,
   type SearchOption,
@@ -146,6 +159,7 @@ const ProvincialApplicationPage = () => {
     Record<string, ProvincialApplicationSearchItem>
   >({})
   const [exemptionStatus, setExemptionStatus] = useState<ExemptionStatus | null>(null)
+  const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canCreateApplication = canPerform('createApplication')
   const canUploadApplicationSubmission = canPerform('uploadApplicationSubmission')
@@ -230,6 +244,9 @@ const ProvincialApplicationPage = () => {
   }, [filters.listingFromDate, filters.listingToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
+  const commitResults = useCallback((nextResults: ProvincialApplicationSearchResponse) => {
+    setResults(nextResults)
+  }, [])
 
   const runSearch = useCallback(
     async (request: ProvincialApplicationSearchRequest, options: { force?: boolean } = {}) => {
@@ -238,9 +255,23 @@ const ProvincialApplicationPage = () => {
         capabilities?.principal,
         request,
       )
+      const isLatestRequest = beginSearchRequest()
       if (!options.force) {
         const cachedResults = getPageDataCache<ProvincialApplicationSearchResponse>(pageCacheKey)
         if (cachedResults) {
+          setCachedSearchTotal(
+            totalCacheRef.current,
+            buildSearchTotalCacheKey(request.filters),
+            cachedResults.page.totalElements,
+          )
+          prefetchAdjacentSearchPages({
+            pageId: 'provincial-application-search',
+            principal: capabilities?.principal,
+            request,
+            response: cachedResults,
+            search: searchProvincialApplications,
+            onError: console.error,
+          })
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -248,7 +279,6 @@ const ProvincialApplicationPage = () => {
         }
       }
 
-      const isLatestRequest = beginSearchRequest()
       if (hasInvalidIsoDateValue(request.filters.listingFromDate, request.filters.listingToDate)) {
         setLoading(false)
         return
@@ -256,10 +286,41 @@ const ProvincialApplicationPage = () => {
       setLoading(true)
       setErrorMessage('')
       try {
-        const response = await searchProvincialApplications(request)
+        const totalCacheKey = buildSearchTotalCacheKey(request.filters)
+        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const commitSearchResponse = (
+          response: ProvincialApplicationSearchResponse,
+          totalIsExact: boolean,
+        ) => {
+          if (totalIsExact) {
+            setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
+            setPageDataCache(pageCacheKey, response)
+            prefetchAdjacentSearchPages({
+              pageId: 'provincial-application-search',
+              principal: capabilities?.principal,
+              request,
+              response,
+              search: searchProvincialApplications,
+              onError: console.error,
+            })
+          }
+          queueMicrotask(() => {
+            if (isLatestRequest()) {
+              commitResults(response)
+            }
+          })
+        }
+        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+          request,
+          cachedTotal,
+          search: searchProvincialApplications,
+          count: countProvincialApplications,
+          isLatestRequest,
+          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
+          onCountError: console.error,
+        })
         if (isLatestRequest()) {
-          setPageDataCache(pageCacheKey, response)
-          setResults(response)
+          commitSearchResponse(response, totalIsExact)
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -273,7 +334,7 @@ const ProvincialApplicationPage = () => {
         }
       }
     },
-    [beginSearchRequest, capabilities?.principal],
+    [beginSearchRequest, capabilities?.principal, commitResults],
   )
 
   useEffect(() => {
@@ -411,20 +472,28 @@ const ProvincialApplicationPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid provincial-application-search-page">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial application search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--filters">
+        <section className="legacy-search-section legacy-search-section--filters provincial-application-search-filters">
           <Tile>
-            <div className="legacy-search-grid">
+            <div className="legacy-search-grid provincial-application-search-grid">
               <TextInput
                 id="applicationNumber"
                 labelText="Application number"
                 value={filters.applicationNumber}
                 onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+              />
+              <SearchableSelect
+                id="applicationStatus"
+                labelText="Application status"
+                value={filters.applicationStatus}
+                placeholder="All statuses"
+                options={applicationStatusOptions}
+                onChange={(value) => updateFilter('applicationStatus', value)}
               />
               <TextInput
                 id="packageNumber"
@@ -445,14 +514,6 @@ const ProvincialApplicationPage = () => {
                 labelText="Exemption number"
                 value={filters.exemptionNumber}
                 onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
-              />
-              <SearchableSelect
-                id="applicationStatus"
-                labelText="Application status"
-                value={filters.applicationStatus}
-                placeholder="All statuses"
-                options={applicationStatusOptions}
-                onChange={(value) => updateFilter('applicationStatus', value)}
               />
               <SearchableSelect
                 id="productTypeCode"
@@ -478,22 +539,6 @@ const ProvincialApplicationPage = () => {
                   )
                 }}
               />
-              <IsoDatePicker
-                id="listingFromDate"
-                labelText="Listing from date (YYYY-MM-DD)"
-                value={filters.listingFromDate}
-                invalid={!isValidIsoDate(filters.listingFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listingFromDate', value)}
-              />
-              <IsoDatePicker
-                id="listingToDate"
-                labelText="Listing to date (YYYY-MM-DD)"
-                value={filters.listingToDate}
-                invalid={!isValidIsoDate(filters.listingToDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listingToDate', value)}
-              />
               <TextInput
                 id="applicantClientNumber"
                 labelText="Applicant client number"
@@ -505,6 +550,22 @@ const ProvincialApplicationPage = () => {
                 labelText="Owner client number"
                 value={filters.ownerClientNumber}
                 onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+              />
+              <IsoDatePicker
+                id="listingFromDate"
+                labelText="Listing from date"
+                value={filters.listingFromDate}
+                invalid={!isValidIsoDate(filters.listingFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingFromDate', value)}
+              />
+              <IsoDatePicker
+                id="listingToDate"
+                labelText="Listing to date"
+                value={filters.listingToDate}
+                invalid={!isValidIsoDate(filters.listingToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingToDate', value)}
               />
             </div>
             <div className="legacy-search-actions">

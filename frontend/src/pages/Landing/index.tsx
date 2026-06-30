@@ -5,7 +5,7 @@ import { Login } from '@carbon/icons-react'
 import { AppNotification } from '../../components/AppNotification'
 import type { LoginProvider } from '@/context/auth/types'
 import { useAuth } from '@/context/auth/useAuth'
-import logo from '@/assets/gov-bc-logo-horiz.png'
+import logo from '@/assets/BCID_H_rgb_pos.png'
 import landingImage from '@/assets/landing.jpg'
 
 const LandingPage = () => {
@@ -33,15 +33,17 @@ const LandingPage = () => {
   return (
     <main className="landing-grid-container" id="main-content" aria-busy={isLoading}>
       <Grid fullWidth className="landing-grid">
-        <Column className="landing-content-col" sm={4} md={8} lg={8}>
+        <Column className="landing-content-col" sm={4} md={5} lg={10}>
           <div className="landing-content-wrapper">
             <div className="landing-logo-mark">
               <img src={logo} alt="Government of British Columbia" className="landing-logo" />
             </div>
 
             <div className="landing-title-group">
-              <p className="landing-kicker">NR LEXIS</p>
-              <h1 className="landing-title">Log Exemption Information System</h1>
+              <h1 className="landing-title">Welcome to LEXIS</h1>
+              <p className="landing-subtitle">
+                Create and manage applications, view offers and permits
+              </p>
             </div>
 
             <div className="landing-actions">
@@ -57,7 +59,7 @@ const LandingPage = () => {
                     Log in with IDIR
                   </Button>
                   <Button
-                    kind="secondary"
+                    kind="tertiary"
                     renderIcon={Login}
                     onClick={() => void onLogin('business-bceid')}
                     disabled={isLoading || !usesExternalLogin}
@@ -88,7 +90,7 @@ const LandingPage = () => {
           </div>
         </Column>
 
-        <Column className="landing-img-col" sm={4} md={8} lg={8}>
+        <Column className="landing-img-col" sm={4} md={3} lg={6}>
           <img src={landingImage} alt="" className="landing-img" aria-hidden="true" />
         </Column>
       </Grid>

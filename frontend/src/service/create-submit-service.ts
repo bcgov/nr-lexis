@@ -284,10 +284,16 @@ export type ProvincialOfferCreateSubmission = {
   companyName: string
   contactName: string
   region: string
+  offerVolume: string
   purchaseOfferAmount: string
   purchaseOfferDate: string
-  offerEndDate: string
+  offerWithdrawalDate: string
   withdrawReason: string
+  teacReviewDate: string
+  fairOfferIndicator: string
+  validOfferIndicator: string
+  approvalIndicator: string
+  offerRemark: string
   pickupLocation: string
   offerCondition: string
 }
@@ -306,13 +312,18 @@ export const submitProvincialOfferCreate = async (
         offeringClientNumber: form.offeringClientNumber,
         clientNumber: form.offeringClientNumber,
         region: form.region,
+        offerVolume: form.offerVolume,
         purchaseOfferAmount: form.purchaseOfferAmount,
         purchaseOfferDate: form.purchaseOfferDate,
-        offerEndDate: form.offerEndDate,
+        offerWithdrawalDate: form.offerWithdrawalDate,
         withdrawReason: form.withdrawReason,
+        teacReviewDate: form.teacReviewDate,
+        fairOfferIndicator: form.fairOfferIndicator,
+        validOfferIndicator: form.validOfferIndicator,
+        approvalIndicator: form.approvalIndicator,
         pickupLocation: form.pickupLocation,
         offerCondition: form.offerCondition,
-        offerRemark: form.offerCondition,
+        offerRemark: form.offerRemark || form.offerCondition,
       }),
     )
     return parseCreateResponse(payload, ['exportPurchaseOfferNumber', 'offerNumber'])

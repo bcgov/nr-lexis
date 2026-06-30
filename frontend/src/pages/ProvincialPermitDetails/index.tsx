@@ -4,12 +4,17 @@ import {
   Column,
   Grid,
   InlineLoading,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
   TextInput,
   Tile,
 } from '@carbon/react'
@@ -76,6 +81,15 @@ const isApplicationDocumentRow = (row: PermitDocumentRow): boolean => {
 type PermitInvoiceField = 'invoiceDraftNumber' | 'invoiceDraftExportValue' | 'invoiceDraftFeeInLieu'
 
 const MAX_SALES_INVOICE_NUMBER_LENGTH = 9
+const PERMIT_DETAIL_TAB_INDEX = {
+  summary: 0,
+  items: 1,
+  fees: 2,
+  billing: 3,
+  orders: 4,
+  documents: 5,
+  invoices: 6,
+} as const
 
 const ProvincialPermitDetailsPage = () => {
   const navigate = useNavigate()
@@ -98,6 +112,9 @@ const ProvincialPermitDetailsPage = () => {
   const [invoiceDraftFeeInLieu, setInvoiceDraftFeeInLieu] = useState('')
   const [invoiceUploadConversionRate, setInvoiceUploadConversionRate] = useState('1.00')
   const [isAddingInvoice, setIsAddingInvoice] = useState(false)
+  const [selectedPermitTabIndex, setSelectedPermitTabIndex] = useState(
+    PERMIT_DETAIL_TAB_INDEX.summary,
+  )
   const [touchedInvoiceFields, setTouchedInvoiceFields] = useState<
     TouchedFields<PermitInvoiceField>
   >({})
@@ -402,7 +419,10 @@ const ProvincialPermitDetailsPage = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
-    document.getElementById('permitDocumentUpload')?.scrollIntoView({ block: 'start' })
+    setSelectedPermitTabIndex(PERMIT_DETAIL_TAB_INDEX.documents)
+    window.setTimeout(() => {
+      document.getElementById('permitDocumentUpload')?.scrollIntoView({ block: 'start' })
+    }, 0)
   }, [detail?.permitNumber])
 
   const onOpenDocument = useCallback(async (row: PermitDocumentRow) => {
@@ -589,7 +609,10 @@ const ProvincialPermitDetailsPage = () => {
 
     if (isLatestRequest()) {
       setInvoiceUploadConversionRate(conversionRate)
-      document.getElementById('permitInvoiceUpload')?.scrollIntoView({ block: 'start' })
+      setSelectedPermitTabIndex(PERMIT_DETAIL_TAB_INDEX.invoices)
+      window.setTimeout(() => {
+        document.getElementById('permitInvoiceUpload')?.scrollIntoView({ block: 'start' })
+      }, 0)
     }
   }, [beginInvoiceUploadRequest, detail?.permitNumber])
 
@@ -736,467 +759,537 @@ const ProvincialPermitDetailsPage = () => {
             </Column>
           )}
 
-          <Column sm={4} md={8} lg={16}>
-            <DetailFieldTile
-              title="Permit summary"
-              fields={[
-                { label: 'Permit number', value: displayValue(detail.permitNumber) },
-                { label: 'Application number', value: displayValue(detail.applicationNumber) },
-                { label: 'Package number', value: displayValue(detail.packageNumber) },
-                { label: 'Exemption number', value: displayValue(detail.exemptionNumber) },
-                {
-                  label: 'Status',
-                  value: displayValue(detail.permitStatusDescription ?? detail.permitStatusCode),
-                },
-                { label: 'Issue date', value: displayValue(detail.issueDate) },
-                { label: 'Expiry date', value: displayValue(detail.expiryDate) },
-                { label: 'Received date', value: displayValue(detail.receivedDate) },
-                { label: 'Region', value: displayValue(detail.region) },
-              ]}
-            />
-          </Column>
+          <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
+            <Tabs
+              selectedIndex={selectedPermitTabIndex}
+              onChange={({ selectedIndex }) => setSelectedPermitTabIndex(selectedIndex)}
+            >
+              <TabList
+                aria-label="Permit detail sections"
+                contained
+                size="md"
+                className="application-tabs__list application-detail-tab-list"
+              >
+                <Tab>Summary</Tab>
+                <Tab>Items</Tab>
+                <Tab>Fees</Tab>
+                <Tab>Billing</Tab>
+                <Tab>Orders</Tab>
+                <Tab>Documents</Tab>
+                <Tab>Invoices</Tab>
+              </TabList>
+              <TabPanels>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <DetailFieldTile
+                        title="Permit summary"
+                        fields={[
+                          { label: 'Permit number', value: displayValue(detail.permitNumber) },
+                          {
+                            label: 'Application number',
+                            value: displayValue(detail.applicationNumber),
+                          },
+                          { label: 'Package number', value: displayValue(detail.packageNumber) },
+                          {
+                            label: 'Exemption number',
+                            value: displayValue(detail.exemptionNumber),
+                          },
+                          {
+                            label: 'Status',
+                            value: displayValue(
+                              detail.permitStatusDescription ?? detail.permitStatusCode,
+                            ),
+                          },
+                          { label: 'Issue date', value: displayValue(detail.issueDate) },
+                          { label: 'Expiry date', value: displayValue(detail.expiryDate) },
+                          { label: 'Received date', value: displayValue(detail.receivedDate) },
+                          { label: 'Region', value: displayValue(detail.region) },
+                        ]}
+                      />
+                    </Column>
 
-          <Column sm={4} md={8} lg={8}>
-            <DetailFieldTile
-              title="Shipping"
-              fields={[
-                {
-                  label: 'Destination company',
-                  value: displayValue(detail.destinationCompanyName),
-                },
-                {
-                  label: 'Destination country',
-                  value: displayValue(detail.destinationCountryCode),
-                },
-                { label: 'Transport type', value: displayValue(detail.transportTypeCode) },
-                { label: 'Transport name', value: displayValue(detail.transportName) },
-                { label: 'Port of export', value: displayValue(detail.portOfExportCode) },
-                {
-                  label: 'Other port of export',
-                  value: displayValue(detail.otherPortOfExport),
-                },
-                {
-                  label: 'Estimated shipping date',
-                  value: displayValue(detail.estimatedShippingDate),
-                },
-              ]}
-            />
-          </Column>
+                    <Column sm={4} md={8} lg={8}>
+                      <DetailFieldTile
+                        title="Shipping"
+                        fields={[
+                          {
+                            label: 'Destination company',
+                            value: displayValue(detail.destinationCompanyName),
+                          },
+                          {
+                            label: 'Destination country',
+                            value: displayValue(detail.destinationCountryCode),
+                          },
+                          {
+                            label: 'Transport type',
+                            value: displayValue(detail.transportTypeCode),
+                          },
+                          { label: 'Transport name', value: displayValue(detail.transportName) },
+                          { label: 'Port of export', value: displayValue(detail.portOfExportCode) },
+                          {
+                            label: 'Other port of export',
+                            value: displayValue(detail.otherPortOfExport),
+                          },
+                          {
+                            label: 'Estimated shipping date',
+                            value: displayValue(detail.estimatedShippingDate),
+                          },
+                        ]}
+                      />
+                    </Column>
 
-          <Column sm={4} md={8} lg={8}>
-            <DetailFieldTile
-              title="Financial and volume"
-              fields={[
-                { label: 'Permit volume (m3)', value: displayValue(detail.permitVolume) },
-                { label: 'Number of pieces', value: displayValue(detail.numberOfPieces) },
-                { label: 'Receipt number', value: displayValue(detail.receiptNumber) },
-                { label: 'Invoice number', value: displayValue(detail.invoiceNumber) },
-                {
-                  label: 'Federal permit number',
-                  value: displayValue(detail.federalPermitNumber),
-                },
-                {
-                  label: 'Applicant client number',
-                  value: displayValue(detail.applicantClientNumber),
-                },
-                { label: 'Owner client number', value: displayValue(detail.ownerClientNumber) },
-                { label: 'Remarks', value: displayValue(detail.remarks) },
-              ]}
-            />
-          </Column>
+                    <Column sm={4} md={8} lg={8}>
+                      <DetailFieldTile
+                        title="Financial and volume"
+                        fields={[
+                          { label: 'Permit volume (m3)', value: displayValue(detail.permitVolume) },
+                          { label: 'Number of pieces', value: displayValue(detail.numberOfPieces) },
+                          { label: 'Receipt number', value: displayValue(detail.receiptNumber) },
+                          { label: 'Invoice number', value: displayValue(detail.invoiceNumber) },
+                          {
+                            label: 'Federal permit number',
+                            value: displayValue(detail.federalPermitNumber),
+                          },
+                          {
+                            label: 'Applicant client number',
+                            value: displayValue(detail.applicantClientNumber),
+                          },
+                          {
+                            label: 'Owner client number',
+                            value: displayValue(detail.ownerClientNumber),
+                          },
+                          { label: 'Remarks', value: displayValue(detail.remarks) },
+                        ]}
+                      />
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">
+                          Permit items{' '}
+                          <ApiSourceTag context="Permit item rows are returned from the permit items service." />
+                        </h2>
+                        <TextInput
+                          id="permitItemsFilter"
+                          labelText="Filter item rows"
+                          value={itemsFilter}
+                          onChange={(event) => updateFilterParam('itemsFilter', event.target.value)}
+                          placeholder="Filter by mark, species, grade, pieces, or volume"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Item</TableHeader>
+                              <TableHeader>Timber mark</TableHeader>
+                              <TableHeader>Species</TableHeader>
+                              <TableHeader>Grade</TableHeader>
+                              <TableHeader>Pieces</TableHeader>
+                              <TableHeader>Volume (m3)</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredItems.map((row) => (
+                              <TableRow key={row.id}>
+                                <TableCell>{row.id}</TableCell>
+                                <TableCell>{row.timberMark || '-'}</TableCell>
+                                <TableCell>{row.species || '-'}</TableCell>
+                                <TableCell>{row.grade || '-'}</TableCell>
+                                <TableCell>{row.pieces.toLocaleString()}</TableCell>
+                                <TableCell>{row.volume.toLocaleString()}</TableCell>
+                              </TableRow>
+                            ))}
+                            {filteredItems.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={6}>
+                                  No permit item rows matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                        <div className="legacy-search-grid">
+                          <TextInput
+                            id="permitInvoiceDraftNumber"
+                            labelText="Invoice number"
+                            value={invoiceDraftNumber}
+                            invalid={!!invoiceFieldError('invoiceDraftNumber')}
+                            invalidText={invoiceFieldError('invoiceDraftNumber')}
+                            onBlur={() => markInvoiceFieldTouched('invoiceDraftNumber')}
+                            onChange={(event) => setInvoiceDraftNumber(event.target.value)}
+                            placeholder="Enter sales invoice number"
+                          />
+                          <TextInput
+                            id="permitInvoiceDraftExportValue"
+                            labelText="Export value"
+                            value={invoiceDraftExportValue}
+                            invalid={!!invoiceFieldError('invoiceDraftExportValue')}
+                            invalidText={invoiceFieldError('invoiceDraftExportValue')}
+                            onBlur={() => markInvoiceFieldTouched('invoiceDraftExportValue')}
+                            onChange={(event) => setInvoiceDraftExportValue(event.target.value)}
+                            placeholder="Enter export value"
+                          />
+                          <TextInput
+                            id="permitInvoiceDraftFeeInLieu"
+                            labelText="Fee in lieu"
+                            value={invoiceDraftFeeInLieu}
+                            invalid={!!invoiceFieldError('invoiceDraftFeeInLieu')}
+                            invalidText={invoiceFieldError('invoiceDraftFeeInLieu')}
+                            onBlur={() => markInvoiceFieldTouched('invoiceDraftFeeInLieu')}
+                            onChange={(event) => setInvoiceDraftFeeInLieu(event.target.value)}
+                            placeholder="Enter fee in lieu (defaults to export value)"
+                          />
+                        </div>
+                        <div className="legacy-search-actions">
+                          <Button
+                            kind="secondary"
+                            size="sm"
+                            disabled={
+                              !canDeleteInvoiceDocuments || isAddingInvoice || !detail.permitNumber
+                            }
+                            onClick={() => void onAddInvoice()}
+                          >
+                            {isAddingInvoice ? 'Adding Invoice...' : 'Add Invoice'}
+                          </Button>
+                        </div>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">
+                          Fee ledger{' '}
+                          <ApiSourceTag context="Permit fee records are returned from the permit ledger service." />
+                        </h2>
+                        <TextInput
+                          id="permitFeesFilter"
+                          labelText="Filter fee rows"
+                          value={feesFilter}
+                          onChange={(event) => updateFilterParam('feesFilter', event.target.value)}
+                          placeholder="Filter by fee code, status, invoice, receipt, or amount"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Fee Code</TableHeader>
+                              <TableHeader>Description</TableHeader>
+                              <TableHeader>Amount</TableHeader>
+                              <TableHeader>Status</TableHeader>
+                              <TableHeader>Invoice</TableHeader>
+                              <TableHeader>Receipt</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredFees.map((row) => (
+                              <TableRow key={row.id}>
+                                <TableCell>{row.feeCode || '-'}</TableCell>
+                                <TableCell>{row.feeDescription || '-'}</TableCell>
+                                <TableCell>${formatAmount(row.amount)}</TableCell>
+                                <TableCell>{row.status || '-'}</TableCell>
+                                <TableCell>{row.invoiceNumber || '-'}</TableCell>
+                                <TableCell>{row.receiptNumber || '-'}</TableCell>
+                              </TableRow>
+                            ))}
+                            {filteredFees.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={6}>
+                                  No fee rows matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">
+                          General Billing Management System events{' '}
+                          <ApiSourceTag context="Permit billing events are returned from the General Billing Management System integration service." />
+                        </h2>
+                        <TextInput
+                          id="permitGbmsFilter"
+                          labelText="Filter General Billing Management System rows"
+                          value={gbmsFilter}
+                          onChange={(event) => updateFilterParam('gbmsFilter', event.target.value)}
+                          placeholder="Filter by type, status, date, reference, or notes"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Date</TableHeader>
+                              <TableHeader>Type</TableHeader>
+                              <TableHeader>Status</TableHeader>
+                              <TableHeader>Reference</TableHeader>
+                              <TableHeader>Notes</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredGbmsEvents.map((row) => (
+                              <TableRow key={row.id}>
+                                <TableCell>{row.eventDate || '-'}</TableCell>
+                                <TableCell>{row.eventType || '-'}</TableCell>
+                                <TableCell>{row.status || '-'}</TableCell>
+                                <TableCell>{row.reference || '-'}</TableCell>
+                                <TableCell>{row.notes || '-'}</TableCell>
+                              </TableRow>
+                            ))}
+                            {filteredGbmsEvents.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={5}>
+                                  No billing system rows matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={8}>
+                      <Tile>
+                        <h2 className="detail-tile-title">
+                          Order in Council items{' '}
+                          <ApiSourceTag context="Order in Council item rows are returned from the permit Order in Council dataset." />
+                        </h2>
+                        <TextInput
+                          id="permitOicFilter"
+                          labelText="Filter Order in Council rows"
+                          value={oicFilter}
+                          onChange={(event) => updateFilterParam('oicFilter', event.target.value)}
+                          placeholder="Filter by type, status, date, reference, or notes"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Date</TableHeader>
+                              <TableHeader>Type</TableHeader>
+                              <TableHeader>Status</TableHeader>
+                              <TableHeader>Reference</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredOicItems.map((row) => (
+                              <TableRow key={row.id}>
+                                <TableCell>{row.eventDate || '-'}</TableCell>
+                                <TableCell>{row.eventType || '-'}</TableCell>
+                                <TableCell>{row.status || '-'}</TableCell>
+                                <TableCell>{row.reference || '-'}</TableCell>
+                              </TableRow>
+                            ))}
+                            {filteredOicItems.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={4}>
+                                  No Order in Council rows matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
 
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">
-                Permit items{' '}
-                <ApiSourceTag context="Permit item rows are returned from the permit items service." />
-              </h2>
-              <TextInput
-                id="permitItemsFilter"
-                labelText="Filter item rows"
-                value={itemsFilter}
-                onChange={(event) => updateFilterParam('itemsFilter', event.target.value)}
-                placeholder="Filter by mark, species, grade, pieces, or volume"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Item</TableHeader>
-                    <TableHeader>Timber mark</TableHeader>
-                    <TableHeader>Species</TableHeader>
-                    <TableHeader>Grade</TableHeader>
-                    <TableHeader>Pieces</TableHeader>
-                    <TableHeader>Volume (m3)</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredItems.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.id}</TableCell>
-                      <TableCell>{row.timberMark || '-'}</TableCell>
-                      <TableCell>{row.species || '-'}</TableCell>
-                      <TableCell>{row.grade || '-'}</TableCell>
-                      <TableCell>{row.pieces.toLocaleString()}</TableCell>
-                      <TableCell>{row.volume.toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredItems.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6}>
-                        No permit item rows matched the current filter.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              <div className="legacy-search-grid">
-                <TextInput
-                  id="permitInvoiceDraftNumber"
-                  labelText="Invoice number"
-                  value={invoiceDraftNumber}
-                  invalid={!!invoiceFieldError('invoiceDraftNumber')}
-                  invalidText={invoiceFieldError('invoiceDraftNumber')}
-                  onBlur={() => markInvoiceFieldTouched('invoiceDraftNumber')}
-                  onChange={(event) => setInvoiceDraftNumber(event.target.value)}
-                  placeholder="Enter sales invoice number"
-                />
-                <TextInput
-                  id="permitInvoiceDraftExportValue"
-                  labelText="Export value"
-                  value={invoiceDraftExportValue}
-                  invalid={!!invoiceFieldError('invoiceDraftExportValue')}
-                  invalidText={invoiceFieldError('invoiceDraftExportValue')}
-                  onBlur={() => markInvoiceFieldTouched('invoiceDraftExportValue')}
-                  onChange={(event) => setInvoiceDraftExportValue(event.target.value)}
-                  placeholder="Enter export value"
-                />
-                <TextInput
-                  id="permitInvoiceDraftFeeInLieu"
-                  labelText="Fee in lieu"
-                  value={invoiceDraftFeeInLieu}
-                  invalid={!!invoiceFieldError('invoiceDraftFeeInLieu')}
-                  invalidText={invoiceFieldError('invoiceDraftFeeInLieu')}
-                  onBlur={() => markInvoiceFieldTouched('invoiceDraftFeeInLieu')}
-                  onChange={(event) => setInvoiceDraftFeeInLieu(event.target.value)}
-                  placeholder="Enter fee in lieu (defaults to export value)"
-                />
-              </div>
-              <div className="legacy-search-actions">
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!canDeleteInvoiceDocuments || isAddingInvoice || !detail.permitNumber}
-                  onClick={() => void onAddInvoice()}
-                >
-                  {isAddingInvoice ? 'Adding Invoice...' : 'Add Invoice'}
-                </Button>
-              </div>
-            </Tile>
-          </Column>
-
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">
-                Fee ledger{' '}
-                <ApiSourceTag context="Permit fee records are returned from the permit ledger service." />
-              </h2>
-              <TextInput
-                id="permitFeesFilter"
-                labelText="Filter fee rows"
-                value={feesFilter}
-                onChange={(event) => updateFilterParam('feesFilter', event.target.value)}
-                placeholder="Filter by fee code, status, invoice, receipt, or amount"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Fee Code</TableHeader>
-                    <TableHeader>Description</TableHeader>
-                    <TableHeader>Amount</TableHeader>
-                    <TableHeader>Status</TableHeader>
-                    <TableHeader>Invoice</TableHeader>
-                    <TableHeader>Receipt</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredFees.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.feeCode || '-'}</TableCell>
-                      <TableCell>{row.feeDescription || '-'}</TableCell>
-                      <TableCell>${formatAmount(row.amount)}</TableCell>
-                      <TableCell>{row.status || '-'}</TableCell>
-                      <TableCell>{row.invoiceNumber || '-'}</TableCell>
-                      <TableCell>{row.receiptNumber || '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredFees.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6}>No fee rows matched the current filter.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
-
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">
-                General Billing Management System events{' '}
-                <ApiSourceTag context="Permit billing events are returned from the General Billing Management System integration service." />
-              </h2>
-              <TextInput
-                id="permitGbmsFilter"
-                labelText="Filter General Billing Management System rows"
-                value={gbmsFilter}
-                onChange={(event) => updateFilterParam('gbmsFilter', event.target.value)}
-                placeholder="Filter by type, status, date, reference, or notes"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Date</TableHeader>
-                    <TableHeader>Type</TableHeader>
-                    <TableHeader>Status</TableHeader>
-                    <TableHeader>Reference</TableHeader>
-                    <TableHeader>Notes</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredGbmsEvents.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.eventDate || '-'}</TableCell>
-                      <TableCell>{row.eventType || '-'}</TableCell>
-                      <TableCell>{row.status || '-'}</TableCell>
-                      <TableCell>{row.reference || '-'}</TableCell>
-                      <TableCell>{row.notes || '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredGbmsEvents.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5}>
-                        No billing system rows matched the current filter.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
-
-          <Column sm={4} md={8} lg={8}>
-            <Tile>
-              <h2 className="detail-tile-title">
-                Order in Council items{' '}
-                <ApiSourceTag context="Order in Council item rows are returned from the permit Order in Council dataset." />
-              </h2>
-              <TextInput
-                id="permitOicFilter"
-                labelText="Filter Order in Council rows"
-                value={oicFilter}
-                onChange={(event) => updateFilterParam('oicFilter', event.target.value)}
-                placeholder="Filter by type, status, date, reference, or notes"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Date</TableHeader>
-                    <TableHeader>Type</TableHeader>
-                    <TableHeader>Status</TableHeader>
-                    <TableHeader>Reference</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredOicItems.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.eventDate || '-'}</TableCell>
-                      <TableCell>{row.eventType || '-'}</TableCell>
-                      <TableCell>{row.status || '-'}</TableCell>
-                      <TableCell>{row.reference || '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredOicItems.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4}>
-                        No Order in Council rows matched the current filter.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
-
-          <Column sm={4} md={8} lg={8}>
-            <Tile>
-              <h2 className="detail-tile-title">
-                Blanket Order in Council items{' '}
-                <ApiSourceTag context="Blanket Order in Council item rows are returned from the permit Blanket Order in Council dataset." />
-              </h2>
-              <TextInput
-                id="permitBoicFilter"
-                labelText="Filter Blanket Order in Council rows"
-                value={boicFilter}
-                onChange={(event) => updateFilterParam('boicFilter', event.target.value)}
-                placeholder="Filter by type, status, date, reference, or notes"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Date</TableHeader>
-                    <TableHeader>Type</TableHeader>
-                    <TableHeader>Status</TableHeader>
-                    <TableHeader>Reference</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredBoicItems.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.eventDate || '-'}</TableCell>
-                      <TableCell>{row.eventType || '-'}</TableCell>
-                      <TableCell>{row.status || '-'}</TableCell>
-                      <TableCell>{row.reference || '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredBoicItems.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4}>
-                        No Blanket Order in Council rows matched the current filter.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
-
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">
-                Permit documents{' '}
-                <ApiSourceTag context="Permit documents are returned from the permit documents service." />
-              </h2>
-              {canDeletePermitDocuments && (
-                <DetailDocumentUploadPanel
-                  workflowType="permit"
-                  targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
-                  inputId="permitDocumentUpload"
-                  disabled={!detail.permitNumber}
-                  onUploadComplete={refreshPermitDocuments}
-                />
-              )}
-              <TextInput
-                id="permitDocumentsFilter"
-                labelText="Filter document rows"
-                value={documentsFilter}
-                onChange={(event) => updateFilterParam('documentsFilter', event.target.value)}
-                placeholder="Filter by file name, description, type, or id"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>File Name</TableHeader>
-                    <TableHeader>Description</TableHeader>
-                    <TableHeader>Type</TableHeader>
-                    <TableHeader>Actions</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredDocumentRows.map((row) => {
-                    const invoiceDocument = isInvoiceDocumentRow(row)
-                    const canDeleteRow =
-                      canDeletePermitDocuments && (!invoiceDocument || canDeleteInvoiceDocuments)
-                    return (
-                      <TableRow key={row.id}>
-                        <TableCell>{row.name || '-'}</TableCell>
-                        <TableCell>{row.description || '-'}</TableCell>
-                        <TableCell>{row.type || row.typeCode || '-'}</TableCell>
-                        <TableCell>
-                          <div className="legacy-search-actions">
-                            <Button
-                              kind="ghost"
-                              size="sm"
-                              disabled={!canPerform('/permitDetails')}
-                              onClick={() => void onOpenDocument(row)}
-                            >
-                              Open
-                            </Button>
-                            <Button
-                              kind="danger--ghost"
-                              size="sm"
-                              disabled={!canDeleteRow || isRemovingDocumentId === row.id}
-                              onClick={() => void onRemoveDocument(row)}
-                            >
-                              {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                  {filteredDocumentRows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4}>
-                        No document rows matched the current filter.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
-
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">
-                Invoices{' '}
-                <ApiSourceTag context="Permit invoices are returned from the permit invoice service." />
-              </h2>
-              {canDeleteInvoiceDocuments && (
-                <DetailDocumentUploadPanel
-                  workflowType="invoice"
-                  targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
-                  inputId="permitInvoiceUpload"
-                  disabled={!detail.permitNumber}
-                  initialInvoiceConversionRate={invoiceUploadConversionRate}
-                  onUploadComplete={refreshPermitDocuments}
-                />
-              )}
-              <TextInput
-                id="permitInvoicesFilter"
-                labelText="Filter invoice rows"
-                value={invoicesFilter}
-                onChange={(event) => updateFilterParam('invoicesFilter', event.target.value)}
-                placeholder="Filter by invoice number, value, rate, or fee-in-lieu"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Invoice number</TableHeader>
-                    <TableHeader>Export value (CAD)</TableHeader>
-                    <TableHeader>Conversion Rate</TableHeader>
-                    <TableHeader>Fee in lieu</TableHeader>
-                    <TableHeader>Status</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredInvoiceRows.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.invoiceNumber || '-'}</TableCell>
-                      <TableCell>{row.exportValueCad || '-'}</TableCell>
-                      <TableCell>{row.conversionRate || '-'}</TableCell>
-                      <TableCell>{row.feeInLieu || '-'}</TableCell>
-                      <TableCell>{row.invoiceFound ? 'Found' : 'Missing'}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredInvoiceRows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5}>No invoice rows matched the current filter.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
+                    <Column sm={4} md={8} lg={8}>
+                      <Tile>
+                        <h2 className="detail-tile-title">
+                          Blanket Order in Council items{' '}
+                          <ApiSourceTag context="Blanket Order in Council item rows are returned from the permit Blanket Order in Council dataset." />
+                        </h2>
+                        <TextInput
+                          id="permitBoicFilter"
+                          labelText="Filter Blanket Order in Council rows"
+                          value={boicFilter}
+                          onChange={(event) => updateFilterParam('boicFilter', event.target.value)}
+                          placeholder="Filter by type, status, date, reference, or notes"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Date</TableHeader>
+                              <TableHeader>Type</TableHeader>
+                              <TableHeader>Status</TableHeader>
+                              <TableHeader>Reference</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredBoicItems.map((row) => (
+                              <TableRow key={row.id}>
+                                <TableCell>{row.eventDate || '-'}</TableCell>
+                                <TableCell>{row.eventType || '-'}</TableCell>
+                                <TableCell>{row.status || '-'}</TableCell>
+                                <TableCell>{row.reference || '-'}</TableCell>
+                              </TableRow>
+                            ))}
+                            {filteredBoicItems.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={4}>
+                                  No Blanket Order in Council rows matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">
+                          Permit documents{' '}
+                          <ApiSourceTag context="Permit documents are returned from the permit documents service." />
+                        </h2>
+                        {canDeletePermitDocuments && (
+                          <DetailDocumentUploadPanel
+                            workflowType="permit"
+                            targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
+                            inputId="permitDocumentUpload"
+                            disabled={!detail.permitNumber}
+                            onUploadComplete={refreshPermitDocuments}
+                          />
+                        )}
+                        <TextInput
+                          id="permitDocumentsFilter"
+                          labelText="Filter document rows"
+                          value={documentsFilter}
+                          onChange={(event) =>
+                            updateFilterParam('documentsFilter', event.target.value)
+                          }
+                          placeholder="Filter by file name, description, type, or id"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>File Name</TableHeader>
+                              <TableHeader>Description</TableHeader>
+                              <TableHeader>Type</TableHeader>
+                              <TableHeader>Actions</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredDocumentRows.map((row) => {
+                              const invoiceDocument = isInvoiceDocumentRow(row)
+                              const canDeleteRow =
+                                canDeletePermitDocuments &&
+                                (!invoiceDocument || canDeleteInvoiceDocuments)
+                              return (
+                                <TableRow key={row.id}>
+                                  <TableCell>{row.name || '-'}</TableCell>
+                                  <TableCell>{row.description || '-'}</TableCell>
+                                  <TableCell>{row.type || row.typeCode || '-'}</TableCell>
+                                  <TableCell>
+                                    <div className="legacy-search-actions">
+                                      <Button
+                                        kind="ghost"
+                                        size="sm"
+                                        disabled={!canPerform('/permitDetails')}
+                                        onClick={() => void onOpenDocument(row)}
+                                      >
+                                        Open
+                                      </Button>
+                                      <Button
+                                        kind="danger--ghost"
+                                        size="sm"
+                                        disabled={!canDeleteRow || isRemovingDocumentId === row.id}
+                                        onClick={() => void onRemoveDocument(row)}
+                                      >
+                                        {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                            {filteredDocumentRows.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={4}>
+                                  No document rows matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">
+                          Invoices{' '}
+                          <ApiSourceTag context="Permit invoices are returned from the permit invoice service." />
+                        </h2>
+                        {canDeleteInvoiceDocuments && (
+                          <DetailDocumentUploadPanel
+                            workflowType="invoice"
+                            targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
+                            inputId="permitInvoiceUpload"
+                            disabled={!detail.permitNumber}
+                            initialInvoiceConversionRate={invoiceUploadConversionRate}
+                            onUploadComplete={refreshPermitDocuments}
+                          />
+                        )}
+                        <TextInput
+                          id="permitInvoicesFilter"
+                          labelText="Filter invoice rows"
+                          value={invoicesFilter}
+                          onChange={(event) =>
+                            updateFilterParam('invoicesFilter', event.target.value)
+                          }
+                          placeholder="Filter by invoice number, value, rate, or fee-in-lieu"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Invoice number</TableHeader>
+                              <TableHeader>Export value (CAD)</TableHeader>
+                              <TableHeader>Conversion Rate</TableHeader>
+                              <TableHeader>Fee in lieu</TableHeader>
+                              <TableHeader>Status</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredInvoiceRows.map((row) => (
+                              <TableRow key={row.id}>
+                                <TableCell>{row.invoiceNumber || '-'}</TableCell>
+                                <TableCell>{row.exportValueCad || '-'}</TableCell>
+                                <TableCell>{row.conversionRate || '-'}</TableCell>
+                                <TableCell>{row.feeInLieu || '-'}</TableCell>
+                                <TableCell>{row.invoiceFound ? 'Found' : 'Missing'}</TableCell>
+                              </TableRow>
+                            ))}
+                            {filteredInvoiceRows.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={5}>
+                                  No invoice rows matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
           </Column>
 
           <Column sm={4} md={8} lg={8}>

@@ -86,6 +86,7 @@ class PurchaseOfferControllerTest {
             null,
             0,
             25,
+            null,
             null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
@@ -126,6 +127,7 @@ class PurchaseOfferControllerTest {
             "offerNumber DESC",
             0,
             25,
+            null,
             null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -168,6 +170,7 @@ class PurchaseOfferControllerTest {
         null,
         0,
         25,
+        null,
         authentication);
 
     ArgumentCaptor<PurchaseOfferSearchCriteria> criteriaCaptor =

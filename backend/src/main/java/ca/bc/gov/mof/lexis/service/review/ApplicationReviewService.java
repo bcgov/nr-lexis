@@ -15,6 +15,11 @@ public interface ApplicationReviewService {
 
   ApplicationReviewSearchResponseDto search(ApplicationReviewSearchCriteria criteria);
 
+  default ApplicationReviewSearchResponseDto search(
+      ApplicationReviewSearchCriteria criteria, Integer knownTotal) {
+    return search(criteria);
+  }
+
   int count(ApplicationReviewSearchCriteria criteria);
 
   ApplicationReviewPreviewResponseDto preview(ApplicationReviewSearchCriteria criteria);

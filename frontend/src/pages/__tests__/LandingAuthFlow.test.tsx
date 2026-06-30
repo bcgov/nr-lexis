@@ -59,6 +59,10 @@ describe('Landing auth flow smoke', () => {
     renderPage()
 
     expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'false')
+    expect(screen.getByRole('heading', { name: 'Welcome to LEXIS' })).toBeInTheDocument()
+    expect(
+      screen.getByText('Create and manage applications, view offers and permits'),
+    ).toBeInTheDocument()
 
     const loginButton = screen.getByRole('button', { name: 'Log in with IDIR' })
     await userEvent.click(loginButton)
@@ -81,6 +85,7 @@ describe('Landing auth flow smoke', () => {
     renderPage()
 
     const loginButton = screen.getByRole('button', { name: 'Log in with Business BCeID' })
+    expect(loginButton).toHaveClass('cds--btn--tertiary')
     await userEvent.click(loginButton)
 
     expect(login).toHaveBeenCalledWith('business-bceid')

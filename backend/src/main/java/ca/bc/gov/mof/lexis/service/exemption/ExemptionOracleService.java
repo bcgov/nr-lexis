@@ -38,11 +38,17 @@ public class ExemptionOracleService implements ExemptionService {
 
   @Override
   public ExemptionSearchResponseDto search(ExemptionSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  @Override
+  public ExemptionSearchResponseDto search(ExemptionSearchCriteria criteria, Integer knownTotal) {
     ExemptionSearchCriteria normalized = normalizeCriteria(criteria);
     int page = normalized.page();
     int size = normalized.size();
 
-    Page<ExemptionSearchResultDto> searchPage = repository.search(normalized);
+    Page<ExemptionSearchResultDto> searchPage =
+        knownTotal == null ? repository.search(normalized) : repository.search(normalized, knownTotal);
     List<ExemptionSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.getContent());
 
     return new ExemptionSearchResponseDto(

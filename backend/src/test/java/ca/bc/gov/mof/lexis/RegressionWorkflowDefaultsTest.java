@@ -67,11 +67,14 @@ class RegressionWorkflowDefaultsTest {
     String script = Files.readString(resolveWaitForFrontendScript());
 
     assertThat(script)
-        .doesNotContain("--ipv4")
+        .contains("WAIT_FOR_FRONTEND_IP_MODE:-ipv4")
+        .contains("curl_ip_args=(--ipv4)")
         .contains("--retry \"${curl_retries}\"")
         .contains("--retry-all-errors")
         .contains("getent ahosts")
-        .contains("curl exit ${curl_status}");
+        .contains("Route DNS lookup returned ${dns_count} address record(s).")
+        .contains("curl exit ${curl_status}")
+        .doesNotContain("dns_output");
   }
 
   private static Path resolveRegressionWorkflow() {

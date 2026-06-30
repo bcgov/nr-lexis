@@ -63,11 +63,18 @@ public class OracleLexisApplicationService implements LexisApplicationService {
 
   @Override
   public LexisApplicationSearchResponseDto search(LexisApplicationSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  @Override
+  public LexisApplicationSearchResponseDto search(
+      LexisApplicationSearchCriteria criteria, Integer knownTotal) {
     LexisApplicationSearchCriteria normalized = normalizeCriteria(criteria);
     int page = normalized.page();
     int size = normalized.size();
 
-    Page<LexisApplicationSearchResultDto> searchPage = repository.search(normalized);
+    Page<LexisApplicationSearchResultDto> searchPage =
+        knownTotal == null ? repository.search(normalized) : repository.search(normalized, knownTotal);
     List<LexisApplicationSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.getContent());
 
     return new LexisApplicationSearchResponseDto(

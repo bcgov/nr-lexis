@@ -74,10 +74,6 @@ const canAccessRoleScope = (
     hasRole(roles, 'APPLICATION_APPROVER') ||
     hasRole(roles, 'EXEMPTION_APPROVER')
 
-  if (roleScope === 'federalApplicationSubmission') {
-    return hasFederalSubmitter
-  }
-
   if (roleScope === 'provincialApplicationSubmission') {
     return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
   }
@@ -335,17 +331,9 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   },
   {
     path: '/federal/application/upload',
-    id: 'Upload Federal Application Submission',
-    roleScope: 'federalApplicationSubmission',
-    requiredActions: ['uploadApplicationSubmission'],
-    element: (
-      <Layout>
-        <AdminUploadsPage
-          lockedWorkflowType="applicationSubmission"
-          pageTitle="Upload Federal Application Submission"
-        />
-      </Layout>
-    ),
+    id: 'Federal Application Upload Redirect',
+    requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
+    element: <Navigate to="/federal" replace />,
     isNavigation: false,
   },
   {
@@ -369,6 +357,28 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isNavigation: true,
+  },
+  {
+    path: '/reports/:reportId',
+    id: 'Report Details',
+    requiredActions: [
+      '/applicationReport',
+      '/offerReport',
+      '/teacReport',
+      '/exemptionReport',
+      '/permitLedgerReport',
+      '/transportReport',
+      '/speciesGradeReport',
+      '/feeReport',
+      '/tenureReport',
+      'mofrListing',
+    ],
+    element: (
+      <Layout>
+        <ReportsPage />
+      </Layout>
+    ),
+    isNavigation: false,
   },
   {
     path: '/admin',

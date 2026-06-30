@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Checkbox,
   Column,
+  ComposedModal,
   Grid,
   FilterableMultiSelect,
+  InlineNotification,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
   Pagination,
   Table,
   TableBody,
@@ -15,7 +20,6 @@ import {
   TableRow,
   TextArea,
   TextInput,
-  Tile,
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
@@ -35,9 +39,13 @@ import {
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
+  buildSearchTotalCacheKey,
+  getCachedSearchTotal,
+  setCachedSearchTotal,
+  type SearchTotalCache,
+} from '@/pages/shared/search-total-cache'
+import {
   DEFAULT_SEARCH_PAGE,
-  DEFAULT_SEARCH_PAGE_SIZE,
-  SEARCH_PAGE_SIZE_OPTIONS,
   appendSearchParamsToPath,
   createEmptyPagedSearchResponse,
   createSearchParams,
@@ -55,7 +63,12 @@ import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
+  loadSearchWithDeferredTotal,
+  prefetchAdjacentSearchPages,
+} from '@/pages/shared/deferred-search-total'
+import {
   approveApplicationReview,
+  countApplicationReviews,
   sendApplicationReviewStatusEmail,
   searchApplicationReviews,
   updateApplicationReviewStatus,
@@ -90,7 +103,12 @@ const INITIAL_FILTERS: ApplicationReviewSearchFilters = {
   listingToDate: '',
 }
 
-const EMPTY_RESULTS = createEmptyPagedSearchResponse<ApplicationReviewSearchResponse>()
+const APPLICATION_REVIEW_DEFAULT_PAGE_SIZE = 100
+const APPLICATION_REVIEW_PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200] as const
+
+const EMPTY_RESULTS = createEmptyPagedSearchResponse<ApplicationReviewSearchResponse>(
+  APPLICATION_REVIEW_DEFAULT_PAGE_SIZE,
+)
 
 const SORT_COLUMNS: {
   id: ApplicationReviewSearchSortField
@@ -110,10 +128,14 @@ const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ApplicationReviewSearchSortField[]
 const REJECT_STATUS_CODE = 'REJ'
-const REJECT_REMARK_REQUIRED_MESSAGE = 'Rejection remark is required.'
-const REJECT_EMAIL_REQUIRED_MESSAGE = 'Enter a valid client email address before rejecting.'
+const REJECT_STATUS_REQUIRED_MESSAGE = 'Choose an application status before updating.'
+const REJECT_REMARK_REQUIRED_MESSAGE = 'Remarks are required.'
+const REJECT_EMAIL_REQUIRED_MESSAGE = 'Enter a valid client email address before sending email.'
 const EMAIL_NOT_CONFIGURED_MESSAGE =
   'Application status email is not configured yet. No email was sent.'
+const DEFAULT_REJECT_STATUS_OPTIONS: SearchOption[] = [
+  { value: REJECT_STATUS_CODE, label: 'Rejected' },
+]
 
 const normalizeReviewEmail = (value: string | null | undefined): string => {
   const normalized = normalizeEmail(value ?? '')
@@ -162,18 +184,22 @@ const ProvincialReviewPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
+  const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
   const [results, setResults] = useState<ApplicationReviewSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRowsById, setSelectedRowsById] = useState<Record<string, boolean>>({})
   const [submittingApproval, setSubmittingApproval] = useState(false)
   const [rejectApplicationNumber, setRejectApplicationNumber] = useState('')
+  const [rejectStatusCode, setRejectStatusCode] = useState(REJECT_STATUS_CODE)
   const [rejectEmailAddress, setRejectEmailAddress] = useState('')
   const [rejectRemark, setRejectRemark] = useState('')
+  const [sendRejectEmail, setSendRejectEmail] = useState(true)
   const [rejectValidationMessage, setRejectValidationMessage] = useState('')
   const [loadingRejectEmail, setLoadingRejectEmail] = useState(false)
   const [submittingReject, setSubmittingReject] = useState(false)
   const [reviewActionStatus, setReviewActionStatus] = useState<ReviewActionStatus | null>(null)
+  const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canApproveApplications = canPerform('/applicationsReview')
   const canOpenApplicationDetails =
     canPerform('/applicationSearch') && canPerform('/applicationDetails')
@@ -206,8 +232,8 @@ const ProvincialReviewPage = () => {
       page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_SEARCH_PAGE),
       pageSize: parsePageSizeParam(
         searchParams.get('pageSize'),
-        DEFAULT_SEARCH_PAGE_SIZE,
-        SEARCH_PAGE_SIZE_OPTIONS,
+        APPLICATION_REVIEW_DEFAULT_PAGE_SIZE,
+        APPLICATION_REVIEW_PAGE_SIZE_OPTIONS,
       ),
     }
   }, [searchParams])
@@ -246,6 +272,14 @@ const ProvincialReviewPage = () => {
     selectedRegions.length > 0
       ? `Selected: ${selectedRegions.map((region) => region.text).join(', ')}`
       : undefined
+  const rejectStatusSelectOptions = useMemo(() => {
+    const baseOptions =
+      reviewStatusOptions.length > 0 ? reviewStatusOptions : DEFAULT_REJECT_STATUS_OPTIONS
+
+    return baseOptions.some((option) => option.value === rejectStatusCode)
+      ? baseOptions
+      : [{ value: rejectStatusCode, label: rejectStatusCode }, ...baseOptions]
+  }, [rejectStatusCode, reviewStatusOptions])
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(
@@ -280,6 +314,9 @@ const ProvincialReviewPage = () => {
   }, [selectableRows, selectedRowsById])
 
   const beginSearchRequest = useLatestRequestGuard()
+  const commitResults = useCallback((nextResults: ApplicationReviewSearchResponse) => {
+    setResults(nextResults)
+  }, [])
 
   const runSearch = useCallback(
     async (request: ApplicationReviewSearchRequest, options: { force?: boolean } = {}) => {
@@ -288,9 +325,23 @@ const ProvincialReviewPage = () => {
         capabilities?.principal,
         request,
       )
+      const isLatestRequest = beginSearchRequest()
       if (!options.force) {
         const cachedResults = getPageDataCache<ApplicationReviewSearchResponse>(pageCacheKey)
         if (cachedResults) {
+          setCachedSearchTotal(
+            totalCacheRef.current,
+            buildSearchTotalCacheKey(request.filters),
+            cachedResults.page.totalElements,
+          )
+          prefetchAdjacentSearchPages({
+            pageId: 'provincial-review-search',
+            principal: capabilities?.principal,
+            request,
+            response: cachedResults,
+            search: searchApplicationReviews,
+            onError: console.error,
+          })
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -298,7 +349,6 @@ const ProvincialReviewPage = () => {
         }
       }
 
-      const isLatestRequest = beginSearchRequest()
       if (
         hasInvalidIsoDateValue(
           request.filters.receivedFromDate,
@@ -314,10 +364,41 @@ const ProvincialReviewPage = () => {
       setLoading(true)
       setErrorMessage('')
       try {
-        const response = await searchApplicationReviews(request)
+        const totalCacheKey = buildSearchTotalCacheKey(request.filters)
+        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const commitSearchResponse = (
+          response: ApplicationReviewSearchResponse,
+          totalIsExact: boolean,
+        ) => {
+          if (totalIsExact) {
+            setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
+            setPageDataCache(pageCacheKey, response)
+            prefetchAdjacentSearchPages({
+              pageId: 'provincial-review-search',
+              principal: capabilities?.principal,
+              request,
+              response,
+              search: searchApplicationReviews,
+              onError: console.error,
+            })
+          }
+          queueMicrotask(() => {
+            if (isLatestRequest()) {
+              commitResults(response)
+            }
+          })
+        }
+        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+          request,
+          cachedTotal,
+          search: searchApplicationReviews,
+          count: countApplicationReviews,
+          isLatestRequest,
+          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
+          onCountError: console.error,
+        })
         if (isLatestRequest()) {
-          setPageDataCache(pageCacheKey, response)
-          setResults(response)
+          commitSearchResponse(response, totalIsExact)
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -331,7 +412,7 @@ const ProvincialReviewPage = () => {
         }
       }
     },
-    [beginSearchRequest, capabilities?.principal],
+    [beginSearchRequest, capabilities?.principal, commitResults],
   )
 
   useEffect(() => {
@@ -350,6 +431,7 @@ const ProvincialReviewPage = () => {
 
       setProductTypeOptions(options.productTypes)
       setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+      setReviewStatusOptions(options.reviewStatuses)
     }
 
     void loadOptions()
@@ -370,7 +452,7 @@ const ProvincialReviewPage = () => {
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
         DEFAULT_SEARCH_PAGE,
-        DEFAULT_SEARCH_PAGE_SIZE,
+        APPLICATION_REVIEW_DEFAULT_PAGE_SIZE,
       ),
     )
   }
@@ -413,8 +495,10 @@ const ProvincialReviewPage = () => {
 
   const closeRejectPanel = useCallback(() => {
     setRejectApplicationNumber('')
+    setRejectStatusCode(REJECT_STATUS_CODE)
     setRejectEmailAddress('')
     setRejectRemark('')
+    setSendRejectEmail(true)
     setRejectValidationMessage('')
     setLoadingRejectEmail(false)
   }, [])
@@ -431,8 +515,10 @@ const ProvincialReviewPage = () => {
 
       setReviewActionStatus(null)
       setRejectApplicationNumber(applicationNumber)
+      setRejectStatusCode(REJECT_STATUS_CODE)
       setRejectEmailAddress('')
       setRejectRemark('')
+      setSendRejectEmail(true)
       setRejectValidationMessage('')
       setLoadingRejectEmail(true)
 
@@ -454,7 +540,7 @@ const ProvincialReviewPage = () => {
         setRejectEmailAddress(candidateEmail)
         if (!candidateEmail) {
           setRejectValidationMessage(
-            'No client email was found for this application. Enter one before rejecting.',
+            'No client email was found for this application. Enter one before sending email or clear Send status email.',
           )
         }
       } catch (error) {
@@ -472,21 +558,26 @@ const ProvincialReviewPage = () => {
       return
     }
 
+    const statusCode = normalizeReviewStatus(rejectStatusCode)
     const clientEmailAddress = normalizeReviewEmail(rejectEmailAddress)
     const remark = rejectRemark.trim()
+    if (!statusCode) {
+      setRejectValidationMessage(REJECT_STATUS_REQUIRED_MESSAGE)
+      return
+    }
     if (!remark) {
       setRejectValidationMessage(REJECT_REMARK_REQUIRED_MESSAGE)
       return
     }
-    if (!clientEmailAddress || !isValidEmail(clientEmailAddress)) {
+    if (sendRejectEmail && (!clientEmailAddress || !isValidEmail(clientEmailAddress))) {
       setRejectValidationMessage(REJECT_EMAIL_REQUIRED_MESSAGE)
       return
     }
 
     const payload = {
-      statusCode: REJECT_STATUS_CODE,
+      statusCode,
       remark,
-      clientEmailAddress,
+      clientEmailAddress: sendRejectEmail ? clientEmailAddress : '',
     }
 
     setSubmittingReject(true)
@@ -503,20 +594,27 @@ const ProvincialReviewPage = () => {
         return
       }
 
-      const emailResult = await sendApplicationReviewStatusEmail(rejectApplicationNumber, payload)
-      if (!emailResult.success) {
-        setReviewActionStatus({
-          kind: 'error',
-          message:
-            emailResult.message === EMAIL_NOT_CONFIGURED_MESSAGE
-              ? 'Application rejected, but status email is not configured yet.'
-              : emailResult.message || 'Application rejected, but email failed.',
-        })
-      } else {
+      if (!sendRejectEmail) {
         setReviewActionStatus({
           kind: 'success',
-          message: `Rejected application ${rejectApplicationNumber} and sent email.`,
+          message: `Updated application ${rejectApplicationNumber}.`,
         })
+      } else {
+        const emailResult = await sendApplicationReviewStatusEmail(rejectApplicationNumber, payload)
+        if (!emailResult.success) {
+          setReviewActionStatus({
+            kind: 'error',
+            message:
+              emailResult.message === EMAIL_NOT_CONFIGURED_MESSAGE
+                ? 'Application status updated, but status email is not configured yet.'
+                : emailResult.message || 'Application status updated, but email failed.',
+          })
+        } else {
+          setReviewActionStatus({
+            kind: 'success',
+            message: `Updated application ${rejectApplicationNumber} and sent email.`,
+          })
+        }
       }
 
       closeRejectPanel()
@@ -535,7 +633,7 @@ const ProvincialReviewPage = () => {
       console.error(error)
       setReviewActionStatus({
         kind: 'error',
-        message: 'Unable to reject application.',
+        message: 'Unable to update application.',
       })
     } finally {
       setSubmittingReject(false)
@@ -620,10 +718,20 @@ const ProvincialReviewPage = () => {
         <h1>Provincial review</h1>
       </Column>
 
+      {!!reviewActionStatus && (
+        <AppNotification
+          kind={reviewActionStatus.kind}
+          title={reviewActionStatus.kind === 'success' ? 'Action complete' : 'Action failed'}
+          subtitle={reviewActionStatus.message}
+          autoDismissMs={reviewActionStatus.kind === 'success' ? 8000 : undefined}
+          onCloseButtonClick={() => setReviewActionStatus(null)}
+        />
+      )}
+
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters">
-          <Tile>
-            <div className="legacy-search-grid">
+          <div className="provincial-review-filters-panel">
+            <div className="legacy-search-grid provincial-review-search-grid">
               <TextInput
                 id="applicationNumber"
                 labelText="Application number"
@@ -656,7 +764,7 @@ const ProvincialReviewPage = () => {
               />
               <IsoDatePicker
                 id="receivedFromDate"
-                labelText="Received from date (YYYY-MM-DD)"
+                labelText="Received from date"
                 value={filters.receivedFromDate}
                 invalid={!isValidIsoDate(filters.receivedFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -664,7 +772,7 @@ const ProvincialReviewPage = () => {
               />
               <IsoDatePicker
                 id="receivedToDate"
-                labelText="Received to date (YYYY-MM-DD)"
+                labelText="Received to date"
                 value={filters.receivedToDate}
                 invalid={!isValidIsoDate(filters.receivedToDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -672,7 +780,7 @@ const ProvincialReviewPage = () => {
               />
               <IsoDatePicker
                 id="listingFromDate"
-                labelText="Listing from date (YYYY-MM-DD)"
+                labelText="Listing from date"
                 value={filters.listingFromDate}
                 invalid={!isValidIsoDate(filters.listingFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -680,7 +788,7 @@ const ProvincialReviewPage = () => {
               />
               <IsoDatePicker
                 id="listingToDate"
-                labelText="Listing to date (YYYY-MM-DD)"
+                labelText="Listing to date"
                 value={filters.listingToDate}
                 invalid={!isValidIsoDate(filters.listingToDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -698,110 +806,141 @@ const ProvincialReviewPage = () => {
               <Button kind="tertiary" onClick={onClearFilters} disabled={loading}>
                 Clear Filters
               </Button>
-              <Button
-                kind="secondary"
-                onClick={() => void onApproveSelectedClick()}
-                disabled={
-                  loading ||
-                  submittingApproval ||
-                  submittingReject ||
-                  selectedRowsCount === 0 ||
-                  !canApproveApplications
-                }
-              >
-                Approve Selected Applications
-              </Button>
             </div>
-            {!!reviewActionStatus && (
-              <AppNotification
-                className="legacy-inline-notification"
-                kind={reviewActionStatus.kind}
-                title={reviewActionStatus.kind === 'success' ? 'Action complete' : 'Action failed'}
-                subtitle={reviewActionStatus.message}
-                autoDismissMs={reviewActionStatus.kind === 'success' ? 8000 : undefined}
-                onCloseButtonClick={() => setReviewActionStatus(null)}
-              />
-            )}
-            {!!rejectApplicationNumber && (
-              <section className="legacy-search-section review-reject-panel">
-                <h2 className="dashboard-title">Reject application {rejectApplicationNumber}</h2>
-                <div className="legacy-search-grid">
-                  <TextInput
-                    id="reviewRejectEmail"
-                    labelText="Client email address"
-                    helperText={
-                      loadingRejectEmail
-                        ? 'Loading from client account...'
-                        : 'Loaded from client account; edit if required.'
-                    }
-                    value={rejectEmailAddress}
-                    invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
-                    invalidText={rejectValidationMessage}
-                    disabled={loadingRejectEmail || submittingReject}
-                    onChange={(event) => {
-                      setRejectEmailAddress(event.target.value)
-                      setRejectValidationMessage('')
-                    }}
-                  />
-                  <TextArea
-                    id="reviewRejectRemark"
-                    labelText="Rejection remark"
-                    maxCount={250}
-                    value={rejectRemark}
-                    invalid={rejectValidationMessage === REJECT_REMARK_REQUIRED_MESSAGE}
-                    invalidText={rejectValidationMessage}
-                    disabled={submittingReject}
-                    onChange={(event) => {
-                      setRejectRemark(event.target.value.slice(0, 250))
-                      setRejectValidationMessage('')
-                    }}
-                  />
-                </div>
-                {!!rejectValidationMessage &&
-                  rejectValidationMessage !== REJECT_EMAIL_REQUIRED_MESSAGE &&
-                  rejectValidationMessage !== REJECT_REMARK_REQUIRED_MESSAGE && (
-                    <AppNotification
-                      className="legacy-inline-notification"
-                      kind="error"
-                      title="Reject validation"
-                      subtitle={rejectValidationMessage}
-                      lowContrast
-                      onCloseButtonClick={() => setRejectValidationMessage('')}
-                    />
-                  )}
-                <div className="legacy-search-actions">
-                  <Button
-                    kind="danger"
-                    size="sm"
-                    disabled={loadingRejectEmail || submittingReject}
-                    onClick={() => void onRejectApplicationClick()}
-                  >
-                    Reject Application
-                  </Button>
-                  <Button
-                    kind="tertiary"
-                    size="sm"
-                    disabled={submittingReject}
-                    onClick={closeRejectPanel}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </section>
-            )}
-          </Tile>
+          </div>
         </section>
       </Column>
+
+      <ComposedModal
+        open={Boolean(rejectApplicationNumber)}
+        size="md"
+        preventCloseOnClickOutside
+        selectorPrimaryFocus="#reviewRejectStatus"
+        onClose={() => {
+          if (submittingReject) {
+            return false
+          }
+
+          closeRejectPanel()
+          return true
+        }}
+      >
+        <ModalHeader
+          label="Application review"
+          title={`Update application ${rejectApplicationNumber}`}
+          buttonOnClick={() => {
+            if (!submittingReject) {
+              closeRejectPanel()
+            }
+          }}
+        />
+        <ModalBody hasForm hasScrollingContent>
+          <div className="review-reject-modal__grid">
+            <SearchableSelect
+              id="reviewRejectStatus"
+              labelText="Application status"
+              value={rejectStatusCode}
+              placeholder="Select application status"
+              options={rejectStatusSelectOptions}
+              invalid={rejectValidationMessage === REJECT_STATUS_REQUIRED_MESSAGE}
+              invalidText={rejectValidationMessage}
+              disabled={submittingReject}
+              onChange={(value) => {
+                setRejectStatusCode(value.toUpperCase())
+                setRejectValidationMessage('')
+              }}
+            />
+            <TextArea
+              id="reviewRejectRemark"
+              labelText="Remarks"
+              maxCount={250}
+              value={rejectRemark}
+              invalid={rejectValidationMessage === REJECT_REMARK_REQUIRED_MESSAGE}
+              invalidText={rejectValidationMessage}
+              disabled={submittingReject}
+              onChange={(event) => {
+                setRejectRemark(event.target.value.slice(0, 250))
+                setRejectValidationMessage('')
+              }}
+            />
+            <Checkbox
+              id="reviewRejectSendEmail"
+              labelText="Send status email"
+              checked={sendRejectEmail}
+              disabled={loadingRejectEmail || submittingReject}
+              onChange={(_, payload) => {
+                setSendRejectEmail(Boolean(payload.checked))
+                setRejectValidationMessage('')
+              }}
+            />
+            <TextInput
+              id="reviewRejectEmail"
+              labelText="Client email address"
+              helperText={
+                loadingRejectEmail
+                  ? 'Loading from client account...'
+                  : sendRejectEmail
+                    ? 'Loaded from client account; edit if required.'
+                    : 'Email is not sent unless Send status email is selected.'
+              }
+              value={rejectEmailAddress}
+              invalid={sendRejectEmail && rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
+              invalidText={rejectValidationMessage}
+              disabled={!sendRejectEmail || loadingRejectEmail || submittingReject}
+              onChange={(event) => {
+                setRejectEmailAddress(event.target.value)
+                setRejectValidationMessage('')
+              }}
+            />
+            {!!rejectValidationMessage &&
+              rejectValidationMessage !== REJECT_STATUS_REQUIRED_MESSAGE &&
+              rejectValidationMessage !== REJECT_EMAIL_REQUIRED_MESSAGE &&
+              rejectValidationMessage !== REJECT_REMARK_REQUIRED_MESSAGE && (
+                <InlineNotification
+                  kind="error"
+                  title="Review validation"
+                  subtitle={rejectValidationMessage}
+                  lowContrast
+                  onCloseButtonClick={() => setRejectValidationMessage('')}
+                />
+              )}
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button kind="secondary" disabled={submittingReject} onClick={closeRejectPanel}>
+            Cancel
+          </Button>
+          <Button
+            kind="danger"
+            disabled={loadingRejectEmail || submittingReject}
+            onClick={() => void onRejectApplicationClick()}
+          >
+            {submittingReject ? 'Updating...' : 'Update Application'}
+          </Button>
+        </ModalFooter>
+      </ComposedModal>
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--results">
           <h2 className="dashboard-title">Review queue</h2>
           {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-          <SearchResultsTableFrame
-            loading={loading}
-            loadingDescription="Loading review queue..."
-            totalItems={results.page.totalElements}
-          >
+          <div className="provincial-review-table-toolbar">
+            <p className="legacy-search-result-count">{results.page.totalElements} results found</p>
+            <Button
+              kind="secondary"
+              onClick={() => void onApproveSelectedClick()}
+              disabled={
+                loading ||
+                submittingApproval ||
+                submittingReject ||
+                selectedRowsCount === 0 ||
+                !canApproveApplications
+              }
+            >
+              Approve Selected Applications
+            </Button>
+          </div>
+          <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue...">
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
@@ -892,7 +1031,7 @@ const ProvincialReviewPage = () => {
             <Pagination
               page={results.page.number + 1}
               pageSize={results.page.size}
-              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+              pageSizes={[...APPLICATION_REVIEW_PAGE_SIZE_OPTIONS]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
                 clearSelection()

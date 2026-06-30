@@ -25,6 +25,10 @@ type BackendApplicationReviewSearchResult = {
   showInfoIcon: boolean
 }
 
+type ApplicationReviewSearchOptions = {
+  knownTotal?: number
+}
+
 export type ApplicationReviewStatusUpdateResult = {
   updated: boolean
   valid: boolean
@@ -92,11 +96,18 @@ const parseBackendPreviewResponse = (payload: unknown): ApplicationReviewPreview
 
 export const searchApplicationReviews = async (
   request: ApplicationReviewSearchRequest,
+  options: ApplicationReviewSearchOptions = {},
 ): Promise<ApplicationReviewSearchResponse> => {
   try {
+    const params = buildBackendParams(request)
+    const knownTotal = options.knownTotal
+    if (Number.isInteger(knownTotal) && knownTotal !== undefined && knownTotal >= 0) {
+      params.append('knownTotal', String(knownTotal))
+    }
+
     const response = await getCachedSearchResponse<unknown>(
       '/lexis/application-reviews/search',
-      buildBackendParams(request),
+      params,
     )
 
     return requireParsedSearchResponse(

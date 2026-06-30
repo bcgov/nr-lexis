@@ -153,7 +153,7 @@ describe('Reports Page Actions', () => {
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
   })
 
-  it('lists only reports granted to the current session', async () => {
+  it('renders the first accessible report when no report is selected', async () => {
     mockReportPermissions((action: string) => action === '/exemptionReport')
 
     render(
@@ -166,7 +166,7 @@ describe('Reports Page Actions', () => {
 
     await screen.findByRole('heading', { name: 'Exemption Report' })
 
-    expect(screen.getAllByText('Exemption Report')).toHaveLength(2)
+    expect(screen.getByRole('heading', { name: 'Exemption Report' })).toBeInTheDocument()
     expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
     expect(screen.queryByText('Offer Report')).not.toBeInTheDocument()
     expect(screen.queryByText(/Accessible reports:/)).not.toBeInTheDocument()
@@ -191,15 +191,16 @@ describe('Reports Page Actions', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/reports']}>
+      <MemoryRouter initialEntries={['/reports/exemptionReport']}>
         <Routes>
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/reports/:reportId" element={<ReportsPage />} />
         </Routes>
       </MemoryRouter>,
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Reports' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Exemption Report' })).toBeInTheDocument()
     })
     await waitFor(() => {
       expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
@@ -207,12 +208,6 @@ describe('Reports Page Actions', () => {
     expect(mockedFetchProvincialApplicationOptions).not.toHaveBeenCalled()
     expect(mockedFetchProvincialExemptionOptions).not.toHaveBeenCalled()
     expect(mockedFetchProvincialPermitOptions).not.toHaveBeenCalled()
-
-    const reportRow = screen.getByText('Exemption Report').closest('tr')
-    expect(reportRow).not.toBeNull()
-    await userEvent.click(
-      within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
-    )
 
     expect(mockedFetchProvincialExemptionOptions).not.toHaveBeenCalled()
     expect(mockedFetchProvincialPermitOptions).not.toHaveBeenCalled()
@@ -834,19 +829,15 @@ describe('Reports Page Actions', () => {
       .mockImplementation(() => {})
 
     render(
-      <MemoryRouter initialEntries={['/reports']}>
+      <MemoryRouter initialEntries={['/reports/biweeklyListing']}>
         <Routes>
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/reports/:reportId" element={<ReportsPage />} />
         </Routes>
       </MemoryRouter>,
     )
 
-    await screen.findByText('Advertising List')
-    const reportRow = screen.getByText('Advertising List').closest('tr')
-    expect(reportRow).not.toBeNull()
-    await userEvent.click(
-      within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
-    )
+    await screen.findByRole('heading', { name: 'Advertising List' })
 
     expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
     await chooseComboBoxOption('Output format', 'CSV')
@@ -989,8 +980,8 @@ describe('Reports Page Actions', () => {
     expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
     expect(screen.queryByText('Offer Report')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
-    expect(screen.getByText('Required action:')).toBeInTheDocument()
-    expect(screen.getAllByText('mofrListing').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Required action:')).not.toBeInTheDocument()
+    expect(screen.queryByText('mofrListing')).not.toBeInTheDocument()
     expect(await openComboBoxOptionNames('Listing from date')).toEqual([
       '2026-07-02',
       '2026-07-08',
@@ -1029,19 +1020,15 @@ describe('Reports Page Actions', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/reports']}>
+      <MemoryRouter initialEntries={['/reports/biweeklyListing']}>
         <Routes>
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/reports/:reportId" element={<ReportsPage />} />
         </Routes>
       </MemoryRouter>,
     )
 
-    await screen.findByText('Advertising List')
-    const reportRow = screen.getByText('Advertising List').closest('tr')
-    expect(reportRow).not.toBeNull()
-    await userEvent.click(
-      within(reportRow as HTMLElement).getByRole('button', { name: 'Configure' }),
-    )
+    await screen.findByRole('heading', { name: 'Advertising List' })
 
     expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
     await chooseComboBoxOption('Jurisdiction', 'Federal')
@@ -1156,7 +1143,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Reports' })
+    await screen.findByRole('heading', { name: 'Application Report' })
     await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
     await chooseComboBoxOption('Output format', 'CSV')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
@@ -1192,7 +1179,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Reports' })
+    await screen.findByRole('heading', { name: 'Application Report' })
     await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
     await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
 

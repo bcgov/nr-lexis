@@ -38,6 +38,15 @@ class ApplicationYamlDefaultsTest {
             "lexis.mail.replyTo");
   }
 
+  @Test
+  void applicationYamlShouldKeepFamUserAccessLookupOptional() {
+    Properties properties = loadApplicationYaml();
+
+    assertThat(properties)
+        .containsEntry("lexis.fam.admin.base-url", "${LEXIS_FAM_ADMIN_BASE_URL:${FAM_ADMIN_BASE_URL:}}")
+        .containsEntry("lexis.fam.admin.application-id", "${LEXIS_FAM_APPLICATION_ID:}");
+  }
+
   private static Properties loadApplicationYaml() {
     YamlPropertiesFactoryBean factory = new YamlPropertiesFactoryBean();
     factory.setResources(new ClassPathResource("application.yml"));

@@ -1,30 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
   Grid,
   FilterableMultiSelect,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   TextArea,
   TextInput,
   Tile,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import SearchableSelect from '../../components/SearchableSelect'
-import { parseEnumParam, setSearchParam } from '@/pages/shared/search-query-utils'
+import { setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
 import { formatLocalIsoDate } from '@/utils/date'
 import { parseJsonValue } from '@/utils/json'
 import { isRecord } from '@/utils/record'
-import { normalizeFilterText as normalizeText } from '@/utils/text'
 import {
   fetchReportOptions,
   fetchProvincialApplicationOptions,
@@ -63,7 +56,6 @@ type ReportActionMapping = {
   label: string
 }
 
-type ReportCategoryFilter = 'ALL' | ReportDefinition['category']
 type ReportOptionSource = 'application' | 'exemption' | 'permit' | 'report'
 type ReportOptionSources = {
   application: Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>
@@ -612,7 +604,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
 ]
 
-const REPORT_CATEGORY_OPTIONS = ['ALL', 'Provincial', 'Federal', 'Cross-Module'] as const
 const BLANK_SCHEDULE_DATE_VALUE = '__blank_schedule_date__'
 
 function getLegacyTenureDefaultFromDate(): string {
@@ -841,19 +832,16 @@ const resolveActionMapping = (report: ReportDefinition, actionValue: string | nu
 }
 
 const buildReportSearchParams = (payload: {
-  searchText: string
-  selectedCategory: ReportCategoryFilter
   selectedReportId: string
   selectedActionMapping: string
   selectedReportValues: Record<string, string>
+  includeReportParam: boolean
 }): URLSearchParams => {
   const params = new URLSearchParams()
 
-  setSearchParam(params, 'q', payload.searchText)
-  if (payload.selectedCategory !== 'ALL') {
-    setSearchParam(params, 'category', payload.selectedCategory)
+  if (payload.includeReportParam) {
+    setSearchParam(params, 'report', payload.selectedReportId)
   }
-  setSearchParam(params, 'report', payload.selectedReportId)
   setSearchParam(params, 'action', payload.selectedActionMapping)
   if (Object.keys(payload.selectedReportValues).length > 0) {
     params.set('values', JSON.stringify(payload.selectedReportValues))
@@ -940,16 +928,17 @@ const validateReportLaunch = (
 }
 
 const ReportsPage = () => {
+  const { reportId: routeReportId } = useParams<{ reportId?: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const { canPerform } = useAuth()
-  const initialReportId = useMemo(() => {
-    const requestedReportId = (searchParams.get('report') ?? '').trim()
+  const requestedReportId = useMemo(() => {
+    const requestedReportId = (routeReportId ?? searchParams.get('report') ?? '').trim()
     if (REPORT_DEFINITIONS.some((report) => report.id === requestedReportId)) {
       return requestedReportId
     }
     return REPORT_DEFINITIONS[0].id
-  }, [searchParams])
-  const initialReport = useMemo(() => resolveReportById(initialReportId), [initialReportId])
+  }, [routeReportId, searchParams])
+  const initialReport = useMemo(() => resolveReportById(requestedReportId), [requestedReportId])
   const initialReportValues = useMemo(() => {
     const parsedValues = parseRecordParam(searchParams.get('values'))
     return sanitizeReportValues(initialReport, parsedValues)
@@ -958,10 +947,6 @@ const ReportsPage = () => {
     return resolveActionMapping(initialReport, searchParams.get('action'))
   }, [initialReport, searchParams])
 
-  const [searchText, setSearchText] = useState(() => searchParams.get('q') ?? '')
-  const [selectedCategory, setSelectedCategory] = useState<ReportCategoryFilter>(() =>
-    parseEnumParam(searchParams.get('category'), REPORT_CATEGORY_OPTIONS, 'ALL'),
-  )
   const [selectedReportId, setSelectedReportId] = useState(initialReport.id)
   const [reportValuesById, setReportValuesById] = useState<Record<string, Record<string, string>>>({
     [initialReport.id]: initialReportValues,
@@ -978,25 +963,6 @@ const ReportsPage = () => {
   const [launchErrorMessage, setLaunchErrorMessage] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const beginReportOptionsRequest = useLatestRequestGuard()
-
-  const visibleReports = useMemo(() => {
-    return REPORT_DEFINITIONS.filter((report) => {
-      const hasAccess = canPerform(report.action)
-      if (!hasAccess) {
-        return false
-      }
-      if (selectedCategory !== 'ALL' && report.category !== selectedCategory) {
-        return false
-      }
-      if (!searchText.trim()) {
-        return true
-      }
-      return (
-        normalizeText(report.title).includes(normalizeText(searchText)) ||
-        normalizeText(report.action).includes(normalizeText(searchText))
-      )
-    })
-  }, [canPerform, searchText, selectedCategory])
 
   const accessibleReports = useMemo(() => {
     return REPORT_DEFINITIONS.filter((report) => canPerform(report.action))
@@ -1112,12 +1078,54 @@ const ReportsPage = () => {
   const defaultReportRegion = reportOptionSourcesByKey.report?.defaultRegion ?? ''
 
   useEffect(() => {
+    const nextReport = resolveReportById(requestedReportId)
+    const nextReportValues = sanitizeReportValues(
+      nextReport,
+      parseRecordParam(searchParams.get('values')),
+    )
+    const nextAction = resolveActionMapping(nextReport, searchParams.get('action'))
+
+    let isActive = true
+    void Promise.resolve().then(() => {
+      if (!isActive) {
+        return
+      }
+
+      setSelectedReportId((current) => (current === nextReport.id ? current : nextReport.id))
+      setReportValuesById((current) => {
+        if (!searchParams.has('values') && current[nextReport.id]) {
+          return current
+        }
+
+        return {
+          ...current,
+          [nextReport.id]: nextReportValues,
+        }
+      })
+      setSelectedActionById((current) => {
+        if (!searchParams.has('action') && current[nextReport.id]) {
+          return current
+        }
+
+        return {
+          ...current,
+          [nextReport.id]: nextAction,
+        }
+      })
+      setLaunchErrorMessage('')
+    })
+
+    return () => {
+      isActive = false
+    }
+  }, [requestedReportId, searchParams])
+
+  useEffect(() => {
     const nextParams = buildReportSearchParams({
-      searchText,
-      selectedCategory,
       selectedReportId: selectedReport.id,
       selectedActionMapping,
       selectedReportValues,
+      includeReportParam: !routeReportId,
     })
     const nextQuery = nextParams.toString()
     if (nextQuery !== searchParams.toString()) {
@@ -1125,12 +1133,11 @@ const ReportsPage = () => {
     }
   }, [
     searchParams,
-    searchText,
     selectedActionMapping,
-    selectedCategory,
     selectedReport.id,
     selectedReportValues,
     setSearchParams,
+    routeReportId,
   ])
 
   useEffect(() => {
@@ -1177,11 +1184,6 @@ const ReportsPage = () => {
     void loadReportFieldOptions()
   }, [beginReportOptionsRequest, reportOptionSourcesByKey, requiredReportOptionSources])
 
-  const onSelectReport = (reportId: string): void => {
-    setSelectedReportId(reportId)
-    setLaunchErrorMessage('')
-  }
-
   const onUpdateField = (fieldKey: string, value: string): void => {
     const clearsSpeciesForestFile =
       selectedReport.id === 'speciesGradeReport' && fieldKey === 'timberMark' && value.trim()
@@ -1208,11 +1210,6 @@ const ReportsPage = () => {
       [selectedReport.id]: {},
     }))
     setLaunchErrorMessage('')
-  }
-
-  const onResetReportFilters = (): void => {
-    setSearchText('')
-    setSelectedCategory('ALL')
   }
 
   const onOpenReportRequest = async (): Promise<void> => {
@@ -1265,95 +1262,17 @@ const ReportsPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid reports-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Reports</h1>
+        <h1>{hasSelectedReportAccess ? selectedReport.title : 'Reports'}</h1>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <div className="legacy-search-grid">
-            <TextInput
-              id="reportSearch"
-              labelText="Search report name or action"
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-            />
-            <SearchableSelect
-              id="reportCategory"
-              labelText="Category"
-              value={selectedCategory}
-              placeholder="All categories"
-              options={[
-                { value: 'ALL', label: 'All categories' },
-                { value: 'Provincial', label: 'Provincial' },
-                { value: 'Federal', label: 'Federal' },
-                { value: 'Cross-Module', label: 'Cross-Module' },
-              ]}
-              onChange={(value) => setSelectedCategory((value || 'ALL') as ReportCategoryFilter)}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button kind="ghost" size="sm" onClick={onResetReportFilters}>
-              Reset Report Filters
-            </Button>
-          </div>
-        </Tile>
-      </Column>
-
-      <Column sm={4} md={8} lg={9}>
-        <Tile>
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Report</TableHeader>
-                <TableHeader>Category</TableHeader>
-                <TableHeader>Required action</TableHeader>
-                <TableHeader>Open</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {visibleReports.map((report) => {
-                const isSelected = selectedReport.id === report.id
-                return (
-                  <TableRow key={report.id} className={isSelected ? 'selected-row' : undefined}>
-                    <TableCell>{report.title}</TableCell>
-                    <TableCell>{report.category}</TableCell>
-                    <TableCell>
-                      <code>{report.action}</code>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        kind={isSelected ? 'primary' : 'ghost'}
-                        size="sm"
-                        onClick={() => onSelectReport(report.id)}
-                      >
-                        {isSelected ? 'Selected' : 'Configure'}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-              {visibleReports.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4}>No reports matched the current filters.</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Tile>
-      </Column>
-
-      <Column sm={4} md={8} lg={7}>
+      <Column sm={4} md={8} lg={16} className="report-parameter-panel">
         <Tile>
           {hasSelectedReportAccess ? (
             <>
-              <h2 className="dashboard-title">{selectedReport.title}</h2>
               <p>{selectedReport.description}</p>
-              <p>
-                Required action: <code>{selectedReport.action}</code>
-              </p>
-              <div className="legacy-search-grid">
+              <div className="legacy-search-grid report-parameter-grid">
                 {selectedReport.actionMappings.length > 1 && (
                   <SearchableSelect
                     id="reportActionMapping"

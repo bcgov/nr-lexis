@@ -61,6 +61,13 @@ const mockedOpenExemptionDocument = vi.mocked(openExemptionDocument)
 const mockedRemoveExemptionDocument = vi.mocked(removeExemptionDocument)
 const mockedRunReport = vi.mocked(runReport)
 
+const selectDetailTab = async (name: string) => {
+  const tab = await screen.findByRole('tab', { name })
+  if (tab.getAttribute('aria-selected') !== 'true') {
+    await userEvent.click(tab)
+  }
+}
+
 const exemptionDetail: ProvincialExemptionDetail = {
   exemptionNumber: 'EX-777',
   exemptionTypeCode: 'TYPE1',
@@ -89,13 +96,29 @@ const federalDetail: FederalApplicationDetail = {
   statusDescription: 'Submitted',
   ownerClientNumber: '00021234',
   ownerClientLocationCode: '01',
+  ownerApplicantType: 'Owner',
+  ownerContactName: 'Owner Contact',
+  ownerCompanyName: 'Owner Company',
   agentClientNumber: '00011234',
   agentClientLocationCode: '01',
+  agentApplicantType: 'Agent',
+  agentContactName: 'Agent Contact',
+  agentCompanyName: 'Agent Company',
   exemptionNumber: 'EX-555',
   exemptionType: 'Section 1',
   exemptionReason: 'Economic',
+  region: 'RSC',
+  productType: 'Standing Timber',
+  applicationDate: '2026-01-10',
   receivedDate: '2026-01-11',
   listingDate: '2026-01-12',
+  termDays: 14,
+  logLocation: 'Forest service road',
+  ageClass: 'Mature',
+  averageLogVolume: 12.5,
+  applicationVolume: 42,
+  endUse: 'HE/PL',
+  author: 'IDIR\\TESTER',
   readOnly: false,
   packages: ['PKG-1'],
   remarks: ['Remark'],
@@ -164,11 +187,16 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    for (const tabName of ['Summary', 'Permits', 'Documents', 'Remarks']) {
+      expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
+    }
     const uploadButton = await screen.findByRole('button', { name: 'Upload Exemption Document' })
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    await waitFor(() => {
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    })
     expect(await screen.findByText('Upload exemption documents')).toBeInTheDocument()
   })
 
@@ -197,6 +225,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -240,6 +269,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -287,6 +317,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const uploadButton = await screen.findByRole('button', { name: 'Upload Exemption Document' })
     expect(uploadButton).toBeDisabled()
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('locked-exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -332,7 +363,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
   })
 
-  it('jumps from the federal application action to the embedded upload panel', async () => {
+  it('renders federal application details with the legacy tab structure', async () => {
     render(
       <MemoryRouter initialEntries={['/federal/888']}>
         <Routes>
@@ -341,11 +372,30 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Application Document' })
-    expect(uploadButton).toBeEnabled()
-    await userEvent.click(uploadButton)
+    for (const tabName of [
+      'Owner',
+      'Agent',
+      'Application',
+      'Items',
+      'Offers',
+      'Remarks',
+      'Documents',
+      'Shipping Details',
+    ]) {
+      expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
+    }
 
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Back to Federal Search results' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open Provincial Application' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
+    expect(screen.queryByText('Read only')).not.toBeInTheDocument()
+    expect(await screen.findByText('Owner Contact')).toBeInTheDocument()
+
+    await selectDetailTab('Application')
+    expect(await screen.findByText('IDIR\\TESTER')).toBeInTheDocument()
+
+    await selectDetailTab('Documents')
     expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
   })
 
@@ -371,6 +421,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -411,6 +462,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -452,9 +504,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Application Document' })
-    expect(uploadButton).toBeDisabled()
-
+    await selectDetailTab('Documents')
+    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
     const documentName = await screen.findByText('locked-federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()

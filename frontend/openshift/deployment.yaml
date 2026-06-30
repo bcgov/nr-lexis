@@ -76,6 +76,8 @@ spec:
               value: ${VITE_COGNITO_SCOPES}
             - name: VITE_ZONE
               value: ${VITE_ZONE}
+            - name: VITE_FAM_MANAGE_URL
+              value: ${VITE_FAM_MANAGE_URL}
             - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
               value: ${VITE_LEXIS_REPORT_ENDPOINT_BASE}
             - name: VITE_LEXIS_REPORT_API_BASE

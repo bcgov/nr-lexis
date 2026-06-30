@@ -17,6 +17,9 @@ const NATURAL_RESOURCE_REGION_CODES = new Set([
   '1910',
 ])
 
+const DISALLOWED_APPLICATION_STATUS_CODE = 'DAL'
+const DISALLOWED_APPLICATION_STATUS_LABEL = 'disallowed'
+
 const parseOptions = (input: unknown, allowEmptyCode = false): SearchOption[] => {
   return mapRecordArray(input, (item) => {
     const code = stringField(item, 'code')
@@ -34,6 +37,13 @@ const parseOptions = (input: unknown, allowEmptyCode = false): SearchOption[] =>
 
 const parseRegionOptions = (input: unknown): SearchOption[] =>
   parseOptions(input).filter((option) => NATURAL_RESOURCE_REGION_CODES.has(option.value))
+
+const parseApplicationStatusOptions = (input: unknown): SearchOption[] =>
+  parseOptions(input).filter(
+    (option) =>
+      option.value !== DISALLOWED_APPLICATION_STATUS_CODE &&
+      option.label.trim().toLowerCase() !== DISALLOWED_APPLICATION_STATUS_LABEL,
+  )
 
 const fetchOptions = async (path: string): Promise<Record<string, unknown> | null> => {
   try {
@@ -77,7 +87,7 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
   return {
     exemptionTypes: parseOptions(data.exemptionTypes),
     exemptionReasons: parseOptions(data.exemptionReasons),
-    applicationStatuses: parseOptions(data.applicationStatuses),
+    applicationStatuses: parseApplicationStatusOptions(data.applicationStatuses),
     productTypes: parseOptions(data.productTypes),
     growthTypes: parseOptions(data.growthTypes),
     regions: parseRegionOptions(data.regions),
@@ -210,7 +220,7 @@ export const fetchFederalApplicationOptions = async (): Promise<{
   }
 
   return {
-    applicationStatuses: parseOptions(data.applicationStatuses),
+    applicationStatuses: parseApplicationStatusOptions(data.applicationStatuses),
   }
 }
 
@@ -231,6 +241,6 @@ export const fetchApplicationReviewOptions = async (): Promise<{
   return {
     productTypes: parseOptions(data.productTypes),
     regions: parseRegionOptions(data.regions),
-    reviewStatuses: parseOptions(data.reviewStatuses),
+    reviewStatuses: parseApplicationStatusOptions(data.reviewStatuses),
   }
 }
