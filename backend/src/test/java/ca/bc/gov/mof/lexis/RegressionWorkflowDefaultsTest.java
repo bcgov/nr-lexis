@@ -67,7 +67,8 @@ class RegressionWorkflowDefaultsTest {
     String script = Files.readString(resolveWaitForFrontendScript());
 
     assertThat(script)
-        .doesNotContain("--ipv4")
+        .contains("WAIT_FOR_FRONTEND_IP_MODE:-ipv4")
+        .contains("curl_ip_args=(--ipv4)")
         .contains("--retry \"${curl_retries}\"")
         .contains("--retry-all-errors")
         .contains("getent ahosts")
