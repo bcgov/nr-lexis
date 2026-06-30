@@ -216,6 +216,7 @@ const selectedNaturalResourceRegionText =
   'Selected: Cariboo Natural Resource Region, Skeena Natural Resource Region'
 const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
+const landingSubtitle = 'Create and manage applications, view offers and permits'
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   const regions = asRecordArray(value)
@@ -284,6 +285,10 @@ const expectLoginShell = async (page: Page, source: string): Promise<void> => {
 
   expect(new URL(page.url()).origin).toBe(baseOrigin)
   await expect(page.getByRole('button', { name: /log in with business bceid/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome to LEXIS' })).toBeVisible()
+  await expect(page.getByText(landingSubtitle, { exact: true })).toBeVisible()
+  await expect(page.getByAltText('Government of British Columbia')).toBeVisible()
+  await expect(page.locator('.landing-img')).toBeVisible()
 }
 
 const browserLocalIsoToday = async (page: Page): Promise<string> => {
@@ -371,33 +376,43 @@ const adminNavigationSections: Array<{
   {
     section: 'Provincial',
     links: [
-      'Application review',
-      'Create/edit application',
-      'Upload application submission',
-      'Application search',
-      'Create/edit exemption',
-      'Exemption search',
-      'Create/edit offer',
-      'Offer search',
-      'Permit search',
+      'Review',
+      'Create/Edit Application',
+      'Upload',
+      'Applications',
+      'Create/Edit Exemption',
+      'Exemptions',
+      'Create/Edit Offer',
+      'Offers',
+      'Permits',
     ],
   },
   {
     section: 'Federal',
-    links: ['Application search', 'Upload application submission'],
+    links: ['Search'],
   },
   {
     section: 'Reports',
-    links: ['Reports menu'],
+    links: [
+      'Applications Report',
+      'Advertising List',
+      'Offers Report',
+      'TEAC Package',
+      'Exemptions Report',
+      'Permits Report',
+      'Transport Report',
+      'Species and Grade Report',
+      'Fees Report',
+      'Tenure Analysis',
+    ],
   },
   {
-    section: 'Administration',
+    section: 'Admin',
     links: [
-      'LEXIS administration',
-      'Fee policy administration',
-      'Fee in lieu percent administration',
-      'Export schedule administration',
-      'Data upload',
+      'Users & Access',
+      'Fee Policy',
+      'Fee in Lieu',
+      'Export Schedule',
       'Average Monthly Values',
     ],
   },
@@ -408,15 +423,26 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/admin/policies/fee', /fee policy administration/i],
   ['/admin/policies/fil', /fee in lieu percent policy administration/i],
   ['/admin/schedules', /export schedule administration/i],
-  ['/admin/uploads', /data upload/i],
   ['/provincial/review', /provincial review/i],
   ['/provincial/application/create', /create provincial application/i],
   ['/provincial/application/upload', /upload application submission/i],
   ['/provincial/application', /provincial application search/i],
   ['/federal', /federal application search/i],
-  ['/federal/application/upload', /upload federal application submission/i],
   ['/reports', /reports/i],
   ['/admin/rtm/emslogamv', /average monthly values/i],
+]
+
+const reportAccessiblePages: Array<[path: string, heading: RegExp]> = [
+  ['/reports/applicationReport', /application report/i],
+  ['/reports/biweeklyListing', /advertising list/i],
+  ['/reports/offerReport', /offer report/i],
+  ['/reports/teacReport', /timber export advisory committee package report/i],
+  ['/reports/exemptionReport', /exemption report/i],
+  ['/reports/permitLedgerReport', /permit ledger report/i],
+  ['/reports/transportReport', /transport report/i],
+  ['/reports/speciesGradeReport', /species and grade report/i],
+  ['/reports/feeReport', /fee report/i],
+  ['/reports/tenureReport', /tenure analysis report/i],
 ]
 
 const regionFilterPages: Array<[path: string, heading: RegExp]> = [
@@ -593,7 +619,10 @@ const latestExportScheduleAdvertisingDate = async (page: Page): Promise<string> 
     .filter((date) => isoDatePattern.test(date))
     .sort()
 
-  expect(dates.length, 'export schedule regression needs at least one existing schedule row').toBeGreaterThan(0)
+  expect(
+    dates.length,
+    'export schedule regression needs at least one existing schedule row',
+  ).toBeGreaterThan(0)
   return dates[dates.length - 1]
 }
 
@@ -762,7 +791,44 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expectAdminNavigation(page)
     await expect(page.getByRole('link', { name: /^Summary$/ })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Upload application submission' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Data upload' })).toHaveCount(0)
     expect(apiServerErrors).toEqual([])
+  })
+
+  test('lands authenticated IDIR admins on provincial review from the app root', async () => {
+    const page = await authenticatedIdirPage()
+
+    await page.goto(new URL('/', E2E_BASE_URL).toString(), {
+      waitUntil: 'domcontentloaded',
+    })
+
+    await expect(page.getByRole('heading', { name: /provincial review/i })).toBeVisible({
+      timeout: 30_000,
+    })
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/review')
+  })
+
+  test('supports collapsible sidebar sections and collapsed icon navigation', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/provincial/review', /provincial review/i)
+
+    const reportsSection = page.locator(sideNavSection('Reports'))
+    await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toBeVisible()
+    await reportsSection.getByRole('button', { name: 'Reports' }).click()
+    await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toHaveCount(0)
+    await reportsSection.getByRole('button', { name: 'Reports' }).click()
+    await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Collapse side navigation' }).click()
+    await expect(page.getByRole('button', { name: 'Expand side navigation' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Review' })).toHaveAttribute('title', 'Review')
+    await expect(page.getByRole('link', { name: 'Advertising List' })).toHaveAttribute(
+      'title',
+      'Advertising List',
+    )
+    await page.getByRole('button', { name: 'Expand side navigation' }).click()
   })
 
   test('can verify representative admin action grants', async () => {
@@ -788,7 +854,7 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
     const apiServerErrors = collectApiServerErrors(page)
 
-    for (const [path, heading] of adminAccessiblePages) {
+    for (const [path, heading] of [...adminAccessiblePages, ...reportAccessiblePages]) {
       await expectAccessiblePage(page, path, heading)
     }
 
@@ -926,6 +992,44 @@ test.describe('TEST IDIR admin regression', () => {
       page.getByRole('textbox', { name: 'Received date (YYYY-MM-DD) (required)' }),
     ).toHaveValue(today)
     await expect(page.getByRole('combobox', { name: 'Listing date' })).toHaveValue(nextListDate)
+  })
+
+  test('shows create application tabs, save workflow, and disabled document upload', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(
+      page,
+      '/provincial/application/create',
+      /create provincial application/i,
+    )
+
+    for (const tabName of [
+      'Summary',
+      'Clients',
+      'Packages / Scales',
+      'Permits',
+      'Offers',
+      'Documents',
+      'Remarks',
+    ]) {
+      await expect(page.getByRole('tab', { name: tabName })).toBeVisible()
+    }
+
+    await expect(page.getByRole('button', { name: 'Save' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Save Draft' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Back to Search' })).toHaveCount(0)
+
+    await page.getByRole('tab', { name: 'Documents' }).click()
+    await expect(page.getByRole('heading', { name: 'Documents' })).toBeVisible()
+    await expect(page.getByText('Upload documents')).toBeVisible()
+    await expect(page.getByText('Save the application before uploading documents.')).toBeVisible()
+    await expect(page.getByLabel('Document File')).toBeDisabled()
+    await expect(page.getByText('Browse files', { exact: true })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
   })
 
   test('can query application review search contracts', async () => {
@@ -1227,7 +1331,9 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('button', { name: 'Reset Fields' })).toBeVisible()
   })
 
-  test('can create, update, and delete future export schedule rows', async () => {
+  // TODO: Re-enable this EXPORT_SCHEDULE write regression once TEST grants allow
+  // INSERT/UPDATE/DELETE on EXPORT_SCHEDULE and access to EXPORT_SCHEDULE_SEQ.
+  test.skip('can create, update, and delete future export schedule rows', async () => {
     const page = await authenticatedIdirPage()
     let scheduleId: string | null = null
     let deleted = false
@@ -1267,7 +1373,9 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
-  test('rejects duplicate future export schedule advertising dates', async () => {
+  // TODO: Re-enable this EXPORT_SCHEDULE write regression once TEST grants allow
+  // INSERT/UPDATE/DELETE on EXPORT_SCHEDULE and access to EXPORT_SCHEDULE_SEQ.
+  test.skip('rejects duplicate future export schedule advertising dates', async () => {
     const page = await authenticatedIdirPage()
     let scheduleId: string | null = null
 
@@ -1433,6 +1541,21 @@ test.describe('TEST IDIR admin regression', () => {
       if (applicationNumber === null) {
         throw new Error('IDIR application submission did not return an application number.')
       }
+
+      await expectAccessiblePage(
+        page,
+        `/provincial/application/${applicationNumber}`,
+        /provincial application details/i,
+      )
+      await page.getByRole('tab', { name: 'Documents' }).click()
+      await expect(page.getByRole('heading', { name: 'Documents' })).toBeVisible()
+      await expect(page.getByText('Upload documents').first()).toBeVisible()
+      await expect(page.getByText('Drag and drop files here, or browse for files.')).toBeVisible()
+      await expect(page.getByLabel('Document File')).toBeEnabled()
+      await expect(page.getByText('Browse files', { exact: true })).toHaveAttribute(
+        'aria-disabled',
+        'false',
+      )
 
       const approved = await readJsonResponse<ReviewStatusResponse>(
         await postWithCsrf(page, `/api/lexis/application-reviews/${applicationNumber}/approve`),
