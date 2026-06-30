@@ -31,10 +31,20 @@ esac
 
 echo "Waiting for frontend route: ${frontend_url}/"
 echo "Route probe IP mode: ${curl_ip_mode}"
-if command -v getent >/dev/null 2>&1; then
-  getent ahosts "${frontend_host}" || true
-elif command -v dig >/dev/null 2>&1; then
-  dig +short "${frontend_host}" || true
+count_dns_records() {
+  if command -v getent >/dev/null 2>&1; then
+    getent ahosts "${frontend_host}" 2>/dev/null | awk 'NF {print $1}' | sort -u | wc -l | tr -d ' '
+  elif command -v dig >/dev/null 2>&1; then
+    dig +short "${frontend_host}" 2>/dev/null | awk 'NF {print $1}' | sort -u | wc -l | tr -d ' '
+  else
+    printf '0'
+  fi
+}
+dns_count="$(count_dns_records || printf '0')"
+if [[ "${dns_count}" == "0" ]]; then
+  echo "Route DNS lookup returned no address records."
+else
+  echo "Route DNS lookup returned ${dns_count} address record(s)."
 fi
 
 for ((attempt = 1; attempt <= attempts; attempt += 1)); do

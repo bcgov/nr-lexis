@@ -72,7 +72,9 @@ class RegressionWorkflowDefaultsTest {
         .contains("--retry \"${curl_retries}\"")
         .contains("--retry-all-errors")
         .contains("getent ahosts")
-        .contains("curl exit ${curl_status}");
+        .contains("Route DNS lookup returned ${dns_count} address record(s).")
+        .contains("curl exit ${curl_status}")
+        .doesNotContain("dns_output");
   }
 
   private static Path resolveRegressionWorkflow() {
