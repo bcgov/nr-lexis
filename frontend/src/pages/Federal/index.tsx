@@ -51,7 +51,10 @@ import {
 } from '@/pages/shared/search-query-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { loadSearchWithDeferredTotal } from '@/pages/shared/deferred-search-total'
+import {
+  loadSearchWithDeferredTotal,
+  prefetchNextSearchPage,
+} from '@/pages/shared/deferred-search-total'
 import {
   countFederalApplications,
   searchFederalApplications,
@@ -236,6 +239,14 @@ const FederalPage = () => {
           if (totalIsExact) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
             setPageDataCache(pageCacheKey, response)
+            prefetchNextSearchPage({
+              pageId: 'federal-application-search',
+              principal: capabilities?.principal,
+              request,
+              response,
+              search: searchFederalApplications,
+              onError: console.error,
+            })
           }
           queueMicrotask(() => {
             if (isLatestRequest()) {

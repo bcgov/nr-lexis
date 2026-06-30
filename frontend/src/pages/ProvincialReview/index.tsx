@@ -64,7 +64,10 @@ import {
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
-import { loadSearchWithDeferredTotal } from '@/pages/shared/deferred-search-total'
+import {
+  loadSearchWithDeferredTotal,
+  prefetchNextSearchPage,
+} from '@/pages/shared/deferred-search-total'
 import {
   approveApplicationReview,
   countApplicationReviews,
@@ -359,6 +362,14 @@ const ProvincialReviewPage = () => {
           if (totalIsExact) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
             setPageDataCache(pageCacheKey, response)
+            prefetchNextSearchPage({
+              pageId: 'provincial-review-search',
+              principal: capabilities?.principal,
+              request,
+              response,
+              search: searchApplicationReviews,
+              onError: console.error,
+            })
           }
           queueMicrotask(() => {
             if (isLatestRequest()) {

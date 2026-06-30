@@ -56,7 +56,10 @@ import {
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { loadSearchWithDeferredTotal } from '@/pages/shared/deferred-search-total'
+import {
+  loadSearchWithDeferredTotal,
+  prefetchNextSearchPage,
+} from '@/pages/shared/deferred-search-total'
 import {
   countProvincialPermits,
   searchProvincialPermits,
@@ -244,6 +247,14 @@ const ProvincialPermitPage = () => {
           if (totalIsExact) {
             setCachedSearchTotal(totalCacheRef.current, cacheKey, response.page.totalElements)
             setPageDataCache(pageCacheKey, response)
+            prefetchNextSearchPage({
+              pageId: 'provincial-permit-search',
+              principal: capabilities?.principal,
+              request,
+              response,
+              search: searchProvincialPermits,
+              onError: console.error,
+            })
           }
           queueMicrotask(() => {
             if (isLatestRequest()) {

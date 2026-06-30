@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { loadSearchWithDeferredTotal } from '@/pages/shared/deferred-search-total'
+import {
+  loadSearchWithDeferredTotal,
+  prefetchNextSearchPage,
+} from '@/pages/shared/deferred-search-total'
+import {
+  buildPageDataCacheKey,
+  clearAllPageDataCache,
+  getPageDataCache,
+} from '@/pages/shared/page-data-cache'
 
 type TestResponse = {
   content: { id: string }[]
@@ -11,13 +19,18 @@ type TestResponse = {
   }
 }
 
-const responseWith = (rowCount: number, totalElements: number): TestResponse => ({
+const responseWith = (
+  rowCount: number,
+  totalElements: number,
+  pageSize = 100,
+  pageNumber = 0,
+): TestResponse => ({
   content: Array.from({ length: rowCount }, (_, index) => ({ id: String(index + 1) })),
   page: {
-    number: 0,
-    size: 100,
+    number: pageNumber,
+    size: pageSize,
     totalElements,
-    totalPages: Math.max(1, Math.ceil(totalElements / 100)),
+    totalPages: Math.max(1, Math.ceil(totalElements / pageSize)),
   },
 })
 
@@ -86,5 +99,30 @@ describe('loadSearchWithDeferredTotal', () => {
     expect(count).not.toHaveBeenCalled()
     expect(result.totalIsExact).toBe(true)
     expect(result.response.page.totalElements).toBe(490)
+  })
+
+  it('prefetches the next exact page into the page cache', async () => {
+    clearAllPageDataCache()
+    const currentResponse = responseWith(20, 45, 20, 0)
+    const nextResponse = responseWith(20, 45, 20, 1)
+    const search = vi.fn().mockResolvedValue(nextResponse)
+
+    prefetchNextSearchPage({
+      pageId: 'test-search',
+      principal: 'IDIR\\TEST',
+      request: { page: 0, pageSize: 20 },
+      response: currentResponse,
+      search,
+    })
+
+    await vi.waitFor(() => {
+      expect(search).toHaveBeenCalledWith({ page: 1, pageSize: 20 }, { knownTotal: 45 })
+    })
+
+    const cacheKey = buildPageDataCacheKey('test-search', 'IDIR\\TEST', {
+      page: 1,
+      pageSize: 20,
+    })
+    expect(getPageDataCache<TestResponse>(cacheKey)).toEqual(nextResponse)
   })
 })

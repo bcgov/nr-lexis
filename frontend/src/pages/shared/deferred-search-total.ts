@@ -1,3 +1,9 @@
+import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
+
 type SearchPageRequest = {
   page: number
   pageSize: number
@@ -114,4 +120,43 @@ export const loadSearchWithDeferredTotal = async <
     response: withTotal(response, optimisticTotal),
     totalIsExact: false,
   }
+}
+
+export const prefetchNextSearchPage = <
+  TRequest extends SearchPageRequest,
+  TResponse extends PagedSearchResponse,
+>({
+  pageId,
+  principal,
+  request,
+  response,
+  search,
+  onError,
+}: {
+  pageId: string
+  principal?: string | null
+  request: TRequest
+  response: TResponse
+  search: (request: TRequest, options?: KnownTotalSearchOptions) => Promise<TResponse>
+  onError?: (error: unknown) => void
+}): void => {
+  const nextPage = request.page + 1
+  if (nextPage >= response.page.totalPages || response.content.length < request.pageSize) {
+    return
+  }
+
+  const nextRequest = {
+    ...request,
+    page: nextPage,
+  }
+  const nextPageCacheKey = buildPageDataCacheKey(pageId, principal, nextRequest)
+  if (getPageDataCache<TResponse>(nextPageCacheKey)) {
+    return
+  }
+
+  void search(nextRequest, { knownTotal: response.page.totalElements })
+    .then((nextResponse) => {
+      setPageDataCache(nextPageCacheKey, withTotal(nextResponse, response.page.totalElements))
+    })
+    .catch((error) => onError?.(error))
 }
