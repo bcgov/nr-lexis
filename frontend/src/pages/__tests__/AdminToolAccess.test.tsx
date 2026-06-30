@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminPage from '@/pages/Admin'
+import { searchFamUserRoleAssignments } from '@/service/fam-user-access-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
@@ -20,7 +21,12 @@ vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
+vi.mock('@/service/fam-user-access-service', () => ({
+  searchFamUserRoleAssignments: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedSearchFamUserRoleAssignments = vi.mocked(searchFamUserRoleAssignments)
 
 const renderPage = () => {
   render(
@@ -35,6 +41,15 @@ const renderPage = () => {
 describe('Admin tool access smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedSearchFamUserRoleAssignments.mockResolvedValue({
+      results: [],
+      total: 0,
+      pageNumber: 1,
+      pageSize: 10,
+      pageCount: 0,
+      configured: true,
+      message: null,
+    })
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -154,5 +169,71 @@ describe('Admin tool access smoke', () => {
     const adminRow = screen.getByText('LEXIS administration').closest('tr')
     expect(adminRow).not.toBeNull()
     expect(within(adminRow as HTMLTableRowElement).getByText('Denied')).toBeInTheDocument()
+  })
+
+  it('searches FAM user access and renders role assignments', async () => {
+    mockedSearchFamUserRoleAssignments.mockResolvedValue({
+      results: [
+        {
+          assignmentId: 88,
+          userId: 44,
+          userName: 'JSMITH',
+          userTypeCode: 'I',
+          userTypeDescription: 'IDIR',
+          firstName: 'Jane',
+          lastName: 'Smith',
+          fullName: 'Jane Smith',
+          email: 'jane.smith@gov.bc.ca',
+          roleId: 12,
+          roleName: 'LEXIS_ADMIN',
+          roleDisplayName: 'Administrator',
+          roleTypeCode: 'C',
+          forestClientNumber: '00012345',
+          forestClientName: 'ACME Timber',
+          forestClientStatusCode: 'ACT',
+          forestClientStatusDescription: 'Active',
+          createDate: '2026-06-30T08:00:00Z',
+          expiryDate: null,
+        },
+      ],
+      total: 1,
+      pageNumber: 1,
+      pageSize: 10,
+      pageCount: 1,
+      configured: true,
+      message: null,
+    })
+
+    renderPage()
+
+    await userEvent.type(screen.getByLabelText('User name, name, or email'), 'smith')
+    await userEvent.click(screen.getByRole('button', { name: 'Search FAM Access' }))
+
+    expect(mockedSearchFamUserRoleAssignments).toHaveBeenCalledWith({
+      search: 'smith',
+      pageNumber: 1,
+      pageSize: 10,
+      sortBy: 'user_name',
+      sortOrder: 'asc',
+    })
+    expect(await screen.findByText('JSMITH')).toBeInTheDocument()
+    expect(screen.getByText('Jane Smith')).toBeInTheDocument()
+    expect(screen.getByText('jane.smith@gov.bc.ca')).toBeInTheDocument()
+    expect(screen.getByText('Administrator')).toBeInTheDocument()
+    expect(screen.getByText('LEXIS_ADMIN')).toBeInTheDocument()
+    expect(screen.getByText('00012345 - ACME Timber')).toBeInTheDocument()
+    expect(screen.getByText('2026-06-30')).toBeInTheDocument()
+  })
+
+  it('validates FAM user access searches before calling the backend', async () => {
+    renderPage()
+
+    await userEvent.type(screen.getByLabelText('User name, name, or email'), 'ab')
+    await userEvent.click(screen.getByRole('button', { name: 'Search FAM Access' }))
+
+    expect(mockedSearchFamUserRoleAssignments).not.toHaveBeenCalled()
+    expect(
+      screen.getByText('Enter at least 3 characters to search FAM user access.'),
+    ).toBeInTheDocument()
   })
 })

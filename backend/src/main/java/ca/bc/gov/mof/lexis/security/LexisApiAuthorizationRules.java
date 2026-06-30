@@ -262,7 +262,8 @@ final class LexisApiAuthorizationRules {
               HttpMethod.GET,
               "/lexisAgentAdmin",
               "/api/lexis/admin/agent",
-              "/api/lexis/admin/lexisAgentAdmin"),
+              "/api/lexis/admin/lexisAgentAdmin",
+              "/api/lexis/admin/fam-users"),
           action(
               HttpMethod.GET,
               "/lexisAgentAdmin",
