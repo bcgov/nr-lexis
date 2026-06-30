@@ -57,7 +57,7 @@ import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
-  prefetchNextSearchPage,
+  prefetchAdjacentSearchPages,
 } from '@/pages/shared/deferred-search-total'
 import {
   countProvincialOffers,
@@ -226,6 +226,7 @@ const ProvincialOffersPage = () => {
         capabilities?.principal,
         request,
       )
+      const isLatestRequest = beginSearchRequest()
       if (!options.force) {
         const cachedResults = getPageDataCache<ProvincialOfferSearchResponse>(pageCacheKey)
         if (cachedResults) {
@@ -234,6 +235,14 @@ const ProvincialOffersPage = () => {
             buildSearchTotalCacheKey(request.filters),
             cachedResults.page.totalElements,
           )
+          prefetchAdjacentSearchPages({
+            pageId: 'provincial-offer-search',
+            principal: capabilities?.principal,
+            request,
+            response: cachedResults,
+            search: searchProvincialOffers,
+            onError: console.error,
+          })
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -241,7 +250,6 @@ const ProvincialOffersPage = () => {
         }
       }
 
-      const isLatestRequest = beginSearchRequest()
       if (
         hasInvalidIsoDateValue(
           request.filters.listingFromDate,
@@ -266,7 +274,7 @@ const ProvincialOffersPage = () => {
           if (totalIsExact) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
             setPageDataCache(pageCacheKey, response)
-            prefetchNextSearchPage({
+            prefetchAdjacentSearchPages({
               pageId: 'provincial-offer-search',
               principal: capabilities?.principal,
               request,

@@ -53,7 +53,7 @@ import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
-  prefetchNextSearchPage,
+  prefetchAdjacentSearchPages,
 } from '@/pages/shared/deferred-search-total'
 import {
   countFederalApplications,
@@ -199,6 +199,7 @@ const FederalPage = () => {
         capabilities?.principal,
         request,
       )
+      const isLatestRequest = beginSearchRequest()
       if (!options.force) {
         const cachedResults = getPageDataCache<FederalApplicationSearchResponse>(pageCacheKey)
         if (cachedResults) {
@@ -207,6 +208,14 @@ const FederalPage = () => {
             buildSearchTotalCacheKey(request.filters),
             cachedResults.page.totalElements,
           )
+          prefetchAdjacentSearchPages({
+            pageId: 'federal-application-search',
+            principal: capabilities?.principal,
+            request,
+            response: cachedResults,
+            search: searchFederalApplications,
+            onError: console.error,
+          })
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -214,7 +223,6 @@ const FederalPage = () => {
         }
       }
 
-      const isLatestRequest = beginSearchRequest()
       if (
         hasInvalidIsoDateValue(
           request.filters.receivedFromDate,
@@ -239,7 +247,7 @@ const FederalPage = () => {
           if (totalIsExact) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
             setPageDataCache(pageCacheKey, response)
-            prefetchNextSearchPage({
+            prefetchAdjacentSearchPages({
               pageId: 'federal-application-search',
               principal: capabilities?.principal,
               request,

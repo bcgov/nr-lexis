@@ -64,7 +64,7 @@ import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
   loadSearchWithDeferredTotal,
-  prefetchNextSearchPage,
+  prefetchAdjacentSearchPages,
 } from '@/pages/shared/deferred-search-total'
 import {
   approveApplicationReview,
@@ -325,6 +325,7 @@ const ProvincialReviewPage = () => {
         capabilities?.principal,
         request,
       )
+      const isLatestRequest = beginSearchRequest()
       if (!options.force) {
         const cachedResults = getPageDataCache<ApplicationReviewSearchResponse>(pageCacheKey)
         if (cachedResults) {
@@ -333,6 +334,14 @@ const ProvincialReviewPage = () => {
             buildSearchTotalCacheKey(request.filters),
             cachedResults.page.totalElements,
           )
+          prefetchAdjacentSearchPages({
+            pageId: 'provincial-review-search',
+            principal: capabilities?.principal,
+            request,
+            response: cachedResults,
+            search: searchApplicationReviews,
+            onError: console.error,
+          })
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -340,7 +349,6 @@ const ProvincialReviewPage = () => {
         }
       }
 
-      const isLatestRequest = beginSearchRequest()
       if (
         hasInvalidIsoDateValue(
           request.filters.receivedFromDate,
@@ -365,7 +373,7 @@ const ProvincialReviewPage = () => {
           if (totalIsExact) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
             setPageDataCache(pageCacheKey, response)
-            prefetchNextSearchPage({
+            prefetchAdjacentSearchPages({
               pageId: 'provincial-review-search',
               principal: capabilities?.principal,
               request,

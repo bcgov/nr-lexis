@@ -58,7 +58,7 @@ import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
-  prefetchNextSearchPage,
+  prefetchAdjacentSearchPages,
 } from '@/pages/shared/deferred-search-total'
 import {
   countProvincialPermits,
@@ -215,6 +215,7 @@ const ProvincialPermitPage = () => {
         capabilities?.principal,
         request,
       )
+      const isLatestRequest = beginSearchRequest()
       if (!options.force) {
         const cachedResults = getPageDataCache<ProvincialPermitSearchResponse>(pageCacheKey)
         if (cachedResults) {
@@ -223,6 +224,14 @@ const ProvincialPermitPage = () => {
             buildSearchTotalCacheKey(request.filters),
             cachedResults.page.totalElements,
           )
+          prefetchAdjacentSearchPages({
+            pageId: 'provincial-permit-search',
+            principal: capabilities?.principal,
+            request,
+            response: cachedResults,
+            search: searchProvincialPermits,
+            onError: console.error,
+          })
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -230,7 +239,6 @@ const ProvincialPermitPage = () => {
         }
       }
 
-      const isLatestRequest = beginSearchRequest()
       if (hasInvalidIsoDateValue(request.filters.issuedFromDate, request.filters.issuedToDate)) {
         setLoading(false)
         return
@@ -247,7 +255,7 @@ const ProvincialPermitPage = () => {
           if (totalIsExact) {
             setCachedSearchTotal(totalCacheRef.current, cacheKey, response.page.totalElements)
             setPageDataCache(pageCacheKey, response)
-            prefetchNextSearchPage({
+            prefetchAdjacentSearchPages({
               pageId: 'provincial-permit-search',
               principal: capabilities?.principal,
               request,

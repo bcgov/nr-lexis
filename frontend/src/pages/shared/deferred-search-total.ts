@@ -28,6 +28,20 @@ type DeferredSearchResult<TResponse extends PagedSearchResponse> = {
   totalIsExact: boolean
 }
 
+type SearchPrefetchConfig<
+  TRequest extends SearchPageRequest,
+  TResponse extends PagedSearchResponse,
+> = {
+  pageId: string
+  principal?: string | null
+  request: TRequest
+  response: TResponse
+  search: (request: TRequest, options?: KnownTotalSearchOptions) => Promise<TResponse>
+  onError?: (error: unknown) => void
+}
+
+const pendingPagePrefetches = new Set<string>()
+
 const totalPagesFor = (totalElements: number, pageSize: number): number =>
   Math.max(1, Math.ceil(Math.max(0, totalElements) / Math.max(1, pageSize)))
 
@@ -122,7 +136,7 @@ export const loadSearchWithDeferredTotal = async <
   }
 }
 
-export const prefetchNextSearchPage = <
+const prefetchSearchPage = <
   TRequest extends SearchPageRequest,
   TResponse extends PagedSearchResponse,
 >({
@@ -132,31 +146,45 @@ export const prefetchNextSearchPage = <
   response,
   search,
   onError,
-}: {
-  pageId: string
-  principal?: string | null
-  request: TRequest
-  response: TResponse
-  search: (request: TRequest, options?: KnownTotalSearchOptions) => Promise<TResponse>
-  onError?: (error: unknown) => void
-}): void => {
-  const nextPage = request.page + 1
-  if (nextPage >= response.page.totalPages || response.content.length < request.pageSize) {
+  targetPage,
+}: SearchPrefetchConfig<TRequest, TResponse> & { targetPage: number }): void => {
+  if (targetPage < 0 || targetPage >= response.page.totalPages) {
     return
   }
 
-  const nextRequest = {
+  if (targetPage > request.page && response.content.length < request.pageSize) {
+    return
+  }
+
+  const targetRequest = {
     ...request,
-    page: nextPage,
+    page: targetPage,
   }
-  const nextPageCacheKey = buildPageDataCacheKey(pageId, principal, nextRequest)
-  if (getPageDataCache<TResponse>(nextPageCacheKey)) {
+  const targetPageCacheKey = buildPageDataCacheKey(pageId, principal, targetRequest)
+  if (
+    getPageDataCache<TResponse>(targetPageCacheKey) ||
+    pendingPagePrefetches.has(targetPageCacheKey)
+  ) {
     return
   }
 
-  void search(nextRequest, { knownTotal: response.page.totalElements })
-    .then((nextResponse) => {
-      setPageDataCache(nextPageCacheKey, withTotal(nextResponse, response.page.totalElements))
+  pendingPagePrefetches.add(targetPageCacheKey)
+  void search(targetRequest, { knownTotal: response.page.totalElements })
+    .then((targetResponse) => {
+      setPageDataCache(targetPageCacheKey, withTotal(targetResponse, response.page.totalElements))
     })
     .catch((error) => onError?.(error))
+    .finally(() => {
+      pendingPagePrefetches.delete(targetPageCacheKey)
+    })
+}
+
+export const prefetchAdjacentSearchPages = <
+  TRequest extends SearchPageRequest,
+  TResponse extends PagedSearchResponse,
+>(
+  config: SearchPrefetchConfig<TRequest, TResponse>,
+): void => {
+  prefetchSearchPage({ ...config, targetPage: config.request.page + 1 })
+  prefetchSearchPage({ ...config, targetPage: config.request.page - 1 })
 }
