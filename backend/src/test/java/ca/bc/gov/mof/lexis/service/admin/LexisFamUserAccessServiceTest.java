@@ -27,18 +27,15 @@ class LexisFamUserAccessServiceTest {
   }
 
   @Test
-  void searchRoleAssignmentsShouldForwardJwtAndMapFamRoleAssignments() {
+  void searchRoleAssignmentsShouldForwardJwtAndMapFamExternalUsers() {
     RestClient.Builder builder = RestClient.builder().baseUrl("https://fam.example");
     MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
     LexisFamUserAccessService service =
-        new LexisFamUserAccessService(builder.build(), 123L, "https://fam.example");
+        new LexisFamUserAccessService(builder.build(), "https://fam.example");
     setJwt("token-123");
 
     server
-        .expect(
-            requestTo(
-                "https://fam.example/fam-applications/123/user-role-assignment"
-                    + "?pageNumber=2&pageSize=25&sortBy=role_display_name&sortOrder=desc&search=smith"))
+        .expect(requestTo("https://fam.example/external/v1/users?page=2&size=25&idpUsername=smith"))
         .andExpect(method(HttpMethod.GET))
         .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer token-123"))
         .andRespond(
@@ -47,42 +44,33 @@ class LexisFamUserAccessServiceTest {
                 {
                   "meta": {
                     "total": 1,
-                    "number_of_pages": 1,
-                    "page_number": 2,
-                    "page_size": 25
+                    "pageCount": 1,
+                    "page": 2,
+                    "size": 25
                   },
-                  "results": [
+                  "users": [
                     {
-                      "user_role_xref_id": 88,
-                      "user_id": 44,
-                      "role_id": 12,
-                      "user": {
-                        "user_name": " JSMITH ",
-                        "user_type": {
-                          "code": "I",
-                          "description": "IDIR"
+                      "firstName": " Jane ",
+                      "lastName": " Smith ",
+                      "idpUsername": " JSMITH ",
+                      "idpUserGuid": "guid-1",
+                      "idpType": "IDIR",
+                      "roles": [
+                        {
+                          "applicationName": "LEXIS",
+                          "roleName": " LEXIS_ADMIN ",
+                          "roleDisplayName": " Administrator ",
+                          "scopeType": "FOREST_CLIENT",
+                          "value": [" 00012345 ", "00012346"]
                         },
-                        "first_name": " Jane ",
-                        "last_name": " Smith ",
-                        "email": " jane.smith@gov.bc.ca "
-                      },
-                      "role": {
-                        "role_name": " LEXIS_ADMIN ",
-                        "role_type_code": "C",
-                        "role_id": 12,
-                        "display_name": " Administrator ",
-                        "description": "Full admin",
-                        "forest_client": {
-                          "forest_client_number": " 00012345 ",
-                          "client_name": " ACME Timber ",
-                          "status": {
-                            "status_code": "ACT",
-                            "description": "Active"
-                          }
+                        {
+                          "applicationName": "LEXIS",
+                          "roleName": " LEXIS_READ_ONLY ",
+                          "roleDisplayName": " Read only ",
+                          "scopeType": null,
+                          "value": []
                         }
-                      },
-                      "create_date": "2026-06-30T08:00:00Z",
-                      "expiry_date": null
+                      ]
                     }
                   ]
                 }
@@ -96,26 +84,41 @@ class LexisFamUserAccessServiceTest {
     assertThat(response.total()).isEqualTo(1);
     assertThat(response.pageNumber()).isEqualTo(2);
     assertThat(response.pageSize()).isEqualTo(25);
-    assertThat(response.results()).hasSize(1);
+    assertThat(response.results()).hasSize(2);
     assertThat(response.results().getFirst())
         .satisfies(
             assignment -> {
-              assertThat(assignment.assignmentId()).isEqualTo(88L);
+              assertThat(assignment.assignmentId()).isNull();
+              assertThat(assignment.userId()).isNull();
               assertThat(assignment.userName()).isEqualTo("JSMITH");
               assertThat(assignment.fullName()).isEqualTo("Jane Smith");
-              assertThat(assignment.email()).isEqualTo("jane.smith@gov.bc.ca");
+              assertThat(assignment.email()).isNull();
+              assertThat(assignment.userTypeCode()).isEqualTo("IDIR");
+              assertThat(assignment.userTypeDescription()).isEqualTo("IDIR");
               assertThat(assignment.roleName()).isEqualTo("LEXIS_ADMIN");
               assertThat(assignment.roleDisplayName()).isEqualTo("Administrator");
-              assertThat(assignment.forestClientNumber()).isEqualTo("00012345");
-              assertThat(assignment.forestClientName()).isEqualTo("ACME Timber");
-              assertThat(assignment.forestClientStatusDescription()).isEqualTo("Active");
+              assertThat(assignment.forestClientNumber()).isEqualTo("00012345, 00012346");
+              assertThat(assignment.forestClientName()).isNull();
+              assertThat(assignment.forestClientStatusDescription()).isNull();
+              assertThat(assignment.scopeType()).isEqualTo("FOREST_CLIENT");
+              assertThat(assignment.scopeValue()).isEqualTo("00012345, 00012346");
+              assertThat(assignment.createDate()).isNull();
+              assertThat(assignment.expiryDate()).isNull();
+            });
+    assertThat(response.results().get(1))
+        .satisfies(
+            assignment -> {
+              assertThat(assignment.roleName()).isEqualTo("LEXIS_READ_ONLY");
+              assertThat(assignment.scopeType()).isNull();
+              assertThat(assignment.scopeValue()).isNull();
+              assertThat(assignment.forestClientNumber()).isNull();
             });
     server.verify();
   }
 
   @Test
   void searchRoleAssignmentsShouldReturnConfiguredFalseWhenFamConfigMissing() {
-    LexisFamUserAccessService service = new LexisFamUserAccessService(RestClient.create(), null, "");
+    LexisFamUserAccessService service = new LexisFamUserAccessService(RestClient.create(), "");
 
     LexisFamUserRoleAssignmentSearchResponseDto response =
         service.searchRoleAssignments("smith", 1, 10, null, null);
@@ -128,7 +131,7 @@ class LexisFamUserAccessServiceTest {
   @Test
   void searchRoleAssignmentsShouldRequireThreeCharactersWhenSearchProvided() {
     LexisFamUserAccessService service =
-        new LexisFamUserAccessService(RestClient.create(), 123L, "https://fam.example");
+        new LexisFamUserAccessService(RestClient.create(), "https://fam.example");
 
     assertThatThrownBy(() -> service.searchRoleAssignments("ab", 1, 10, null, null))
         .isInstanceOf(IllegalArgumentException.class)

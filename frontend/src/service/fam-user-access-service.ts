@@ -18,6 +18,8 @@ export type FamUserRoleAssignment = {
   forestClientName: string | null
   forestClientStatusCode: string | null
   forestClientStatusDescription: string | null
+  scopeType: string | null
+  scopeValue: string | null
   createDate: string | null
   expiryDate: string | null
 }

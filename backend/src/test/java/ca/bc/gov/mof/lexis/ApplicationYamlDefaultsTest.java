@@ -43,8 +43,12 @@ class ApplicationYamlDefaultsTest {
     Properties properties = loadApplicationYaml();
 
     assertThat(properties)
-        .containsEntry("lexis.fam.admin.base-url", "${LEXIS_FAM_ADMIN_BASE_URL:${FAM_ADMIN_BASE_URL:}}")
-        .containsEntry("lexis.fam.admin.application-id", "${LEXIS_FAM_APPLICATION_ID:}");
+        .containsEntry("ca.bc.gov.nrs.identity-lookup.base-url", "${IDENTITY_LOOKUP_BASE_URL:}")
+        .doesNotContainKeys(
+            "lexis.fam.admin.base-url",
+            "lexis.fam.admin.application-id",
+            "lexis.fam.admin.connect-timeout",
+            "lexis.fam.admin.read-timeout");
   }
 
   private static Properties loadApplicationYaml() {

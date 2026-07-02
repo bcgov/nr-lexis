@@ -177,6 +177,11 @@ const displayValue = (value: string | number | null | undefined): string => {
 }
 
 const roleScopeLabel = (assignment: FamUserRoleAssignment): string => {
+  if (assignment.scopeValue?.trim()) {
+    return assignment.scopeType?.trim()
+      ? `${assignment.scopeType}: ${assignment.scopeValue}`
+      : assignment.scopeValue
+  }
   if (!assignment.forestClientNumber && !assignment.forestClientName) {
     return 'Application'
   }
@@ -341,7 +346,7 @@ const AdminPage = () => {
             <div className="legacy-search-grid">
               <TextInput
                 id="famUserSearch"
-                labelText="User name, name, or email"
+                labelText="IDIR or Business BCeID username"
                 value={famSearchText}
                 onChange={(event) => setFamSearchText(event.target.value)}
                 onKeyDown={(event) => {

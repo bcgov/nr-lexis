@@ -18,5 +18,7 @@ public record LexisFamUserRoleAssignmentDto(
     String forestClientName,
     String forestClientStatusCode,
     String forestClientStatusDescription,
+    String scopeType,
+    String scopeValue,
     String createDate,
     String expiryDate) {}
