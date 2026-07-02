@@ -47,6 +47,7 @@ In OpenShift deployments these come from the Secret created by `openshift.deploy
 | `AWS_COGNITO_ISSUER_URI` | Cognito issuer URI | - |
 | `COGNITO_USERINFO_URI` | Cognito userinfo endpoint | - |
 | `IDENTITY_LOOKUP_BASE_URL` | FAM identity lookup base URL | - |
+| `LEXIS_PROD_RTM_ONLY` | Backend enforcement for PROD RTM-only rollout; denies non-session/non-RTM APIs and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` so the UI only shows Average Monthly Values | false |
 | `APP_LOG_LEVEL` | Application logging level | INFO |
 | `SPRING_JPA_SHOW_SQL` | SQL logging toggle | false |
 

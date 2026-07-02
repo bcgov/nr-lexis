@@ -129,6 +129,16 @@ TEST IDIR credentials from GitHub `test` environment secrets and passes the mask
 because repeated automated login attempts can lock the TEST account. See
 [frontend/e2e/README.md](frontend/e2e/README.md) for the required GitHub environment secrets.
 
+Production RTM-only rollout is controlled by the optional GitHub environment secret
+`lexis_prod_rtm_only`. Set it to `true` for PROD to pass `LEXIS_PROD_RTM_ONLY` to the backend and
+`VITE_LEXIS_PROD_RTM_ONLY` to the frontend. In that mode, the frontend only shows the Average
+Monthly Values module/sidebar item for LEXIS admins, and the backend denies non-session/non-RTM API
+routes.
+
+The new admin user access lookup link can be pointed at a specific FAM manage app by setting the
+optional GitHub environment variable `VITE_FAM_MANAGE_URL`; if omitted, the frontend resolves a
+default URL from `VITE_ZONE`.
+
 ## Component docs
 
 - [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.

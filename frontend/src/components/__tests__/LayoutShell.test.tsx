@@ -33,6 +33,7 @@ const renderLayout = (path: string) => {
 describe('Layout shell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.config = {}
 
     mockedUseAuth.mockReturnValue(createTestAuthContext())
   })
@@ -87,6 +88,28 @@ describe('Layout shell', () => {
     expect(feePolicyLink).not.toHaveClass('cds--side-nav__link--active')
     expect(filPolicyLink).not.toHaveClass('cds--side-nav__link--active')
     expect(averageMonthlyValuesLink).not.toHaveClass('cds--side-nav__link--active')
+  })
+
+  it('shows only the RTM navigation link when PROD RTM-only mode is enabled', () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        defaultRoute: '/admin/rtm/emslogamv',
+        canPerform: (action: string) => action === '/lexisAgentAdmin',
+      }),
+    )
+
+    renderLayout('/admin/rtm/emslogamv')
+
+    expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toHaveAttribute(
+      'href',
+      '/admin/rtm/emslogamv',
+    )
+    expect(screen.queryByRole('link', { name: /Users & Access/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('Provincial')).not.toBeInTheDocument()
+    expect(screen.queryByText('Federal')).not.toBeInTheDocument()
+    expect(screen.queryByText('Reports')).not.toBeInTheDocument()
   })
 
   it('renders side-nav links with standard icons and collapsed labels', () => {
