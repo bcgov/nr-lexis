@@ -17,7 +17,7 @@ class ScheduledWorkflowDefaultsTest {
         .contains("name: PR Deployment Purge")
         .contains("environment: dev")
         .contains("oc_namespace: ${{ secrets.oc_namespace }}")
-        .contains("oc_token: ${{ secrets.oc_token }}")
+        .contains("oc_token: ${{ secrets.oc_cleanup_token }}")
         .contains("oc_server: ${{ vars.oc_server }}")
         .contains("oc whoami >/dev/null")
         .contains("oc project \"${NAMESPACE}\" >/dev/null")
