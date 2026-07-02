@@ -196,6 +196,8 @@ describe('Admin tool access smoke', () => {
           forestClientName: 'ACME Timber',
           forestClientStatusCode: 'ACT',
           forestClientStatusDescription: 'Active',
+          scopeType: 'FOREST_CLIENT',
+          scopeValue: '00012345',
           createDate: '2026-06-30T08:00:00Z',
           expiryDate: null,
         },
@@ -214,7 +216,7 @@ describe('Admin tool access smoke', () => {
     expect(manageLink).toHaveAttribute('href', 'https://fam-dev.nrs.gov.bc.ca')
     expect(manageLink).toHaveAttribute('target', '_blank')
 
-    await userEvent.type(screen.getByLabelText('User name, name, or email'), 'smith')
+    await userEvent.type(screen.getByLabelText('IDIR or Business BCeID username'), 'smith')
     await userEvent.click(screen.getByRole('button', { name: 'Search FAM Access' }))
 
     expect(mockedSearchFamUserRoleAssignments).toHaveBeenCalledWith({
@@ -229,7 +231,7 @@ describe('Admin tool access smoke', () => {
     expect(screen.getByText('jane.smith@gov.bc.ca')).toBeInTheDocument()
     expect(screen.getByText('Administrator')).toBeInTheDocument()
     expect(screen.getByText('LEXIS_ADMIN')).toBeInTheDocument()
-    expect(screen.getByText('00012345 - ACME Timber')).toBeInTheDocument()
+    expect(screen.getByText('FOREST_CLIENT: 00012345')).toBeInTheDocument()
     expect(screen.getByText('2026-06-30')).toBeInTheDocument()
   })
 
@@ -261,7 +263,7 @@ describe('Admin tool access smoke', () => {
   it('validates FAM user access searches before calling the backend', async () => {
     renderPage()
 
-    await userEvent.type(screen.getByLabelText('User name, name, or email'), 'ab')
+    await userEvent.type(screen.getByLabelText('IDIR or Business BCeID username'), 'ab')
     await userEvent.click(screen.getByRole('button', { name: 'Search FAM Access' }))
 
     expect(mockedSearchFamUserRoleAssignments).not.toHaveBeenCalled()

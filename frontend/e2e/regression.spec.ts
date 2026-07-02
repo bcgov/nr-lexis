@@ -859,7 +859,7 @@ test.describe('TEST IDIR admin regression', () => {
     })
     await expect(famAccessSection).toBeVisible()
     await expect(famAccessSection.getByText('Search IDIR or Business BCeID users')).toBeVisible()
-    await expect(famAccessSection.getByLabel('User name, name, or email')).toBeVisible()
+    await expect(famAccessSection.getByLabel('IDIR or Business BCeID username')).toBeVisible()
     await expect(famAccessSection.getByRole('button', { name: 'Search FAM Access' })).toBeVisible()
 
     const manageLink = famAccessSection.getByRole('link', { name: 'Manage in FAM' })

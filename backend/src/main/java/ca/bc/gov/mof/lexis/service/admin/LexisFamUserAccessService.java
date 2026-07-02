@@ -2,7 +2,6 @@ package ca.bc.gov.mof.lexis.service.admin;
 
 import ca.bc.gov.mof.lexis.dto.admin.LexisFamUserRoleAssignmentDto;
 import ca.bc.gov.mof.lexis.dto.admin.LexisFamUserRoleAssignmentSearchResponseDto;
-import java.net.URI;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
@@ -22,30 +21,26 @@ import org.springframework.web.client.RestClient;
 @Service
 public class LexisFamUserAccessService {
 
-  private static final String USER_ROLE_ASSIGNMENT_PATH =
-      "/fam-applications/{applicationId}/user-role-assignment";
+  private static final String USER_SEARCH_PATH = "/external/v1/users";
   private static final int MIN_SEARCH_LENGTH = 3;
   private static final int MIN_PAGE_SIZE = 10;
   private static final int DEFAULT_PAGE_SIZE = 10;
   private static final int MAX_PAGE_SIZE = 100;
 
   private final RestClient restClient;
-  private final Long applicationId;
   private final boolean configured;
 
   @Autowired
   public LexisFamUserAccessService(
-      @Value("${lexis.fam.admin.base-url:}") String baseUrl,
-      @Value("${lexis.fam.admin.application-id:}") String applicationId,
-      @Value("${lexis.fam.admin.connect-timeout:5s}") Duration connectTimeout,
-      @Value("${lexis.fam.admin.read-timeout:10s}") Duration readTimeout) {
-    this(buildRestClient(baseUrl, connectTimeout, readTimeout), parseApplicationId(applicationId), baseUrl);
+      @Value("${ca.bc.gov.nrs.identity-lookup.base-url:}") String baseUrl,
+      @Value("${ca.bc.gov.nrs.identity-lookup.connect-timeout:5s}") Duration connectTimeout,
+      @Value("${ca.bc.gov.nrs.identity-lookup.read-timeout:10s}") Duration readTimeout) {
+    this(buildRestClient(baseUrl, connectTimeout, readTimeout), baseUrl);
   }
 
-  LexisFamUserAccessService(RestClient restClient, Long applicationId, String baseUrl) {
+  LexisFamUserAccessService(RestClient restClient, String baseUrl) {
     this.restClient = restClient;
-    this.applicationId = applicationId;
-    this.configured = StringUtils.hasText(baseUrl) && applicationId != null;
+    this.configured = StringUtils.hasText(baseUrl);
   }
 
   public LexisFamUserRoleAssignmentSearchResponseDto searchRoleAssignments(
@@ -53,8 +48,6 @@ public class LexisFamUserAccessService {
     String normalizedSearch = normalizeSearch(search);
     int normalizedPageNumber = Math.max(pageNumber, 1);
     int normalizedPageSize = normalizePageSize(pageSize);
-    String normalizedSortBy = normalizeSortBy(sortBy);
-    String normalizedSortOrder = normalizeSortOrder(sortOrder);
 
     if (!configured) {
       return new LexisFamUserRoleAssignmentSearchResponseDto(
@@ -67,26 +60,23 @@ public class LexisFamUserAccessService {
           "FAM user access lookup is not configured.");
     }
 
-    FamPagedRoleAssignments response =
+    FamExternalUserSearchResponse response =
         restClient
             .get()
             .uri(
                 uriBuilder -> {
                   uriBuilder
-                      .path(USER_ROLE_ASSIGNMENT_PATH)
-                      .queryParam("pageNumber", normalizedPageNumber)
-                      .queryParam("pageSize", normalizedPageSize)
-                      .queryParam("sortBy", normalizedSortBy)
-                      .queryParam("sortOrder", normalizedSortOrder);
+                      .path(USER_SEARCH_PATH)
+                      .queryParam("page", normalizedPageNumber)
+                      .queryParam("size", normalizedPageSize);
                   if (normalizedSearch != null) {
-                    uriBuilder.queryParam("search", normalizedSearch);
+                    uriBuilder.queryParam("idpUsername", normalizedSearch);
                   }
-                  URI uri = uriBuilder.build(applicationId);
-                  return uri;
+                  return uriBuilder.build();
                 })
             .header(HttpHeaders.AUTHORIZATION, "Bearer " + extractBearerToken())
             .retrieve()
-            .body(FamPagedRoleAssignments.class);
+            .body(FamExternalUserSearchResponse.class);
 
     if (response == null) {
       return new LexisFamUserRoleAssignmentSearchResponseDto(
@@ -95,14 +85,13 @@ public class LexisFamUserAccessService {
 
     FamPageMeta meta = response.meta();
     int total = meta == null ? 0 : meta.total();
-    int returnedPage = meta == null ? normalizedPageNumber : Math.max(meta.page_number(), 1);
-    int returnedPageSize = meta == null ? normalizedPageSize : Math.max(meta.page_size(), MIN_PAGE_SIZE);
-    int pageCount = meta == null ? 0 : Math.max(meta.number_of_pages(), 0);
+    int returnedPage = meta == null ? normalizedPageNumber : Math.max(meta.page(), 1);
+    int returnedPageSize = meta == null ? normalizedPageSize : Math.max(meta.size(), MIN_PAGE_SIZE);
+    int pageCount = meta == null ? 0 : Math.max(meta.pageCount(), 0);
     List<LexisFamUserRoleAssignmentDto> results =
-        response.results().stream()
+        response.users().stream()
             .filter(Objects::nonNull)
-            .map(LexisFamUserAccessService::toDto)
-            .filter(Objects::nonNull)
+            .flatMap(user -> toDtos(user).stream())
             .toList();
 
     return new LexisFamUserRoleAssignmentSearchResponseDto(
@@ -124,17 +113,6 @@ public class LexisFamUserAccessService {
     return builder.build();
   }
 
-  private static Long parseApplicationId(String applicationId) {
-    if (!StringUtils.hasText(applicationId)) {
-      return null;
-    }
-    try {
-      return Long.parseLong(applicationId.trim());
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
   private static String normalizeSearch(String search) {
     if (!StringUtils.hasText(search)) {
       return null;
@@ -153,24 +131,6 @@ public class LexisFamUserAccessService {
     return Math.min(Math.max(pageSize, MIN_PAGE_SIZE), MAX_PAGE_SIZE);
   }
 
-  private static String normalizeSortBy(String sortBy) {
-    if (!StringUtils.hasText(sortBy)) {
-      return "user_name";
-    }
-    return switch (sortBy.trim()) {
-      case "create_date", "user_name", "user_type_code", "email", "full_name", "role_display_name",
-          "forest_client_number" -> sortBy.trim();
-      default -> "user_name";
-    };
-  }
-
-  private static String normalizeSortOrder(String sortOrder) {
-    if (!StringUtils.hasText(sortOrder)) {
-      return "asc";
-    }
-    return "desc".equalsIgnoreCase(sortOrder.trim()) ? "desc" : "asc";
-  }
-
   private static String extractBearerToken() {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
     if (authentication instanceof JwtAuthenticationToken jwtAuth) {
@@ -179,38 +139,71 @@ public class LexisFamUserAccessService {
     throw new IllegalStateException("No valid JWT bearer token in security context");
   }
 
-  private static LexisFamUserRoleAssignmentDto toDto(FamRoleAssignment assignment) {
-    FamUser user = assignment.user();
-    FamRole role = assignment.role();
-    if (user == null || role == null) {
-      return null;
+  private static List<LexisFamUserRoleAssignmentDto> toDtos(FamExternalUser user) {
+    if (user.roles().isEmpty()) {
+      return List.of(toDto(user, null));
     }
-    FamUserType userType = user.user_type();
-    FamForestClient forestClient = role.forest_client();
-    FamForestClientStatus forestClientStatus = forestClient == null ? null : forestClient.status();
-    String firstName = trim(user.first_name());
-    String lastName = trim(user.last_name());
+    return user.roles().stream().filter(Objects::nonNull).map(role -> toDto(user, role)).toList();
+  }
 
+  private static LexisFamUserRoleAssignmentDto toDto(FamExternalUser user, FamExternalRole role) {
+    String firstName = trim(user.firstName());
+    String lastName = trim(user.lastName());
+    String userName = trim(user.idpUsername());
+    String idpType = trim(user.idpType());
+    String roleName = role == null ? null : trim(role.roleName());
+    String roleDisplayName = role == null ? null : trim(role.roleDisplayName());
+    String scopeType = role == null ? null : trim(role.scopeType());
+    String scopeValue = role == null ? null : joinValues(role.value());
+    boolean forestClientScope = "FOREST_CLIENT".equalsIgnoreCase(scopeType);
     return new LexisFamUserRoleAssignmentDto(
-        assignment.user_role_xref_id(),
-        assignment.user_id(),
-        trim(user.user_name()),
-        userType == null ? null : trim(userType.code()),
-        userType == null ? null : trim(userType.description()),
+        null,
+        null,
+        userName,
+        idpType,
+        userTypeDescription(idpType),
         firstName,
         lastName,
-        buildFullName(firstName, lastName, user.user_name()),
-        trim(user.email()),
-        assignment.role_id(),
-        trim(role.role_name()),
-        trim(role.display_name()),
-        trim(role.role_type_code()),
-        forestClient == null ? null : trim(forestClient.forest_client_number()),
-        forestClient == null ? null : trim(forestClient.client_name()),
-        forestClientStatus == null ? null : trim(forestClientStatus.status_code()),
-        forestClientStatus == null ? null : trim(forestClientStatus.description()),
-        trim(assignment.create_date()),
-        trim(assignment.expiry_date()));
+        buildFullName(firstName, lastName, userName),
+        null,
+        null,
+        roleName,
+        roleDisplayName,
+        null,
+        forestClientScope ? scopeValue : null,
+        null,
+        null,
+        null,
+        scopeType,
+        scopeValue,
+        null,
+        null);
+  }
+
+  private static String userTypeDescription(String idpType) {
+    if (!StringUtils.hasText(idpType)) {
+      return null;
+    }
+    return switch (idpType.trim().toUpperCase()) {
+      case "BCEID" -> "Business BCeID";
+      case "BCSC" -> "BC Services Card";
+      case "IDIR" -> "IDIR";
+      default -> idpType.trim();
+    };
+  }
+
+  private static String joinValues(List<String> values) {
+    if (values == null || values.isEmpty()) {
+      return null;
+    }
+    String joined =
+        values.stream()
+            .map(LexisFamUserAccessService::trim)
+            .filter(StringUtils::hasText)
+            .distinct()
+            .reduce((left, right) -> left + ", " + right)
+            .orElse(null);
+    return StringUtils.hasText(joined) ? joined : null;
   }
 
   private static String buildFullName(String firstName, String lastName, String fallback) {
@@ -230,44 +223,40 @@ public class LexisFamUserAccessService {
     return value == null ? null : value.trim();
   }
 
-  private record FamPagedRoleAssignments(FamPageMeta meta, List<FamRoleAssignment> results) {
-    FamPagedRoleAssignments {
-      if (results == null) {
-        results = Collections.emptyList();
+  private record FamExternalUserSearchResponse(FamPageMeta meta, List<FamExternalUser> users) {
+    FamExternalUserSearchResponse {
+      if (users == null) {
+        users = Collections.emptyList();
       }
     }
   }
 
-  private record FamPageMeta(int total, int number_of_pages, int page_number, int page_size) {}
+  private record FamPageMeta(int total, int pageCount, int page, int size) {}
 
-  private record FamRoleAssignment(
-      Long user_role_xref_id,
-      Long user_id,
-      Long role_id,
-      FamUser user,
-      FamRole role,
-      String create_date,
-      String expiry_date) {}
+  private record FamExternalUser(
+      String firstName,
+      String lastName,
+      String idpUsername,
+      String idpUserGuid,
+      String idpType,
+      List<FamExternalRole> roles) {
+    FamExternalUser {
+      if (roles == null) {
+        roles = Collections.emptyList();
+      }
+    }
+  }
 
-  private record FamUser(
-      String user_name,
-      FamUserType user_type,
-      String first_name,
-      String last_name,
-      String email) {}
-
-  private record FamUserType(String code, String description) {}
-
-  private record FamRole(
-      String role_name,
-      String role_type_code,
-      Long role_id,
-      String display_name,
-      String description,
-      FamForestClient forest_client) {}
-
-  private record FamForestClient(
-      String forest_client_number, String client_name, FamForestClientStatus status) {}
-
-  private record FamForestClientStatus(String status_code, String description) {}
+  private record FamExternalRole(
+      String applicationName,
+      String roleName,
+      String roleDisplayName,
+      String scopeType,
+      List<String> value) {
+    FamExternalRole {
+      if (value == null) {
+        value = Collections.emptyList();
+      }
+    }
+  }
 }
