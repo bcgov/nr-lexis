@@ -6,6 +6,7 @@ import {
   hasProvincialSubmitterRole,
   hasRole,
 } from '@/context/auth/role-utils'
+import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminPage from '@/pages/Admin'
 import AdminPoliciesPage from '@/pages/AdminPolicies'
@@ -48,6 +49,7 @@ function ProtectedRootRedirect() {
 }
 
 export type RouteGuardProps = {
+  path: string
   requiredActions?: string[]
   requiredActionsMatch?: RouteActionMatch
   roleScope?: RouteDescription['roleScope']
@@ -87,11 +89,16 @@ const canAccessRoleScope = (
 
 function RouteActionGuard({
   children,
+  path,
   requiredActions,
   requiredActionsMatch = 'any',
   roleScope,
 }: RouteGuardProps) {
   const { capabilities, canPerform } = useAuth()
+
+  if (!isProdRtmOnlyPathAllowed(path)) {
+    return <Navigate to="/unauthorized" replace />
+  }
 
   if (!requiredActions || requiredActions.length === 0) {
     return <>{children}</>
@@ -518,6 +525,7 @@ export const getProtectedRoutes = (): RouteDescription[] => {
     ...route,
     element: (
       <RouteActionGuard
+        path={route.path}
         requiredActions={route.requiredActions}
         requiredActionsMatch={route.requiredActionsMatch}
         roleScope={route.roleScope}

@@ -15,6 +15,7 @@ import {
   hasProvincialSubmitterRole,
   hasRole,
 } from '@/context/auth/role-utils'
+import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
 
@@ -260,6 +261,10 @@ function Layout({ children }: LayoutProps) {
   )
 
   const canShowLink = (link: NavigationLink): boolean => {
+    if (!isProdRtmOnlyPathAllowed(link.to)) {
+      return false
+    }
+
     if (!canShowRoleScopedLink(link, capabilities.roles)) {
       return false
     }

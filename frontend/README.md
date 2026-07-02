@@ -33,6 +33,7 @@ Mirrors `frontend/.env.example`. Vite bundles these values at dev/build time; ch
 | `VITE_REDIRECT_SIGN_OUT` | BC Gov logoff URL registered in Cognito; use `logoff.cgi?retnow=1&returl=<encoded-app-root>` and do not chain through LoginProxy OIDC logout | - |
 | `VITE_COGNITO_SCOPES` | OAuth scopes | openid profile email |
 | `VITE_ZONE` | Environment zone used for IDIR provider selection | dev |
+| `VITE_LEXIS_PROD_RTM_ONLY` | Restrict visible app routes to Average Monthly Values for LEXIS admins | false |
 
 Additional route and endpoint overrides are listed in `frontend/.env.example`.
 

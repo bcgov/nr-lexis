@@ -36,6 +36,8 @@ parameters:
     value: INFO
   - name: SPRING_JPA_SHOW_SQL
     value: "false"
+  - name: LEXIS_PROD_RTM_ONLY
+    value: "false"
   - name: AWS_COGNITO_ISSUER_URI
     required: true
   - name: COGNITO_USERINFO_URI
@@ -154,6 +156,8 @@ objects:
                   value: ${SPRING_BOOT_AUTOCONFIG_LOG_LEVEL}
                 - name: SPRING_JPA_SHOW_SQL
                   value: ${SPRING_JPA_SHOW_SQL}
+                - name: LEXIS_PROD_RTM_ONLY
+                  value: ${LEXIS_PROD_RTM_ONLY}
                 - name: KEYSTORE_SECRET
                   valueFrom:
                     secretKeyRef:

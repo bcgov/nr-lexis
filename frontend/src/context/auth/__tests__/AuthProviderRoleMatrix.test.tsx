@@ -66,6 +66,7 @@ const waitForAuthLoad = async () => {
 describe('Auth Provider Role Matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.config = {}
   })
 
   it('normalizes modern submitter roles without routing to retired summary', async () => {
@@ -144,6 +145,47 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/fileApplicationUpload')).toHaveTextContent('true')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
+  })
+
+  it('limits admin default route and actions when PROD RTM-only mode is enabled', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\admin',
+      roles: ['LEXIS_ADMIN'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/lexisAgentAdmin', '/applicationSearch', 'createApplication'],
+    })
+
+    renderProbe(['/lexisAgentAdmin', '/applicationSearch', 'createApplication'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/admin/rtm/emslogamv')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')
+  })
+
+  it('routes non-admin users to unauthorized when PROD RTM-only mode is enabled', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\readonly',
+      roles: ['LEXIS_READ_ONLY'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/applicationSearch'],
+    })
+
+    renderProbe(['/lexisAgentAdmin', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('READ_ONLY')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
   it('keeps admin routing and actions when read-only is also present', async () => {

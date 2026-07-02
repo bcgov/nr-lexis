@@ -13,6 +13,10 @@ vi.mock('@/pages/Reports', () => ({
   default: () => <h1>Reports</h1>,
 }))
 
+vi.mock('@/pages/RTMEmsLogAmv', () => ({
+  default: () => <h1>Average Monthly Values</h1>,
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 
 const renderWithPath = (path: string) => {
@@ -25,6 +29,7 @@ const renderWithPath = (path: string) => {
 describe('Protected route guard access', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.config = {}
   })
 
   it('redirects to unauthorized when required action is missing', async () => {
@@ -214,5 +219,33 @@ describe('Protected route guard access', () => {
       await screen.findByRole('heading', { name: 'Upload Federal Application Submission' }),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+  })
+
+  it('blocks non-RTM protected routes when PROD RTM-only mode is enabled', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === '/lexisAgentAdmin',
+      }),
+    )
+
+    renderWithPath('/admin')
+
+    expect(await screen.findByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
+  })
+
+  it('allows the RTM protected route when PROD RTM-only mode is enabled', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === '/lexisAgentAdmin',
+      }),
+    )
+
+    renderWithPath('/admin/rtm/emslogamv')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Average Monthly Values' }),
+    ).toBeInTheDocument()
   })
 })
