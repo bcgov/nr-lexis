@@ -410,7 +410,44 @@ describe('search-service contracts', () => {
     },
   )
 
-  it('provincial permit search can reuse a known total without changing paging metadata', async () => {
+  it.each([
+    {
+      name: 'provincial application',
+      run: () =>
+        searchProvincialApplications(
+          { ...applicationRequest, page: 2, pageSize: 30 },
+          { knownTotal: 91 },
+        ),
+    },
+    {
+      name: 'provincial exemption',
+      run: () =>
+        searchProvincialExemptions(
+          { ...exemptionRequest, page: 2, pageSize: 30 },
+          { knownTotal: 91 },
+        ),
+    },
+    {
+      name: 'provincial offer',
+      run: () =>
+        searchProvincialOffers({ ...offerRequest, page: 2, pageSize: 30 }, { knownTotal: 91 }),
+    },
+    {
+      name: 'provincial permit',
+      run: () =>
+        searchProvincialPermits({ ...permitRequest, page: 2, pageSize: 30 }, { knownTotal: 91 }),
+    },
+    {
+      name: 'federal application',
+      run: () =>
+        searchFederalApplications({ ...federalRequest, page: 2, pageSize: 30 }, { knownTotal: 91 }),
+    },
+    {
+      name: 'application review',
+      run: () =>
+        searchApplicationReviews({ ...reviewRequest, page: 2, pageSize: 30 }, { knownTotal: 91 }),
+    },
+  ])('$name search can reuse a known total without changing paging metadata', async ({ run }) => {
     getCachedResponseMock.mockResolvedValue({
       data: {
         results: [],
@@ -420,10 +457,7 @@ describe('search-service contracts', () => {
       },
     })
 
-    const result = await searchProvincialPermits(
-      { ...permitRequest, page: 2, pageSize: 30 },
-      { knownTotal: 91 },
-    )
+    const result = await run()
 
     const params = readParams()
     expect(params.get('knownTotal')).toBe('91')
@@ -434,7 +468,6 @@ describe('search-service contracts', () => {
       totalPages: 4,
     })
   })
-
   it.each([
     {
       name: 'provincial applications',

@@ -67,15 +67,6 @@ const renderPage = (path = '/admin/uploads?type=permit') => {
             />
           }
         />
-        <Route
-          path="/federal/application/upload"
-          element={
-            <AdminUploadsPage
-              lockedWorkflowType="applicationSubmission"
-              pageTitle="Upload Federal Application Submission"
-            />
-          }
-        />
       </Routes>
     </MemoryRouter>,
   )
@@ -503,49 +494,6 @@ describe('Admin upload workflow smoke', () => {
       'href',
       '/provincial/application/9001',
     )
-  })
-
-  it('shows parsed federal application numbers for federal application submissions', async () => {
-    mockUploadAccess('uploadApplicationSubmission')
-    mockedValidateApplicationSubmissionUpload.mockResolvedValue({
-      message:
-        'LEXIS application submission validated for federal application 700123 and package FED26-700123.',
-      packageNumber: 'FED26-700123',
-      scaleRows: 1,
-      submissionSummary: {
-        ownerClientNumber: '1074',
-        ownerClientLocationCode: '03',
-        ownerContactName: 'CUSTOMER SERVICE',
-        jurisdictionCode: 'F',
-        federalApplicationNumber: 700123,
-        orgUnitNumber: 1909,
-        sourceApplicationStatusCode: 'SUB',
-        exemptionReasonCode: 'U',
-        applicantTypeCode: 'O',
-        productTypeCode: 'H',
-        productLocation: 'Federal water lot',
-        ageClass: 'M',
-        applicationVolume: 10,
-        averageLogVolume: 0.2,
-        averageLength: 6.1,
-        averageDiameter: 12.2,
-        speciesCodes: ['HE'],
-        endUseCode: 'PL',
-      },
-    })
-
-    renderPage('/federal/application/upload')
-
-    expect(screen.getByText('Upload Federal Application Submission')).toBeInTheDocument()
-
-    const file = new File(['<xml />'], 'federal-submission.xml', { type: 'application/xml' })
-    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Validate submission' }))
-
-    expect(await screen.findByText('Submission validated')).toBeInTheDocument()
-    expect(screen.getByText('Federal application')).toBeInTheDocument()
-    expect(screen.getByText('700123')).toBeInTheDocument()
-    expect(screen.getByText('F')).toBeInTheDocument()
   })
 
   it('cancels a validated application submission and clears review state', async () => {

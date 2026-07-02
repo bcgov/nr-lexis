@@ -96,6 +96,7 @@ class ExemptionControllerTest {
             List.<Long>of(),
             0,
             25,
+            null,
             null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
@@ -146,6 +147,7 @@ class ExemptionControllerTest {
             List.of(12L),
             0,
             25,
+            null,
             null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -193,6 +195,7 @@ class ExemptionControllerTest {
         List.of(),
         0,
         25,
+        null,
         authentication);
 
     ArgumentCaptor<ExemptionSearchCriteria> criteriaCaptor =

@@ -9,6 +9,7 @@ interface ImportMetaEnv {
   readonly VITE_REDIRECT_SIGN_OUT?: string
   readonly VITE_ZONE?: string
   readonly VITE_LEXIS_PROD_RTM_ONLY?: string
+  readonly VITE_FAM_MANAGE_URL?: string
   readonly VITE_LEXIS_REPORT_ENDPOINT_BASE?: string
   readonly VITE_LEXIS_REPORT_API_BASE?: string
 }

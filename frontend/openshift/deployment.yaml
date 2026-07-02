@@ -78,6 +78,8 @@ spec:
               value: ${VITE_ZONE}
             - name: VITE_LEXIS_PROD_RTM_ONLY
               value: ${VITE_LEXIS_PROD_RTM_ONLY}
+            - name: VITE_FAM_MANAGE_URL
+              value: ${VITE_FAM_MANAGE_URL}
             - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
               value: ${VITE_LEXIS_REPORT_ENDPOINT_BASE}
             - name: VITE_LEXIS_REPORT_API_BASE

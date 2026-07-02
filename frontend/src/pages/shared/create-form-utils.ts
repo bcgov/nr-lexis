@@ -26,20 +26,6 @@ type CreateSubmitMessageSource = {
   warnings?: string[]
 }
 
-export const mergeCreateDraftPayload = <TForm extends object>(
-  payload: unknown,
-  initialForm: TForm,
-): TForm => {
-  if (!payload || typeof payload !== 'object') {
-    return initialForm
-  }
-
-  return {
-    ...initialForm,
-    ...(payload as Partial<TForm>),
-  }
-}
-
 export const joinCreateSubmitMessages = ({
   message = '',
   errors = [],

@@ -193,6 +193,7 @@ describe('AuthProvider logout', () => {
     await waitFor(() => {
       expect(screen.getByTestId('loading')).toHaveTextContent('false')
     })
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true')
 
     window.dispatchEvent(
       new CustomEvent(SESSION_EXPIRED_EVENT, {

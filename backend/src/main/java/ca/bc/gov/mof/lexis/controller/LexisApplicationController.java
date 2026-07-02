@@ -79,6 +79,7 @@ public class LexisApplicationController {
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal,
       Authentication authentication) {
 
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
@@ -105,7 +106,9 @@ public class LexisApplicationController {
             sortField,
             page,
             size);
-    return ResponseEntity.ok(withSearchLocks(service.search(criteria), authentication));
+    LexisApplicationSearchResponseDto response =
+        knownTotal == null ? service.search(criteria) : service.search(criteria, knownTotal);
+    return ResponseEntity.ok(withSearchLocks(response, authentication));
   }
 
   @GetMapping("/search/count")

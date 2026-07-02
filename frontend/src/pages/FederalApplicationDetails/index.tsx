@@ -1,32 +1,30 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Button,
   Column,
   Grid,
   InlineLoading,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
-  TextInput,
+  Tabs,
   Tile,
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
-import { ApiSourceTag } from '../../components/AbbreviatedSourceTag'
 import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
-import {
-  displayValue,
-  matchesFilter,
-  normalizeFilterText as normalizeText,
-} from '@/pages/shared/detail-page-utils'
-import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
+import { displayValue } from '@/pages/shared/detail-page-utils'
+import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchFederalApplicationDetail } from '@/service/lexis-detail-service'
 import {
@@ -41,33 +39,28 @@ const FederalApplicationDetailsPage = () => {
   const navigate = useNavigate()
   const { canPerform } = useAuth()
   const { applicationNumber } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const [detail, setDetail] = useState<FederalApplicationDetail | null>(null)
   const [documentRows, setDocumentRows] = useState<FederalApplicationDocumentRow[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
-  const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [selectedFederalApplicationTabIndex, setSelectedFederalApplicationTabIndex] = useState(0)
   const beginDetailRequest = useLatestRequestGuard()
-  const packageFilter = searchParams.get('packageFilter') ?? ''
-  const offerFilter = searchParams.get('offerFilter') ?? ''
-  const remarkFilter = searchParams.get('remarkFilter') ?? ''
-  const documentsFilter = searchParams.get('documentsFilter') ?? ''
+
+  const canManageDocuments = canPerform('/fileApplicationUpload')
+  const hasAgent =
+    !!detail?.agentClientNumber ||
+    !!detail?.agentClientLocationCode ||
+    !!detail?.agentApplicantType ||
+    !!detail?.agentContactName ||
+    !!detail?.agentCompanyName
+
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
-  )
-  const updateFilterParam = useCallback(
-    (key: 'packageFilter' | 'offerFilter' | 'remarkFilter' | 'documentsFilter', value: string) => {
-      const nextSearchParams = searchParamsWithValue(searchParams, key, value)
-
-      if (nextSearchParams.toString() !== searchParams.toString()) {
-        setSearchParams(nextSearchParams, { replace: true })
-      }
-    },
-    [searchParams, setSearchParams],
   )
 
   useEffect(() => {
@@ -79,7 +72,6 @@ const FederalApplicationDetailsPage = () => {
         setDocumentRows([])
         setDocumentsErrorMessage('')
         setActionErrorMessage('')
-        setActionInfoMessage('')
         setLoading(false)
         return
       }
@@ -88,7 +80,6 @@ const FederalApplicationDetailsPage = () => {
       setErrorMessage('')
       setDocumentsErrorMessage('')
       setActionErrorMessage('')
-      setActionInfoMessage('')
       try {
         const response = await fetchFederalApplicationDetail(applicationNumber)
         if (!isLatestRequest()) {
@@ -131,46 +122,6 @@ const FederalApplicationDetailsPage = () => {
     void load()
   }, [applicationNumber, beginDetailRequest])
 
-  const filteredPackages = useMemo(() => {
-    const rows = detail?.packages ?? []
-    if (!packageFilter.trim()) {
-      return rows
-    }
-
-    const normalizedFilter = normalizeText(packageFilter)
-    return rows.filter((item) => normalizeText(item).includes(normalizedFilter))
-  }, [detail?.packages, packageFilter])
-
-  const filteredOffers = useMemo(() => {
-    const rows = detail?.offers ?? []
-    if (!offerFilter.trim()) {
-      return rows
-    }
-
-    const normalizedFilter = normalizeText(offerFilter)
-    return rows.filter((item) => normalizeText(item).includes(normalizedFilter))
-  }, [detail?.offers, offerFilter])
-
-  const filteredRemarks = useMemo(() => {
-    const rows = detail?.remarks ?? []
-    if (!remarkFilter.trim()) {
-      return rows
-    }
-
-    const normalizedFilter = normalizeText(remarkFilter)
-    return rows.filter((item) => normalizeText(item).includes(normalizedFilter))
-  }, [detail?.remarks, remarkFilter])
-
-  const filteredDocumentRows = useMemo(() => {
-    return documentRows.filter((row) =>
-      matchesFilter([row.name, row.description, row.type, row.id], documentsFilter),
-    )
-  }, [documentRows, documentsFilter])
-
-  const canAccessFederalSearch =
-    canPerform('/federalApplicationSearch') || canPerform('viewFederalApplication')
-  const canManageDocuments = canPerform('/fileApplicationUpload')
-
   const refreshFederalApplicationDocuments = useCallback(async () => {
     if (!applicationNumber) {
       return
@@ -181,25 +132,8 @@ const FederalApplicationDetailsPage = () => {
     setDocumentsErrorMessage('')
   }, [applicationNumber])
 
-  const onOpenApplicationUpload = useCallback(() => {
-    if (!detail) {
-      return
-    }
-    const resolvedApplicationNumber = String(
-      detail.applicationNumber ?? applicationNumber ?? '',
-    ).trim()
-    if (!resolvedApplicationNumber) {
-      setActionErrorMessage('Application number is missing for upload.')
-      return
-    }
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    document.getElementById('federalApplicationDocumentUpload')?.scrollIntoView({ block: 'start' })
-  }, [applicationNumber, detail])
-
   const onOpenDocument = useCallback(async (row: FederalApplicationDocumentRow) => {
     setActionErrorMessage('')
-    setActionInfoMessage('')
 
     try {
       const result = await openFederalApplicationDocument(row.id, row.name)
@@ -219,7 +153,6 @@ const FederalApplicationDetailsPage = () => {
       const isLatestRequest = beginDetailRequest()
       setIsRemovingDocumentId(row.id)
       setActionErrorMessage('')
-      setActionInfoMessage('')
 
       try {
         const removeResult = await removeFederalApplicationDocument(row.id, applicationNumber)
@@ -300,316 +233,398 @@ const FederalApplicationDetailsPage = () => {
               />
             </Column>
           )}
-          {!!actionInfoMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="info"
-                title="Action completed"
-                subtitle={actionInfoMessage}
-                lowContrast
-                autoDismissMs={8000}
-                onCloseButtonClick={() => setActionInfoMessage('')}
-              />
-            </Column>
-          )}
 
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">Actions</h2>
-              <div className="legacy-search-actions">
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!canAccessFederalSearch}
-                  onClick={() => navigate(withCurrentSearch('/federal'))}
-                >
-                  Back to Federal Search results
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={
-                    !detail.applicationNumber ||
-                    !canPerform('/applicationSearch') ||
-                    !canPerform('/applicationDetails')
-                  }
-                  onClick={() => {
-                    if (detail.applicationNumber) {
-                      navigate(
-                        withCurrentSearch(`/provincial/application/${detail.applicationNumber}`),
-                      )
-                    }
-                  }}
-                >
-                  Open Provincial Application
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!canManageDocuments || !detail.applicationNumber}
-                  onClick={onOpenApplicationUpload}
-                >
-                  Upload Application Document
-                </Button>
-              </div>
-            </Tile>
-          </Column>
+          <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
+            <Tabs
+              selectedIndex={selectedFederalApplicationTabIndex}
+              onChange={({ selectedIndex }) => setSelectedFederalApplicationTabIndex(selectedIndex)}
+            >
+              <TabList
+                aria-label="Federal application detail sections"
+                contained
+                size="md"
+                className="application-tabs__list application-detail-tab-list"
+              >
+                <Tab>Owner</Tab>
+                {hasAgent && <Tab>Agent</Tab>}
+                <Tab>Application</Tab>
+                <Tab>Items</Tab>
+                <Tab>Offers</Tab>
+                <Tab>Remarks</Tab>
+                <Tab>Documents</Tab>
+                <Tab>Shipping Details</Tab>
+              </TabList>
+              <TabPanels>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <DetailFieldTile
+                        title="Owner"
+                        fields={[
+                          {
+                            label: 'Client number',
+                            value: displayValue(detail.ownerClientNumber),
+                          },
+                          {
+                            label: 'Applicant type',
+                            value: displayValue(detail.ownerApplicantType),
+                          },
+                          {
+                            label: 'Client location',
+                            value: displayValue(detail.ownerClientLocationCode),
+                          },
+                          {
+                            label: 'Contact name',
+                            value: displayValue(detail.ownerContactName),
+                          },
+                          {
+                            label: 'Company name',
+                            value: displayValue(detail.ownerCompanyName),
+                          },
+                        ]}
+                      />
+                    </Column>
+                  </Grid>
+                </TabPanel>
 
-          <Column sm={4} md={8} lg={16}>
-            <DetailFieldTile
-              title="Federal application summary"
-              fields={[
-                { label: 'Application number', value: displayValue(detail.applicationNumber) },
-                {
-                  label: 'Federal application number',
-                  value: displayValue(detail.federalApplicationNumber),
-                },
-                {
-                  label: 'Status',
-                  value: displayValue(detail.statusDescription ?? detail.statusCode),
-                },
-                { label: 'Owner client number', value: displayValue(detail.ownerClientNumber) },
-                {
-                  label: 'Owner location code',
-                  value: displayValue(detail.ownerClientLocationCode),
-                },
-                { label: 'Agent client number', value: displayValue(detail.agentClientNumber) },
-                {
-                  label: 'Agent location code',
-                  value: displayValue(detail.agentClientLocationCode),
-                },
-                { label: 'Exemption number', value: displayValue(detail.exemptionNumber) },
-                { label: 'Exemption type', value: displayValue(detail.exemptionType) },
-                { label: 'Exemption reason', value: displayValue(detail.exemptionReason) },
-                { label: 'Received date', value: displayValue(detail.receivedDate) },
-                { label: 'Listing date', value: displayValue(detail.listingDate) },
-                {
-                  label: 'Read only',
-                  value: (
-                    <Tag type={detail.readOnly ? 'red' : 'gray'}>
-                      {detail.readOnly ? 'Yes' : 'No'}
-                    </Tag>
-                  ),
-                },
-              ]}
-            />
-          </Column>
+                {hasAgent && (
+                  <TabPanel className="application-detail-tab-panel">
+                    <Grid fullWidth className="application-detail-tab-grid">
+                      <Column sm={4} md={8} lg={16}>
+                        <DetailFieldTile
+                          title="Agent"
+                          fields={[
+                            {
+                              label: 'Client number',
+                              value: displayValue(detail.agentClientNumber),
+                            },
+                            {
+                              label: 'Applicant type',
+                              value: displayValue(detail.agentApplicantType),
+                            },
+                            {
+                              label: 'Client location',
+                              value: displayValue(detail.agentClientLocationCode),
+                            },
+                            {
+                              label: 'Contact name',
+                              value: displayValue(detail.agentContactName),
+                            },
+                            {
+                              label: 'Company name',
+                              value: displayValue(detail.agentCompanyName),
+                            },
+                          ]}
+                        />
+                      </Column>
+                    </Grid>
+                  </TabPanel>
+                )}
 
-          <Column sm={4} md={8} lg={16}>
-            <DetailFieldTile
-              title="Federal permit"
-              fields={[
-                {
-                  label: 'Permit number',
-                  value: displayValue(detail.federalPermit?.permitNumber),
-                },
-                {
-                  label: 'Permit issue date',
-                  value: displayValue(detail.federalPermit?.permitIssueDate),
-                },
-                {
-                  label: 'Destination country',
-                  value: displayValue(detail.federalPermit?.destinationCountry),
-                },
-                {
-                  label: 'Transport type',
-                  value: displayValue(detail.federalPermit?.transportType),
-                },
-                {
-                  label: 'Transport name',
-                  value: displayValue(detail.federalPermit?.transportName),
-                },
-                {
-                  label: 'Shipping date',
-                  value: displayValue(detail.federalPermit?.shippingDate),
-                },
-                {
-                  label: 'Port of export',
-                  value: displayValue(detail.federalPermit?.portOfExport),
-                },
-                {
-                  label: 'Other port of export',
-                  value: displayValue(detail.federalPermit?.otherPortOfExport),
-                },
-              ]}
-            />
-          </Column>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <DetailFieldTile
+                        title="Application"
+                        fields={[
+                          {
+                            label: 'Region',
+                            value: displayValue(detail.region),
+                          },
+                          {
+                            label: 'Product type',
+                            value: displayValue(detail.productType),
+                          },
+                          {
+                            label: 'Application date',
+                            value: displayValue(detail.applicationDate),
+                          },
+                          {
+                            label: 'Date received',
+                            value: displayValue(detail.receivedDate),
+                          },
+                          {
+                            label: 'List date',
+                            value: displayValue(detail.listingDate),
+                          },
+                          {
+                            label: 'Application number',
+                            value: displayValue(detail.federalApplicationNumber),
+                          },
+                          {
+                            label: 'Status',
+                            value: displayValue(detail.statusDescription ?? detail.statusCode),
+                          },
+                          {
+                            label: 'Author',
+                            value: displayValue(detail.author),
+                          },
+                          {
+                            label: 'Exemption number',
+                            value: displayValue(detail.exemptionNumber),
+                          },
+                          {
+                            label: 'Exemption type',
+                            value: displayValue(detail.exemptionType),
+                          },
+                          {
+                            label: 'Exemption reason',
+                            value: displayValue(detail.exemptionReason),
+                          },
+                          {
+                            label: 'Term days',
+                            value: displayValue(detail.termDays),
+                          },
+                        ]}
+                      />
+                    </Column>
+                  </Grid>
+                </TabPanel>
 
-          <Column sm={4} md={8} lg={8}>
-            <Tile>
-              <h2 className="detail-tile-title">Packages</h2>
-              <TextInput
-                id="federalDetailPackageFilter"
-                labelText="Filter packages"
-                value={packageFilter}
-                onChange={(event) => updateFilterParam('packageFilter', event.target.value)}
-                placeholder="Filter by package identifier"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Package</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredPackages.map((item) => (
-                    <TableRow key={item}>
-                      <TableCell>{item}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredPackages.length === 0 && (
-                    <TableRow>
-                      <TableCell>No packages matched the current filter.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <DetailFieldTile
+                        title="Items"
+                        fields={[
+                          {
+                            label: 'Location of logs',
+                            value: displayValue(detail.logLocation),
+                          },
+                          {
+                            label: 'Age class',
+                            value: displayValue(detail.ageClass),
+                          },
+                          {
+                            label: 'Average log volume',
+                            value: displayValue(detail.averageLogVolume),
+                          },
+                          {
+                            label: 'Application volume',
+                            value: displayValue(detail.applicationVolume),
+                          },
+                          {
+                            label: 'Species and end use sort',
+                            value: displayValue(detail.endUse),
+                          },
+                        ]}
+                      />
+                    </Column>
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">Packages</h2>
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Package number</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {detail.packages.map((item) => (
+                              <TableRow key={item}>
+                                <TableCell>{item}</TableCell>
+                              </TableRow>
+                            ))}
+                            {detail.packages.length === 0 && (
+                              <TableRow>
+                                <TableCell>No packages found.</TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
 
-          <Column sm={4} md={8} lg={8}>
-            <Tile>
-              <h2 className="detail-tile-title">Offers</h2>
-              <TextInput
-                id="federalDetailOfferFilter"
-                labelText="Filter offers"
-                value={offerFilter}
-                onChange={(event) => updateFilterParam('offerFilter', event.target.value)}
-                placeholder="Filter by offer reference"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Offer Reference</TableHeader>
-                    <TableHeader>Open</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredOffers.map((item) => (
-                    <TableRow key={item}>
-                      <TableCell>{item}</TableCell>
-                      <TableCell>
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          disabled={!canPerform('/offersSearch') || !canPerform('/offerDetails')}
-                          onClick={() =>
-                            navigate(
-                              withCurrentSearch(`/provincial/offers/${encodeURIComponent(item)}`),
-                            )
-                          }
-                        >
-                          Open
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredOffers.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={2}>No offers matched the current filter.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">Offers</h2>
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Offer reference</TableHeader>
+                              <TableHeader>Open</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {detail.offers.map((item) => (
+                              <TableRow key={item}>
+                                <TableCell>{item}</TableCell>
+                                <TableCell>
+                                  <Button
+                                    kind="ghost"
+                                    size="sm"
+                                    disabled={
+                                      !canPerform('/offersSearch') || !canPerform('/offerDetails')
+                                    }
+                                    onClick={() =>
+                                      navigate(
+                                        withCurrentSearch(
+                                          `/provincial/offers/${encodeURIComponent(item)}`,
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    Open
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {detail.offers.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={2}>No offers found.</TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
 
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">
-                Documents{' '}
-                <ApiSourceTag context="Federal application documents are returned from the document service." />
-              </h2>
-              {canManageDocuments && (
-                <DetailDocumentUploadPanel
-                  workflowType="application"
-                  targetNumber={String(detail.applicationNumber ?? applicationNumber ?? '')}
-                  inputId="federalApplicationDocumentUpload"
-                  disabled={!detail.applicationNumber && !applicationNumber}
-                  onUploadComplete={refreshFederalApplicationDocuments}
-                />
-              )}
-              <TextInput
-                id="federalDetailDocumentsFilter"
-                labelText="Filter document rows"
-                value={documentsFilter}
-                onChange={(event) => updateFilterParam('documentsFilter', event.target.value)}
-                placeholder="Filter by file name, description, type, or id"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>File Name</TableHeader>
-                    <TableHeader>Description</TableHeader>
-                    <TableHeader>Type</TableHeader>
-                    <TableHeader>Actions</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredDocumentRows.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.name || '-'}</TableCell>
-                      <TableCell>{row.description || '-'}</TableCell>
-                      <TableCell>{row.type || '-'}</TableCell>
-                      <TableCell>
-                        <div className="legacy-search-actions">
-                          <Button kind="ghost" size="sm" onClick={() => void onOpenDocument(row)}>
-                            Open
-                          </Button>
-                          <Button
-                            kind="danger--ghost"
-                            size="sm"
-                            disabled={!canManageDocuments || isRemovingDocumentId === row.id}
-                            onClick={() => void onRemoveDocument(row)}
-                          >
-                            {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredDocumentRows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4}>
-                        No document rows matched the current filter.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">Remarks</h2>
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Remark</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {detail.remarks.map((item) => (
+                              <TableRow key={item}>
+                                <TableCell>{item}</TableCell>
+                              </TableRow>
+                            ))}
+                            {detail.remarks.length === 0 && (
+                              <TableRow>
+                                <TableCell>No remarks found.</TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
 
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">Remarks</h2>
-              <TextInput
-                id="federalDetailRemarkFilter"
-                labelText="Filter remarks"
-                value={remarkFilter}
-                onChange={(event) => updateFilterParam('remarkFilter', event.target.value)}
-                placeholder="Filter remark text"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Remark</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredRemarks.map((item) => (
-                    <TableRow key={item}>
-                      <TableCell>{item}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredRemarks.length === 0 && (
-                    <TableRow>
-                      <TableCell>No remarks matched the current filter.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile>
+                        <h2 className="detail-tile-title">Documents</h2>
+                        {canManageDocuments && (
+                          <DetailDocumentUploadPanel
+                            workflowType="application"
+                            targetNumber={String(
+                              detail.applicationNumber ?? applicationNumber ?? '',
+                            )}
+                            inputId="federalApplicationDocumentUpload"
+                            disabled={!detail.applicationNumber && !applicationNumber}
+                            onUploadComplete={refreshFederalApplicationDocuments}
+                          />
+                        )}
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>File Name</TableHeader>
+                              <TableHeader>Description</TableHeader>
+                              <TableHeader>Type</TableHeader>
+                              <TableHeader>Actions</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {documentRows.map((row) => (
+                              <TableRow key={row.id}>
+                                <TableCell>{row.name || '-'}</TableCell>
+                                <TableCell>{row.description || '-'}</TableCell>
+                                <TableCell>{row.type || '-'}</TableCell>
+                                <TableCell>
+                                  <div className="legacy-search-actions">
+                                    <Button
+                                      kind="ghost"
+                                      size="sm"
+                                      onClick={() => void onOpenDocument(row)}
+                                    >
+                                      Open
+                                    </Button>
+                                    <Button
+                                      kind="danger--ghost"
+                                      size="sm"
+                                      disabled={
+                                        !canManageDocuments || isRemovingDocumentId === row.id
+                                      }
+                                      onClick={() => void onRemoveDocument(row)}
+                                    >
+                                      {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {documentRows.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={4}>No documents found.</TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <DetailFieldTile
+                        title="Shipping details"
+                        fields={[
+                          {
+                            label: 'Permit issue date',
+                            value: displayValue(detail.federalPermit?.permitIssueDate),
+                          },
+                          {
+                            label: 'Final destination country',
+                            value: displayValue(detail.federalPermit?.destinationCountry),
+                          },
+                          {
+                            label: 'Transport type',
+                            value: displayValue(detail.federalPermit?.transportType),
+                          },
+                          {
+                            label: 'Transport name',
+                            value: displayValue(detail.federalPermit?.transportName),
+                          },
+                          {
+                            label: 'Estimated shipping date',
+                            value: displayValue(detail.federalPermit?.shippingDate),
+                          },
+                          {
+                            label: 'Customs port of export',
+                            value: displayValue(detail.federalPermit?.portOfExport),
+                          },
+                          {
+                            label: 'Other port of export',
+                            value: displayValue(detail.federalPermit?.otherPortOfExport),
+                          },
+                          {
+                            label: 'Permit number',
+                            value: displayValue(detail.federalPermit?.permitNumber),
+                          },
+                        ]}
+                      />
+                    </Column>
+                  </Grid>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
           </Column>
         </>
       )}

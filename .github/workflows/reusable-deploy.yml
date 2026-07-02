@@ -142,6 +142,7 @@ jobs:
             -p VITE_COGNITO_SCOPES="${{ vars.VITE_COGNITO_SCOPES }}"
             -p VITE_ZONE="${{ vars.VITE_ZONE }}"
             -p VITE_LEXIS_PROD_RTM_ONLY="${{ secrets.lexis_prod_rtm_only || 'false' }}"
+            -p VITE_FAM_MANAGE_URL="${{ vars.VITE_FAM_MANAGE_URL }}"
             -p VITE_LEXIS_REPORT_ENDPOINT_BASE="${{ vars.VITE_LEXIS_REPORT_ENDPOINT_BASE }}"
             -p VITE_LEXIS_REPORT_API_BASE="${{ vars.VITE_LEXIS_REPORT_API_BASE }}"
           triggers: ${{ inputs.triggers }}

@@ -75,6 +75,7 @@ public class ExemptionController {
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal,
       Authentication authentication) {
     ExemptionService service = serviceProvider.getIfAvailable();
     if (service == null) {
@@ -109,6 +110,9 @@ public class ExemptionController {
             page,
             size);
 
+    if (knownTotal != null) {
+      return ResponseEntity.ok(service.search(criteria, knownTotal));
+    }
     return ResponseEntity.ok(service.search(criteria));
   }
 

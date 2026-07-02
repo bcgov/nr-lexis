@@ -17,6 +17,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/provincial-offer-search-service', () => ({
+  countProvincialOffers: vi.fn(),
   searchProvincialOffers: vi.fn(),
 }))
 
@@ -119,6 +120,7 @@ describe('Provincial Offer Search Actions', () => {
           region: [],
         }),
       }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
   })
 
@@ -148,6 +150,7 @@ describe('Provincial Offer Search Actions', () => {
             listingToDate: '2026-07-11',
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })
@@ -192,13 +195,13 @@ describe('Provincial Offer Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Listing from date (YYYY-MM-DD)'), '2026-50-99')
+    await userEvent.type(screen.getByLabelText('Listing from date'), '2026-50-99')
     await waitFor(() => {
       expect(searchButton).toBeDisabled()
     })
 
-    await userEvent.clear(screen.getByLabelText('Listing from date (YYYY-MM-DD)'))
-    await userEvent.type(screen.getByLabelText('Listing from date (YYYY-MM-DD)'), '2026-02-01')
+    await userEvent.clear(screen.getByLabelText('Listing from date'))
+    await userEvent.type(screen.getByLabelText('Listing from date'), '2026-02-01')
     await waitFor(() => {
       expect(searchButton).toBeEnabled()
     })
@@ -206,12 +209,11 @@ describe('Provincial Offer Search Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Listing date (ASC)' }))
 
     await waitFor(() => {
-      expect(mockedSearchProvincialOffers).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sortField: 'listingDate',
-          sortDirection: 'desc',
-        }),
-      )
+      expect(
+        mockedSearchProvincialOffers.mock.calls.some(
+          ([request]) => request.sortField === 'listingDate' && request.sortDirection === 'desc',
+        ),
+      ).toBe(true)
     })
   })
 })

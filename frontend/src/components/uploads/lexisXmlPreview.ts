@@ -56,10 +56,23 @@ const buildXmlPreviewMessage = async (file: File): Promise<string> => {
     }
 
     const scaleRowCount = countXmlElements(xml, 'harvestedTimber')
+    const harvestedWithoutSummaryCount = countXmlElements(
+      xml,
+      'harvestedTimberWithoutSummaryOfScale',
+    )
+    const standingTimberCount = countXmlElements(xml, 'standingTimber')
 
     const details = [
       'LEXIS XML structure detected',
       scaleRowCount > 0 ? `${scaleRowCount} scale row${scaleRowCount === 1 ? '' : 's'}` : '',
+      harvestedWithoutSummaryCount > 0
+        ? `${harvestedWithoutSummaryCount} no-summary timber mark${
+            harvestedWithoutSummaryCount === 1 ? '' : 's'
+          }`
+        : '',
+      standingTimberCount > 0
+        ? `${standingTimberCount} standing timber mark${standingTimberCount === 1 ? '' : 's'}`
+        : '',
     ].filter(Boolean)
 
     return details.length > 0 ? `Preview: ${details.join(', ')}.` : XML_PREVIEW_UNAVAILABLE

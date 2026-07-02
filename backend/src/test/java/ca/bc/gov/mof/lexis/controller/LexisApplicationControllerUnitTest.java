@@ -61,6 +61,7 @@ class LexisApplicationControllerUnitTest {
         null,
         0,
         25,
+        null,
         authentication);
 
     ArgumentCaptor<LexisApplicationSearchCriteria> criteriaCaptor =
@@ -108,6 +109,7 @@ class LexisApplicationControllerUnitTest {
             null,
             0,
             25,
+            null,
             authentication);
 
     assertThat(response.getBody()).isNotNull();

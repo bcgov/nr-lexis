@@ -48,6 +48,10 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
     mockMvc
         .perform(get("/api/lexis/applications/search").with(jwt().authorities(admin)))
         .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(get("/api/lexis/admin/fam-users").with(jwt().authorities(admin)))
+        .andExpect(status().isForbidden());
   }
 
   @Test

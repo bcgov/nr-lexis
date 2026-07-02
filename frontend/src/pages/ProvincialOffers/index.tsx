@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -31,6 +31,12 @@ import {
   setPageDataCache,
 } from '@/pages/shared/page-data-cache'
 import {
+  buildSearchTotalCacheKey,
+  getCachedSearchTotal,
+  setCachedSearchTotal,
+  type SearchTotalCache,
+} from '@/pages/shared/search-total-cache'
+import {
   DEFAULT_SEARCH_PAGE,
   DEFAULT_SEARCH_PAGE_SIZE,
   SEARCH_PAGE_SIZE_OPTIONS,
@@ -49,7 +55,14 @@ import {
 } from '@/pages/shared/search-query-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
+import {
+  loadSearchWithDeferredTotal,
+  prefetchAdjacentSearchPages,
+} from '@/pages/shared/deferred-search-total'
+import {
+  countProvincialOffers,
+  searchProvincialOffers,
+} from '@/service/provincial-offer-search-service'
 import {
   fetchProvincialApplicationOptions,
   fetchProvincialOfferOptions,
@@ -118,6 +131,7 @@ const ProvincialOffersPage = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [defaultListingToDate, setDefaultListingToDate] = useState('')
   const [isOptionsLoaded, setIsOptionsLoaded] = useState(false)
+  const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateOffer = canPerform('createOffer')
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
@@ -201,6 +215,9 @@ const ProvincialOffersPage = () => {
   ])
 
   const beginSearchRequest = useLatestRequestGuard()
+  const commitResults = useCallback((nextResults: ProvincialOfferSearchResponse) => {
+    setResults(nextResults)
+  }, [])
 
   const runSearch = useCallback(
     async (request: ProvincialOfferSearchRequest, options: { force?: boolean } = {}) => {
@@ -209,9 +226,23 @@ const ProvincialOffersPage = () => {
         capabilities?.principal,
         request,
       )
+      const isLatestRequest = beginSearchRequest()
       if (!options.force) {
         const cachedResults = getPageDataCache<ProvincialOfferSearchResponse>(pageCacheKey)
         if (cachedResults) {
+          setCachedSearchTotal(
+            totalCacheRef.current,
+            buildSearchTotalCacheKey(request.filters),
+            cachedResults.page.totalElements,
+          )
+          prefetchAdjacentSearchPages({
+            pageId: 'provincial-offer-search',
+            principal: capabilities?.principal,
+            request,
+            response: cachedResults,
+            search: searchProvincialOffers,
+            onError: console.error,
+          })
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -219,7 +250,6 @@ const ProvincialOffersPage = () => {
         }
       }
 
-      const isLatestRequest = beginSearchRequest()
       if (
         hasInvalidIsoDateValue(
           request.filters.listingFromDate,
@@ -235,10 +265,41 @@ const ProvincialOffersPage = () => {
       setLoading(true)
       setErrorMessage('')
       try {
-        const response = await searchProvincialOffers(request)
+        const totalCacheKey = buildSearchTotalCacheKey(request.filters)
+        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const commitSearchResponse = (
+          response: ProvincialOfferSearchResponse,
+          totalIsExact: boolean,
+        ) => {
+          if (totalIsExact) {
+            setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
+            setPageDataCache(pageCacheKey, response)
+            prefetchAdjacentSearchPages({
+              pageId: 'provincial-offer-search',
+              principal: capabilities?.principal,
+              request,
+              response,
+              search: searchProvincialOffers,
+              onError: console.error,
+            })
+          }
+          queueMicrotask(() => {
+            if (isLatestRequest()) {
+              commitResults(response)
+            }
+          })
+        }
+        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+          request,
+          cachedTotal,
+          search: searchProvincialOffers,
+          count: countProvincialOffers,
+          isLatestRequest,
+          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
+          onCountError: console.error,
+        })
         if (isLatestRequest()) {
-          setPageDataCache(pageCacheKey, response)
-          setResults(response)
+          commitSearchResponse(response, totalIsExact)
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -252,10 +313,14 @@ const ProvincialOffersPage = () => {
         }
       }
     },
-    [beginSearchRequest, capabilities?.principal],
+    [beginSearchRequest, capabilities?.principal, commitResults],
   )
 
   useEffect(() => {
+    if (searchParams.toString().length === 0) {
+      return
+    }
+
     void runSearch({
       filters: debouncedUrlState.filters,
       page: debouncedUrlState.page - 1,
@@ -263,7 +328,7 @@ const ProvincialOffersPage = () => {
       sortField: debouncedUrlState.sortField,
       sortDirection: debouncedUrlState.sortDirection,
     })
-  }, [debouncedUrlState, runSearch])
+  }, [debouncedUrlState, runSearch, searchParams])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -331,15 +396,15 @@ const ProvincialOffersPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid provincial-offer-search-page">
       <Column sm={4} md={8} lg={16}>
         <h1>Provincial offers search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <section className="legacy-search-section legacy-search-section--filters">
+        <section className="legacy-search-section legacy-search-section--filters provincial-offer-search-filters">
           <Tile>
-            <div className="legacy-search-grid">
+            <div className="legacy-search-grid provincial-offer-search-grid">
               <TextInput
                 id="applicationNumber"
                 labelText="Application number"
@@ -360,7 +425,7 @@ const ProvincialOffersPage = () => {
               />
               <IsoDatePicker
                 id="listingFromDate"
-                labelText="Listing from date (YYYY-MM-DD)"
+                labelText="Listing from date"
                 value={filters.listingFromDate}
                 invalid={!isValidIsoDate(filters.listingFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -368,7 +433,7 @@ const ProvincialOffersPage = () => {
               />
               <IsoDatePicker
                 id="listingToDate"
-                labelText="Listing to date (YYYY-MM-DD)"
+                labelText="Listing to date"
                 value={filters.listingToDate}
                 invalid={!isValidIsoDate(filters.listingToDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -392,7 +457,7 @@ const ProvincialOffersPage = () => {
               />
               <IsoDatePicker
                 id="withdrawalFromDate"
-                labelText="Withdrawn from date (YYYY-MM-DD)"
+                labelText="Withdrawn from date"
                 value={filters.withdrawalFromDate}
                 invalid={!isValidIsoDate(filters.withdrawalFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -400,7 +465,7 @@ const ProvincialOffersPage = () => {
               />
               <IsoDatePicker
                 id="withdrawalToDate"
-                labelText="Withdrawn to date (YYYY-MM-DD)"
+                labelText="Withdrawn to date"
                 value={filters.withdrawalToDate}
                 invalid={!isValidIsoDate(filters.withdrawalToDate)}
                 invalidText="Date must be YYYY-MM-DD"

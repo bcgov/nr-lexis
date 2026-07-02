@@ -258,6 +258,7 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/application-reviews/*/approve",
               "/api/lexis/application-reviews/*/status",
               "/api/lexis/application-reviews/*/status-email"),
+          adminAuthority("/api/lexis/admin/fam-users"),
           action(
               HttpMethod.GET,
               "/lexisAgentAdmin",

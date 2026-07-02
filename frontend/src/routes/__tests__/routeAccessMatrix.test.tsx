@@ -43,12 +43,6 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
     roleScope: 'provincialApplicationSubmission',
   },
   {
-    path: '/federal/application/upload',
-    requiredActions: ['uploadApplicationSubmission'],
-    requiredActionsMatch: 'any',
-    roleScope: 'federalApplicationSubmission',
-  },
-  {
     path: '/provincial/exemption/create',
     requiredActions: ['/exemptionSearch', '/createExemption'],
     requiredActionsMatch: 'all',
@@ -94,8 +88,26 @@ describe('Protected route access matrix', () => {
 
   it('includes advertising list action in reports route requirements', () => {
     const route = findRoute('/reports')
+    const detailRoute = findRoute('/reports/:reportId')
+
     expect(route.requiredActions).toContain('mofrListing')
     expect(route.requiredActions).toContain('/applicationReport')
+    expect(detailRoute.requiredActions).toEqual(route.requiredActions)
+  })
+
+  it('redirects the retired federal upload URL to federal search', () => {
+    const route = findRoute('/federal/application/upload')
+
+    expect(route.id).toBe('Federal Application Upload Redirect')
+    expect(route.requiredActions).toEqual(['/federalApplicationSearch', 'viewFederalApplication'])
+    expect(route.requiredActionsMatch ?? 'any').toBe('any')
+    expect(route.roleScope).toBeUndefined()
+    expect(isValidElement(route.element)).toBe(true)
+    expect((route.element as ReactElement).type).toBe(Navigate)
+    expect((route.element as ReactElement).props).toMatchObject({
+      to: '/federal',
+      replace: true,
+    })
   })
 
   it('does not expose retired Indian Reserve or legacy advertising routes', () => {

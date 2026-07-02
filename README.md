@@ -135,6 +135,10 @@ Production RTM-only rollout is controlled by the optional GitHub environment sec
 Monthly Values module/sidebar item for LEXIS admins, and the backend denies non-session/non-RTM API
 routes.
 
+The new admin user access lookup link can be pointed at a specific FAM manage app by setting the
+optional GitHub environment variable `VITE_FAM_MANAGE_URL`; if omitted, the frontend resolves a
+default URL from `VITE_ZONE`.
+
 ## Component docs
 
 - [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.

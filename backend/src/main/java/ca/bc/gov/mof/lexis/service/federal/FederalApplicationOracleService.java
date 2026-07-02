@@ -36,11 +36,18 @@ public class FederalApplicationOracleService implements FederalApplicationServic
 
   @Override
   public FederalApplicationSearchResponseDto search(FederalApplicationSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  @Override
+  public FederalApplicationSearchResponseDto search(
+      FederalApplicationSearchCriteria criteria, Integer knownTotal) {
     FederalApplicationSearchCriteria normalized = normalizeCriteria(criteria);
     int page = normalized.page();
     int size = normalized.size();
 
-    Page<FederalApplicationSearchResultDto> searchPage = repository.search(normalized);
+    Page<FederalApplicationSearchResultDto> searchPage =
+        knownTotal == null ? repository.search(normalized) : repository.search(normalized, knownTotal);
     List<FederalApplicationSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.getContent());
 
     return new FederalApplicationSearchResponseDto(

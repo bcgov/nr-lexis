@@ -4,6 +4,11 @@ import {
   Column,
   Grid,
   InlineLoading,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
   Table,
   TableBody,
   TableCell,
@@ -109,6 +114,16 @@ const REVIEW_STATUSES_WITH_PERSISTED_REMARK = new Set(['EXP', 'REJ', 'WDN'])
 const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before updating review status.'
 const REVIEW_REMARK_REQUIRED_MESSAGE =
   'Review remark is required when rejecting or withdrawing an application.'
+const APPLICATION_DETAIL_TAB_INDEX = {
+  owner: 0,
+  agent: 1,
+  application: 2,
+  items: 3,
+  documents: 4,
+  remarks: 5,
+  offers: 6,
+  review: 7,
+} as const
 const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
   'Status email is only supported for rejected or withdrawn applications.'
 const REVIEW_EMAIL_REQUIRED_MESSAGE =
@@ -142,9 +157,10 @@ export type ClientDataSummaryProps = {
   title: string
   clientData: ApplicationClientData | null
   isLoading: boolean
+  detailFields?: Array<[string, string]>
 }
 
-function ClientDataSummary({ title, clientData, isLoading }: ClientDataSummaryProps) {
+function ClientDataSummary({ title, clientData, isLoading, detailFields }: ClientDataSummaryProps) {
   const clientLookupMessage = clientData?.notfound ?? ''
   const clientLookupMessageKey = `${clientData?.clientNumber ?? ''}:${clientLookupMessage}`
   const [dismissedClientLookupMessageKey, setDismissedClientLookupMessageKey] = useState<
@@ -164,6 +180,7 @@ function ClientDataSummary({ title, clientData, isLoading }: ClientDataSummaryPr
       <h3 className="application-client-summary__title">{title}</h3>
       <dl className="detail-field-grid">
         {[
+          ...(detailFields ?? []),
           ['Company name', displayValue(clientData.companyName)],
           ['Address', displayValue(clientData.address)],
           ['City', displayValue(clientData.city)],
@@ -303,6 +320,18 @@ const withApplicationSpecies = (
   const endUseCode = speciesRows.map((row) => row.endUse.trim()).find(Boolean) ?? form.endUseCode
   return { ...form, speciesCodes, endUseCode }
 }
+
+const normalizeSummaryAgentFields = (
+  form: ApplicationSummaryFormState,
+): ApplicationSummaryFormState =>
+  isAgentApplicant(form.applicantTypeCode)
+    ? form
+    : {
+        ...form,
+        agentClientNumber: '',
+        agentClientLocationCode: '',
+        agentContactName: '',
+      }
 
 const APPLICATION_STATUS_EXPIRED = 'EXP'
 const APPLICATION_STATUS_PERMITTED = 'PMT'
@@ -506,6 +535,9 @@ const ProvincialApplicationDetailsPage = () => {
   const [isSubmittingReviewAction, setIsSubmittingReviewAction] = useState(false)
   const [focusedPackageNumber, setFocusedPackageNumber] = useState('')
   const [focusedPackageRequestId, setFocusedPackageRequestId] = useState(0)
+  const [selectedApplicationTabIndex, setSelectedApplicationTabIndex] = useState(
+    APPLICATION_DETAIL_TAB_INDEX.owner,
+  )
   const beginDetailRequest = useLatestRequestGuard()
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
@@ -526,6 +558,7 @@ const ProvincialApplicationDetailsPage = () => {
     [searchParams, setSearchParams],
   )
   const focusPackageInItems = useCallback((packageNumber: string) => {
+    setSelectedApplicationTabIndex(APPLICATION_DETAIL_TAB_INDEX.items)
     setFocusedPackageNumber(packageNumber)
     setFocusedPackageRequestId((current) => current + 1)
   }, [])
@@ -559,7 +592,9 @@ const ProvincialApplicationDetailsPage = () => {
       if (!isLatestRequest()) {
         return
       }
-      let editableSummaryForm = response ? toSummaryFormState(response) : null
+      let editableSummaryForm = response
+        ? normalizeSummaryAgentFields(toSummaryFormState(response))
+        : null
       setDetail(response)
       setSummaryForm(editableSummaryForm)
       setSummaryBaselineForm(editableSummaryForm)
@@ -599,8 +634,14 @@ const ProvincialApplicationDetailsPage = () => {
       ) {
         try {
           const summarySnapshot = await fetchApplicationSummarySnapshot(applicationNumber)
-          if (isLatestRequest() && summarySnapshot) {
-            editableSummaryForm = toSummarySnapshotFormState(summarySnapshot)
+          if (
+            isLatestRequest() &&
+            summarySnapshot &&
+            String(summarySnapshot.applicationNumber) === applicationNumber
+          ) {
+            editableSummaryForm = normalizeSummaryAgentFields(
+              toSummarySnapshotFormState(summarySnapshot),
+            )
             setSummaryForm(editableSummaryForm)
             setSummaryBaselineForm(editableSummaryForm)
           }
@@ -756,9 +797,14 @@ const ProvincialApplicationDetailsPage = () => {
     !isReviewEmailInvalid
   const hasSummaryForm = summaryForm !== null
   const summaryOwnerClientNumber = summaryForm?.ownerClientNumber.trim() ?? ''
-  const summaryAgentClientNumber = summaryForm?.agentClientNumber.trim() ?? ''
+  const isSummaryAgentApplicant = isAgentApplicant(summaryForm?.applicantTypeCode ?? '')
+  const summaryAgentClientNumber = isSummaryAgentApplicant
+    ? (summaryForm?.agentClientNumber.trim() ?? '')
+    : ''
   const summaryOwnerClientLocationCode = summaryForm?.ownerClientLocationCode.trim() ?? ''
-  const summaryAgentClientLocationCode = summaryForm?.agentClientLocationCode.trim() ?? ''
+  const summaryAgentClientLocationCode = isSummaryAgentApplicant
+    ? (summaryForm?.agentClientLocationCode.trim() ?? '')
+    : ''
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
@@ -1655,7 +1701,10 @@ const ProvincialApplicationDetailsPage = () => {
     }
     setActionErrorMessage('')
     setActionInfoMessage('')
-    document.getElementById('applicationDocumentUpload')?.scrollIntoView({ block: 'start' })
+    setSelectedApplicationTabIndex(APPLICATION_DETAIL_TAB_INDEX.documents)
+    window.setTimeout(() => {
+      document.getElementById('applicationDocumentUpload')?.scrollIntoView({ block: 'start' })
+    }, 0)
   }, [detail])
 
   const onOpenDocument = useCallback(async (row: ProvincialApplicationDocumentRow) => {
@@ -1749,7 +1798,14 @@ const ProvincialApplicationDetailsPage = () => {
 
   const onSummaryFormChange = useCallback(
     (key: keyof ApplicationSummaryFormState, value: string) => {
-      setSummaryForm((current) => (current ? { ...current, [key]: value } : current))
+      setSummaryForm((current) => {
+        if (!current) {
+          return current
+        }
+
+        const next = { ...current, [key]: value }
+        return key === 'applicantTypeCode' ? normalizeSummaryAgentFields(next) : next
+      })
       setSummaryVolumeWarningAccepted(false)
       setActionWarningMessage('')
     },
@@ -1816,31 +1872,32 @@ const ProvincialApplicationDetailsPage = () => {
         }
       }
 
+      const summaryRequestForm = normalizeSummaryAgentFields(summaryForm)
       const result = await updateApplicationSummary({
         applicationNumber: String(detail.applicationNumber),
-        applicationDate: summaryForm.applicationDate,
-        receivedDate: summaryForm.receivedDate,
+        applicationDate: summaryRequestForm.applicationDate,
+        receivedDate: summaryRequestForm.receivedDate,
         termDays: calculatedSummaryTermDays,
-        applicationVolume: summaryForm.applicationVolume,
-        averageLogVolume: summaryForm.averageLogVolume,
-        exemptionReasonCode: summaryForm.exemptionReasonCode,
-        productLocation: summaryForm.productLocation,
-        exportScheduleId: summaryForm.exportScheduleId,
-        agentClientNumber: summaryForm.agentClientNumber,
-        agentClientLocationCode: summaryForm.agentClientLocationCode,
-        ownerClientNumber: summaryForm.ownerClientNumber,
-        ownerClientLocationCode: summaryForm.ownerClientLocationCode,
-        applicationStatusCode: summaryForm.applicationStatusCode,
-        applicantTypeCode: summaryForm.applicantTypeCode,
-        orgUnitNumber: summaryForm.orgUnitNumber,
-        productTypeCode: summaryForm.productTypeCode,
-        jurisdictionCode: summaryForm.jurisdictionCode,
-        growthTypeCode: summaryForm.growthTypeCode,
-        agentContactName: summaryForm.agentContactName,
-        ownerContactName: summaryForm.ownerContactName,
-        oicIndicator: summaryForm.oicIndicator,
-        endUseCode: summaryForm.endUseCode,
-        speciesCodes: summaryForm.speciesCodes,
+        applicationVolume: summaryRequestForm.applicationVolume,
+        averageLogVolume: summaryRequestForm.averageLogVolume,
+        exemptionReasonCode: summaryRequestForm.exemptionReasonCode,
+        productLocation: summaryRequestForm.productLocation,
+        exportScheduleId: summaryRequestForm.exportScheduleId,
+        agentClientNumber: summaryRequestForm.agentClientNumber,
+        agentClientLocationCode: summaryRequestForm.agentClientLocationCode,
+        ownerClientNumber: summaryRequestForm.ownerClientNumber,
+        ownerClientLocationCode: summaryRequestForm.ownerClientLocationCode,
+        applicationStatusCode: summaryRequestForm.applicationStatusCode,
+        applicantTypeCode: summaryRequestForm.applicantTypeCode,
+        orgUnitNumber: summaryRequestForm.orgUnitNumber,
+        productTypeCode: summaryRequestForm.productTypeCode,
+        jurisdictionCode: summaryRequestForm.jurisdictionCode,
+        growthTypeCode: summaryRequestForm.growthTypeCode,
+        agentContactName: summaryRequestForm.agentContactName,
+        ownerContactName: summaryRequestForm.ownerContactName,
+        oicIndicator: summaryRequestForm.oicIndicator,
+        endUseCode: summaryRequestForm.endUseCode,
+        speciesCodes: summaryRequestForm.speciesCodes,
       })
       if (!result.valid) {
         setActionErrorMessage(
@@ -2031,25 +2088,234 @@ const ProvincialApplicationDetailsPage = () => {
     [applyReviewStatusResult, buildReviewStatusPayload, canReviewApplication, detail],
   )
 
-  const clientSummaryContent =
-    ownerClientData || agentClientData || isLoadingOwnerClientData || isLoadingAgentClientData ? (
-      <div className="application-client-summary-grid">
-        <ClientDataSummary
-          title="Owner client details"
-          clientData={ownerClientData}
-          isLoading={isLoadingOwnerClientData}
-        />
-        {(summaryForm?.applicantTypeCode === 'A' ||
-          agentClientData ||
-          isLoadingAgentClientData) && (
-          <ClientDataSummary
-            title="Agent client details"
-            clientData={agentClientData}
-            isLoading={isLoadingAgentClientData}
+  const ownerApplicantTypeCode = summaryForm?.applicantTypeCode ?? ''
+  const ownerApplicantTypeOption = optionsWithCurrentValue(
+    APPLICANT_TYPE_OPTIONS,
+    ownerApplicantTypeCode,
+  ).find((option) => option.value === ownerApplicantTypeCode)
+  const ownerApplicantTypeLabel = ownerApplicantTypeOption
+    ? optionLabel(ownerApplicantTypeOption)
+    : ownerApplicantTypeCode
+  const ownerClientDetailFields: Array<[string, string]> = [
+    ['Client number', summaryForm?.ownerClientNumber ?? String(detail?.ownerClientNumber ?? '')],
+    ['Applicant type', ownerApplicantTypeLabel],
+    ['Client location', summaryForm?.ownerClientLocationCode ?? ''],
+    ['Contact name', summaryForm?.ownerContactName ?? ''],
+    ['I am an agent', summaryForm?.applicantTypeCode === 'A' ? 'Yes' : 'No'],
+  ]
+  const ownerClientSummaryContent =
+    ownerClientData || isLoadingOwnerClientData ? (
+      <ClientDataSummary
+        title="Owner client details"
+        clientData={ownerClientData}
+        isLoading={isLoadingOwnerClientData}
+        detailFields={ownerClientDetailFields}
+      />
+    ) : null
+  const agentClientDetailFields: Array<[string, string]> = [
+    ['Agent number', summaryForm?.agentClientNumber ?? String(detail?.agentClientNumber ?? '')],
+    ['Applicant type', 'Agent'],
+    ['Contact location', summaryForm?.agentClientLocationCode ?? ''],
+    ['Contact name', summaryForm?.agentContactName ?? ''],
+  ]
+  const agentClientSummaryContent =
+    summaryForm?.applicantTypeCode === 'A' || agentClientData || isLoadingAgentClientData ? (
+      <ClientDataSummary
+        title="Agent client details"
+        clientData={agentClientData}
+        isLoading={isLoadingAgentClientData}
+        detailFields={agentClientDetailFields}
+      />
+    ) : null
+
+  const applicationPermitsContent = detail ? (
+    <Tile id="application-permits" className="application-detail-section">
+      <h2 className="detail-tile-title">Permits</h2>
+      <Table useZebraStyles>
+        <TableHead>
+          <TableRow>
+            <TableHeader>Permit</TableHeader>
+            <TableHeader>Status</TableHeader>
+            <TableHeader>Open</TableHeader>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {permitRows.map((item) => (
+            <TableRow key={item.permitNumber}>
+              <TableCell>{item.permitNumber}</TableCell>
+              <TableCell>{item.permitStatusDescription || '-'}</TableCell>
+              <TableCell>
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  disabled={!canPerform('/permitDetails')}
+                  onClick={() =>
+                    navigate(withCurrentSearch(`/provincial/permit/${item.permitNumber}`))
+                  }
+                >
+                  Open
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+          {permitRows.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={3}>No permits found for this application.</TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </Tile>
+  ) : null
+
+  const applicationOffersContent = detail ? (
+    <Tile id="application-offers" className="application-detail-section">
+      <h2 className="detail-tile-title">Offers</h2>
+      <TextInput
+        id="applicationDetailOfferFilter"
+        labelText="Filter offers"
+        value={offerFilter}
+        onChange={(event) => updateFilterParam('offerFilter', event.target.value)}
+        placeholder="Filter by company, offer number, received date, validity, or withdrawal date"
+      />
+      <Table useZebraStyles>
+        <TableHead>
+          <TableRow>
+            <TableHeader>Offer</TableHeader>
+            <TableHeader>Company</TableHeader>
+            <TableHeader>Date Received</TableHeader>
+            <TableHeader>Valid</TableHeader>
+            <TableHeader>Withdrawal Date</TableHeader>
+            <TableHeader>Open</TableHeader>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {filteredOffers.map((item) => (
+            <TableRow key={item.offerNumber}>
+              <TableCell>{item.offerNumber}</TableCell>
+              <TableCell>{item.companyName ?? '-'}</TableCell>
+              <TableCell>{item.receivedDate ?? '-'}</TableCell>
+              <TableCell>{item.validOffer ? 'Yes' : 'No'}</TableCell>
+              <TableCell>{item.withdrawalDate ?? '-'}</TableCell>
+              <TableCell>
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  disabled={!canPerform('/offersSearch') || !canPerform('/offerDetails')}
+                  onClick={() =>
+                    navigate(withCurrentSearch(`/provincial/offers/${item.offerNumber}`))
+                  }
+                >
+                  Open
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+          {filteredOffers.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={6}>No offer rows matched the current filter.</TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </Tile>
+  ) : null
+
+  const applicationReviewContent = detail ? (
+    canReviewApplication ? (
+      <Tile
+        id="application-review"
+        className="application-detail-section application-detail-review"
+      >
+        <h2 className="detail-tile-title">Application review</h2>
+        <div className="legacy-search-grid">
+          <SearchableSelect
+            id="applicationDetailReviewStatus"
+            labelText="Application status"
+            value={reviewStatusCode}
+            placeholder="Select status"
+            options={reviewStatusOptions}
+            invalid={isReviewStatusInvalid}
+            invalidText={reviewValidationMessage}
+            onChange={(value) => {
+              setReviewStatusCode(value)
+              setReviewValidationMessage('')
+            }}
+          />
+          <TextInput
+            id="applicationDetailReviewEmail"
+            labelText="Client email address"
+            value={reviewStatusEmailAddress}
+            invalid={isReviewEmailInvalid}
+            invalidText={reviewValidationMessage}
+            onChange={(event) => {
+              setReviewStatusEmailAddress(event.target.value)
+              setReviewValidationMessage('')
+            }}
+          />
+        </div>
+        <div className="legacy-search-grid">
+          <TextArea
+            id="applicationDetailReviewRemark"
+            labelText="Review remark"
+            maxCount={250}
+            invalid={isReviewRemarkInvalid}
+            invalidText={reviewValidationMessage}
+            value={reviewStatusRemark}
+            onChange={(event) => {
+              setReviewStatusRemark(event.target.value.slice(0, 250))
+              setReviewValidationMessage('')
+            }}
+          />
+        </div>
+        {showReviewValidationNotification && (
+          <AppNotification
+            kind="error"
+            title="Review validation"
+            subtitle={reviewValidationMessage}
+            lowContrast
+            onCloseButtonClick={() => setReviewValidationMessage('')}
           />
         )}
-      </div>
-    ) : null
+        <div className="legacy-search-actions">
+          <Button
+            kind="primary"
+            size="sm"
+            disabled={isSubmittingReviewAction}
+            onClick={() => void onApproveApplication()}
+          >
+            Approve Application
+          </Button>
+          <Button
+            kind="secondary"
+            size="sm"
+            disabled={isSubmittingReviewAction}
+            onClick={() => void onUpdateReviewStatus(false)}
+          >
+            Update Review Status
+          </Button>
+          <Button
+            kind="tertiary"
+            size="sm"
+            disabled={isSubmittingReviewAction || !canSendReviewStatusEmail}
+            onClick={() => void onUpdateReviewStatus(true)}
+          >
+            Update Status and Send Email
+          </Button>
+        </div>
+      </Tile>
+    ) : (
+      <Tile
+        id="application-review"
+        className="application-detail-section application-detail-review"
+      >
+        <h2 className="detail-tile-title">Application review</h2>
+        <p className="detail-empty-message">
+          Review actions are not available for this application.
+        </p>
+      </Tile>
+    )
+  ) : null
 
   return (
     <Grid fullWidth className="default-grid provincial-application-detail">
@@ -2143,22 +2409,6 @@ const ProvincialApplicationDetailsPage = () => {
           )}
 
           <Column sm={4} md={8} lg={16}>
-            <nav
-              className="application-detail-section-nav"
-              aria-label="Application detail sections"
-            >
-              <a href="#application-summary">Summary fields</a>
-              {canReviewApplication && <a href="#application-review">Review Actions</a>}
-              <a href="#application-packages">Package list</a>
-              <a href="#application-items">Item Editor</a>
-              <a href="#application-documents">Document Files</a>
-              <a href="#application-offers">Offer rows</a>
-              <a href="#application-permits">Permit rows</a>
-              <a href="#application-remarks">Remark log</a>
-            </nav>
-          </Column>
-
-          <Column sm={4} md={8} lg={16}>
             <Tile className="application-detail-action-bar">
               <h2 className="detail-tile-title">Actions</h2>
               <div className="legacy-search-actions">
@@ -2229,916 +2479,901 @@ const ProvincialApplicationDetailsPage = () => {
             </Tile>
           </Column>
 
-          <Column sm={4} md={8} lg={16}>
-            <Tile
-              id="application-summary"
-              className="application-detail-section application-detail-summary"
+          <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
+            <Tabs
+              selectedIndex={selectedApplicationTabIndex}
+              onChange={({ selectedIndex }) => setSelectedApplicationTabIndex(selectedIndex)}
             >
-              <h2 className="detail-tile-title">Application summary</h2>
-              <dl className="detail-field-grid">
-                {[
-                  ['Application number', displayValue(detail.applicationNumber)],
-                  ['Exemption number', displayValue(detail.exemptionNumber)],
-                  [
-                    'Status',
-                    displayValue(detail.statusDescription ?? detail.applicationStatusCode),
-                  ],
-                  ['Product type', displayValue(detail.productTypeCode)],
-                  ['Owner client number', displayValue(detail.ownerClientNumber)],
-                  ['Agent client number', displayValue(detail.agentClientNumber)],
-                  ['Org Unit', displayValue(detail.orgUnitName ?? detail.orgUnitNumber)],
-                  ['Listing date', displayValue(detail.listingDate)],
-                ].map(([label, value]) => (
-                  <div key={label} className="detail-field-item">
-                    <dt className="detail-field-label">{label}</dt>
-                    <dd className="detail-field-value">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              {canEditSummary && summaryForm ? (
-                <>
-                  <div className="legacy-search-grid">
-                    <SearchableSelect
-                      id="applicationSummaryExemptionReason"
-                      labelText="Exemption reason"
-                      value={summaryForm.exemptionReasonCode}
-                      invalid={Boolean(visibleSummaryFieldError('exemptionReasonCode'))}
-                      invalidText={visibleSummaryFieldError('exemptionReasonCode')}
-                      disabled={isLoadingSummaryOptions && exemptionReasonOptions.length === 0}
-                      placeholder="Select exemption reason"
-                      options={optionsWithCurrentValue(
-                        exemptionReasonOptions,
-                        summaryForm.exemptionReasonCode,
-                      )}
-                      onChange={(value) =>
-                        onSummaryFormChange('exemptionReasonCode', value.toUpperCase())
-                      }
-                    />
-                    <IsoDatePicker
-                      id="applicationSummaryApplicationDate"
-                      labelText="Application date"
-                      value={summaryForm.applicationDate}
-                      invalid={Boolean(visibleSummaryFieldError('applicationDate'))}
-                      invalidText={visibleSummaryFieldError('applicationDate')}
-                      onChange={(value) => onSummaryFormChange('applicationDate', value)}
-                    />
-                    <IsoDatePicker
-                      id="applicationSummaryReceivedDate"
-                      labelText="Received date"
-                      value={summaryForm.receivedDate}
-                      invalid={Boolean(visibleSummaryFieldError('receivedDate'))}
-                      invalidText={visibleSummaryFieldError('receivedDate')}
-                      onChange={(value) => onSummaryFormChange('receivedDate', value)}
-                    />
-                    <TextInput
-                      id="applicationSummaryTermDays"
-                      labelText="Term (days)"
-                      type="number"
-                      min={1}
-                      value={summaryForm.termDays}
-                      invalid={Boolean(visibleSummaryFieldError('termDays'))}
-                      invalidText={visibleSummaryFieldError('termDays')}
-                      onChange={(event) => onSummaryFormChange('termDays', event.target.value)}
-                    />
-                    <TextInput
-                      id="applicationSummaryTermMonths"
-                      labelText="Term (months)"
-                      type="number"
-                      min={0}
-                      value={summaryForm.termMonths}
-                      invalid={Boolean(visibleSummaryFieldError('termMonths'))}
-                      invalidText={visibleSummaryFieldError('termMonths')}
-                      onChange={(event) => onSummaryFormChange('termMonths', event.target.value)}
-                    />
-                    <TextInput
-                      id="applicationSummaryTermYears"
-                      labelText="Term (years)"
-                      type="number"
-                      min={0}
-                      value={summaryForm.termYears}
-                      invalid={Boolean(visibleSummaryFieldError('termYears'))}
-                      invalidText={visibleSummaryFieldError('termYears')}
-                      onChange={(event) => onSummaryFormChange('termYears', event.target.value)}
-                    />
-                    <TextInput
-                      id="applicationSummaryVolume"
-                      labelText="Application volume (m³)"
-                      type="number"
-                      min={0}
-                      step="0.1"
-                      value={summaryForm.applicationVolume}
-                      invalid={Boolean(visibleSummaryFieldError('applicationVolume'))}
-                      invalidText={visibleSummaryFieldError('applicationVolume')}
-                      onChange={(event) =>
-                        onSummaryFormChange('applicationVolume', event.target.value)
-                      }
-                    />
-                    <TextInput
-                      id="applicationSummaryAverageLogVolume"
-                      labelText="Average log volume"
-                      type="number"
-                      min={0}
-                      step="0.1"
-                      value={summaryForm.averageLogVolume}
-                      invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
-                      invalidText={visibleSummaryFieldError('averageLogVolume')}
-                      onChange={(event) =>
-                        onSummaryFormChange('averageLogVolume', event.target.value)
-                      }
-                    />
-                    <TextInput
-                      id="applicationSummaryOwnerClientNumber"
-                      labelText="Owner client number"
-                      value={summaryForm.ownerClientNumber}
-                      invalid={Boolean(visibleSummaryFieldError('ownerClientNumber'))}
-                      invalidText={visibleSummaryFieldError('ownerClientNumber')}
-                      onChange={(event) =>
-                        onSummaryFormChange('ownerClientNumber', event.target.value)
-                      }
-                    />
-                    <SearchableSelect
-                      id="applicationSummaryOwnerClientLocationCode"
-                      labelText="Owner client location"
-                      value={summaryForm.ownerClientLocationCode}
-                      invalid={Boolean(visibleSummaryFieldError('ownerClientLocationCode'))}
-                      invalidText={visibleSummaryFieldError('ownerClientLocationCode')}
-                      disabled={
-                        !summaryForm.ownerClientNumber.trim() || isLoadingOwnerClientLocations
-                      }
-                      placeholder={ownerClientLocationPlaceholder}
-                      options={ownerClientLocations
-                        .filter(isSelectableClientLocation)
-                        .map((location) => ({
-                          value: location.locationCode,
-                          label: location.locationName,
-                        }))}
-                      onChange={(value) => onSummaryFormChange('ownerClientLocationCode', value)}
-                    />
-                    {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
-                      <SearchableSelect
-                        id="applicationSummaryOwnerContactName"
-                        labelText="Owner contact name"
-                        value={summaryForm.ownerContactName}
-                        invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
-                        invalidText={visibleSummaryFieldError('ownerContactName')}
-                        disabled={
-                          !summaryForm.ownerClientLocationCode.trim() ||
-                          isLoadingOwnerClientContacts
-                        }
-                        placeholder={ownerContactPlaceholder}
-                        options={ownerClientContacts
-                          .filter(isSelectableClientContact)
-                          .map((contact) => ({
-                            value: contact.contactName,
-                            label: contact.contactName,
-                          }))}
-                        onChange={(value) => onSummaryFormChange('ownerContactName', value)}
-                      />
-                    ) : (
-                      <TextInput
-                        id="applicationSummaryOwnerContactName"
-                        labelText="Owner contact name"
-                        value={summaryForm.ownerContactName}
-                        invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
-                        invalidText={visibleSummaryFieldError('ownerContactName')}
-                        disabled={!summaryForm.ownerClientLocationCode.trim()}
-                        placeholder="Enter owner contact name"
-                        onChange={(event) =>
-                          onSummaryFormChange('ownerContactName', event.target.value)
-                        }
-                      />
-                    )}
-                    <SearchableSelect
-                      id="applicationSummaryApplicantTypeCode"
-                      labelText="Applicant type"
-                      value={summaryForm.applicantTypeCode}
-                      placeholder="Select applicant type"
-                      options={optionsWithCurrentValue(
-                        APPLICANT_TYPE_OPTIONS,
-                        summaryForm.applicantTypeCode,
-                      ).map((option) => ({ value: option.value, label: optionLabel(option) }))}
-                      invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
-                      invalidText={visibleSummaryFieldError('applicantTypeCode')}
-                      onChange={(value) =>
-                        onSummaryFormChange('applicantTypeCode', value.toUpperCase())
-                      }
-                    />
-                    <TextInput
-                      id="applicationSummaryAgentClientNumber"
-                      labelText="Agent client number"
-                      value={summaryForm.agentClientNumber}
-                      invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
-                      invalidText={visibleSummaryFieldError('agentClientNumber')}
-                      onChange={(event) =>
-                        onSummaryFormChange('agentClientNumber', event.target.value)
-                      }
-                    />
-                    <SearchableSelect
-                      id="applicationSummaryAgentClientLocationCode"
-                      labelText="Agent client location"
-                      value={summaryForm.agentClientLocationCode}
-                      invalid={Boolean(visibleSummaryFieldError('agentClientLocationCode'))}
-                      invalidText={visibleSummaryFieldError('agentClientLocationCode')}
-                      disabled={
-                        !summaryForm.agentClientNumber.trim() || isLoadingAgentClientLocations
-                      }
-                      placeholder={agentClientLocationPlaceholder}
-                      options={agentClientLocations
-                        .filter(isSelectableClientLocation)
-                        .map((location) => ({
-                          value: location.locationCode,
-                          label: location.locationName,
-                        }))}
-                      onChange={(value) => onSummaryFormChange('agentClientLocationCode', value)}
-                    />
-                    {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
-                      <SearchableSelect
-                        id="applicationSummaryAgentContactName"
-                        labelText="Agent contact name"
-                        value={summaryForm.agentContactName}
-                        invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
-                        invalidText={visibleSummaryFieldError('agentContactName')}
-                        disabled={
-                          !summaryForm.agentClientLocationCode.trim() ||
-                          isLoadingAgentClientContacts
-                        }
-                        placeholder={agentContactPlaceholder}
-                        options={agentClientContacts
-                          .filter(isSelectableClientContact)
-                          .map((contact) => ({
-                            value: contact.contactName,
-                            label: contact.contactName,
-                          }))}
-                        onChange={(value) => onSummaryFormChange('agentContactName', value)}
-                      />
-                    ) : (
-                      <TextInput
-                        id="applicationSummaryAgentContactName"
-                        labelText="Agent contact name"
-                        value={summaryForm.agentContactName}
-                        invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
-                        invalidText={visibleSummaryFieldError('agentContactName')}
-                        disabled={!summaryForm.agentClientLocationCode.trim()}
-                        placeholder="Enter agent contact name"
-                        onChange={(event) =>
-                          onSummaryFormChange('agentContactName', event.target.value)
-                        }
-                      />
-                    )}
-                    <SearchableSelect
-                      id="applicationSummaryRegion"
-                      labelText="Region"
-                      value={summaryForm.orgUnitNumber}
-                      invalid={Boolean(visibleSummaryFieldError('orgUnitNumber'))}
-                      invalidText={visibleSummaryFieldError('orgUnitNumber')}
-                      disabled={isLoadingSummaryOptions && regionOptions.length === 0}
-                      placeholder="Select region"
-                      options={optionsWithCurrentValue(regionOptions, summaryForm.orgUnitNumber)}
-                      onChange={(value) => onSummaryFormChange('orgUnitNumber', value)}
-                    />
-                    <SearchableSelect
-                      id="applicationSummaryProductType"
-                      labelText="Product type"
-                      value={summaryForm.productTypeCode}
-                      invalid={Boolean(visibleSummaryFieldError('productTypeCode'))}
-                      invalidText={visibleSummaryFieldError('productTypeCode')}
-                      disabled={isLoadingSummaryOptions && productTypeOptions.length === 0}
-                      placeholder="Select product type"
-                      options={optionsWithCurrentValue(
-                        productTypeOptions,
-                        summaryForm.productTypeCode,
-                      )}
-                      onChange={(value) =>
-                        onSummaryFormChange('productTypeCode', value.toUpperCase())
-                      }
-                    />
-                    <SearchableSelect
-                      id="applicationSummaryGrowthType"
-                      labelText="Growth type"
-                      value={summaryForm.growthTypeCode}
-                      invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
-                      invalidText={visibleSummaryFieldError('growthTypeCode')}
-                      disabled={isLoadingSummaryOptions && growthTypeOptions.length === 0}
-                      placeholder="Select growth type"
-                      options={optionsWithCurrentValue(
-                        growthTypeOptions,
-                        summaryForm.growthTypeCode,
-                      )}
-                      onChange={(value) =>
-                        onSummaryFormChange('growthTypeCode', value.toUpperCase())
-                      }
-                    />
-                    <SearchableSelect
-                      id="applicationSummaryStatus"
-                      labelText="Application status"
-                      value={summaryForm.applicationStatusCode}
-                      invalid={Boolean(visibleSummaryFieldError('applicationStatusCode'))}
-                      invalidText={visibleSummaryFieldError('applicationStatusCode')}
-                      disabled={isLoadingSummaryOptions && applicationStatusOptions.length === 0}
-                      placeholder="Select application status"
-                      options={optionsWithCurrentValue(
-                        applicationStatusOptions,
-                        summaryForm.applicationStatusCode,
-                      )}
-                      onChange={(value) =>
-                        onSummaryFormChange('applicationStatusCode', value.toUpperCase())
-                      }
-                    />
-                    <SearchableSelect
-                      id="applicationSummaryJurisdiction"
-                      labelText="Jurisdiction"
-                      value={summaryForm.jurisdictionCode}
-                      placeholder="Select jurisdiction"
-                      options={optionsWithCurrentValue(
-                        JURISDICTION_OPTIONS,
-                        summaryForm.jurisdictionCode,
-                      ).map((option) => ({ value: option.value, label: optionLabel(option) }))}
-                      invalid={Boolean(visibleSummaryFieldError('jurisdictionCode'))}
-                      invalidText={visibleSummaryFieldError('jurisdictionCode')}
-                      onChange={(value) =>
-                        onSummaryFormChange('jurisdictionCode', value.toUpperCase())
-                      }
-                    />
-                    <SearchableSelect
-                      id="applicationSummarySchedule"
-                      labelText="Listing date"
-                      value={summaryForm.exportScheduleId}
-                      disabled={isLoadingSummaryOptions && summaryScheduleOptions.length === 0}
-                      placeholder="Search listing date"
-                      options={optionsWithCurrentValue(
-                        summaryScheduleOptions,
-                        summaryForm.exportScheduleId,
-                      )}
-                      onChange={(value) => onSummaryFormChange('exportScheduleId', value)}
-                    />
-                    <SearchableSelect
-                      id="applicationSummaryOicIndicator"
-                      labelText="Order in Council indicator"
-                      value={summaryForm.oicIndicator}
-                      placeholder="Select Order in Council indicator"
-                      options={optionsWithCurrentValue(
-                        OIC_INDICATOR_OPTIONS,
-                        summaryForm.oicIndicator,
-                      ).map((option) => ({ value: option.value, label: optionLabel(option) }))}
-                      invalid={Boolean(visibleSummaryFieldError('oicIndicator'))}
-                      invalidText={visibleSummaryFieldError('oicIndicator')}
-                      onChange={(value) => onSummaryFormChange('oicIndicator', value.toUpperCase())}
-                    />
-                  </div>
-                  {clientSummaryContent}
-                  <div className="legacy-search-grid">
-                    <TextArea
-                      id="applicationSummaryProductLocation"
-                      labelText="Location of logs"
-                      value={summaryForm.productLocation}
-                      invalid={Boolean(visibleSummaryFieldError('productLocation'))}
-                      invalidText={visibleSummaryFieldError('productLocation')}
-                      onChange={(event) =>
-                        onSummaryFormChange('productLocation', event.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="legacy-search-grid">
-                    <SearchableSelect
-                      id="applicationSummarySpeciesCandidate"
-                      labelText="Application species"
-                      value={applicationSpeciesCandidate}
-                      disabled={applicationSpeciesSelectOptions.length === 0}
-                      placeholder={speciesPlaceholder}
-                      options={applicationSpeciesSelectOptions}
-                      onChange={setApplicationSpeciesCandidate}
-                    />
-                    <SearchableSelect
-                      id="applicationSummaryEndUse"
-                      labelText="Application end use"
-                      value={summaryForm.endUseCode}
-                      disabled={
-                        (summaryForm.speciesCodes ?? []).length === 0 ||
-                        applicationEndUseSelectOptions.length === 0
-                      }
-                      placeholder={endUsePlaceholder}
-                      options={applicationEndUseSelectOptions}
-                      onChange={(value) => onSummaryFormChange('endUseCode', value)}
-                    />
-                  </div>
-                  <div className="legacy-search-actions">
-                    <Button
-                      kind="secondary"
-                      size="sm"
-                      disabled={
-                        !applicationSpeciesCandidate ||
-                        !availableApplicationSpeciesOptions.some(
-                          (option) => option.code === applicationSpeciesCandidate,
-                        )
-                      }
-                      onClick={onAddApplicationSpecies}
-                    >
-                      Add Application species
-                    </Button>
-                    {(summaryForm.speciesCodes ?? []).map((speciesCode) => (
-                      <span key={speciesCode} className="legacy-search-actions">
-                        <Tag type="blue">{speciesCode}</Tag>
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          onClick={() => onRemoveApplicationSpecies(speciesCode)}
-                        >
-                          Remove
-                        </Button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="legacy-search-actions">
-                    <Button
-                      kind="primary"
-                      size="sm"
-                      disabled={isSavingSummary}
-                      onClick={() => void onSaveSummary()}
-                    >
-                      {isSavingSummary ? 'Saving...' : 'Save Summary'}
-                    </Button>
-                    <Button
-                      kind="secondary"
-                      size="sm"
-                      disabled={isSavingSummary}
-                      onClick={() => {
-                        setSummaryForm(summaryBaselineForm ?? toSummaryFormState(detail))
-                        setShowSummaryValidationErrors(false)
-                      }}
-                    >
-                      Reset Summary
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <dl className="detail-field-grid">
-                    {[
-                      ['Exemption reason', displayValue(detail.exemptionReasonCode)],
-                      ['Application date', displayValue(detail.applicationDate)],
-                      ['Received date', displayValue(detail.receivedDate)],
-                      ['Term (days)', displayValue(detail.termDays)],
-                      ['Application volume (m³)', displayValue(detail.applicationVolume)],
-                      ['Average log volume', displayValue(detail.averageLogVolume)],
-                    ].map(([label, value]) => (
-                      <div key={label} className="detail-field-item">
-                        <dt className="detail-field-label">{label}</dt>
-                        <dd className="detail-field-value">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  {clientSummaryContent}
-                </>
-              )}
-            </Tile>
-          </Column>
-
-          <Column sm={4} md={8} lg={16}>
-            <Tile className="application-detail-section application-detail-status-strip">
-              <h2 className="detail-tile-title">Access & workflow flags</h2>
-              <div className="application-detail-flag-row">
-                <Tag type={detail.canCreateOffers ? 'green' : 'gray'}>
-                  Create offers: {detail.canCreateOffers ? 'Yes' : 'No'}
-                </Tag>
-                <Tag type={detail.industryUser ? 'green' : 'gray'}>
-                  Industry User: {detail.industryUser ? 'Yes' : 'No'}
-                </Tag>
-                <Tag type={detail.readOnly ? 'red' : 'gray'}>
-                  Read Only: {detail.readOnly ? 'Yes' : 'No'}
-                </Tag>
-                <Tag type={detail.exemptionApprover ? 'green' : 'gray'}>
-                  Exemption Approver: {detail.exemptionApprover ? 'Yes' : 'No'}
-                </Tag>
-                <Tag type={detail.locked ? 'red' : 'green'}>
-                  Locked: {detail.locked ? 'Yes' : 'No'}
-                </Tag>
-              </div>
-              {detail.locked && detail.lockMessage && (
-                <p className="application-detail-lock-message">{detail.lockMessage}</p>
-              )}
-            </Tile>
-          </Column>
-
-          {canReviewApplication && (
-            <Column sm={4} md={8} lg={16}>
-              <Tile
-                id="application-review"
-                className="application-detail-section application-detail-review"
+              <TabList
+                aria-label="Application detail sections"
+                contained
+                size="md"
+                className="application-tabs__list application-detail-tab-list"
               >
-                <h2 className="detail-tile-title">Application review</h2>
-                <div className="legacy-search-grid">
-                  <SearchableSelect
-                    id="applicationDetailReviewStatus"
-                    labelText="Application status"
-                    value={reviewStatusCode}
-                    placeholder="Select status"
-                    options={reviewStatusOptions}
-                    invalid={isReviewStatusInvalid}
-                    invalidText={reviewValidationMessage}
-                    onChange={(value) => {
-                      setReviewStatusCode(value)
-                      setReviewValidationMessage('')
-                    }}
-                  />
-                  <TextInput
-                    id="applicationDetailReviewEmail"
-                    labelText="Client email address"
-                    value={reviewStatusEmailAddress}
-                    invalid={isReviewEmailInvalid}
-                    invalidText={reviewValidationMessage}
-                    onChange={(event) => {
-                      setReviewStatusEmailAddress(event.target.value)
-                      setReviewValidationMessage('')
-                    }}
-                  />
-                </div>
-                <div className="legacy-search-grid">
-                  <TextArea
-                    id="applicationDetailReviewRemark"
-                    labelText="Review remark"
-                    maxCount={250}
-                    invalid={isReviewRemarkInvalid}
-                    invalidText={reviewValidationMessage}
-                    value={reviewStatusRemark}
-                    onChange={(event) => {
-                      setReviewStatusRemark(event.target.value.slice(0, 250))
-                      setReviewValidationMessage('')
-                    }}
-                  />
-                </div>
-                {showReviewValidationNotification && (
-                  <AppNotification
-                    kind="error"
-                    title="Review validation"
-                    subtitle={reviewValidationMessage}
-                    lowContrast
-                    onCloseButtonClick={() => setReviewValidationMessage('')}
-                  />
-                )}
-                <div className="legacy-search-actions">
-                  <Button
-                    kind="primary"
-                    size="sm"
-                    disabled={isSubmittingReviewAction}
-                    onClick={() => void onApproveApplication()}
-                  >
-                    Approve Application
-                  </Button>
-                  <Button
-                    kind="secondary"
-                    size="sm"
-                    disabled={isSubmittingReviewAction}
-                    onClick={() => void onUpdateReviewStatus(false)}
-                  >
-                    Update Review Status
-                  </Button>
-                  <Button
-                    kind="tertiary"
-                    size="sm"
-                    disabled={isSubmittingReviewAction || !canSendReviewStatusEmail}
-                    onClick={() => void onUpdateReviewStatus(true)}
-                  >
-                    Update Status and Send Email
-                  </Button>
-                </div>
-              </Tile>
-            </Column>
-          )}
+                <Tab>Owner</Tab>
+                <Tab>Agent</Tab>
+                <Tab>Application</Tab>
+                <Tab>Items</Tab>
+                <Tab>Documents</Tab>
+                <Tab>Remarks</Tab>
+                <Tab>Offers</Tab>
+                <Tab>Review</Tab>
+              </TabList>
+              <TabPanels>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile
+                        id="application-owner-details"
+                        className="application-detail-section application-detail-clients"
+                      >
+                        <h2 className="detail-tile-title">Owner</h2>
+                        {ownerClientSummaryContent ?? (
+                          <p className="detail-empty-message">
+                            No owner client lookup details are available for this application.
+                          </p>
+                        )}
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile
+                        id="application-agent-details"
+                        className="application-detail-section application-detail-clients"
+                      >
+                        <h2 className="detail-tile-title">Agent</h2>
+                        {agentClientSummaryContent ?? (
+                          <p className="detail-empty-message">
+                            No agent is assigned to this application.
+                          </p>
+                        )}
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile
+                        id="application-summary"
+                        className="application-detail-section application-detail-summary"
+                      >
+                        <h2 className="detail-tile-title">Application summary</h2>
+                        <dl className="detail-field-grid">
+                          {[
+                            ['Application number', displayValue(detail.applicationNumber)],
+                            ['Exemption number', displayValue(detail.exemptionNumber)],
+                            [
+                              'Status',
+                              displayValue(
+                                detail.statusDescription ?? detail.applicationStatusCode,
+                              ),
+                            ],
+                            ['Product type', displayValue(detail.productTypeCode)],
+                            ['Owner client number', displayValue(detail.ownerClientNumber)],
+                            ['Agent client number', displayValue(detail.agentClientNumber)],
+                            ['Org Unit', displayValue(detail.orgUnitName ?? detail.orgUnitNumber)],
+                            ['Listing date', displayValue(detail.listingDate)],
+                          ].map(([label, value]) => (
+                            <div key={label} className="detail-field-item">
+                              <dt className="detail-field-label">{label}</dt>
+                              <dd className="detail-field-value">{value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                        {canEditSummary && summaryForm ? (
+                          <>
+                            <div className="legacy-search-grid">
+                              <SearchableSelect
+                                id="applicationSummaryExemptionReason"
+                                labelText="Exemption reason"
+                                value={summaryForm.exemptionReasonCode}
+                                invalid={Boolean(visibleSummaryFieldError('exemptionReasonCode'))}
+                                invalidText={visibleSummaryFieldError('exemptionReasonCode')}
+                                disabled={
+                                  isLoadingSummaryOptions && exemptionReasonOptions.length === 0
+                                }
+                                placeholder="Select exemption reason"
+                                options={optionsWithCurrentValue(
+                                  exemptionReasonOptions,
+                                  summaryForm.exemptionReasonCode,
+                                )}
+                                onChange={(value) =>
+                                  onSummaryFormChange('exemptionReasonCode', value.toUpperCase())
+                                }
+                              />
+                              <IsoDatePicker
+                                id="applicationSummaryApplicationDate"
+                                labelText="Application date"
+                                value={summaryForm.applicationDate}
+                                invalid={Boolean(visibleSummaryFieldError('applicationDate'))}
+                                invalidText={visibleSummaryFieldError('applicationDate')}
+                                onChange={(value) => onSummaryFormChange('applicationDate', value)}
+                              />
+                              <IsoDatePicker
+                                id="applicationSummaryReceivedDate"
+                                labelText="Received date"
+                                value={summaryForm.receivedDate}
+                                invalid={Boolean(visibleSummaryFieldError('receivedDate'))}
+                                invalidText={visibleSummaryFieldError('receivedDate')}
+                                onChange={(value) => onSummaryFormChange('receivedDate', value)}
+                              />
+                              <TextInput
+                                id="applicationSummaryTermDays"
+                                labelText="Term (days)"
+                                type="number"
+                                min={1}
+                                value={summaryForm.termDays}
+                                invalid={Boolean(visibleSummaryFieldError('termDays'))}
+                                invalidText={visibleSummaryFieldError('termDays')}
+                                onChange={(event) =>
+                                  onSummaryFormChange('termDays', event.target.value)
+                                }
+                              />
+                              <TextInput
+                                id="applicationSummaryTermMonths"
+                                labelText="Term (months)"
+                                type="number"
+                                min={0}
+                                value={summaryForm.termMonths}
+                                invalid={Boolean(visibleSummaryFieldError('termMonths'))}
+                                invalidText={visibleSummaryFieldError('termMonths')}
+                                onChange={(event) =>
+                                  onSummaryFormChange('termMonths', event.target.value)
+                                }
+                              />
+                              <TextInput
+                                id="applicationSummaryTermYears"
+                                labelText="Term (years)"
+                                type="number"
+                                min={0}
+                                value={summaryForm.termYears}
+                                invalid={Boolean(visibleSummaryFieldError('termYears'))}
+                                invalidText={visibleSummaryFieldError('termYears')}
+                                onChange={(event) =>
+                                  onSummaryFormChange('termYears', event.target.value)
+                                }
+                              />
+                              <TextInput
+                                id="applicationSummaryVolume"
+                                labelText="Application volume (m³)"
+                                type="number"
+                                min={0}
+                                step="0.1"
+                                value={summaryForm.applicationVolume}
+                                invalid={Boolean(visibleSummaryFieldError('applicationVolume'))}
+                                invalidText={visibleSummaryFieldError('applicationVolume')}
+                                onChange={(event) =>
+                                  onSummaryFormChange('applicationVolume', event.target.value)
+                                }
+                              />
+                              <TextInput
+                                id="applicationSummaryAverageLogVolume"
+                                labelText="Average log volume"
+                                type="number"
+                                min={0}
+                                step="0.1"
+                                value={summaryForm.averageLogVolume}
+                                invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
+                                invalidText={visibleSummaryFieldError('averageLogVolume')}
+                                onChange={(event) =>
+                                  onSummaryFormChange('averageLogVolume', event.target.value)
+                                }
+                              />
+                              <TextInput
+                                id="applicationSummaryOwnerClientNumber"
+                                labelText="Owner client number"
+                                value={summaryForm.ownerClientNumber}
+                                invalid={Boolean(visibleSummaryFieldError('ownerClientNumber'))}
+                                invalidText={visibleSummaryFieldError('ownerClientNumber')}
+                                onChange={(event) =>
+                                  onSummaryFormChange('ownerClientNumber', event.target.value)
+                                }
+                              />
+                              <SearchableSelect
+                                id="applicationSummaryOwnerClientLocationCode"
+                                labelText="Owner client location"
+                                value={summaryForm.ownerClientLocationCode}
+                                invalid={Boolean(
+                                  visibleSummaryFieldError('ownerClientLocationCode'),
+                                )}
+                                invalidText={visibleSummaryFieldError('ownerClientLocationCode')}
+                                disabled={
+                                  !summaryForm.ownerClientNumber.trim() ||
+                                  isLoadingOwnerClientLocations
+                                }
+                                placeholder={ownerClientLocationPlaceholder}
+                                options={ownerClientLocations
+                                  .filter(isSelectableClientLocation)
+                                  .map((location) => ({
+                                    value: location.locationCode,
+                                    label: location.locationName,
+                                  }))}
+                                onChange={(value) =>
+                                  onSummaryFormChange('ownerClientLocationCode', value)
+                                }
+                              />
+                              {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
+                                <SearchableSelect
+                                  id="applicationSummaryOwnerContactName"
+                                  labelText="Owner contact name"
+                                  value={summaryForm.ownerContactName}
+                                  invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
+                                  invalidText={visibleSummaryFieldError('ownerContactName')}
+                                  disabled={
+                                    !summaryForm.ownerClientLocationCode.trim() ||
+                                    isLoadingOwnerClientContacts
+                                  }
+                                  placeholder={ownerContactPlaceholder}
+                                  options={ownerClientContacts
+                                    .filter(isSelectableClientContact)
+                                    .map((contact) => ({
+                                      value: contact.contactName,
+                                      label: contact.contactName,
+                                    }))}
+                                  onChange={(value) =>
+                                    onSummaryFormChange('ownerContactName', value)
+                                  }
+                                />
+                              ) : (
+                                <TextInput
+                                  id="applicationSummaryOwnerContactName"
+                                  labelText="Owner contact name"
+                                  value={summaryForm.ownerContactName}
+                                  invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
+                                  invalidText={visibleSummaryFieldError('ownerContactName')}
+                                  disabled={!summaryForm.ownerClientLocationCode.trim()}
+                                  placeholder="Enter owner contact name"
+                                  onChange={(event) =>
+                                    onSummaryFormChange('ownerContactName', event.target.value)
+                                  }
+                                />
+                              )}
+                              <SearchableSelect
+                                id="applicationSummaryApplicantTypeCode"
+                                labelText="Applicant type"
+                                value={summaryForm.applicantTypeCode}
+                                placeholder="Select applicant type"
+                                options={optionsWithCurrentValue(
+                                  APPLICANT_TYPE_OPTIONS,
+                                  summaryForm.applicantTypeCode,
+                                ).map((option) => ({
+                                  value: option.value,
+                                  label: optionLabel(option),
+                                }))}
+                                invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
+                                invalidText={visibleSummaryFieldError('applicantTypeCode')}
+                                onChange={(value) =>
+                                  onSummaryFormChange('applicantTypeCode', value.toUpperCase())
+                                }
+                              />
+                              {isSummaryAgentApplicant && (
+                                <>
+                                  <TextInput
+                                    id="applicationSummaryAgentClientNumber"
+                                    labelText="Agent client number"
+                                    value={summaryForm.agentClientNumber}
+                                    invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
+                                    invalidText={visibleSummaryFieldError('agentClientNumber')}
+                                    onChange={(event) =>
+                                      onSummaryFormChange('agentClientNumber', event.target.value)
+                                    }
+                                  />
+                                  <SearchableSelect
+                                    id="applicationSummaryAgentClientLocationCode"
+                                    labelText="Agent client location"
+                                    value={summaryForm.agentClientLocationCode}
+                                    invalid={Boolean(
+                                      visibleSummaryFieldError('agentClientLocationCode'),
+                                    )}
+                                    invalidText={visibleSummaryFieldError(
+                                      'agentClientLocationCode',
+                                    )}
+                                    disabled={
+                                      !summaryForm.agentClientNumber.trim() ||
+                                      isLoadingAgentClientLocations
+                                    }
+                                    placeholder={agentClientLocationPlaceholder}
+                                    options={agentClientLocations
+                                      .filter(isSelectableClientLocation)
+                                      .map((location) => ({
+                                        value: location.locationCode,
+                                        label: location.locationName,
+                                      }))}
+                                    onChange={(value) =>
+                                      onSummaryFormChange('agentClientLocationCode', value)
+                                    }
+                                  />
+                                  {hasSelectableAgentClientContacts ||
+                                  isLoadingAgentClientContacts ? (
+                                    <SearchableSelect
+                                      id="applicationSummaryAgentContactName"
+                                      labelText="Agent contact name"
+                                      value={summaryForm.agentContactName}
+                                      invalid={Boolean(
+                                        visibleSummaryFieldError('agentContactName'),
+                                      )}
+                                      invalidText={visibleSummaryFieldError('agentContactName')}
+                                      disabled={
+                                        !summaryForm.agentClientLocationCode.trim() ||
+                                        isLoadingAgentClientContacts
+                                      }
+                                      placeholder={agentContactPlaceholder}
+                                      options={agentClientContacts
+                                        .filter(isSelectableClientContact)
+                                        .map((contact) => ({
+                                          value: contact.contactName,
+                                          label: contact.contactName,
+                                        }))}
+                                      onChange={(value) =>
+                                        onSummaryFormChange('agentContactName', value)
+                                      }
+                                    />
+                                  ) : (
+                                    <TextInput
+                                      id="applicationSummaryAgentContactName"
+                                      labelText="Agent contact name"
+                                      value={summaryForm.agentContactName}
+                                      invalid={Boolean(
+                                        visibleSummaryFieldError('agentContactName'),
+                                      )}
+                                      invalidText={visibleSummaryFieldError('agentContactName')}
+                                      disabled={!summaryForm.agentClientLocationCode.trim()}
+                                      placeholder="Enter agent contact name"
+                                      onChange={(event) =>
+                                        onSummaryFormChange('agentContactName', event.target.value)
+                                      }
+                                    />
+                                  )}
+                                </>
+                              )}
+                              <SearchableSelect
+                                id="applicationSummaryRegion"
+                                labelText="Region"
+                                value={summaryForm.orgUnitNumber}
+                                invalid={Boolean(visibleSummaryFieldError('orgUnitNumber'))}
+                                invalidText={visibleSummaryFieldError('orgUnitNumber')}
+                                disabled={isLoadingSummaryOptions && regionOptions.length === 0}
+                                placeholder="Select region"
+                                options={optionsWithCurrentValue(
+                                  regionOptions,
+                                  summaryForm.orgUnitNumber,
+                                )}
+                                onChange={(value) => onSummaryFormChange('orgUnitNumber', value)}
+                              />
+                              <SearchableSelect
+                                id="applicationSummaryProductType"
+                                labelText="Product type"
+                                value={summaryForm.productTypeCode}
+                                invalid={Boolean(visibleSummaryFieldError('productTypeCode'))}
+                                invalidText={visibleSummaryFieldError('productTypeCode')}
+                                disabled={
+                                  isLoadingSummaryOptions && productTypeOptions.length === 0
+                                }
+                                placeholder="Select product type"
+                                options={optionsWithCurrentValue(
+                                  productTypeOptions,
+                                  summaryForm.productTypeCode,
+                                )}
+                                onChange={(value) =>
+                                  onSummaryFormChange('productTypeCode', value.toUpperCase())
+                                }
+                              />
+                              <SearchableSelect
+                                id="applicationSummaryGrowthType"
+                                labelText="Growth type"
+                                value={summaryForm.growthTypeCode}
+                                invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
+                                invalidText={visibleSummaryFieldError('growthTypeCode')}
+                                disabled={isLoadingSummaryOptions && growthTypeOptions.length === 0}
+                                placeholder="Select growth type"
+                                options={optionsWithCurrentValue(
+                                  growthTypeOptions,
+                                  summaryForm.growthTypeCode,
+                                )}
+                                onChange={(value) =>
+                                  onSummaryFormChange('growthTypeCode', value.toUpperCase())
+                                }
+                              />
+                              <SearchableSelect
+                                id="applicationSummaryStatus"
+                                labelText="Application status"
+                                value={summaryForm.applicationStatusCode}
+                                invalid={Boolean(visibleSummaryFieldError('applicationStatusCode'))}
+                                invalidText={visibleSummaryFieldError('applicationStatusCode')}
+                                disabled={
+                                  isLoadingSummaryOptions && applicationStatusOptions.length === 0
+                                }
+                                placeholder="Select application status"
+                                options={optionsWithCurrentValue(
+                                  applicationStatusOptions,
+                                  summaryForm.applicationStatusCode,
+                                )}
+                                onChange={(value) =>
+                                  onSummaryFormChange('applicationStatusCode', value.toUpperCase())
+                                }
+                              />
+                              <SearchableSelect
+                                id="applicationSummaryJurisdiction"
+                                labelText="Jurisdiction"
+                                value={summaryForm.jurisdictionCode}
+                                placeholder="Select jurisdiction"
+                                options={optionsWithCurrentValue(
+                                  JURISDICTION_OPTIONS,
+                                  summaryForm.jurisdictionCode,
+                                ).map((option) => ({
+                                  value: option.value,
+                                  label: optionLabel(option),
+                                }))}
+                                invalid={Boolean(visibleSummaryFieldError('jurisdictionCode'))}
+                                invalidText={visibleSummaryFieldError('jurisdictionCode')}
+                                onChange={(value) =>
+                                  onSummaryFormChange('jurisdictionCode', value.toUpperCase())
+                                }
+                              />
+                              <SearchableSelect
+                                id="applicationSummarySchedule"
+                                labelText="Listing date"
+                                value={summaryForm.exportScheduleId}
+                                disabled={
+                                  isLoadingSummaryOptions && summaryScheduleOptions.length === 0
+                                }
+                                placeholder="Search listing date"
+                                options={optionsWithCurrentValue(
+                                  summaryScheduleOptions,
+                                  summaryForm.exportScheduleId,
+                                )}
+                                onChange={(value) => onSummaryFormChange('exportScheduleId', value)}
+                              />
+                              <SearchableSelect
+                                id="applicationSummaryOicIndicator"
+                                labelText="Order in Council indicator"
+                                value={summaryForm.oicIndicator}
+                                placeholder="Select Order in Council indicator"
+                                options={optionsWithCurrentValue(
+                                  OIC_INDICATOR_OPTIONS,
+                                  summaryForm.oicIndicator,
+                                ).map((option) => ({
+                                  value: option.value,
+                                  label: optionLabel(option),
+                                }))}
+                                invalid={Boolean(visibleSummaryFieldError('oicIndicator'))}
+                                invalidText={visibleSummaryFieldError('oicIndicator')}
+                                onChange={(value) =>
+                                  onSummaryFormChange('oicIndicator', value.toUpperCase())
+                                }
+                              />
+                            </div>
+                            <div className="legacy-search-grid">
+                              <TextArea
+                                id="applicationSummaryProductLocation"
+                                labelText="Location of logs"
+                                value={summaryForm.productLocation}
+                                invalid={Boolean(visibleSummaryFieldError('productLocation'))}
+                                invalidText={visibleSummaryFieldError('productLocation')}
+                                onChange={(event) =>
+                                  onSummaryFormChange('productLocation', event.target.value)
+                                }
+                              />
+                            </div>
+                            <div className="legacy-search-grid">
+                              <SearchableSelect
+                                id="applicationSummarySpeciesCandidate"
+                                labelText="Application species"
+                                value={applicationSpeciesCandidate}
+                                disabled={applicationSpeciesSelectOptions.length === 0}
+                                placeholder={speciesPlaceholder}
+                                options={applicationSpeciesSelectOptions}
+                                onChange={setApplicationSpeciesCandidate}
+                              />
+                              <SearchableSelect
+                                id="applicationSummaryEndUse"
+                                labelText="Application end use"
+                                value={summaryForm.endUseCode}
+                                disabled={
+                                  (summaryForm.speciesCodes ?? []).length === 0 ||
+                                  applicationEndUseSelectOptions.length === 0
+                                }
+                                placeholder={endUsePlaceholder}
+                                options={applicationEndUseSelectOptions}
+                                onChange={(value) => onSummaryFormChange('endUseCode', value)}
+                              />
+                            </div>
+                            <div className="legacy-search-actions">
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={
+                                  !applicationSpeciesCandidate ||
+                                  !availableApplicationSpeciesOptions.some(
+                                    (option) => option.code === applicationSpeciesCandidate,
+                                  )
+                                }
+                                onClick={onAddApplicationSpecies}
+                              >
+                                Add Application species
+                              </Button>
+                              {(summaryForm.speciesCodes ?? []).map((speciesCode) => (
+                                <span key={speciesCode} className="legacy-search-actions">
+                                  <Tag type="blue">{speciesCode}</Tag>
+                                  <Button
+                                    kind="ghost"
+                                    size="sm"
+                                    onClick={() => onRemoveApplicationSpecies(speciesCode)}
+                                  >
+                                    Remove
+                                  </Button>
+                                </span>
+                              ))}
+                            </div>
+                            <div className="legacy-search-actions">
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={isSavingSummary}
+                                onClick={() => void onSaveSummary()}
+                              >
+                                {isSavingSummary ? 'Saving...' : 'Save Summary'}
+                              </Button>
+                              <Button
+                                kind="secondary"
+                                size="sm"
+                                disabled={isSavingSummary}
+                                onClick={() => {
+                                  setSummaryForm(summaryBaselineForm ?? toSummaryFormState(detail))
+                                  setShowSummaryValidationErrors(false)
+                                }}
+                              >
+                                Reset Summary
+                              </Button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <dl className="detail-field-grid">
+                              {[
+                                ['Exemption reason', displayValue(detail.exemptionReasonCode)],
+                                ['Application date', displayValue(detail.applicationDate)],
+                                ['Received date', displayValue(detail.receivedDate)],
+                                ['Term (days)', displayValue(detail.termDays)],
+                                ['Application volume (m³)', displayValue(detail.applicationVolume)],
+                                ['Average log volume', displayValue(detail.averageLogVolume)],
+                              ].map(([label, value]) => (
+                                <div key={label} className="detail-field-item">
+                                  <dt className="detail-field-label">{label}</dt>
+                                  <dd className="detail-field-value">{value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </>
+                        )}
+                      </Tile>
+                    </Column>
 
-          <Column sm={4} md={8} lg={16}>
-            <Tile
-              id="application-packages"
-              className="application-detail-section application-detail-packages"
-            >
-              <h2 className="detail-tile-title">Packages</h2>
-              <TextInput
-                id="applicationDetailPackageFilter"
-                labelText="Filter packages"
-                value={packageFilter}
-                onChange={(event) => updateFilterParam('packageFilter', event.target.value)}
-                placeholder="Filter by package, pieces, or volume"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Package number</TableHeader>
-                    <TableHeader>Volume (m3)</TableHeader>
-                    <TableHeader>Pieces</TableHeader>
-                    <TableHeader>Action</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredPackages.map((item) => (
-                    <TableRow key={item.packageNumber}>
-                      <TableCell>{item.packageNumber}</TableCell>
-                      <TableCell>{item.volume.toLocaleString()}</TableCell>
-                      <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
-                      <TableCell>
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          aria-label={`Edit package ${item.packageNumber} items`}
-                          onClick={() => focusPackageInItems(item.packageNumber)}
-                        >
-                          Edit Items
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredPackages.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4}>No package rows matched the current filter.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
-          <Column sm={4} md={8} lg={16}>
-            <ProvincialApplicationItemsPanel
-              detail={detail}
-              canManageItems={canManageItems}
-              productTypeOptions={packageProductTypeOptions}
-              growthTypeOptions={packageGrowthTypeOptions}
-              onDetailChanged={loadApplicationDetail}
-              focusedPackageNumber={focusedPackageNumber}
-              focusedPackageRequestId={focusedPackageRequestId}
-            />
-          </Column>
-          <Column sm={4} md={8} lg={8}>
-            <Tile id="application-permits" className="application-detail-section">
-              <h2 className="detail-tile-title">Permits</h2>
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Permit</TableHeader>
-                    <TableHeader>Status</TableHeader>
-                    <TableHeader>Open</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {permitRows.map((item) => (
-                    <TableRow key={item.permitNumber}>
-                      <TableCell>{item.permitNumber}</TableCell>
-                      <TableCell>{item.permitStatusDescription || '-'}</TableCell>
-                      <TableCell>
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          disabled={!canPerform('/permitDetails')}
-                          onClick={() =>
-                            navigate(withCurrentSearch(`/provincial/permit/${item.permitNumber}`))
-                          }
-                        >
-                          Open
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {permitRows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={3}>No permits found for this application.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
-          <Column sm={4} md={8} lg={8}>
-            <Tile id="application-offers" className="application-detail-section">
-              <h2 className="detail-tile-title">Offers</h2>
-              <TextInput
-                id="applicationDetailOfferFilter"
-                labelText="Filter offers"
-                value={offerFilter}
-                onChange={(event) => updateFilterParam('offerFilter', event.target.value)}
-                placeholder="Filter by company, offer number, received date, validity, or withdrawal date"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Offer</TableHeader>
-                    <TableHeader>Company</TableHeader>
-                    <TableHeader>Date Received</TableHeader>
-                    <TableHeader>Valid</TableHeader>
-                    <TableHeader>Withdrawal Date</TableHeader>
-                    <TableHeader>Open</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredOffers.map((item) => (
-                    <TableRow key={item.offerNumber}>
-                      <TableCell>{item.offerNumber}</TableCell>
-                      <TableCell>{item.companyName ?? '-'}</TableCell>
-                      <TableCell>{item.receivedDate ?? '-'}</TableCell>
-                      <TableCell>{item.validOffer ? 'Yes' : 'No'}</TableCell>
-                      <TableCell>{item.withdrawalDate ?? '-'}</TableCell>
-                      <TableCell>
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          disabled={!canPerform('/offersSearch') || !canPerform('/offerDetails')}
-                          onClick={() =>
-                            navigate(withCurrentSearch(`/provincial/offers/${item.offerNumber}`))
-                          }
-                        >
-                          Open
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredOffers.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6}>No offer rows matched the current filter.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
-          <Column sm={4} md={8} lg={16}>
-            <Tile
-              id="application-documents"
-              className="application-detail-section application-detail-documents"
-            >
-              <h2 className="detail-tile-title">
-                Documents{' '}
-                <ApiSourceTag context="Application documents are returned from the document service." />
-              </h2>
-              {!!showDocumentUploadUnavailableMessage && canUploadApplicationDocuments && (
-                <AppNotification
-                  kind="info"
-                  title="Upload unavailable"
-                  subtitle={documentUploadUnavailableMessage}
-                  lowContrast
-                  onCloseButtonClick={() =>
-                    setDismissedDocumentUploadUnavailableMessageKey(
-                      documentUploadUnavailableMessageKey,
-                    )
-                  }
-                />
-              )}
-              {canAddApplicationDocuments && (
-                <DetailDocumentUploadPanel
-                  workflowType="application"
-                  targetNumber={String(detail.applicationNumber ?? '')}
-                  inputId="applicationDocumentUpload"
-                  disabled={!detail.applicationNumber}
-                  onUploadComplete={refreshApplicationDocuments}
-                />
-              )}
-              <TextInput
-                id="applicationDetailDocumentsFilter"
-                labelText="Filter document rows"
-                value={documentsFilter}
-                onChange={(event) => updateFilterParam('documentsFilter', event.target.value)}
-                placeholder="Filter by file name, description, type, or id"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>File Name</TableHeader>
-                    <TableHeader>Description</TableHeader>
-                    <TableHeader>Type</TableHeader>
-                    <TableHeader>Actions</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredDocumentRows.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.name || '-'}</TableCell>
-                      <TableCell>{row.description || '-'}</TableCell>
-                      <TableCell>{row.type || '-'}</TableCell>
-                      <TableCell>
-                        <div className="legacy-search-actions">
-                          <Button kind="ghost" size="sm" onClick={() => void onOpenDocument(row)}>
-                            Open
-                          </Button>
-                          <Button
-                            kind="danger--ghost"
-                            size="sm"
-                            disabled={!canDeleteDocuments || isRemovingDocumentId === row.id}
-                            onClick={() => void onRemoveDocument(row)}
-                          >
-                            {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}
-                          </Button>
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile className="application-detail-section application-detail-status-strip">
+                        <h2 className="detail-tile-title">Access & workflow flags</h2>
+                        <div className="application-detail-flag-row">
+                          <Tag type={detail.canCreateOffers ? 'green' : 'gray'}>
+                            Create offers: {detail.canCreateOffers ? 'Yes' : 'No'}
+                          </Tag>
+                          <Tag type={detail.industryUser ? 'green' : 'gray'}>
+                            Industry User: {detail.industryUser ? 'Yes' : 'No'}
+                          </Tag>
+                          <Tag type={detail.readOnly ? 'red' : 'gray'}>
+                            Read Only: {detail.readOnly ? 'Yes' : 'No'}
+                          </Tag>
+                          <Tag type={detail.exemptionApprover ? 'green' : 'gray'}>
+                            Exemption Approver: {detail.exemptionApprover ? 'Yes' : 'No'}
+                          </Tag>
+                          <Tag type={detail.locked ? 'red' : 'green'}>
+                            Locked: {detail.locked ? 'Yes' : 'No'}
+                          </Tag>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredDocumentRows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4}>
-                        No document rows matched the current filter.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
-          </Column>
+                        {detail.locked && detail.lockMessage && (
+                          <p className="application-detail-lock-message">{detail.lockMessage}</p>
+                        )}
+                      </Tile>
+                    </Column>
 
-          <Column sm={4} md={8} lg={16}>
-            <Tile
-              id="application-remarks"
-              className="application-detail-section application-detail-remarks"
-            >
-              <h2 className="detail-tile-title">Remarks</h2>
-              {canManageRemarks && (
-                <div className="legacy-search-actions">
-                  <TextArea
-                    id="applicationRemarkBody"
-                    labelText={editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark'}
-                    value={remarkBody}
-                    invalid={!!remarkValidationMessage}
-                    invalidText={remarkValidationMessage}
-                    onChange={(event) => {
-                      setRemarkBody(event.target.value)
-                      if (remarkValidationMessage) {
-                        setRemarkValidationMessage('')
-                      }
-                    }}
-                  />
-                  <Button
-                    kind="primary"
-                    size="sm"
-                    disabled={isSavingRemark}
-                    onClick={() => void onSaveRemark()}
-                  >
-                    {isSavingRemark
-                      ? 'Saving...'
-                      : editingRemarkId
-                        ? 'Update Remark'
-                        : 'Save Remark'}
-                  </Button>
-                  {editingRemarkId && (
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      disabled={isSavingRemark}
-                      onClick={() => {
-                        setEditingRemarkId(null)
-                        setRemarkBody('')
-                        setRemarkValidationMessage('')
-                      }}
-                    >
-                      Cancel Edit
-                    </Button>
-                  )}
-                </div>
-              )}
-              <TextInput
-                id="applicationDetailRemarkFilter"
-                labelText="Filter remarks"
-                value={remarkFilter}
-                onChange={(event) => updateFilterParam('remarkFilter', event.target.value)}
-                placeholder="Filter by title or remark text"
-              />
-              <Table useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Date</TableHeader>
-                    <TableHeader>User</TableHeader>
-                    <TableHeader>Title</TableHeader>
-                    <TableHeader>Remark</TableHeader>
-                    {canManageRemarks && <TableHeader>Actions</TableHeader>}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredRemarks.map((item) => (
-                    <TableRow key={`${item.remarkId ?? item.title}-${item.remark}`}>
-                      <TableCell>{displayValue(item.date)}</TableCell>
-                      <TableCell>{displayValue(item.user)}</TableCell>
-                      <TableCell>{item.title}</TableCell>
-                      <TableCell>{item.remark}</TableCell>
-                      {canManageRemarks && (
-                        <TableCell>
-                          <Button
-                            kind="ghost"
-                            size="sm"
-                            disabled={!item.remarkId}
-                            onClick={() => {
-                              setEditingRemarkId(item.remarkId ? String(item.remarkId) : null)
-                              setRemarkBody(item.remark)
-                              setRemarkValidationMessage('')
-                            }}
-                          >
-                            Edit
-                          </Button>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
-                  {filteredRemarks.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={canManageRemarks ? 5 : 4}>
-                        No remarks matched the current filter.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Tile>
+                    <Column sm={4} md={8} lg={16}>
+                      {applicationPermitsContent}
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile
+                        id="application-packages"
+                        className="application-detail-section application-detail-packages"
+                      >
+                        <h2 className="detail-tile-title">Packages</h2>
+                        <TextInput
+                          id="applicationDetailPackageFilter"
+                          labelText="Filter packages"
+                          value={packageFilter}
+                          onChange={(event) =>
+                            updateFilterParam('packageFilter', event.target.value)
+                          }
+                          placeholder="Filter by package, pieces, or volume"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Package number</TableHeader>
+                              <TableHeader>Volume (m3)</TableHeader>
+                              <TableHeader>Pieces</TableHeader>
+                              <TableHeader>Action</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredPackages.map((item) => (
+                              <TableRow key={item.packageNumber}>
+                                <TableCell>{item.packageNumber}</TableCell>
+                                <TableCell>{item.volume.toLocaleString()}</TableCell>
+                                <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
+                                <TableCell>
+                                  <Button
+                                    kind="ghost"
+                                    size="sm"
+                                    aria-label={`Edit package ${item.packageNumber} items`}
+                                    onClick={() => focusPackageInItems(item.packageNumber)}
+                                  >
+                                    Edit Items
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {filteredPackages.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={4}>
+                                  No package rows matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                    <Column sm={4} md={8} lg={16}>
+                      <ProvincialApplicationItemsPanel
+                        detail={detail}
+                        canManageItems={canManageItems}
+                        productTypeOptions={packageProductTypeOptions}
+                        growthTypeOptions={packageGrowthTypeOptions}
+                        onDetailChanged={loadApplicationDetail}
+                        focusedPackageNumber={focusedPackageNumber}
+                        focusedPackageRequestId={focusedPackageRequestId}
+                      />
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile
+                        id="application-documents"
+                        className="application-detail-section application-detail-documents"
+                      >
+                        <h2 className="detail-tile-title">
+                          Documents{' '}
+                          <ApiSourceTag context="Application documents are returned from the document service." />
+                        </h2>
+                        {!!showDocumentUploadUnavailableMessage &&
+                          canUploadApplicationDocuments && (
+                            <AppNotification
+                              kind="info"
+                              title="Upload unavailable"
+                              subtitle={documentUploadUnavailableMessage}
+                              lowContrast
+                              onCloseButtonClick={() =>
+                                setDismissedDocumentUploadUnavailableMessageKey(
+                                  documentUploadUnavailableMessageKey,
+                                )
+                              }
+                            />
+                          )}
+                        {canAddApplicationDocuments && (
+                          <DetailDocumentUploadPanel
+                            workflowType="application"
+                            targetNumber={String(detail.applicationNumber ?? '')}
+                            inputId="applicationDocumentUpload"
+                            disabled={!detail.applicationNumber}
+                            onUploadComplete={refreshApplicationDocuments}
+                          />
+                        )}
+                        <TextInput
+                          id="applicationDetailDocumentsFilter"
+                          labelText="Filter document rows"
+                          value={documentsFilter}
+                          onChange={(event) =>
+                            updateFilterParam('documentsFilter', event.target.value)
+                          }
+                          placeholder="Filter by file name, description, type, or id"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>File Name</TableHeader>
+                              <TableHeader>Description</TableHeader>
+                              <TableHeader>Type</TableHeader>
+                              <TableHeader>Actions</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredDocumentRows.map((row) => (
+                              <TableRow key={row.id}>
+                                <TableCell>{row.name || '-'}</TableCell>
+                                <TableCell>{row.description || '-'}</TableCell>
+                                <TableCell>{row.type || '-'}</TableCell>
+                                <TableCell>
+                                  <div className="legacy-search-actions">
+                                    <Button
+                                      kind="ghost"
+                                      size="sm"
+                                      onClick={() => void onOpenDocument(row)}
+                                    >
+                                      Open
+                                    </Button>
+                                    <Button
+                                      kind="danger--ghost"
+                                      size="sm"
+                                      disabled={
+                                        !canDeleteDocuments || isRemovingDocumentId === row.id
+                                      }
+                                      onClick={() => void onRemoveDocument(row)}
+                                    >
+                                      {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {filteredDocumentRows.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={4}>
+                                  No document rows matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      <Tile
+                        id="application-remarks"
+                        className="application-detail-section application-detail-remarks"
+                      >
+                        <h2 className="detail-tile-title">Remarks</h2>
+                        {canManageRemarks && (
+                          <div className="legacy-search-actions">
+                            <TextArea
+                              id="applicationRemarkBody"
+                              labelText={
+                                editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark'
+                              }
+                              value={remarkBody}
+                              invalid={!!remarkValidationMessage}
+                              invalidText={remarkValidationMessage}
+                              onChange={(event) => {
+                                setRemarkBody(event.target.value)
+                                if (remarkValidationMessage) {
+                                  setRemarkValidationMessage('')
+                                }
+                              }}
+                            />
+                            <Button
+                              kind="primary"
+                              size="sm"
+                              disabled={isSavingRemark}
+                              onClick={() => void onSaveRemark()}
+                            >
+                              {isSavingRemark
+                                ? 'Saving...'
+                                : editingRemarkId
+                                  ? 'Update Remark'
+                                  : 'Save Remark'}
+                            </Button>
+                            {editingRemarkId && (
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                disabled={isSavingRemark}
+                                onClick={() => {
+                                  setEditingRemarkId(null)
+                                  setRemarkBody('')
+                                  setRemarkValidationMessage('')
+                                }}
+                              >
+                                Cancel Edit
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                        <TextInput
+                          id="applicationDetailRemarkFilter"
+                          labelText="Filter remarks"
+                          value={remarkFilter}
+                          onChange={(event) =>
+                            updateFilterParam('remarkFilter', event.target.value)
+                          }
+                          placeholder="Filter by title or remark text"
+                        />
+                        <Table useZebraStyles>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Date</TableHeader>
+                              <TableHeader>User</TableHeader>
+                              <TableHeader>Title</TableHeader>
+                              <TableHeader>Remark</TableHeader>
+                              {canManageRemarks && <TableHeader>Actions</TableHeader>}
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredRemarks.map((item) => (
+                              <TableRow key={`${item.remarkId ?? item.title}-${item.remark}`}>
+                                <TableCell>{displayValue(item.date)}</TableCell>
+                                <TableCell>{displayValue(item.user)}</TableCell>
+                                <TableCell>{item.title}</TableCell>
+                                <TableCell>{item.remark}</TableCell>
+                                {canManageRemarks && (
+                                  <TableCell>
+                                    <Button
+                                      kind="ghost"
+                                      size="sm"
+                                      disabled={!item.remarkId}
+                                      onClick={() => {
+                                        setEditingRemarkId(
+                                          item.remarkId ? String(item.remarkId) : null,
+                                        )
+                                        setRemarkBody(item.remark)
+                                        setRemarkValidationMessage('')
+                                      }}
+                                    >
+                                      Edit
+                                    </Button>
+                                  </TableCell>
+                                )}
+                              </TableRow>
+                            ))}
+                            {filteredRemarks.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={canManageRemarks ? 5 : 4}>
+                                  No remarks matched the current filter.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Tile>
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      {applicationOffersContent}
+                    </Column>
+                  </Grid>
+                </TabPanel>
+                <TabPanel className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    <Column sm={4} md={8} lg={16}>
+                      {applicationReviewContent}
+                    </Column>
+                  </Grid>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
           </Column>
         </>
       )}
