@@ -2,6 +2,7 @@
 [![Merge](https://github.com/bcgov/nr-lexis/actions/workflows/merge.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/merge.yml)
 [![Analysis](https://github.com/bcgov/nr-lexis/actions/workflows/analysis.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/analysis.yml)
 [![Scheduled](https://github.com/bcgov/nr-lexis/actions/workflows/scheduled.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/scheduled.yml)
+[![Regression](https://github.com/bcgov/nr-lexis/actions/workflows/regression.yml/badge.svg)](https://github.com/bcgov/nr-lexis/actions/workflows/regression.yml)
 
 # LEXIS - Log Exemption Information System
 
@@ -11,44 +12,66 @@ Full-stack LEXIS application for log export workflows.
 |-----------|------------|
 | Frontend | React 19, TypeScript, Carbon Design System |
 | Backend | Spring Boot 3.5, Java 21 |
-| Database | Oracle |
-| Auth | AWS Cognito (FAM roles) |
-| Reports | JasperReports library (embedded) |
+| Database | Oracle (shared, BC Gov-managed) |
+| Auth | AWS Cognito (FAM) |
+| Reports | JasperReports library |
 
 ## Local Development
 
-Primary workflow is direct local run (backend + frontend in separate terminals).
+Two supported ways to run LEXIS locally. Pick whichever fits your workflow.
 
-### Prerequisites
+| | Option A - direct on host | Option B - Docker Compose |
+|---|---|---|
+| **Backend hot reload** | Manual restart | Manual restart |
+| **Frontend hot reload (Vite HMR)** | Yes | Yes |
+| **First-time setup cost** | Install Java 21 + Node 22 on host | Just Docker Desktop |
+| **Best for** | Day-to-day backend/frontend work | Quick smoke tests, frontend-only work, and container parity |
 
-1. BC Gov VPN connected (required for Oracle connectivity).
-2. Java 21 and Maven 3.9+.
-3. Node 22+.
-4. Docker Desktop (optional).
+Both options share the same prerequisites and property files below. Reports use the checked-in JRXML templates in the Spring Boot backend.
 
-### Local configuration files
+### Shared prerequisites
 
-These files are gitignored and stay local:
+1. **Network access to the BC Gov Oracle environment.** Compose cannot route that for you.
+2. **Maven 3.9+ and Java 21** (Option A only). The repo has no Maven wrapper.
+3. **Node 22+** (Option A only).
+4. **Docker Desktop** (Option B only).
 
-1. `backend/src/main/resources/application-local.yml`
-2. `backend/src/main/resources/cert/jssecacerts`
-3. `frontend/.env` (copy from `frontend/.env.example`)
+### Property files you create once
 
-### Run backend
+These files are gitignored and stay local.
+
+#### `backend/src/main/resources/application-local.yml`
+
+Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, IDIR base URL, and `TRUSTSTORE_PATH`. Obtain these values through approved team channels and keep them out of git.
+
+For Option B, Compose overrides `TRUSTSTORE_PATH` inside Docker to `/app/src/main/resources/cert/jssecacerts`; no local edit is needed for the container path.
+
+#### `backend/src/main/resources/cert/jssecacerts`
+
+Java keystore containing the trusted CA chain for the Oracle TLS connection. Obtain it through approved team channels and keep it out of git.
+
+#### `frontend/.env`
+
+Copy `frontend/.env.example` and fill in the Cognito client values. Vite inlines these values into the app bundle, so restart `npm run dev` after changing `.env`.
+
+### Option A - direct on host
+
+Run the backend and frontend in separate terminal tabs.
+
+**Backend:**
 
 ```bash
 cd backend
 mvn -DskipTests spring-boot:run -Dspring-boot.run.profiles=local,oracle
 ```
 
-Health checks:
+Port check:
 
 ```bash
-curl http://localhost:8080/actuator/health
-curl http://localhost:8080/actuator/prometheus
+nc -z localhost 8080
 ```
 
-### Run frontend
+**Frontend:**
 
 ```bash
 cd frontend
@@ -58,25 +81,65 @@ npm run dev
 
 Frontend: `http://localhost:3000`
 
-### Optional Docker Compose flow
+### Option B - Docker Compose
 
 ```bash
-docker compose up
-docker compose --profile caddy up caddy
+docker compose up           # foreground; Ctrl-C to stop
+docker compose up -d        # detached
+docker compose down         # stop containers, keep cache
+docker compose down -v      # stop + drop the Maven cache volume
+docker compose logs -f backend
 ```
 
-This runs Spring Boot + Vite locally with the same Oracle-backed assumptions (VPN + local Oracle config files).
+Services:
 
-## CI/CD
+- `backend` -> `localhost:8080` (Spring Boot via `mvn spring-boot:run` inside `maven:3.9.9-amazoncorretto-21-alpine`).
+- `frontend` -> `localhost:3000` (Vite via `npm run dev` inside `node:22-alpine`).
 
-GitHub Actions handles PR checks, image builds, and OpenShift deployments. Namespace and credential values are environment-driven through repository/environment secrets and variables.
+First `up` downloads Maven dependencies into the `maven-cache` named volume. Subsequent starts are faster.
+
+An optional production-like frontend variant is on the `caddy` profile:
+
+```bash
+docker compose --profile caddy up caddy backend
+```
+
+That builds the real `frontend/Dockerfile` and serves it at `localhost:3005`.
+
+#### Compose-specific gotchas
+
+- If you Ctrl-C mid dependency download, Maven can leave partial files in `maven-cache`. Fix with `docker compose down -v && docker compose up`.
+- The backend is not hot-reloading. Java changes need `docker compose restart backend`.
+- HMR uses WebSocket from your browser to `localhost:3000`. If you remap the published port, also override `VITE_HMR_PORT` in `docker-compose.yml`.
+
+### Verifying it works
+
+Regardless of option:
+
+- `nc -z localhost 8080` succeeds once the backend port is listening.
+- Open `http://localhost:3000` and complete the Cognito login round trip.
+
+If the backend starts but authenticated API calls fail, check network access, `application-local.yml` credentials, Cognito config, and the truststore path.
+
+## CI regression
+
+The `Regression` GitHub Actions workflow runs weekly and manually against TEST. It currently reads
+TEST IDIR credentials from GitHub `test` environment secrets and passes the masked values into the
+`npm run e2e:regression` command. Business BCeID browser regression is intentionally not scheduled
+because repeated automated login attempts can lock the TEST account. See
+[frontend/e2e/README.md](frontend/e2e/README.md) for the required GitHub environment secrets.
+
+Production RTM-only rollout is controlled by the optional GitHub environment secret
+`lexis_prod_rtm_only`. Set it to `true` for PROD to pass `LEXIS_PROD_RTM_ONLY` to the backend and
+`VITE_LEXIS_PROD_RTM_ONLY` to the frontend. In that mode, the frontend only shows the Average
+Monthly Values module/sidebar item for LEXIS admins, and the backend denies non-session/non-RTM API
+routes.
+
+The new admin user access lookup link can be pointed at a specific FAM manage app by setting the
+optional GitHub environment variable `VITE_FAM_MANAGE_URL`; if omitted, the frontend resolves a
+default URL from `VITE_ZONE`.
 
 ## Component docs
 
-- [backend/README.md](backend/README.md)
-- [frontend/README.md](frontend/README.md)
-
-## Notes
-
-- Source-of-truth legacy behavior reference: `nr-lexis-main`.
-- Repository structure and operational conventions reference: `nr-rept`.
+- [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.
+- [frontend/README.md](frontend/README.md) - Vite scripts, env-var table, project structure, testing libraries.

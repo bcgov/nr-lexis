@@ -1,16 +1,27 @@
-import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
-import { AuthContext } from '@/context/auth/AuthContext'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth'
 import {
-  clearDevRoles,
-  normalizeRoles,
-  readDevRoles,
-  writeDevRoles,
-} from '@/context/auth/dev-role-storage'
-import type { AuthContextType } from '@/context/auth/types'
+  businessBceidProviderName,
+  idirProviderName,
+  isCognitoConfigured,
+} from '@/config/fam/config'
+import { isProdRtmOnlyMode, PROD_RTM_ONLY_ROUTE } from '@/config/features'
+import { AuthContext } from '@/context/auth/AuthContext'
+import { hasRole } from '@/context/auth/role-utils'
+import {
+  redirectToLoginShell,
+  SESSION_EXPIRED_EVENT,
+  SESSION_IDLE_TIMEOUT_MS,
+  type SessionExpiredEventDetail,
+  type SessionExpiredReason,
+} from '@/context/auth/session-expiry'
+import type { AuthContextType, LoginProvider } from '@/context/auth/types'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
-import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
+import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
+import apiService from '@/service/api-service'
+import { fetchSessionCapabilities } from '@/service/session-service'
 
-type Props = {
+export type AuthProviderProps = {
   children: ReactNode
 }
 
@@ -21,44 +32,68 @@ const DEFAULT_CAPABILITIES: LexisSessionCapabilities = {
   welcomeTarget: null,
   legacyPath: null,
   grantedActions: [],
+  orgUnitNo: null,
 }
 
 const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
-  summary: '/provincial/summary',
   applicationsreview: '/provincial/review',
   applicationsearch: '/provincial/application',
+  createapplication: '/provincial/application/upload',
   exemptionsearch: '/provincial/exemption',
   offerssearch: '/provincial/offers',
   permitsearch: '/provincial/permit',
   federalapplicationsearch: '/federal',
-  indianreservepermitsearch: '/indian-reserve',
   lexisagentadmin: '/admin',
 }
 
 const ACTION_PRIORITY: string[] = [
-  'summary',
   'applicationsReview',
   'applicationSearch',
+  'uploadApplicationSubmission',
   'exemptionSearch',
   'offersSearch',
   'permitSearch',
   'federalApplicationSearch',
-  'indianReservePermitSearch',
   'lexisAgentAdmin',
 ]
+
+const REPORT_ACTION_ROUTE_MAP: Record<string, string> = {
+  applicationreport: '/reports/applicationReport',
+  mofrlisting: '/reports/biweeklyListing',
+  offerreport: '/reports/offerReport',
+  teacreport: '/reports/teacReport',
+  exemptionreport: '/reports/exemptionReport',
+  permitledgerreport: '/reports/permitLedgerReport',
+  transportreport: '/reports/transportReport',
+  speciesgradereport: '/reports/speciesGradeReport',
+  feereport: '/reports/feeReport',
+  tenurereport: '/reports/tenureReport',
+}
+
+const REPORT_ACTIONS = new Set<string>([
+  'applicationreport',
+  'offerreport',
+  'teacreport',
+  'exemptionreport',
+  'permitledgerreport',
+  'transportreport',
+  'speciesgradereport',
+  'feereport',
+  'tenurereport',
+  'mofrlisting',
+])
 
 const LEGACY_TO_CANONICAL_ROLE_MAP: Record<string, string> = {
   LEXIS_ADMIN: 'ADMIN',
   LEXIS_READ_ONLY: 'READ_ONLY',
   LEXIS_APPLICATION_APPROVER: 'APPLICATION_APPROVER',
   LEXIS_EXEMPTION_APPROVER: 'EXEMPTION_APPROVER',
-  LEXIS_INDUSTRY: 'PROVINCIAL_SUBMITTER',
-  LEXIS_LOG_EXPORT_INDUSTRY: 'FEDERAL_SUBMITTER',
-  LOG_EXPORT_INDUSTRY: 'FEDERAL_SUBMITTER',
+  LEXIS_PROVINCIAL_SUBMITTER: 'PROVINCIAL_SUBMITTER',
+  LEXIS_FEDERAL_SUBMITTER: 'FEDERAL_SUBMITTER',
+  LEXIS_DELEGATED_ADMIN: 'DELEGATED_ADMIN',
 }
 
-const LEGACY_PROVINCIAL_CONCRETE_PREFIX = 'LEXIS_INDUSTRY_'
-const LEGACY_FEDERAL_CONCRETE_PREFIXES = ['LEXIS_LOG_EXPORT_INDUSTRY_', 'LOG_EXPORT_INDUSTRY_']
+const CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX = 'LEXIS_PROVINCIAL_SUBMITTER_'
 const CANONICAL_PROVINCIAL_CONCRETE_PREFIX = 'PROVINCIAL_SUBMITTER_'
 const CANONICAL_FEDERAL_CONCRETE_ROLE = 'FEDERAL_SUBMITTER'
 const ROLE_ADMIN = 'ADMIN'
@@ -67,16 +102,33 @@ const ROLE_APPLICATION_APPROVER = 'APPLICATION_APPROVER'
 const ROLE_EXEMPTION_APPROVER = 'EXEMPTION_APPROVER'
 const ROLE_PROVINCIAL_SUBMITTER = 'PROVINCIAL_SUBMITTER'
 const ROLE_FEDERAL_SUBMITTER = 'FEDERAL_SUBMITTER'
+const PROD_RTM_ONLY_ACTION = '/lexisAgentAdmin'
+
+const INDUSTRY_ROLE_NAMES = new Set<string>([ROLE_PROVINCIAL_SUBMITTER, ROLE_FEDERAL_SUBMITTER])
+const SESSION_ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'scroll', 'focus']
+
+const normalizeAction = (action: string): string => {
+  return action.trim().toLowerCase().replace(/\.do$/i, '').replace(/^\//, '')
+}
+
+const hasOauthCallbackParams = (): boolean => {
+  const searchParams = new URLSearchParams(window.location.search)
+  return searchParams.has('code') || searchParams.has('state')
+}
+
+const clearOauthCallbackParams = (): void => {
+  if (!hasOauthCallbackParams()) {
+    return
+  }
+  const cleanUrl = `${window.location.origin}${window.location.pathname}`
+  window.history.replaceState({}, document.title, cleanUrl)
+}
 
 const canonicalizeRole = (role: string): string => {
   const normalizedRole = role.trim().toUpperCase()
 
-  if (normalizedRole.startsWith(LEGACY_PROVINCIAL_CONCRETE_PREFIX)) {
-    return `${CANONICAL_PROVINCIAL_CONCRETE_PREFIX}${normalizedRole.slice(LEGACY_PROVINCIAL_CONCRETE_PREFIX.length)}`
-  }
-
-  if (LEGACY_FEDERAL_CONCRETE_PREFIXES.some((prefix) => normalizedRole.startsWith(prefix))) {
-    return CANONICAL_FEDERAL_CONCRETE_ROLE
+  if (normalizedRole.startsWith(CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX)) {
+    return `${CANONICAL_PROVINCIAL_CONCRETE_PREFIX}${normalizedRole.slice(CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX.length)}`
   }
 
   if (normalizedRole.startsWith('FEDERAL_SUBMITTER_')) {
@@ -87,192 +139,35 @@ const canonicalizeRole = (role: string): string => {
 }
 
 const canonicalizeRoles = (roles: string[]): string[] => {
-  return normalizeRoles(roles.map(canonicalizeRole))
-}
-
-const BASE_SEARCH_ACTIONS: string[] = [
-  '/summary',
-  '/applicationSearch',
-  '/exemptionSearch',
-  '/offersSearch',
-  '/permitSearch',
-  '/federalApplicationSearch',
-  '/indianReservePermitSearch',
-]
-
-const BASE_DETAIL_ACTIONS: string[] = [
-  '/applicationDetails',
-  '/exemptionDetails',
-  '/offerDetails',
-  '/permitDetails',
-  '/federalApplicationDetails',
-  '/indianReservePermitDetails',
-]
-
-const BASE_REPORT_ACTIONS: string[] = [
-  '/applicationReport',
-  '/offerReport',
-  '/teacReport',
-  '/exemptionReport',
-  '/permitLedgerReport',
-  '/transportReport',
-  '/speciesGradeReport',
-  '/feeReport',
-  '/tenureReport',
-  'mofrListing',
-]
-
-const BASE_WORKFLOW_ACTIONS: string[] = [
-  '/applicationsReview',
-  'createApplication',
-  '/createExemption',
-  'createOffer',
-  'createPermit',
-  'approveExemption',
-  'viewFederalApplication',
-  'viewOICApplication',
-]
-
-const BASE_ADMIN_ACTIONS: string[] = [
-  '/lexisAgentAdmin',
-  '/fileApplicationUpload',
-  '/fileExemptionUpload',
-  '/filePermitUpload',
-  '/fileInvoiceUpload',
-  '/lexisPolicyAdmin',
-  '/lexisFILAdmin',
-]
-
-const DEV_READ_ONLY_ACTIONS: string[] = [
-  '/applicationSearch',
-  '/applicationDetails',
-  '/federalApplicationSearch',
-  '/federalApplicationDetails',
-  '/permitSearch',
-  '/permitDetails',
-  '/indianReservePermitSearch',
-  '/indianReservePermitDetails',
-]
-
-const DEV_APPLICATION_APPROVER_ACTIONS: string[] = [...DEV_READ_ONLY_ACTIONS, '/applicationsReview']
-const DEV_EXEMPTION_APPROVER_ACTIONS: string[] = [
-  ...DEV_READ_ONLY_ACTIONS,
-  '/exemptionSearch',
-  '/exemptionDetails',
-  '/applicationsReview',
-  'approveExemption',
-]
-
-const DEV_PROVINCIAL_SUBMITTER_ACTIONS: string[] = [
-  '/summary',
-  '/exemptionSearch',
-  '/applicationSearch',
-  '/applicationDetails',
-  '/offersSearch',
-  '/offerDetails',
-]
-
-const DEV_FEDERAL_SUBMITTER_ACTIONS: string[] = [
-  ...DEV_PROVINCIAL_SUBMITTER_ACTIONS,
-  '/federalApplicationSearch',
-  '/federalApplicationDetails',
-  'viewFederalApplication',
-]
-
-const DEV_ADMIN_ACTIONS: string[] = [
-  ...BASE_SEARCH_ACTIONS,
-  ...BASE_DETAIL_ACTIONS,
-  ...BASE_REPORT_ACTIONS,
-  ...BASE_WORKFLOW_ACTIONS,
-  ...BASE_ADMIN_ACTIONS,
-]
-
-const DEV_ROLE_ACTIONS: Record<string, string[]> = {
-  [ROLE_ADMIN]: DEV_ADMIN_ACTIONS,
-  [ROLE_READ_ONLY]: DEV_READ_ONLY_ACTIONS,
-  [ROLE_APPLICATION_APPROVER]: DEV_APPLICATION_APPROVER_ACTIONS,
-  [ROLE_EXEMPTION_APPROVER]: DEV_EXEMPTION_APPROVER_ACTIONS,
-  [ROLE_PROVINCIAL_SUBMITTER]: DEV_PROVINCIAL_SUBMITTER_ACTIONS,
-  [ROLE_FEDERAL_SUBMITTER]: DEV_FEDERAL_SUBMITTER_ACTIONS,
-  LEXIS_ADMIN: DEV_ADMIN_ACTIONS,
-  LEXIS_READ_ONLY: DEV_READ_ONLY_ACTIONS,
-  LEXIS_APPLICATION_APPROVER: DEV_APPLICATION_APPROVER_ACTIONS,
-  LEXIS_EXEMPTION_APPROVER: DEV_EXEMPTION_APPROVER_ACTIONS,
-  LEXIS_INDUSTRY: DEV_PROVINCIAL_SUBMITTER_ACTIONS,
-  LEXIS_LOG_EXPORT_INDUSTRY: DEV_FEDERAL_SUBMITTER_ACTIONS,
-  LOG_EXPORT_INDUSTRY: DEV_FEDERAL_SUBMITTER_ACTIONS,
-}
-
-const DEV_CONCRETE_ROLE_PREFIXES: string[] = ['PROVINCIAL_SUBMITTER_', 'LEXIS_INDUSTRY_']
-const INDUSTRY_ROLE_NAMES = new Set<string>([
-  ROLE_PROVINCIAL_SUBMITTER,
-  ROLE_FEDERAL_SUBMITTER,
-  'LEXIS_INDUSTRY',
-  'LEXIS_LOG_EXPORT_INDUSTRY',
-  'LOG_EXPORT_INDUSTRY',
-])
-
-const normalizeAction = (action: string): string => {
-  return action.trim().toLowerCase().replace(/\.do$/i, '').replace(/^\//, '')
+  const deduped = new Set<string>()
+  for (const role of roles) {
+    const normalizedRole = canonicalizeRole(role)
+    if (normalizedRole.length > 0) {
+      deduped.add(normalizedRole)
+    }
+  }
+  return Array.from(deduped)
 }
 
 const isIndustryRole = (role: string): boolean => {
   if (INDUSTRY_ROLE_NAMES.has(role)) {
     return true
   }
-  return DEV_CONCRETE_ROLE_PREFIXES.some((prefix) => role.startsWith(prefix))
+  return role.startsWith('PROVINCIAL_SUBMITTER_')
 }
 
-const resolveFallbackActionsForRole = (role: string): string[] => {
-  if (DEV_ROLE_ACTIONS[role]) {
-    return DEV_ROLE_ACTIONS[role]
-  }
-
-  // Compatibility fallback for concrete provincial submitter roles during authz cutover.
-  if (DEV_CONCRETE_ROLE_PREFIXES.some((prefix) => role.startsWith(prefix))) {
-    return DEV_PROVINCIAL_SUBMITTER_ACTIONS
-  }
-
-  return []
-}
-
-const deriveGrantedActionsFromRoles = (roles: string[]): string[] => {
-  const actionSet = new Set<string>()
-
-  roles
-    .flatMap((role) => resolveFallbackActionsForRole(role))
-    .forEach((action) => actionSet.add(action))
-
-  return Array.from(actionSet)
-}
-
-const normalizeLegacyActionFromPath = (legacyPath: string | null): string | null => {
-  if (!legacyPath) {
+const asNonBlankString = (value: unknown): string | null => {
+  if (typeof value !== 'string' && typeof value !== 'number') {
     return null
   }
 
-  const withoutQuery = legacyPath.trim().split('?')[0]
-  return normalizeAction(withoutQuery)
-}
-
-const shouldUseLegacyPathRouting = (): boolean => {
-  const configured = (import.meta.env.VITE_LEXIS_ENABLE_LEGACY_PATH_ROUTING ?? '')
-    .toString()
-    .trim()
-    .toLowerCase()
-  return configured === '1' || configured === 'true' || configured === 'yes'
-}
-
-const shouldUseRoleActionFallback = (): boolean => {
-  const configured = (import.meta.env.VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK ?? 'false')
-    .toString()
-    .trim()
-    .toLowerCase()
-  return configured !== '0' && configured !== 'false' && configured !== 'no'
+  const normalized = String(value).trim()
+  return normalized.length > 0 ? normalized : null
 }
 
 const sanitizeCapabilities = (
   payload: Partial<LexisSessionCapabilities>,
+  orgUnitNo: string | null = null,
 ): LexisSessionCapabilities => {
   return {
     authenticated: Boolean(payload.authenticated),
@@ -283,45 +178,71 @@ const sanitizeCapabilities = (
     grantedActions: (payload.grantedActions ?? []).filter(
       (action): action is string => typeof action === 'string',
     ),
+    orgUnitNo: orgUnitNo ?? payload.orgUnitNo ?? null,
   }
 }
 
 const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => {
-  if (shouldUseLegacyPathRouting()) {
-    const legacyAction = normalizeLegacyActionFromPath(capabilities.legacyPath)
-    if (legacyAction && LEGACY_ACTION_ROUTE_MAP[legacyAction]) {
-      return LEGACY_ACTION_ROUTE_MAP[legacyAction]
-    }
+  const isReadOnlyUser = hasRole(capabilities.roles, ROLE_READ_ONLY)
+  const isIndustryUser = capabilities.roles.some((role) => isIndustryRole(role))
+  const isProvincialSubmitterUser = capabilities.roles.some((role) => {
+    return role === ROLE_PROVINCIAL_SUBMITTER || role.startsWith('PROVINCIAL_SUBMITTER_')
+  })
+  const isFederalSubmitterUser = capabilities.roles.some((role) => role === ROLE_FEDERAL_SUBMITTER)
+  const isAdminUser = hasRole(capabilities.roles, ROLE_ADMIN)
+  const isApplicationApproverUser = hasRole(capabilities.roles, ROLE_APPLICATION_APPROVER)
+  const isExemptionApproverUser = hasRole(capabilities.roles, ROLE_EXEMPTION_APPROVER)
+  const grantedSet = new Set(capabilities.grantedActions.map(normalizeAction))
+  const hasGrantedAction = (action: string): boolean => grantedSet.has(normalizeAction(action))
+  const reportRoute = Object.entries(REPORT_ACTION_ROUTE_MAP).find(([action]) =>
+    grantedSet.has(action),
+  )?.[1]
+
+  if (isProdRtmOnlyMode()) {
+    return isAdminUser ? PROD_RTM_ONLY_ROUTE : '/unauthorized'
   }
 
-  const roleSet = new Set(capabilities.roles)
-  const isReadOnlyUser = roleSet.has(ROLE_READ_ONLY) || roleSet.has('LEXIS_READ_ONLY')
-  const isIndustryUser = capabilities.roles.some((role) => isIndustryRole(role))
-  const isAdminOnly = roleSet.size === 1 && (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN'))
-  const isExemptionApproverUser =
-    roleSet.has(ROLE_EXEMPTION_APPROVER) || roleSet.has('LEXIS_EXEMPTION_APPROVER')
+  if (isAdminUser) {
+    return '/provincial/review'
+  }
 
   if (isReadOnlyUser) {
     return '/provincial/application'
   }
 
   if (isIndustryUser) {
-    return '/provincial/summary'
-  }
-
-  if (isAdminOnly) {
-    return '/admin'
+    if (isProvincialSubmitterUser && hasGrantedAction('/applicationSearch')) {
+      return '/provincial/application'
+    }
+    if (isProvincialSubmitterUser && hasGrantedAction('createApplication')) {
+      return '/provincial/application/create'
+    }
+    if (
+      hasGrantedAction('/federalApplicationSearch') ||
+      hasGrantedAction('viewFederalApplication')
+    ) {
+      return '/federal'
+    }
+    if (isFederalSubmitterUser && !isProvincialSubmitterUser) {
+      return '/unauthorized'
+    }
+    if (hasGrantedAction('uploadApplicationSubmission')) {
+      return '/provincial/application/upload'
+    }
+    if (reportRoute) {
+      return reportRoute
+    }
+    return '/unauthorized'
   }
 
   if (isExemptionApproverUser) {
     return '/provincial/exemption'
   }
 
-  if (capabilities.roles.length > 0) {
+  if (isApplicationApproverUser) {
     return '/provincial/review'
   }
 
-  const grantedSet = new Set(capabilities.grantedActions.map(normalizeAction))
   for (const action of ACTION_PRIORITY) {
     const normalizedAction = normalizeAction(action)
     if (grantedSet.has(normalizedAction)) {
@@ -329,31 +250,111 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     }
   }
 
-  if (roleSet.has(ROLE_ADMIN) || roleSet.has('LEXIS_ADMIN')) {
-    return '/admin'
+  if (reportRoute) {
+    return reportRoute
   }
 
-  return '/dashboard'
+  return '/unauthorized'
 }
 
-export const AuthProvider: FC<Props> = ({ children }) => {
+export function AuthProvider({ children }: AuthProviderProps) {
   const [capabilities, setCapabilities] = useState<LexisSessionCapabilities>(DEFAULT_CAPABILITIES)
   const [isLoading, setIsLoading] = useState(true)
-  const externalLoginUrl = (import.meta.env.VITE_LOGIN_URL ?? '').trim()
-  const usesExternalLogin = externalLoginUrl.length > 0
-  const devRoles = readDevRoles()
+  const refreshPromiseRef = useRef<Promise<void> | null>(null)
+  const sessionGenerationRef = useRef(0)
+  const sessionExpiryInFlightRef = useRef(false)
+  const authenticatedSessionRef = useRef(false)
+  const usesExternalLogin = isCognitoConfigured
 
-  const refresh = useCallback(async () => {
-    setIsLoading(true)
+  const expireSession = useCallback(async (reason: SessionExpiredReason) => {
+    if (sessionExpiryInFlightRef.current) {
+      return
+    }
+
+    sessionExpiryInFlightRef.current = true
+    sessionGenerationRef.current += 1
+    refreshPromiseRef.current = null
+    const shouldSignOut =
+      isCognitoConfigured && (authenticatedSessionRef.current || reason === 'idle-timeout')
 
     try {
-      const data = await fetchSessionCapabilities()
-      setCapabilities(sanitizeCapabilities(data))
-    } catch (error) {
-      console.warn('Unable to load session capabilities.', error)
+      apiService.clearCachedGetData()
+      clearAllPageDataCache()
+      authenticatedSessionRef.current = false
       setCapabilities(DEFAULT_CAPABILITIES)
-    } finally {
       setIsLoading(false)
+      redirectToLoginShell()
+
+      if (shouldSignOut) {
+        await signOut()
+      }
+    } catch (error) {
+      console.warn(`Unable to complete Cognito sign-out after ${reason}.`, error)
+    } finally {
+      sessionExpiryInFlightRef.current = false
+    }
+  }, [])
+
+  const refresh = useCallback(async () => {
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current
+    }
+
+    setIsLoading(true)
+    const refreshGeneration = sessionGenerationRef.current
+
+    const refreshPromise = (async () => {
+      try {
+        let orgUnitNo: string | null = null
+        if (isCognitoConfigured) {
+          let tokenReady = false
+          const retryCount = hasOauthCallbackParams() ? 6 : 1
+          for (let attempt = 0; attempt < retryCount; attempt += 1) {
+            try {
+              const { tokens } = (await fetchAuthSession({ forceRefresh: false })) ?? {}
+              orgUnitNo = asNonBlankString(tokens?.idToken?.payload?.['custom:org_unit_no'])
+              if (tokens?.accessToken) {
+                tokenReady = true
+                break
+              }
+            } catch {
+              // Continue retry loop below.
+            }
+
+            if (attempt < retryCount - 1) {
+              await new Promise((resolve) => setTimeout(resolve, 300))
+            }
+          }
+
+          if (tokenReady) {
+            clearOauthCallbackParams()
+          }
+        }
+
+        const data = await fetchSessionCapabilities()
+        if (sessionGenerationRef.current === refreshGeneration) {
+          sessionExpiryInFlightRef.current = false
+          setCapabilities(sanitizeCapabilities(data, orgUnitNo))
+        }
+      } catch (error) {
+        if (sessionGenerationRef.current === refreshGeneration) {
+          console.warn('Unable to load session capabilities.', error)
+          setCapabilities(DEFAULT_CAPABILITIES)
+        }
+      } finally {
+        if (sessionGenerationRef.current === refreshGeneration) {
+          setIsLoading(false)
+        }
+      }
+    })()
+
+    refreshPromiseRef.current = refreshPromise
+    try {
+      await refreshPromise
+    } finally {
+      if (refreshPromiseRef.current === refreshPromise) {
+        refreshPromiseRef.current = null
+      }
     }
   }, [])
 
@@ -361,101 +362,123 @@ export const AuthProvider: FC<Props> = ({ children }) => {
     void refresh()
   }, [refresh])
 
-  const login = useCallback(async () => {
-    if (externalLoginUrl) {
-      window.location.assign(externalLoginUrl)
-      return
-    }
-    await refresh()
-  }, [externalLoginUrl, refresh])
+  useEffect(() => {
+    authenticatedSessionRef.current = capabilities.authenticated
+  }, [capabilities.authenticated])
 
-  const setDevRoles = useCallback(
-    async (roles: string[]) => {
-      writeDevRoles(canonicalizeRoles(roles))
+  useEffect(() => {
+    const onSessionExpired = (event: Event) => {
+      const reason =
+        (event as CustomEvent<SessionExpiredEventDetail>).detail?.reason ?? 'api-unauthorized'
+      void expireSession(reason)
+    }
+
+    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired)
+  }, [expireSession])
+
+  useEffect(() => {
+    if (!isCognitoConfigured || !capabilities.authenticated) {
+      return undefined
+    }
+
+    let timeoutId: number | undefined
+    const resetIdleTimer = () => {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId)
+      }
+      timeoutId = window.setTimeout(() => {
+        void expireSession('idle-timeout')
+      }, SESSION_IDLE_TIMEOUT_MS)
+    }
+
+    resetIdleTimer()
+    SESSION_ACTIVITY_EVENTS.forEach((eventName) => {
+      window.addEventListener(eventName, resetIdleTimer, { passive: true })
+    })
+
+    return () => {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId)
+      }
+      SESSION_ACTIVITY_EVENTS.forEach((eventName) => {
+        window.removeEventListener(eventName, resetIdleTimer)
+      })
+    }
+  }, [capabilities.authenticated, expireSession])
+
+  const login = useCallback(
+    async (provider: LoginProvider = 'idir') => {
+      sessionExpiryInFlightRef.current = false
+      if (isCognitoConfigured) {
+        const providerName =
+          provider === 'business-bceid' ? businessBceidProviderName : idirProviderName
+        await signInWithRedirect({ provider: { custom: providerName } })
+        return
+      }
       await refresh()
     },
     [refresh],
   )
 
-  const clearLoginSimulation = useCallback(async () => {
-    clearDevRoles()
-    await refresh()
-  }, [refresh])
-
   const logout = useCallback(async () => {
+    sessionGenerationRef.current += 1
+    refreshPromiseRef.current = null
+
     try {
-      await performLogoff()
-    } catch (error) {
-      console.warn('Unable to complete backend logoff. Clearing local auth state.', error)
-    } finally {
-      clearDevRoles()
+      apiService.clearCachedGetData()
+      clearAllPageDataCache()
+      authenticatedSessionRef.current = false
       setCapabilities(DEFAULT_CAPABILITIES)
       setIsLoading(false)
+      redirectToLoginShell()
+
+      if (isCognitoConfigured) {
+        await signOut()
+      }
+    } catch (error) {
+      console.warn('Unable to complete Cognito sign-out. Clearing local auth state.', error)
     }
   }, [])
 
-  const canonicalDevRoles = useMemo(() => canonicalizeRoles(devRoles), [devRoles])
-
-  const effectiveRoles = useMemo(() => {
-    if (capabilities.roles.length > 0) {
-      return capabilities.roles
-    }
-    return canonicalDevRoles
-  }, [capabilities.roles, canonicalDevRoles])
-
-  const effectiveGrantedActions = useMemo(() => {
-    if (capabilities.grantedActions.length > 0) {
-      return capabilities.grantedActions
-    }
-    const hasDevRoleSimulation = capabilities.roles.length === 0 && canonicalDevRoles.length > 0
-    if (!shouldUseRoleActionFallback() && !hasDevRoleSimulation) {
-      return []
-    }
-    return deriveGrantedActionsFromRoles(effectiveRoles)
-  }, [
-    capabilities.grantedActions,
-    capabilities.roles.length,
-    canonicalDevRoles.length,
-    effectiveRoles,
-  ])
-
-  const effectiveCapabilities = useMemo(
-    () => ({
-      ...capabilities,
-      roles: effectiveRoles,
-      grantedActions: effectiveGrantedActions,
-    }),
-    [capabilities, effectiveGrantedActions, effectiveRoles],
-  )
-
   const grantedActionSet = useMemo(() => {
-    return new Set(effectiveGrantedActions.map(normalizeAction))
-  }, [effectiveGrantedActions])
+    return new Set(capabilities.grantedActions.map(normalizeAction))
+  }, [capabilities.grantedActions])
 
   const canPerform = useCallback(
     (action: string): boolean => {
-      return grantedActionSet.has(normalizeAction(action))
+      if (isProdRtmOnlyMode()) {
+        return (
+          hasRole(capabilities.roles, ROLE_ADMIN) &&
+          normalizeAction(action) === normalizeAction(PROD_RTM_ONLY_ACTION)
+        )
+      }
+      if (hasRole(capabilities.roles, ROLE_ADMIN)) {
+        return true
+      }
+      const normalizedAction = normalizeAction(action)
+      if (hasRole(capabilities.roles, ROLE_READ_ONLY) && REPORT_ACTIONS.has(normalizedAction)) {
+        return false
+      }
+      return grantedActionSet.has(normalizedAction)
     },
-    [grantedActionSet],
+    [capabilities.roles, grantedActionSet],
   )
 
-  const hasAnyRole = effectiveRoles.length > 0
-  const isLoggedIn = capabilities.authenticated || hasAnyRole
-  const defaultRoute = resolveDefaultRoute(effectiveCapabilities)
+  const hasAnyRole = capabilities.roles.length > 0
+  const isLoggedIn = capabilities.authenticated
+  const defaultRoute = resolveDefaultRoute(capabilities)
 
   const contextValue: AuthContextType = {
-    capabilities: effectiveCapabilities,
+    capabilities,
     isLoading,
     isLoggedIn,
     hasAnyRole,
     usesExternalLogin,
     defaultRoute,
-    devRoles: canonicalDevRoles,
     refresh,
     login,
     logout,
-    setDevRoles,
-    clearLoginSimulation,
     canPerform,
   }
 

@@ -6,6 +6,7 @@ import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.util.Locale;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
@@ -25,12 +26,13 @@ public class UploadRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "INSERT_EXEMPT_FILE_ATTACHMENT(?,?,?,?,?,?,?,?,?,?,?)";
   private static final String INSERT_INVOICE_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "INSERT_INVOICE_FILE_ATTACHMENT(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  private static final String FIND_FILE_TYPE_CODE = LEXIS_CODES_PACKAGE + "FIND_FILE_TYPE_CODE(?,?)";
 
   public UploadRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
   }
 
-  public boolean insertApplicationFile(
+  public UploadPersistenceResult insertApplicationFile(
       Long applicationNumber,
       String fileName,
       String description,
@@ -39,7 +41,7 @@ public class UploadRepository extends OracleRepositorySupport {
       String entryUserId,
       byte[] bytes) {
     if (applicationNumber == null || applicationNumber < 1 || bytes == null || bytes.length == 0) {
-      return false;
+      return UploadPersistenceResult.failed(UploadFailureReason.INVALID_REQUEST);
     }
 
     String call = "{ call " + INSERT_APPLICATION_FILE_ATTACHMENT + " }";
@@ -51,7 +53,7 @@ public class UploadRepository extends OracleRepositorySupport {
           cs.setString(3, description);
           cs.setString(4, attachmentTypeCode);
           cs.setString(5, fileTypeCode);
-          cs.setString(6, entryUserId);
+          cs.setString(6, auditUserOrDefault(entryUserId));
           cs.setTimestamp(7, new Timestamp(System.currentTimeMillis()));
           cs.setNull(8, Types.VARCHAR);
           cs.setNull(9, Types.TIMESTAMP);
@@ -62,7 +64,7 @@ public class UploadRepository extends OracleRepositorySupport {
         11);
   }
 
-  public boolean insertPermitFile(
+  public UploadPersistenceResult insertPermitFile(
       Long permitNumber,
       String fileName,
       String description,
@@ -71,7 +73,7 @@ public class UploadRepository extends OracleRepositorySupport {
       String entryUserId,
       byte[] bytes) {
     if (permitNumber == null || permitNumber < 1 || bytes == null || bytes.length == 0) {
-      return false;
+      return UploadPersistenceResult.failed(UploadFailureReason.INVALID_REQUEST);
     }
 
     String call = "{ call " + INSERT_PERMIT_FILE_ATTACHMENT + " }";
@@ -83,7 +85,7 @@ public class UploadRepository extends OracleRepositorySupport {
           cs.setString(3, description);
           cs.setString(4, attachmentTypeCode);
           cs.setString(5, fileTypeCode);
-          cs.setString(6, entryUserId);
+          cs.setString(6, auditUserOrDefault(entryUserId));
           cs.setTimestamp(7, new Timestamp(System.currentTimeMillis()));
           cs.setNull(8, Types.VARCHAR);
           cs.setNull(9, Types.TIMESTAMP);
@@ -94,7 +96,7 @@ public class UploadRepository extends OracleRepositorySupport {
         11);
   }
 
-  public boolean insertExemptionFile(
+  public UploadPersistenceResult insertExemptionFile(
       String exemptionNumber,
       String fileName,
       String description,
@@ -104,7 +106,7 @@ public class UploadRepository extends OracleRepositorySupport {
       byte[] bytes) {
     String normalizedExemptionNumber = trim(exemptionNumber);
     if (normalizedExemptionNumber == null || bytes == null || bytes.length == 0) {
-      return false;
+      return UploadPersistenceResult.failed(UploadFailureReason.INVALID_REQUEST);
     }
 
     String call = "{ call " + INSERT_EXEMPTION_FILE_ATTACHMENT + " }";
@@ -116,7 +118,7 @@ public class UploadRepository extends OracleRepositorySupport {
           cs.setString(3, description);
           cs.setString(4, attachmentTypeCode);
           cs.setString(5, fileTypeCode);
-          cs.setString(6, entryUserId);
+          cs.setString(6, auditUserOrDefault(entryUserId));
           cs.setTimestamp(7, new Timestamp(System.currentTimeMillis()));
           cs.setNull(8, Types.VARCHAR);
           cs.setNull(9, Types.TIMESTAMP);
@@ -127,7 +129,7 @@ public class UploadRepository extends OracleRepositorySupport {
         11);
   }
 
-  public boolean insertInvoiceFile(
+  public UploadPersistenceResult insertInvoiceFile(
       Long permitNumber,
       String salesInvoiceNumber,
       String fileName,
@@ -145,7 +147,7 @@ public class UploadRepository extends OracleRepositorySupport {
         || normalizedSalesInvoiceNumber == null
         || bytes == null
         || bytes.length == 0) {
-      return false;
+      return UploadPersistenceResult.failed(UploadFailureReason.INVALID_REQUEST);
     }
 
     String call = "{ call " + INSERT_INVOICE_FILE_ATTACHMENT + " }";
@@ -161,7 +163,7 @@ public class UploadRepository extends OracleRepositorySupport {
           cs.setBigDecimal(7, defaultDecimal(exportValue));
           cs.setBigDecimal(8, defaultDecimal(currencyConversionRate));
           cs.setBigDecimal(9, defaultDecimal(feeInLieu));
-          cs.setString(10, entryUserId);
+          cs.setString(10, auditUserOrDefault(entryUserId));
           cs.setTimestamp(11, new Timestamp(System.currentTimeMillis()));
           cs.setNull(12, Types.VARCHAR);
           cs.setNull(13, Types.TIMESTAMP);
@@ -172,7 +174,21 @@ public class UploadRepository extends OracleRepositorySupport {
         15);
   }
 
-  private boolean executeUpload(
+  public boolean isFileTypeCodeValid(String fileTypeCode) {
+    String normalized = trim(fileTypeCode);
+    if (normalized == null) {
+      return false;
+    }
+
+    return queryCursorSingle(
+            FIND_FILE_TYPE_CODE,
+            cs -> cs.setString(1, normalized),
+            2,
+            rs -> trim(getString(rs, "CODE")))
+        .isPresent();
+  }
+
+  private UploadPersistenceResult executeUpload(
       String call,
       SqlConsumer<CallableStatement> binder,
       String procedureSignature,
@@ -189,14 +205,49 @@ public class UploadRepository extends OracleRepositorySupport {
                       return Boolean.TRUE;
                     }
                   });
-      return Boolean.TRUE.equals(result);
+      return Boolean.TRUE.equals(result)
+          ? UploadPersistenceResult.success()
+          : UploadPersistenceResult.failed(UploadFailureReason.UNKNOWN);
     } catch (DataAccessException ex) {
       logger.warn("Oracle procedure execution failed [{}]: {}", procedureSignature, ex.getMessage());
-      return false;
+      return UploadPersistenceResult.failed(resolveUploadFailureReason(ex));
     }
+  }
+
+  private UploadFailureReason resolveUploadFailureReason(Throwable throwable) {
+    String rootMessage = rootCauseMessage(throwable).toLowerCase(Locale.ROOT);
+    if (rootMessage.contains("ora-02291") || rootMessage.contains("parent key not found")) {
+      return UploadFailureReason.PARENT_NOT_FOUND;
+    }
+    return UploadFailureReason.UNKNOWN;
+  }
+
+  private String rootCauseMessage(Throwable throwable) {
+    Throwable root = throwable;
+    while (root.getCause() != null && root.getCause() != root) {
+      root = root.getCause();
+    }
+    String message = root.getMessage();
+    return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
   }
 
   private BigDecimal defaultDecimal(BigDecimal value) {
     return value == null ? BigDecimal.ZERO : value;
+  }
+
+  public enum UploadFailureReason {
+    INVALID_REQUEST,
+    PARENT_NOT_FOUND,
+    UNKNOWN
+  }
+
+  public record UploadPersistenceResult(boolean persisted, UploadFailureReason failureReason) {
+    public static UploadPersistenceResult success() {
+      return new UploadPersistenceResult(true, null);
+    }
+
+    public static UploadPersistenceResult failed(UploadFailureReason failureReason) {
+      return new UploadPersistenceResult(false, failureReason);
+    }
   }
 }

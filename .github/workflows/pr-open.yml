@@ -2,6 +2,7 @@ name: PR
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
 
 concurrency:
   group: ${{ github.event.number }}
@@ -41,9 +42,55 @@ jobs:
           tag_fallback: latest
           triggers: ('${{ matrix.package }}/', '.github/workflows/')
 
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Java 21 (Temurin) + Maven cache
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Maven verify
+        working-directory: backend
+        run: mvn -B -DskipITs verify
+
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend checks
+        working-directory: frontend
+        run: |
+          npm run lint
+          npm run format:check
+          npm run test:cov
+
   deploys:
     name: Deploys (${{ github.event.number }})
-    needs: [builds, vars]
+    needs: [builds, vars, backend-tests, frontend-tests]
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-deploy.yml
@@ -55,6 +102,7 @@ jobs:
       database_host: ${{ secrets.database_host }}
       database_service_name: ${{ secrets.database_service_name }}
       keystore_secret: ${{ secrets.keystore_secret }}
+      lexis_prod_rtm_only: ${{ secrets.lexis_prod_rtm_only }}
     with:
       environment: dev
       target: ${{ github.event.number }}
@@ -68,16 +116,13 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-tests.yml
-    secrets:
-      e2e_idir_user: ${{ secrets.E2E_IDIR_USER }}
-      e2e_idir_password: ${{ secrets.E2E_IDIR_PASSWORD }}
     with:
       target: ${{ github.event.number }}
       slot: ${{ needs.vars.outputs.slot }}
 
   results:
     name: PR Results
-    needs: [builds, deploys, tests]
+    needs: [builds, backend-tests, frontend-tests, deploys, tests]
     if: always()
     runs-on: ubuntu-slim
     steps:

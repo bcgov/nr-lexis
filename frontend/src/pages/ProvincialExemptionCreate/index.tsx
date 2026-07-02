@@ -1,24 +1,21 @@
-import { useEffect, useMemo, useState, type FC } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
+import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
+import IsoDatePicker from '../../components/IsoDatePicker'
+import { AppNotification } from '../../components/AppNotification'
+import SearchableSelect from '../../components/SearchableSelect'
 import {
-  Button,
-  Column,
-  Grid,
-  InlineNotification,
-  Select,
-  SelectItem,
-  TextArea,
-  TextInput,
-  Tile,
-} from '@carbon/react'
-import CreateDraftHistory from '@/pages/shared/CreateDraftHistory'
-import { isPositiveNumeric, isValidIsoDate, normalizeText } from '@/pages/shared/create-form-utils'
-import {
-  deleteCreateDraft,
-  listCreateDrafts,
-  saveCreateDraft,
-  type CreateDraftRecord,
-} from '@/service/create-draft-service'
+  atMostOneDecimalFieldError,
+  firstValidationError,
+  getVisibleFieldError,
+  isoDateFieldError,
+  maxNumericValueFieldError,
+  positiveNumericFieldError,
+  requiredFieldError,
+  type FieldErrors,
+  type TouchedFields,
+} from '@/pages/shared/create-form-utils'
 import {
   fetchProvincialExemptionOptions,
   type SearchOption,
@@ -26,7 +23,6 @@ import {
 import { submitProvincialExemptionCreate } from '@/service/create-submit-service'
 
 type ProvincialExemptionCreateForm = {
-  exemptionNumber: string
   applicationNumber: string
   exemptionTypeCode: string
   exemptionStatusCode: string
@@ -38,16 +34,15 @@ type ProvincialExemptionCreateForm = {
   otherConditions: string
 }
 
+type ProvincialExemptionCreateField = keyof ProvincialExemptionCreateForm & string
+
 type ExemptionCreatePrefillState = {
   selectedApplicationNumbers: string[]
   ownerClientNumber: string
   applicantClientNumber: string
 }
 
-const MODULE_KEY = 'provincial-exemption'
-
 const INITIAL_FORM: ProvincialExemptionCreateForm = {
-  exemptionNumber: '',
   applicationNumber: '',
   exemptionTypeCode: '',
   exemptionStatusCode: '',
@@ -170,7 +165,7 @@ type PageStatus = {
   message: string
 }
 
-const ProvincialExemptionCreatePage: FC = () => {
+const ProvincialExemptionCreatePage = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -183,27 +178,17 @@ const ProvincialExemptionCreatePage: FC = () => {
     [location.state, searchParams],
   )
   const initialForm = useMemo(() => buildInitialForm(prefillState), [prefillState])
-  const [form, setForm] = useState<ProvincialExemptionCreateForm>(() =>
-    buildInitialForm(prefillState),
-  )
+  const [form, setForm] = useState<ProvincialExemptionCreateForm>(() => initialForm)
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
   const [exemptionStatuses, setExemptionStatuses] = useState<SearchOption[]>([])
-  const [drafts, setDrafts] = useState<CreateDraftRecord<unknown>[]>(() =>
-    listCreateDrafts(MODULE_KEY),
-  )
   const [status, setStatus] = useState<PageStatus | null>(null)
+  const [showMissingRequiredOptions, setShowMissingRequiredOptions] = useState(true)
+  const [showPrefillNotice, setShowPrefillNotice] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const mapDraftPayloadToForm = (payload: unknown): ProvincialExemptionCreateForm => {
-    if (!payload || typeof payload !== 'object') {
-      return initialForm
-    }
-
-    return {
-      ...initialForm,
-      ...(payload as Partial<ProvincialExemptionCreateForm>),
-    }
-  }
+  const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialExemptionCreateField>>(
+    {},
+  )
+  const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -215,43 +200,53 @@ const ProvincialExemptionCreatePage: FC = () => {
     void loadOptions()
   }, [])
 
-  const hasValidationError = useMemo(() => {
-    return (
-      !normalizeText(form.exemptionNumber) ||
-      !normalizeText(form.applicationNumber) ||
-      !normalizeText(form.exemptionTypeCode) ||
-      !normalizeText(form.ownerClientNumber) ||
-      !normalizeText(form.applicantClientNumber) ||
-      !isPositiveNumeric(form.applicationNumber) ||
-      !isPositiveNumeric(form.approvedVolume) ||
-      !isValidIsoDate(form.approvalDate) ||
-      !isValidIsoDate(form.expiryDate)
-    )
-  }, [form])
-  const missingRequiredOptions = exemptionTypes.length === 0
+  const fieldErrors = useMemo<FieldErrors<ProvincialExemptionCreateField>>(
+    () => ({
+      applicationNumber: firstValidationError(
+        () => requiredFieldError(form.applicationNumber, 'Application number'),
+        () => positiveNumericFieldError(form.applicationNumber),
+      ),
+      exemptionTypeCode: requiredFieldError(form.exemptionTypeCode, 'Exemption type') ?? undefined,
+      exemptionStatusCode:
+        requiredFieldError(form.exemptionStatusCode, 'Exemption status') ?? undefined,
+      ownerClientNumber:
+        requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
+      applicantClientNumber:
+        requiredFieldError(form.applicantClientNumber, 'Applicant client number') ?? undefined,
+      approvalDate: isoDateFieldError(form.approvalDate) ?? undefined,
+      expiryDate: isoDateFieldError(form.expiryDate) ?? undefined,
+      approvedVolume: firstValidationError(
+        () => requiredFieldError(form.approvedVolume, 'Approved volume'),
+        () => positiveNumericFieldError(form.approvedVolume),
+        () => maxNumericValueFieldError(form.approvedVolume, 9999999.9, 'Approved volume'),
+        () => atMostOneDecimalFieldError(form.approvedVolume, 'Approved volume'),
+      ),
+    }),
+    [form],
+  )
+  const hasValidationError = useMemo(
+    () => Object.values(fieldErrors).some((error) => !!error),
+    [fieldErrors],
+  )
+  const missingRequiredOptions = exemptionTypes.length === 0 && showMissingRequiredOptions
 
-  const onSaveDraft = () => {
-    setStatus(null)
-    if (hasValidationError) {
-      setStatus({
-        kind: 'error',
-        title: 'Validation Error',
-        message: 'Please fix validation errors before saving the draft.',
-      })
-      return
-    }
-
-    const saved = saveCreateDraft(MODULE_KEY, form)
-    setDrafts(listCreateDrafts(MODULE_KEY))
-    setStatus({ kind: 'success', title: 'Draft Saved', message: `Draft ${saved.id} saved.` })
+  const markFieldTouched = (field: ProvincialExemptionCreateField): void => {
+    setTouchedFields((current) => ({ ...current, [field]: true }))
   }
 
-  const onSubmit = async () => {
+  const fieldError = (field: ProvincialExemptionCreateField): string | undefined =>
+    getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
+  const firstSubmitValidationError = Object.values(fieldErrors).find(
+    (error): error is string => !!error,
+  )
+
+  const onSave = async () => {
     if (hasValidationError) {
+      setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation Error',
-        message: 'Please fix validation errors before submitting.',
+        message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
       })
       return
     }
@@ -265,10 +260,6 @@ const ProvincialExemptionCreatePage: FC = () => {
           form.applicationNumber,
         ],
       })
-      const responseMessage = [result.message, ...result.errors, ...result.warnings]
-        .filter((value) => value.trim().length > 0)
-        .join(' ')
-
       if (result.success) {
         if (result.createdId) {
           navigate(`/provincial/exemption/${encodeURIComponent(result.createdId)}`)
@@ -276,83 +267,87 @@ const ProvincialExemptionCreatePage: FC = () => {
         }
         setStatus({
           kind: 'success',
-          title: 'Exemption Submitted',
-          message: responseMessage || 'Exemption submitted successfully.',
+          title: 'Exemption Saved',
+          message: 'Exemption saved successfully.',
         })
         return
       }
 
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
-        message: responseMessage || 'Unable to submit provincial exemption create request.',
+        title: 'Save Failed',
+        message:
+          'Exemption save failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } catch (error) {
       console.error(error)
       setStatus({
         kind: 'error',
-        title: 'Submit Failed',
-        message: 'Unable to submit provincial exemption create request.',
+        title: 'Save Failed',
+        message:
+          'Exemption save failed. Please review the form and try again. If the problem persists, contact support.',
       })
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const onUseDraft = (record: CreateDraftRecord<unknown>) => {
-    setForm(mapDraftPayloadToForm(record.payload))
-    setStatus({ kind: 'success', title: 'Draft Loaded', message: `Draft ${record.id} loaded.` })
-  }
-
-  const onDeleteDraft = (draftId: string) => {
-    const wasDeleted = deleteCreateDraft(MODULE_KEY, draftId)
-    setDrafts(listCreateDrafts(MODULE_KEY))
-    setStatus({
-      kind: wasDeleted ? 'success' : 'error',
-      title: wasDeleted ? 'Draft Deleted' : 'Draft Delete Failed',
-      message: wasDeleted ? `Draft ${draftId} deleted.` : `Draft ${draftId} was not found.`,
-    })
-  }
-
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Create Provincial Exemption</h1>
-        <p>Base create form for provincial exemption migration.</p>
+        <div className="application-detail-title-row">
+          <h1>Create provincial exemption</h1>
+          <dl
+            className="application-detail-header-metrics"
+            role="group"
+            aria-label="New exemption state"
+          >
+            <div>
+              <dt>Exemption number</dt>
+              <dd>New</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>New</dd>
+            </div>
+          </dl>
+        </div>
       </Column>
 
       {missingRequiredOptions && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind="warning"
             title="Required options unavailable"
-            subtitle="Exemption type values are unavailable from backend options. Submit remains disabled until a valid type is available."
+            subtitle="Exemption type values are unavailable. Save remains disabled until a valid type is available."
             lowContrast
-            hideCloseButton
+            onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
           />
         </Column>
       )}
 
-      {!!prefillState && (
+      {!!prefillState && showPrefillNotice && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind="info"
             title="Prefilled from selected applications"
             subtitle={`Loaded ${prefillState.selectedApplicationNumbers.length} application(s) into this form.`}
             lowContrast
-            hideCloseButton
+            onCloseButtonClick={() => setShowPrefillNotice(false)}
+            autoDismissMs={8000}
           />
         </Column>
       )}
 
       {!!status && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind={status.kind}
             title={status.title}
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
+            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
           />
         </Column>
       )}
@@ -360,119 +355,107 @@ const ProvincialExemptionCreatePage: FC = () => {
       <Column sm={4} md={8} lg={16}>
         <Tile>
           <div className="legacy-search-grid">
-            <TextInput
-              id="exemptionNumber"
-              labelText="Exemption Number (required)"
-              value={form.exemptionNumber}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, exemptionNumber: event.target.value }))
-              }
-            />
-            <TextInput
+            <ApplicationNumberSelect
               id="applicationNumber"
-              labelText="Application Number (required)"
+              labelText="Application number"
               value={form.applicationNumber}
-              invalid={!isPositiveNumeric(form.applicationNumber)}
-              invalidText="Use a positive numeric value."
-              onChange={(event) =>
-                setForm((current) => ({ ...current, applicationNumber: event.target.value }))
+              invalid={!!fieldError('applicationNumber')}
+              invalidText={fieldError('applicationNumber')}
+              onBlur={() => markFieldTouched('applicationNumber')}
+              onChange={(value) => setForm((current) => ({ ...current, applicationNumber: value }))}
+            />
+            <SearchableSelect
+              id="exemptionTypeCode"
+              labelText="Exemption type"
+              value={form.exemptionTypeCode}
+              invalid={!!fieldError('exemptionTypeCode')}
+              invalidText={fieldError('exemptionTypeCode')}
+              placeholder="Select type"
+              options={exemptionTypes}
+              onBlur={() => markFieldTouched('exemptionTypeCode')}
+              onChange={(value) => setForm((current) => ({ ...current, exemptionTypeCode: value }))}
+            />
+            <SearchableSelect
+              id="exemptionStatusCode"
+              labelText="Exemption status"
+              value={form.exemptionStatusCode}
+              invalid={!!fieldError('exemptionStatusCode')}
+              invalidText={fieldError('exemptionStatusCode')}
+              placeholder="Select status"
+              options={exemptionStatuses}
+              onBlur={() => markFieldTouched('exemptionStatusCode')}
+              onChange={(value) =>
+                setForm((current) => ({ ...current, exemptionStatusCode: value }))
               }
             />
-            <Select
-              id="exemptionTypeCode"
-              labelText="Exemption Type (required)"
-              value={form.exemptionTypeCode}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, exemptionTypeCode: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select type" />
-              {exemptionTypes.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
-            <Select
-              id="exemptionStatusCode"
-              labelText="Exemption Status"
-              value={form.exemptionStatusCode}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, exemptionStatusCode: event.target.value }))
-              }
-            >
-              <SelectItem value="" text="Select status" />
-              {exemptionStatuses.map((option) => (
-                <SelectItem key={option.value} value={option.value} text={option.label} />
-              ))}
-            </Select>
             <TextInput
               id="ownerClientNumber"
-              labelText="Owner Client Number (required)"
+              labelText="Owner client number"
               value={form.ownerClientNumber}
+              invalid={!!fieldError('ownerClientNumber')}
+              invalidText={fieldError('ownerClientNumber')}
+              onBlur={() => markFieldTouched('ownerClientNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, ownerClientNumber: event.target.value }))
               }
             />
             <TextInput
               id="applicantClientNumber"
-              labelText="Applicant Client Number (required)"
+              labelText="Applicant client number"
               value={form.applicantClientNumber}
+              invalid={!!fieldError('applicantClientNumber')}
+              invalidText={fieldError('applicantClientNumber')}
+              onBlur={() => markFieldTouched('applicantClientNumber')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, applicantClientNumber: event.target.value }))
               }
             />
-            <TextInput
+            <IsoDatePicker
               id="approvalDate"
-              labelText="Approval Date (YYYY-MM-DD)"
+              labelText="Approval date (YYYY-MM-DD)"
               value={form.approvalDate}
-              invalid={!isValidIsoDate(form.approvalDate)}
-              invalidText="Date must be YYYY-MM-DD."
-              onChange={(event) =>
-                setForm((current) => ({ ...current, approvalDate: event.target.value }))
-              }
+              invalid={!!fieldError('approvalDate')}
+              invalidText={fieldError('approvalDate')}
+              onBlur={() => markFieldTouched('approvalDate')}
+              onChange={(value) => setForm((current) => ({ ...current, approvalDate: value }))}
             />
-            <TextInput
+            <IsoDatePicker
               id="expiryDate"
-              labelText="Expiry Date (YYYY-MM-DD)"
+              labelText="Expiry date (YYYY-MM-DD)"
               value={form.expiryDate}
-              invalid={!isValidIsoDate(form.expiryDate)}
-              invalidText="Date must be YYYY-MM-DD."
-              onChange={(event) =>
-                setForm((current) => ({ ...current, expiryDate: event.target.value }))
-              }
+              invalid={!!fieldError('expiryDate')}
+              invalidText={fieldError('expiryDate')}
+              onBlur={() => markFieldTouched('expiryDate')}
+              onChange={(value) => setForm((current) => ({ ...current, expiryDate: value }))}
             />
             <TextInput
               id="approvedVolume"
-              labelText="Approved Volume (m³)"
+              labelText="Approved volumeume (m³)"
               value={form.approvedVolume}
-              invalid={!isPositiveNumeric(form.approvedVolume)}
-              invalidText="Use a positive numeric value."
+              invalid={!!fieldError('approvedVolume')}
+              invalidText={fieldError('approvedVolume')}
+              onBlur={() => markFieldTouched('approvedVolume')}
               onChange={(event) =>
                 setForm((current) => ({ ...current, approvedVolume: event.target.value }))
               }
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="primary" onClick={onSaveDraft} disabled={hasValidationError}>
-              Save Draft
-            </Button>
             <Button
               kind="primary"
-              onClick={() => void onSubmit()}
-              disabled={hasValidationError || isSubmitting}
+              onClick={() => void onSave()}
+              disabled={missingRequiredOptions || isSubmitting}
             >
-              Submit
+              Save
             </Button>
-            <Button kind="secondary" onClick={() => setForm(initialForm)}>
-              Reset
+            <Button kind="secondary" onClick={() => navigate('/provincial/exemption')}>
+              Cancel
             </Button>
-            <Link className="cds--link" to="/provincial/exemption">
-              Back to Search
-            </Link>
           </div>
           <div className="legacy-search-actions">
             <TextArea
               id="otherConditions"
-              labelText="Other Conditions"
+              labelText="Other conditions"
               value={form.otherConditions}
               onChange={(event) =>
                 setForm((current) => ({ ...current, otherConditions: event.target.value }))
@@ -480,19 +463,6 @@ const ProvincialExemptionCreatePage: FC = () => {
             />
           </div>
         </Tile>
-      </Column>
-
-      <Column sm={4} md={8} lg={16}>
-        <CreateDraftHistory
-          title="Recent Exemption Drafts"
-          drafts={drafts}
-          onUseDraft={onUseDraft}
-          onDeleteDraft={onDeleteDraft}
-          summarize={(payload) => {
-            const value = payload as ProvincialExemptionCreateForm
-            return `${value.exemptionNumber || 'N/A'} / application ${value.applicationNumber || 'N/A'}`
-          }}
-        />
       </Column>
     </Grid>
   )

@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Column,
   Grid,
   InlineLoading,
-  InlineNotification,
   Table,
   TableBody,
   TableCell,
@@ -15,14 +14,23 @@ import {
   Tile,
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
+import { AppNotification } from '../../components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
-import { searchApplicationReviews } from '@/service/application-review-search-service'
-import { searchFederalApplications } from '@/service/federal-application-search-service'
-import { searchIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
-import { searchProvincialApplications } from '@/service/provincial-application-search-service'
-import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
-import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
-import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
+import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
+import {
+  countApplicationReviews,
+  previewApplicationReviews,
+} from '@/service/application-review-search-service'
+import { countFederalApplications } from '@/service/federal-application-search-service'
+import { countProvincialApplications } from '@/service/provincial-application-search-service'
+import { countProvincialExemptions } from '@/service/provincial-exemption-search-service'
+import { countProvincialOffers } from '@/service/provincial-offer-search-service'
+import { countProvincialPermits } from '@/service/provincial-permit-search-service'
 
 type SummaryMetricKey =
   | 'provincialApplications'
@@ -31,13 +39,24 @@ type SummaryMetricKey =
   | 'provincialPermits'
   | 'reviewQueue'
   | 'federalApplications'
-  | 'indianReservePermits'
 
 type SummaryMetric = {
   key: SummaryMetricKey
   label: string
   description: string
   total: number
+}
+
+type SummaryReviewPreviewRow = {
+  applicationNumber: string
+  status: string
+  listingDate: string
+  region: string
+}
+
+type SummaryPageCacheData = {
+  metrics: SummaryMetric[]
+  reviewPreview: SummaryReviewPreviewRow[]
 }
 
 type SummaryRouteConfig = {
@@ -70,66 +89,55 @@ const SUMMARY_ROUTE_CONFIG: Record<SummaryMetricKey, SummaryRouteConfig> = {
     path: '/federal',
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
   },
-  indianReservePermits: {
-    path: '/indian-reserve',
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
-  },
 }
 
 const INITIAL_METRICS: SummaryMetric[] = [
   {
     key: 'provincialApplications',
-    label: 'Provincial Applications',
+    label: 'Provincial applications',
     description: 'Total matched by current base search defaults.',
     total: 0,
   },
   {
     key: 'provincialExemptions',
-    label: 'Provincial Exemptions',
+    label: 'Provincial exemptions',
     description: 'Total exemption files in search scope.',
     total: 0,
   },
   {
     key: 'provincialOffers',
-    label: 'Provincial Offers',
+    label: 'Provincial offers',
     description: 'Total purchase offers in search scope.',
     total: 0,
   },
   {
     key: 'provincialPermits',
-    label: 'Provincial Permits',
+    label: 'Provincial permits',
     description: 'Total permit files in search scope.',
     total: 0,
   },
   {
     key: 'reviewQueue',
-    label: 'Provincial Review Queue',
+    label: 'Provincial review queue',
     description: 'Total applications in review queue.',
     total: 0,
   },
   {
     key: 'federalApplications',
-    label: 'Federal Applications',
+    label: 'Federal applications',
     description: 'Total federal application files in scope.',
-    total: 0,
-  },
-  {
-    key: 'indianReservePermits',
-    label: 'Indigenous Reserve Permits',
-    description: 'Total reserve permit files in scope.',
     total: 0,
   },
 ]
 
-const ProvincialSummaryPage: FC = () => {
+const ProvincialSummaryPage = () => {
   const navigate = useNavigate()
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
   const [metrics, setMetrics] = useState<SummaryMetric[]>(INITIAL_METRICS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [reviewPreview, setReviewPreview] = useState<
-    { applicationNumber: string; status: string; listingDate: string; region: string }[]
-  >([])
+  const [reviewPreview, setReviewPreview] = useState<SummaryReviewPreviewRow[]>([])
+  const beginSummaryRequest = useLatestRequestGuard()
 
   const canAccessSummaryRoute = useCallback(
     (key: SummaryMetricKey): boolean => {
@@ -142,26 +150,49 @@ const ProvincialSummaryPage: FC = () => {
   const canOpenReviewApplication =
     canPerform('/applicationSearch') && canPerform('/applicationDetails')
 
-  const accessibleMetricCount = useMemo(() => {
-    return INITIAL_METRICS.filter((metric) => canAccessSummaryRoute(metric.key)).length
-  }, [canAccessSummaryRoute])
+  const visibleMetrics = useMemo(
+    () => INITIAL_METRICS.filter((metric) => canAccessSummaryRoute(metric.key)),
+    [canAccessSummaryRoute],
+  )
 
-  const loadSummary = useCallback(async () => {
-    setLoading(true)
-    setErrorMessage('')
+  const loadSummary = useCallback(
+    async (options: { force?: boolean } = {}) => {
+      const pageCacheKey = buildPageDataCacheKey('provincial-summary', capabilities?.principal, {
+        visibleMetrics: visibleMetrics.map((metric) => metric.key),
+        canOpenReviewApplication,
+      })
+      if (!options.force) {
+        const cachedSummary = getPageDataCache<SummaryPageCacheData>(pageCacheKey)
+        if (cachedSummary) {
+          setMetrics(cachedSummary.metrics)
+          setReviewPreview(cachedSummary.reviewPreview)
+          setLoading(false)
+          setErrorMessage('')
+          return
+        }
+      }
 
-    try {
-      const [
-        provincialApplications,
-        provincialExemptions,
-        provincialOffers,
-        provincialPermits,
-        reviewQueue,
-        federalApplications,
-        indianReservePermits,
-      ] = await Promise.all([
-        canAccessSummaryRoute('provincialApplications')
-          ? searchProvincialApplications({
+      const isLatestRequest = beginSummaryRequest()
+      setLoading(true)
+      setErrorMessage('')
+
+      try {
+        const loadMetric = async <T,>(
+          canAccess: boolean,
+          load: () => Promise<T>,
+        ): Promise<T | null> => (canAccess ? load() : null)
+
+        const [
+          provincialApplications,
+          provincialExemptions,
+          provincialOffers,
+          provincialPermits,
+          reviewQueueTotal,
+          reviewQueuePreview,
+          federalApplications,
+        ] = await Promise.all([
+          loadMetric(canAccessSummaryRoute('provincialApplications'), () =>
+            countProvincialApplications({
               filters: {
                 applicationNumber: '',
                 packageNumber: '',
@@ -179,10 +210,10 @@ const ProvincialSummaryPage: FC = () => {
               pageSize: 1,
               sortField: 'applicationNumber',
               sortDirection: 'desc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('provincialExemptions')
-          ? searchProvincialExemptions({
+            }),
+          ),
+          loadMetric(canAccessSummaryRoute('provincialExemptions'), () =>
+            countProvincialExemptions({
               filters: {
                 applicationNumber: '',
                 packageNumber: '',
@@ -199,10 +230,10 @@ const ProvincialSummaryPage: FC = () => {
               pageSize: 1,
               sortField: 'exemptionNumber',
               sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('provincialOffers')
-          ? searchProvincialOffers({
+            }),
+          ),
+          loadMetric(canAccessSummaryRoute('provincialOffers'), () =>
+            countProvincialOffers({
               filters: {
                 applicationNumber: '',
                 packageNumber: '',
@@ -217,10 +248,10 @@ const ProvincialSummaryPage: FC = () => {
               pageSize: 1,
               sortField: 'offerNumber',
               sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('provincialPermits')
-          ? searchProvincialPermits({
+            }),
+          ),
+          loadMetric(canAccessSummaryRoute('provincialPermits'), () =>
+            countProvincialPermits({
               filters: {
                 applicationNumber: '',
                 packageNumber: '',
@@ -236,10 +267,27 @@ const ProvincialSummaryPage: FC = () => {
               pageSize: 1,
               sortField: 'permitNumber',
               sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('reviewQueue')
-          ? searchApplicationReviews({
+            }),
+          ),
+          loadMetric(canAccessSummaryRoute('reviewQueue'), () =>
+            countApplicationReviews({
+              filters: {
+                applicationNumber: '',
+                productTypeCode: '',
+                region: [],
+                receivedFromDate: '',
+                receivedToDate: '',
+                listingFromDate: '',
+                listingToDate: '',
+              },
+              page: 0,
+              pageSize: 1,
+              sortField: 'applicationNumber',
+              sortDirection: 'asc',
+            }),
+          ),
+          loadMetric(canAccessSummaryRoute('reviewQueue'), () =>
+            previewApplicationReviews({
               filters: {
                 applicationNumber: '',
                 productTypeCode: '',
@@ -253,10 +301,10 @@ const ProvincialSummaryPage: FC = () => {
               pageSize: 5,
               sortField: 'applicationNumber',
               sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('federalApplications')
-          ? searchFederalApplications({
+            }),
+          ),
+          loadMetric(canAccessSummaryRoute('federalApplications'), () =>
+            countFederalApplications({
               filters: {
                 applicationNumber: '',
                 packageNumber: '',
@@ -271,60 +319,59 @@ const ProvincialSummaryPage: FC = () => {
               pageSize: 1,
               sortField: 'federalApplicationNumber',
               sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-        canAccessSummaryRoute('indianReservePermits')
-          ? searchIndianReservePermits({
-              filters: {
-                permitNumber: '',
-                packageNumber: '',
-                fromPermitIssueDate: '',
-                toPermitIssueDate: '',
-                fromEstimatedShippingDate: '',
-                toEstimatedShippingDate: '',
-              },
-              page: 0,
-              pageSize: 1,
-              sortField: 'permitNumber',
-              sortDirection: 'asc',
-            })
-          : Promise.resolve(null),
-      ])
+            }),
+          ),
+        ])
 
-      const totalsByKey: Record<SummaryMetricKey, number> = {
-        provincialApplications: provincialApplications?.page.totalElements ?? 0,
-        provincialExemptions: provincialExemptions?.page.totalElements ?? 0,
-        provincialOffers: provincialOffers?.page.totalElements ?? 0,
-        provincialPermits: provincialPermits?.page.totalElements ?? 0,
-        reviewQueue: reviewQueue?.page.totalElements ?? 0,
-        federalApplications: federalApplications?.page.totalElements ?? 0,
-        indianReservePermits: indianReservePermits?.page.totalElements ?? 0,
+        const totalsByKey: Record<SummaryMetricKey, number> = {
+          provincialApplications: provincialApplications ?? 0,
+          provincialExemptions: provincialExemptions ?? 0,
+          provincialOffers: provincialOffers ?? 0,
+          provincialPermits: provincialPermits ?? 0,
+          reviewQueue: reviewQueueTotal ?? 0,
+          federalApplications: federalApplications ?? 0,
+        }
+
+        if (isLatestRequest()) {
+          const nextMetrics = INITIAL_METRICS.map((metric) => ({
+            ...metric,
+            total: totalsByKey[metric.key],
+          }))
+          const nextReviewPreview = (reviewQueuePreview?.content ?? []).map((item) => ({
+            applicationNumber: item.applicationNumber,
+            status: item.status,
+            listingDate: item.listingDate,
+            region: item.region,
+          }))
+
+          setMetrics(nextMetrics)
+          setReviewPreview(nextReviewPreview)
+          setPageDataCache(pageCacheKey, {
+            metrics: nextMetrics,
+            reviewPreview: nextReviewPreview,
+          })
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to calculate provincial summary metrics.')
+          setMetrics(INITIAL_METRICS)
+          setReviewPreview([])
+        }
+      } finally {
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
       }
-
-      setMetrics(
-        INITIAL_METRICS.map((metric) => ({
-          ...metric,
-          total: totalsByKey[metric.key],
-        })),
-      )
-
-      setReviewPreview(
-        (reviewQueue?.content ?? []).map((item) => ({
-          applicationNumber: item.applicationNumber,
-          status: item.status,
-          listingDate: item.listingDate,
-          region: item.region,
-        })),
-      )
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to calculate provincial summary metrics.')
-      setMetrics(INITIAL_METRICS)
-      setReviewPreview([])
-    } finally {
-      setLoading(false)
-    }
-  }, [canAccessSummaryRoute])
+    },
+    [
+      beginSummaryRequest,
+      canAccessSummaryRoute,
+      canOpenReviewApplication,
+      capabilities?.principal,
+      visibleMetrics,
+    ],
+  )
 
   useEffect(() => {
     void loadSummary()
@@ -333,27 +380,25 @@ const ProvincialSummaryPage: FC = () => {
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial Summary</h1>
-        <p>Drill-down dashboard for operational totals and review queue triage.</p>
+        <h1>Provincial summary</h1>
+        <p>Drill-down summary for operational totals and review queue triage.</p>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <p>
-            Accessible modules: <strong>{accessibleMetricCount}</strong> of{' '}
-            <strong>{INITIAL_METRICS.length}</strong>
-          </p>
           <div className="legacy-search-actions">
-            <Button kind="secondary" onClick={() => void loadSummary()} disabled={loading}>
+            <Button
+              kind="secondary"
+              onClick={() => void loadSummary({ force: true })}
+              disabled={loading}
+            >
               Refresh Summary
             </Button>
-            <Button
-              kind="ghost"
-              disabled={!canAccessSummaryRoute('reviewQueue')}
-              onClick={() => navigate(SUMMARY_ROUTE_CONFIG.reviewQueue.path)}
-            >
-              Open Review Queue
-            </Button>
+            {canAccessSummaryRoute('reviewQueue') && (
+              <Button kind="ghost" onClick={() => navigate(SUMMARY_ROUTE_CONFIG.reviewQueue.path)}>
+                Open review queue
+              </Button>
+            )}
           </div>
         </Tile>
       </Column>
@@ -366,9 +411,9 @@ const ProvincialSummaryPage: FC = () => {
 
       {!loading && !!errorMessage && (
         <Column sm={4} md={8} lg={16}>
-          <InlineNotification
+          <AppNotification
             kind="error"
-            title="Summary Error"
+            title="Summary error"
             subtitle={errorMessage}
             lowContrast
             onCloseButtonClick={() => setErrorMessage('')}
@@ -377,22 +422,21 @@ const ProvincialSummaryPage: FC = () => {
       )}
 
       {!loading &&
-        metrics.map((metric) => {
-          const hasAccess = canAccessSummaryRoute(metric.key)
-          return (
+        metrics
+          .filter((metric) =>
+            visibleMetrics.some((visibleMetric) => visibleMetric.key === metric.key),
+          )
+          .map((metric) => (
             <Column key={metric.key} sm={4} md={4} lg={5}>
               <Tile>
                 <h2 className="dashboard-title">{metric.label}</h2>
-                <Tag type={hasAccess ? 'green' : 'red'}>
-                  {hasAccess ? 'Available' : 'Not Granted'}
-                </Tag>
+                <Tag type="green">Available</Tag>
                 <p className="summary-metric-value">{metric.total.toLocaleString()}</p>
                 <p>{metric.description}</p>
                 <div className="legacy-search-actions">
                   <Button
-                    kind={hasAccess ? 'primary' : 'ghost'}
+                    kind="primary"
                     size="sm"
-                    disabled={!hasAccess}
                     onClick={() => navigate(SUMMARY_ROUTE_CONFIG[metric.key].path)}
                   >
                     Open
@@ -400,54 +444,58 @@ const ProvincialSummaryPage: FC = () => {
                 </div>
               </Tile>
             </Column>
-          )
-        })}
+          ))}
 
-      <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <h2 className="dashboard-title">Review Queue Preview</h2>
-          <Table useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Application</TableHeader>
-                <TableHeader>Status</TableHeader>
-                <TableHeader>Listing Date</TableHeader>
-                <TableHeader>Region</TableHeader>
-                <TableHeader>Open</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {reviewPreview.map((row) => (
-                <TableRow key={row.applicationNumber}>
-                  <TableCell>{row.applicationNumber}</TableCell>
-                  <TableCell>{row.status}</TableCell>
-                  <TableCell>{row.listingDate}</TableCell>
-                  <TableCell>{row.region}</TableCell>
-                  <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      disabled={!canOpenReviewApplication}
-                      onClick={() =>
-                        navigate(
-                          `/provincial/application/${encodeURIComponent(row.applicationNumber)}`,
-                        )
-                      }
-                    >
-                      Open
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {reviewPreview.length === 0 && (
+      {canAccessSummaryRoute('reviewQueue') && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <h2 className="dashboard-title">Review queue preview</h2>
+            <Table useZebraStyles>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={5}>No review queue data available.</TableCell>
+                  <TableHeader>Application</TableHeader>
+                  <TableHeader>Status</TableHeader>
+                  <TableHeader>Listing date</TableHeader>
+                  <TableHeader>Region</TableHeader>
+                  {canOpenReviewApplication && <TableHeader>Open</TableHeader>}
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Tile>
-      </Column>
+              </TableHead>
+              <TableBody>
+                {reviewPreview.map((row) => (
+                  <TableRow key={row.applicationNumber}>
+                    <TableCell>{row.applicationNumber}</TableCell>
+                    <TableCell>{row.status}</TableCell>
+                    <TableCell>{row.listingDate}</TableCell>
+                    <TableCell>{row.region}</TableCell>
+                    {canOpenReviewApplication && (
+                      <TableCell>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          onClick={() =>
+                            navigate(
+                              `/provincial/application/${encodeURIComponent(row.applicationNumber)}`,
+                            )
+                          }
+                        >
+                          Open
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+                {reviewPreview.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={canOpenReviewApplication ? 5 : 4}>
+                      No review queue data available.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Tile>
+        </Column>
+      )}
     </Grid>
   )
 }

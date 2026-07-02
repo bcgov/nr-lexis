@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -15,7 +16,13 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
+import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository.ApplicationStatusUpdateRow;
+import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository.ReviewRemarkRow;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -26,12 +33,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mail.MailSendException;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ApplicationReviewOracleService")
 class ApplicationReviewOracleServiceTest {
 
   @Mock private ApplicationReviewRepository repository;
+  @Mock private ApplicationReviewStatusEmailSender emailSender;
   @InjectMocks private ApplicationReviewOracleService service;
 
   @Test
@@ -48,16 +57,15 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
-  void searchShouldReturnPagedSliceFromRepository() {
+  void searchShouldReturnRepositoryPage() {
     ApplicationReviewSearchCriteria criteria =
         new ApplicationReviewSearchCriteria(null, null, null, null, null, null, List.of(), null, 1, 2);
     List<ApplicationReviewSearchResultDto> rows =
         List.of(
-            row(10001L, LocalDate.of(2026, 3, 1)),
-            row(10002L, LocalDate.of(2026, 3, 2)),
             row(10003L, LocalDate.of(2026, 3, 3)),
             row(10004L, LocalDate.of(2026, 3, 4)));
-    when(repository.search(any(ApplicationReviewSearchCriteria.class))).thenReturn(rows);
+    when(repository.search(any(ApplicationReviewSearchCriteria.class)))
+        .thenReturn(page(rows, 4));
 
     ApplicationReviewSearchResponseDto response = service.search(criteria);
 
@@ -82,7 +90,8 @@ class ApplicationReviewOracleServiceTest {
             " applicationNumber DESC ",
             -2,
             0);
-    when(repository.search(any(ApplicationReviewSearchCriteria.class))).thenReturn(List.of());
+    when(repository.search(any(ApplicationReviewSearchCriteria.class)))
+        .thenReturn(page(List.of(), 0));
 
     service.search(criteria);
 
@@ -116,8 +125,19 @@ class ApplicationReviewOracleServiceTest {
 
     assertThat(result.valid()).isTrue();
     assertThat(result.updated()).isTrue();
-    assertThat(result.statusCode()).isEqualTo("APR");
+    assertThat(result.statusCode()).isEqualTo("APP");
     verify(repository).approve(1000456L, "idir\\jsmith");
+  }
+
+  @Test
+  void approveShouldDefaultUpdateUserWhenPrincipalIsMissing() {
+    when(repository.approve(1000456L, "system")).thenReturn(true);
+
+    ApplicationReviewStatusUpdateResultDto result = service.approve(1000456L, null);
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.updated()).isTrue();
+    verify(repository).approve(1000456L, "system");
   }
 
   @Test
@@ -134,10 +154,38 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void updateStatusShouldRequireRemarkForRejectedOrWithdrawnStatuses() {
+    ApplicationReviewStatusUpdateResultDto rejectedResult =
+        service.updateStatus(
+            1000456L,
+            new ApplicationReviewStatusUpdateRequestDto("REJ", " ", "client@gov.bc.ca"),
+            "idir\\jsmith");
+    ApplicationReviewStatusUpdateResultDto withdrawnResult =
+        service.updateStatus(
+            1000456L,
+            new ApplicationReviewStatusUpdateRequestDto("WDN", null, "client@gov.bc.ca"),
+            "idir\\jsmith");
+
+    assertThat(rejectedResult.valid()).isFalse();
+    assertThat(rejectedResult.updated()).isFalse();
+    assertThat(rejectedResult.message())
+        .isEqualTo("Remark is required when rejecting or withdrawing an application.");
+    assertThat(withdrawnResult.valid()).isFalse();
+    assertThat(withdrawnResult.updated()).isFalse();
+    assertThat(withdrawnResult.message())
+        .isEqualTo("Remark is required when rejecting or withdrawing an application.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
   void updateStatusShouldNormalizeValuesBeforeRepositoryCall() {
     ApplicationReviewStatusUpdateRequestDto request =
         new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");
-    when(repository.updateStatus(1000456L, "REJ", "Missing docs", "idir\\jsmith")).thenReturn(true);
+    Instant remarkDate = Instant.parse("2026-01-05T10:15:00Z");
+    when(repository.updateStatusWithRemark(1000456L, "REJ", "Missing docs", "idir\\jsmith"))
+        .thenReturn(
+            new ApplicationStatusUpdateRow(
+                true, new ReviewRemarkRow(99L, "Missing docs", "idir\\jsmith", remarkDate)));
 
     ApplicationReviewStatusUpdateResultDto result =
         service.updateStatus(1000456L, request, " idir\\jsmith ");
@@ -147,7 +195,64 @@ class ApplicationReviewOracleServiceTest {
     assertThat(result.statusCode()).isEqualTo("REJ");
     assertThat(result.clientEmail()).isEqualTo("client@gov.bc.ca");
     assertThat(result.remark()).isEqualTo("Missing docs");
-    verify(repository).updateStatus(1000456L, "REJ", "Missing docs", "idir\\jsmith");
+    assertThat(result.remarkId()).isEqualTo(99L);
+    assertThat(result.remarkUser()).isEqualTo("idir\\jsmith");
+    assertThat(result.remarkDate()).isEqualTo(remarkDate);
+    verify(repository).updateStatusWithRemark(1000456L, "REJ", "Missing docs", "idir\\jsmith");
+  }
+
+  @Test
+  void updateStatusShouldFailWhenRequestedRemarkDoesNotPersist() {
+    ApplicationReviewStatusUpdateRequestDto request =
+        new ApplicationReviewStatusUpdateRequestDto("REJ", "Missing docs", "client@gov.bc.ca");
+    when(repository.updateStatusWithRemark(1000456L, "REJ", "Missing docs", "idir\\jsmith"))
+        .thenReturn(new ApplicationStatusUpdateRow(true, null));
+
+    ApplicationReviewStatusUpdateResultDto result =
+        service.updateStatus(1000456L, request, "idir\\jsmith");
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.updated()).isFalse();
+    assertThat(result.statusCode()).isEqualTo("REJ");
+    assertThat(result.clientEmail()).isEqualTo("client@gov.bc.ca");
+    assertThat(result.remark()).isEqualTo("Missing docs");
+    assertThat(result.message()).isEqualTo("Application status remark did not persist.");
+    verify(repository).updateStatusWithRemark(1000456L, "REJ", "Missing docs", "idir\\jsmith");
+  }
+
+  @Test
+  void updateStatusShouldAllowOptionalRemarkToRemainEmpty() {
+    ApplicationReviewStatusUpdateRequestDto request =
+        new ApplicationReviewStatusUpdateRequestDto("EXP", " ", "client@gov.bc.ca");
+    when(repository.updateStatusWithRemark(1000456L, "EXP", null, "idir\\jsmith"))
+        .thenReturn(new ApplicationStatusUpdateRow(true, null));
+
+    ApplicationReviewStatusUpdateResultDto result =
+        service.updateStatus(1000456L, request, "idir\\jsmith");
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.updated()).isTrue();
+    assertThat(result.statusCode()).isEqualTo("EXP");
+    assertThat(result.clientEmail()).isEqualTo("client@gov.bc.ca");
+    assertThat(result.remark()).isNull();
+    verify(repository).updateStatusWithRemark(1000456L, "EXP", null, "idir\\jsmith");
+  }
+
+  @Test
+  void updateStatusShouldDefaultUpdateUserWhenPrincipalIsMissing() {
+    ApplicationReviewStatusUpdateRequestDto request =
+        new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");
+    when(repository.updateStatusWithRemark(1000456L, "REJ", "Missing docs", "system"))
+        .thenReturn(
+            new ApplicationStatusUpdateRow(
+                true, new ReviewRemarkRow(99L, "Missing docs", "system", Instant.now())));
+
+    ApplicationReviewStatusUpdateResultDto result =
+        service.updateStatus(1000456L, request, null);
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.updated()).isTrue();
+    verify(repository).updateStatusWithRemark(1000456L, "REJ", "Missing docs", "system");
   }
 
   @Test
@@ -160,7 +265,35 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
-  void sendStatusEmailShouldPassThroughRepositoryWhenInputValid() {
+  void sendStatusEmailShouldShortCircuitWhenEmailAddressInvalid() {
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto("REJ", "not-an-email", "Missing docs"));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Client email must be a valid email address.");
+    verifyNoInteractions(repository);
+    verifyNoInteractions(emailSender);
+  }
+
+  @Test
+  void sendStatusEmailShouldRejectOverlongMalformedEmailBeforeSideEffects() {
+    String overlongEmail = "client@" + "a".repeat(300) + ".test";
+
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto("REJ", overlongEmail, "Missing docs"));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Client email must be a valid email address.");
+    verifyNoInteractions(repository);
+    verifyNoInteractions(emailSender);
+  }
+
+  @Test
+  void sendStatusEmailShouldStageRequestAndSendEmailWhenInputValid() {
     ApplicationReviewStatusEmailRequestDto request =
         new ApplicationReviewStatusEmailRequestDto(" REJ ", " client@gov.bc.ca ", " Missing docs ");
     when(repository.sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs"))
@@ -169,7 +302,52 @@ class ApplicationReviewOracleServiceTest {
     ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
 
     assertThat(result.success()).isTrue();
+    assertThat(result.message()).isEqualTo("Application status email sent.");
     verify(repository).sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs");
+    verify(emailSender).sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs");
+  }
+
+  @Test
+  void sendStatusEmailShouldNotSendWhenRepositoryCannotStageRequest() {
+    ApplicationReviewStatusEmailRequestDto request =
+        new ApplicationReviewStatusEmailRequestDto("REJ", "client@example.test", "Missing docs");
+    when(repository.sendStatusEmail(1000456L, "REJ", "client@example.test", "Missing docs"))
+        .thenReturn(false);
+
+    ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Application status email could not be prepared.");
+    verify(repository).sendStatusEmail(1000456L, "REJ", "client@example.test", "Missing docs");
+    verifyNoInteractions(emailSender);
+  }
+
+  @Test
+  void sendStatusEmailShouldReportMailSenderFailure() {
+    ApplicationReviewStatusEmailRequestDto request =
+        new ApplicationReviewStatusEmailRequestDto("REJ", "client@gov.bc.ca", "Missing docs");
+    when(repository.sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs"))
+        .thenReturn(true);
+    doThrow(new MailSendException("SMTP unavailable"))
+        .when(emailSender)
+        .sendStatusEmail(1000456L, "REJ", "client@gov.bc.ca", "Missing docs");
+
+    ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Application status email failed to send.");
+  }
+
+  @Test
+  void sendStatusEmailShouldRejectUnsupportedStatusesBeforeRepository() {
+    ApplicationReviewStatusEmailRequestDto request =
+        new ApplicationReviewStatusEmailRequestDto("EXP", "client@gov.bc.ca", null);
+
+    ApplicationReviewStatusEmailResultDto result = service.sendStatusEmail(1000456L, request);
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Status email is only supported for rejected or withdrawn applications.");
+    verifyNoInteractions(repository);
   }
 
   private ApplicationReviewSearchResultDto row(Long applicationNumber, LocalDate listingDate) {
@@ -181,5 +359,9 @@ class ApplicationReviewOracleServiceTest {
         "Pending",
         "R2",
         true);
+  }
+
+  private static <T> Page<T> page(List<T> content, long total) {
+    return new PageImpl<>(content, PageRequest.of(0, Math.max(1, content.size())), total);
   }
 }

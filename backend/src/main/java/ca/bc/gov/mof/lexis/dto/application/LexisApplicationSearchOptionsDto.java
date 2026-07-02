@@ -5,6 +5,9 @@ import java.util.List;
 
 public record LexisApplicationSearchOptionsDto(
     List<CodeNameDto> exemptionTypes,
+    List<CodeNameDto> exemptionReasons,
     List<CodeNameDto> applicationStatuses,
     List<CodeNameDto> productTypes,
-    List<CodeNameDto> regions) {}
+    List<CodeNameDto> growthTypes,
+    List<CodeNameDto> regions,
+    List<CodeNameDto> currentSchedules) {}

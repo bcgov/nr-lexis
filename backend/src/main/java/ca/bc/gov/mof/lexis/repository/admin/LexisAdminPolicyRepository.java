@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.admin;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
+
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -94,7 +96,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
           cs.setTimestamp(1, toTimestamp(effectiveDate));
           cs.setLong(2, orgUnitNo);
           cs.setInt(3, percentIncrease);
-          cs.setString(4, trim(entryUserId));
+          cs.setString(4, auditUserOrDefault(entryUserId));
         },
         5,
         this::mapFeePolicyRow);
@@ -122,7 +124,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
           cs.setTimestamp(2, toTimestamp(effectiveDate));
           cs.setLong(3, orgUnitNo);
           cs.setInt(4, percentIncrease);
-          cs.setString(5, trim(updateUserId));
+          cs.setString(5, auditUserOrDefault(updateUserId));
         });
   }
 
@@ -134,7 +136,10 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
   }
 
   public long countFeePolicies() {
-    return queryCursorProcedure(COUNT_FEE_POLICIES, null, 1, rs -> Integer.valueOf(1)).size();
+    return queryCursorProcedure(COUNT_FEE_POLICIES, null, 1, rs -> {
+      long value = rs.getLong(1);
+      return rs.wasNull() ? 0L : value;
+    }).stream().findFirst().orElse(0L);
   }
 
   public List<FilPolicyRow> findFilPolicies(String sortOrder, int page) {
@@ -186,7 +191,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
         cs -> {
           cs.setTimestamp(1, toTimestamp(effectiveDate));
           cs.setInt(2, filPercent);
-          cs.setString(3, trim(entryUserId));
+          cs.setString(3, auditUserOrDefault(entryUserId));
         },
         4,
         this::mapFilPolicyRow);
@@ -204,7 +209,7 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
           cs.setLong(1, filPolicyId);
           cs.setTimestamp(2, toTimestamp(effectiveDate));
           cs.setInt(3, filPercent);
-          cs.setString(4, trim(updateUserId));
+          cs.setString(4, auditUserOrDefault(updateUserId));
         });
   }
 
@@ -216,7 +221,10 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
   }
 
   public long countFilPolicies() {
-    return queryCursorProcedure(COUNT_FIL_POLICIES, null, 1, rs -> Integer.valueOf(1)).size();
+    return queryCursorProcedure(COUNT_FIL_POLICIES, null, 1, rs -> {
+      long value = rs.getLong(1);
+      return rs.wasNull() ? 0L : value;
+    }).stream().findFirst().orElse(0L);
   }
 
   public Optional<OrgUnitRow> findOrgUnitByNumber(Long orgUnitNo) {
@@ -230,17 +238,17 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
         2,
         rs ->
             new OrgUnitRow(
-                defaultLong(getLong(rs, "ORG_UNIT_NO"), orgUnitNo),
+                coalesce(getLong(rs, "ORG_UNIT_NO"), orgUnitNo),
                 defaultString(getString(rs, "ORG_UNIT_CODE")),
                 defaultString(getString(rs, "ORG_UNIT_NAME"))));
   }
 
   private FeePolicyRow mapFeePolicyRow(java.sql.ResultSet rs) {
     return new FeePolicyRow(
-        defaultLong(getLong(rs, "LEXIS_FEE_POLICY_ID"), 0L),
+        coalesce(getLong(rs, "LEXIS_FEE_POLICY_ID"), 0L),
         getLocalDate(rs, "EFFECTIVE_DATE"),
-        defaultLong(getLong(rs, "ORG_UNIT_NO"), 0L),
-        defaultLong(getLong(rs, "PERCENT_INCREASE"), 0L),
+        coalesce(getLong(rs, "ORG_UNIT_NO"), 0L),
+        coalesce(getLong(rs, "PERCENT_INCREASE"), 0L),
         defaultString(getString(rs, "ENTRY_USERID")),
         getLocalDate(rs, "ENTRY_TIMESTAMP"),
         defaultString(getString(rs, "UPDATE_USERID")),
@@ -249,9 +257,9 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
 
   private FilPolicyRow mapFilPolicyRow(java.sql.ResultSet rs) {
     return new FilPolicyRow(
-        defaultLong(getLong(rs, "FEE_IN_LIEU_PERCENT_ID"), 0L),
+        coalesce(getLong(rs, "FEE_IN_LIEU_PERCENT_ID"), 0L),
         getLocalDate(rs, "EFFECTIVE_DATE"),
-        defaultLong(getLong(rs, "FEE_IN_LIEU_PERCENT"), 0L),
+        coalesce(getLong(rs, "FEE_IN_LIEU_PERCENT"), 0L),
         defaultString(getString(rs, "ENTRY_USERID")),
         getLocalDate(rs, "ENTRY_TIMESTAMP"),
         defaultString(getString(rs, "UPDATE_USERID")),
@@ -260,10 +268,6 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
 
   private Timestamp toTimestamp(LocalDate value) {
     return value == null ? null : Timestamp.valueOf(value.atStartOfDay());
-  }
-
-  private long defaultLong(Long value, long fallback) {
-    return value == null ? fallback : value;
   }
 
   private String defaultString(String value) {

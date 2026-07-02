@@ -25,13 +25,17 @@ public record LexisApplicationDetailDto(
     boolean readOnly,
     boolean exemptionApprover,
     boolean locked,
+    String lockedBy,
+    String lockMessage,
     List<LexisPackageDto> packages,
     List<LexisRemarkDto> remarks,
     List<LexisOfferDto> offers) {
 
   public record LexisPackageDto(String packageNumber, double volume, long pieceCount) {}
 
-  public record LexisRemarkDto(String title, String remark) {}
+  public record LexisRemarkDto(
+      Long remarkId, String title, String remark, String user, LocalDate date) {}
 
-  public record LexisOfferDto(String offerNumber, boolean validOffer, LocalDate withdrawalDate) {}
+  public record LexisOfferDto(
+      String offerNumber, String companyName, LocalDate receivedDate, boolean validOffer, LocalDate withdrawalDate) {}
 }

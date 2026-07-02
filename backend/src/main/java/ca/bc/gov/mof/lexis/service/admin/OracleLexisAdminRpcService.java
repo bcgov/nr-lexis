@@ -1,10 +1,13 @@
 package ca.bc.gov.mof.lexis.service.admin;
 
+import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
+import ca.bc.gov.mof.lexis.dto.admin.LexisAdminPagedResponseDto;
 import ca.bc.gov.mof.lexis.dto.admin.LexisAdminRpcRequestDto;
 import ca.bc.gov.mof.lexis.repository.admin.LexisAdminPolicyRepository;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.IntFunction;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -23,8 +27,10 @@ import org.springframework.stereotype.Service;
 public class OracleLexisAdminRpcService implements LexisAdminRpcService {
 
   private static final DateTimeFormatter DISPLAY_DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
   private static final long MAX_RESULTS_PER_PAGE = 10L;
+  private static final int LEGACY_RESULTS_PER_PAGE = 10;
+  private static final int DEFAULT_MODERN_PAGE_SIZE = 100;
+  private static final int MAX_MODERN_PAGE_SIZE = 200;
 
   private static final Set<String> FEE_SORT_COLUMNS =
       Set.of("effective_date", "org_unit_no", "percent_increase");
@@ -44,6 +50,58 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
   @Override
   public Optional<Object> executeFilPolicyRpc(LexisAdminRpcRequestDto request) {
     return Optional.of(handleFilPolicyRpc(request));
+  }
+
+  @Override
+  public Optional<LexisAdminPagedResponseDto<Map<String, Object>>> listFeePolicies(
+      int page, int size, String sortField, String sortDirection) {
+    int normalizedPage = normalizeModernPage(page);
+    int normalizedSize = normalizeModernSize(size);
+    String sortOrder =
+        buildSortOrder(
+            sortParameters(sortField, sortDirection),
+            FEE_SORT_COLUMNS,
+            "effective_date",
+            "desc");
+    long total = repository.countFeePolicies();
+    List<Map<String, Object>> rows =
+        fetchLegacyWindow(
+            normalizedPage,
+            normalizedSize,
+            total,
+            legacyPage ->
+                repository.findFeePolicies(sortOrder, legacyPage).stream()
+                    .map(this::toFeePolicyListItem)
+                    .toList());
+    return Optional.of(
+        new LexisAdminPagedResponseDto<>(
+            rows, safeTotal(total), normalizedPage, normalizedSize));
+  }
+
+  @Override
+  public Optional<LexisAdminPagedResponseDto<Map<String, Object>>> listFilPolicies(
+      int page, int size, String sortField, String sortDirection) {
+    int normalizedPage = normalizeModernPage(page);
+    int normalizedSize = normalizeModernSize(size);
+    String sortOrder =
+        buildSortOrder(
+            sortParameters(sortField, sortDirection),
+            FIL_SORT_COLUMNS,
+            "effective_date",
+            "desc");
+    long total = repository.countFilPolicies();
+    List<Map<String, Object>> rows =
+        fetchLegacyWindow(
+            normalizedPage,
+            normalizedSize,
+            total,
+            legacyPage ->
+                repository.findFilPolicies(sortOrder, legacyPage).stream()
+                    .map(this::toFilPolicyListItem)
+                    .toList());
+    return Optional.of(
+        new LexisAdminPagedResponseDto<>(
+            rows, safeTotal(total), normalizedPage, normalizedSize));
   }
 
   private Object handleFeePolicyRpc(LexisAdminRpcRequestDto request) {
@@ -376,6 +434,63 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
     }
   }
 
+  private Map<String, String> sortParameters(String sortField, String sortDirection) {
+    LinkedHashMap<String, String> parameters = new LinkedHashMap<>();
+    if (trimToNull(sortField) != null) {
+      parameters.put("columnName", trimToNull(sortField));
+    }
+    if (trimToNull(sortDirection) != null) {
+      parameters.put("sortOrder", trimToNull(sortDirection));
+    }
+    return Map.copyOf(parameters);
+  }
+
+  private int normalizeModernPage(int page) {
+    return Math.max(0, page);
+  }
+
+  private int normalizeModernSize(int size) {
+    if (size < 1) {
+      return DEFAULT_MODERN_PAGE_SIZE;
+    }
+    return Math.min(size, MAX_MODERN_PAGE_SIZE);
+  }
+
+  private int safeTotal(long total) {
+    if (total < 0L) {
+      return 0;
+    }
+    return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
+  }
+
+  private <T> List<T> fetchLegacyWindow(
+      int page, int size, long total, IntFunction<List<T>> legacyPageFetcher) {
+    long offset = (long) page * size;
+    if (offset >= total || offset > Integer.MAX_VALUE) {
+      return List.of();
+    }
+
+    int firstLegacyPage = (int) (offset / LEGACY_RESULTS_PER_PAGE);
+    int firstLegacyOffset = (int) (offset % LEGACY_RESULTS_PER_PAGE);
+    ArrayList<T> rows = new ArrayList<>(size);
+    for (int legacyPage = firstLegacyPage; rows.size() < size; legacyPage++) {
+      List<T> legacyRows = legacyPageFetcher.apply(legacyPage);
+      if (legacyRows.isEmpty()) {
+        break;
+      }
+
+      int fromIndex = legacyPage == firstLegacyPage ? firstLegacyOffset : 0;
+      for (int index = fromIndex; index < legacyRows.size() && rows.size() < size; index++) {
+        rows.add(legacyRows.get(index));
+      }
+
+      if (legacyRows.size() < LEGACY_RESULTS_PER_PAGE) {
+        break;
+      }
+    }
+    return List.copyOf(rows);
+  }
+
   private LocalDate parseFutureDate(String rawValue, List<String> errors) {
     String normalized = trimToNull(rawValue);
     if (normalized == null) {
@@ -397,17 +512,7 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
   }
 
   private LocalDate parseDate(String rawValue) {
-    try {
-      return LocalDate.parse(rawValue, DISPLAY_DATE_FORMATTER);
-    } catch (DateTimeParseException ignored) {
-      // Fall through to legacy format.
-    }
-
-    try {
-      return LocalDate.parse(rawValue, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ignored) {
-      return null;
-    }
+    return parseIsoOrLegacyDate(rawValue);
   }
 
   private Long parseRequiredPositiveLong(String rawValue, String requiredMessage, List<String> errors) {
@@ -468,14 +573,6 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
 
   private String formatDate(LocalDate value) {
     return value == null ? "" : value.format(DISPLAY_DATE_FORMATTER);
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private String renderPaginationHtml(

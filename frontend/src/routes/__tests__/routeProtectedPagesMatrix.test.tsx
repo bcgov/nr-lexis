@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest'
+import type { RouteActionMatch } from '@/routes/routeAccessTypes'
 import { PROTECTED_ROUTES } from '@/routes/routePaths'
 
 type RouteExpectation = {
   path: string
   requiredActions: string[]
-  requiredActionsMatch?: 'any' | 'all'
+  requiredActionsMatch?: RouteActionMatch
 }
 
 const EXPECTED_CORE_PAGES: RouteExpectation[] = [
   {
     path: '/provincial/application',
     requiredActions: ['/applicationSearch'],
+  },
+  {
+    path: '/provincial/application/upload',
+    requiredActions: ['uploadApplicationSubmission'],
   },
   {
     path: '/provincial/application/:applicationNumber',
@@ -49,16 +54,8 @@ const EXPECTED_CORE_PAGES: RouteExpectation[] = [
     requiredActions: ['/applicationsReview'],
   },
   {
-    path: '/provincial/summary',
-    requiredActions: ['/summary'],
-  },
-  {
     path: '/federal',
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
-  },
-  {
-    path: '/indian-reserve',
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
   },
 ]
 

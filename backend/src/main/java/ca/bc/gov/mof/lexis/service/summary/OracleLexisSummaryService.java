@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.summary;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
@@ -218,20 +220,19 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             null,
-            null,
+            normalizedClientNumber,
             true,
             regions,
             firstPresent(sortField, PERMIT_SORT_DEFAULT),
-            DEFAULT_PAGE,
-            Integer.MAX_VALUE);
+            normalizedPage,
+            normalizedSize);
 
     var response = permitService.search(criteria);
     List<PermitSearchResultDto> scopedResults =
         filterPermitResultsForClient(response.results(), normalizedClientNumber);
-    List<SummaryPermitItemDto> results =
-        pageSlice(scopedResults, normalizedPage, normalizedSize).stream().map(this::toSummaryPermit).toList();
+    List<SummaryPermitItemDto> results = scopedResults.stream().map(this::toSummaryPermit).toList();
 
-    return new SummaryPermitsResponseDto(results, scopedResults.size(), normalizedPage, normalizedSize);
+    return new SummaryPermitsResponseDto(results, response.total(), response.page(), response.size());
   }
 
   @Override
@@ -263,20 +264,19 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             null,
-            null,
+            normalizedClientNumber,
             false,
             regions,
             firstPresent(sortField, FEE_SORT_DEFAULT),
-            DEFAULT_PAGE,
-            Integer.MAX_VALUE);
+            normalizedPage,
+            normalizedSize);
 
     var response = permitService.search(criteria);
     List<PermitSearchResultDto> scopedResults =
         filterPermitResultsForClient(response.results(), normalizedClientNumber);
-    List<SummaryFeeItemDto> results =
-        pageSlice(scopedResults, normalizedPage, normalizedSize).stream().map(this::toSummaryFee).toList();
+    List<SummaryFeeItemDto> results = scopedResults.stream().map(this::toSummaryFee).toList();
 
-    return new SummaryFeesResponseDto(results, scopedResults.size(), normalizedPage, normalizedSize);
+    return new SummaryFeesResponseDto(results, response.total(), response.page(), response.size());
   }
 
   @Override
@@ -341,7 +341,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
         result.status(),
         reason,
         exemptionType,
-        blankToNull(result.exemptionNumber()),
+        trimToNull(result.exemptionNumber()),
         detail.map(LexisApplicationDetailDto::receivedDate).orElse(null),
         result.listingDate(),
         packageNumbers);
@@ -446,18 +446,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
     return fallback;
   }
 
-  private String blankToNull(String value) {
-    return trimToNull(value);
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
   private List<PermitSearchResultDto> filterPermitResultsForClient(
       List<PermitSearchResultDto> results,
       String clientNumber) {
@@ -469,15 +457,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
         .filter(result -> hasClientNumber(result.ownerClientNumber(), clientNumber)
             || hasClientNumber(result.applicantClientNumber(), clientNumber))
         .toList();
-  }
-
-  private <T> List<T> pageSlice(List<T> results, int page, int size) {
-    if (results == null || results.isEmpty()) {
-      return List.of();
-    }
-    int fromIndex = Math.min(page * size, results.size());
-    int toIndex = Math.min(fromIndex + size, results.size());
-    return results.subList(fromIndex, toIndex);
   }
 
   private boolean hasClientNumber(String value, String clientNumber) {

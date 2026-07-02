@@ -1,10 +1,16 @@
 package ca.bc.gov.mof.lexis.repository.review;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.CallableStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
@@ -23,12 +29,13 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
 
   private static final String FIND_ALL_PRODUCT_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_PRODUCT_TYPE_CODES(?)";
-  private static final String FIND_ALL_ORG_UNITS = LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)";
   private static final String FIND_ALL_APPLICATION_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
 
   private static final String FIND_APPLICATIONS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATIONS_BY_CRITERIA(?,?,?,?,?)";
+  private static final String COUNT_APPLICATIONS_BY_CRITERIA =
+      LEXIS_GROUP_5_PACKAGE + "COUNT_APPLICATIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String UPDATE_EXEMPTION_APPLICATION =
@@ -48,18 +55,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return queryCursorProcedure(
-        FIND_ALL_ORG_UNITS,
-        null,
-        1,
-        rs -> {
-          Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-          String regionCode = getString(rs, "ORG_UNIT_CODE");
-          String regionName = getString(rs, "ORG_UNIT_NAME");
-          return new CodeNameDto(
-              orgUnitNo == null ? null : orgUnitNo.toString(),
-              regionCode == null ? regionName : regionCode);
-        });
+    return loadOrgUnitOptions(true);
   }
 
   public List<CodeNameDto> loadReviewStatusOptions() {
@@ -73,54 +69,83 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public List<ApplicationReviewSearchResultDto> search(ApplicationReviewSearchCriteria criteria) {
+  public Page<ApplicationReviewSearchResultDto> search(ApplicationReviewSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  public Page<ApplicationReviewSearchResultDto> search(
+      ApplicationReviewSearchCriteria criteria, Integer knownTotal) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    int totalElements =
+        knownTotal == null
+            ? queryLegacyDynamicCountProcedure(
+                COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues())
+            : Math.max(0, knownTotal);
+    return queryLegacyDynamicPage(
+        FIND_APPLICATIONS_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        totalElements,
+        this::toSearchResult);
+  }
+
+  public int count(ApplicationReviewSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+  }
+
+  public Slice<ApplicationReviewSearchResultDto> slice(ApplicationReviewSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return queryLegacyDynamicSlice(
+        FIND_APPLICATIONS_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        this::toSearchResult);
+  }
+
+  private SqlWhere buildSearchWhere(ApplicationReviewSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
-    where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
-    where.addEquals("EEA.EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
-    where.addDateGte("EEA.RECEIVED_DATE", criteria.receivedFromDate());
-    where.addDateLte("EEA.RECEIVED_DATE", criteria.receivedToDate());
-    where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
-    where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
-    where.addRaw(" AND (EEA.EXPORT_APPLICATION_STATUS_CODE = 'NEW' OR EEA.EXPORT_APPLICATION_STATUS_CODE = 'PND')");
-    where.addInEqualsNumberOrNoResults("EEA.ORG_UNIT_NO", criteria.regionNumbers());
+    where.addLike("v.APPLICATION_NUMBER", criteria.applicationNumber());
+    where.addEquals("v.EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
+    where.addDateGte("v.RECEIVED_DATE", criteria.receivedFromDate());
+    where.addDateLte("v.RECEIVED_DATE", criteria.receivedToDate());
+    where.addDateGte("v.ADVERTISING_DATE", criteria.listingFromDate());
+    where.addDateLte("v.ADVERTISING_DATE", criteria.listingToDate());
+    where.addRaw(" AND (v.EXPORT_APPLICATION_STATUS_CODE = 'NEW' OR v.EXPORT_APPLICATION_STATUS_CODE = 'PND')");
+    if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
+      where.addInEqualsNumberOrNoResults("v.ORG_UNIT_NO", criteria.regionNumbers());
+    }
 
     String orderBy =
         sanitizedSort(
             criteria.sortField(),
             mapOf(
-                "applicationNumber", "EEA.APPLICATION_NUMBER",
-                "volume", "EEA.EXEMPTION_APPLICATION_VOLUME",
-                "listingDate", "ES.ADVERTISING_DATE",
-                "status", "EEA.EXPORT_APPLICATION_STATUS_CODE",
-                "region", "OU.ORG_UNIT_CODE"),
+                "applicationNumber", "v.APPLICATION_NUMBER",
+                "volume", "v.EXEMPTION_APPLICATION_VOLUME",
+                "listingDate", "v.ADVERTISING_DATE",
+                "status", "v.EXPORT_APPLICATION_STATUS_CODE",
+                "region", "v.ORG_UNIT_CODE"),
             "applicationNumber",
             "DESC");
 
-    SqlWhere sqlWhere = where.build(orderBy);
-
-    return queryDynamicAllPages(
-        FIND_APPLICATIONS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        rs ->
-            new ApplicationReviewSearchResultDto(
-                getLong(rs, "APPLICATION_NUMBER"),
-                firstNonNullDouble(
-                    getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
-                    getDouble(rs, "APPLICATION_VOLUME")),
-                firstNonNull(getString(rs, "END_USE_SORT"), getString(rs, "EXPORT_PRODUCT_TYPE_CODE")),
-                getLocalDate(rs, "ADVERTISING_DATE"),
-                firstNonNull(getString(rs, "STATUS_DESCRIPTION"), getString(rs, "EXPORT_APPLICATION_STATUS_CODE")),
-                firstNonNull(getString(rs, "REGION_CODE"), getString(rs, "REGION")),
-                "Y".equalsIgnoreCase(getString(rs, "SHOW_INFO_ICON"))));
+    return where.build(orderBy);
   }
 
   public boolean approve(Long applicationNumber, String updateUserId) {
-    return updateApplicationStatus(applicationNumber, "APP", null, updateUserId);
+    return updateApplicationStatus(applicationNumber, "APP", null, updateUserId).updated();
   }
 
   public boolean updateStatus(
+      Long applicationNumber, String statusCode, String remark, String updateUserId) {
+    return updateStatusWithRemark(applicationNumber, statusCode, remark, updateUserId).updated();
+  }
+
+  public ApplicationStatusUpdateRow updateStatusWithRemark(
       Long applicationNumber, String statusCode, String remark, String updateUserId) {
     return updateApplicationStatus(applicationNumber, statusCode, remark, updateUserId);
   }
@@ -146,20 +171,20 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     return true;
   }
 
-  private boolean updateApplicationStatus(
+  private ApplicationStatusUpdateRow updateApplicationStatus(
       Long applicationNumber, String statusCode, String remark, String updateUserId) {
     if (applicationNumber == null || applicationNumber < 1) {
-      return false;
+      return ApplicationStatusUpdateRow.notUpdated();
     }
 
     String normalizedStatus = trim(statusCode);
     if (normalizedStatus == null) {
-      return false;
+      return ApplicationStatusUpdateRow.notUpdated();
     }
 
     Optional<ApplicationUpdateRecord> application = loadApplicationUpdateRecord(applicationNumber);
     if (application.isEmpty()) {
-      return false;
+      return ApplicationStatusUpdateRow.notUpdated();
     }
 
     ApplicationUpdateRecord record = application.get();
@@ -174,15 +199,29 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
             UPDATE_EXEMPTION_APPLICATION,
             cs -> bindApplicationUpdate(cs, record, normalizedStatus, finalUpdateUser));
     if (!updated) {
-      return false;
+      return ApplicationStatusUpdateRow.notUpdated();
     }
 
     String normalizedRemark = trim(remark);
+    Optional<ReviewRemarkRow> insertedRemark = Optional.empty();
     if (normalizedRemark != null) {
-      insertRemark(applicationNumber, normalizedRemark, finalUpdateUser);
+      insertedRemark = insertRemark(applicationNumber, normalizedRemark, finalUpdateUser);
     }
 
-    return true;
+    return new ApplicationStatusUpdateRow(true, insertedRemark.orElse(null));
+  }
+
+  private ApplicationReviewSearchResultDto toSearchResult(ResultSet rs) {
+    return new ApplicationReviewSearchResultDto(
+        getLong(rs, "APPLICATION_NUMBER"),
+        firstNonNull(
+            getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
+            getDouble(rs, "APPLICATION_VOLUME")),
+        firstNonNull(getString(rs, "END_USE_SORT"), getString(rs, "EXPORT_PRODUCT_TYPE_CODE")),
+        getLocalDate(rs, "ADVERTISING_DATE"),
+        firstNonNull(getString(rs, "STATUS_DESCRIPTION"), getString(rs, "EXPORT_APPLICATION_STATUS_CODE")),
+        firstNonNull(getString(rs, "REGION_CODE"), getString(rs, "REGION")),
+        "Y".equalsIgnoreCase(getString(rs, "SHOW_INFO_ICON")));
   }
 
   private Optional<ApplicationUpdateRecord> loadApplicationUpdateRecord(Long applicationNumber) {
@@ -197,7 +236,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
                 getLocalDate(rs, "APPLICATION_DATE"),
                 getLong(rs, "TERM_DAYS"),
                 getLocalDate(rs, "RECEIVED_DATE"),
-                firstNonNullDouble(
+                firstNonNull(
                     getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
                     getDouble(rs, "APPLICATION_VOLUME")),
                 getDouble(rs, "AVERAGE_LOG_VOLUME"),
@@ -230,16 +269,16 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     int index = 1;
 
     setLongOrNull(cs, index++, record.applicationNumber());
-    setLongOrNull(cs, index++, emptyToNull(record.federalApplicationNumber()));
+    setLongOrNull(cs, index++, positiveOrNull(record.federalApplicationNumber()));
     setDateOrNull(cs, index++, record.applicationDate());
     setLongOrNull(cs, index++, record.termDays());
     setDateOrNull(cs, index++, record.receivedDate());
     setDoubleOrNull(cs, index++, record.exemptionApplicationVolume());
     setDoubleOrNull(cs, index++, record.averageLogVolume());
     setStringOrNull(cs, index++, record.productLocation());
-    setStringOrNull(cs, index++, record.entryUserId());
+    cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
-    setStringOrNull(cs, index++, updateUserId);
+    cs.setString(index++, auditUserOrDefault(updateUserId));
     cs.setTimestamp(index++, new Timestamp(System.currentTimeMillis()));
     setLongOrNull(cs, index++, record.exportScheduleId());
     setStringOrNull(cs, index++, record.agentClientNumber());
@@ -259,18 +298,31 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index, record.oicIndicator());
   }
 
-  private void insertRemark(Long applicationNumber, String remark, String updateUserId) {
-    queryCursorProcedure(
+  private Optional<ReviewRemarkRow> insertRemark(Long applicationNumber, String remark, String updateUserId) {
+    return queryCursorSingle(
         INSERT_EXEMPTION_APP_REMARK,
         cs -> {
           cs.setTimestamp(1, new Timestamp(System.currentTimeMillis()));
           cs.setString(2, remark);
-          cs.setString(3, updateUserId);
+          cs.setString(3, auditUserOrDefault(updateUserId));
           cs.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
           cs.setString(5, applicationNumber.toString());
         },
         6,
-        rs -> null);
+        this::mapReviewRemarkRow);
+  }
+
+  private ReviewRemarkRow mapReviewRemarkRow(ResultSet rs) {
+    Long remarkId = getLong(rs, "EXPORT_EXMPTN_APPL_REMARK_NMBR");
+    String remark = getString(rs, "REMARK");
+    String user = getString(rs, "ENTRY_USERID");
+    Timestamp entryTimestamp = safeTimestamp(rs, "ENTRY_TIMESTAMP");
+    java.time.Instant date = entryTimestamp == null ? null : entryTimestamp.toInstant();
+    return new ReviewRemarkRow(
+        remarkId == null ? 0L : remarkId,
+        remark == null ? "" : remark,
+        user,
+        date);
   }
 
   private Timestamp safeTimestamp(java.sql.ResultSet rs, String columnName) {
@@ -279,18 +331,6 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     } catch (SQLException ex) {
       return null;
     }
-  }
-
-  private String firstNonNull(String first, String second) {
-    return first != null ? first : second;
-  }
-
-  private Double firstNonNullDouble(Double first, Double second) {
-    return first != null ? first : second;
-  }
-
-  private Long emptyToNull(Long value) {
-    return value == null || value <= 0 ? null : value;
   }
 
   private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
@@ -359,4 +399,12 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       String agentCompanyContact,
       String ownerCompanyContact,
       String oicIndicator) {}
+
+  public record ApplicationStatusUpdateRow(boolean updated, ReviewRemarkRow remark) {
+    public static ApplicationStatusUpdateRow notUpdated() {
+      return new ApplicationStatusUpdateRow(false, null);
+    }
+  }
+
+  public record ReviewRemarkRow(long remarkId, String remark, String user, java.time.Instant date) {}
 }

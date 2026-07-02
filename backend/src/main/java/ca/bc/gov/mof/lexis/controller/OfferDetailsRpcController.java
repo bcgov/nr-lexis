@@ -1,10 +1,21 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDouble;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
+import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -16,9 +27,13 @@ import java.util.TreeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,20 +44,30 @@ import org.springframework.web.bind.annotation.RestController;
 public class OfferDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OfferDetailsRpcController.class);
+  private static final String LEGACY_ACTION_CREATE_OFFER = "createOffer";
   private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
       DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ObjectProvider<LexisApplicationService> applicationServiceProvider;
   private final ObjectProvider<FederalApplicationService> federalApplicationServiceProvider;
   private final ObjectProvider<ClientLookupService> clientLookupServiceProvider;
+  private final ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider;
+  private final LexisSessionService sessionService;
+  private final LexisAuthorizationService authorizationService;
 
   public OfferDetailsRpcController(
       ObjectProvider<LexisApplicationService> applicationServiceProvider,
       ObjectProvider<FederalApplicationService> federalApplicationServiceProvider,
-      ObjectProvider<ClientLookupService> clientLookupServiceProvider) {
+      ObjectProvider<ClientLookupService> clientLookupServiceProvider,
+      ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider,
+      LexisSessionService sessionService,
+      LexisAuthorizationService authorizationService) {
     this.applicationServiceProvider = applicationServiceProvider;
     this.federalApplicationServiceProvider = federalApplicationServiceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
+    this.purchaseOfferServiceProvider = purchaseOfferServiceProvider;
+    this.sessionService = sessionService;
+    this.authorizationService = authorizationService;
   }
 
   @GetMapping("/validate-application-number")
@@ -256,12 +281,75 @@ public class OfferDetailsRpcController {
     return ResponseEntity.ok(response);
   }
 
+  @PostMapping("/offer")
+  public ResponseEntity<OfferPersistenceResponseDto> addOffer(
+      HttpServletRequest request,
+      Authentication authentication) {
+    return addOffer(fromRequest(request), authentication);
+  }
+
+  private ResponseEntity<OfferPersistenceResponseDto> addOffer(
+      MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_OFFER)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    PurchaseOfferService service = purchaseOfferServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Purchase offer service unavailable - returning no content for add offer");
+      return ResponseEntity.noContent().build();
+    }
+
+    String userId = authentication == null ? null : authentication.getName();
+    PurchaseOfferService.CreateOfferResult result =
+        service.addOffer(toCreateOfferRequest(parameters), userId);
+    return ResponseEntity.ok(toPersistenceResponse(result));
+  }
+
+  @PostMapping("/offer/update")
+  public ResponseEntity<OfferPersistenceResponseDto> updateOffer(
+      @RequestParam MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_OFFER)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    PurchaseOfferService service = purchaseOfferServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Purchase offer service unavailable - returning no content for update offer");
+      return ResponseEntity.noContent().build();
+    }
+
+    String userId = authentication == null ? null : authentication.getName();
+    PurchaseOfferService.CreateOfferResult result =
+        service.updateOffer(toCreateOfferRequest(parameters), userId);
+    return ResponseEntity.ok(toPersistenceResponse(result));
+  }
+
+  public ResponseEntity<OfferPersistenceResponseDto> addOfferLegacy(
+      MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return addOffer(parameters, authentication);
+  }
+
+  public ResponseEntity<OfferPersistenceResponseDto> updateOfferLegacy(
+      MultiValueMap<String, String> parameters,
+      Authentication authentication) {
+    return updateOffer(parameters, authentication);
+  }
+
   private boolean isFederalApplication(Long applicationNumber) {
     FederalApplicationService federalService = federalApplicationServiceProvider.getIfAvailable();
     if (federalService == null) {
       return false;
     }
     return federalService.findByApplicationNumber(applicationNumber).isPresent();
+  }
+
+  private boolean canPerform(Authentication authentication, String action) {
+    return authorizationService.canPerformAction(
+        sessionService.parseRolesFromPrincipal(authentication), action);
   }
 
   private Long parseApplicationNumber(String applicationNumber) {
@@ -275,6 +363,46 @@ public class OfferDetailsRpcController {
     }
   }
 
+  private PurchaseOfferService.CreateOfferRequest toCreateOfferRequest(
+      MultiValueMap<String, String> parameters) {
+    return new PurchaseOfferService.CreateOfferRequest(
+        parsePositiveLong(first(parameters, "applicationNumber")),
+        parsePositiveLong(first(parameters, "exportPurchaseOfferNumber", "offerNumber")),
+        first(parameters, "packageNumber"),
+        first(parameters, "companyName"),
+        first(parameters, "contactName"),
+        parseDouble(first(parameters, "purchaseOfferAmount")),
+        parseDate(first(parameters, "purchaseOfferDate")),
+        parseDate(first(parameters, "offerWithdrawalDate", "offerEndDate")),
+        parseDate(first(parameters, "teacReviewDate")),
+        first(parameters, "fairOfferIndicator"),
+        first(parameters, "validOfferIndicator"),
+        first(parameters, "offerRemark"),
+        first(parameters, "approvalIndicator"),
+        first(parameters, "withdrawReason"),
+        first(parameters, "exportJurisdictionCode", "jurisdictionCode"),
+        first(parameters, "manufacturingFacilityInfo"),
+        first(parameters, "offeringClientNumber", "clientNumber"),
+        first(parameters, "pickupLocation"),
+        first(parameters, "offerCondition"),
+        parseDouble(first(parameters, "offerVolume")));
+  }
+
+  private OfferPersistenceResponseDto toPersistenceResponse(
+      PurchaseOfferService.CreateOfferResult result) {
+    return new OfferPersistenceResponseDto(
+        result.success(),
+        result.message(),
+        result.applicationNumber(),
+        result.exportPurchaseOfferNumber(),
+        result.clientHasEmail(),
+        result.toEmails(),
+        result.sendEmail(),
+        result.update(),
+        result.errors(),
+        result.warnings());
+  }
+
   private String formatLegacyDate(LocalDate value) {
     if (value == null) {
       return "";
@@ -284,14 +412,6 @@ public class OfferDetailsRpcController {
 
   private String formatVolume(double value) {
     return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private String fallbackApplicationNumber(String value) {
@@ -330,4 +450,16 @@ public class OfferDetailsRpcController {
 
   public record OfferClientLocationResponseDto(
       String locationName, String locationCode, boolean selected) {}
+
+  public record OfferPersistenceResponseDto(
+      boolean success,
+      String message,
+      Long applicationNumber,
+      Long exportPurchaseOfferNumber,
+      boolean clientHasEmail,
+      String toEmails,
+      boolean sendEmail,
+      boolean isUpdate,
+      List<String> errors,
+      List<String> warnings) {}
 }

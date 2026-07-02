@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import UnauthorizedPage from '@/pages/Unauthorized'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -28,9 +29,7 @@ describe('Unauthorized page actions', () => {
   })
 
   it('navigates back to landing page', async () => {
-    mockedUseAuth.mockReturnValue({
-      logout: vi.fn().mockResolvedValue(undefined),
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext())
 
     renderPage()
 
@@ -39,17 +38,16 @@ describe('Unauthorized page actions', () => {
     expect(await screen.findByText('landing-page')).toBeInTheDocument()
   })
 
-  it('calls logout and navigates to landing page', async () => {
+  it('calls logout', async () => {
     const logout = vi.fn().mockResolvedValue(undefined)
-    mockedUseAuth.mockReturnValue({
-      logout,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ logout }))
 
     renderPage()
 
     await userEvent.click(screen.getByRole('button', { name: 'Log Out' }))
 
     expect(logout).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('landing-page')).toBeInTheDocument()
+    expect(logout).toHaveBeenCalledWith()
+    expect(screen.getByRole('heading', { name: 'Unauthorized' })).toBeInTheDocument()
   })
 })

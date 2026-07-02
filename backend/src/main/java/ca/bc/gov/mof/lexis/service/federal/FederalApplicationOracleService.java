@@ -1,5 +1,9 @@
 package ca.bc.gov.mof.lexis.service.federal;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
@@ -10,6 +14,7 @@ import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -31,19 +36,30 @@ public class FederalApplicationOracleService implements FederalApplicationServic
 
   @Override
   public FederalApplicationSearchResponseDto search(FederalApplicationSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  @Override
+  public FederalApplicationSearchResponseDto search(
+      FederalApplicationSearchCriteria criteria, Integer knownTotal) {
     FederalApplicationSearchCriteria normalized = normalizeCriteria(criteria);
     int page = normalized.page();
     int size = normalized.size();
 
-    List<FederalApplicationSearchResultDto> results = safeList(repository.search(normalized));
-    int fromIndex = Math.min(page * size, results.size());
-    int toIndex = Math.min(fromIndex + size, results.size());
+    Page<FederalApplicationSearchResultDto> searchPage =
+        knownTotal == null ? repository.search(normalized) : repository.search(normalized, knownTotal);
+    List<FederalApplicationSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.getContent());
 
     return new FederalApplicationSearchResponseDto(
-        results.subList(fromIndex, toIndex),
-        results.size(),
+        results,
+        searchPage == null ? 0 : (int) Math.min(Integer.MAX_VALUE, searchPage.getTotalElements()),
         page,
         size);
+  }
+
+  @Override
+  public int count(FederalApplicationSearchCriteria criteria) {
+    return repository.count(normalizeCriteria(criteria));
   }
 
   @Override
@@ -64,7 +80,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
 
   @Override
   public boolean verifyApplicationClients(List<Long> applicationNumbers) {
-    List<Long> validNumbers = normalizeApplicationNumbers(applicationNumbers);
+    List<Long> validNumbers = positiveDistinctLongs(applicationNumbers);
     if (validNumbers.isEmpty()) {
       return false;
     }
@@ -92,22 +108,4 @@ public class FederalApplicationOracleService implements FederalApplicationServic
         Math.max(1, input.size()));
   }
 
-  private List<Long> normalizeApplicationNumbers(List<Long> rawValues) {
-    if (rawValues == null) {
-      return List.of();
-    }
-    return rawValues.stream().filter(value -> value != null && value > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

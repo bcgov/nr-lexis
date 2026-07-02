@@ -1,13 +1,12 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import { type FC } from 'react'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '@/context/auth/AuthProvider'
+import { AuthProvider } from '../AuthProvider'
 import { useAuth } from '@/context/auth/useAuth'
 import { fetchSessionCapabilities } from '@/service/session-service'
 
 vi.mock('@/service/session-service', () => ({
   fetchSessionCapabilities: vi.fn(),
-  performLogoff: vi.fn(),
 }))
 
 const mockedFetchSessionCapabilities = vi.mocked(fetchSessionCapabilities)
@@ -16,8 +15,17 @@ type ProbeProps = {
   actionChecks: string[]
 }
 
-const AuthProbe: FC<ProbeProps> = ({ actionChecks }) => {
-  const { capabilities, canPerform, defaultRoute, hasAnyRole, isLoading, isLoggedIn } = useAuth()
+function AuthProbe({ actionChecks }: ProbeProps) {
+  const {
+    capabilities,
+    canPerform,
+    defaultRoute,
+    hasAnyRole,
+    isLoading,
+    isLoggedIn,
+    logout,
+    refresh,
+  } = useAuth()
 
   return (
     <div>
@@ -31,6 +39,12 @@ const AuthProbe: FC<ProbeProps> = ({ actionChecks }) => {
           {String(canPerform(action))}
         </div>
       ))}
+      <button type="button" onClick={() => void refresh()}>
+        Refresh Session
+      </button>
+      <button type="button" onClick={() => void logout()}>
+        Logout
+      </button>
     </div>
   )
 }
@@ -52,12 +66,48 @@ const waitForAuthLoad = async () => {
 describe('Auth Provider Role Matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.unstubAllEnvs()
-    localStorage.clear()
+    window.config = {}
   })
 
-  it('normalizes final and legacy concrete submitter roles and grants expected actions', async () => {
-    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
+  it('normalizes modern submitter roles without routing to retired summary', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\tester',
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345', 'LEXIS_FEDERAL_SUBMITTER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/summary'],
+    })
+
+    renderProbe(['/summary'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent(
+      'PROVINCIAL_SUBMITTER_00012345,FEDERAL_SUBMITTER',
+    )
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
+    expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
+  })
+
+  it('does not route modern submitter roles to summary without a summary grant', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\submitter',
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: [],
+    })
+
+    renderProbe(['/summary'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('PROVINCIAL_SUBMITTER_00012345')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
+    expect(screen.getByTestId('action-/summary')).toHaveTextContent('false')
+  })
+
+  it('does not route legacy submitter aliases as modern submitter roles', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\tester',
@@ -67,20 +117,17 @@ describe('Auth Provider Role Matrix', () => {
       grantedActions: [],
     })
 
-    renderProbe(['/summary', '/federalApplicationSearch', '/lexisAgentAdmin'])
+    renderProbe(['/summary'])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent(
-      'PROVINCIAL_SUBMITTER_00012345,FEDERAL_SUBMITTER',
+      'LEXIS_INDUSTRY_00012345,LOG_EXPORT_INDUSTRY_00067890',
     )
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/summary')
-    expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
-    expect(screen.getByTestId('action-/federalApplicationSearch')).toHaveTextContent('true')
-    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
+    expect(screen.getByTestId('action-/summary')).toHaveTextContent('false')
   })
 
-  it('maps legacy admin alias to canonical admin role and admin route', async () => {
-    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
+  it('maps legacy admin alias to canonical admin role and review route', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\admin',
@@ -90,126 +137,368 @@ describe('Auth Provider Role Matrix', () => {
       grantedActions: [],
     })
 
-    renderProbe(['/lexisAgentAdmin', '/applicationSearch'])
+    renderProbe(['/lexisAgentAdmin', '/fileApplicationUpload', 'createApplication'])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/admin')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
-    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/fileApplicationUpload')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
   })
 
-  it('preserves legacy path routing precedence when legacyPath is present', async () => {
-    vi.stubEnv('VITE_LEXIS_ENABLE_LEGACY_PATH_ROUTING', 'true')
-    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
+  it('limits admin default route and actions when PROD RTM-only mode is enabled', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
-      principal: 'idir\\approver',
-      roles: ['APPLICATION_APPROVER'],
+      principal: 'idir\\admin',
+      roles: ['LEXIS_ADMIN'],
       welcomeTarget: null,
-      legacyPath: '/permitSearch.do?actionMapping=view',
-      grantedActions: [],
+      legacyPath: null,
+      grantedActions: ['/lexisAgentAdmin', '/applicationSearch', 'createApplication'],
     })
 
-    renderProbe(['/applicationsReview'])
+    renderProbe(['/lexisAgentAdmin', '/applicationSearch', 'createApplication'])
     await waitForAuthLoad()
 
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/permit')
-    expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
+    expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/admin/rtm/emslogamv')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')
   })
 
-  it('ignores legacy path routing by default when legacy routing is not enabled', async () => {
-    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
+  it('routes non-admin users to unauthorized when PROD RTM-only mode is enabled', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\readonly',
+      roles: ['LEXIS_READ_ONLY'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/applicationSearch'],
+    })
+
+    renderProbe(['/lexisAgentAdmin', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('READ_ONLY')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+  })
+
+  it('keeps admin review routing and actions when read-only is also present', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\admin',
+      roles: ['LEXIS_ADMIN', 'LEXIS_READ_ONLY'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/applicationSearch'],
+    })
+
+    renderProbe(['/lexisAgentAdmin', '/applicationReport', 'createApplication'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN,READ_ONLY')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
+  })
+
+  it('does not use legacyPath for default route routing anymore', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\approver',
-      roles: ['APPLICATION_APPROVER'],
+      roles: ['LEXIS_APPLICATION_APPROVER'],
       welcomeTarget: null,
       legacyPath: '/permitSearch.do?actionMapping=view',
       grantedActions: [],
     })
 
-    renderProbe(['/applicationsReview'])
+    renderProbe(['/applicationsReview', '/applicationReport', '/lexisAgentAdmin'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
+    expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
+  })
+
+  it('routes application approvers to review and honours report but not admin grants', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\approver',
+      roles: ['LEXIS_APPLICATION_APPROVER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/applicationsReview', '/applicationReport'],
+    })
+
+    renderProbe(['/applicationsReview', '/applicationReport', '/lexisAgentAdmin'])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
   })
 
-  it('treats FEDERAL_SUBMITTER suffixed values as concrete federal role', async () => {
-    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
+  it('blocks reports for read-only users even when report actions are granted', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
-      principal: 'idir\\federal',
-      roles: ['FEDERAL_SUBMITTER_99999999'],
+      principal: 'idir\\readonly',
+      roles: ['LEXIS_READ_ONLY'],
       welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/applicationSearch', '/applicationReport', '/feeReport', 'mofrListing'],
+    })
+
+    renderProbe(['/applicationSearch', '/applicationReport', '/feeReport', 'mofrListing'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/feeReport')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-mofrListing')).toHaveTextContent('false')
+  })
+
+  it('routes delegated admin without LEXIS actions to unauthorized', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\delegated',
+      roles: ['LEXIS_DELEGATED_ADMIN'],
+      welcomeTarget: 'noAccess',
       legacyPath: null,
       grantedActions: [],
     })
 
-    renderProbe(['/federalApplicationSearch', 'viewFederalApplication'])
+    renderProbe(['/applicationsReview'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('roles')).toHaveTextContent('DELEGATED_ADMIN')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
+    expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('false')
+  })
+
+  it('uses backend granted actions for canPerform and roleless default route selection', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\reviewer',
+      roles: [],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/applicationsReview'],
+    })
+
+    renderProbe(['/applicationsReview', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
+    expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+  })
+
+  it('prioritizes the review queue over retired summary when both actions are granted', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'idir\\reviewer',
+      roles: [],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/summary', '/applicationsReview'],
+    })
+
+    renderProbe(['/summary', '/applicationsReview'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
+    expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
+  })
+
+  it('routes provincial submitters with application access to application search before upload', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\submitter',
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: [
+        '/applicationSearch',
+        '/applicationDetails',
+        'createApplication',
+        'uploadApplicationSubmission',
+      ],
+    })
+
+    renderProbe(['uploadApplicationSubmission', 'createApplication', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
+    expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
+  })
+
+  it('routes application-submission-only users to the upload flow', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\submitter',
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['uploadApplicationSubmission'],
+    })
+
+    renderProbe(['uploadApplicationSubmission', 'createApplication', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application/upload')
+    expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+  })
+
+  it('routes report-only users to their first available report', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\reporter',
+      roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['mofrListing'],
+    })
+
+    renderProbe(['mofrListing', '/applicationReport', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/reports/biweeklyListing')
+    expect(screen.getByTestId('action-mofrListing')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+  })
+
+  it('routes federal submitters to federal search instead of application submission upload', async () => {
+    mockedFetchSessionCapabilities.mockResolvedValue({
+      authenticated: true,
+      principal: 'bceid\\federal',
+      roles: ['LEXIS_FEDERAL_SUBMITTER'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: [
+        '/federalApplicationSearch',
+        '/federalApplicationDetails',
+        'uploadApplicationSubmission',
+        'viewFederalApplication',
+      ],
+    })
+
+    renderProbe([
+      '/federalApplicationSearch',
+      '/applicationSearch',
+      'uploadApplicationSubmission',
+      'createApplication',
+    ])
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('FEDERAL_SUBMITTER')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/federal')
     expect(screen.getByTestId('action-/federalApplicationSearch')).toHaveTextContent('true')
-    expect(screen.getByTestId('action-viewFederalApplication')).toHaveTextContent('true')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/summary')
+    expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')
   })
 
-  it('grants exemption approval actions to EXEMPTION_APPROVER', async () => {
-    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'true')
-    mockedFetchSessionCapabilities.mockResolvedValue({
-      authenticated: true,
-      principal: 'idir\\exemption-approver',
-      roles: ['EXEMPTION_APPROVER'],
-      welcomeTarget: null,
-      legacyPath: null,
-      grantedActions: [],
+  it('coalesces concurrent session refresh requests', async () => {
+    let resolveCapabilities:
+      | ((value: Awaited<ReturnType<typeof fetchSessionCapabilities>>) => void)
+      | undefined
+    mockedFetchSessionCapabilities.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCapabilities = resolve
+        }),
+    )
+
+    renderProbe()
+
+    await waitFor(() => {
+      expect(mockedFetchSessionCapabilities).toHaveBeenCalledTimes(1)
     })
 
-    renderProbe(['approveExemption', '/applicationsReview', '/exemptionSearch'])
-    await waitForAuthLoad()
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh Session' }))
+    expect(mockedFetchSessionCapabilities).toHaveBeenCalledTimes(1)
 
-    expect(screen.getByTestId('roles')).toHaveTextContent('EXEMPTION_APPROVER')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/exemption')
-    expect(screen.getByTestId('action-approveExemption')).toHaveTextContent('true')
-    expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
-    expect(screen.getByTestId('action-/exemptionSearch')).toHaveTextContent('true')
+    await act(async () => {
+      resolveCapabilities?.({
+        authenticated: true,
+        principal: 'idir\\reviewer',
+        roles: [],
+        welcomeTarget: null,
+        legacyPath: null,
+        grantedActions: ['/applicationsReview'],
+      })
+    })
+
+    await waitForAuthLoad()
+    expect(mockedFetchSessionCapabilities).toHaveBeenCalledTimes(1)
   })
 
-  it('can disable role-derived action fallback when backend action claims are expected', async () => {
-    vi.stubEnv('VITE_LEXIS_ENABLE_ROLE_ACTION_FALLBACK', 'false')
+  it('ignores stale session refresh results after logout', async () => {
+    let resolveCapabilities:
+      | ((value: Awaited<ReturnType<typeof fetchSessionCapabilities>>) => void)
+      | undefined
+    mockedFetchSessionCapabilities.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCapabilities = resolve
+        }),
+    )
+
+    renderProbe()
+
+    await waitFor(() => {
+      expect(mockedFetchSessionCapabilities).toHaveBeenCalledTimes(1)
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Logout' }))
+    await waitForAuthLoad()
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+
+    await act(async () => {
+      resolveCapabilities?.({
+        authenticated: true,
+        principal: 'idir\\admin',
+        roles: ['LEXIS_ADMIN'],
+        welcomeTarget: null,
+        legacyPath: null,
+        grantedActions: ['/lexisAgentAdmin'],
+      })
+    })
+
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+    expect(screen.getByTestId('roles')).toHaveTextContent('')
+    expect(mockedFetchSessionCapabilities).toHaveBeenCalledTimes(1)
+  })
+
+  it('sets login state from authenticated flag only', async () => {
     mockedFetchSessionCapabilities.mockResolvedValue({
-      authenticated: true,
-      principal: 'idir\\read-only',
+      authenticated: false,
+      principal: null,
       roles: ['READ_ONLY'],
       welcomeTarget: null,
       legacyPath: null,
       grantedActions: [],
     })
 
-    renderProbe(['/applicationSearch'])
+    renderProbe()
     await waitForAuthLoad()
 
-    expect(screen.getByTestId('roles')).toHaveTextContent('READ_ONLY')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
-    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
-  })
-
-  it('defaults role-derived action fallback to disabled when env is not configured', async () => {
-    mockedFetchSessionCapabilities.mockResolvedValue({
-      authenticated: true,
-      principal: 'idir\\read-only',
-      roles: ['READ_ONLY'],
-      welcomeTarget: null,
-      legacyPath: null,
-      grantedActions: [],
-    })
-
-    renderProbe(['/applicationSearch'])
-    await waitForAuthLoad()
-
-    expect(screen.getByTestId('roles')).toHaveTextContent('READ_ONLY')
-    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+    expect(screen.getByTestId('has-any-role')).toHaveTextContent('true')
   })
 })

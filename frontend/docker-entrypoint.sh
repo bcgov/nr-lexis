@@ -16,10 +16,15 @@ escape() {
 cat > "$CONFIG_FILE" <<EOF2
 // Generated at container start by docker-entrypoint.sh from VITE_* env vars.
 window.config = {
-  VITE_LOGIN_URL: "$(escape "${VITE_LOGIN_URL:-}")",
-  VITE_LOGOUT_URL: "$(escape "${VITE_LOGOUT_URL:-}")",
-  VITE_ENABLE_DEV_ROLE_SIMULATION: "$(escape "${VITE_ENABLE_DEV_ROLE_SIMULATION:-false}")",
-  VITE_ENABLE_SEARCH_MOCK_FALLBACK: "$(escape "${VITE_ENABLE_SEARCH_MOCK_FALLBACK:-false}")",
+  VITE_USER_POOLS_ID: "$(escape "${VITE_USER_POOLS_ID:-}")",
+  VITE_USER_POOLS_WEB_CLIENT_ID: "$(escape "${VITE_USER_POOLS_WEB_CLIENT_ID:-}")",
+  VITE_COGNITO_DOMAIN: "$(escape "${VITE_COGNITO_DOMAIN:-}")",
+  VITE_REDIRECT_SIGN_IN: "$(escape "${VITE_REDIRECT_SIGN_IN:-}")",
+  VITE_REDIRECT_SIGN_OUT: "$(escape "${VITE_REDIRECT_SIGN_OUT:-}")",
+  VITE_COGNITO_SCOPES: "$(escape "${VITE_COGNITO_SCOPES:-}")",
+  VITE_ZONE: "$(escape "${VITE_ZONE:-dev}")",
+  VITE_LEXIS_PROD_RTM_ONLY: "$(escape "${VITE_LEXIS_PROD_RTM_ONLY:-false}")",
+  VITE_FAM_MANAGE_URL: "$(escape "${VITE_FAM_MANAGE_URL:-}")",
   VITE_LEXIS_REPORT_ENDPOINT_BASE: "$(escape "${VITE_LEXIS_REPORT_ENDPOINT_BASE:-/api}")",
   VITE_LEXIS_REPORT_API_BASE: "$(escape "${VITE_LEXIS_REPORT_API_BASE:-/lexis/reports}")"
 };

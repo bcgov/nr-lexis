@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Column,
   Grid,
-  InlineLoading,
-  MultiSelect,
+  FilterableMultiSelect,
   Pagination,
   Table,
   TableBody,
@@ -16,6 +15,8 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
+import IsoDatePicker from '../../components/IsoDatePicker'
 import type {
   ProvincialOfferSearchFilters,
   ProvincialOfferSearchRequest,
@@ -23,20 +24,50 @@ import type {
   ProvincialOfferSearchSortField,
 } from '@/interfaces/ProvincialOfferSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
+import {
+  buildSearchTotalCacheKey,
+  getCachedSearchTotal,
+  setCachedSearchTotal,
+  type SearchTotalCache,
+} from '@/pages/shared/search-total-cache'
+import {
+  DEFAULT_SEARCH_PAGE,
+  DEFAULT_SEARCH_PAGE_SIZE,
+  SEARCH_PAGE_SIZE_OPTIONS,
+  appendSearchParamsToPath,
+  createEmptyPagedSearchResponse,
+  createSearchParams,
+  getNextSortDirection,
+  mapSelectedOptionsById,
+  mapValueLabelOptionsToIdTextOptions,
   parseCsvParam,
   parseEnumParam,
+  parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
-  setSearchParam,
+  type IdTextOption,
 } from '@/pages/shared/search-query-utils'
-import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
-import { fetchProvincialOfferOptions } from '@/service/search-options-service'
-
-type RegionOption = {
-  id: string
-  text: string
-}
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
+import {
+  loadSearchWithDeferredTotal,
+  prefetchAdjacentSearchPages,
+} from '@/pages/shared/deferred-search-total'
+import {
+  countProvincialOffers,
+  searchProvincialOffers,
+} from '@/service/provincial-offer-search-service'
+import {
+  fetchProvincialApplicationOptions,
+  fetchProvincialOfferOptions,
+} from '@/service/search-options-service'
+import { formatLocalIsoDate } from '@/utils/date'
 
 const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
   applicationNumber: '',
@@ -49,20 +80,7 @@ const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
   withdrawalToDate: '',
 }
 
-const EMPTY_RESULTS: ProvincialOfferSearchResponse = {
-  content: [],
-  page: {
-    number: 0,
-    size: 10,
-    totalElements: 0,
-    totalPages: 1,
-  },
-}
-
-const isValidIsoDate = (value: string): boolean => {
-  if (!value.trim()) return true
-  return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
-}
+const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialOfferSearchResponse>()
 
 const SORT_COLUMNS: {
   id: ProvincialOfferSearchSortField
@@ -71,16 +89,13 @@ const SORT_COLUMNS: {
   { id: 'offerNumber', label: 'Offer' },
   { id: 'applicationNumber', label: 'Application' },
   { id: 'packageNumber', label: 'Package' },
-  { id: 'listingDate', label: 'Listing Date' },
-  { id: 'region', label: 'Natural Resource Region Code' },
-  { id: 'offerWithdrawalDate', label: 'Offer Withdrawn Date' },
+  { id: 'listingDate', label: 'Listing date' },
+  { id: 'region', label: 'Natural resource region code' },
+  { id: 'offerWithdrawalDate', label: 'Offer withdrawn date' },
 ]
 
 const DEFAULT_SORT_FIELD: ProvincialOfferSearchSortField = 'listingDate'
 const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
-const DEFAULT_PAGE = 1
-const DEFAULT_PAGE_SIZE = 10
-const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialOfferSearchSortField[]
@@ -91,43 +106,35 @@ const buildSearchParams = (
   sortDirection: 'asc' | 'desc',
   page: number,
   pageSize: number,
-): URLSearchParams => {
-  const params = new URLSearchParams()
+): URLSearchParams =>
+  createSearchParams([
+    ['applicationNumber', filters.applicationNumber],
+    ['packageNumber', filters.packageNumber],
+    ['clientNumber', filters.clientNumber],
+    ['listingFromDate', filters.listingFromDate],
+    ['listingToDate', filters.listingToDate],
+    ['region', filters.region],
+    ['withdrawalFromDate', filters.withdrawalFromDate],
+    ['withdrawalToDate', filters.withdrawalToDate],
+    ['sortField', sortField],
+    ['sortDirection', sortDirection],
+    ['page', page],
+    ['pageSize', pageSize],
+  ])
 
-  setSearchParam(params, 'applicationNumber', filters.applicationNumber)
-  setSearchParam(params, 'packageNumber', filters.packageNumber)
-  setSearchParam(params, 'clientNumber', filters.clientNumber)
-  setSearchParam(params, 'listingFromDate', filters.listingFromDate)
-  setSearchParam(params, 'listingToDate', filters.listingToDate)
-  setSearchParam(params, 'region', filters.region)
-  setSearchParam(params, 'withdrawalFromDate', filters.withdrawalFromDate)
-  setSearchParam(params, 'withdrawalToDate', filters.withdrawalToDate)
-  setSearchParam(params, 'sortField', sortField)
-  setSearchParam(params, 'sortDirection', sortDirection)
-  setSearchParam(params, 'page', page)
-  setSearchParam(params, 'pageSize', pageSize)
-
-  return params
-}
-
-const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]): RegionOption[] => {
-  const optionMap = new Map(regionOptions.map((option) => [option.id, option]))
-  return regionIds.map((regionId) => optionMap.get(regionId) ?? { id: regionId, text: regionId })
-}
-
-const ProvincialOffersPage: FC = () => {
-  const { canPerform } = useAuth()
+const ProvincialOffersPage = () => {
+  const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
+  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [defaultListingToDate, setDefaultListingToDate] = useState('')
+  const [isOptionsLoaded, setIsOptionsLoaded] = useState(false)
+  const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateOffer = canPerform('createOffer')
   const withCurrentSearch = useCallback(
-    (path: string): string => {
-      const query = searchParams.toString()
-      return query.length > 0 ? `${path}?${query}` : path
-    },
+    (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
 
@@ -143,8 +150,6 @@ const ProvincialOffersPage: FC = () => {
       withdrawalToDate: searchParams.get('withdrawalToDate') ?? '',
     }
 
-    const parsedPageSize = parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
-
     return {
       filters: urlFilters,
       sortField: parseEnumParam(
@@ -156,12 +161,15 @@ const ProvincialOffersPage: FC = () => {
         searchParams.get('sortDirection'),
         DEFAULT_SORT_DIRECTION,
       ),
-      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
-      pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
-        ? parsedPageSize
-        : DEFAULT_PAGE_SIZE,
+      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_SEARCH_PAGE),
+      pageSize: parsePageSizeParam(
+        searchParams.get('pageSize'),
+        DEFAULT_SEARCH_PAGE_SIZE,
+        SEARCH_PAGE_SIZE_OPTIONS,
+      ),
     }
   }, [searchParams])
+  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
@@ -176,7 +184,7 @@ const ProvincialOffersPage: FC = () => {
         [key]: value,
       }
       setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
+        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
         { replace: true },
       )
     },
@@ -184,16 +192,20 @@ const ProvincialOffersPage: FC = () => {
   )
 
   const selectedRegions = useMemo(
-    () => mapSelectedRegions(filters.region, regionOptions),
+    () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
+  const selectedRegionHelperText =
+    selectedRegions.length > 0
+      ? `Selected: ${selectedRegions.map((region) => region.text).join(', ')}`
+      : undefined
 
   const hasDateValidationError = useMemo(() => {
-    return (
-      !isValidIsoDate(filters.listingFromDate) ||
-      !isValidIsoDate(filters.listingToDate) ||
-      !isValidIsoDate(filters.withdrawalFromDate) ||
-      !isValidIsoDate(filters.withdrawalToDate)
+    return hasInvalidIsoDateValue(
+      filters.listingFromDate,
+      filters.listingToDate,
+      filters.withdrawalFromDate,
+      filters.withdrawalToDate,
     )
   }, [
     filters.listingFromDate,
@@ -202,56 +214,166 @@ const ProvincialOffersPage: FC = () => {
     filters.withdrawalToDate,
   ])
 
-  const runSearch = useCallback(async (request: ProvincialOfferSearchRequest) => {
-    if (
-      !isValidIsoDate(request.filters.listingFromDate) ||
-      !isValidIsoDate(request.filters.listingToDate) ||
-      !isValidIsoDate(request.filters.withdrawalFromDate) ||
-      !isValidIsoDate(request.filters.withdrawalToDate)
-    ) {
+  const beginSearchRequest = useLatestRequestGuard()
+  const commitResults = useCallback((nextResults: ProvincialOfferSearchResponse) => {
+    setResults(nextResults)
+  }, [])
+
+  const runSearch = useCallback(
+    async (request: ProvincialOfferSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheKey = buildPageDataCacheKey(
+        'provincial-offer-search',
+        capabilities?.principal,
+        request,
+      )
+      const isLatestRequest = beginSearchRequest()
+      if (!options.force) {
+        const cachedResults = getPageDataCache<ProvincialOfferSearchResponse>(pageCacheKey)
+        if (cachedResults) {
+          setCachedSearchTotal(
+            totalCacheRef.current,
+            buildSearchTotalCacheKey(request.filters),
+            cachedResults.page.totalElements,
+          )
+          prefetchAdjacentSearchPages({
+            pageId: 'provincial-offer-search',
+            principal: capabilities?.principal,
+            request,
+            response: cachedResults,
+            search: searchProvincialOffers,
+            onError: console.error,
+          })
+          setResults(cachedResults)
+          setLoading(false)
+          setErrorMessage('')
+          return
+        }
+      }
+
+      if (
+        hasInvalidIsoDateValue(
+          request.filters.listingFromDate,
+          request.filters.listingToDate,
+          request.filters.withdrawalFromDate,
+          request.filters.withdrawalToDate,
+        )
+      ) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setErrorMessage('')
+      try {
+        const totalCacheKey = buildSearchTotalCacheKey(request.filters)
+        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const commitSearchResponse = (
+          response: ProvincialOfferSearchResponse,
+          totalIsExact: boolean,
+        ) => {
+          if (totalIsExact) {
+            setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
+            setPageDataCache(pageCacheKey, response)
+            prefetchAdjacentSearchPages({
+              pageId: 'provincial-offer-search',
+              principal: capabilities?.principal,
+              request,
+              response,
+              search: searchProvincialOffers,
+              onError: console.error,
+            })
+          }
+          queueMicrotask(() => {
+            if (isLatestRequest()) {
+              commitResults(response)
+            }
+          })
+        }
+        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+          request,
+          cachedTotal,
+          search: searchProvincialOffers,
+          count: countProvincialOffers,
+          isLatestRequest,
+          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
+          onCountError: console.error,
+        })
+        if (isLatestRequest()) {
+          commitSearchResponse(response, totalIsExact)
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve offer search results.')
+          setResults(EMPTY_RESULTS)
+        }
+      } finally {
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
+      }
+    },
+    [beginSearchRequest, capabilities?.principal, commitResults],
+  )
+
+  useEffect(() => {
+    if (searchParams.toString().length === 0) {
       return
     }
 
-    setLoading(true)
-    setErrorMessage('')
-    try {
-      const response = await searchProvincialOffers(request)
-      setResults(response)
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to retrieve offer search results.')
-      setResults(EMPTY_RESULTS)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
     void runSearch({
-      filters: urlState.filters,
-      page: urlState.page - 1,
-      pageSize: urlState.pageSize,
-      sortField: urlState.sortField,
-      sortDirection: urlState.sortDirection,
+      filters: debouncedUrlState.filters,
+      page: debouncedUrlState.page - 1,
+      pageSize: debouncedUrlState.pageSize,
+      sortField: debouncedUrlState.sortField,
+      sortDirection: debouncedUrlState.sortDirection,
     })
-  }, [runSearch, urlState])
+  }, [debouncedUrlState, runSearch, searchParams])
 
   useEffect(() => {
     const loadOptions = async () => {
-      const options = await fetchProvincialOfferOptions()
-      setRegionOptions(
-        options.regions.map((option) => ({
-          id: option.value,
-          text: `${option.label} (${option.value})`,
-        })),
+      const [offerOptions, applicationOptions] = await Promise.all([
+        fetchProvincialOfferOptions(),
+        fetchProvincialApplicationOptions(),
+      ])
+      setRegionOptions(mapValueLabelOptionsToIdTextOptions(offerOptions.regions))
+      setDefaultListingToDate(
+        applicationOptions.currentSchedules.find((option) => option.value.trim())?.label ??
+          formatLocalIsoDate(new Date()),
       )
+      setIsOptionsLoaded(true)
     }
 
     void loadOptions()
   }, [])
 
+  useEffect(() => {
+    if (!isOptionsLoaded) {
+      return
+    }
+
+    const hasSearchQuery = searchParams.toString().length > 0
+    if (!hasSearchQuery) {
+      setSearchParams(
+        buildSearchParams(
+          {
+            ...INITIAL_FILTERS,
+            listingToDate: defaultListingToDate,
+          },
+          DEFAULT_SORT_FIELD,
+          DEFAULT_SORT_DIRECTION,
+          DEFAULT_SEARCH_PAGE,
+          DEFAULT_SEARCH_PAGE_SIZE,
+        ),
+        { replace: true },
+      )
+    }
+  }, [defaultListingToDate, isOptionsLoaded, searchParams, setSearchParams])
+
   const onSearch = () => {
-    setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
+    setSearchParams(
+      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    )
   }
 
   const onClearFilters = () => {
@@ -260,124 +382,127 @@ const ProvincialOffersPage: FC = () => {
         INITIAL_FILTERS,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
-        DEFAULT_PAGE,
-        DEFAULT_PAGE_SIZE,
+        DEFAULT_SEARCH_PAGE,
+        DEFAULT_SEARCH_PAGE_SIZE,
       ),
     )
   }
 
   const onHeaderClick = (column: ProvincialOfferSearchSortField) => {
-    const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
-    setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
+    const nextDirection = getNextSortDirection(sortField, sortDirection, column)
+    setSearchParams(
+      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    )
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid provincial-offer-search-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial Offers Search</h1>
-        <p>
-          Migrated from <code>src/main/webapp/WEB-INF/jsp/provincial/offers/search.jsp</code> and{' '}
-          <code>src/main/webapp/javascript/provincial/offers/search.js</code>.
-        </p>
+        <h1>Provincial offers search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <div className="legacy-search-grid">
-            <TextInput
-              id="applicationNumber"
-              labelText="Application Number"
-              value={filters.applicationNumber}
-              onChange={(event) => updateFilter('applicationNumber', event.target.value)}
-            />
-            <TextInput
-              id="packageNumber"
-              labelText="Package Number"
-              value={filters.packageNumber}
-              onChange={(event) => updateFilter('packageNumber', event.target.value)}
-            />
-            <TextInput
-              id="clientNumber"
-              labelText="Client Number"
-              value={filters.clientNumber}
-              onChange={(event) => updateFilter('clientNumber', event.target.value)}
-            />
-            <TextInput
-              id="listingFromDate"
-              labelText="Listing From Date (YYYY-MM-DD)"
-              value={filters.listingFromDate}
-              invalid={!isValidIsoDate(filters.listingFromDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingFromDate', event.target.value)}
-            />
-            <TextInput
-              id="listingToDate"
-              labelText="Listing To Date (YYYY-MM-DD)"
-              value={filters.listingToDate}
-              invalid={!isValidIsoDate(filters.listingToDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingToDate', event.target.value)}
-            />
-            <MultiSelect
-              id="region"
-              titleText="Region"
-              items={regionOptions}
-              itemToString={(item) => (item ? item.text : '')}
-              label="Select region(s)"
-              selectionFeedback="fixed"
-              selectedItems={selectedRegions}
-              onChange={(event) => {
-                const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                updateFilter(
-                  'region',
-                  nextSelected.map((item) => item.id),
-                )
-              }}
-            />
-            <TextInput
-              id="withdrawalFromDate"
-              labelText="Withdrawn From Date (YYYY-MM-DD)"
-              value={filters.withdrawalFromDate}
-              invalid={!isValidIsoDate(filters.withdrawalFromDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('withdrawalFromDate', event.target.value)}
-            />
-            <TextInput
-              id="withdrawalToDate"
-              labelText="Withdrawn To Date (YYYY-MM-DD)"
-              value={filters.withdrawalToDate}
-              invalid={!isValidIsoDate(filters.withdrawalToDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('withdrawalToDate', event.target.value)}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={onSearch}
-              disabled={loading || hasDateValidationError}
-              size="md"
-            >
-              Search
-            </Button>
-            <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-              Clear Filters
-            </Button>
-            {canCreateOffer && (
-              <Link className="cds--link" to="/provincial/offers/create">
-                Add Offer
-              </Link>
-            )}
-          </div>
-        </Tile>
+        <section className="legacy-search-section legacy-search-section--filters provincial-offer-search-filters">
+          <Tile>
+            <div className="legacy-search-grid provincial-offer-search-grid">
+              <TextInput
+                id="applicationNumber"
+                labelText="Application number"
+                value={filters.applicationNumber}
+                onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+              />
+              <TextInput
+                id="packageNumber"
+                labelText="Package number"
+                value={filters.packageNumber}
+                onChange={(event) => updateFilter('packageNumber', event.target.value)}
+              />
+              <TextInput
+                id="clientNumber"
+                labelText="Client number"
+                value={filters.clientNumber}
+                onChange={(event) => updateFilter('clientNumber', event.target.value)}
+              />
+              <IsoDatePicker
+                id="listingFromDate"
+                labelText="Listing from date"
+                value={filters.listingFromDate}
+                invalid={!isValidIsoDate(filters.listingFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingFromDate', value)}
+              />
+              <IsoDatePicker
+                id="listingToDate"
+                labelText="Listing to date"
+                value={filters.listingToDate}
+                invalid={!isValidIsoDate(filters.listingToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingToDate', value)}
+              />
+              <FilterableMultiSelect
+                id="region"
+                titleText="Region"
+                items={regionOptions}
+                itemToString={(item) => (item ? item.text : '')}
+                placeholder="Select region(s)"
+                helperText={selectedRegionHelperText}
+                selectedItems={selectedRegions}
+                onChange={(event) => {
+                  const nextSelected = (event.selectedItems ?? []) as IdTextOption[]
+                  updateFilter(
+                    'region',
+                    nextSelected.map((item) => item.id),
+                  )
+                }}
+              />
+              <IsoDatePicker
+                id="withdrawalFromDate"
+                labelText="Withdrawn from date"
+                value={filters.withdrawalFromDate}
+                invalid={!isValidIsoDate(filters.withdrawalFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('withdrawalFromDate', value)}
+              />
+              <IsoDatePicker
+                id="withdrawalToDate"
+                labelText="Withdrawn to date"
+                value={filters.withdrawalToDate}
+                invalid={!isValidIsoDate(filters.withdrawalToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('withdrawalToDate', value)}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={onSearch}
+                disabled={loading || hasDateValidationError}
+                size="md"
+              >
+                Search
+              </Button>
+              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
+                Clear Filters
+              </Button>
+              {canCreateOffer && (
+                <Link className="cds--link" to="/provincial/offers/create">
+                  Add Offer
+                </Link>
+              )}
+            </div>
+          </Tile>
+        </section>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <h2 className="dashboard-title">Search Results</h2>
-        {loading && <InlineLoading description="Loading offer search results..." />}
-        {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        {!loading && (
-          <>
+        <section className="legacy-search-section legacy-search-section--results">
+          <h2 className="dashboard-title">Search results</h2>
+          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+          <SearchResultsTableFrame
+            loading={loading}
+            loadingDescription="Loading offer search results..."
+            totalItems={results.page.totalElements}
+          >
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
@@ -423,7 +548,7 @@ const ProvincialOffersPage: FC = () => {
             <Pagination
               page={results.page.number + 1}
               pageSize={results.page.size}
-              pageSizes={[10, 20, 30]}
+              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
                 setSearchParams(
@@ -431,8 +556,8 @@ const ProvincialOffersPage: FC = () => {
                 )
               }}
             />
-          </>
-        )}
+          </SearchResultsTableFrame>
+        </section>
       </Column>
     </Grid>
   )

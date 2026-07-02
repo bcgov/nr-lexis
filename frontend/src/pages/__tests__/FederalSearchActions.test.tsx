@@ -6,22 +6,14 @@ import { useAuth } from '@/context/auth/useAuth'
 import FederalPage from '@/pages/Federal'
 import { searchFederalApplications } from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions } from '@/service/search-options-service'
-
-const mockNavigate = vi.fn()
-
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom')
-  return {
-    ...(actual as object),
-    useNavigate: () => mockNavigate,
-  }
-})
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
 vi.mock('@/service/federal-application-search-service', () => ({
+  countFederalApplications: vi.fn(),
   searchFederalApplications: vi.fn(),
 }))
 
@@ -75,9 +67,7 @@ const defaultRows = [
 describe('Federal Search Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action === '/createExemption',
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext())
     mockedFetchFederalApplicationOptions.mockResolvedValue({
       applicationStatuses: [
         { value: 'NEW', label: 'New' },
@@ -95,71 +85,19 @@ describe('Federal Search Actions', () => {
     })
   })
 
-  it('allows selecting eligible federal rows and navigates with exemption prefill state', async () => {
+  it('does not expose provincial bulk exemption controls', async () => {
     renderPage()
     await screen.findByText('FED-1001')
 
-    const createExemptionButton = screen.getByRole('button', {
-      name: 'Create Exemption for Selected Applications',
-    })
-    expect(createExemptionButton).toBeDisabled()
-
-    expect(screen.getByRole('checkbox', { name: 'Select 1001' })).toBeEnabled()
-    expect(screen.getByRole('checkbox', { name: 'Select 1002' })).toBeDisabled()
-
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1001' }))
-    expect(createExemptionButton).toBeEnabled()
-
-    await userEvent.click(createExemptionButton)
-
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/create', {
-      state: {
-        selectedApplicationNumbers: ['1001'],
-        applicantClientNumber: '11111111',
-        ownerClientNumber: '11111111',
-      },
-    })
-  })
-
-  it('shows validation when selected federal rows have mismatched client numbers', async () => {
-    mockedSearchFederalApplications.mockResolvedValue({
-      content: [
-        {
-          ...defaultRows[0],
-          allowCreateExemption: true,
-          clientNumber: '11111111',
-        },
-        {
-          ...defaultRows[1],
-          allowCreateExemption: true,
-          clientNumber: '22222222',
-        },
-      ],
-      page: {
-        number: 0,
-        size: 10,
-        totalElements: 2,
-        totalPages: 1,
-      },
-    })
-
-    renderPage()
-    await screen.findByText('FED-1001')
-
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Create Exemption for Selected Applications' }),
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText('Validation failed')).toBeInTheDocument()
-      expect(
-        screen.getByText(
-          'Selected federal applications do not share the same client number. Multi-application exemptions require matching clients.',
-        ),
-      ).toBeInTheDocument()
-    })
-    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('button', {
+        name: 'Create exemption for Selected Applications',
+      }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Select 1001' })).not.toBeInTheDocument()
   })
 
   it('disables search button for invalid ISO date filters', async () => {
@@ -169,10 +107,21 @@ describe('Federal Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Received From Date (YYYY-MM-DD)'), '2026-13-99')
+    await userEvent.type(screen.getByLabelText('Received from date'), '2026-13-99')
 
     await waitFor(() => {
       expect(searchButton).toBeDisabled()
     })
+  })
+
+  it('does not use date format text in visible date labels', async () => {
+    renderPage()
+    await screen.findByText('FED-1001')
+
+    expect(screen.getByLabelText('Received from date')).toBeInTheDocument()
+    expect(screen.getByLabelText('Received to date')).toBeInTheDocument()
+    expect(screen.getByLabelText('Listing from date')).toBeInTheDocument()
+    expect(screen.getByLabelText('Listing to date')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Received from date (YYYY-MM-DD)')).not.toBeInTheDocument()
   })
 })

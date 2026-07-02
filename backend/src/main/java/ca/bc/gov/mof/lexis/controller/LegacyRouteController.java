@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
+
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.validation.constraints.Max;
@@ -12,6 +14,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,6 +30,9 @@ public class LegacyRouteController {
   private static final String ACTION_VIEW = "view";
   private static final String ACTION_ADD = "add";
   private static final String ACTION_CREATE = "create";
+  private static final String ACTION_APPROVE = "approve";
+  private static final String ACTION_DISAPPROVE = "disapprove";
+  private static final String ACTION_SEND_STATUS_EMAIL = "sendStatusEmail";
   private static final String ACTION_VERIFY_APPLICATION_CLIENTS = "verifyApplicationClients";
   private static final String ACTION_HAS_VALID_OFFER = "hasValidOffer";
   private static final String ACTION_GET_APPLICATIONS = "getApplications";
@@ -48,6 +54,8 @@ public class LegacyRouteController {
   private static final String ACTION_GET_APPLICATION_VOLUME = "getApplicationVolume";
   private static final String ACTION_GET_CLIENT_DATA = "getClientData";
   private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
+  private static final String ACTION_ADD_OFFER = "addOffer";
+  private static final String ACTION_UPDATE_OFFER = "updateOffer";
   private static final String ACTION_GET_PERMIT_SUMMARY = "getPermitSummary";
   private static final String ACTION_GET_TOTAL_FEES_FOR_PERMIT = "getTotalFeesForPermit";
   private static final String ACTION_GET_SCALE_FEES_FOR_PACKAGE = "getScaleFeesForPackage";
@@ -85,12 +93,10 @@ public class LegacyRouteController {
   private static final String LEGACY_ACTION_CREATE_APPLICATION = "createApplication";
   private static final String LEGACY_ACTION_CREATE_EXEMPTION = "/createExemption";
   private static final String LEGACY_ACTION_CREATE_OFFER = "createOffer";
-  private static final String LEGACY_ACTION_CREATE_PERMIT = "createPermit";
 
   private final LexisApplicationController applicationController;
   private final ExemptionController exemptionController;
   private final FederalApplicationController federalApplicationController;
-  private final IndianReservePermitController indianReservePermitController;
   private final PurchaseOfferController purchaseOfferController;
   private final PermitController permitController;
   private final ApplicationReviewController applicationReviewController;
@@ -106,7 +112,6 @@ public class LegacyRouteController {
       LexisApplicationController applicationController,
       ExemptionController exemptionController,
       FederalApplicationController federalApplicationController,
-      IndianReservePermitController indianReservePermitController,
       PurchaseOfferController purchaseOfferController,
       PermitController permitController,
       ApplicationReviewController applicationReviewController,
@@ -120,7 +125,6 @@ public class LegacyRouteController {
     this.applicationController = applicationController;
     this.exemptionController = exemptionController;
     this.federalApplicationController = federalApplicationController;
-    this.indianReservePermitController = indianReservePermitController;
     this.purchaseOfferController = purchaseOfferController;
     this.permitController = permitController;
     this.applicationReviewController = applicationReviewController;
@@ -152,7 +156,8 @@ public class LegacyRouteController {
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "applications", required = false) String applications,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      Authentication authentication) {
     if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
       return applicationController.searchOptions();
     }
@@ -178,7 +183,9 @@ public class LegacyRouteController {
         regionNumbers,
         sortField,
         page,
-        size);
+        size,
+        null,
+        authentication);
   }
 
   @GetMapping({"/applicationDetails", "/applicationDetails.do"})
@@ -192,10 +199,12 @@ public class LegacyRouteController {
     if (applicationNumber == null) {
       return ResponseEntity.noContent().build();
     }
-    return applicationController.getByApplicationNumber(applicationNumber);
+    return applicationController.getByApplicationNumber(applicationNumber, authentication);
   }
 
-  @GetMapping({"/applicationsReview", "/applicationsReview.do"})
+  @RequestMapping(
+      path = {"/applicationsReview", "/applicationsReview.do"},
+      method = {RequestMethod.GET, RequestMethod.POST})
   public ResponseEntity<?> applicationsReview(
       @RequestParam(name = "actionMapping", required = false) String actionMapping,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
@@ -207,9 +216,20 @@ public class LegacyRouteController {
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      @RequestParam MultiValueMap<String, String> requestParameters,
+      HttpServletRequest request) {
     if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
       return applicationReviewController.searchOptions();
+    }
+    if (ACTION_APPROVE.equalsIgnoreCase(actionMapping)) {
+      return applicationReviewController.approveLegacy(requestParameters, request);
+    }
+    if (ACTION_DISAPPROVE.equalsIgnoreCase(actionMapping)) {
+      return applicationReviewController.disapproveLegacy(requestParameters, request);
+    }
+    if (ACTION_SEND_STATUS_EMAIL.equalsIgnoreCase(actionMapping)) {
+      return applicationReviewController.sendStatusEmailLegacy(requestParameters);
     }
     return applicationReviewController.search(
         applicationNumber,
@@ -221,7 +241,8 @@ public class LegacyRouteController {
         regionNumbers,
         sortField,
         page,
-        size);
+        size,
+        null);
   }
 
   @GetMapping({"/exemptionSearch", "/exemptionSearch.do"})
@@ -244,7 +265,8 @@ public class LegacyRouteController {
       @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      Authentication authentication) {
     if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
       return exemptionController.searchOptions();
     }
@@ -266,7 +288,9 @@ public class LegacyRouteController {
         ownerClientNumber,
         regionNumbers,
         page,
-        size);
+        size,
+        null,
+        authentication);
   }
 
   @GetMapping({"/exemptionDetails", "/exemptionDetails.do"})
@@ -280,7 +304,7 @@ public class LegacyRouteController {
     if (exemptionNumber == null || exemptionNumber.isBlank()) {
       return ResponseEntity.noContent().build();
     }
-    return exemptionController.getByExemptionNumber(exemptionNumber);
+    return exemptionController.getByExemptionNumber(exemptionNumber, authentication);
   }
 
   @GetMapping({"/federalApplicationSearch", "/federalApplicationSearch.do"})
@@ -320,7 +344,8 @@ public class LegacyRouteController {
         ownerClientNumber,
         agentClientNumber,
         page,
-        size);
+        size,
+        null);
   }
 
   @GetMapping({"/federalApplicationDetails", "/federalApplicationDetails.do"})
@@ -330,33 +355,6 @@ public class LegacyRouteController {
       return ResponseEntity.noContent().build();
     }
     return federalApplicationController.getByApplicationNumber(applicationNumber);
-  }
-
-  @GetMapping({"/indianReservePermitSearch", "/indianReservePermitSearch.do"})
-  public ResponseEntity<?> indianReservePermitSearch(
-      @RequestParam(name = "actionMapping", required = false) String actionMapping,
-      @RequestParam(name = "permitNumber", required = false) String permitNumber,
-      @RequestParam(name = "packageNumber", required = false) String packageNumber,
-      @RequestParam(name = "fromPermitIssueDate", required = false) String issuedFromDate,
-      @RequestParam(name = "toPermitIssueDate", required = false) String issuedToDate,
-      @RequestParam(name = "fromEstimatedShippingDate", required = false) String shippingFromDate,
-      @RequestParam(name = "toEstimatedShippingDate", required = false) String shippingToDate,
-      @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
-    if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
-      return indianReservePermitController.searchOptions();
-    }
-    return indianReservePermitController.search(
-        permitNumber, packageNumber, issuedFromDate, issuedToDate, shippingFromDate, shippingToDate, page, size);
-  }
-
-  @GetMapping({"/indianReservePermitDetails", "/indianReservePermitDetails.do"})
-  public ResponseEntity<?> indianReservePermitDetails(
-      @RequestParam(name = "permitNumber", required = false) String permitNumber) {
-    if (permitNumber == null || permitNumber.isBlank()) {
-      return ResponseEntity.noContent().build();
-    }
-    return indianReservePermitController.getByPermitNumber(permitNumber);
   }
 
   @GetMapping({"/offersSearch", "/offersSearch.do"})
@@ -374,7 +372,8 @@ public class LegacyRouteController {
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      Authentication authentication) {
     if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
       return purchaseOfferController.searchOptions();
     }
@@ -391,7 +390,9 @@ public class LegacyRouteController {
         regionNumbers,
         sortField,
         page,
-        size);
+        size,
+        null,
+        authentication);
   }
 
   @GetMapping({"/offerDetails", "/offerDetails.do"})
@@ -405,7 +406,7 @@ public class LegacyRouteController {
     if (offerNumber == null) {
       return ResponseEntity.noContent().build();
     }
-    return purchaseOfferController.getByOfferNumber(offerNumber);
+    return purchaseOfferController.getByOfferNumber(offerNumber, authentication);
   }
 
   @GetMapping({"/permitSearch", "/permitSearch.do"})
@@ -423,7 +424,8 @@ public class LegacyRouteController {
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      Authentication authentication) {
     if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
       return permitController.searchOptions();
     }
@@ -440,7 +442,9 @@ public class LegacyRouteController {
         regionNumbers,
         sortField,
         page,
-        size);
+        size,
+        null,
+        authentication);
   }
 
   @GetMapping({"/permitDetails", "/permitDetails.do"})
@@ -449,12 +453,12 @@ public class LegacyRouteController {
       @RequestParam(name = "permitNumber", required = false) @Positive Long permitNumber,
       Authentication authentication) {
     if (isLegacyAddOrCreateAction(actionMapping)) {
-      return authorizeLegacyAction(authentication, LEGACY_ACTION_CREATE_PERMIT);
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     if (permitNumber == null) {
       return ResponseEntity.noContent().build();
     }
-    return permitController.getByPermitNumber(permitNumber);
+    return permitController.getByPermitNumber(permitNumber, authentication);
   }
 
   @GetMapping({"/feeDetails", "/feeDetails.do"})
@@ -514,10 +518,14 @@ public class LegacyRouteController {
       method = {RequestMethod.GET, RequestMethod.POST})
   public ResponseEntity<?> offerDetailsRpc(
       @RequestParam(name = "actionMapping", required = false) String actionMapping,
-      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
-      @RequestParam(name = "packageNumber", required = false) String packageNumber,
-      @RequestParam(name = "clientNumber", required = false) String clientNumber,
-      @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode) {
+      HttpServletRequest request,
+      Authentication authentication) {
+    MultiValueMap<String, String> requestParameters = fromRequest(request);
+    String applicationNumber = first(requestParameters, "applicationNumber");
+    String packageNumber = first(requestParameters, "packageNumber");
+    String clientNumber = first(requestParameters, "clientNumber");
+    String clientLocationCode = first(requestParameters, "clientLocationCode");
+
     if (ACTION_VALIDATE_APPLICATION_NUMBER.equalsIgnoreCase(actionMapping)) {
       return offerDetailsRpcController.validateApplicationNumber(applicationNumber);
     }
@@ -538,6 +546,12 @@ public class LegacyRouteController {
     }
     if (ACTION_GET_CLIENT_LOCATIONS.equalsIgnoreCase(actionMapping)) {
       return offerDetailsRpcController.getClientLocations(clientNumber);
+    }
+    if (ACTION_ADD_OFFER.equalsIgnoreCase(actionMapping)) {
+      return offerDetailsRpcController.addOfferLegacy(requestParameters, authentication);
+    }
+    if (ACTION_UPDATE_OFFER.equalsIgnoreCase(actionMapping)) {
+      return offerDetailsRpcController.updateOfferLegacy(requestParameters, authentication);
     }
     return ResponseEntity.noContent().build();
   }
@@ -676,13 +690,13 @@ public class LegacyRouteController {
           permitNumber == null ? null : permitNumber.toString());
     }
     if (ACTION_REMOVE_PERMIT_DOCUMENT.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.removePermitDocument(documentId);
+      return permitDetailsRpcController.removePermitDocument(documentId, authentication);
     }
     if (ACTION_REMOVE_APPLICATION_DOCUMENT.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.removeApplicationDocument(documentId);
+      return permitDetailsRpcController.removeApplicationDocument(documentId, authentication);
     }
     if (ACTION_REMOVE_INVOICE_DOCUMENT.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.removeInvoiceDocument(documentId);
+      return permitDetailsRpcController.removeInvoiceDocument(documentId, authentication);
     }
     return ResponseEntity.noContent().build();
   }
@@ -774,5 +788,13 @@ public class LegacyRouteController {
     }
     // Legacy "add/create" loaded JSP pages; REST shim preserves only authorization semantics.
     return ResponseEntity.noContent().build();
+  }
+
+  private String first(MultiValueMap<String, String> parameters, String name) {
+    if (parameters == null || name == null) {
+      return null;
+    }
+    String value = parameters.getFirst(name);
+    return value == null || value.isBlank() ? null : value.trim();
   }
 }

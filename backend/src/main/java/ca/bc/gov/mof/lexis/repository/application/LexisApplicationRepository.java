@@ -1,10 +1,14 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.ResultSet;
 import java.time.LocalDate;
@@ -29,18 +33,24 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   private static final String JURISDICTION_FEDERAL = "F";
   private static final String OIC_INDICATOR_NO = "N";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
+  private static final String EXPORT_EXEMPTION_APPL_REMARK_NUMBER =
+      "EXPORT_EXMPTN_APPL_REMARK_NMBR";
   private static final String INDICATOR_YES = "Y";
 
   private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
+  private static final String FIND_ALL_EXEMPTION_REASON_CODES =
+      LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_RSN_CODES(?)";
   private static final String FIND_ALL_APPLICATION_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
   private static final String FIND_ALL_PRODUCT_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_PRODUCT_TYPE_CODES(?)";
-  private static final String FIND_ALL_ORG_UNITS = LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)";
-
+  private static final String FIND_ALL_GROWTH_TYPE_CODES =
+      LEXIS_CODES_PACKAGE + "FIND_ALL_GROWTH_TYPE_CODES(?)";
   private static final String FIND_APPLICATIONS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATIONS_BY_CRITERIA(?,?,?,?,?)";
+  private static final String COUNT_APPLICATIONS_BY_CRITERIA =
+      LEXIS_GROUP_5_PACKAGE + "COUNT_APPLICATIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_PACKAGE_BY_NUMBER =
@@ -70,6 +80,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     return options;
   }
 
+  public List<CodeNameDto> loadExemptionReasonOptions() {
+    return loadCodeNameOptions(FIND_ALL_EXEMPTION_REASON_CODES);
+  }
+
   public List<CodeNameDto> loadApplicationStatusOptions() {
     List<CodeNameDto> options = new ArrayList<>();
     options.add(new CodeNameDto("", "All"));
@@ -84,42 +98,65 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     return options;
   }
 
-  public List<CodeNameDto> loadRegionOptions() {
-    return queryCursorProcedure(
-        FIND_ALL_ORG_UNITS,
-        null,
-        1,
-        rs -> {
-          Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-          String regionCode = getString(rs, "ORG_UNIT_CODE");
-          String regionName = getString(rs, "ORG_UNIT_NAME");
-          return new CodeNameDto(
-              orgUnitNo == null ? null : orgUnitNo.toString(),
-              regionCode == null ? regionName : regionCode);
-        });
+  public List<CodeNameDto> loadGrowthTypeOptions() {
+    return loadCodeNameOptions(FIND_ALL_GROWTH_TYPE_CODES);
   }
 
-  public List<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
+  public List<CodeNameDto> loadRegionOptions() {
+    return loadOrgUnitOptions(true);
+  }
+
+  public Page<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  public Page<LexisApplicationSearchResultDto> search(
+      LexisApplicationSearchCriteria criteria, Integer knownTotal) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    LocalDate today = LocalDate.now(ZoneId.systemDefault());
+    int totalElements =
+        knownTotal == null
+            ? queryLegacyDynamicCountProcedure(
+                COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues())
+            : Math.max(0, knownTotal);
+    return queryLegacyDynamicPage(
+        FIND_APPLICATIONS_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        totalElements,
+        rs -> toSearchResult(rs, today));
+  }
+
+  public int count(LexisApplicationSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+  }
+
+  private SqlWhere buildSearchWhere(LexisApplicationSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
-    where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
-    where.addRaw(" AND EEA.APPLICATION_NUMBER > TO_NUMBER(0)");
-    where.addLike("EP.PACKAGE_NUMBER", criteria.packageNumber());
-    where.addLike("EEA.EXEMPTION_NUMBER", criteria.exemptionNumber());
-    where.addEquals("EEA.EXPORT_APPLICATION_STATUS_CODE", criteria.applicationStatus());
-    where.addEquals("EEA.EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
-    where.addDateGte("EEA.RECEIVED_DATE", criteria.receivedFromDate());
-    where.addDateLte("EEA.RECEIVED_DATE", criteria.receivedToDate());
-    where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
-    where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
-    where.addLike("EEA.OWNER_CLIENT_NUMBER", criteria.ownerClientNumber());
-    where.addRaw(" AND EEA.EXPORT_JURISDICTION_CODE <> '" + JURISDICTION_FEDERAL + "'");
-    where.addEquals("EEA.OIC_INDICATOR", OIC_INDICATOR_NO);
-    where.addInEqualsNumberOrNoResults("EEA.ORG_UNIT_NO", criteria.regionNumbers());
+    where.addLike("v.APPLICATION_NUMBER", criteria.applicationNumber());
+    where.addRaw(" AND v.APPLICATION_NUMBER > TO_NUMBER(0)");
+    where.addLike("v.PACKAGE_NUMBER", criteria.packageNumber());
+    where.addLike("v.EXEMPTION_NUMBER", criteria.exemptionNumber());
+    where.addEquals("v.EXPORT_APPLICATION_STATUS_CODE", criteria.applicationStatus());
+    where.addEquals("v.EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());
+    where.addDateGte("v.RECEIVED_DATE", criteria.receivedFromDate());
+    where.addDateLte("v.RECEIVED_DATE", criteria.receivedToDate());
+    where.addDateGte("v.ADVERTISING_DATE", criteria.listingFromDate());
+    where.addDateLte("v.ADVERTISING_DATE", criteria.listingToDate());
+    where.addLike("v.OWNER_CLIENT_NUMBER", criteria.ownerClientNumber());
+    where.addRaw(" AND v.EXPORT_JURISDICTION_CODE <> '" + JURISDICTION_FEDERAL + "'");
+    where.addEquals("v.OIC_INDICATOR", OIC_INDICATOR_NO);
+    if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
+      where.addInEqualsNumberOrNoResults("v.ORG_UNIT_NO", criteria.regionNumbers());
+    }
 
     String exemptionType = trim(criteria.exemptionType());
     if (exemptionType != null && !"ALL".equalsIgnoreCase(exemptionType)) {
-      where.addEquals("EEA.EXPORT_EXEMPTION_TYPE_CODE", exemptionType);
+      where.addEquals("v.EXPORT_EXEMPTION_TYPE_CODE", exemptionType);
     }
 
     String agentClientNumber = trim(criteria.agentClientNumber());
@@ -127,27 +164,20 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       int idx1 = where.nextBindIndex();
       int idx2 = idx1 + 1;
       where.addRawWithBinds(
-          " AND ((EEA.OWNER_CLIENT_NUMBER LIKE '%' || :"
+          " AND ((v.OWNER_CLIENT_NUMBER LIKE '%' || :"
               + idx1
-              + " || '%' AND EEA.EXPORT_APPLICANT_TYPE_CODE = '"
+              + " || '%' AND v.EXPORT_APPLICANT_TYPE_CODE = '"
               + APPLICANT_TYPE_OWNER
-              + "') OR (EEA.AGENT_CLIENT_NUMBER LIKE '%' || :"
+              + "') OR (v.AGENT_CLIENT_NUMBER LIKE '%' || :"
               + idx2
-              + " || '%' AND EEA.EXPORT_APPLICANT_TYPE_CODE = '"
+              + " || '%' AND v.EXPORT_APPLICANT_TYPE_CODE = '"
               + APPLICANT_TYPE_AGENT
               + "'))",
           agentClientNumber,
           agentClientNumber);
     }
 
-    SqlWhere sqlWhere = where.build(buildSortOrder(criteria.sortField()));
-
-    LocalDate today = LocalDate.now(ZoneId.systemDefault());
-    return queryDynamicAllPages(
-        FIND_APPLICATIONS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        rs -> toSearchResult(rs, today));
+    return where.build(buildSortOrder(criteria.sortField()));
   }
 
   public Optional<LexisApplicationDetailDto> findByApplicationNumber(Long applicationNumber) {
@@ -195,6 +225,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             false,
             false,
             false,
+            null,
+            null,
             packages,
             remarks,
             offers));
@@ -307,7 +339,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE")));
     LocalDate listingDate = getLocalDate(rs, "ADVERTISING_DATE");
     Double applicationVolume =
-        firstNonNullDouble(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME"));
+        firstNonNull(
+            getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME"));
     String productTypeCode = getString(rs, "EXPORT_PRODUCT_TYPE_CODE");
 
     String client = "";
@@ -412,10 +445,17 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         FIND_REMARKS_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
-        rs -> {
-          String remark = getString(rs, "REMARK");
-          return new LexisApplicationDetailDto.LexisRemarkDto(remark, remark);
-        });
+        this::mapRemarkRow);
+  }
+
+  LexisApplicationDetailDto.LexisRemarkDto mapRemarkRow(ResultSet rs) {
+    String remark = getString(rs, "REMARK");
+    return new LexisApplicationDetailDto.LexisRemarkDto(
+        getLong(rs, EXPORT_EXEMPTION_APPL_REMARK_NUMBER),
+        remark,
+        remark,
+        getString(rs, "ENTRY_USERID"),
+        getLocalDate(rs, "ENTRY_TIMESTAMP"));
   }
 
   private List<LexisApplicationDetailDto.LexisOfferDto> loadOffersByApplication(Long applicationNumber) {
@@ -426,6 +466,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         rs ->
             new LexisApplicationDetailDto.LexisOfferDto(
                 offerNumberAsString(rs),
+                getString(rs, "COMPANY_NAME"),
+                getLocalDate(rs, "ENTRY_TIMESTAMP"),
                 INDICATOR_YES.equalsIgnoreCase(getString(rs, "VALID_OFFER_INDICATOR")),
                 getLocalDate(rs, "OFFER_WITHDRAWAL_DATE")));
   }
@@ -471,24 +513,25 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         getLocalDate(rs, "RECEIVED_DATE"),
         getLocalDate(rs, "ADVERTISING_DATE"),
         getLong(rs, "TERM_DAYS"),
-        firstNonNullDouble(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME")),
+        firstNonNull(
+            getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME")),
         getDouble(rs, "AVERAGE_LOG_VOLUME"));
   }
 
   private String buildSortOrder(String sortField) {
     Map<String, String> allowedColumns =
         mapOf(
-            "applicationNumber", "EEA.APPLICATION_NUMBER",
-            "application", "EEA.APPLICATION_NUMBER",
-            "applicantClientNumber", "EEA.OWNER_CLIENT_NUMBER",
-            "displayOwnerClientNumber", "EEA.OWNER_CLIENT_NUMBER",
-            "ownerClientNumber", "EEA.OWNER_CLIENT_NUMBER",
-            "exemptionNumber", "EEA.EXEMPTION_NUMBER",
-            "listingDate", "ES.ADVERTISING_DATE",
-            "regionCode", "OU.ORG_UNIT_CODE",
-            "region", "OU.ORG_UNIT_CODE");
+            "applicationNumber", "v.APPLICATION_NUMBER",
+            "application", "v.APPLICATION_NUMBER",
+            "applicantClientNumber", "v.OWNER_CLIENT_NUMBER",
+            "displayOwnerClientNumber", "v.OWNER_CLIENT_NUMBER",
+            "ownerClientNumber", "v.OWNER_CLIENT_NUMBER",
+            "exemptionNumber", "v.EXEMPTION_NUMBER",
+            "listingDate", "v.ADVERTISING_DATE",
+            "regionCode", "v.REGION_CODE",
+            "region", "v.REGION_CODE");
 
-    String fallbackColumn = "EEA.APPLICATION_NUMBER";
+    String fallbackColumn = "v.APPLICATION_NUMBER";
     String direction = "ASC";
     String key = trim(sortField);
 
@@ -506,10 +549,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       column = fallbackColumn;
     }
 
-    if ("EEA.APPLICATION_NUMBER".equals(column)) {
-      return " ORDER BY EEA.APPLICATION_NUMBER " + direction;
+    if ("v.APPLICATION_NUMBER".equals(column)) {
+      return " ORDER BY v.APPLICATION_NUMBER " + direction;
     }
-    return " ORDER BY " + column + " " + direction + ", EEA.APPLICATION_NUMBER ASC";
+    return " ORDER BY " + column + " " + direction + ", v.APPLICATION_NUMBER ASC";
   }
 
   private String offerNumberAsString(ResultSet rs) {
@@ -520,24 +563,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     return getString(rs, "EXPORT_PURCHASE_OFFER_NUMBER");
   }
 
-  private String firstNonNull(String first, String second) {
-    return first != null ? first : second;
-  }
-
-  private Double firstNonNullDouble(Double first, Double second) {
-    return first != null ? first : second;
-  }
-
   private boolean equalsNullable(String left, String right) {
     return left == null ? right == null : left.equals(right);
-  }
-
-  private double coalesce(Double value, double fallback) {
-    return value == null ? fallback : value;
-  }
-
-  private long coalesce(Long value, long fallback) {
-    return value == null ? fallback : value;
   }
 
   private record ApplicationSnapshot(

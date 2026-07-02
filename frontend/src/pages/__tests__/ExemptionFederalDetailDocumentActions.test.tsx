@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { FederalApplicationDetail, ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
@@ -20,6 +20,8 @@ import {
   openExemptionDocument,
   removeExemptionDocument,
 } from '@/service/provincial-exemption-documents-service'
+import { runReport } from '@/service/report-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -42,6 +44,12 @@ vi.mock('@/service/federal-application-documents-service', () => ({
   removeFederalApplicationDocument: vi.fn(),
 }))
 
+vi.mock('@/service/report-service', () => ({
+  runReport: vi.fn(),
+}))
+
+Element.prototype.scrollIntoView = vi.fn()
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchFederalApplicationDetail = vi.mocked(fetchFederalApplicationDetail)
 const mockedFetchProvincialExemptionDetail = vi.mocked(fetchProvincialExemptionDetail)
@@ -51,6 +59,14 @@ const mockedRemoveFederalApplicationDocument = vi.mocked(removeFederalApplicatio
 const mockedFetchExemptionDocuments = vi.mocked(fetchExemptionDocuments)
 const mockedOpenExemptionDocument = vi.mocked(openExemptionDocument)
 const mockedRemoveExemptionDocument = vi.mocked(removeExemptionDocument)
+const mockedRunReport = vi.mocked(runReport)
+
+const selectDetailTab = async (name: string) => {
+  const tab = await screen.findByRole('tab', { name })
+  if (tab.getAttribute('aria-selected') !== 'true') {
+    await userEvent.click(tab)
+  }
+}
 
 const exemptionDetail: ProvincialExemptionDetail = {
   exemptionNumber: 'EX-777',
@@ -80,13 +96,29 @@ const federalDetail: FederalApplicationDetail = {
   statusDescription: 'Submitted',
   ownerClientNumber: '00021234',
   ownerClientLocationCode: '01',
+  ownerApplicantType: 'Owner',
+  ownerContactName: 'Owner Contact',
+  ownerCompanyName: 'Owner Company',
   agentClientNumber: '00011234',
   agentClientLocationCode: '01',
+  agentApplicantType: 'Agent',
+  agentContactName: 'Agent Contact',
+  agentCompanyName: 'Agent Company',
   exemptionNumber: 'EX-555',
   exemptionType: 'Section 1',
   exemptionReason: 'Economic',
+  region: 'RSC',
+  productType: 'Standing Timber',
+  applicationDate: '2026-01-10',
   receivedDate: '2026-01-11',
   listingDate: '2026-01-12',
+  termDays: 14,
+  logLocation: 'Forest service road',
+  ageClass: 'Mature',
+  averageLogVolume: 12.5,
+  applicationVolume: 42,
+  endUse: 'HE/PL',
+  author: 'IDIR\\TESTER',
   readOnly: false,
   packages: ['PKG-1'],
   remarks: ['Remark'],
@@ -103,17 +135,10 @@ const federalDetail: FederalApplicationDetail = {
   },
 }
 
-const LocationProbe = () => {
-  const location = useLocation()
-  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
-}
-
 describe('Exemption and Federal Detail Document Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialExemptionDetail.mockResolvedValue(exemptionDetail)
     mockedFetchFederalApplicationDetail.mockResolvedValue(federalDetail)
     mockedFetchExemptionDocuments.mockResolvedValue({
@@ -142,9 +167,15 @@ describe('Exemption and Federal Detail Document Actions', () => {
       success: true,
       source: 'api',
     })
+    mockedRunReport.mockResolvedValue({
+      source: 'api',
+      blob: new Blob(['approved-exemption-report']),
+      filename: 'approved-exemption-report.pdf',
+      contentType: 'application/pdf',
+    })
   })
 
-  it('navigates to upload center with exemption context', async () => {
+  it('jumps from the exemption action to the embedded upload panel', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
         <Routes>
@@ -152,17 +183,21 @@ describe('Exemption and Federal Detail Document Actions', () => {
             path="/provincial/exemption/:exemptionNumber"
             element={<ProvincialExemptionDetailsPage />}
           />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
 
+    for (const tabName of ['Summary', 'Permits', 'Documents', 'Remarks']) {
+      expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
+    }
     const uploadButton = await screen.findByRole('button', { name: 'Upload Exemption Document' })
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/admin/uploads?type=exemption&exemptionNumber=EX-777')
+    await waitFor(() => {
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    })
+    expect(await screen.findByText('Upload exemption documents')).toBeInTheDocument()
   })
 
   it('opens exemption document from API response', async () => {
@@ -190,6 +225,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -233,6 +269,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -249,9 +286,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
   })
 
   it('disables exemption upload and delete without file upload permission', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action !== '/fileExemptionUpload',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/fileExemptionUpload',
+      }),
+    )
     mockedFetchExemptionDocuments.mockResolvedValue({
       rows: [
         {
@@ -278,6 +317,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const uploadButton = await screen.findByRole('button', { name: 'Upload Exemption Document' })
     expect(uploadButton).toBeDisabled()
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('locked-exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -288,22 +328,75 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(mockedRemoveExemptionDocument).not.toHaveBeenCalled()
   })
 
-  it('navigates to upload center with federal application context', async () => {
+  it('uses report service blob response when opening approved exemption report', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
+
     render(
-      <MemoryRouter initialEntries={['/federal/888']}>
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
         <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
         </Routes>
       </MemoryRouter>,
     )
 
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Application Document' })
-    expect(uploadButton).toBeEnabled()
-    await userEvent.click(uploadButton)
+    const reportButton = await screen.findByRole('button', {
+      name: 'Open Approved Exemption Report',
+    })
+    expect(reportButton).toBeEnabled()
+    await userEvent.click(reportButton)
 
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/admin/uploads?type=application&applicationNumber=888')
+    expect(mockedRunReport).toHaveBeenCalledWith({
+      reportId: 'approvedExemptionReport',
+      actionMapping: 'generate',
+      values: {
+        exemptionNumber: 'EX-777',
+        outputFormat: 'PDF',
+      },
+    })
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining('blob:'),
+      'approvedExemptionReportWindow',
+      expect.any(String),
+    )
+  })
+
+  it('renders federal application details with the legacy tab structure', async () => {
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    for (const tabName of [
+      'Owner',
+      'Agent',
+      'Application',
+      'Items',
+      'Offers',
+      'Remarks',
+      'Documents',
+      'Shipping Details',
+    ]) {
+      expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
+    }
+
+    expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Back to Federal Search results' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open Provincial Application' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
+    expect(screen.queryByText('Read only')).not.toBeInTheDocument()
+    expect(await screen.findByText('Owner Contact')).toBeInTheDocument()
+
+    await selectDetailTab('Application')
+    expect(await screen.findByText('IDIR\\TESTER')).toBeInTheDocument()
+
+    await selectDetailTab('Documents')
+    expect(await screen.findByText('Upload application documents')).toBeInTheDocument()
   })
 
   it('opens federal document from API response', async () => {
@@ -328,6 +421,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -368,6 +462,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
+    await selectDetailTab('Documents')
     const documentName = await screen.findByText('federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -377,16 +472,18 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.click(deleteButton)
 
     await waitFor(() => {
-      expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('800')
+      expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('800', '888')
       expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledTimes(2)
       expect(screen.queryByText('federal-doc.pdf')).not.toBeInTheDocument()
     })
   })
 
   it('disables federal upload and delete without file upload permission', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action !== '/fileApplicationUpload',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/fileApplicationUpload',
+      }),
+    )
     mockedFetchFederalApplicationDocuments.mockResolvedValue({
       rows: [
         {
@@ -407,9 +504,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Application Document' })
-    expect(uploadButton).toBeDisabled()
-
+    await selectDetailTab('Documents')
+    expect(screen.queryByText('Upload application documents')).not.toBeInTheDocument()
     const documentName = await screen.findByText('locked-federal-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()

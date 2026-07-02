@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -12,6 +13,9 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -44,30 +48,32 @@ class PermitOracleServiceTest {
   }
 
   @Test
-  void searchShouldReturnEmptyWhenRegionNotSelected() {
+  void searchShouldQueryRepositoryWhenRegionNotSelected() {
     PermitSearchCriteria criteria =
         new PermitSearchCriteria(
             null, null, null, null, null, null, null, null, null, List.of(), null, 0, 25);
+    when(repository.search(any(PermitSearchCriteria.class)))
+        .thenReturn(page(List.of(row(90001L, LocalDate.of(2026, 2, 1))), 1));
 
     PermitSearchResponseDto response = service.search(criteria);
 
-    assertThat(response.total()).isZero();
-    assertThat(response.results()).isEmpty();
-    verifyNoInteractions(repository);
+    assertThat(response.total()).isEqualTo(1);
+    assertThat(response.results()).extracting(PermitSearchResultDto::permitNumber)
+        .containsExactly(90001L);
+    verify(repository).search(any(PermitSearchCriteria.class));
   }
 
   @Test
-  void searchShouldReturnPagedSliceFromRepository() {
+  void searchShouldReturnRepositoryPage() {
     PermitSearchCriteria criteria =
         new PermitSearchCriteria(
             null, null, null, null, null, null, null, null, null, List.of(12L), null, 1, 2);
     List<PermitSearchResultDto> rows =
         List.of(
-            row(90001L, LocalDate.of(2026, 2, 1)),
-            row(90002L, LocalDate.of(2026, 2, 2)),
             row(90003L, LocalDate.of(2026, 2, 3)),
             row(90004L, LocalDate.of(2026, 2, 4)));
-    when(repository.search(any(PermitSearchCriteria.class))).thenReturn(rows);
+    when(repository.search(any(PermitSearchCriteria.class)))
+        .thenReturn(page(rows, 4));
 
     PermitSearchResponseDto response = service.search(criteria);
 
@@ -76,6 +82,22 @@ class PermitOracleServiceTest {
     assertThat(response.size()).isEqualTo(2);
     assertThat(response.results()).extracting(PermitSearchResultDto::permitNumber)
         .containsExactly(90003L, 90004L);
+  }
+
+  @Test
+  void searchShouldPassKnownTotalToRepository() {
+    PermitSearchCriteria criteria =
+        new PermitSearchCriteria(
+            null, null, null, null, null, null, null, null, null, List.of(12L), null, 2, 30);
+    when(repository.search(any(PermitSearchCriteria.class), eq(91)))
+        .thenReturn(page(List.of(row(90005L, LocalDate.of(2026, 2, 5))), 91));
+
+    PermitSearchResponseDto response = service.search(criteria, 91);
+
+    assertThat(response.total()).isEqualTo(91);
+    assertThat(response.page()).isEqualTo(2);
+    assertThat(response.size()).isEqualTo(30);
+    verify(repository).search(any(PermitSearchCriteria.class), eq(91));
   }
 
   @Test
@@ -95,7 +117,8 @@ class PermitOracleServiceTest {
             " permitNumber DESC ",
             -2,
             0);
-    when(repository.search(any(PermitSearchCriteria.class))).thenReturn(List.of());
+    when(repository.search(any(PermitSearchCriteria.class)))
+        .thenReturn(page(List.of(), 0));
 
     service.search(criteria);
 
@@ -169,5 +192,9 @@ class PermitOracleServiceTest {
         80.0,
         issueDate,
         "R2");
+  }
+
+  private static <T> Page<T> page(List<T> content, long total) {
+    return new PageImpl<>(content, PageRequest.of(0, Math.max(1, content.size())), total);
   }
 }

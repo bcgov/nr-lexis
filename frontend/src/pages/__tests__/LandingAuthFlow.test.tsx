@@ -4,6 +4,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import LandingPage from '@/pages/Landing'
+import {
+  createLoggedOutTestAuthContext,
+  createTestAuthContext,
+  createTestCapabilities,
+} from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -35,135 +40,109 @@ describe('Landing auth flow smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: false,
-        principal: null,
-        roles: [],
-        welcomeTarget: null,
-        legacyPath: null,
-        grantedActions: [],
-      },
-      defaultRoute: '/provincial/summary',
-      devRoles: [],
-      isLoading: false,
-      isLoggedIn: false,
-      hasAnyRole: false,
-      usesExternalLogin: true,
-      login: vi.fn().mockResolvedValue(undefined),
-      refresh: vi.fn().mockResolvedValue(undefined),
-      logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
-      canPerform: vi.fn().mockReturnValue(false),
-    })
+    mockedUseAuth.mockReturnValue(
+      createLoggedOutTestAuthContext({
+        defaultRoute: '/provincial/application',
+      }),
+    )
   })
 
-  it('runs login action from the landing entry button', async () => {
+  it('runs IDIR login action from the landing entry button', async () => {
     const login = vi.fn().mockResolvedValue(undefined)
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: false,
-        principal: null,
-        roles: [],
-        welcomeTarget: null,
-        legacyPath: null,
-        grantedActions: [],
-      },
-      defaultRoute: '/provincial/summary',
-      devRoles: [],
-      isLoading: false,
-      isLoggedIn: false,
-      hasAnyRole: false,
-      usesExternalLogin: true,
-      login,
-      refresh: vi.fn().mockResolvedValue(undefined),
-      logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
-      canPerform: vi.fn().mockReturnValue(false),
-    })
+    mockedUseAuth.mockReturnValue(
+      createLoggedOutTestAuthContext({
+        defaultRoute: '/provincial/application',
+        login,
+      }),
+    )
 
     renderPage()
+
+    expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'false')
+    expect(screen.getByRole('heading', { name: 'Welcome to LEXIS' })).toBeInTheDocument()
+    expect(
+      screen.getByText('Create and manage applications, view offers and permits'),
+    ).toBeInTheDocument()
 
     const loginButton = screen.getByRole('button', { name: 'Log in with IDIR' })
     await userEvent.click(loginButton)
 
-    expect(login).toHaveBeenCalledTimes(1)
+    expect(login).toHaveBeenCalledWith('idir')
     expect(
       screen.queryByRole('button', { name: 'Continue to Application' }),
     ).not.toBeInTheDocument()
   })
 
-  it('shows session claims and navigates to default route when logged in', async () => {
+  it('runs Business BCeID login action from the landing entry button', async () => {
     const login = vi.fn().mockResolvedValue(undefined)
-    const refresh = vi.fn().mockResolvedValue(undefined)
-
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: true,
-        principal: 'idir\\analyst',
-        roles: ['PROVINCIAL_SUBMITTER_00012345'],
-        welcomeTarget: '/summary',
-        legacyPath: null,
-        grantedActions: ['/summary', '/applicationSearch'],
-      },
-      defaultRoute: '/provincial/summary',
-      devRoles: [],
-      isLoading: false,
-      isLoggedIn: true,
-      hasAnyRole: true,
-      usesExternalLogin: true,
-      login,
-      refresh,
-      logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
-      canPerform: vi.fn().mockReturnValue(true),
-    })
+    mockedUseAuth.mockReturnValue(
+      createLoggedOutTestAuthContext({
+        defaultRoute: '/provincial/application',
+        login,
+      }),
+    )
 
     renderPage()
 
-    expect(screen.getByText('idir\\analyst')).toBeInTheDocument()
-    expect(screen.getByText('PROVINCIAL_SUBMITTER_00012345')).toBeInTheDocument()
+    const loginButton = screen.getByRole('button', { name: 'Log in with Business BCeID' })
+    expect(loginButton).toHaveClass('cds--btn--tertiary')
+    await userEvent.click(loginButton)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Continue to Application' }))
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/summary')
+    expect(login).toHaveBeenCalledWith('business-bceid')
+  })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh Session' }))
-    expect(refresh).toHaveBeenCalledTimes(1)
+  it('redirects logged in users to the default route without exposing session details', async () => {
+    const login = vi.fn().mockResolvedValue(undefined)
+    const refresh = vi.fn().mockResolvedValue(undefined)
+
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          authenticated: true,
+          principal: 'idir\\analyst',
+          roles: ['PROVINCIAL_SUBMITTER_00012345'],
+          welcomeTarget: '/applicationSearch',
+          legacyPath: null,
+          grantedActions: ['/applicationSearch'],
+        }),
+        defaultRoute: '/provincial/application',
+        isLoggedIn: true,
+        hasAnyRole: true,
+        login,
+        refresh,
+        canPerform: vi.fn().mockReturnValue(true),
+      }),
+    )
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/provincial/application', { replace: true })
+    })
+
+    expect(screen.queryByText('idir\\analyst')).not.toBeInTheDocument()
+    expect(screen.queryByText('PROVINCIAL_SUBMITTER_00012345')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh Session' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Continue to Application' }),
+    ).not.toBeInTheDocument()
+    expect(refresh).not.toHaveBeenCalled()
   })
 
   it('surfaces inline error when login initiation fails', async () => {
-    mockedUseAuth.mockReturnValue({
-      capabilities: {
-        authenticated: false,
-        principal: null,
-        roles: [],
-        welcomeTarget: null,
-        legacyPath: null,
-        grantedActions: [],
-      },
-      defaultRoute: '/provincial/summary',
-      devRoles: [],
-      isLoading: false,
-      isLoggedIn: false,
-      hasAnyRole: false,
-      usesExternalLogin: true,
-      login: vi.fn().mockRejectedValue(new Error('boom')),
-      refresh: vi.fn().mockResolvedValue(undefined),
-      logout: vi.fn().mockResolvedValue(undefined),
-      setDevRoles: vi.fn().mockResolvedValue(undefined),
-      clearLoginSimulation: vi.fn().mockResolvedValue(undefined),
-      canPerform: vi.fn().mockReturnValue(false),
-    })
+    mockedUseAuth.mockReturnValue(
+      createLoggedOutTestAuthContext({
+        defaultRoute: '/provincial/application',
+        login: vi.fn().mockRejectedValue(new Error('boom')),
+      }),
+    )
 
     renderPage()
 
     await userEvent.click(screen.getByRole('button', { name: 'Log in with IDIR' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Session Error')).toBeInTheDocument()
+      expect(screen.getByText('Session error')).toBeInTheDocument()
       expect(screen.getByText('Unable to start the login flow.')).toBeInTheDocument()
     })
   })

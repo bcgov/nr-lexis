@@ -1,5 +1,15 @@
-import type { AxiosResponseHeaders, RawAxiosResponseHeaders } from 'axios'
 import apiService from '@/service/api-service'
+import {
+  documentValueAsBoolean as asBoolean,
+  documentValueAsString as asString,
+  documentValueAsStringArray as asStringArray,
+  normalizeDocumentRowBase,
+  parseDocumentArrayPayload,
+  parseRemoveDocumentSuccess,
+} from '@/service/document-service-utils'
+import { extractResponseFilename } from '@/service/http-response-utils'
+import { LEGACY_FORM_CONTENT_TYPE, toUrlEncodedParams } from '@/service/legacy-form-utils'
+import { recordOrEmpty } from '@/utils/record'
 
 export type PermitDocumentRow = {
   id: string
@@ -70,153 +80,30 @@ type PermitInvoiceDetailsPayload = {
 }
 
 const DEFAULT_CONVERSION_RATE = '1.00'
-
-const asString = (value: unknown): string => {
-  if (typeof value === 'string') {
-    return value.trim()
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return String(value)
-  }
-  return ''
-}
-
-const asBoolean = (value: unknown): boolean => {
-  if (typeof value === 'boolean') {
-    return value
-  }
-  if (typeof value === 'string') {
-    return value.trim().toLowerCase() === 'true'
-  }
-  return false
-}
-
-const parseRemoveDocumentSuccess = (payload: unknown): boolean => {
-  if (typeof payload === 'boolean') {
-    return payload
-  }
-
-  if (!payload || typeof payload !== 'object') {
-    return false
-  }
-
-  const objectPayload = payload as Record<string, unknown>
-  if ('success' in objectPayload) {
-    return asBoolean(objectPayload.success)
-  }
-  if ('removed' in objectPayload) {
-    return asBoolean(objectPayload.removed)
-  }
-  if ('valid' in objectPayload) {
-    return asBoolean(objectPayload.valid)
-  }
-
-  return false
-}
-
-const parseArrayPayload = (payload: unknown): unknown[] | null => {
-  if (Array.isArray(payload)) {
-    return payload
-  }
-
-  if (!payload || typeof payload !== 'object') {
-    return null
-  }
-
-  const objectPayload = payload as Record<string, unknown>
-  if (Array.isArray(objectPayload.results)) {
-    return objectPayload.results
-  }
-  if (Array.isArray(objectPayload.rows)) {
-    return objectPayload.rows
-  }
-  if (Array.isArray(objectPayload.items)) {
-    return objectPayload.items
-  }
-  if (Array.isArray(objectPayload.data)) {
-    return objectPayload.data
-  }
-  if (Array.isArray(objectPayload.invoiceList)) {
-    return objectPayload.invoiceList
-  }
-
-  return null
-}
-
-const parseStringArrayPayload = (payload: unknown): string[] => {
-  if (!Array.isArray(payload)) {
-    return []
-  }
-
-  return payload
-    .map((entry) => asString(entry))
-    .filter((entry): entry is string => entry.length > 0)
-}
+const PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS = 30_000
 
 const normalizeDocumentRow = (row: unknown, index: number): PermitDocumentRow => {
-  const source = (row ?? {}) as Record<string, unknown>
-  const fallbackId = `document-${index + 1}`
+  const source = recordOrEmpty(row)
   return {
-    id: asString(source.id || source.fileId || fallbackId) || fallbackId,
-    name: asString(source.name || source.fileName) || `Document ${index + 1}`,
-    description: asString(source.description || source.fileDescription),
-    type: asString(source.type || source.attachmentTypeDescription),
+    ...normalizeDocumentRowBase(row, index),
     typeCode: asString(source.typeCode || source.attachmentType || source.type_code),
   }
-}
-
-const getResponseHeaderValue = (
-  headers: RawAxiosResponseHeaders | AxiosResponseHeaders,
-  name: string,
-): string | null => {
-  const headerValue = headers[name] ?? headers[name.toLowerCase()] ?? headers[name.toUpperCase()]
-  if (typeof headerValue === 'string') {
-    return headerValue
-  }
-  if (Array.isArray(headerValue)) {
-    return headerValue[0] ?? null
-  }
-  return null
-}
-
-const extractFilename = (
-  headers: RawAxiosResponseHeaders | AxiosResponseHeaders,
-  requestedFileName: string,
-): string => {
-  const contentDisposition = getResponseHeaderValue(headers, 'content-disposition')
-  if (!contentDisposition) {
-    return requestedFileName
-  }
-
-  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
-  if (utf8Match && utf8Match[1]) {
-    try {
-      return decodeURIComponent(utf8Match[1])
-    } catch {
-      // ignored - fallback parser below
-    }
-  }
-
-  const regularMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
-  if (regularMatch && regularMatch[1]) {
-    return regularMatch[1]
-  }
-
-  return requestedFileName
 }
 
 const fetchInvoiceDetails = async (
   permitNumber: string,
   invoiceNumber: string,
 ): Promise<PermitInvoiceDetailsPayload> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .get<PermitInvoiceDetailsPayload>('/lexis/rpc/permit-details/invoice-details', {
+  const response = await apiService.getCachedResponse<PermitInvoiceDetailsPayload>(
+    '/lexis/rpc/permit-details/invoice-details',
+    {
       params: {
         permitNumber,
         salesInvoiceNumber: invoiceNumber,
       },
-    })
+    },
+    { ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS },
+  )
 
   if (response.status === 204) {
     return {
@@ -240,13 +127,15 @@ const fetchInvoiceDetails = async (
 export const fetchPermitDocuments = async (
   permitNumber: string,
 ): Promise<PermitDocumentsResult> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .get<unknown>('/lexis/rpc/permit-details/document-details', {
+  const response = await apiService.getCachedResponse<unknown>(
+    '/lexis/rpc/permit-details/document-details',
+    {
       params: {
         permitNumber,
       },
-    })
+    },
+    { ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS },
+  )
 
   if (response.status === 204) {
     return {
@@ -255,7 +144,7 @@ export const fetchPermitDocuments = async (
     }
   }
 
-  const rows = parseArrayPayload(response.data)
+  const rows = parseDocumentArrayPayload(response.data)
   if (!rows) {
     throw new Error('Unexpected document list payload.')
   }
@@ -290,18 +179,20 @@ export const openPermitDocument = async (
   return {
     source: 'api',
     blob: response.data,
-    filename: extractFilename(response.headers, fileName),
+    filename: extractResponseFilename(response.headers, fileName),
   }
 }
 
 export const fetchPermitInvoices = async (permitNumber: string): Promise<PermitInvoicesResult> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .get<{ invoiceList?: unknown }>('/lexis/rpc/permit-details/invoices-for-permit', {
+  const response = await apiService.getCachedResponse<{ invoiceList?: unknown }>(
+    '/lexis/rpc/permit-details/invoices-for-permit',
+    {
       params: {
         permitNumber,
       },
-    })
+    },
+    { ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS },
+  )
 
   if (response.status === 204) {
     return {
@@ -312,16 +203,17 @@ export const fetchPermitInvoices = async (permitNumber: string): Promise<PermitI
 
   const listRaw = Array.isArray(response.data?.invoiceList)
     ? response.data.invoiceList
-    : parseArrayPayload(response.data)
+    : parseDocumentArrayPayload(response.data, ['invoiceList'])
   if (!listRaw) {
     throw new Error('Unexpected invoice list payload.')
   }
 
   const invoiceNumbers = listRaw.map((entry) => asString(entry)).filter((entry) => entry.length > 0)
 
-  const detailsResults = await Promise.all(
-    invoiceNumbers.map((invoiceNumber) => fetchInvoiceDetails(permitNumber, invoiceNumber)),
-  )
+  const detailsResults: PermitInvoiceDetailsPayload[] = []
+  for (const invoiceNumber of invoiceNumbers) {
+    detailsResults.push(await fetchInvoiceDetails(permitNumber, invoiceNumber))
+  }
 
   return {
     rows: detailsResults.map((result, index) => ({
@@ -338,10 +230,12 @@ export const fetchPermitInvoices = async (permitNumber: string): Promise<PermitI
 
 export const fetchPermitInvoiceConversionRate =
   async (): Promise<PermitInvoiceConversionRateResult> => {
-    const response = await apiService.getAxiosInstance().get<{
+    const response = await apiService.getCachedResponse<{
       success?: boolean
       conversionRate?: unknown
-    }>('/lexis/rpc/permit-details/conversion-rate')
+    }>('/lexis/rpc/permit-details/conversion-rate', undefined, {
+      ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS,
+    })
 
     const conversionRate = asString(response.data?.conversionRate) || DEFAULT_CONVERSION_RATE
     return {
@@ -353,9 +247,9 @@ export const fetchPermitInvoiceConversionRate =
 const postFormData = async (path: string, payload: Record<string, string>): Promise<unknown> => {
   const response = await apiService
     .getAxiosInstance()
-    .post<unknown>(path, new URLSearchParams(payload), {
+    .post<unknown>(path, toUrlEncodedParams(payload), {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': LEGACY_FORM_CONTENT_TYPE,
       },
     })
 
@@ -366,11 +260,11 @@ const parseAddPermitInvoiceResponse = (
   payload: unknown,
   source: PermitDocumentAndInvoiceSource,
 ): AddPermitInvoiceResult => {
-  const objectPayload = (payload ?? {}) as Record<string, unknown>
+  const objectPayload = recordOrEmpty(payload)
   const success = asBoolean(objectPayload.success ?? objectPayload.valid)
   const message = asString(objectPayload.message)
-  const errors = parseStringArrayPayload(objectPayload.errors)
-  const warnings = parseStringArrayPayload(objectPayload.warnings)
+  const errors = asStringArray(objectPayload.errors)
+  const warnings = asStringArray(objectPayload.warnings)
 
   return {
     success,

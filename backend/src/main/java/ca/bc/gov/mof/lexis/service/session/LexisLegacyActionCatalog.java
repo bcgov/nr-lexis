@@ -14,7 +14,6 @@ final class LexisLegacyActionCatalog {
           "/applicationSearch",
           "/applicationsReview",
           "/approvedExemptionReport",
-          "/blankListing",
           "/changeApplicantType",
           "/createExemption",
           "/editCompletedApplications",
@@ -28,8 +27,6 @@ final class LexisLegacyActionCatalog {
           "/fileExemptionUpload",
           "/fileInvoiceUpload",
           "/filePermitUpload",
-          "/indianReservePermitDetails",
-          "/indianReservePermitSearch",
           "/lexisAgentAdmin",
           "/lexisFILAdmin",
           "/lexisPolicyAdmin",
@@ -49,11 +46,9 @@ final class LexisLegacyActionCatalog {
           "approveExemption",
           "createApplication",
           "createOffer",
-          "createPermit",
-          "industryListing",
           "mofrListing",
           "saveExemption",
           "savePermit",
-          "viewFederalApplication",
-          "viewOICApplication");
+          "uploadApplicationSubmission",
+          "viewFederalApplication");
 }

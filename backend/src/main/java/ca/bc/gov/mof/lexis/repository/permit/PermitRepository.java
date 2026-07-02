@@ -1,9 +1,13 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -18,10 +22,11 @@ public class PermitRepository extends OracleRepositorySupport {
 
   private static final String FIND_ALL_PERMIT_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_PERMIT_STATUS_CODES(?)";
-  private static final String FIND_ALL_ORG_UNITS = LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)";
 
   private static final String FIND_PERMIT_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_BY_CRITERIA(?,?,?,?,?)";
+  private static final String COUNT_PERMIT_BY_CRITERIA =
+      LEXIS_GROUP_5_PACKAGE + "COUNT_PERMIT_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
 
@@ -34,21 +39,44 @@ public class PermitRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return queryCursorProcedure(
-        FIND_ALL_ORG_UNITS,
-        null,
-        1,
-        rs -> {
-          Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-          String regionCode = getString(rs, "ORG_UNIT_CODE");
-          String regionName = getString(rs, "ORG_UNIT_NAME");
-          return new CodeNameDto(
-              orgUnitNo == null ? null : orgUnitNo.toString(),
-              regionCode == null ? regionName : regionCode);
-        });
+    return loadOrgUnitOptions(true);
   }
 
-  public List<PermitSearchResultDto> search(PermitSearchCriteria criteria) {
+  public Page<PermitSearchResultDto> search(PermitSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  public Page<PermitSearchResultDto> search(PermitSearchCriteria criteria, Integer knownTotal) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    int totalElements =
+        knownTotal == null
+            ? queryLegacyDynamicCountProcedure(
+                COUNT_PERMIT_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues())
+            : Math.max(0, knownTotal);
+    return queryLegacyDynamicPage(
+        FIND_PERMIT_BY_CRITERIA,
+        sqlWhere.sql(),
+        sqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        totalElements,
+        rs ->
+            new PermitSearchResultDto(
+                getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+                firstNonNull(getString(rs, "STATUS_DESCRIPTION"), getString(rs, "EXPORT_PERMIT_STATUS_CODE")),
+                getString(rs, "AGENT_NUMBER"),
+                getString(rs, "CLIENT_NUMBER"),
+                coalesce(getDouble(rs, "PERMIT_VOLUME"), 0.0d),
+                getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
+                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
+  }
+
+  public int count(PermitSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    return queryLegacyDynamicCountProcedure(COUNT_PERMIT_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+  }
+
+  private SqlWhere buildSearchWhere(PermitSearchCriteria criteria) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("EP.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -74,7 +102,9 @@ public class PermitRepository extends OracleRepositorySupport {
           ownerClientNumber);
     }
 
-    where.addInEqualsNumberOrNoResults("EPD.ORG_UNIT_NO", criteria.regionNumbers());
+    if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
+      where.addInEqualsNumberOrNoResults("EPD.ORG_UNIT_NO", criteria.regionNumbers());
+    }
     if (criteria.requireScalePermit()) {
       where.addRaw(" AND ESD.EXPORT_PERMIT_DETAIL_NUMBER IS NOT NULL");
     }
@@ -97,21 +127,7 @@ public class PermitRepository extends OracleRepositorySupport {
             "permitNumber",
             "DESC");
 
-    SqlWhere sqlWhere = where.build(orderBy);
-
-    return queryDynamicAllPages(
-        FIND_PERMIT_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        rs ->
-            new PermitSearchResultDto(
-                getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-                firstNonNull(getString(rs, "STATUS_DESCRIPTION"), getString(rs, "EXPORT_PERMIT_STATUS_CODE")),
-                getString(rs, "AGENT_NUMBER"),
-                getString(rs, "CLIENT_NUMBER"),
-                coalesce(getDouble(rs, "PERMIT_VOLUME"), 0.0d),
-                getLocalDate(rs, "EXPORT_PERMIT_ISSUE_DATE"),
-                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
+    return where.build(orderBy);
   }
 
   public Optional<PermitDetailDto> findByPermitNumber(Long permitNumber) {
@@ -152,15 +168,4 @@ public class PermitRepository extends OracleRepositorySupport {
                 firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE"))));
   }
 
-  private String firstNonNull(String first, String second) {
-    return first != null ? first : second;
-  }
-
-  private double coalesce(Double value, double fallback) {
-    return value == null ? fallback : value;
-  }
-
-  private long coalesce(Long value, long fallback) {
-    return value == null ? fallback : value;
-  }
 }

@@ -1,5 +1,9 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
+import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
@@ -9,6 +13,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -30,23 +35,29 @@ public class PermitOracleService implements PermitService {
 
   @Override
   public PermitSearchResponseDto search(PermitSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  @Override
+  public PermitSearchResponseDto search(PermitSearchCriteria criteria, Integer knownTotal) {
     PermitSearchCriteria normalized = normalizeCriteria(criteria);
     int page = normalized.page();
     int size = normalized.size();
 
-    if (normalized.regionNumbers().isEmpty()) {
-      return new PermitSearchResponseDto(List.of(), 0, page, size);
-    }
-
-    List<PermitSearchResultDto> results = safeList(repository.search(normalized));
-    int fromIndex = Math.min(page * size, results.size());
-    int toIndex = Math.min(fromIndex + size, results.size());
+    Page<PermitSearchResultDto> searchPage =
+        knownTotal == null ? repository.search(normalized) : repository.search(normalized, knownTotal);
+    List<PermitSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.getContent());
 
     return new PermitSearchResponseDto(
-        results.subList(fromIndex, toIndex),
-        results.size(),
+        results,
+        searchPage == null ? 0 : (int) Math.min(Integer.MAX_VALUE, searchPage.getTotalElements()),
         page,
         size);
+  }
+
+  @Override
+  public int count(PermitSearchCriteria criteria) {
+    return repository.count(normalizeCriteria(criteria));
   }
 
   @Override
@@ -74,28 +85,10 @@ public class PermitOracleService implements PermitService {
         trimToNull(input.applicantClientNumber()),
         trimToNull(input.ownerClientNumber()),
         input.requireScalePermit(),
-        normalizeRegions(input.regionNumbers()),
+        positiveDistinctLongs(input.regionNumbers()),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
   }
 
-  private List<Long> normalizeRegions(List<Long> rawRegions) {
-    if (rawRegions == null) {
-      return List.of();
-    }
-    return rawRegions.stream().filter(region -> region != null && region > 0).distinct().toList();
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
-  private static <T> List<T> safeList(List<T> input) {
-    return input == null ? List.of() : input;
-  }
 }

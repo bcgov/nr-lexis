@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
@@ -14,65 +15,101 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
+import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | OracleLexisApplicationService")
 class OracleLexisApplicationServiceTest {
 
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-06-25T00:00:00Z"), ZoneOffset.UTC);
+
   @Mock private LexisApplicationRepository repository;
-  @InjectMocks private OracleLexisApplicationService service;
+  @Mock private LexisReportScheduleRepository scheduleRepository;
+  private OracleLexisApplicationService service;
+
+  @BeforeEach
+  void setUp() {
+    service = new OracleLexisApplicationService(repository, scheduleRepository, FIXED_CLOCK);
+  }
 
   @Test
   void searchOptionsShouldReturnRepositoryValues() {
     when(repository.loadExemptionTypeOptions()).thenReturn(List.of(new CodeNameDto("ALL", "All")));
+    when(repository.loadExemptionReasonOptions()).thenReturn(List.of(new CodeNameDto("U", "Unadvertised")));
     when(repository.loadApplicationStatusOptions()).thenReturn(List.of(new CodeNameDto("APP", "Approved")));
     when(repository.loadProductTypeOptions()).thenReturn(List.of(new CodeNameDto("S", "Standing")));
+    when(repository.loadGrowthTypeOptions()).thenReturn(List.of(new CodeNameDto("O", "Old Growth")));
     when(repository.loadRegionOptions()).thenReturn(List.of(new CodeNameDto("12", "Coast")));
+    when(scheduleRepository.findUpcomingExportSchedules())
+        .thenReturn(
+            List.of(
+                scheduleRow(986L, LocalDate.of(2026, 1, 11)),
+                scheduleRow(null, LocalDate.of(2026, 7, 4)),
+                scheduleRow(990L, null),
+                scheduleRow(987L, LocalDate.of(2026, 7, 11)),
+                scheduleRow(988L, LocalDate.of(2026, 7, 25)),
+                scheduleRow(989L, LocalDate.of(2026, 8, 8))));
 
     LexisApplicationSearchOptionsDto response = service.searchOptions();
 
     assertThat(response.exemptionTypes()).hasSize(1);
+    assertThat(response.exemptionReasons()).hasSize(1);
     assertThat(response.applicationStatuses()).hasSize(1);
     assertThat(response.productTypes()).hasSize(1);
+    assertThat(response.growthTypes()).hasSize(1);
     assertThat(response.regions()).hasSize(1);
+    assertThat(response.currentSchedules())
+        .containsExactly(
+            new CodeNameDto("987", "2026-07-11"),
+            new CodeNameDto("988", "2026-07-25"),
+            new CodeNameDto("", "Blank"));
   }
 
   @Test
-  void searchShouldReturnEmptyWhenRegionNotSelected() {
+  void searchShouldQueryRepositoryWhenRegionNotSelected() {
     LexisApplicationSearchCriteria criteria =
         new LexisApplicationSearchCriteria(
             null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 25);
+    when(repository.search(any(LexisApplicationSearchCriteria.class)))
+        .thenReturn(page(List.of(row(1001L, LocalDate.of(2026, 2, 1))), 1));
 
     LexisApplicationSearchResponseDto response = service.search(criteria);
 
-    assertThat(response.total()).isZero();
-    assertThat(response.results()).isEmpty();
-    verifyNoInteractions(repository);
+    assertThat(response.total()).isEqualTo(1);
+    assertThat(response.results()).extracting(LexisApplicationSearchResultDto::application)
+        .containsExactly(1001L);
+    verify(repository).search(any(LexisApplicationSearchCriteria.class));
   }
 
   @Test
-  void searchShouldReturnPagedSliceFromRepository() {
+  void searchShouldReturnRepositoryPage() {
     LexisApplicationSearchCriteria criteria =
         new LexisApplicationSearchCriteria(
             null, null, null, null, null, null, null, null, null, null, null, null, List.of(12L), null, 1, 2);
     List<LexisApplicationSearchResultDto> rows =
         List.of(
-            row(1001L, LocalDate.of(2026, 2, 1)),
-            row(1002L, LocalDate.of(2026, 2, 2)),
             row(1003L, LocalDate.of(2026, 2, 3)),
             row(1004L, LocalDate.of(2026, 2, 4)));
-    when(repository.search(any(LexisApplicationSearchCriteria.class))).thenReturn(rows);
+    when(repository.search(any(LexisApplicationSearchCriteria.class)))
+        .thenReturn(page(rows, 4));
 
     LexisApplicationSearchResponseDto response = service.search(criteria);
 
@@ -103,7 +140,8 @@ class OracleLexisApplicationServiceTest {
             " listingDate DESC ",
             -2,
             0);
-    when(repository.search(any(LexisApplicationSearchCriteria.class))).thenReturn(List.of());
+    when(repository.search(any(LexisApplicationSearchCriteria.class)))
+        .thenReturn(page(List.of(), 0));
 
     service.search(criteria);
 
@@ -151,6 +189,8 @@ class OracleLexisApplicationServiceTest {
             false,
             false,
             false,
+            null,
+            null,
             List.of(),
             List.of(),
             List.of());
@@ -234,5 +274,13 @@ class OracleLexisApplicationServiceTest {
         95.0,
         false,
         false);
+  }
+
+  private static ExportScheduleRowDto scheduleRow(Long exportScheduleId, LocalDate advertisingDate) {
+    return new ExportScheduleRowDto(exportScheduleId, advertisingDate, null, null, null, null, null);
+  }
+
+  private static <T> Page<T> page(List<T> content, long total) {
+    return new PageImpl<>(content, PageRequest.of(0, Math.max(1, content.size())), total);
   }
 }

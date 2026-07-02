@@ -1,0 +1,91 @@
+name: Regression
+
+on:
+  schedule:
+    - cron: "0 10 * * 3" # Wednesdays at 10:00 UTC; 3 AM Pacific during daylight time.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  credentialed-regression:
+    name: TEST Regression (${{ matrix.project }})
+    environment: test
+    defaults:
+      run:
+        working-directory: frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium]
+    outputs:
+      regression-outcome: ${{ steps.run-regression.outcome }}
+    env:
+      E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.silver.devops.gov.bc.ca
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Check regression secrets
+        env:
+          E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
+          E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
+        run: |
+          test -n "$E2E_IDIR_USER" || (echo "E2E_IDIR_USER test environment secret is required." && exit 1)
+          test -n "$E2E_IDIR_PASSWORD" || (echo "E2E_IDIR_PASSWORD test environment secret is required." && exit 1)
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps ${{ matrix.project }}
+
+      - name: Wait for deployed frontend
+        run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL"
+
+      - name: Run TEST regression suite
+        id: run-regression
+        continue-on-error: true
+        env:
+          CI: "true"
+          E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
+          E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
+        run: |
+          npm run e2e:regression -- --reporter=html,list
+
+      - uses: actions/upload-artifact@v7
+        if: (! cancelled())
+        with:
+          name: playwright-regression-${{ matrix.project }}-test
+          path: frontend/playwright-report
+          retention-days: 7
+
+  regression-result:
+    name: TEST Regression Result
+    needs: [credentialed-regression]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Check TEST regression result
+        run: |
+          if [ "${{ needs.credentialed-regression.result }}" != "success" ]; then
+            echo "TEST regression setup failed before the regression result could be collected."
+            exit 1
+          fi
+          if [ "${{ needs.credentialed-regression.outputs.regression-outcome }}" != "success" ]; then
+            echo "TEST regression failed. Check the TEST Regression job logs and uploaded Playwright report."
+            exit 1
+          fi

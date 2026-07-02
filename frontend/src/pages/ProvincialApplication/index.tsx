@@ -1,16 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Checkbox,
   Column,
   Grid,
-  InlineLoading,
-  InlineNotification,
-  MultiSelect,
+  FilterableMultiSelect,
   Pagination,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -20,6 +16,9 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
+import { AppNotification } from '../../components/AppNotification'
+import SearchableSelect from '../../components/SearchableSelect'
 import type {
   ProvincialApplicationSearchFilters,
   ProvincialApplicationSearchItem,
@@ -28,23 +27,50 @@ import type {
   ProvincialApplicationSearchSortField,
 } from '@/interfaces/ProvincialApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
+  buildPageDataCacheKey,
+  getPageDataCache,
+  setPageDataCache,
+} from '@/pages/shared/page-data-cache'
+import {
+  buildSearchTotalCacheKey,
+  getCachedSearchTotal,
+  setCachedSearchTotal,
+  type SearchTotalCache,
+} from '@/pages/shared/search-total-cache'
+import {
+  DEFAULT_SEARCH_PAGE,
+  DEFAULT_SEARCH_PAGE_SIZE,
+  SEARCH_PAGE_SIZE_OPTIONS,
+  appendSearchParamsToPath,
+  createEmptyPagedSearchResponse,
+  createSearchParams,
+  getNextSortDirection,
+  mapSelectedOptionsById,
+  mapValueLabelOptionsToIdTextOptions,
   parseCsvParam,
   parseEnumParam,
+  parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
-  setSearchParam,
+  type IdTextOption,
 } from '@/pages/shared/search-query-utils'
-import { searchProvincialApplications } from '@/service/provincial-application-search-service'
+import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
+import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
+import {
+  loadSearchWithDeferredTotal,
+  prefetchAdjacentSearchPages,
+} from '@/pages/shared/deferred-search-total'
+import {
+  countProvincialApplications,
+  searchProvincialApplications,
+} from '@/service/provincial-application-search-service'
 import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
-
-type RegionOption = {
-  id: string
-  text: string
-}
+import IsoDatePicker from '../../components/IsoDatePicker'
 
 type ExemptionStatus = {
   kind: 'error'
@@ -71,20 +97,7 @@ const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
   ownerClientNumber: '',
 }
 
-const EMPTY_RESULTS: ProvincialApplicationSearchResponse = {
-  content: [],
-  page: {
-    number: 0,
-    size: 10,
-    totalElements: 0,
-    totalPages: 1,
-  },
-}
-
-const isValidIsoDate = (value: string): boolean => {
-  if (!value.trim()) return true
-  return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(value)
-}
+const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialApplicationSearchResponse>()
 
 const SORT_COLUMNS: {
   id: ProvincialApplicationSearchSortField
@@ -92,19 +105,16 @@ const SORT_COLUMNS: {
 }[] = [
   { id: 'applicationNumber', label: 'Application' },
   { id: 'status', label: 'Status' },
-  { id: 'applicantClientNumber', label: 'Applicant Client Number' },
-  { id: 'ownerClientNumber', label: 'Owner Client Number' },
+  { id: 'applicantClientNumber', label: 'Applicant client number' },
+  { id: 'ownerClientNumber', label: 'Owner client number' },
   { id: 'region', label: 'Region' },
-  { id: 'applicationVolume', label: 'Application Volume (m³)' },
-  { id: 'exemptionNumber', label: 'Exemption Number' },
-  { id: 'listingDate', label: 'Listing Date' },
+  { id: 'applicationVolume', label: 'Application volume (m³)' },
+  { id: 'exemptionNumber', label: 'Exemption number' },
+  { id: 'listingDate', label: 'Listing date' },
 ]
 
 const DEFAULT_SORT_FIELD: ProvincialApplicationSearchSortField = 'applicationNumber'
 const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc'
-const DEFAULT_PAGE = 1
-const DEFAULT_PAGE_SIZE = 10
-const PAGE_SIZE_OPTIONS = [10, 20, 30] as const
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialApplicationSearchSortField[]
@@ -115,38 +125,30 @@ const buildSearchParams = (
   sortDirection: 'asc' | 'desc',
   page: number,
   pageSize: number,
-): URLSearchParams => {
-  const params = new URLSearchParams()
+): URLSearchParams =>
+  createSearchParams([
+    ['applicationNumber', filters.applicationNumber],
+    ['packageNumber', filters.packageNumber],
+    ['exemptionType', filters.exemptionType],
+    ['exemptionNumber', filters.exemptionNumber],
+    ['applicationStatus', filters.applicationStatus],
+    ['productTypeCode', filters.productTypeCode],
+    ['region', filters.region],
+    ['listingFromDate', filters.listingFromDate],
+    ['listingToDate', filters.listingToDate],
+    ['applicantClientNumber', filters.applicantClientNumber],
+    ['ownerClientNumber', filters.ownerClientNumber],
+    ['sortField', sortField],
+    ['sortDirection', sortDirection],
+    ['page', page],
+    ['pageSize', pageSize],
+  ])
 
-  setSearchParam(params, 'applicationNumber', filters.applicationNumber)
-  setSearchParam(params, 'packageNumber', filters.packageNumber)
-  setSearchParam(params, 'exemptionType', filters.exemptionType)
-  setSearchParam(params, 'exemptionNumber', filters.exemptionNumber)
-  setSearchParam(params, 'applicationStatus', filters.applicationStatus)
-  setSearchParam(params, 'productTypeCode', filters.productTypeCode)
-  setSearchParam(params, 'region', filters.region)
-  setSearchParam(params, 'listingFromDate', filters.listingFromDate)
-  setSearchParam(params, 'listingToDate', filters.listingToDate)
-  setSearchParam(params, 'applicantClientNumber', filters.applicantClientNumber)
-  setSearchParam(params, 'ownerClientNumber', filters.ownerClientNumber)
-  setSearchParam(params, 'sortField', sortField)
-  setSearchParam(params, 'sortDirection', sortDirection)
-  setSearchParam(params, 'page', page)
-  setSearchParam(params, 'pageSize', pageSize)
-
-  return params
-}
-
-const mapSelectedRegions = (regionIds: string[], regionOptions: RegionOption[]): RegionOption[] => {
-  const optionMap = new Map(regionOptions.map((option) => [option.id, option]))
-  return regionIds.map((regionId) => optionMap.get(regionId) ?? { id: regionId, text: regionId })
-}
-
-const ProvincialApplicationPage: FC = () => {
+const ProvincialApplicationPage = () => {
   const navigate = useNavigate()
-  const { canPerform } = useAuth()
+  const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([])
+  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
@@ -157,14 +159,13 @@ const ProvincialApplicationPage: FC = () => {
     Record<string, ProvincialApplicationSearchItem>
   >({})
   const [exemptionStatus, setExemptionStatus] = useState<ExemptionStatus | null>(null)
+  const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canCreateApplication = canPerform('createApplication')
+  const canUploadApplicationSubmission = canPerform('uploadApplicationSubmission')
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
-    (path: string): string => {
-      const query = searchParams.toString()
-      return query.length > 0 ? `${path}?${query}` : path
-    },
+    (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
 
@@ -182,7 +183,6 @@ const ProvincialApplicationPage: FC = () => {
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
     }
-    const parsedPageSize = parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
 
     return {
       filters: urlFilters,
@@ -195,12 +195,15 @@ const ProvincialApplicationPage: FC = () => {
         searchParams.get('sortDirection'),
         DEFAULT_SORT_DIRECTION,
       ),
-      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_PAGE),
-      pageSize: PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
-        ? parsedPageSize
-        : DEFAULT_PAGE_SIZE,
+      page: parsePositiveIntParam(searchParams.get('page'), DEFAULT_SEARCH_PAGE),
+      pageSize: parsePageSizeParam(
+        searchParams.get('pageSize'),
+        DEFAULT_SEARCH_PAGE_SIZE,
+        SEARCH_PAGE_SIZE_OPTIONS,
+      ),
     }
   }, [searchParams])
+  const debouncedUrlState = useDebouncedValue(urlState)
   const filters = urlState.filters
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
@@ -220,7 +223,7 @@ const ProvincialApplicationPage: FC = () => {
       }
       clearSelection()
       setSearchParams(
-        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_PAGE, pageSize),
+        buildSearchParams(nextFilters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
         { replace: true },
       )
     },
@@ -228,44 +231,121 @@ const ProvincialApplicationPage: FC = () => {
   )
 
   const selectedRegions = useMemo(
-    () => mapSelectedRegions(filters.region, regionOptions),
+    () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
+  const selectedRegionHelperText =
+    selectedRegions.length > 0
+      ? `Selected: ${selectedRegions.map((region) => region.text).join(', ')}`
+      : undefined
 
   const hasDateValidationError = useMemo(() => {
-    return !isValidIsoDate(filters.listingFromDate) || !isValidIsoDate(filters.listingToDate)
+    return hasInvalidIsoDateValue(filters.listingFromDate, filters.listingToDate)
   }, [filters.listingFromDate, filters.listingToDate])
 
-  const runSearch = useCallback(async (request: ProvincialApplicationSearchRequest) => {
-    if (
-      !isValidIsoDate(request.filters.listingFromDate) ||
-      !isValidIsoDate(request.filters.listingToDate)
-    ) {
-      return
-    }
-    setLoading(true)
-    setErrorMessage('')
-    try {
-      const response = await searchProvincialApplications(request)
-      setResults(response)
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('Unable to retrieve application search results.')
-      setResults(EMPTY_RESULTS)
-    } finally {
-      setLoading(false)
-    }
+  const beginSearchRequest = useLatestRequestGuard()
+  const commitResults = useCallback((nextResults: ProvincialApplicationSearchResponse) => {
+    setResults(nextResults)
   }, [])
+
+  const runSearch = useCallback(
+    async (request: ProvincialApplicationSearchRequest, options: { force?: boolean } = {}) => {
+      const pageCacheKey = buildPageDataCacheKey(
+        'provincial-application-search',
+        capabilities?.principal,
+        request,
+      )
+      const isLatestRequest = beginSearchRequest()
+      if (!options.force) {
+        const cachedResults = getPageDataCache<ProvincialApplicationSearchResponse>(pageCacheKey)
+        if (cachedResults) {
+          setCachedSearchTotal(
+            totalCacheRef.current,
+            buildSearchTotalCacheKey(request.filters),
+            cachedResults.page.totalElements,
+          )
+          prefetchAdjacentSearchPages({
+            pageId: 'provincial-application-search',
+            principal: capabilities?.principal,
+            request,
+            response: cachedResults,
+            search: searchProvincialApplications,
+            onError: console.error,
+          })
+          setResults(cachedResults)
+          setLoading(false)
+          setErrorMessage('')
+          return
+        }
+      }
+
+      if (hasInvalidIsoDateValue(request.filters.listingFromDate, request.filters.listingToDate)) {
+        setLoading(false)
+        return
+      }
+      setLoading(true)
+      setErrorMessage('')
+      try {
+        const totalCacheKey = buildSearchTotalCacheKey(request.filters)
+        const cachedTotal = getCachedSearchTotal(totalCacheRef.current, totalCacheKey)
+        const commitSearchResponse = (
+          response: ProvincialApplicationSearchResponse,
+          totalIsExact: boolean,
+        ) => {
+          if (totalIsExact) {
+            setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
+            setPageDataCache(pageCacheKey, response)
+            prefetchAdjacentSearchPages({
+              pageId: 'provincial-application-search',
+              principal: capabilities?.principal,
+              request,
+              response,
+              search: searchProvincialApplications,
+              onError: console.error,
+            })
+          }
+          queueMicrotask(() => {
+            if (isLatestRequest()) {
+              commitResults(response)
+            }
+          })
+        }
+        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+          request,
+          cachedTotal,
+          search: searchProvincialApplications,
+          count: countProvincialApplications,
+          isLatestRequest,
+          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
+          onCountError: console.error,
+        })
+        if (isLatestRequest()) {
+          commitSearchResponse(response, totalIsExact)
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setErrorMessage('Unable to retrieve application search results.')
+          setResults(EMPTY_RESULTS)
+        }
+      } finally {
+        if (isLatestRequest()) {
+          setLoading(false)
+        }
+      }
+    },
+    [beginSearchRequest, capabilities?.principal, commitResults],
+  )
 
   useEffect(() => {
     void runSearch({
-      filters: urlState.filters,
-      page: urlState.page - 1,
-      pageSize: urlState.pageSize,
-      sortField: urlState.sortField,
-      sortDirection: urlState.sortDirection,
+      filters: debouncedUrlState.filters,
+      page: debouncedUrlState.page - 1,
+      pageSize: debouncedUrlState.pageSize,
+      sortField: debouncedUrlState.sortField,
+      sortDirection: debouncedUrlState.sortDirection,
     })
-  }, [runSearch, urlState])
+  }, [debouncedUrlState, runSearch])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -274,12 +354,7 @@ const ProvincialApplicationPage: FC = () => {
       setExemptionTypeOptions(options.exemptionTypes)
       setApplicationStatusOptions(options.applicationStatuses)
       setProductTypeOptions(options.productTypes)
-      setRegionOptions(
-        options.regions.map((option) => ({
-          id: option.value,
-          text: `${option.label} (${option.value})`,
-        })),
-      )
+      setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
     }
 
     void loadOptions()
@@ -287,7 +362,9 @@ const ProvincialApplicationPage: FC = () => {
 
   const onSearch = () => {
     clearSelection()
-    setSearchParams(buildSearchParams(filters, sortField, sortDirection, DEFAULT_PAGE, pageSize))
+    setSearchParams(
+      buildSearchParams(filters, sortField, sortDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    )
   }
 
   const onClearFilters = () => {
@@ -297,16 +374,18 @@ const ProvincialApplicationPage: FC = () => {
         INITIAL_FILTERS,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
-        DEFAULT_PAGE,
-        DEFAULT_PAGE_SIZE,
+        DEFAULT_SEARCH_PAGE,
+        DEFAULT_SEARCH_PAGE_SIZE,
       ),
     )
   }
 
   const onHeaderClick = (column: ProvincialApplicationSearchSortField) => {
-    const nextDirection = sortField === column && sortDirection === 'asc' ? 'desc' : 'asc'
+    const nextDirection = getNextSortDirection(sortField, sortDirection, column)
     clearSelection()
-    setSearchParams(buildSearchParams(filters, column, nextDirection, DEFAULT_PAGE, pageSize))
+    setSearchParams(
+      buildSearchParams(filters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+    )
   }
 
   const selectableRows = useMemo(() => {
@@ -393,158 +472,155 @@ const ProvincialApplicationPage: FC = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid provincial-application-search-page">
       <Column sm={4} md={8} lg={16}>
-        <h1>Provincial Application Search</h1>
-        <p>
-          Migrated from <code>src/main/webapp/WEB-INF/jsp/provincial/application/search.jsp</code>{' '}
-          and <code>src/main/webapp/javascript/provincial/application/search.js</code>.
-        </p>
+        <h1>Provincial application search</h1>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <Tile>
-          <div className="legacy-search-grid">
-            <TextInput
-              id="applicationNumber"
-              labelText="Application Number"
-              value={filters.applicationNumber}
-              onChange={(event) => updateFilter('applicationNumber', event.target.value)}
-            />
-            <TextInput
-              id="packageNumber"
-              labelText="Package Number"
-              value={filters.packageNumber}
-              onChange={(event) => updateFilter('packageNumber', event.target.value)}
-            />
-            <Select
-              id="exemptionType"
-              labelText="Exemption Type"
-              value={filters.exemptionType}
-              onChange={(event) => updateFilter('exemptionType', event.target.value)}
-            >
-              <SelectItem text="All types" value="" />
-              {exemptionTypeOptions.map((option) => (
-                <SelectItem key={option.value} text={option.label} value={option.value} />
-              ))}
-            </Select>
-            <TextInput
-              id="exemptionNumber"
-              labelText="Exemption Number"
-              value={filters.exemptionNumber}
-              onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
-            />
-            <Select
-              id="applicationStatus"
-              labelText="Application Status"
-              value={filters.applicationStatus}
-              onChange={(event) => updateFilter('applicationStatus', event.target.value)}
-            >
-              <SelectItem text="All statuses" value="" />
-              {applicationStatusOptions.map((option) => (
-                <SelectItem key={option.value} text={option.label} value={option.value} />
-              ))}
-            </Select>
-            <Select
-              id="productTypeCode"
-              labelText="Product Type"
-              value={filters.productTypeCode}
-              onChange={(event) => updateFilter('productTypeCode', event.target.value)}
-            >
-              <SelectItem text="All product types" value="" />
-              {productTypeOptions.map((option) => (
-                <SelectItem key={option.value} text={option.label} value={option.value} />
-              ))}
-            </Select>
-            <MultiSelect
-              id="region"
-              titleText="Region"
-              items={regionOptions}
-              itemToString={(item) => (item ? item.text : '')}
-              label="Select region(s)"
-              selectionFeedback="fixed"
-              selectedItems={selectedRegions}
-              onChange={(event) => {
-                const nextSelected = (event.selectedItems ?? []) as RegionOption[]
-                updateFilter(
-                  'region',
-                  nextSelected.map((item) => item.id),
-                )
-              }}
-            />
-            <TextInput
-              id="listingFromDate"
-              labelText="Listing From Date (YYYY-MM-DD)"
-              value={filters.listingFromDate}
-              invalid={!isValidIsoDate(filters.listingFromDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingFromDate', event.target.value)}
-            />
-            <TextInput
-              id="listingToDate"
-              labelText="Listing To Date (YYYY-MM-DD)"
-              value={filters.listingToDate}
-              invalid={!isValidIsoDate(filters.listingToDate)}
-              invalidText="Date must be YYYY-MM-DD"
-              onChange={(event) => updateFilter('listingToDate', event.target.value)}
-            />
-            <TextInput
-              id="applicantClientNumber"
-              labelText="Applicant Client Number"
-              value={filters.applicantClientNumber}
-              onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
-            />
-            <TextInput
-              id="ownerClientNumber"
-              labelText="Owner Client Number"
-              value={filters.ownerClientNumber}
-              onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
-            />
-          </div>
-          <div className="legacy-search-actions">
-            <Button
-              kind="primary"
-              onClick={onSearch}
-              disabled={loading || hasDateValidationError}
-              size="md"
-            >
-              Search
-            </Button>
-            <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
-              Clear Filters
-            </Button>
-            <Button
-              kind="secondary"
-              size="md"
-              onClick={onCreateExemptionClick}
-              disabled={selectedRowsCount === 0 || !canCreateExemption}
-            >
-              Create Exemption for Selected Applications
-            </Button>
-            {canCreateApplication && (
-              <Link className="cds--link" to="/provincial/application/create">
-                Add Application
-              </Link>
+        <section className="legacy-search-section legacy-search-section--filters provincial-application-search-filters">
+          <Tile>
+            <div className="legacy-search-grid provincial-application-search-grid">
+              <TextInput
+                id="applicationNumber"
+                labelText="Application number"
+                value={filters.applicationNumber}
+                onChange={(event) => updateFilter('applicationNumber', event.target.value)}
+              />
+              <SearchableSelect
+                id="applicationStatus"
+                labelText="Application status"
+                value={filters.applicationStatus}
+                placeholder="All statuses"
+                options={applicationStatusOptions}
+                onChange={(value) => updateFilter('applicationStatus', value)}
+              />
+              <TextInput
+                id="packageNumber"
+                labelText="Package number"
+                value={filters.packageNumber}
+                onChange={(event) => updateFilter('packageNumber', event.target.value)}
+              />
+              <SearchableSelect
+                id="exemptionType"
+                labelText="Exemption type"
+                value={filters.exemptionType}
+                placeholder="All types"
+                options={exemptionTypeOptions}
+                onChange={(value) => updateFilter('exemptionType', value)}
+              />
+              <TextInput
+                id="exemptionNumber"
+                labelText="Exemption number"
+                value={filters.exemptionNumber}
+                onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
+              />
+              <SearchableSelect
+                id="productTypeCode"
+                labelText="Product type"
+                value={filters.productTypeCode}
+                placeholder="All product types"
+                options={productTypeOptions}
+                onChange={(value) => updateFilter('productTypeCode', value)}
+              />
+              <FilterableMultiSelect
+                id="region"
+                titleText="Region"
+                items={regionOptions}
+                itemToString={(item) => (item ? item.text : '')}
+                placeholder="Select region(s)"
+                helperText={selectedRegionHelperText}
+                selectedItems={selectedRegions}
+                onChange={(event) => {
+                  const nextSelected = (event.selectedItems ?? []) as IdTextOption[]
+                  updateFilter(
+                    'region',
+                    nextSelected.map((item) => item.id),
+                  )
+                }}
+              />
+              <TextInput
+                id="applicantClientNumber"
+                labelText="Applicant client number"
+                value={filters.applicantClientNumber}
+                onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
+              />
+              <TextInput
+                id="ownerClientNumber"
+                labelText="Owner client number"
+                value={filters.ownerClientNumber}
+                onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+              />
+              <IsoDatePicker
+                id="listingFromDate"
+                labelText="Listing from date"
+                value={filters.listingFromDate}
+                invalid={!isValidIsoDate(filters.listingFromDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingFromDate', value)}
+              />
+              <IsoDatePicker
+                id="listingToDate"
+                labelText="Listing to date"
+                value={filters.listingToDate}
+                invalid={!isValidIsoDate(filters.listingToDate)}
+                invalidText="Date must be YYYY-MM-DD"
+                onChange={(value) => updateFilter('listingToDate', value)}
+              />
+            </div>
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                onClick={onSearch}
+                disabled={loading || hasDateValidationError}
+                size="md"
+              >
+                Search
+              </Button>
+              <Button kind="tertiary" onClick={onClearFilters} disabled={loading} size="md">
+                Clear Filters
+              </Button>
+              <Button
+                kind="secondary"
+                size="md"
+                onClick={onCreateExemptionClick}
+                disabled={selectedRowsCount === 0 || !canCreateExemption}
+              >
+                Create exemption for Selected Applications
+              </Button>
+              {canCreateApplication && (
+                <Link className="cds--link" to="/provincial/application/create">
+                  Add Application
+                </Link>
+              )}
+              {canUploadApplicationSubmission && (
+                <Link className="cds--link" to="/provincial/application/upload">
+                  Upload Application Submission
+                </Link>
+              )}
+            </div>
+            {exemptionStatus && (
+              <AppNotification
+                className="legacy-inline-notification"
+                kind={exemptionStatus.kind}
+                title="Validation failed"
+                subtitle={exemptionStatus.message}
+                onCloseButtonClick={() => setExemptionStatus(null)}
+              />
             )}
-          </div>
-          {exemptionStatus && (
-            <InlineNotification
-              className="legacy-inline-notification"
-              kind={exemptionStatus.kind}
-              title="Validation failed"
-              subtitle={exemptionStatus.message}
-              onCloseButtonClick={() => setExemptionStatus(null)}
-            />
-          )}
-        </Tile>
+          </Tile>
+        </section>
       </Column>
 
       <Column sm={4} md={8} lg={16}>
-        <h2 className="dashboard-title">Search Results</h2>
-        {loading && <InlineLoading description="Loading application search results..." />}
-        {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
-        {!loading && (
-          <>
+        <section className="legacy-search-section legacy-search-section--results">
+          <h2 className="dashboard-title">Search results</h2>
+          {!!errorMessage && <p className="legacy-search-error">{errorMessage}</p>}
+          <SearchResultsTableFrame
+            loading={loading}
+            loadingDescription="Loading application search results..."
+            totalItems={results.page.totalElements}
+          >
             <Table useZebraStyles>
               <TableHead>
                 <TableRow>
@@ -625,7 +701,7 @@ const ProvincialApplicationPage: FC = () => {
             <Pagination
               page={results.page.number + 1}
               pageSize={results.page.size}
-              pageSizes={[10, 20, 30]}
+              pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
               totalItems={results.page.totalElements}
               onChange={({ page, pageSize: nextPageSize }) => {
                 clearSelection()
@@ -634,8 +710,8 @@ const ProvincialApplicationPage: FC = () => {
                 )
               }}
             />
-          </>
-        )}
+          </SearchResultsTableFrame>
+        </section>
       </Column>
     </Grid>
   )

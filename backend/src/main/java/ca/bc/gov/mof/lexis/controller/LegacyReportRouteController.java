@@ -1,6 +1,9 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
+import ca.bc.gov.mof.lexis.util.TextUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,7 +27,6 @@ public class LegacyReportRouteController {
   private static final String ACTION_GENERATE = "generate";
   private static final Set<String> LEGACY_REPORT_ACTIONS =
       Set.of(
-          "biweeklyListing",
           "offerReport",
           "speciesGradeReport",
           "exemptionReport",
@@ -45,8 +47,6 @@ public class LegacyReportRouteController {
 
   @RequestMapping(
       path = {
-        "/biweeklyListing",
-        "/biweeklyListing.do",
         "/offerReport",
         "/offerReport.do",
         "/speciesGradeReport",
@@ -91,7 +91,7 @@ public class LegacyReportRouteController {
     }
 
     Map<String, String> normalizedParameters =
-        normalizeReportParameters(requestParams, multiValueRequestParams);
+        normalizeReportParameters(reportAction, requestParams, multiValueRequestParams);
     normalizedParameters.put("legacyActionMapping", actionMapping);
 
     LexisReportRequestDto requestDto =
@@ -101,7 +101,6 @@ public class LegacyReportRouteController {
 
   private ResponseEntity<byte[]> dispatch(String reportAction, LexisReportRequestDto request) {
     return switch (reportAction) {
-      case "biweeklyListing" -> reportController.biweeklyListing(request);
       case "offerReport" -> reportController.offerReport(request);
       case "speciesGradeReport" -> reportController.speciesGradeReport(request);
       case "exemptionReport" -> reportController.exemptionReport(request);
@@ -143,16 +142,14 @@ public class LegacyReportRouteController {
 
     if (ACTION_GENERATE.equalsIgnoreCase(actionMapping) || normalizedAction.startsWith(ACTION_GENERATE)) {
       String explicitFormat = trimToNull(outputFormat);
-      if (explicitFormat != null) {
-        // Legacy pages label spreadsheet output as XLS while posting CSV.
-        if ("XLS".equalsIgnoreCase(explicitFormat) || "XLSX".equalsIgnoreCase(explicitFormat)) {
-          return "CSV";
-        }
-        return explicitFormat.toUpperCase(Locale.ROOT);
-      }
-
-      if ("approvedExemptionReport".equals(reportAction)) {
+      if ("approvedExemptionReport".equals(reportAction) || "permitReport".equals(reportAction)) {
         return "PDF";
+      }
+      if ("tenureReport".equals(reportAction)) {
+        return "PDF".equalsIgnoreCase(explicitFormat) ? "PDF" : "XLS";
+      }
+      if (explicitFormat != null) {
+        return "PDF".equalsIgnoreCase(explicitFormat) ? "PDF" : "CSV";
       }
 
       // Struts legacy behavior defaulted to CSV when outputFormat was absent.
@@ -162,6 +159,7 @@ public class LegacyReportRouteController {
   }
 
   private Map<String, String> normalizeReportParameters(
+      String reportAction,
       Map<String, String> requestParams,
       MultiValueMap<String, String> multiValueRequestParams) {
     Map<String, String> normalized = new LinkedHashMap<>();
@@ -173,7 +171,7 @@ public class LegacyReportRouteController {
           }
           String trimmed = trimToNull(value);
           if (trimmed != null) {
-            normalized.put(key, trimmed);
+            normalized.put(key, normalizeReportValue(reportAction, key, trimmed));
           }
         });
 
@@ -183,29 +181,62 @@ public class LegacyReportRouteController {
             return;
           }
           List<String> cleaned =
-              values.stream().map(this::trimToNull).filter(v -> v != null).toList();
+              values.stream().map(TextUtils::trimToNull).filter(v -> v != null).toList();
           if (cleaned.isEmpty()) {
             return;
           }
           if (cleaned.size() == 1) {
-            normalized.put(key, cleaned.get(0));
+            normalized.put(key, normalizeReportValue(reportAction, key, cleaned.get(0)));
             return;
           }
-          normalized.put(key, String.join(",", cleaned));
+          List<String> normalizedValues =
+              cleaned.stream().map(value -> normalizeReportValue(reportAction, key, value)).toList();
+          normalized.put(key, String.join(",", normalizedValues));
         });
 
     return normalized;
+  }
+
+  private String normalizeReportValue(String reportAction, String key, String value) {
+    if ("clientNumber".equals(key) && shouldNormalizeClientNumber(reportAction)) {
+      return normalizeClientNumber(value);
+    }
+    if (shouldNormalizeUppercase(reportAction, key)) {
+      return value.toUpperCase(Locale.ROOT);
+    }
+    return value;
+  }
+
+  private boolean shouldNormalizeClientNumber(String reportAction) {
+    return "offerReport".equals(reportAction)
+        || "permitLedgerReport".equals(reportAction)
+        || "tenureReport".equals(reportAction);
+  }
+
+  private boolean shouldNormalizeUppercase(String reportAction, String key) {
+    if ("speciesGradeReport".equals(reportAction)) {
+      return "timberMark".equals(key) || "forestFileId".equals(key);
+    }
+    if ("permitLedgerReport".equals(reportAction)) {
+      return "timberMark".equals(key);
+    }
+    if ("tenureReport".equals(reportAction)) {
+      return "forestFileId".equals(key)
+          || key.matches("tenureType[1-6]")
+          || key.matches("timberMark[1-6]");
+    }
+    return false;
+  }
+
+  private String normalizeClientNumber(String value) {
+    if (value == null || !value.matches("[0-9.]+")) {
+      return value;
+    }
+    return String.format("%8s", value).replace(' ', '0');
   }
 
   private boolean isControlParam(String key) {
     return "actionMapping".equals(key) || "outputFormat".equals(key);
   }
 
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
 }

@@ -32,6 +32,12 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
           new CodeNameDto("FEE", "Fee in Lieu"),
           new CodeNameDto("APP", "Application Exemption"));
 
+  private static final List<CodeNameDto> EXEMPTION_REASONS =
+      List.of(
+          new CodeNameDto("U", "Unadvertised"),
+          new CodeNameDto("S", "Section 127"),
+          new CodeNameDto("E", "Emergency"));
+
   private static final List<CodeNameDto> APPLICATION_STATUSES =
       List.of(
           new CodeNameDto("NEW", "New"),
@@ -43,11 +49,21 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
           new CodeNameDto("LOG", "Logs"),
           new CodeNameDto("LUM", "Lumber"));
 
+  private static final List<CodeNameDto> GROWTH_TYPES =
+      List.of(
+          new CodeNameDto("O", "Old Growth"),
+          new CodeNameDto("S", "Second Growth"));
+
   private static final List<CodeNameDto> REGIONS =
       List.of(
-          new CodeNameDto("11", "Cariboo"),
-          new CodeNameDto("12", "Coast"),
-          new CodeNameDto("24", "Skeena"));
+          new CodeNameDto("1903", "Cariboo Natural Resource Region"),
+          new CodeNameDto("1904", "Kootenay-Boundary Natural Resource Region"),
+          new CodeNameDto("1905", "Northeast Natural Resource Region"),
+          new CodeNameDto("1906", "Omineca Natural Resource Region"),
+          new CodeNameDto("1907", "Thompson-Okanagan Natural Resource Region"),
+          new CodeNameDto("1908", "Skeena Natural Resource Region"),
+          new CodeNameDto("1909", "South Coast Natural Resource Region"),
+          new CodeNameDto("1910", "West Coast Natural Resource Region"));
 
   private static final List<ApplicationRecord> APPLICATIONS =
       List.of(
@@ -83,7 +99,11 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
                   new LexisApplicationDetailDto.LexisPackageDto("PKG-902", 90.2, 33)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      "Initial Review", "Submitted with complete scale package.")),
+                      1001L,
+                      "Initial Review",
+                      "Submitted with complete scale package.",
+                      "system",
+                      LocalDate.of(2026, 1, 15))),
               List.of()),
           new ApplicationRecord(
               1000456L,
@@ -115,11 +135,20 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
               List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", 95.0, 28)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      "Pending", "Awaiting agency confirmation for listing date.")),
+                      1002L,
+                      "Pending",
+                      "Awaiting agency confirmation for listing date.",
+                      "system",
+                      LocalDate.of(2026, 2, 21))),
               List.of(
-                  new LexisApplicationDetailDto.LexisOfferDto("OF-810", true, null),
                   new LexisApplicationDetailDto.LexisOfferDto(
-                      "OF-803", true, LocalDate.of(2026, 3, 20)))),
+                      "OF-810", "Example Timber Ltd.", LocalDate.of(2026, 3, 1), true, null),
+                  new LexisApplicationDetailDto.LexisOfferDto(
+                      "OF-803",
+                      "Interior Mill Co.",
+                      LocalDate.of(2026, 2, 28),
+                      true,
+                      LocalDate.of(2026, 3, 20)))),
           new ApplicationRecord(
               1000999L,
               "PER",
@@ -150,15 +179,29 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
               List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-950", 325.75, 88)),
               List.of(
                   new LexisApplicationDetailDto.LexisRemarkDto(
-                      "Completed", "Permit issued and application closed.")),
+                      1003L,
+                      "Completed",
+                      "Permit issued and application closed.",
+                      "system",
+                      LocalDate.of(2025, 12, 2))),
               List.of(
                   new LexisApplicationDetailDto.LexisOfferDto(
-                      "OF-990", true, LocalDate.of(2025, 12, 20)))));
+                      "OF-990",
+                      "North Coast Exports",
+                      LocalDate.of(2025, 12, 2),
+                      true,
+                      LocalDate.of(2025, 12, 20)))));
 
   @Override
   public LexisApplicationSearchOptionsDto searchOptions() {
     return new LexisApplicationSearchOptionsDto(
-        EXEMPTION_TYPES, APPLICATION_STATUSES, PRODUCT_TYPES, REGIONS);
+        EXEMPTION_TYPES,
+        EXEMPTION_REASONS,
+        APPLICATION_STATUSES,
+        PRODUCT_TYPES,
+        GROWTH_TYPES,
+        REGIONS,
+        List.of());
   }
 
   @Override
@@ -166,23 +209,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
     int page = Math.max(0, criteria.page());
     int size = Math.max(1, criteria.size());
 
-    List<ApplicationRecord> filtered =
-        APPLICATIONS.stream()
-            .filter(matchesApplicationNumber(criteria.applicationNumber()))
-            .filter(matchesPackageNumber(criteria.packageNumber()))
-            .filter(matchesText(ApplicationRecord::exemptionNumber, criteria.exemptionNumber()))
-            .filter(matchesText(ApplicationRecord::ownerClientNumber, criteria.ownerClientNumber()))
-            .filter(matchesExact(ApplicationRecord::exemptionType, criteria.exemptionType()))
-            .filter(matchesExact(ApplicationRecord::statusCode, criteria.applicationStatus()))
-            .filter(matchesExact(ApplicationRecord::productTypeCode, criteria.productTypeCode()))
-            .filter(matchesAgentClientLogic(criteria.agentClientNumber()))
-            .filter(matchesDateRange(
-                ApplicationRecord::receivedDate, criteria.receivedFromDate(), criteria.receivedToDate()))
-            .filter(matchesDateRange(
-                ApplicationRecord::listingDate, criteria.listingFromDate(), criteria.listingToDate()))
-            .filter(matchesRegion(criteria.regionNumbers()))
-            .sorted(resolveSort(criteria.sortField()))
-            .toList();
+    List<ApplicationRecord> filtered = filterApplications(criteria);
 
     int fromIndex = Math.min(page * size, filtered.size());
     int toIndex = Math.min(fromIndex + size, filtered.size());
@@ -191,6 +218,11 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         filtered.subList(fromIndex, toIndex).stream().map(this::toSearchResult).toList();
 
     return new LexisApplicationSearchResponseDto(paged, filtered.size(), page, size);
+  }
+
+  @Override
+  public int count(LexisApplicationSearchCriteria criteria) {
+    return filterApplications(criteria).size();
   }
 
   @Override
@@ -273,6 +305,25 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
     return false;
   }
 
+  private List<ApplicationRecord> filterApplications(LexisApplicationSearchCriteria criteria) {
+    return APPLICATIONS.stream()
+        .filter(matchesApplicationNumber(criteria.applicationNumber()))
+        .filter(matchesPackageNumber(criteria.packageNumber()))
+        .filter(matchesText(ApplicationRecord::exemptionNumber, criteria.exemptionNumber()))
+        .filter(matchesText(ApplicationRecord::ownerClientNumber, criteria.ownerClientNumber()))
+        .filter(matchesExact(ApplicationRecord::exemptionType, criteria.exemptionType()))
+        .filter(matchesExact(ApplicationRecord::statusCode, criteria.applicationStatus()))
+        .filter(matchesExact(ApplicationRecord::productTypeCode, criteria.productTypeCode()))
+        .filter(matchesAgentClientLogic(criteria.agentClientNumber()))
+        .filter(matchesDateRange(
+            ApplicationRecord::receivedDate, criteria.receivedFromDate(), criteria.receivedToDate()))
+        .filter(matchesDateRange(
+            ApplicationRecord::listingDate, criteria.listingFromDate(), criteria.listingToDate()))
+        .filter(matchesRegion(criteria.regionNumbers()))
+        .sorted(resolveSort(criteria.sortField()))
+        .toList();
+  }
+
   private List<ApplicationRecord> resolveRequested(List<Long> applicationNumbers) {
     if (applicationNumbers == null || applicationNumbers.isEmpty()) {
       return List.of();
@@ -335,6 +386,8 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         record.readOnly(),
         record.exemptionApprover(),
         record.locked(),
+        null,
+        null,
         record.packages(),
         record.remarks(),
         record.offers());

@@ -1,17 +1,18 @@
-import { DashboardReference, Document, Search, UserAvatar } from '@carbon/icons-react'
-import type { ComponentType, FC, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Navigate, type RouteObject } from 'react-router-dom'
-import Layout from '@/components/Layout'
+import Layout from '../components/Layout'
+import {
+  hasFederalSubmitterRole,
+  hasProvincialSubmitterRole,
+  hasRole,
+} from '@/context/auth/role-utils'
+import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminPage from '@/pages/Admin'
 import AdminPoliciesPage from '@/pages/AdminPolicies'
 import AdminUploadsPage from '@/pages/AdminUploads'
-import DashboardPage from '@/pages/Dashboard'
 import FederalPage from '@/pages/Federal'
 import FederalApplicationDetailsPage from '@/pages/FederalApplicationDetails'
-import IndianReservePage from '@/pages/IndianReserve'
-import IndianReservePermitCreatePage from '@/pages/IndianReservePermitCreate'
-import IndianReservePermitDetailsPage from '@/pages/IndianReservePermitDetails'
 import LandingPage from '@/pages/Landing'
 import NotFoundPage from '@/pages/NotFound'
 import ProvincialApplicationPage from '@/pages/ProvincialApplication'
@@ -25,43 +26,82 @@ import ProvincialOfferDetailsPage from '@/pages/ProvincialOfferDetails'
 import ProvincialOffersPage from '@/pages/ProvincialOffers'
 import ProvincialPage from '@/pages/Provincial'
 import ProvincialPermitPage from '@/pages/ProvincialPermit'
-import ProvincialPermitCreatePage from '@/pages/ProvincialPermitCreate'
 import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
 import ProvincialReviewPage from '@/pages/ProvincialReview'
-import ProvincialSummaryPage from '@/pages/ProvincialSummary'
 import ReportsPage from '@/pages/Reports'
 import UnauthorizedPage from '@/pages/Unauthorized'
+import RTMEmsLogAmvPage from '@/pages/RTMEmsLogAmv'
+import type { RouteActionMatch, RouteRoleScope } from '@/routes/routeAccessTypes'
 
 export type RouteDescription = {
   id: string
   path: string
   element: ReactNode
-  icon?: ComponentType
   isNavigation: boolean
   requiredActions?: string[]
-  requiredActionsMatch?: 'any' | 'all'
+  requiredActionsMatch?: RouteActionMatch
+  roleScope?: RouteRoleScope
 } & RouteObject
 
-const ProtectedRootRedirect: FC = () => {
+function ProtectedRootRedirect() {
   const { defaultRoute } = useAuth()
   return <Navigate to={defaultRoute} replace />
 }
 
-type RouteGuardProps = {
+export type RouteGuardProps = {
+  path: string
   requiredActions?: string[]
-  requiredActionsMatch?: 'any' | 'all'
+  requiredActionsMatch?: RouteActionMatch
+  roleScope?: RouteDescription['roleScope']
   children: ReactNode
 }
 
-const RouteActionGuard: FC<RouteGuardProps> = ({
+const canAccessRoleScope = (
+  roles: string[],
+  roleScope: RouteDescription['roleScope'] = undefined,
+): boolean => {
+  if (!roleScope) {
+    return true
+  }
+
+  const hasAdminRole = hasRole(roles, 'ADMIN')
+  if (hasAdminRole) {
+    return true
+  }
+
+  const hasFederalSubmitter = hasFederalSubmitterRole(roles)
+  const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
+  const hasProvincialStaffRole =
+    hasRole(roles, 'READ_ONLY') ||
+    hasRole(roles, 'APPLICATION_APPROVER') ||
+    hasRole(roles, 'EXEMPTION_APPROVER')
+
+  if (roleScope === 'provincialApplicationSubmission') {
+    return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
+  }
+
+  return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
+}
+
+function RouteActionGuard({
   children,
+  path,
   requiredActions,
   requiredActionsMatch = 'any',
-}) => {
-  const { canPerform } = useAuth()
+  roleScope,
+}: RouteGuardProps) {
+  const { capabilities, canPerform } = useAuth()
+
+  if (!isProdRtmOnlyPathAllowed(path)) {
+    return <Navigate to="/unauthorized" replace />
+  }
 
   if (!requiredActions || requiredActions.length === 0) {
     return <>{children}</>
+  }
+
+  if (!canAccessRoleScope(capabilities.roles, roleScope)) {
+    return <Navigate to="/unauthorized" replace />
   }
 
   const canAccessRoute =
@@ -80,6 +120,12 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
     path: '/',
     id: 'Landing',
     element: <LandingPage />,
+    isNavigation: false,
+  },
+  {
+    path: '/dashboard',
+    id: 'Legacy Dashboard Redirect',
+    element: <Navigate to="/" replace />,
     isNavigation: false,
   },
   {
@@ -105,23 +151,18 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   },
   {
     path: '/dashboard',
-    id: 'Dashboard',
-    icon: DashboardReference,
-    element: (
-      <Layout>
-        <DashboardPage />
-      </Layout>
-    ),
-    isNavigation: true,
+    id: 'Legacy Callback Redirect',
+    element: <ProtectedRootRedirect />,
+    isNavigation: false,
   },
   {
     path: '/provincial',
     id: 'Provincial',
-    icon: Search,
+    roleScope: 'provincial',
     requiredActions: [
-      '/summary',
       '/applicationsReview',
       '/applicationSearch',
+      'uploadApplicationSubmission',
       '/exemptionSearch',
       '/offersSearch',
       '/permitSearch',
@@ -250,18 +291,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
-    path: '/provincial/permit/create',
-    id: 'Create Provincial Permit',
-    requiredActions: ['/permitSearch', 'createPermit'],
-    requiredActionsMatch: 'all',
-    element: (
-      <Layout>
-        <ProvincialPermitCreatePage />
-      </Layout>
-    ),
-    isNavigation: false,
-  },
-  {
     path: '/provincial/permit/:permitNumber',
     id: 'Provincial Permit Details',
     requiredActions: ['/permitSearch', '/permitDetails'],
@@ -285,20 +314,8 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
-    path: '/provincial/summary',
-    id: 'Provincial Summary',
-    requiredActions: ['/summary'],
-    element: (
-      <Layout>
-        <ProvincialSummaryPage />
-      </Layout>
-    ),
-    isNavigation: false,
-  },
-  {
     path: '/federal',
     id: 'Federal',
-    icon: Search,
     requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
     element: (
       <Layout>
@@ -311,7 +328,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     path: '/federal/application/:applicationNumber',
     id: 'Federal Application Details',
     requiredActions: ['/federalApplicationDetails', 'viewFederalApplication'],
-    requiredActionsMatch: 'any',
+    requiredActionsMatch: 'all',
     element: (
       <Layout>
         <FederalApplicationDetailsPage />
@@ -320,45 +337,15 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
-    path: '/indian-reserve',
-    id: 'Indigenous Reserve',
-    icon: Search,
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
-    element: (
-      <Layout>
-        <IndianReservePage />
-      </Layout>
-    ),
-    isNavigation: true,
-  },
-  {
-    path: '/indian-reserve/permit/create',
-    id: 'Create Indigenous Reserve Permit',
-    requiredActions: ['/indianReservePermitSearch', 'viewOICApplication'],
-    requiredActionsMatch: 'all',
-    element: (
-      <Layout>
-        <IndianReservePermitCreatePage />
-      </Layout>
-    ),
-    isNavigation: false,
-  },
-  {
-    path: '/indian-reserve/permit/:permitNumber',
-    id: 'Indigenous Reserve Permit Details',
-    requiredActions: ['/indianReservePermitDetails', 'viewOICApplication'],
-    requiredActionsMatch: 'any',
-    element: (
-      <Layout>
-        <IndianReservePermitDetailsPage />
-      </Layout>
-    ),
+    path: '/federal/application/upload',
+    id: 'Federal Application Upload Redirect',
+    requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
+    element: <Navigate to="/federal" replace />,
     isNavigation: false,
   },
   {
     path: '/reports',
     id: 'Reports',
-    icon: Document,
     requiredActions: [
       '/applicationReport',
       '/offerReport',
@@ -379,9 +366,30 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: true,
   },
   {
+    path: '/reports/:reportId',
+    id: 'Report Details',
+    requiredActions: [
+      '/applicationReport',
+      '/offerReport',
+      '/teacReport',
+      '/exemptionReport',
+      '/permitLedgerReport',
+      '/transportReport',
+      '/speciesGradeReport',
+      '/feeReport',
+      '/tenureReport',
+      'mofrListing',
+    ],
+    element: (
+      <Layout>
+        <ReportsPage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
     path: '/admin',
     id: 'Admin',
-    icon: UserAvatar,
     requiredActions: ['/lexisAgentAdmin'],
     element: (
       <Layout>
@@ -391,8 +399,19 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: true,
   },
   {
+    path: '/admin/rtm/emslogamv',
+    id: 'Admin - Average Monthly Values',
+    requiredActions: ['/lexisAgentAdmin'],
+    element: (
+      <Layout>
+        <RTMEmsLogAmvPage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
     path: '/admin/uploads',
-    id: 'Upload Center',
+    id: 'Data Upload',
     requiredActions: [
       '/lexisAgentAdmin',
       '/fileApplicationUpload',
@@ -408,12 +427,60 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
-    path: '/admin/policies',
-    id: 'Policy Center',
-    requiredActions: ['/lexisAgentAdmin'],
+    path: '/provincial/application/upload',
+    id: 'Upload Application Submission',
+    roleScope: 'provincialApplicationSubmission',
+    requiredActions: ['uploadApplicationSubmission'],
     element: (
       <Layout>
-        <AdminPoliciesPage />
+        <AdminUploadsPage
+          lockedWorkflowType="applicationSubmission"
+          pageTitle="Upload Application Submission"
+        />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/admin/policies',
+    id: 'Policy Center',
+    requiredActions: ['/lexisPolicyAdmin'],
+    element: (
+      <Layout>
+        <Navigate to="/admin/policies/fee" replace />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/admin/policies/fee',
+    id: 'Fee Policy Administration',
+    requiredActions: ['/lexisPolicyAdmin'],
+    element: (
+      <Layout>
+        <AdminPoliciesPage area="fee" />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/admin/policies/fil',
+    id: 'Fee In Lieu Policy Administration',
+    requiredActions: ['/lexisFILAdmin'],
+    element: (
+      <Layout>
+        <AdminPoliciesPage area="fil" />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/admin/schedules',
+    id: 'Export Schedule Administration',
+    requiredActions: ['/lexisPolicyAdmin'],
+    element: (
+      <Layout>
+        <AdminPoliciesPage area="schedule" />
       </Layout>
     ),
     isNavigation: false,
@@ -468,8 +535,10 @@ export const getProtectedRoutes = (): RouteDescription[] => {
     ...route,
     element: (
       <RouteActionGuard
+        path={route.path}
         requiredActions={route.requiredActions}
         requiredActionsMatch={route.requiredActionsMatch}
+        roleScope={route.roleScope}
       >
         {route.element}
       </RouteActionGuard>

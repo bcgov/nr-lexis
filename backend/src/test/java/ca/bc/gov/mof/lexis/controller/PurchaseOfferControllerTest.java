@@ -6,13 +6,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
+import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | PurchaseOfferController")
@@ -33,6 +37,9 @@ class PurchaseOfferControllerTest {
 
   @Mock private ObjectProvider<PurchaseOfferService> serviceProvider;
   @Mock private PurchaseOfferService service;
+  @Mock private LexisSessionService sessionService;
+  @Mock private LexisApplicationService applicationService;
+  @Mock private Authentication authentication;
 
   @InjectMocks private PurchaseOfferController controller;
 
@@ -78,7 +85,9 @@ class PurchaseOfferControllerTest {
             List.of(),
             null,
             0,
-            25);
+            25,
+            null,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(service);
@@ -117,7 +126,9 @@ class PurchaseOfferControllerTest {
             List.of(12L),
             "offerNumber DESC",
             0,
-            25);
+            25,
+            null,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
@@ -139,10 +150,41 @@ class PurchaseOfferControllerTest {
   }
 
   @Test
+  void searchShouldOverrideClientFilterWhenUserHasScopedForestClient() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.search(any(PurchaseOfferSearchCriteria.class)))
+        .thenReturn(new PurchaseOfferSearchResponseDto(List.of(), 0, 0, 25));
+
+    controller.search(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "00099999",
+        List.of(),
+        null,
+        0,
+        25,
+        null,
+        authentication);
+
+    ArgumentCaptor<PurchaseOfferSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(service).search(criteriaCaptor.capture());
+
+    assertThat(criteriaCaptor.getValue().clientNumber()).isEqualTo("00077881");
+  }
+
+  @Test
   void detailShouldReturnNoContentWhenServiceMissing() {
     when(serviceProvider.getIfAvailable()).thenReturn(null);
 
-    ResponseEntity<PurchaseOfferDetailDto> response = controller.getByOfferNumber(81009L);
+    ResponseEntity<PurchaseOfferDetailDto> response = controller.getByOfferNumber(81009L, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(service);
@@ -153,7 +195,7 @@ class PurchaseOfferControllerTest {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.findByOfferNumber(81009L)).thenReturn(Optional.empty());
 
-    ResponseEntity<PurchaseOfferDetailDto> response = controller.getByOfferNumber(81009L);
+    ResponseEntity<PurchaseOfferDetailDto> response = controller.getByOfferNumber(81009L, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     verify(service).findByOfferNumber(81009L);
@@ -163,36 +205,105 @@ class PurchaseOfferControllerTest {
   void detailShouldReturnPayloadWhenServiceReturnsEntity() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PurchaseOfferDetailDto dto =
-        new PurchaseOfferDetailDto(
-            81009L,
-            1000456L,
-            "PKG-903",
-            "Example Lumber",
-            "Alex Example",
-            12500.25,
-            LocalDate.of(2026, 3, 2),
-            null,
-            LocalDate.of(2026, 3, 18),
-            "N",
-            "Y",
-            "N",
-            "Initial offer",
-            null,
-            "P",
-            "Mill details",
-            "00077881",
-            "Port Moody",
-            "Condition notes",
-            LocalDate.of(2026, 2, 26),
-            LocalDate.of(2026, 3, 19),
-            90.0,
-            "R2");
+        offerDetail();
     when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(dto));
 
-    ResponseEntity<PurchaseOfferDetailDto> response = controller.getByOfferNumber(81009L);
+    ResponseEntity<PurchaseOfferDetailDto> response = controller.getByOfferNumber(81009L, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).findByOfferNumber(81009L);
+  }
+
+  @Test
+  void detailShouldReturnPayloadWhenScopedUserOwnsParentApplication() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    PurchaseOfferDetailDto offer = offerDetail();
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00077881", null)));
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(offer);
+    verify(service).findByOfferNumber(81009L);
+    verify(applicationService).findByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void detailShouldReturnNotFoundWhenScopedUserDoesNotOwnParentApplication() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offerDetail()));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    verify(service).findByOfferNumber(81009L);
+    verify(applicationService).findByApplicationNumber(1000456L);
+  }
+
+  private static PurchaseOfferDetailDto offerDetail() {
+    return new PurchaseOfferDetailDto(
+        81009L,
+        1000456L,
+        "PKG-903",
+        "Example Lumber",
+        "Alex Example",
+        12500.25,
+        LocalDate.of(2026, 3, 2),
+        null,
+        LocalDate.of(2026, 3, 18),
+        "N",
+        "Y",
+        "N",
+        "Initial offer",
+        null,
+        "P",
+        "Mill details",
+        "00077881",
+        "Port Moody",
+        "Condition notes",
+        LocalDate.of(2026, 2, 26),
+        LocalDate.of(2026, 3, 19),
+        90.0,
+        "R2");
+  }
+
+  private static LexisApplicationDetailDto applicationDetail(
+      String ownerClientNumber, String agentClientNumber) {
+    return new LexisApplicationDetailDto(
+        1000456L,
+        null,
+        "NEW",
+        "New",
+        ownerClientNumber,
+        agentClientNumber,
+        12L,
+        "R2",
+        "H",
+        "S",
+        LocalDate.of(2026, 3, 1),
+        LocalDate.of(2026, 3, 1),
+        LocalDate.of(2026, 3, 2),
+        180L,
+        90.0,
+        0.5,
+        true,
+        false,
+        false,
+        false,
+        false,
+        null,
+        null,
+        List.of(),
+        List.of(),
+        List.of());
   }
 }

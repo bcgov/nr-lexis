@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  submitIndianReservePermitCreate,
   submitProvincialApplicationCreate,
+  submitProvincialExemptionCreate,
   submitProvincialOfferCreate,
-  submitProvincialPermitCreate,
 } from '@/service/create-submit-service'
 
 const postMock = vi.fn()
@@ -32,15 +31,24 @@ describe('create-submit-service', () => {
     })
 
     const result = await submitProvincialApplicationCreate({
-      applicationNumber: '1001',
-      packageNumber: 'PKG-1',
       ownerClientNumber: '00011111',
-      applicantClientNumber: '00022222',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      applicantTypeCode: 'O',
       productTypeCode: 'LOG',
-      exemptionType: 'SECTION_1',
+      ageClass: '',
+      exemptionType: 'U',
       region: '11',
+      applicationDate: '2026-01-01',
+      applicationTermDays: '30',
       receivedDate: '2026-01-01',
+      exportScheduleId: '987',
       listingDate: '2026-01-02',
+      productLocation: 'Camp 1',
+      applicationVolume: '125.5',
+      averageLogVolume: '1.2',
+      speciesCodes: ['HE', 'BA'],
+      endUseCode: 'SA',
       comments: 'ready',
     })
 
@@ -62,8 +70,34 @@ describe('create-submit-service', () => {
     })
     expect(body).toBeInstanceOf(URLSearchParams)
     expect(body.get('actionMapping')).toBe('addApplication')
-    expect(body.get('applicationNumber')).toBe('1001')
-    expect(body.get('agentClientNumber')).toBe('00022222')
+    expect(body.get('applicationNumber')).toBeNull()
+    expect(body.get('packageNumber')).toBeNull()
+    expect(body.get('ownerApplicantType')).toBe('O')
+    expect(body.get('applicantType')).toBe('O')
+    expect(body.get('agentClientNumber')).toBeNull()
+    expect(body.get('ownerClientLocationCode')).toBe('00')
+    expect(body.get('ownerContactName')).toBe('Owner Contact')
+    expect(body.get('ageClass')).toBeNull()
+    expect(body.get('growthTypeCode')).toBeNull()
+    expect(body.get('exemptionReason')).toBe('U')
+    expect(body.get('exemptionReasonCode')).toBe('U')
+    expect(body.get('applicationDate')).toBe('2026-01-01')
+    expect(body.get('exemptionTerm')).toBe('30')
+    expect(body.get('dateReceived')).toBe('2026-01-01')
+    expect(body.get('exportScheduleId')).toBe('987')
+    expect(body.get('legacyExportScheduleId')).toBe('987')
+    expect(body.get('listingDate')).toBe('2026-01-02')
+    expect(body.get('productLocation')).toBe('Camp 1')
+    expect(body.get('logLocation')).toBe('Camp 1')
+    expect(body.get('applicationVolume')).toBe('125.5')
+    expect(body.get('averageLogVolume')).toBe('1.2')
+    expect(body.get('logVolume')).toBe('1.2')
+    expect(body.get('applicationSelectedSpecies')).toBe('HE,BA')
+    expect(body.get('speciesTableValues')).toBe('HE,BA')
+    expect(body.get('speciesCodes')).toBe('HE,BA')
+    expect(body.get('applicationEndUseCode')).toBe('SA')
+    expect(body.get('endUseCode')).toBe('SA')
+    expect(body.get('endUse')).toBe('SA')
   })
 
   it('returns offer created id from exportPurchaseOfferNumber payload', async () => {
@@ -76,19 +110,108 @@ describe('create-submit-service', () => {
     })
 
     const result = await submitProvincialOfferCreate({
-      offerNumber: '900',
       applicationNumber: '200',
       packageNumber: 'PKG-9',
       offeringClientNumber: '00012345',
+      companyName: 'Example Lumber',
+      contactName: 'Alex Example',
       region: '11',
+      offerVolume: '99.9',
       purchaseOfferAmount: '25000',
       purchaseOfferDate: '2026-01-10',
-      offerEndDate: '2026-01-20',
+      offerWithdrawalDate: '2026-01-20',
+      withdrawReason: 'Withdrawn by buyer',
+      teacReviewDate: '2026-01-15',
+      fairOfferIndicator: 'Y',
+      validOfferIndicator: 'Y',
+      approvalIndicator: 'N',
+      offerRemark: 'Needs review',
       pickupLocation: 'yard',
       offerCondition: 'none',
     })
 
     expect(result.createdId).toBe('OP-900')
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('companyName')).toBe('Example Lumber')
+    expect(body.get('contactName')).toBe('Alex Example')
+    expect(body.get('offerVolume')).toBe('99.9')
+    expect(body.get('offerWithdrawalDate')).toBe('2026-01-20')
+    expect(body.get('withdrawReason')).toBe('Withdrawn by buyer')
+    expect(body.get('teacReviewDate')).toBe('2026-01-15')
+    expect(body.get('fairOfferIndicator')).toBe('Y')
+    expect(body.get('validOfferIndicator')).toBe('Y')
+    expect(body.get('approvalIndicator')).toBe('N')
+    expect(body.get('offerRemark')).toBe('Needs review')
+    expect(body.get('offerNumber')).toBeNull()
+    expect(body.get('exportPurchaseOfferNumber')).toBeNull()
+  })
+
+  it('posts provincial application agent applicant fields when applicant type is agent', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        success: true,
+        message: 'saved',
+        applicationNumber: '1002',
+      },
+    })
+
+    await submitProvincialApplicationCreate({
+      ownerClientNumber: '00011111',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      agentClientNumber: '00033333',
+      agentClientLocationCode: '01',
+      agentContactName: 'Agent Contact',
+      applicantTypeCode: 'A',
+      productTypeCode: 'LOG',
+      ageClass: '',
+      exemptionType: 'U',
+      region: '11',
+      applicationDate: '2026-01-01',
+      applicationTermDays: '30',
+      receivedDate: '2026-01-01',
+      listingDate: '2026-01-02',
+      productLocation: 'Camp 1',
+      applicationVolume: '125.5',
+      averageLogVolume: '1.2',
+      comments: 'ready',
+    })
+
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('ownerApplicantType')).toBe('A')
+    expect(body.get('applicantType')).toBe('A')
+    expect(body.get('agentClientNumber')).toBe('00033333')
+    expect(body.get('agentClientLocationCode')).toBe('01')
+    expect(body.get('agentClientLocation')).toBe('01')
+    expect(body.get('agentContactName')).toBe('Agent Contact')
+  })
+
+  it('surfaces provincial exemption backend errors without a generic prefix', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        success: false,
+        errors: ['Application 123 is already assigned to exemption 1234.'],
+      },
+    })
+
+    const result = await submitProvincialExemptionCreate({
+      applicationNumber: '123',
+      linkedApplicationNumbers: ['123'],
+      exemptionTypeCode: 'M',
+      exemptionStatusCode: 'NEW',
+      ownerClientNumber: '123',
+      applicantClientNumber: '123',
+      approvalDate: '2026-04-04',
+      expiryDate: '2027-04-04',
+      approvedVolume: '333333',
+      otherConditions: '',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toBe('')
+    expect(result.errors).toEqual(['Application 123 is already assigned to exemption 1234.'])
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('exemptionNumber')).toBeNull()
   })
 
   it('uses configured create endpoint overrides when provided', async () => {
@@ -102,15 +225,21 @@ describe('create-submit-service', () => {
     })
 
     await submitProvincialApplicationCreate({
-      applicationNumber: '1001',
-      packageNumber: 'PKG-1',
       ownerClientNumber: '00011111',
-      applicantClientNumber: '00022222',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      applicantTypeCode: 'O',
       productTypeCode: 'LOG',
-      exemptionType: 'SECTION_1',
+      ageClass: '',
+      exemptionType: 'U',
       region: '11',
+      applicationDate: '2026-01-01',
+      applicationTermDays: '30',
       receivedDate: '2026-01-01',
       listingDate: '2026-01-02',
+      productLocation: 'Camp 1',
+      applicationVolume: '125.5',
+      averageLogVolume: '1.2',
       comments: 'ready',
     })
 
@@ -129,15 +258,21 @@ describe('create-submit-service', () => {
     })
 
     await submitProvincialApplicationCreate({
-      applicationNumber: '1001',
-      packageNumber: 'PKG-1',
       ownerClientNumber: '00011111',
-      applicantClientNumber: '00022222',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      applicantTypeCode: 'O',
       productTypeCode: 'LOG',
-      exemptionType: 'SECTION_1',
+      ageClass: '',
+      exemptionType: 'U',
       region: '11',
+      applicationDate: '2026-01-01',
+      applicationTermDays: '30',
       receivedDate: '2026-01-01',
       listingDate: '2026-01-02',
+      productLocation: 'Camp 1',
+      applicationVolume: '125.5',
+      averageLogVolume: '1.2',
       comments: 'ready',
     })
 
@@ -145,108 +280,20 @@ describe('create-submit-service', () => {
     expect(body).toEqual(
       expect.objectContaining({
         actionMapping: 'addApplication',
-        applicationNumber: '1001',
+        ownerApplicantType: 'O',
+        exemptionReason: 'U',
+        logLocation: 'Camp 1',
+        productLocation: 'Camp 1',
+        averageLogVolume: '1.2',
+        logVolume: '1.2',
       }),
     )
+    expect(body).not.toHaveProperty('applicationNumber')
+    expect(body).not.toHaveProperty('packageNumber')
     expect(config).toEqual({
       headers: {
         'Content-Type': 'application/json',
       },
     })
-  })
-
-  it('can omit create actionMapping when include-action-mapping toggle is disabled', async () => {
-    vi.stubEnv('VITE_LEXIS_CREATE_SUBMIT_REQUEST_MODE', 'json')
-    vi.stubEnv('VITE_LEXIS_CREATE_SUBMIT_INCLUDE_ACTION_MAPPING', 'false')
-    postMock.mockResolvedValue({
-      data: {
-        success: true,
-        message: 'saved',
-        permitNumber: '101',
-      },
-    })
-
-    await submitProvincialPermitCreate({
-      permitNumber: '101',
-      applicationNumber: '2',
-      packageNumber: 'PKG',
-      exemptionNumber: 'EX-1',
-      permitStatus: 'Issued',
-      applicantClientNumber: '00011111',
-      ownerClientNumber: '00022222',
-      issueDate: '2026-01-01',
-      estimatedShippingDate: '2026-01-02',
-      permitVolume: '10',
-      remarks: '',
-    })
-
-    const [, body] = postMock.mock.calls[0]
-    expect(body).toEqual(
-      expect.objectContaining({
-        permitNumber: '101',
-        permitStatus: 'Issued',
-      }),
-    )
-    expect(body).not.toHaveProperty('actionMapping')
-  })
-
-  it('returns status-specific message when permit submit endpoint is unavailable', async () => {
-    postMock.mockRejectedValue({
-      isAxiosError: true,
-      response: {
-        status: 404,
-        data: {},
-      },
-    })
-
-    const result = await submitProvincialPermitCreate({
-      permitNumber: '1',
-      applicationNumber: '2',
-      packageNumber: 'PKG',
-      exemptionNumber: 'EX-1',
-      permitStatus: 'Issued',
-      applicantClientNumber: '00011111',
-      ownerClientNumber: '00022222',
-      issueDate: '2026-01-01',
-      estimatedShippingDate: '2026-01-02',
-      permitVolume: '10',
-      remarks: '',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.message).toBe(
-      'Unable to submit provincial permit create request. Submit endpoint is unavailable in this environment (status 404).',
-    )
-  })
-
-  it('uses backend response message for submit failures when provided', async () => {
-    postMock.mockRejectedValue({
-      isAxiosError: true,
-      response: {
-        status: 400,
-        data: {
-          message: 'Validation failed',
-          errors: ['Client number is required'],
-        },
-      },
-    })
-
-    const result = await submitIndianReservePermitCreate({
-      permitNumber: '900',
-      packageNumber: 'PKG-1',
-      clientNumber: '12345678',
-      applicationDate: '2026-03-01',
-      permitIssueDate: '2026-03-02',
-      estimatedShippingDate: '2026-03-03',
-      destinationCountry: 'CA',
-      transportTypeCode: 'TRK',
-      transportName: 'Truck',
-      portOfExport: 'VAN',
-      remarks: '',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.message).toBe('Validation failed')
-    expect(result.errors).toEqual(['Client number is required'])
   })
 })

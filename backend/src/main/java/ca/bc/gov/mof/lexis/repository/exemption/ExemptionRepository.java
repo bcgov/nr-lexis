@@ -1,9 +1,13 @@
 package ca.bc.gov.mof.lexis.repository.exemption;
 
+import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
@@ -20,14 +24,41 @@ public class ExemptionRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
   private static final String FIND_ALL_EXEMPTION_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_STS_CODES(?)";
-  private static final String FIND_ALL_ORG_UNITS = LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)";
-
   private static final String FIND_EXEMPTIONS_BY_CRITERIA =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTIONS_BY_CRITERIA(?,?,?,?,?)";
+  private static final String COUNT_EXEMPTIONS_BY_CRITERIA =
+      LEXIS_GROUP_5_PACKAGE + "COUNT_EXEMPTIONS_BY_CRITERIA(?,?,?,?)";
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_EXEMPTION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_EXMP(?,?)";
+  private static final String SEARCH_GROUP_BY =
+      " GROUP BY "
+          + "EE.EXEMPTION_NUMBER, "
+          + "EE.APPROVED_VOLUME, "
+          + "EE.APPROVAL_DATE, "
+          + "EE.EXPIRY_DATE, "
+          + "EE.OTHER_CONDITIONS, "
+          + "EE.ENTRY_USERID, "
+          + "EE.ENTRY_TIMESTAMP, "
+          + "EE.UPDATE_USERID, "
+          + "EE.UPDATE_TIMESTAMP, "
+          + "EE.EXPORT_EXEMPTION_TYPE_CODE, "
+          + "EE.EXPORT_EXEMPTION_STATUS_CODE, "
+          + "EESC.DESCRIPTION, "
+          + "EEA.APPLICATION_NUMBER, "
+          + "CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE != 'B' AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'O' "
+          + "THEN EEA.AGENT_CLIENT_NUMBER END, "
+          + "CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE != 'B' AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'O' "
+          + "THEN EEA.OWNER_CLIENT_NUMBER END, "
+          + "EO.ORG_UNIT_NAME, "
+          + "CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE != 'B' AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'O' "
+          + "THEN ES.ADVERTISING_DATE ELSE NULL END, "
+          + "CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE != 'B' AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'O' "
+          + "THEN (case when EEA.AGENT_CLIENT_NUMBER is null then '' else EEA.AGENT_CLIENT_NUMBER end) ELSE '' END, "
+          + "CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE != 'B' AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'O' "
+          + "THEN (case when EEA.OWNER_CLIENT_NUMBER is null then '' else EEA.OWNER_CLIENT_NUMBER end) ELSE '' END";
+  private static final String SEARCH_ORDER_BY = " ORDER BY EE.EXEMPTION_NUMBER DESC";
 
   public ExemptionRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -46,21 +77,50 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadRegionOptions() {
-    return queryCursorProcedure(
-        FIND_ALL_ORG_UNITS,
-        null,
-        1,
-        rs -> {
-          Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-          String regionCode = getString(rs, "ORG_UNIT_CODE");
-          String regionName = getString(rs, "ORG_UNIT_NAME");
-          return new CodeNameDto(
-              orgUnitNo == null ? null : orgUnitNo.toString(),
-              regionCode == null ? regionName : regionCode);
-        });
+    return loadOrgUnitOptions(true);
   }
 
-  public List<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
+  public Page<ExemptionSearchResultDto> search(ExemptionSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  public Page<ExemptionSearchResultDto> search(
+      ExemptionSearchCriteria criteria, Integer knownTotal) {
+    SqlWhere countSqlWhere = buildSearchWhere(criteria, false, false);
+    SqlWhere pageSqlWhere = buildSearchWhere(criteria, true, true);
+    int totalElements =
+        knownTotal == null
+            ? queryLegacyDynamicCountProcedure(
+                COUNT_EXEMPTIONS_BY_CRITERIA, countSqlWhere.sql(), countSqlWhere.bindValues())
+            : Math.max(0, knownTotal);
+    return queryLegacyDynamicPage(
+        FIND_EXEMPTIONS_BY_CRITERIA,
+        pageSqlWhere.sql(),
+        pageSqlWhere.bindValues(),
+        criteria.page(),
+        criteria.size(),
+        totalElements,
+        rs ->
+            new ExemptionSearchResultDto(
+                getString(rs, "EXEMPTION_NUMBER"),
+                getString(rs, "EXPORT_EXEMPTION_TYPE_CODE"),
+                firstNonNull(getString(rs, "EXPORT_EXEMPTION_STATUS_CODE"), getString(rs, "STATUS_DESCRIPTION")),
+                getString(rs, "OWNER_CLIENT_NUMBER"),
+                getLong(rs, "APPLICATION_NUMBER"),
+                getLocalDate(rs, "APPROVAL_DATE"),
+                getLocalDate(rs, "ADVERTISING_DATE"),
+                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE")),
+                coalesce(getDouble(rs, "APPROVED_VOLUME"), 0.0d),
+                false));
+  }
+
+  public int count(ExemptionSearchCriteria criteria) {
+    SqlWhere sqlWhere = buildSearchWhere(criteria, false, false);
+    return queryLegacyDynamicCountProcedure(COUNT_EXEMPTIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+  }
+
+  private SqlWhere buildSearchWhere(
+      ExemptionSearchCriteria criteria, boolean includeGroupBy, boolean includeOrderBy) {
     SqlWhereBuilder where = newWhereBuilder();
 
     where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
@@ -88,26 +148,11 @@ public class ExemptionRepository extends OracleRepositorySupport {
     where.addDateLte("EE.APPROVAL_DATE", criteria.approvalToDate());
     where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
     where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
-    where.addInLikeOrNoResults("EO.ORG_UNIT_NO", criteria.regionNumbers());
+    if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
+      where.addInLikeOrNoResults("EO.ORG_UNIT_NO", criteria.regionNumbers());
+    }
 
-    SqlWhere sqlWhere = where.build(" ORDER BY EE.EXEMPTION_NUMBER DESC");
-
-    return queryDynamicAllPages(
-        FIND_EXEMPTIONS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
-        rs ->
-            new ExemptionSearchResultDto(
-                getString(rs, "EXEMPTION_NUMBER"),
-                getString(rs, "EXPORT_EXEMPTION_TYPE_CODE"),
-                firstNonNull(getString(rs, "EXPORT_EXEMPTION_STATUS_CODE"), getString(rs, "STATUS_DESCRIPTION")),
-                getString(rs, "OWNER_CLIENT_NUMBER"),
-                getLong(rs, "APPLICATION_NUMBER"),
-                getLocalDate(rs, "APPROVAL_DATE"),
-                getLocalDate(rs, "ADVERTISING_DATE"),
-                firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE")),
-                coalesce(getDouble(rs, "APPROVED_VOLUME"), 0.0d),
-                false));
+    return where.build((includeGroupBy ? SEARCH_GROUP_BY : "") + (includeOrderBy ? SEARCH_ORDER_BY : ""));
   }
 
   public Optional<ExemptionDetailDto> findByExemptionNumber(String exemptionNumber) {
@@ -181,11 +226,4 @@ public class ExemptionRepository extends OracleRepositorySupport {
             List.of()));
   }
 
-  private String firstNonNull(String first, String second) {
-    return first != null ? first : second;
-  }
-
-  private double coalesce(Double value, double fallback) {
-    return value == null ? fallback : value;
-  }
 }

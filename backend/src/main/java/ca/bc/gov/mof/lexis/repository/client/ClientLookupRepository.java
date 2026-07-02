@@ -16,6 +16,8 @@ public class ClientLookupRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_CLIENT_LOCATION(?,?,?)";
   private static final String FIND_CLIENT_LOCATIONS =
       LEXIS_GROUP_5_PACKAGE + "FIND_CLIENT_LOCATIONS(?,?)";
+  private static final String FIND_CONTACTS_BY_LOCATION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_CONTACTS_BY_LOCATION(?,?,?)";
 
   public ClientLookupRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -82,6 +84,24 @@ public class ClientLookupRepository extends OracleRepositorySupport {
                 getString(rs, "EMAIL_ADDRESS")));
   }
 
+  public List<ClientContactRow> findContactsByClientNumberCode(
+      String clientNumber, String locationCode) {
+    String normalizedClientNumber = trim(clientNumber);
+    String normalizedLocationCode = trim(locationCode);
+    if (normalizedClientNumber == null || normalizedLocationCode == null) {
+      return List.of();
+    }
+
+    return queryCursorProcedure(
+        FIND_CONTACTS_BY_LOCATION,
+        cs -> {
+          cs.setString(1, normalizedClientNumber);
+          cs.setString(2, normalizedLocationCode);
+        },
+        3,
+        rs -> new ClientContactRow(getString(rs, "CONTACT_NAME"), getString(rs, "CLIENT_CONTACT_ID")));
+  }
+
   public record ClientLocationRow(
       String clientNumber,
       String clientLocationCode,
@@ -97,4 +117,6 @@ public class ClientLookupRepository extends OracleRepositorySupport {
       String businessPhone,
       String faxNumber,
       String emailAddress) {}
+
+  public record ClientContactRow(String contactName, String contactId) {}
 }

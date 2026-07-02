@@ -36,6 +36,8 @@ parameters:
     value: INFO
   - name: SPRING_JPA_SHOW_SQL
     value: "false"
+  - name: LEXIS_PROD_RTM_ONLY
+    value: "false"
   - name: AWS_COGNITO_ISSUER_URI
     required: true
   - name: COGNITO_USERINFO_URI
@@ -74,10 +76,6 @@ objects:
           labels:
             app: ${NAME}-backend-${ZONE}
             app.kubernetes.io/instance: ${ZONE}
-          annotations:
-            prometheus.io/path: /actuator/prometheus
-            prometheus.io/port: '8080'
-            prometheus.io/scrape: 'true'
         spec:
           automountServiceAccountToken: false
           securityContext:
@@ -158,6 +156,8 @@ objects:
                   value: ${SPRING_BOOT_AUTOCONFIG_LOG_LEVEL}
                 - name: SPRING_JPA_SHOW_SQL
                   value: ${SPRING_JPA_SHOW_SQL}
+                - name: LEXIS_PROD_RTM_ONLY
+                  value: ${LEXIS_PROD_RTM_ONLY}
                 - name: KEYSTORE_SECRET
                   valueFrom:
                     secretKeyRef:
@@ -173,8 +173,7 @@ objects:
                   memory: "800Mi"
                   ephemeral-storage: "500Mi"
               livenessProbe:
-                httpGet:
-                  path: /actuator/health
+                tcpSocket:
                   port: 8080
                 initialDelaySeconds: 300
                 periodSeconds: 30

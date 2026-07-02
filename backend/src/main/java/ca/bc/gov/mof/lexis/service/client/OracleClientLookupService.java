@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.service.client;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.normalizeClientNumber;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository.ClientLocationRow;
 import java.util.List;
@@ -54,6 +57,25 @@ public class OracleClientLookupService implements ClientLookupService {
     return locations;
   }
 
+  @Override
+  public List<ClientContact> getContactsForLocation(String clientNumber, String locationCode) {
+    String normalizedClientNumber = normalizeClientNumber(clientNumber);
+    String normalizedLocationCode = trimToNull(locationCode);
+    if (normalizedClientNumber == null || normalizedLocationCode == null) {
+      return List.of(new ClientContact("No contacts on file for this location", "0"));
+    }
+
+    List<ClientContact> contacts =
+        repository.findContactsByClientNumberCode(normalizedClientNumber, normalizedLocationCode).stream()
+            .map(row -> new ClientContact(replaceEmptyField(row.contactName()), replaceEmptyField(row.contactId())))
+            .toList();
+
+    if (contacts.isEmpty()) {
+      return List.of(new ClientContact("No contacts on file for this location", "0"));
+    }
+    return contacts;
+  }
+
   private ClientData toClientData(ClientLocationRow row) {
     return new ClientData(
         replaceEmptyField(row.clientNumber()),
@@ -103,19 +125,4 @@ public class OracleClientLookupService implements ClientLookupService {
     return normalized == null ? NOT_ON_FILE : normalized;
   }
 
-  private String normalizeClientNumber(String clientNumber) {
-    String normalized = trimToNull(clientNumber);
-    if (normalized == null) {
-      return null;
-    }
-    return normalized.length() >= 8 ? normalized : "0".repeat(8 - normalized.length()) + normalized;
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
 }

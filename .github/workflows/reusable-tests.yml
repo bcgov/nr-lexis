@@ -13,13 +13,6 @@ on:
           it defaults to target.
         default: ""
         type: string
-    secrets:
-      e2e_idir_user:
-        description: IDIR service account username for Playwright auth
-        required: true
-      e2e_idir_password:
-        description: IDIR service account password for Playwright auth
-        required: true
 
 env:
   DOMAIN: apps.silver.devops.gov.bc.ca
@@ -29,7 +22,7 @@ permissions: {}
 
 jobs:
   e2e-tests:
-    name: E2E (${{ matrix.project }})
+    name: Basic E2E (${{ matrix.project }})
     defaults:
       run:
         working-directory: frontend
@@ -55,14 +48,17 @@ jobs:
           npm ci
           npx playwright install --with-deps ${{ matrix.project }}
 
-      - name: Run Playwright
+      - name: Wait for deployed frontend
         env:
           E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
-          E2E_IDIR_USER: ${{ secrets.e2e_idir_user }}
-          E2E_IDIR_PASSWORD: ${{ secrets.e2e_idir_password }}
+        run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL" 17 5 '<div id="root"' 30
+
+      - name: Run basic Playwright smoke suite
+        env:
+          E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
           CI: "true"
         run: |
-          npx playwright test --project="${{ matrix.project }}" --reporter=html,list
+          npm run e2e -- --reporter=html,list
 
       - uses: actions/upload-artifact@v7
         if: (! cancelled())

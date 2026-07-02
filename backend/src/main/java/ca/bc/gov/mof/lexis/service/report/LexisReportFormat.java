@@ -4,7 +4,7 @@ import java.util.Locale;
 
 public enum LexisReportFormat {
   PDF("pdf", "application/pdf"),
-  CSV("csv", "text/csv"),
+  CSV("csv", "application/vnd.ms-excel"),
   XLS("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
   XLSX("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
   DOC("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),

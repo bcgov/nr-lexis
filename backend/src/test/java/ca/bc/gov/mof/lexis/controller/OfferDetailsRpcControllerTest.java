@@ -11,6 +11,9 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
+import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -18,11 +21,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | OfferDetailsRpcController")
@@ -31,9 +38,14 @@ class OfferDetailsRpcControllerTest {
   @Mock private ObjectProvider<LexisApplicationService> applicationServiceProvider;
   @Mock private ObjectProvider<FederalApplicationService> federalApplicationServiceProvider;
   @Mock private ObjectProvider<ClientLookupService> clientLookupServiceProvider;
+  @Mock private ObjectProvider<PurchaseOfferService> purchaseOfferServiceProvider;
   @Mock private LexisApplicationService applicationService;
   @Mock private FederalApplicationService federalApplicationService;
   @Mock private ClientLookupService clientLookupService;
+  @Mock private PurchaseOfferService purchaseOfferService;
+  @Mock private LexisSessionService sessionService;
+  @Mock private LexisAuthorizationService authorizationService;
+  @Mock private Authentication authentication;
 
   private OfferDetailsRpcController controller;
 
@@ -43,7 +55,10 @@ class OfferDetailsRpcControllerTest {
         new OfferDetailsRpcController(
             applicationServiceProvider,
             federalApplicationServiceProvider,
-            clientLookupServiceProvider);
+            clientLookupServiceProvider,
+            purchaseOfferServiceProvider,
+            sessionService,
+            authorizationService);
   }
 
   @Test
@@ -204,6 +219,115 @@ class OfferDetailsRpcControllerTest {
     assertThat(response.getBody().get(0).selected()).isTrue();
   }
 
+  @Test
+  void addOfferLegacyShouldMapAliasesAndReturnPersistencePayload() {
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(authentication.getName()).thenReturn("idir\\jsmith");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(true);
+    when(purchaseOfferService.addOffer(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new PurchaseOfferService.CreateOfferResult(
+                true,
+                "The purchase offer was saved successfully.",
+                1000456L,
+                81001L,
+                false,
+                null,
+                true,
+                false,
+                List.of(),
+                List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("offerNumber", "81001");
+    params.add("packageNumber", " PKG-903 ");
+    params.add("companyName", "Example Lumber");
+    params.add("contactName", "Alex Example");
+    params.add("purchaseOfferAmount", "12500.25");
+    params.add("purchaseOfferDate", "03/02/2026");
+    params.add("offerEndDate", "2026-03-18");
+    params.add("clientNumber", "00077881");
+    params.add("pickupLocation", "Port Moody");
+    params.add("offerCondition", "Condition notes");
+    params.add("offerVolume", "99.99");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.addOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().exportPurchaseOfferNumber()).isEqualTo(81001L);
+    assertThat(response.getBody().sendEmail()).isTrue();
+    assertThat(response.getBody().isUpdate()).isFalse();
+
+    ArgumentCaptor<PurchaseOfferService.CreateOfferRequest> requestCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferService.CreateOfferRequest.class);
+    verify(purchaseOfferService)
+        .addOffer(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    PurchaseOfferService.CreateOfferRequest request = requestCaptor.getValue();
+    assertThat(request.applicationNumber()).isEqualTo(1000456L);
+    assertThat(request.exportPurchaseOfferNumber()).isEqualTo(81001L);
+    assertThat(request.packageNumber()).isEqualTo("PKG-903");
+    assertThat(request.purchaseOfferDate()).isEqualTo(LocalDate.of(2026, 3, 2));
+    assertThat(request.offerWithdrawalDate()).isEqualTo(LocalDate.of(2026, 3, 18));
+    assertThat(request.offeringClientNumber()).isEqualTo("00077881");
+    assertThat(request.offerVolume()).isEqualTo(99.99d);
+  }
+
+  @Test
+  void updateOfferLegacyShouldMapAliasesAndReturnUpdatePayload() {
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(authentication.getName()).thenReturn("idir\\jsmith");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(true);
+    when(purchaseOfferService.updateOffer(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new PurchaseOfferService.CreateOfferResult(
+                true,
+                "The purchase offer was updated successfully.",
+                1000456L,
+                81001L,
+                false,
+                null,
+                true,
+                true,
+                List.of(),
+                List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("purchaseOfferAmount", "13000.00");
+    params.add("purchaseOfferDate", "2026-03-03");
+    params.add("offerWithdrawalDate", "03/19/2026");
+    params.add("withdrawReason", "Withdrawn by buyer");
+    params.add("pickupLocation", "Port Moody");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    assertThat(response.getBody().isUpdate()).isTrue();
+    assertThat(response.getBody().sendEmail()).isTrue();
+
+    ArgumentCaptor<PurchaseOfferService.CreateOfferRequest> requestCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferService.CreateOfferRequest.class);
+    verify(purchaseOfferService)
+        .updateOffer(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    PurchaseOfferService.CreateOfferRequest request = requestCaptor.getValue();
+    assertThat(request.exportPurchaseOfferNumber()).isEqualTo(81001L);
+    assertThat(request.purchaseOfferAmount()).isEqualTo(13000.00d);
+    assertThat(request.offerWithdrawalDate()).isEqualTo(LocalDate.of(2026, 3, 19));
+    assertThat(request.withdrawReason()).isEqualTo("Withdrawn by buyer");
+  }
+
   private LexisApplicationDetailDto application(
       long applicationNumber,
       String statusCode,
@@ -232,6 +356,8 @@ class OfferDetailsRpcControllerTest {
         false,
         false,
         false,
+        null,
+        null,
         packages,
         List.of(),
         List.of());

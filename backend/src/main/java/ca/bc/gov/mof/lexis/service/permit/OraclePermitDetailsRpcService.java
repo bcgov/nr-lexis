@@ -1,5 +1,11 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.parseDouble;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong;
+
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
@@ -46,11 +52,11 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationR
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
+import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -77,6 +83,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final String EXPORT_SCALE_METHOD_WEIGHT = "W";
   private static final String EXPORT_PERMIT_STATUS_ACTIVE = "ACT";
   private static final String SPECIES_FIR = "FI";
+  private static final int MAX_SALES_INVOICE_NUMBER_LENGTH = 9;
   private static final long RCO_REGION_CODE = 1835L;
   private static final long RSK_REGION_CODE = 1908L;
   private static final long RSC_REGION_CODE = 1909L;
@@ -920,6 +927,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     if (normalizedSalesInvoiceNumber == null) {
       errors.add("A valid sales invoice number is required.");
+    } else if (normalizedSalesInvoiceNumber.length() > MAX_SALES_INVOICE_NUMBER_LENGTH) {
+      errors.add(
+          "The sales invoice number must be "
+              + MAX_SALES_INVOICE_NUMBER_LENGTH
+              + " characters or fewer.");
     }
     if (invoiceExportValue == null || invoiceExportValue.compareTo(BigDecimal.ZERO) <= 0) {
       errors.add("A valid export value is required.");
@@ -1259,7 +1271,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         applicationService
             .findPackageByPackageNumber(normalizedPackageNumber)
             .map(LexisPackageLookupDto::growthTypeCode)
-            .map(this::trimToNull)
+            .map(TextUtils::trimToNull)
             .orElse(null);
     if (growthTypeCode == null) {
       return "";
@@ -1535,48 +1547,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
   }
 
-  private Long parsePositiveLong(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(normalized);
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
-  private Double parseDouble(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      return null;
-    }
-    try {
-      return Double.parseDouble(normalized);
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
   private LocalDate parseDate(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      return null;
-    }
-
-    try {
-      return LocalDate.parse(normalized);
-    } catch (DateTimeParseException ignored) {
-      // Fall through to legacy parser.
-    }
-
-    try {
-      return LocalDate.parse(normalized, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ignored) {
-      return null;
-    }
+    return parseIsoOrLegacyDate(value);
   }
 
   private String formatVolume(double value) {
@@ -1629,14 +1601,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
   }
 
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
   private String nonNull(String value) {
     return value == null ? "" : value;
   }
@@ -1648,10 +1612,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private boolean isCanadaCountryCode(String countryCode) {
     return "CA".equalsIgnoreCase(trimToNull(countryCode));
-  }
-
-  private <T> T firstNonNull(T first, T second) {
-    return first != null ? first : second;
   }
 
   private record FeeCalculationContext(

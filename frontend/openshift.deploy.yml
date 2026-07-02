@@ -23,6 +23,9 @@ parameters:
   - name: IMAGE_TAG
     description: Container image tag (PR number, 'test', or 'prod')
     value: latest
+  - name: ROLLOUT_TRIGGER
+    description: Value placed on the pod template to force rollout when a reused image tag is rebuilt
+    value: ""
   - name: REGISTRY
     description: Image registry path (no tag)
     value: ghcr.io/bcgov/nr-lexis/frontend
@@ -31,14 +34,25 @@ parameters:
     value: apps.silver.devops.gov.bc.ca
   - name: FRONTEND_LOG_LEVEL
     value: INFO
-  - name: VITE_LOGIN_URL
+  - name: VITE_USER_POOLS_ID
     value: ""
-  - name: VITE_LOGOUT_URL
+  - name: VITE_USER_POOLS_WEB_CLIENT_ID
     value: ""
-  - name: VITE_ENABLE_DEV_ROLE_SIMULATION
+  - name: VITE_COGNITO_DOMAIN
+    value: ""
+  - name: VITE_REDIRECT_SIGN_IN
+    value: ""
+  - name: VITE_REDIRECT_SIGN_OUT
+    description: Full BC Gov logoff chain URL; must match a Cognito-registered sign-out URL
+    required: true
+  - name: VITE_COGNITO_SCOPES
+    value: "openid profile email"
+  - name: VITE_ZONE
+    value: dev
+  - name: VITE_LEXIS_PROD_RTM_ONLY
     value: "false"
-  - name: VITE_ENABLE_SEARCH_MOCK_FALLBACK
-    value: "false"
+  - name: VITE_FAM_MANAGE_URL
+    value: ""
   - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
     value: /api
   - name: VITE_LEXIS_REPORT_API_BASE
@@ -63,6 +77,8 @@ objects:
           labels:
             app: ${NAME}-frontend-${ZONE}
             app.kubernetes.io/instance: ${ZONE}
+          annotations:
+            app.openshift.io/redeploy-token: ${ROLLOUT_TRIGGER}
         spec:
           automountServiceAccountToken: false
           securityContext:
@@ -70,6 +86,7 @@ objects:
           initContainers:
             - name: seed-srv
               image: ${REGISTRY}:${IMAGE_TAG}
+              imagePullPolicy: Always
               command:
                 - sh
                 - -c
@@ -95,6 +112,7 @@ objects:
           containers:
             - name: ${NAME}-frontend
               image: ${REGISTRY}:${IMAGE_TAG}
+              imagePullPolicy: Always
               ports:
                 - name: http
                   containerPort: 3000
@@ -109,14 +127,24 @@ objects:
                   value: /tmp
                 - name: XDG_CONFIG_HOME
                   value: /tmp
-                - name: VITE_LOGIN_URL
-                  value: ${VITE_LOGIN_URL}
-                - name: VITE_LOGOUT_URL
-                  value: ${VITE_LOGOUT_URL}
-                - name: VITE_ENABLE_DEV_ROLE_SIMULATION
-                  value: ${VITE_ENABLE_DEV_ROLE_SIMULATION}
-                - name: VITE_ENABLE_SEARCH_MOCK_FALLBACK
-                  value: ${VITE_ENABLE_SEARCH_MOCK_FALLBACK}
+                - name: VITE_USER_POOLS_ID
+                  value: ${VITE_USER_POOLS_ID}
+                - name: VITE_USER_POOLS_WEB_CLIENT_ID
+                  value: ${VITE_USER_POOLS_WEB_CLIENT_ID}
+                - name: VITE_COGNITO_DOMAIN
+                  value: ${VITE_COGNITO_DOMAIN}
+                - name: VITE_REDIRECT_SIGN_IN
+                  value: ${VITE_REDIRECT_SIGN_IN}
+                - name: VITE_REDIRECT_SIGN_OUT
+                  value: ${VITE_REDIRECT_SIGN_OUT}
+                - name: VITE_COGNITO_SCOPES
+                  value: ${VITE_COGNITO_SCOPES}
+                - name: VITE_ZONE
+                  value: ${VITE_ZONE}
+                - name: VITE_LEXIS_PROD_RTM_ONLY
+                  value: ${VITE_LEXIS_PROD_RTM_ONLY}
+                - name: VITE_FAM_MANAGE_URL
+                  value: ${VITE_FAM_MANAGE_URL}
                 - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
                   value: ${VITE_LEXIS_REPORT_ENDPOINT_BASE}
                 - name: VITE_LEXIS_REPORT_API_BASE

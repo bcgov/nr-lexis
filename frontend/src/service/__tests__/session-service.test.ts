@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchSessionCapabilities, performLogoff } from '@/service/session-service'
 
-const getMock = vi.fn()
-const postMock = vi.fn()
+const { getCachedResponseMock, getMock, postMock } = vi.hoisted(() => ({
+  getCachedResponseMock: vi.fn(),
+  getMock: vi.fn(),
+  postMock: vi.fn(),
+}))
 
 vi.mock('@/service/api-service', () => ({
   default: {
+    getCachedResponse: getCachedResponseMock,
     getAxiosInstance: () => ({
       get: getMock,
       post: postMock,
@@ -23,15 +27,19 @@ describe('session-service', () => {
       authenticated: true,
       principal: 'idir\\tester',
       roles: ['READ_ONLY'],
-      welcomeTarget: '/dashboard',
+      welcomeTarget: 'readOnly',
       legacyPath: null,
       grantedActions: ['/applicationSearch'],
     }
-    getMock.mockResolvedValue({ data: payload })
+    getCachedResponseMock.mockResolvedValue({ data: payload })
 
     const result = await fetchSessionCapabilities()
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/session/capabilities')
+    expect(getCachedResponseMock).toHaveBeenCalledWith('/lexis/session/capabilities', undefined, {
+      cacheKey: 'session-capabilities',
+      ttlMs: 5_000,
+    })
+    expect(getMock).not.toHaveBeenCalled()
     expect(result).toEqual(payload)
   })
 
@@ -50,7 +58,7 @@ describe('session-service', () => {
 
   it('propagates backend errors to callers', async () => {
     const backendError = new Error('backend unavailable')
-    getMock.mockRejectedValue(backendError)
+    getCachedResponseMock.mockRejectedValue(backendError)
 
     await expect(fetchSessionCapabilities()).rejects.toThrow('backend unavailable')
   })

@@ -1,5 +1,7 @@
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 
+export type LoginProvider = 'idir' | 'business-bceid'
+
 export type AuthContextType = {
   capabilities: LexisSessionCapabilities
   isLoading: boolean
@@ -7,11 +9,8 @@ export type AuthContextType = {
   hasAnyRole: boolean
   usesExternalLogin: boolean
   defaultRoute: string
-  devRoles: string[]
   refresh: () => Promise<void>
-  login: () => Promise<void>
+  login: (provider?: LoginProvider) => Promise<void>
   logout: () => Promise<void>
-  setDevRoles: (roles: string[]) => Promise<void>
-  clearLoginSimulation: () => Promise<void>
   canPerform: (action: string) => boolean
 }

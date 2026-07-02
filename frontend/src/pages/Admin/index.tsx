@@ -1,9 +1,11 @@
-import { useMemo, useState, type FC } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Button,
   Checkbox,
   Column,
   Grid,
+  InlineNotification,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -16,6 +18,13 @@ import {
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import {
+  searchFamUserRoleAssignments,
+  type FamUserRoleAssignment,
+  type FamUserRoleAssignmentSearchResponse,
+} from '@/service/fam-user-access-service'
+import { resolveFamManageUrl } from '@/service/fam-manage-url'
+import { normalizeFilterText as normalizeText } from '@/utils/text'
 
 type LegacyLaunchTool = {
   id: string
@@ -29,54 +38,75 @@ type LegacyLaunchTool = {
 const LEGACY_ADMIN_TOOLS: LegacyLaunchTool[] = [
   {
     id: 'lexisAgentAdmin',
-    label: 'LEXIS Administration',
+    label: 'LEXIS administration',
     requiredAction: '/lexisAgentAdmin',
-    description: 'Legacy administration dashboard.',
+    description: 'User and access administration.',
     reactPath: '/admin',
   },
   {
     id: 'lexisPolicyAdmin',
-    label: 'Fee Policy Administration',
+    label: 'Fee policy administration',
     requiredAction: '/lexisPolicyAdmin',
-    description: 'Legacy fee policy administration page.',
-    reactPath: '/admin/policies',
+    description: 'Fee policy administration.',
+    reactPath: '/admin/policies/fee',
   },
   {
     id: 'lexisFILAdmin',
-    label: 'FIL Percent Administration',
+    label: 'Fee in lieu percent administration',
     requiredAction: '/lexisFILAdmin',
-    description: 'Legacy fee-in-lieu percent policy page.',
-    reactPath: '/admin/policies',
+    description: 'Fee-in-lieu percent policy administration.',
+    reactPath: '/admin/policies/fil',
+  },
+  {
+    id: 'exportScheduleAdmin',
+    label: 'Export schedule administration',
+    requiredAction: '/lexisPolicyAdmin',
+    description: 'Manage upcoming advertising list dates in EXPORT_SCHEDULE.',
+    reactPath: '/admin/schedules',
+  },
+  {
+    id: 'rtmEmsLogAmv',
+    label: 'Average Monthly Values',
+    requiredAction: '/lexisAgentAdmin',
+    description: 'Manage EMS log average monthly values.',
+    reactPath: '/admin/rtm/emslogamv',
   },
 ]
 
 const LEGACY_UPLOAD_TOOLS: LegacyLaunchTool[] = [
   {
+    id: 'applicationSubmissionUpload',
+    label: 'Application submission upload',
+    requiredAction: 'uploadApplicationSubmission',
+    description: 'Create applications from ESF LEXIS XML or GeoJSON submissions.',
+    reactPath: '/provincial/application/upload',
+  },
+  {
     id: 'fileApplicationUpload',
-    label: 'Application Upload',
+    label: 'Application upload',
     requiredAction: '/fileApplicationUpload',
-    description: 'Legacy file upload workflow for applications.',
+    description: 'Application document upload.',
     reactUploadType: 'application',
   },
   {
     id: 'fileExemptionUpload',
-    label: 'Exemption Upload',
+    label: 'Exemption upload',
     requiredAction: '/fileExemptionUpload',
-    description: 'Legacy file upload workflow for exemptions.',
+    description: 'Exemption document upload.',
     reactUploadType: 'exemption',
   },
   {
     id: 'filePermitUpload',
-    label: 'Permit Upload',
+    label: 'Permit upload',
     requiredAction: '/filePermitUpload',
-    description: 'Legacy file upload workflow for permits.',
+    description: 'Permit document upload.',
     reactUploadType: 'permit',
   },
   {
     id: 'fileInvoiceUpload',
-    label: 'Invoice Upload',
+    label: 'Invoice upload',
     requiredAction: '/fileInvoiceUpload',
-    description: 'Legacy file upload workflow for invoices.',
+    description: 'Invoice document upload.',
     reactUploadType: 'invoice',
   },
 ]
@@ -88,7 +118,6 @@ const LEGACY_ACTION_CATALOG = [
   '/applicationSearch',
   '/applicationsReview',
   '/approvedExemptionReport',
-  '/blankListing',
   '/changeApplicantType',
   '/createExemption',
   '/editCompletedApplications',
@@ -102,8 +131,6 @@ const LEGACY_ACTION_CATALOG = [
   '/fileExemptionUpload',
   '/fileInvoiceUpload',
   '/filePermitUpload',
-  '/indianReservePermitDetails',
-  '/indianReservePermitSearch',
   '/lexisAgentAdmin',
   '/lexisFILAdmin',
   '/lexisPolicyAdmin',
@@ -116,42 +143,68 @@ const LEGACY_ACTION_CATALOG = [
   '/permitSearch',
   '/permitsReview',
   '/speciesGradeReport',
-  '/summary',
   '/teacReport',
   '/tenureReport',
   '/transportReport',
   'approveExemption',
   'createApplication',
   'createOffer',
-  'createPermit',
-  'industryListing',
   'mofrListing',
   'saveExemption',
   'savePermit',
+  'uploadApplicationSubmission',
   'viewFederalApplication',
-  'viewOICApplication',
 ] as const
 
 const ROUTE_ACCESS_CHECKS = [
-  { label: 'Provincial Summary', action: '/summary' },
-  { label: 'Provincial Review', action: '/applicationsReview' },
-  { label: 'Provincial Application Search', action: '/applicationSearch' },
-  { label: 'Provincial Exemption Search', action: '/exemptionSearch' },
-  { label: 'Provincial Offers Search', action: '/offersSearch' },
-  { label: 'Provincial Permit Search', action: '/permitSearch' },
-  { label: 'Federal Application Search', action: '/federalApplicationSearch' },
-  { label: 'Indigenous Reserve Permit Search', action: '/indianReservePermitSearch' },
+  { label: 'Provincial review', action: '/applicationsReview' },
+  { label: 'Provincial application search', action: '/applicationSearch' },
+  { label: 'Provincial exemption search', action: '/exemptionSearch' },
+  { label: 'Provincial offers search', action: '/offersSearch' },
+  { label: 'Provincial permit search', action: '/permitSearch' },
+  { label: 'Federal application search', action: '/federalApplicationSearch' },
   { label: 'Reports', action: '/applicationReport' },
   { label: 'Admin', action: '/lexisAgentAdmin' },
 ]
 
-const normalizeText = (value: string): string => value.trim().toLowerCase()
+const FAM_USER_ROLE_PAGE_SIZES = [10, 25, 50, 100]
 
-const AdminPage: FC = () => {
+const displayValue = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined || String(value).trim().length === 0) {
+    return '-'
+  }
+  return String(value)
+}
+
+const roleScopeLabel = (assignment: FamUserRoleAssignment): string => {
+  if (!assignment.forestClientNumber && !assignment.forestClientName) {
+    return 'Application'
+  }
+  const client = [assignment.forestClientNumber, assignment.forestClientName]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(' - ')
+  return client || 'Forest client'
+}
+
+const formatDate = (value: string | null): string => {
+  if (!value) {
+    return '-'
+  }
+  return value.slice(0, 10)
+}
+
+const AdminPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform, refresh } = useAuth()
   const [actionFilter, setActionFilter] = useState('')
   const [showGrantedOnly, setShowGrantedOnly] = useState(false)
+  const [famSearchText, setFamSearchText] = useState('')
+  const [famPageNumber, setFamPageNumber] = useState(1)
+  const [famPageSize, setFamPageSize] = useState(10)
+  const [famSearchResponse, setFamSearchResponse] =
+    useState<FamUserRoleAssignmentSearchResponse | null>(null)
+  const [famSearchError, setFamSearchError] = useState<string | null>(null)
+  const [isFamSearchLoading, setIsFamSearchLoading] = useState(false)
 
   const visibleActions = useMemo(() => {
     return LEGACY_ACTION_CATALOG.filter((action) => {
@@ -168,17 +221,52 @@ const AdminPage: FC = () => {
   const grantedActionCount = useMemo(() => {
     return LEGACY_ACTION_CATALOG.filter((action) => canPerform(action)).length
   }, [canPerform])
+  const canSearchFamUserAccess = canPerform('/lexisAgentAdmin')
+  const famManageUrl = resolveFamManageUrl()
+
+  const runFamUserSearch = async (pageNumber = famPageNumber, pageSize = famPageSize) => {
+    const search = famSearchText.trim()
+    if (search.length < 3) {
+      setFamSearchError('Enter at least 3 characters to search FAM user access.')
+      setFamSearchResponse(null)
+      return
+    }
+
+    setIsFamSearchLoading(true)
+    setFamSearchError(null)
+    try {
+      const response = await searchFamUserRoleAssignments({
+        search,
+        pageNumber,
+        pageSize,
+        sortBy: 'user_name',
+        sortOrder: 'asc',
+      })
+      setFamSearchResponse(response)
+      setFamPageNumber(response.pageNumber || pageNumber)
+      setFamPageSize(response.pageSize || pageSize)
+      if (response.message) {
+        setFamSearchError(response.message)
+      }
+    } catch (error) {
+      setFamSearchError(
+        error instanceof Error ? error.message : 'Unable to search FAM user access.',
+      )
+      setFamSearchResponse(null)
+    } finally {
+      setIsFamSearchLoading(false)
+    }
+  }
 
   return (
     <Grid fullWidth className="default-grid">
       <Column sm={4} md={8} lg={16}>
         <h1>Administration</h1>
-        <p>Base administration and authorization visibility for migration parity.</p>
       </Column>
 
       <Column sm={4} md={8} lg={8}>
         <Tile>
-          <h2 className="dashboard-title">Session Snapshot</h2>
+          <h2 className="dashboard-title">Session snapshot</h2>
           <p>
             Principal: <strong>{capabilities.principal ?? 'Anonymous'}</strong>
           </p>
@@ -187,9 +275,6 @@ const AdminPage: FC = () => {
           </p>
           <p>
             Welcome Target: <strong>{capabilities.welcomeTarget ?? 'N/A'}</strong>
-          </p>
-          <p>
-            Legacy Path: <strong>{capabilities.legacyPath ?? 'N/A'}</strong>
           </p>
           <div className="landing-role-tags">
             {capabilities.roles.length === 0 && <Tag type="gray">No roles</Tag>}
@@ -209,7 +294,7 @@ const AdminPage: FC = () => {
 
       <Column sm={4} md={8} lg={8}>
         <Tile>
-          <h2 className="dashboard-title">Route Access Check</h2>
+          <h2 className="dashboard-title">Route access check</h2>
           <Table useZebraStyles size="sm">
             <TableHead>
               <TableRow>
@@ -234,19 +319,143 @@ const AdminPage: FC = () => {
         </Tile>
       </Column>
 
+      {canSearchFamUserAccess && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <div className="admin-section-heading">
+              <div>
+                <h2 className="dashboard-title">FAM user access lookup</h2>
+                <p>Search IDIR or Business BCeID users to view their LEXIS role assignments.</p>
+              </div>
+              <Button
+                href={famManageUrl}
+                kind="tertiary"
+                rel="noopener noreferrer"
+                size="sm"
+                target="_blank"
+              >
+                Manage in FAM
+              </Button>
+            </div>
+
+            <div className="legacy-search-grid">
+              <TextInput
+                id="famUserSearch"
+                labelText="User name, name, or email"
+                value={famSearchText}
+                onChange={(event) => setFamSearchText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    setFamPageNumber(1)
+                    void runFamUserSearch(1, famPageSize)
+                  }
+                }}
+              />
+              <div className="legacy-search-actions">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setFamPageNumber(1)
+                    void runFamUserSearch(1, famPageSize)
+                  }}
+                  disabled={isFamSearchLoading}
+                >
+                  Search FAM Access
+                </Button>
+              </div>
+            </div>
+
+            {famSearchError && (
+              <InlineNotification
+                kind={famSearchResponse?.configured === false ? 'warning' : 'error'}
+                lowContrast
+                title="FAM user access"
+                subtitle={famSearchError}
+              />
+            )}
+
+            <Table useZebraStyles size="sm">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>User</TableHeader>
+                  <TableHeader>Type</TableHeader>
+                  <TableHeader>Email</TableHeader>
+                  <TableHeader>Role</TableHeader>
+                  <TableHeader>Scope</TableHeader>
+                  <TableHeader>Created</TableHeader>
+                  <TableHeader>Expires</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(famSearchResponse?.results ?? []).map((assignment) => (
+                  <TableRow
+                    key={assignment.assignmentId ?? `${assignment.userName}-${assignment.roleName}`}
+                  >
+                    <TableCell>
+                      <strong>{displayValue(assignment.userName)}</strong>
+                      <div>{displayValue(assignment.fullName)}</div>
+                    </TableCell>
+                    <TableCell>
+                      {displayValue(assignment.userTypeDescription ?? assignment.userTypeCode)}
+                    </TableCell>
+                    <TableCell>{displayValue(assignment.email)}</TableCell>
+                    <TableCell>
+                      <strong>
+                        {displayValue(assignment.roleDisplayName ?? assignment.roleName)}
+                      </strong>
+                      <div>{displayValue(assignment.roleName)}</div>
+                    </TableCell>
+                    <TableCell>{roleScopeLabel(assignment)}</TableCell>
+                    <TableCell>{formatDate(assignment.createDate)}</TableCell>
+                    <TableCell>{formatDate(assignment.expiryDate)}</TableCell>
+                  </TableRow>
+                ))}
+                {famSearchResponse?.results.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7}>
+                      {famSearchResponse.configured
+                        ? 'No FAM role assignments matched the current search.'
+                        : 'FAM user access lookup is not configured.'}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!famSearchResponse && (
+                  <TableRow>
+                    <TableCell colSpan={7}>Search to view FAM role assignments.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+
+            {famSearchResponse && famSearchResponse.configured && (
+              <Pagination
+                backwardText="Previous page"
+                forwardText="Next page"
+                itemsPerPageText="Items per page"
+                page={famPageNumber}
+                pageSize={famPageSize}
+                pageSizes={FAM_USER_ROLE_PAGE_SIZES}
+                totalItems={famSearchResponse.total}
+                onChange={({ page, pageSize }) => {
+                  setFamPageNumber(page)
+                  setFamPageSize(pageSize)
+                  void runFamUserSearch(page, pageSize)
+                }}
+              />
+            )}
+          </Tile>
+        </Column>
+      )}
+
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <h2 className="dashboard-title">Admin and Upload Tools</h2>
-          <p>
-            Open native React workflows for admin and upload tasks while backend migration
-            progresses.
-          </p>
+          <h2 className="dashboard-title">Admin and upload tools</h2>
 
           <Table useZebraStyles>
             <TableHead>
               <TableRow>
                 <TableHeader>Tool</TableHeader>
-                <TableHeader>Required Action</TableHeader>
+                <TableHeader>Required action</TableHeader>
                 <TableHeader>Access</TableHeader>
                 <TableHeader>Open</TableHeader>
               </TableRow>
@@ -254,6 +463,7 @@ const AdminPage: FC = () => {
             <TableBody>
               {[...LEGACY_ADMIN_TOOLS, ...LEGACY_UPLOAD_TOOLS].map((tool) => {
                 const granted = canPerform(tool.requiredAction)
+                const reactPath = tool.reactPath
                 return (
                   <TableRow key={tool.id}>
                     <TableCell>
@@ -276,11 +486,11 @@ const AdminPage: FC = () => {
                         >
                           Open
                         </Button>
-                      ) : tool.reactPath ? (
+                      ) : reactPath ? (
                         <Button
                           kind="secondary"
                           size="sm"
-                          onClick={() => navigate(tool.reactPath)}
+                          onClick={() => navigate(reactPath)}
                           disabled={!granted}
                         >
                           Open
@@ -299,7 +509,7 @@ const AdminPage: FC = () => {
 
       <Column sm={4} md={8} lg={16}>
         <Tile>
-          <h2 className="dashboard-title">Legacy Action Matrix</h2>
+          <h2 className="dashboard-title">Legacy action matrix</h2>
           <p>
             Granted actions: <strong>{grantedActionCount}</strong> of{' '}
             <strong>{LEGACY_ACTION_CATALOG.length}</strong>
@@ -307,7 +517,7 @@ const AdminPage: FC = () => {
           <div className="legacy-search-grid">
             <TextInput
               id="actionFilter"
-              labelText="Filter Action Name"
+              labelText="Filter action name"
               value={actionFilter}
               onChange={(event) => setActionFilter(event.target.value)}
             />

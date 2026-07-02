@@ -1,5 +1,9 @@
 package ca.bc.gov.mof.lexis.service.report;
 
+import static ca.bc.gov.mof.lexis.service.report.ReportParameterUtils.first;
+import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -12,8 +16,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +32,6 @@ import org.springframework.stereotype.Service;
 public class OracleLegacyCsvReportService {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OracleLegacyCsvReportService.class);
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
   private static final String STRING_ARRAY_TYPE = "CBR_VARCHAR2_ARRAY";
 
   private static final String SPECIES_GRADE_CSV_PROCEDURE =
@@ -53,6 +54,8 @@ public class OracleLegacyCsvReportService {
       "{ call LEXIS_REPORTING.EXEMPTION_LEDGER_RPT_CSV(?,?,?,?) }";
   private static final String PERMIT_LEDGER_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.PERMIT_LEDGER_REPORT(?,?,?,?,?,?,?,?,?,?,?,?) }";
+  private static final String APPROVED_EXEMPTION_PROCEDURE =
+      "{ call LEXIS_GROUP_5.FIND_EXEMPTION_BY_NUMBER(?,?) }";
 
   private static final String JURISDICTION_PROVINCIAL = "P";
   private static final String JURISDICTION_FEDERAL = "F";
@@ -67,7 +70,7 @@ public class OracleLegacyCsvReportService {
       LexisJasperReportDefinition definition,
       LexisReportRequestDto request,
       LexisReportFormat format) {
-    if (format == LexisReportFormat.PDF) {
+    if (format != LexisReportFormat.CSV) {
       return Optional.empty();
     }
 
@@ -91,6 +94,7 @@ public class OracleLegacyCsvReportService {
     return switch (definition) {
       case SPECIES_GRADE_REPORT -> loadSpeciesGradeData(request);
       case TEAC_REPORT -> loadTeacData(request);
+      case APPROVED_EXEMPTION_REPORT -> loadApprovedExemptionData(request);
       default -> Optional.empty();
     };
   }
@@ -145,20 +149,20 @@ public class OracleLegacyCsvReportService {
           cs.setDate(1, toSqlDate(first(parameters, "fromDate")));
           cs.setDate(2, toSqlDate(first(parameters, "toDate")));
           setNullableString(cs, 3, csvValue(parameters, "region"));
-          setNullableString(cs, 4, emptyToNull(first(parameters, "permitStatus")));
-          setNullableString(cs, 5, emptyToNull(first(parameters, "exemptionNumber")));
-          setNullableString(cs, 6, emptyToNull(first(parameters, "exemptionType")));
-          setNullableString(cs, 7, emptyToNull(first(parameters, "exemptionReason")));
-          setNullableString(cs, 8, emptyToNull(first(parameters, "growthType")));
-          setNullableString(cs, 9, emptyToNull(first(parameters, "timberMark")));
-          setNullableString(cs, 10, emptyToNull(first(parameters, "forestFileId")));
+          setNullableString(cs, 4, trimToNull(first(parameters, "exemptionNumber")));
+          setNullableString(cs, 5, trimToNull(first(parameters, "exemptionType")));
+          setNullableString(cs, 6, trimToNull(first(parameters, "exemptionReason")));
+          setNullableString(cs, 7, trimToNull(first(parameters, "growthType")));
+          setNullableString(cs, 8, trimToNull(first(parameters, "timberMark")));
+          setNullableString(cs, 9, trimToNull(first(parameters, "forestFileId")));
+          setNullableString(cs, 10, trimToNull(first(parameters, "permitStatus")));
         },
         11);
   }
 
   private Optional<LegacyTabularReportData> loadTeacData(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
-    String jurisdiction = normalize(first(parameters, "exportJurisdictionCode", "jurisdiction"));
+    String jurisdiction = trimToNull(first(parameters, "exportJurisdictionCode", "jurisdiction"));
 
     String procedureCall;
     if (JURISDICTION_PROVINCIAL.equalsIgnoreCase(jurisdiction)) {
@@ -177,6 +181,20 @@ public class OracleLegacyCsvReportService {
           cs.setLong(2, parseLongOrZero(first(parameters, "exportSchedule")));
         },
         3);
+  }
+
+  private Optional<LegacyTabularReportData> loadApprovedExemptionData(LexisReportRequestDto request) {
+    Map<String, String> parameters = requestParameters(request);
+    String exemptionNumber = trimToNull(first(parameters, "exemptionNumber"));
+    if (exemptionNumber == null) {
+      LOGGER.warn("Approved exemption report request missing exemptionNumber");
+      return Optional.empty();
+    }
+
+    return executeCursorProcedure(
+        APPROVED_EXEMPTION_PROCEDURE,
+        cs -> setNullableString(cs, 1, exemptionNumber),
+        2);
   }
 
   private Optional<LexisGeneratedReport> generateApplicationCsv(LexisReportRequestDto request) {
@@ -367,8 +385,9 @@ public class OracleLegacyCsvReportService {
         "EEA.RECEIVED_DATE",
         defaultDate(first(parameters, "fromDate"), "0001-01-01"),
         defaultDate(first(parameters, "toDate"), "9999-12-31"));
-    where.addNumericOrGroup("EEA.ORG_UNIT_NO", csvParts(parameters, "region"));
+    where.addNumericOrGroup("EEA.ORG_UNIT_NO", csvPartsExceptAllRegion(parameters, "region"));
     where.addLike("EEA.EXPORT_JURISDICTION_CODE", first(parameters, "exportJurisdictionCode", "jurisdiction"));
+    where.addNotEquals("EEA.EXPORT_JURISDICTION_CODE", "I");
     where.addLike("EEA.OWNER_CLIENT_NUMBER", first(parameters, "clientNumber"));
     where.addLike("EEA.EXPORT_GROWTH_TYPE_CODE", first(parameters, "growthType"));
     where.addLike("EEA.EXPORT_EXEMPTION_REASON_CODE", first(parameters, "exemptionReason"));
@@ -466,35 +485,39 @@ public class OracleLegacyCsvReportService {
     try (Connection connection = dataSource.getConnection();
         CallableStatement cs = connection.prepareCall(procedureCall)) {
       cs.setString(1, " WHERE " + where.sql());
+      Array bindArray = null;
       if (where.bindValues().isEmpty()) {
         cs.setNull(2, Types.ARRAY);
       } else {
-        Array bindArray = null;
-        try {
-          OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
-          bindArray =
-              oracleConnection.createOracleArray(
-                  STRING_ARRAY_TYPE,
-                  where.bindValues().toArray(new String[0]));
-          cs.setArray(2, bindArray);
-        } finally {
-          if (bindArray != null) {
-            bindArray.free();
-          }
-        }
+        OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
+        bindArray =
+            oracleConnection.createOracleArray(
+                STRING_ARRAY_TYPE,
+                where.bindValues().toArray(new String[0]));
+        cs.setArray(2, bindArray);
       }
       cs.setInt(3, where.bindValues().size());
       cs.registerOutParameter(4, Types.REF_CURSOR);
-      cs.execute();
+      try {
+        cs.execute();
 
-      try (ResultSet rs = (ResultSet) cs.getObject(4)) {
-        if (rs == null) {
-          return Optional.empty();
+        try (ResultSet rs = (ResultSet) cs.getObject(4)) {
+          if (rs == null) {
+            return Optional.empty();
+          }
+          return Optional.of(readTabularData(rs));
         }
-        return Optional.of(readTabularData(rs));
+      } finally {
+        if (bindArray != null) {
+          bindArray.free();
+        }
       }
     } catch (SQLException ex) {
-      LOGGER.warn("CSV report procedure failed [{}]: {}", procedureCall, ex.getMessage());
+      LOGGER.warn(
+          "CSV report procedure failed [{}]: {}; root cause: {}",
+          procedureCall,
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return Optional.empty();
     }
   }
@@ -516,7 +539,11 @@ public class OracleLegacyCsvReportService {
         return Optional.of(readTabularData(rs));
       }
     } catch (SQLException ex) {
-      LOGGER.warn("CSV report procedure failed [{}]: {}", procedureCall, ex.getMessage());
+      LOGGER.warn(
+          "CSV report procedure failed [{}]: {}; root cause: {}",
+          procedureCall,
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return Optional.empty();
     }
   }
@@ -586,15 +613,6 @@ public class OracleLegacyCsvReportService {
     return request.parameters();
   }
 
-  private String first(Map<String, String> parameters, String... keys) {
-    for (String key : keys) {
-      if (parameters.containsKey(key)) {
-        return parameters.get(key);
-      }
-    }
-    return null;
-  }
-
   private String csvValue(Map<String, String> parameters, String... keys) {
     for (String key : keys) {
       String value = first(parameters, key);
@@ -624,8 +642,13 @@ public class OracleLegacyCsvReportService {
     return parts;
   }
 
+  private List<String> csvPartsExceptAllRegion(Map<String, String> parameters, String... keys) {
+    List<String> parts = csvParts(parameters, keys);
+    return parts.size() == 1 && "0".equals(parts.get(0)) ? List.of() : parts;
+  }
+
   private String normalizeCsv(String value) {
-    String normalized = normalize(value);
+    String normalized = trimToNull(value);
     if (normalized == null) {
       return "";
     }
@@ -637,7 +660,7 @@ public class OracleLegacyCsvReportService {
     String[] parts = normalized.split(",");
     StringBuilder builder = new StringBuilder();
     for (String part : parts) {
-      String trimmed = normalize(part);
+      String trimmed = trimToNull(part);
       if (trimmed == null) {
         continue;
       }
@@ -648,14 +671,6 @@ public class OracleLegacyCsvReportService {
     }
 
     return builder.toString();
-  }
-
-  private String normalize(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private String defaultDate(String value, String fallback) {
@@ -679,36 +694,17 @@ public class OracleLegacyCsvReportService {
     return value;
   }
 
-  private String emptyToNull(String value) {
-    return normalize(value);
-  }
-
   private java.sql.Date toSqlDate(String value) {
     LocalDate localDate = parseDate(value);
     return localDate == null ? null : java.sql.Date.valueOf(localDate);
   }
 
   private LocalDate parseDate(String raw) {
-    String value = normalize(raw);
-    if (value == null) {
-      return null;
-    }
-
-    try {
-      return LocalDate.parse(value);
-    } catch (DateTimeParseException ignored) {
-      // Fall through.
-    }
-
-    try {
-      return LocalDate.parse(value, LEGACY_DATE_FORMATTER);
-    } catch (DateTimeParseException ignored) {
-      return null;
-    }
+    return parseIsoOrLegacyDate(raw);
   }
 
   private long parseLongOrZero(String raw) {
-    String value = normalize(raw);
+    String value = trimToNull(raw);
     if (value == null) {
       return 0L;
     }
@@ -717,6 +713,15 @@ public class OracleLegacyCsvReportService {
     } catch (NumberFormatException ex) {
       return 0L;
     }
+  }
+
+  private static String rootCauseMessage(Throwable throwable) {
+    Throwable root = throwable;
+    while (root.getCause() != null && root.getCause() != root) {
+      root = root.getCause();
+    }
+    String message = root.getMessage();
+    return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
   }
 
   private void setNullableString(CallableStatement cs, int index, String value) throws SQLException {

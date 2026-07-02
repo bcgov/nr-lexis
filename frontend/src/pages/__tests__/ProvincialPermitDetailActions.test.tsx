@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
@@ -21,6 +21,8 @@ import {
   removePermitInvoiceDocument,
 } from '@/service/provincial-permit-documents-invoices-service'
 import { runReport } from '@/service/report-service'
+import { submitAdminUpload } from '@/service/admin-upload-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -31,6 +33,13 @@ vi.mock('@/service/lexis-detail-service', () => ({
 }))
 
 vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
+  EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: {
+    items: [],
+    fees: [],
+    gbmsEvents: [],
+    oicItems: [],
+    boicItems: [],
+  },
   fetchProvincialPermitDetailTabs: vi.fn(),
 }))
 
@@ -49,6 +58,12 @@ vi.mock('@/service/report-service', () => ({
   runReport: vi.fn(),
 }))
 
+vi.mock('@/service/admin-upload-service', () => ({
+  submitAdminUpload: vi.fn(),
+}))
+
+Element.prototype.scrollIntoView = vi.fn()
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialPermitDetail = vi.mocked(fetchProvincialPermitDetail)
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailTabs)
@@ -61,6 +76,7 @@ const mockedRemovePermitApplicationDocument = vi.mocked(removePermitApplicationD
 const mockedRemovePermitDocument = vi.mocked(removePermitDocument)
 const mockedRemovePermitInvoiceDocument = vi.mocked(removePermitInvoiceDocument)
 const mockedRunReport = vi.mocked(runReport)
+const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 
 const permitDetail: ProvincialPermitDetail = {
   permitNumber: 777,
@@ -98,17 +114,17 @@ const tabsResult: ProvincialPermitDetailTabsData = {
   boicItems: [],
 }
 
-const LocationProbe = () => {
-  const location = useLocation()
-  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
+const selectPermitDetailTab = async (name: string) => {
+  const tab = await screen.findByRole('tab', { name })
+  if (tab.getAttribute('aria-selected') !== 'true') {
+    await userEvent.click(tab)
+  }
 }
 
 describe('Provincial Permit Detail Action Smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: () => true,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialPermitDetail.mockResolvedValue(permitDetail)
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
     mockedAddPermitInvoice.mockResolvedValue({
@@ -147,6 +163,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       success: true,
       source: 'api',
     })
+    mockedSubmitAdminUpload.mockResolvedValue({
+      status: 'success',
+      message: 'Invoice upload submitted.',
+    })
   })
 
   it('adds invoice and refreshes invoice rows', async () => {
@@ -184,8 +204,20 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    const invoiceNumberInput = await screen.findByLabelText('Invoice Number')
-    const exportValueInput = await screen.findByLabelText('Export Value')
+    for (const tabName of [
+      'Summary',
+      'Items',
+      'Fees',
+      'Billing',
+      'Orders',
+      'Documents',
+      'Invoices',
+    ]) {
+      expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
+    }
+    await selectPermitDetailTab('Items')
+    const invoiceNumberInput = await screen.findByLabelText('Invoice number')
+    const exportValueInput = await screen.findByLabelText('Export value')
     const addInvoiceButton = await screen.findByRole('button', { name: 'Add Invoice' })
     await userEvent.type(invoiceNumberInput, 'INV-NEW')
     await userEvent.type(exportValueInput, '100')
@@ -202,9 +234,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(2)
       expect(screen.getByText('INV-NEW')).toBeInTheDocument()
     })
-  })
+  }, 15000)
 
-  it('navigates to upload center with permit context', async () => {
+  it('shows field validation when adding invoice without required values', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -212,7 +244,50 @@ describe('Provincial Permit Detail Action Smoke', () => {
             path="/provincial/permit/:permitNumber"
             element={<ProvincialPermitDetailsPage />}
           />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Items')
+    const addInvoiceButton = await screen.findByRole('button', { name: 'Add Invoice' })
+    await userEvent.click(addInvoiceButton)
+
+    expect(screen.getAllByText('Invoice number is required.').length).toBeGreaterThan(0)
+    expect(screen.getByText('Invoice export value is required.')).toBeInTheDocument()
+    expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
+  })
+
+  it('blocks add invoice when invoice number exceeds the legacy length limit', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Items')
+    await userEvent.type(await screen.findByLabelText('Invoice number'), '1234567890')
+    await userEvent.type(screen.getByLabelText('Export value'), '100')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add Invoice' }))
+
+    expect(
+      screen.getAllByText('Invoice number must be 9 characters or fewer.').length,
+    ).toBeGreaterThan(0)
+    expect(mockedAddPermitInvoice).not.toHaveBeenCalled()
+  })
+
+  it('jumps from the permit document action to the embedded upload panel', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
         </Routes>
       </MemoryRouter>,
     )
@@ -221,11 +296,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(uploadButton).toBeEnabled()
     await userEvent.click(uploadButton)
 
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/admin/uploads?type=permit&permitNumber=777')
+    await waitFor(() => {
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    })
+    expect(await screen.findByText('Upload permit documents')).toBeInTheDocument()
   })
 
-  it('navigates to invoice upload context with conversion rate lookup', async () => {
+  it('jumps to embedded invoice upload with conversion rate lookup', async () => {
     mockedFetchPermitInvoiceConversionRate.mockResolvedValue({
       conversionRate: '1.37',
       source: 'api',
@@ -238,7 +315,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
             path="/provincial/permit/:permitNumber"
             element={<ProvincialPermitDetailsPage />}
           />
-          <Route path="/admin/uploads" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -249,10 +325,51 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await waitFor(() => {
       expect(mockedFetchPermitInvoiceConversionRate).toHaveBeenCalledTimes(1)
-      expect(screen.getByTestId('location').textContent).toBe(
-        '/admin/uploads?type=invoice&permitNumber=777&invoiceConversionRate=1.37',
+      expect(screen.getByLabelText('Upload invoice conversion rate')).toHaveValue('1.37')
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    })
+  })
+
+  it('uploads invoice files inline and refreshes permit document data', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Invoices')
+    const invoicePanel = (await screen.findByText('Upload invoices')).closest(
+      '.detail-document-upload',
+    )
+    expect(invoicePanel).toBeTruthy()
+    const invoiceControls = within(invoicePanel as HTMLElement)
+    const file = new File(['invoice upload'], 'invoice.pdf', { type: 'application/pdf' })
+
+    await userEvent.type(invoiceControls.getByLabelText('Upload invoice number'), 'INV123')
+    await userEvent.type(invoiceControls.getByLabelText('Upload invoice export value'), '1000')
+    await userEvent.upload(invoiceControls.getByLabelText('Document File'), file)
+    await userEvent.click(invoiceControls.getByRole('button', { name: 'Submit Upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'invoice',
+        expect.objectContaining({
+          permitNumber: '777',
+          salesInvoiceNumber: 'INV123',
+          invoiceExportValue: '1000',
+          invoiceConversionRate: '1.00',
+          invoiceFeeInLieu: '1.00',
+          file,
+        }),
       )
     })
+    expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(2)
+    expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(2)
   })
 
   it('opens permit document from API response', async () => {
@@ -286,6 +403,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Documents')
     await screen.findByText('permit-doc.pdf')
     const openDocumentButton = await screen.findByRole('button', { name: 'Open' })
     await userEvent.click(openDocumentButton)
@@ -326,6 +444,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Documents')
     await screen.findByText('permit-doc.pdf')
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     expect(deleteButton).toBeEnabled()
@@ -339,9 +458,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('disables invoice document delete when invoice upload permission is missing', async () => {
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) => action !== '/fileInvoiceUpload',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/fileInvoiceUpload',
+      }),
+    )
     mockedFetchPermitDocuments.mockResolvedValue({
       rows: [
         {
@@ -366,6 +487,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Documents')
     await screen.findByText('locked-invoice-doc.pdf')
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     expect(deleteButton).toBeDisabled()
@@ -402,6 +524,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
+    await selectPermitDetailTab('Documents')
     await screen.findByText('application-doc.pdf')
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     await userEvent.click(deleteButton)
@@ -414,6 +537,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('uses report service blob response when opening permit report', async () => {
+    mockedFetchPermitInvoices.mockResolvedValue({
+      rows: [
+        {
+          id: 'INV-GBMS-1',
+          invoiceNumber: 'INV-GBMS',
+          exportValueCad: '10.00',
+          conversionRate: '1.00',
+          feeInLieu: '0.00',
+          invoiceFound: true,
+        },
+      ],
+      source: 'api',
+    })
     mockedRunReport.mockResolvedValue({
       source: 'api',
       blob: new Blob(['permit-report']),
@@ -452,6 +588,28 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
+  it('gates permit report action on the legacy permit report permission', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/permitReport',
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reportButton = await screen.findByRole('button', { name: 'Open Permit Report' })
+    expect(reportButton).toBeDisabled()
+  })
+
   it('shows detail error contract when permit detail endpoint fails', async () => {
     mockedFetchProvincialPermitDetail.mockRejectedValue(new Error('backend down'))
 
@@ -472,5 +630,29 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()
     expect(mockedFetchPermitDocuments).not.toHaveBeenCalled()
     expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
+  })
+
+  it('keeps permit table tabs available without an unavailable warning when tab data fails', async () => {
+    mockedFetchProvincialPermitDetailTabs.mockRejectedValue(new Error('tables unavailable'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Items')
+    expect(await screen.findByRole('heading', { name: /Permit items/ })).toBeInTheDocument()
+    expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
+      permitNumber: '777',
+      receiptNumber: 'R-1',
+    })
+    expect(screen.queryByText('Permit Tables Unavailable')).not.toBeInTheDocument()
+    expect(screen.getByText('No permit item rows matched the current filter.')).toBeInTheDocument()
   })
 })

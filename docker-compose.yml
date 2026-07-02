@@ -5,7 +5,7 @@
 # No database service: LEXIS connects to shared Oracle directly.
 #
 # Prereqs (host machine):
-#   1. BCGov VPN is connected.
+#   1. Network access to the BC Gov Oracle environment is available.
 #   2. backend/src/main/resources/application-local.yml exists.
 #   3. backend/src/main/resources/cert/jssecacerts exists.
 #   4. frontend/.env exists (copy from frontend/.env.example).
@@ -36,7 +36,7 @@ services:
       - ./backend:/app
       - maven-cache:/root/.m2
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
       interval: 30s
       timeout: 5s
       start_period: 90s

@@ -13,6 +13,7 @@ import {
   fetchProvincialApplicationDetail,
   fetchProvincialExemptionDetail,
 } from '@/service/lexis-detail-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -31,13 +32,74 @@ vi.mock('@/context/auth/useAuth', () => ({
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchProvincialApplicationDetail: vi.fn(),
   fetchProvincialExemptionDetail: vi.fn(),
+  releaseApplicationEditLock: vi.fn(),
+}))
+
+vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientData: vi.fn().mockResolvedValue(null),
+  fetchApplicationClientContacts: vi.fn().mockResolvedValue([]),
+  fetchApplicationClientLocations: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/service/application-review-search-service', () => ({
+  approveApplicationReview: vi.fn(),
+  sendApplicationReviewStatusEmail: vi.fn(),
+  updateApplicationReviewStatus: vi.fn(),
+}))
+
+vi.mock('@/service/provincial-application-documents-service', () => ({
+  fetchApplicationDocuments: vi.fn().mockResolvedValue({ rows: [] }),
+  openApplicationDocument: vi.fn(),
+  removeApplicationDocument: vi.fn(),
+}))
+
+vi.mock('@/service/provincial-exemption-documents-service', () => ({
+  fetchExemptionDocuments: vi.fn().mockResolvedValue({ rows: [] }),
+  openExemptionDocument: vi.fn(),
+  removeExemptionDocument: vi.fn(),
+}))
+
+vi.mock('@/service/provincial-application-items-service', () => ({
+  checkApplicationVolumeUsage: vi.fn(),
+  fetchApplicationEndUsesForSpeciesRegion: vi.fn().mockResolvedValue([]),
+  fetchApplicationPermits: vi.fn().mockResolvedValue([]),
+  fetchApplicationRemainingSpecies: vi.fn().mockResolvedValue([]),
+  fetchApplicationSpecies: vi.fn().mockResolvedValue([]),
+  fetchApplicationSummarySnapshot: vi.fn().mockResolvedValue(null),
+  saveApplicationRemark: vi.fn(),
+  updateApplicationSummary: vi.fn(),
+}))
+
+vi.mock('@/service/search-options-service', () => ({
+  fetchApplicationReviewOptions: vi.fn().mockResolvedValue({ reviewStatuses: [] }),
+  fetchProvincialApplicationOptions: vi.fn().mockResolvedValue({
+    applicationStatuses: [],
+    currentSchedules: [],
+    exemptionReasons: [],
+    exemptionTypes: [],
+    growthTypes: [],
+    productTypes: [],
+    regions: [],
+  }),
+}))
+
+vi.mock('@/service/report-service', () => ({
+  runReport: vi.fn(),
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
 const mockedFetchProvincialExemptionDetail = vi.mocked(fetchProvincialExemptionDetail)
 
-const defaultCanPerform = () => true
+const defaultCanPerform = (action: string) =>
+  [
+    '/applicationSearch',
+    '/exemptionDetails',
+    '/exemptionSearch',
+    '/offersSearch',
+    '/permitSearch',
+    'createOffer',
+  ].includes(action)
 
 const applicationDetail: ProvincialApplicationDetail = {
   applicationNumber: 321,
@@ -62,8 +124,16 @@ const applicationDetail: ProvincialApplicationDetail = {
   exemptionApprover: false,
   locked: false,
   packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 5 }],
-  remarks: [{ title: 'Note', remark: 'ok' }],
-  offers: [{ offerNumber: 'OFF-1', validOffer: true, withdrawalDate: null }],
+  remarks: [{ remarkId: 88, title: 'Note', remark: 'ok' }],
+  offers: [
+    {
+      offerNumber: 'OFF-1',
+      companyName: 'Example Lumber',
+      receivedDate: '2026-01-04',
+      validOffer: true,
+      withdrawalDate: null,
+    },
+  ],
 }
 
 const exemptionDetail: ProvincialExemptionDetail = {
@@ -90,9 +160,7 @@ const exemptionDetail: ProvincialExemptionDetail = {
 describe('Detail Create Action Smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: defaultCanPerform,
-    } as any)
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: defaultCanPerform }))
   })
 
   it('enables Create Offer and navigates with prefill from provincial application detail', async () => {
@@ -109,13 +177,43 @@ describe('Detail Create Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    const createOfferButton = await screen.findByRole('button', { name: 'Create Offer' })
+    const createOfferButton = await screen.findByRole('button', { name: /Create offer/i })
     expect(createOfferButton).toBeEnabled()
 
     await userEvent.click(createOfferButton)
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/provincial/offers/create?applicationNumber=321&packageNumber=PKG-1&offeringClientNumber=00011122&region=12',
+      '/provincial/offers/create?applicationNumber=321&packageNumber=PKG-1&packageNumbers=PKG-1&offeringClientNumber=00011122&region=12',
+    )
+  })
+
+  it('navigates to Create Offer with all application package options', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [
+        { packageNumber: 'PKG-1', volume: 100, pieceCount: 5 },
+        { packageNumber: 'PKG-2', volume: 200, pieceCount: 8 },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createOfferButton = await screen.findByRole('button', { name: /Create offer/i })
+    expect(createOfferButton).toBeEnabled()
+
+    await userEvent.click(createOfferButton)
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/provincial/offers/create?applicationNumber=321&packageNumber=PKG-1&packageNumbers=PKG-1%2CPKG-2&offeringClientNumber=00011122&region=12',
     )
   })
 
@@ -136,11 +234,53 @@ describe('Detail Create Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    const createOfferButton = await screen.findByRole('button', { name: 'Create Offer' })
+    const createOfferButton = await screen.findByRole('button', { name: /Create offer/i })
     expect(createOfferButton).toBeDisabled()
   })
 
-  it('enables Create Permit and navigates with prefill from provincial exemption detail', async () => {
+  it('disables Create Offer until the application has at least one package', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createOfferButton = await screen.findByRole('button', { name: /Create offer/i })
+    expect(createOfferButton).toBeDisabled()
+  })
+
+  it('disables Create Offer for industry users', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      industryUser: true,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createOfferButton = await screen.findByRole('button', { name: /Create offer/i })
+    expect(createOfferButton).toBeDisabled()
+  })
+
+  it('does not expose the retired Create Permit action on exemption detail', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue(exemptionDetail)
 
     render(
@@ -154,35 +294,7 @@ describe('Detail Create Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    const createPermitButton = await screen.findByRole('button', { name: 'Create Permit' })
-    expect(createPermitButton).toBeEnabled()
-
-    await userEvent.click(createPermitButton)
-
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/provincial/permit/create?exemptionNumber=EX-777&applicationNumber=654&ownerClientNumber=00055566&applicantClientNumber=00077788',
-    )
-  })
-
-  it('disables Create Permit when exemption is not active', async () => {
-    mockedFetchProvincialExemptionDetail.mockResolvedValue({
-      ...exemptionDetail,
-      exemptionStatusCode: 'CLOSED',
-      exemptionStatusDescription: 'Closed',
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
-        <Routes>
-          <Route
-            path="/provincial/exemption/:exemptionNumber"
-            element={<ProvincialExemptionDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const createPermitButton = await screen.findByRole('button', { name: 'Create Permit' })
-    expect(createPermitButton).toBeDisabled()
+    await screen.findByText('Exemption summary')
+    expect(screen.queryByRole('button', { name: /Create permit/i })).not.toBeInTheDocument()
   })
 })

@@ -1,5 +1,10 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.first;
+
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
@@ -27,9 +32,10 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
-import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
@@ -38,9 +44,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -56,16 +64,21 @@ public class PermitDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PermitDetailsRpcController.class);
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
+  private static final String LEGACY_ACTION_SAVE_PERMIT = "savePermit";
   private static final String LEGACY_PERMIT_LOCK_SESSION_KEY = "PERMIT_LOCK";
 
   private final ObjectProvider<PermitDetailsRpcService> serviceProvider;
   private final LexisSessionService sessionService;
+  private final LexisAuthorizationService authorizationService;
   private final Set<String> configuredIndustryRoles;
 
   public PermitDetailsRpcController(
-      ObjectProvider<PermitDetailsRpcService> serviceProvider, LexisSessionService sessionService) {
+      ObjectProvider<PermitDetailsRpcService> serviceProvider,
+      LexisSessionService sessionService,
+      LexisAuthorizationService authorizationService) {
     this.serviceProvider = serviceProvider;
     this.sessionService = sessionService;
+    this.authorizationService = authorizationService;
     this.configuredIndustryRoles = sessionService.getConfiguredIndustryRoles();
   }
 
@@ -321,6 +334,10 @@ public class PermitDetailsRpcController {
   @PostMapping("/add-permit")
   public ResponseEntity<PermitMutationRpcResponseDto> addPermit(
       HttpServletRequest request, Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for add permit");
@@ -336,6 +353,10 @@ public class PermitDetailsRpcController {
   @PostMapping("/update-permit")
   public ResponseEntity<PermitMutationRpcResponseDto> updatePermit(
       HttpServletRequest request, Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for update permit");
@@ -351,6 +372,10 @@ public class PermitDetailsRpcController {
   @PostMapping("/update-shipping")
   public ResponseEntity<PermitMutationRpcResponseDto> updateShipping(
       HttpServletRequest request, Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for update shipping");
@@ -371,6 +396,10 @@ public class PermitDetailsRpcController {
       @RequestParam(name = "invoiceConversionRate", required = false) String invoiceConversionRate,
       @RequestParam(name = "invoiceFeeInLieu", required = false) String invoiceFeeInLieu,
       Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for add invoice");
@@ -499,7 +528,12 @@ public class PermitDetailsRpcController {
 
   @DeleteMapping("/document/permit")
   public ResponseEntity<RemoveDocumentResponseDto> removePermitDocument(
-      @RequestParam(name = "documentId", required = false) String documentId) {
+      @RequestParam(name = "documentId", required = false) String documentId,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for remove permit document");
@@ -512,7 +546,12 @@ public class PermitDetailsRpcController {
 
   @DeleteMapping("/document/application")
   public ResponseEntity<RemoveDocumentResponseDto> removeApplicationDocument(
-      @RequestParam(name = "documentId", required = false) String documentId) {
+      @RequestParam(name = "documentId", required = false) String documentId,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for remove application document");
@@ -525,7 +564,12 @@ public class PermitDetailsRpcController {
 
   @DeleteMapping("/document/invoice")
   public ResponseEntity<RemoveDocumentResponseDto> removeInvoiceDocument(
-      @RequestParam(name = "documentId", required = false) String documentId) {
+      @RequestParam(name = "documentId", required = false) String documentId,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Permit RPC service unavailable - returning no content for remove invoice document");
@@ -537,74 +581,41 @@ public class PermitDetailsRpcController {
   }
 
   private PermitMutationRequestDto buildPermitMutationRequest(HttpServletRequest request) {
+    MultiValueMap<String, String> parameters = fromRequest(request);
     return new PermitMutationRequestDto(
-        firstParam(request, "permitNumber"),
-        firstParam(request, "permitStatus"),
-        firstParam(request, "permitSubmitDate"),
-        firstParam(request, "permitIssueDate"),
-        firstParam(request, "permitExpiryDate"),
-        firstParam(request, "permitRequestDate"),
-        firstParam(request, "exemptionNumber"),
-        firstParam(request, "destinationCompanyName"),
-        firstParam(request, "destinationCountry"),
-        firstParam(request, "transportType"),
-        firstParam(request, "transportName"),
-        firstParam(request, "estimatedShippingDate"),
-        firstParam(request, "portOfExport"),
-        firstParam(request, "otherPortOfExport"),
-        firstParam(request, "permitReceiptNo", "receiptNumber"),
-        firstParam(request, "permitRemarks"),
-        firstParam(request, "permitGrowthType", "growthType"),
-        firstParam(request, "permitTotalVolume"),
-        firstParam(request, "permitNumberOfPieces", "permitTotalPieces"),
-        firstParam(request, "orgUnitNo", "region"),
-        firstParam(request, "ownerClientNumber"),
-        firstParam(request, "ownerClientLocation"),
-        firstParam(request, "agentClientNumber"),
-        firstParam(request, "agentClientLocation"),
-        firstParam(request, "oicApplicationNumber"),
-        firstParam(request, "oicRegion"),
-        firstParam(request, "oicPermitTotalPieces"),
-        firstParam(request, "oicPermitTotalVolume"),
-        firstParam(request, "packageAgeClass"),
-        firstParam(request, "packageProductType"),
-        firstParam(request, "overrideInd"),
-        firstParam(request, "overrideFee"),
-        firstParam(request, "overrideComment"));
-  }
-
-  private String firstParam(HttpServletRequest request, String... names) {
-    for (String name : names) {
-      String value = request.getParameter(name);
-      if (value != null && !value.isBlank()) {
-        return value;
-      }
-    }
-    return null;
-  }
-
-  private Long parsePositiveLong(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(rawValue.trim());
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
-  private String sanitizeFileName(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    String normalized = rawValue.trim();
-    int slashIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
-    if (slashIndex >= 0 && slashIndex < normalized.length() - 1) {
-      normalized = normalized.substring(slashIndex + 1);
-    }
-    return normalized;
+        first(parameters, "permitNumber"),
+        first(parameters, "permitStatus"),
+        first(parameters, "permitSubmitDate"),
+        first(parameters, "permitIssueDate"),
+        first(parameters, "permitExpiryDate"),
+        first(parameters, "permitRequestDate"),
+        first(parameters, "exemptionNumber"),
+        first(parameters, "destinationCompanyName"),
+        first(parameters, "destinationCountry"),
+        first(parameters, "transportType"),
+        first(parameters, "transportName"),
+        first(parameters, "estimatedShippingDate"),
+        first(parameters, "portOfExport"),
+        first(parameters, "otherPortOfExport"),
+        first(parameters, "permitReceiptNo", "receiptNumber"),
+        first(parameters, "permitRemarks"),
+        first(parameters, "permitGrowthType", "growthType"),
+        first(parameters, "permitTotalVolume"),
+        first(parameters, "permitNumberOfPieces", "permitTotalPieces"),
+        first(parameters, "orgUnitNo", "region"),
+        first(parameters, "ownerClientNumber"),
+        first(parameters, "ownerClientLocation"),
+        first(parameters, "agentClientNumber"),
+        first(parameters, "agentClientLocation"),
+        first(parameters, "oicApplicationNumber"),
+        first(parameters, "oicRegion"),
+        first(parameters, "oicPermitTotalPieces"),
+        first(parameters, "oicPermitTotalVolume"),
+        first(parameters, "packageAgeClass"),
+        first(parameters, "packageProductType"),
+        first(parameters, "overrideInd"),
+        first(parameters, "overrideFee"),
+        first(parameters, "overrideComment"));
   }
 
   private boolean isMinistryUser(Authentication authentication) {
@@ -626,6 +637,11 @@ public class PermitDetailsRpcController {
       return false;
     }
     return roles.contains(ROLE_READ_ONLY);
+  }
+
+  private boolean canSavePermit(Authentication authentication) {
+    return authorizationService.canPerformAction(
+        sessionService.parseRolesFromPrincipal(authentication), LEGACY_ACTION_SAVE_PERMIT);
   }
 
   private BigDecimal parsePositiveDecimal(String rawValue) {

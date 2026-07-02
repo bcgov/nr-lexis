@@ -40,7 +40,7 @@ class LegacyReportRouteControllerTest {
   }
 
   @Test
-  void shouldDelegateGenerateWithExplicitPdfFormat() {
+  void shouldDelegateGenerateWithExplicitPdfFormatAndNormalizeLegacyClientNumber() {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/offerReport.do");
 
@@ -49,14 +49,14 @@ class LegacyReportRouteControllerTest {
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
     multi.add("actionMapping", "generate");
     multi.add("outputFormat", "PDF");
-    multi.add("clientNumber", "1234567");
+    multi.add("clientNumber", "123.4");
 
     ResponseEntity<byte[]> response =
         controller.legacyReport(
             Map.of(
                 "actionMapping", "generate",
                 "outputFormat", "PDF",
-                "clientNumber", "1234567"),
+                "clientNumber", "123.4"),
             multi,
             request);
 
@@ -66,8 +66,36 @@ class LegacyReportRouteControllerTest {
 
     LexisReportRequestDto delegated = requestCaptor.getValue();
     assertThat(delegated.format()).isEqualTo("PDF");
-    assertThat(delegated.parameters()).containsEntry("clientNumber", "1234567");
+    assertThat(delegated.parameters()).containsEntry("clientNumber", "000123.4");
     assertThat(delegated.parameters()).containsEntry("legacyActionMapping", "generate");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldPreserveApplicationClientNumberBecauseLegacyFormDidNotNormalizeIt() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/applicationReport.do");
+
+    when(reportController.applicationReport(any())).thenReturn(ResponseEntity.ok(new byte[] {1, 2}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+    multi.add("clientNumber", "1234567");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "clientNumber", "1234567"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).applicationReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.parameters()).containsEntry("clientNumber", "1234567");
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
   }
 
@@ -105,7 +133,37 @@ class LegacyReportRouteControllerTest {
   }
 
   @Test
-  void shouldRouteTenureGenerateActionMappingsAndMapXlsToCsv() {
+  void shouldMapLegacyNonPdfOutputFormatsToCsvForGenerateActions() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/offerReport.do");
+
+    when(reportController.offerReport(any())).thenReturn(ResponseEntity.ok(new byte[] {3, 4}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+    multi.add("outputFormat", "XLS");
+    multi.add("region", "1904");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "outputFormat", "XLS"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).offerReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.format()).isEqualTo("CSV");
+    assertThat(delegated.parameters()).containsEntry("region", "1904");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldRouteTenureGenerateActionMappingsAndKeepSpreadsheetFormat() {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
 
@@ -115,6 +173,7 @@ class LegacyReportRouteControllerTest {
     multi.add("actionMapping", "generateTenureReport");
     multi.add("outputFormat", "XLS");
     multi.add("reportingDistrict", "DSE");
+    multi.add("clientNumber", "77881");
 
     ResponseEntity<byte[]> response =
         controller.legacyReport(
@@ -130,9 +189,237 @@ class LegacyReportRouteControllerTest {
     verify(reportController).tenureReport(requestCaptor.capture());
 
     LexisReportRequestDto delegated = requestCaptor.getValue();
-    assertThat(delegated.format()).isEqualTo("CSV");
+    assertThat(delegated.format()).isEqualTo("XLS");
     assertThat(delegated.parameters()).containsEntry("legacyActionMapping", "generateTenureReport");
     assertThat(delegated.parameters()).containsEntry("reportingDistrict", "DSE");
+    assertThat(delegated.parameters()).containsEntry("clientNumber", "00077881");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldMapLegacyTenureCsvValueToSpreadsheetFormat() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
+
+    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {7, 7}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generateFileReport");
+    multi.add("outputFormat", "CSV");
+    multi.add("forestFileId", "A12345");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generateFileReport",
+                "outputFormat", "CSV",
+                "forestFileId", "A12345"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).tenureReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.format()).isEqualTo("XLS");
+    assertThat(delegated.parameters()).containsEntry("legacyActionMapping", "generateFileReport");
+    assertThat(delegated.parameters()).containsEntry("forestFileId", "A12345");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldDefaultLegacyTenureGenerateToSpreadsheetWhenOutputFormatMissing() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
+
+    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {7, 8}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generateMarkReport");
+    multi.add("timberMark1", "TM001");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generateMarkReport",
+                "timberMark1", "TM001"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).tenureReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.format()).isEqualTo("XLS");
+    assertThat(delegated.parameters()).containsEntry("legacyActionMapping", "generateMarkReport");
+    assertThat(delegated.parameters()).containsEntry("timberMark1", "TM001");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldMapLegacyTenureNonPdfOutputValuesToSpreadsheetFormat() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
+
+    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {7, 9}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generateTenureReport");
+    multi.add("outputFormat", "unexpected");
+    multi.add("tenureType1", "A01");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generateTenureReport",
+                "outputFormat", "unexpected",
+                "tenureType1", "A01"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).tenureReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.format()).isEqualTo("XLS");
+    assertThat(delegated.parameters()).containsEntry("legacyActionMapping", "generateTenureReport");
+    assertThat(delegated.parameters()).containsEntry("tenureType1", "A01");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldNormalizeLegacySpeciesGradeMarkAndFileFieldsToUppercase() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/api/lexis/speciesGradeReport.do");
+
+    when(reportController.speciesGradeReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 1}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+    multi.add("outputFormat", "PDF");
+    multi.add("timberMark", "tm123");
+    multi.add("forestFileId", "a12345");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "outputFormat", "PDF",
+                "timberMark", "tm123",
+                "forestFileId", "a12345"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).speciesGradeReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.parameters())
+        .containsEntry("timberMark", "TM123")
+        .containsEntry("forestFileId", "A12345");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldNormalizeLegacyPermitLedgerTimberMarkToUppercase() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/api/lexis/permitLedgerReport.do");
+
+    when(reportController.permitLedgerReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 2}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+    multi.add("outputFormat", "PDF");
+    multi.add("timberMark", "tm456");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "outputFormat", "PDF",
+                "timberMark", "tm456"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).permitLedgerReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.parameters()).containsEntry("timberMark", "TM456");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldNormalizeLegacyTenureIndexedFieldsAndForestFileToUppercase() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
+
+    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 3}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generateMarkReport");
+    multi.add("outputFormat", "PDF");
+    multi.add("tenureType1", "a01");
+    multi.add("timberMark1", "tm001");
+    multi.add("forestFileId", "a12345");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generateMarkReport",
+                "outputFormat", "PDF",
+                "tenureType1", "a01",
+                "timberMark1", "tm001",
+                "forestFileId", "a12345"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).tenureReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.parameters())
+        .containsEntry("tenureType1", "A01")
+        .containsEntry("timberMark1", "TM001")
+        .containsEntry("forestFileId", "A12345");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void shouldNormalizeRepeatedLegacyValuesBeforeJoiningThem() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
+
+    when(reportController.tenureReport(any())).thenReturn(ResponseEntity.ok(new byte[] {5, 4}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generateMarkReport");
+    multi.add("outputFormat", "PDF");
+    multi.add("timberMark1", "tm001");
+    multi.add("timberMark1", "tm002");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generateMarkReport",
+                "outputFormat", "PDF"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).tenureReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.parameters()).containsEntry("timberMark1", "TM001,TM002");
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
   }
 
@@ -168,31 +455,67 @@ class LegacyReportRouteControllerTest {
   }
 
   @Test
-  void shouldHandleIndustryBiweeklyGeneratePdfActionMapping() {
+  void shouldKeepApprovedExemptionReportPdfOnlyWhenOutputFormatIsProvided() {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
-    MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/lexis/biweeklyListing.do");
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/api/lexis/approvedExemptionReport.do");
 
-    when(reportController.biweeklyListing(any())).thenReturn(ResponseEntity.ok(new byte[] {8, 8}));
+    when(reportController.approvedExemptionReport(any()))
+        .thenReturn(ResponseEntity.ok(new byte[] {4, 4}));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
-    multi.add("actionMapping", "generateIndustryPDF");
-    multi.add("jurisdiction", "P");
+    multi.add("actionMapping", "generate");
+    multi.add("outputFormat", "CSV");
+    multi.add("exemptionNumber", "E-12345");
 
     ResponseEntity<byte[]> response =
         controller.legacyReport(
             Map.of(
-                "actionMapping", "generateIndustryPDF",
-                "jurisdiction", "P"),
+                "actionMapping", "generate",
+                "outputFormat", "CSV",
+                "exemptionNumber", "E-12345"),
             multi,
             request);
 
     ArgumentCaptor<LexisReportRequestDto> requestCaptor =
         ArgumentCaptor.forClass(LexisReportRequestDto.class);
-    verify(reportController).biweeklyListing(requestCaptor.capture());
+    verify(reportController).approvedExemptionReport(requestCaptor.capture());
 
     LexisReportRequestDto delegated = requestCaptor.getValue();
     assertThat(delegated.format()).isEqualTo("PDF");
-    assertThat(delegated.parameters()).containsEntry("jurisdiction", "P");
+    assertThat(delegated.parameters()).containsEntry("exemptionNumber", "E-12345");
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
   }
+
+  @Test
+  void shouldDefaultPermitReportGenerateToPdfWhenOutputFormatMissing() {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/api/lexis/permitReport.do");
+
+    when(reportController.permitReport(any()))
+        .thenReturn(ResponseEntity.ok(new byte[] {4, 3}));
+
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("actionMapping", "generate");
+    multi.add("permitNumber", "900100");
+
+    ResponseEntity<byte[]> response =
+        controller.legacyReport(
+            Map.of(
+                "actionMapping", "generate",
+                "permitNumber", "900100"),
+            multi,
+            request);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).permitReport(requestCaptor.capture());
+
+    LexisReportRequestDto delegated = requestCaptor.getValue();
+    assertThat(delegated.format()).isEqualTo("PDF");
+    assertThat(delegated.parameters()).containsEntry("permitNumber", "900100");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
 }

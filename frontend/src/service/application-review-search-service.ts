@@ -1,8 +1,18 @@
 import type {
+  ApplicationReviewPreviewResponse,
   ApplicationReviewSearchRequest,
   ApplicationReviewSearchResponse,
+  ApplicationReviewSearchItem,
 } from '@/interfaces/ApplicationReviewSearch'
 import apiService from '@/service/api-service'
+import {
+  createSortedPagedSearchParams,
+  getCachedSearchResponse,
+  parsePagedSearchResponse,
+  parsePreviewSearchResponse,
+  requireParsedSearchResponse,
+} from '@/service/cached-search-service'
+import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 
 type BackendApplicationReviewSearchResult = {
@@ -15,19 +25,19 @@ type BackendApplicationReviewSearchResult = {
   showInfoIcon: boolean
 }
 
-type BackendApplicationReviewSearchResponse = {
-  results: BackendApplicationReviewSearchResult[]
-  total: number
-  page: number
-  size: number
+type ApplicationReviewSearchOptions = {
+  knownTotal?: number
 }
 
 export type ApplicationReviewStatusUpdateResult = {
   updated: boolean
   valid: boolean
-  statusCode: string
-  clientEmail: string
-  remark: string
+  statusCode: string | null
+  clientEmail: string | null
+  remark: string | null
+  remarkId?: number | null
+  remarkUser?: string | null
+  remarkDate?: string | null
   message: string
 }
 
@@ -43,85 +53,96 @@ export type ApplicationReviewStatusEmailResult = {
 }
 
 const buildBackendParams = (request: ApplicationReviewSearchRequest): URLSearchParams => {
-  const params = new URLSearchParams()
-
-  const appendIfPresent = (key: string, value: string) => {
-    const trimmed = value.trim()
-    if (trimmed.length > 0) {
-      params.append(key, trimmed)
-    }
-  }
-
   const { filters } = request
-  appendIfPresent('applicationNumber', filters.applicationNumber)
-  appendIfPresent('productTypeCode', filters.productTypeCode)
-  appendIfPresent('receivedFromDate', filters.receivedFromDate)
-  appendIfPresent('receivedToDate', filters.receivedToDate)
-  appendIfPresent('listingFromDate', filters.listingFromDate)
-  appendIfPresent('listingToDate', filters.listingToDate)
-
-  filters.region
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value) && value > 0)
-    .forEach((value) => {
-      params.append('region', String(value))
-    })
-
-  const backendSortField =
-    request.sortDirection === 'desc' ? `${request.sortField} DESC` : request.sortField
-  params.append('sortField', backendSortField)
-  params.append('page', String(request.page))
-  params.append('size', String(request.pageSize))
-
-  return params
+  return createSortedPagedSearchParams(
+    request,
+    [
+      ['applicationNumber', filters.applicationNumber],
+      ['productTypeCode', filters.productTypeCode],
+      ['receivedFromDate', filters.receivedFromDate],
+      ['receivedToDate', filters.receivedToDate],
+      ['listingFromDate', filters.listingFromDate],
+      ['listingToDate', filters.listingToDate],
+    ],
+    [['region', filters.region]],
+  )
 }
 
+const mapBackendReviewRow = (
+  row: BackendApplicationReviewSearchResult,
+): ApplicationReviewSearchItem => ({
+  applicationNumber: String(row.applicationNumber ?? ''),
+  volume: row.volume ?? 0,
+  speciesEndUse: row.speciesEndUse ?? '',
+  listingDate: row.listingDate ?? '',
+  status: row.status ?? '',
+  region: row.region ?? '',
+  showInfoIcon: Boolean(row.showInfoIcon),
+})
+
 const parseBackendResponse = (payload: unknown): ApplicationReviewSearchResponse | null => {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).results)) {
-    return null
-  }
+  return parsePagedSearchResponse<
+    BackendApplicationReviewSearchResult,
+    ApplicationReviewSearchItem
+  >(payload, mapBackendReviewRow)
+}
 
-  const backendResponse = payload as BackendApplicationReviewSearchResponse
-  const totalElements = Number.isFinite(backendResponse.total) ? backendResponse.total : 0
-  const pageSize = Number.isFinite(backendResponse.size) ? backendResponse.size : 10
-  const pageNumber = Number.isFinite(backendResponse.page) ? backendResponse.page : 0
-  const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(pageSize, 1)))
-
-  return {
-    content: backendResponse.results.map((row) => ({
-      applicationNumber: String(row.applicationNumber ?? ''),
-      volume: row.volume ?? 0,
-      speciesEndUse: row.speciesEndUse ?? '',
-      listingDate: row.listingDate ?? '',
-      status: row.status ?? '',
-      region: row.region ?? '',
-      showInfoIcon: Boolean(row.showInfoIcon),
-    })),
-    page: {
-      number: pageNumber,
-      size: pageSize,
-      totalElements,
-      totalPages,
-    },
-  }
+const parseBackendPreviewResponse = (payload: unknown): ApplicationReviewPreviewResponse | null => {
+  return parsePreviewSearchResponse<
+    BackendApplicationReviewSearchResult,
+    ApplicationReviewSearchItem
+  >(payload, mapBackendReviewRow)
 }
 
 export const searchApplicationReviews = async (
   request: ApplicationReviewSearchRequest,
+  options: ApplicationReviewSearchOptions = {},
 ): Promise<ApplicationReviewSearchResponse> => {
   try {
-    const response = await apiService
-      .getAxiosInstance()
-      .get('/lexis/application-reviews/search', { params: buildBackendParams(request) })
-
-    const parsed = parseBackendResponse(response.data)
-    if (!parsed) {
-      throw new Error('Backend application review response did not include results.')
+    const params = buildBackendParams(request)
+    const knownTotal = options.knownTotal
+    if (Number.isInteger(knownTotal) && knownTotal !== undefined && knownTotal >= 0) {
+      params.append('knownTotal', String(knownTotal))
     }
 
-    return parsed
+    const response = await getCachedSearchResponse<unknown>(
+      '/lexis/application-reviews/search',
+      params,
+    )
+
+    return requireParsedSearchResponse(
+      parseBackendResponse(response.data),
+      'Backend application review response did not include results.',
+    )
   } catch (error) {
     throw toSearchServiceError('Unable to load provincial review search results.', error)
+  }
+}
+
+export const countApplicationReviews = async (
+  request: ApplicationReviewSearchRequest,
+): Promise<number> =>
+  getSearchCount(
+    '/lexis/application-reviews/search/count',
+    buildBackendParams(request),
+    'Unable to count provincial review search results.',
+  )
+
+export const previewApplicationReviews = async (
+  request: ApplicationReviewSearchRequest,
+): Promise<ApplicationReviewPreviewResponse> => {
+  try {
+    const response = await getCachedSearchResponse<unknown>(
+      '/lexis/application-reviews/search/preview',
+      buildBackendParams(request),
+    )
+
+    return requireParsedSearchResponse(
+      parseBackendPreviewResponse(response.data),
+      'Backend application review preview response did not include results.',
+    )
+  } catch (error) {
+    throw toSearchServiceError('Unable to load provincial review preview results.', error)
   }
 }
 

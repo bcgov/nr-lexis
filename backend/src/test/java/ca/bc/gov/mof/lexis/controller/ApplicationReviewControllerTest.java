@@ -18,6 +18,7 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +30,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ApplicationReviewController")
@@ -71,7 +74,7 @@ class ApplicationReviewControllerTest {
     when(serviceProvider.getIfAvailable()).thenReturn(null);
 
     ResponseEntity<ApplicationReviewSearchResponseDto> response =
-        controller.search(null, null, null, null, null, null, null, null, 0, 25);
+        controller.search(null, null, null, null, null, null, null, null, 0, 25, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verifyNoInteractions(service);
@@ -107,7 +110,8 @@ class ApplicationReviewControllerTest {
             List.of(12L),
             "applicationNumber DESC",
             0,
-            25);
+            25,
+            null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
@@ -144,7 +148,7 @@ class ApplicationReviewControllerTest {
     request.setUserPrincipal(() -> "idir\\jsmith");
     ApplicationReviewStatusUpdateResultDto dto =
         new ApplicationReviewStatusUpdateResultDto(
-            true, true, "APR", null, null, "Application approved.");
+            true, true, "APP", null, null, null, null, null, "Application approved.");
     when(service.approve(1000456L, "idir\\jsmith")).thenReturn(dto);
 
     ResponseEntity<ApplicationReviewStatusUpdateResultDto> response =
@@ -164,7 +168,15 @@ class ApplicationReviewControllerTest {
         new ApplicationReviewStatusUpdateRequestDto("REJ", "Missing docs", "client@gov.bc.ca");
     ApplicationReviewStatusUpdateResultDto dto =
         new ApplicationReviewStatusUpdateResultDto(
-            true, true, "REJ", "client@gov.bc.ca", "Missing docs", "Application status updated.");
+            true,
+            true,
+            "REJ",
+            "client@gov.bc.ca",
+            "Missing docs",
+            99L,
+            "idir\\jsmith",
+            null,
+            "Application status updated.");
     when(service.updateStatus(1000456L, body, "idir\\jsmith")).thenReturn(dto);
 
     ResponseEntity<ApplicationReviewStatusUpdateResultDto> response =
@@ -190,5 +202,108 @@ class ApplicationReviewControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).sendStatusEmail(1000456L, body);
+  }
+
+  @Test
+  void approveLegacyShouldReturnLegacyPayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.setUserPrincipal(() -> "idir\\jsmith");
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    parameters.add("applicationNumber", "1000456");
+    ApplicationReviewStatusUpdateResultDto dto =
+        new ApplicationReviewStatusUpdateResultDto(
+            true, true, "APP", null, null, null, null, null, "Application approved.");
+    when(service.approve(1000456L, "idir\\jsmith")).thenReturn(dto);
+
+    ResponseEntity<Map<String, Object>> response = controller.approveLegacy(parameters, request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .containsEntry("hasLock", true)
+        .containsEntry("valid", true)
+        .containsEntry("message", "Application approved.")
+        .containsEntry("errors", List.of())
+        .containsEntry("warnings", List.of());
+    verify(service).approve(1000456L, "idir\\jsmith");
+  }
+
+  @Test
+  void approveLegacyShouldReturnLegacyValidationPayloadForInvalidApplicationNumber() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    parameters.add("applicationNumber", "not-a-number");
+
+    ResponseEntity<Map<String, Object>> response =
+        controller.approveLegacy(parameters, new MockHttpServletRequest());
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .containsEntry("hasLock", false)
+        .containsEntry("valid", false)
+        .containsEntry("errors", List.of("Application number must be a positive value."));
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void disapproveLegacyShouldMapLegacyAliasesAndFallbackClientEmail() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.setUserPrincipal(() -> "idir\\jsmith");
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    parameters.add("applicationNumber", "1000456");
+    parameters.add("applicationReviewStatus", "REJ");
+    parameters.add("remarkBody", "Missing documents");
+    ApplicationReviewStatusUpdateResultDto dto =
+        new ApplicationReviewStatusUpdateResultDto(
+            true,
+            true,
+            "REJ",
+            null,
+            "Missing documents",
+            99L,
+            "idir\\jsmith",
+            null,
+            "Application status updated.");
+    ArgumentCaptor<ApplicationReviewStatusUpdateRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationReviewStatusUpdateRequestDto.class);
+    when(service.updateStatus(any(), any(), any())).thenReturn(dto);
+
+    ResponseEntity<Map<String, Object>> response = controller.disapproveLegacy(parameters, request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .containsEntry("hasLock", true)
+        .containsEntry("valid", true)
+        .containsEntry("clientEmail", "none")
+        .containsEntry("remark", "Missing documents");
+    verify(service).updateStatus(any(), requestCaptor.capture(), any());
+    assertThat(requestCaptor.getValue())
+        .isEqualTo(new ApplicationReviewStatusUpdateRequestDto("REJ", "Missing documents", null));
+  }
+
+  @Test
+  void sendStatusEmailLegacyShouldReturnLegacyStringSuccessPayload() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    parameters.add("applicationNumber", "1000456");
+    parameters.add("appStatus", "WDN");
+    parameters.add("clientEmailAddress", "client@gov.bc.ca");
+    parameters.add("remark", "Withdrawn");
+    ApplicationReviewStatusEmailResultDto dto =
+        new ApplicationReviewStatusEmailResultDto(true, "The email notification sent successfully.");
+    ArgumentCaptor<ApplicationReviewStatusEmailRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationReviewStatusEmailRequestDto.class);
+    when(service.sendStatusEmail(any(), any())).thenReturn(dto);
+
+    ResponseEntity<Map<String, Object>> response = controller.sendStatusEmailLegacy(parameters);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .containsEntry("success", "true")
+        .containsEntry("message", "The email notification sent successfully.");
+    verify(service).sendStatusEmail(any(), requestCaptor.capture());
+    assertThat(requestCaptor.getValue())
+        .isEqualTo(new ApplicationReviewStatusEmailRequestDto("WDN", "client@gov.bc.ca", "Withdrawn"));
   }
 }

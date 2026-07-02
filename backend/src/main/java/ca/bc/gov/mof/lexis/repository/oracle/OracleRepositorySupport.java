@@ -14,15 +14,26 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import oracle.jdbc.OracleConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -40,7 +51,26 @@ public abstract class OracleRepositorySupport {
   protected static final String LEXIS_READ_ONLY_PACKAGE = "LEXIS_READ_ONLY.";
 
   private static final String STRING_ARRAY_TYPE = "CBR_VARCHAR2_ARRAY";
+  private static final int LEGACY_DYNAMIC_PAGE_SIZE = 10;
+  private static final int LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES = 4;
+  private static final int AUDIT_USER_MAX_LENGTH = 30;
   private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
+  private static final List<String> NATURAL_RESOURCE_REGION_CODES =
+      List.of("1903", "1904", "1905", "1906", "1907", "1908", "1909", "1910");
+  private static final AtomicInteger LEGACY_DYNAMIC_FETCH_THREAD_ID = new AtomicInteger();
+  // Legacy dynamic searches page in 10-row chunks; keep larger UI pages fast without flooding Oracle.
+  private static final ExecutorService LEGACY_DYNAMIC_FETCH_EXECUTOR =
+      Executors.newFixedThreadPool(
+          LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES,
+          runnable -> {
+            Thread thread =
+                new Thread(
+                    runnable,
+                    "lexis-legacy-page-fetcher-"
+                        + LEGACY_DYNAMIC_FETCH_THREAD_ID.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+          });
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final JdbcTemplate jdbcTemplate;
@@ -60,11 +90,75 @@ public abstract class OracleRepositorySupport {
   }
 
   protected List<CodeNameDto> loadCodeNameOptions(String procedureSignature) {
-    return queryCursorProcedure(
+    List<CodeNameDto> options = queryCursorProcedure(
         procedureSignature,
         null,
         1,
         rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2))));
+    if (!options.isEmpty()) {
+      return options;
+    }
+    return fallbackCodeNameOptions(procedureSignature);
+  }
+
+  protected Optional<String> fallbackCodeDescription(String procedureSignature, String code) {
+    String normalized = trim(code);
+    if (procedureSignature == null || normalized == null) {
+      return Optional.empty();
+    }
+    String upperCode = normalized.toUpperCase(Locale.ROOT);
+    return Optional.ofNullable(
+        switch (procedureSignature) {
+          case LEXIS_CODES_PACKAGE + "FIND_GROWTH_TYPE_CODE(?,?)" ->
+              switch (upperCode) {
+                case "O" -> "Old Growth";
+                case "S" -> "Second Growth";
+                default -> null;
+              };
+          case LEXIS_CODES_PACKAGE + "FIND_PACKAGE_STATUS_CODE(?,?)" ->
+              switch (upperCode) {
+                case "ACT" -> "Active";
+                case "SHT" -> "Shutout";
+                default -> null;
+              };
+          case LEXIS_CODES_PACKAGE + "FIND_PRODUCT_TYPE_CODE(?,?)" ->
+              switch (upperCode) {
+                case "H" -> "Harvested Timber";
+                case "S" -> "Standing Timber";
+                case "T" -> "Unmanufactured Timber";
+                default -> null;
+              };
+          default -> null;
+        });
+  }
+
+  protected List<CodeNameDto> loadOrgUnitOptions(boolean displayName) {
+    List<CodeNameDto> options =
+        queryCursorProcedure(
+            LEXIS_CODES_PACKAGE + "FIND_ALL_ORG_UNITS(?)",
+            null,
+            1,
+            rs -> {
+              Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
+              String regionCode = getString(rs, "ORG_UNIT_CODE");
+              String regionName = getString(rs, "ORG_UNIT_NAME");
+              return new CodeNameDto(
+                  orgUnitNo == null ? null : orgUnitNo.toString(),
+                  displayName
+                      ? firstPresent(regionName, regionCode)
+                      : firstPresent(regionCode, regionName));
+            });
+    List<CodeNameDto> naturalResourceRegions = naturalResourceRegions(options);
+    if (!naturalResourceRegions.isEmpty()) {
+      return naturalResourceRegions;
+    }
+    return naturalResourceRegions(fallbackOrgUnitOptions(displayName));
+  }
+
+  private List<CodeNameDto> naturalResourceRegions(List<CodeNameDto> options) {
+    return options.stream()
+        .filter(option -> NATURAL_RESOURCE_REGION_CODES.contains(option.code()))
+        .toList();
   }
 
   protected <T> List<T> queryCursorProcedure(
@@ -96,7 +190,11 @@ public abstract class OracleRepositorySupport {
             return results;
           });
     } catch (DataAccessException ex) {
-      logger.warn("Oracle procedure call failed [{}]: {}", procedureSignature, ex.getMessage());
+      logger.warn(
+          "Oracle procedure call failed [{}]: {}; root cause: {}",
+          procedureSignature,
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return List.of();
     }
   }
@@ -113,7 +211,7 @@ public abstract class OracleRepositorySupport {
     return Optional.ofNullable(results.get(0));
   }
 
-  protected <T> List<T> queryDynamicPagedProcedure(
+  protected <T> List<T> queryLegacyDynamicPagedProcedure(
       String procedureSignature,
       String whereSql,
       List<String> bindValues,
@@ -158,8 +256,64 @@ public abstract class OracleRepositorySupport {
             return results;
           });
     } catch (DataAccessException ex) {
-      logger.warn("Oracle dynamic call failed [{}]: {}", procedureSignature, ex.getMessage());
+      logger.warn(
+          "Oracle dynamic call failed [{}]: {}; root cause: {}",
+          procedureSignature,
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return List.of();
+    }
+  }
+
+  protected int queryLegacyDynamicCountProcedure(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues) {
+    String call = "{ call " + procedureSignature + " }";
+
+    try {
+      Integer total =
+          jdbcTemplate.execute(
+              call,
+              (CallableStatementCallback<Integer>) cs -> {
+                cs.setString(1, whereSql);
+
+                Array array = null;
+                if (bindValues != null && !bindValues.isEmpty()) {
+                  Connection connection = cs.getConnection();
+                  OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
+                  array =
+                      oracleConnection.createOracleArray(
+                          STRING_ARRAY_TYPE, bindValues.toArray(String[]::new));
+                  cs.setArray(2, array);
+                } else {
+                  cs.setNull(2, Types.ARRAY, STRING_ARRAY_TYPE);
+                }
+
+                cs.setInt(3, bindValues == null ? 0 : bindValues.size());
+                cs.registerOutParameter(4, Types.REF_CURSOR);
+                cs.execute();
+
+                try (ResultSet rs = (ResultSet) cs.getObject(4)) {
+                  if (rs == null || !rs.next()) {
+                    return 0;
+                  }
+                  long resultCount = Math.max(0L, rs.getLong("RESULTS_COUNT"));
+                  return (int) Math.min(Integer.MAX_VALUE, resultCount);
+                } finally {
+                  if (array != null) {
+                    array.free();
+                  }
+                }
+              });
+      return total == null ? 0 : total;
+    } catch (DataAccessException ex) {
+      logger.warn(
+          "Oracle dynamic count call failed [{}]: {}; root cause: {}",
+          procedureSignature,
+          ex.getMessage(),
+          rootCauseMessage(ex));
+      return 0;
     }
   }
 
@@ -179,32 +333,331 @@ public abstract class OracleRepositorySupport {
                   });
       return Boolean.TRUE.equals(result);
     } catch (DataAccessException ex) {
-      logger.warn("Oracle procedure execution failed [{}]: {}", procedureSignature, ex.getMessage());
+      logger.warn(
+          "Oracle procedure execution failed [{}]: {}; root cause: {}",
+          procedureSignature,
+          ex.getMessage(),
+          rootCauseMessage(ex));
       return false;
     }
   }
 
-  protected <T> List<T> queryDynamicAllPages(
+  protected <T> Page<T> queryLegacyDynamicPage(
       String procedureSignature,
       String whereSql,
       List<String> bindValues,
+      int page,
+      int size,
       SqlRowMapper<T> rowMapper) {
-    List<T> allResults = new ArrayList<>();
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    long offsetLong = (long) normalizedPage * normalizedSize;
+    if (offsetLong > Integer.MAX_VALUE) {
+      return new PageImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          Integer.MAX_VALUE);
+    }
 
-    for (int page = 0; page < 10_000; page++) {
+    int offset = (int) offsetLong;
+    List<T> allRows = new ArrayList<>();
+    List<T> previousPage = List.of();
+
+    for (int legacyPage = 0; legacyPage < 10_000; legacyPage++) {
       List<T> currentPage =
-          queryDynamicPagedProcedure(procedureSignature, whereSql, bindValues, page, rowMapper);
+          queryLegacyDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
       if (currentPage.isEmpty()) {
         break;
       }
-      allResults.addAll(currentPage);
-      if (currentPage.size() < 500) {
-        // Legacy procedures page server-side; short page usually means completion.
-        continue;
+      if (legacyPage > 0 && currentPage.equals(previousPage)) {
+        logger.warn(
+            "Oracle dynamic call [{}] returned duplicate data for page {}; stopping pagination",
+            procedureSignature,
+            legacyPage);
+        break;
+      }
+      allRows.addAll(currentPage);
+      previousPage = currentPage;
+      if (currentPage.size() < LEGACY_DYNAMIC_PAGE_SIZE) {
+        break;
       }
     }
 
-    return allResults;
+    if (offset >= allRows.size()) {
+      return new PageImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          allRows.size());
+    }
+
+    int toIndex = Math.min(offset + normalizedSize, allRows.size());
+    return new PageImpl<>(
+        List.copyOf(allRows.subList(offset, toIndex)),
+        PageRequest.of(normalizedPage, normalizedSize),
+        allRows.size());
+  }
+
+  protected <T> Page<T> queryLegacyDynamicPage(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues,
+      int page,
+      int size,
+      int totalElements,
+      SqlRowMapper<T> rowMapper) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    int normalizedTotal = Math.max(0, totalElements);
+    long offsetLong = (long) normalizedPage * normalizedSize;
+    if (offsetLong > Integer.MAX_VALUE || offsetLong >= normalizedTotal) {
+      return new PageImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          normalizedTotal);
+    }
+
+    int offset = (int) offsetLong;
+    int firstLegacyPage = offset / LEGACY_DYNAMIC_PAGE_SIZE;
+    int firstLegacyPageOffset = offset % LEGACY_DYNAMIC_PAGE_SIZE;
+    int requestedRows = Math.min(normalizedSize, normalizedTotal - offset);
+    int lastLegacyPage = (offset + requestedRows - 1) / LEGACY_DYNAMIC_PAGE_SIZE;
+    List<T> rows = new ArrayList<>();
+    List<T> previousPage = List.of();
+    List<List<T>> legacyPages =
+        queryRequiredLegacyDynamicPages(
+            procedureSignature,
+            whereSql,
+            bindValues,
+            firstLegacyPage,
+            lastLegacyPage,
+            rowMapper);
+
+    for (int pageIndex = 0; pageIndex < legacyPages.size() && rows.size() < requestedRows; pageIndex++) {
+      int legacyPage = firstLegacyPage + pageIndex;
+      List<T> currentPage = legacyPages.get(pageIndex);
+      if (currentPage.isEmpty()) {
+        break;
+      }
+      if (legacyPage > firstLegacyPage && currentPage.equals(previousPage)) {
+        logger.warn(
+            "Oracle dynamic call [{}] returned duplicate data for page {}; stopping pagination",
+            procedureSignature,
+            legacyPage);
+        break;
+      }
+
+      int fromIndex =
+          legacyPage == firstLegacyPage
+              ? Math.min(firstLegacyPageOffset, currentPage.size())
+              : 0;
+      if (fromIndex < currentPage.size()) {
+        rows.addAll(currentPage.subList(fromIndex, currentPage.size()));
+      }
+      previousPage = currentPage;
+      if (currentPage.size() < LEGACY_DYNAMIC_PAGE_SIZE) {
+        break;
+      }
+    }
+
+    return new PageImpl<>(
+        List.copyOf(rows.subList(0, Math.min(rows.size(), requestedRows))),
+        PageRequest.of(normalizedPage, normalizedSize),
+        normalizedTotal);
+  }
+
+  private <T> List<List<T>> queryRequiredLegacyDynamicPages(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues,
+      int firstLegacyPage,
+      int lastLegacyPage,
+      SqlRowMapper<T> rowMapper) {
+    int normalizedFirstLegacyPage = Math.max(0, firstLegacyPage);
+    int normalizedLastLegacyPage =
+        Math.min(Math.max(normalizedFirstLegacyPage, lastLegacyPage), 9_999);
+    int pageCount = normalizedLastLegacyPage - normalizedFirstLegacyPage + 1;
+
+    if (pageCount <= 1) {
+      return List.of(
+          queryLegacyDynamicPagedProcedure(
+              procedureSignature, whereSql, bindValues, normalizedFirstLegacyPage, rowMapper));
+    }
+
+    List<List<T>> pages = new ArrayList<>(pageCount);
+    for (
+        int batchStart = normalizedFirstLegacyPage;
+        batchStart <= normalizedLastLegacyPage;
+        batchStart += LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES) {
+      int batchEnd =
+          Math.min(
+              batchStart + LEGACY_DYNAMIC_PARALLEL_PAGE_FETCHES - 1, normalizedLastLegacyPage);
+      List<CompletableFuture<List<T>>> futures = new ArrayList<>();
+      for (int legacyPage = batchStart; legacyPage <= batchEnd; legacyPage++) {
+        int pageToFetch = legacyPage;
+        futures.add(
+            CompletableFuture.supplyAsync(
+                () ->
+                    queryLegacyDynamicPagedProcedure(
+                        procedureSignature, whereSql, bindValues, pageToFetch, rowMapper),
+                LEGACY_DYNAMIC_FETCH_EXECUTOR));
+      }
+
+      for (CompletableFuture<List<T>> future : futures) {
+        try {
+          pages.add(future.join());
+        } catch (CompletionException ex) {
+          logger.warn(
+              "Oracle dynamic page fetch failed [{}]: {}; root cause: {}",
+              procedureSignature,
+              ex.getMessage(),
+              rootCauseMessage(ex));
+          pages.add(List.of());
+        }
+      }
+    }
+    return pages;
+  }
+
+  protected <T> Slice<T> queryLegacyDynamicSlice(
+      String procedureSignature,
+      String whereSql,
+      List<String> bindValues,
+      int page,
+      int size,
+      SqlRowMapper<T> rowMapper) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    long requiredRowsLong = ((long) normalizedPage * normalizedSize) + normalizedSize + 1L;
+    if (requiredRowsLong > Integer.MAX_VALUE) {
+      return new SliceImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          false);
+    }
+
+    int offset = normalizedPage * normalizedSize;
+    int requiredRows = (int) requiredRowsLong;
+    List<T> rows = new ArrayList<>();
+    List<T> previousPage = List.of();
+
+    for (int legacyPage = 0; legacyPage < 10_000 && rows.size() < requiredRows; legacyPage++) {
+      List<T> currentPage =
+          queryLegacyDynamicPagedProcedure(procedureSignature, whereSql, bindValues, legacyPage, rowMapper);
+      if (currentPage.isEmpty()) {
+        break;
+      }
+      if (legacyPage > 0 && currentPage.equals(previousPage)) {
+        logger.warn(
+            "Oracle dynamic call [{}] returned duplicate data for page {}; stopping slice",
+            procedureSignature,
+            legacyPage);
+        break;
+      }
+      rows.addAll(currentPage);
+      previousPage = currentPage;
+      if (currentPage.size() < LEGACY_DYNAMIC_PAGE_SIZE) {
+        break;
+      }
+    }
+
+    if (offset >= rows.size()) {
+      return new SliceImpl<>(
+          List.of(),
+          PageRequest.of(normalizedPage, normalizedSize),
+          false);
+    }
+
+    int toIndex = Math.min(offset + normalizedSize, rows.size());
+    boolean hasNext = rows.size() > toIndex;
+    return new SliceImpl<>(
+        List.copyOf(rows.subList(offset, toIndex)),
+        PageRequest.of(normalizedPage, normalizedSize),
+        hasNext);
+  }
+
+  private List<CodeNameDto> fallbackCodeNameOptions(String procedureSignature) {
+    if (procedureSignature == null) {
+      return List.of();
+    }
+    return switch (procedureSignature) {
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)" ->
+          List.of(
+              new CodeNameDto("NEW", "New"),
+              new CodeNameDto("APP", "Approved"),
+              new CodeNameDto("PND", "Pending"),
+              new CodeNameDto("REJ", "Rejected"),
+              new CodeNameDto("WDN", "Withdrawn"),
+              new CodeNameDto("EXE", "Exempted"),
+              new CodeNameDto("EXP", "Expired"),
+              new CodeNameDto("PMT", "Permitted"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)" ->
+          List.of(
+              new CodeNameDto("M", "Ministerial"),
+              new CodeNameDto("O", "Order in Council"),
+              new CodeNameDto("B", "Blanket Order in Council"),
+              new CodeNameDto("F", "Federal"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_STS_CODES(?)" ->
+          List.of(
+              new CodeNameDto("NEW", "New"),
+              new CodeNameDto("ACT", "Active"),
+              new CodeNameDto("CAN", "Cancelled"),
+              new CodeNameDto("EXP", "Expired"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_PRODUCT_TYPE_CODES(?)" ->
+          List.of(
+              new CodeNameDto("H", "Harvested Timber"),
+              new CodeNameDto("S", "Standing Timber"),
+              new CodeNameDto("T", "Unmanufactured Timber"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_PERMIT_STATUS_CODES(?)" ->
+          List.of(
+              new CodeNameDto("ACT", "Active"),
+              new CodeNameDto("CAN", "Cancelled"),
+              new CodeNameDto("COM", "Complete"),
+              new CodeNameDto("EXP", "Expired"),
+              new CodeNameDto("PPD", "Payment Pending"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_JURISDICTION_CODES(?)" ->
+          List.of(
+              new CodeNameDto("P", "Provincial"),
+              new CodeNameDto("F", "Federal"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_RSN_CODES(?)" ->
+          List.of(
+              new CodeNameDto("S", "Surplus"),
+              new CodeNameDto("U", "Utilization"),
+              new CodeNameDto("E", "Economic"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_GROWTH_TYPE_CODES(?)" ->
+          List.of(
+              new CodeNameDto("O", "Old Growth"),
+              new CodeNameDto("S", "Second Growth"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)" ->
+          List.of(
+              new CodeNameDto("US", "United States"),
+              new CodeNameDto("JP", "Japan"),
+              new CodeNameDto("CN", "China"),
+              new CodeNameDto("NZ", "New Zealand"));
+      case LEXIS_CODES_PACKAGE + "FIND_ALL_PORT_CODES(?)" ->
+          List.of(
+              new CodeNameDto("VAN", "Vancouver"),
+              new CodeNameDto("OT", "Other"));
+      default -> List.of();
+    };
+  }
+
+  private List<CodeNameDto> fallbackOrgUnitOptions(boolean displayName) {
+    List<CodeNameDto> regions =
+        List.of(
+            new CodeNameDto("1903", "Cariboo Natural Resource Region"),
+            new CodeNameDto("1904", "Kootenay-Boundary Natural Resource Region"),
+            new CodeNameDto("1905", "Northeast Natural Resource Region"),
+            new CodeNameDto("1906", "Omineca Natural Resource Region"),
+            new CodeNameDto("1907", "Thompson-Okanagan Natural Resource Region"),
+            new CodeNameDto("1908", "Skeena Natural Resource Region"),
+            new CodeNameDto("1909", "South Coast Natural Resource Region"),
+            new CodeNameDto("1910", "West Coast Natural Resource Region"));
+    if (displayName) {
+      return regions;
+    }
+    return regions.stream()
+        .map(option -> new CodeNameDto(option.code(), option.name().split(" - ", 2)[0]))
+        .toList();
   }
 
   protected String trim(String value) {
@@ -215,12 +668,31 @@ public abstract class OracleRepositorySupport {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
+  protected String auditUserOrDefault(String value) {
+    String normalized = trim(value);
+    if (normalized == null) {
+      return "system";
+    }
+    return normalized.length() <= AUDIT_USER_MAX_LENGTH
+        ? normalized
+        : normalized.substring(0, AUDIT_USER_MAX_LENGTH);
+  }
+
   protected LocalDate toLocalDate(Date value) {
     return value == null ? null : value.toLocalDate();
   }
 
   protected LocalDate toLocalDate(Timestamp value) {
     return value == null ? null : value.toLocalDateTime().toLocalDate();
+  }
+
+  private String rootCauseMessage(Throwable throwable) {
+    Throwable root = throwable;
+    while (root.getCause() != null && root.getCause() != root) {
+      root = root.getCause();
+    }
+    String message = root.getMessage();
+    return root.getClass().getSimpleName() + (message == null ? "" : ": " + message);
   }
 
   protected Long getLong(ResultSet rs, String column) {
@@ -265,6 +737,10 @@ public abstract class OracleRepositorySupport {
     } catch (SQLException ex) {
       return null;
     }
+  }
+
+  private String firstPresent(String first, String second) {
+    return first != null ? first : second;
   }
 
   protected boolean safeIdentifier(String value) {

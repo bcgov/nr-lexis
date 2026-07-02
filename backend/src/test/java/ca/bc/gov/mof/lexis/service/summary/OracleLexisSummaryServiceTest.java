@@ -74,7 +74,10 @@ class OracleLexisSummaryServiceTest {
                 List.of(),
                 List.of(),
                 List.of(),
-                List.of(new CodeNameDto("12", "Coast"), new CodeNameDto("24", "Skeena"))));
+                List.of(),
+                List.of(),
+                List.of(new CodeNameDto("12", "Coast"), new CodeNameDto("24", "Skeena")),
+                List.of()));
 
     when(applicationService.search(any(LexisApplicationSearchCriteria.class)))
         .thenReturn(
@@ -120,6 +123,8 @@ class OracleLexisSummaryServiceTest {
                     false,
                     false,
                     false,
+                    null,
+                    null,
                     List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", 95.0, 28)),
                     List.of(),
                     List.of())));
@@ -313,13 +318,13 @@ class OracleLexisSummaryServiceTest {
     verify(permitService).search(criteriaCaptor.capture());
 
     PermitSearchCriteria criteria = criteriaCaptor.getValue();
-    assertThat(criteria.ownerClientNumber()).isNull();
+    assertThat(criteria.ownerClientNumber()).isEqualTo("00077881");
     assertThat(criteria.applicantClientNumber()).isNull();
     assertThat(criteria.requireScalePermit()).isTrue();
     assertThat(criteria.regionNumbers()).containsExactly(12L, 24L);
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
     assertThat(criteria.page()).isZero();
-    assertThat(criteria.size()).isEqualTo(Integer.MAX_VALUE);
+    assertThat(criteria.size()).isEqualTo(10);
 
     assertThat(response.total()).isEqualTo(1);
     assertThat(response.results()).hasSize(1);
@@ -389,12 +394,12 @@ class OracleLexisSummaryServiceTest {
     verify(permitService).search(criteriaCaptor.capture());
 
     PermitSearchCriteria criteria = criteriaCaptor.getValue();
-    assertThat(criteria.ownerClientNumber()).isNull();
+    assertThat(criteria.ownerClientNumber()).isEqualTo("00077881");
     assertThat(criteria.applicantClientNumber()).isNull();
     assertThat(criteria.requireScalePermit()).isFalse();
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
     assertThat(criteria.page()).isZero();
-    assertThat(criteria.size()).isEqualTo(Integer.MAX_VALUE);
+    assertThat(criteria.size()).isEqualTo(10);
 
     assertThat(response.total()).isEqualTo(1);
     assertThat(response.results()).hasSize(1);

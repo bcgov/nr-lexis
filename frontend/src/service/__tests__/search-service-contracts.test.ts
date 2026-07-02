@@ -1,19 +1,42 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { searchApplicationReviews } from '@/service/application-review-search-service'
-import { searchFederalApplications } from '@/service/federal-application-search-service'
-import { searchIndianReservePermits } from '@/service/indian-reserve-permit-search-service'
-import { searchProvincialApplications } from '@/service/provincial-application-search-service'
-import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
-import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
-import { searchProvincialPermits } from '@/service/provincial-permit-search-service'
+import {
+  countApplicationReviews,
+  previewApplicationReviews,
+  searchApplicationReviews,
+} from '@/service/application-review-search-service'
+import {
+  requireParsedSearchResponse,
+  uniqueSearchItemsByKey,
+} from '@/service/cached-search-service'
+import {
+  countFederalApplications,
+  searchFederalApplications,
+} from '@/service/federal-application-search-service'
+import {
+  countProvincialApplications,
+  searchProvincialApplicationNumberOptions,
+  searchProvincialApplications,
+} from '@/service/provincial-application-search-service'
+import {
+  countProvincialExemptions,
+  searchProvincialExemptions,
+} from '@/service/provincial-exemption-search-service'
+import {
+  countProvincialOffers,
+  searchProvincialOffers,
+} from '@/service/provincial-offer-search-service'
+import {
+  countProvincialPermits,
+  searchProvincialPermits,
+} from '@/service/provincial-permit-search-service'
 
-const getMock = vi.fn()
+const { getCachedResponseMock } = vi.hoisted(() => ({
+  getCachedResponseMock: vi.fn(),
+}))
 
 vi.mock('@/service/api-service', () => ({
   default: {
-    getAxiosInstance: () => ({
-      get: getMock,
-    }),
+    getCachedResponse: getCachedResponseMock,
   },
 }))
 
@@ -124,25 +147,11 @@ const reviewRequest = {
   sortDirection: 'asc' as const,
 }
 
-const indigenousRequest = {
-  filters: {
-    permitNumber: '',
-    packageNumber: '',
-    fromPermitIssueDate: '',
-    toPermitIssueDate: '',
-    fromEstimatedShippingDate: '',
-    toEstimatedShippingDate: '',
-  },
-  page: 0,
-  pageSize: 10,
-  sortField: 'permitNumber' as const,
-  sortDirection: 'asc' as const,
-}
-
 const readParams = (callIndex = 0): URLSearchParams => {
-  const [, config] = getMock.mock.calls[callIndex]
+  const [, config, options] = getCachedResponseMock.mock.calls[callIndex]
   expect(config).toBeDefined()
   expect(config.params).toBeInstanceOf(URLSearchParams)
+  expect(options).toEqual({ ttlMs: 10_000 })
   return config.params as URLSearchParams
 }
 
@@ -151,8 +160,30 @@ describe('search-service contracts', () => {
     vi.clearAllMocks()
   })
 
+  it('keeps the first search option for each non-empty key', () => {
+    const result = uniqueSearchItemsByKey(
+      [
+        { id: '100', label: 'first' },
+        { id: '', label: 'blank' },
+        { id: '100', label: 'duplicate' },
+        { id: '101', label: 'second' },
+      ],
+      (item) => item.id,
+    )
+
+    expect(result).toEqual([
+      { id: '100', label: 'first' },
+      { id: '101', label: 'second' },
+    ])
+  })
+
+  it('requires parsed search responses', () => {
+    expect(requireParsedSearchResponse({ content: [] }, 'missing')).toEqual({ content: [] })
+    expect(() => requireParsedSearchResponse(null, 'missing')).toThrow('missing')
+  })
+
   it('maps provincial application results and backend query params', async () => {
-    getMock.mockResolvedValue({
+    getCachedResponseMock.mockResolvedValue({
       data: {
         results: [
           {
@@ -176,10 +207,15 @@ describe('search-service contracts', () => {
 
     const result = await searchProvincialApplications(applicationRequest)
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/applications/search', expect.any(Object))
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/applications/search',
+      expect.any(Object),
+      { ttlMs: 10_000 },
+    )
     const params = readParams()
     expect(params.get('applicationNumber')).toBe('101')
     expect(params.get('agentClientNumber')).toBe('00012345')
+    expect(params.get('region')).toBe('12')
     expect(params.get('sortField')).toBe('applicationNumber DESC')
     expect(result.page.totalElements).toBe(12)
     expect(result.content[0]).toEqual(
@@ -191,8 +227,46 @@ describe('search-service contracts', () => {
     )
   })
 
+  it('loads provincial application number options from application search', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          {
+            application: 28077,
+            status: 'Approved',
+            client: '',
+            ownerClientNumber: '00016245',
+            exemptionNumber: '',
+            listingDate: '2012-05-11',
+            region: 'RKB',
+            applicationVolume: 228,
+            showCheckbox: true,
+            locked: false,
+          },
+        ],
+        total: 1,
+        page: 0,
+        size: 20,
+      },
+    })
+
+    const result = await searchProvincialApplicationNumberOptions('280')
+
+    const params = readParams()
+    expect(params.get('applicationNumber')).toBe('280')
+    expect(params.get('page')).toBe('0')
+    expect(params.get('size')).toBe('20')
+    expect(params.get('sortField')).toBe('applicationNumber DESC')
+    expect(result).toEqual([
+      expect.objectContaining({
+        value: '28077',
+        label: '28077 - Approved - Owner 00016245 - Region RKB - 2012-05-11',
+      }),
+    ])
+  })
+
   it('maps provincial exemption status fields and approval gate', async () => {
-    getMock.mockResolvedValue({
+    getCachedResponseMock.mockResolvedValue({
       data: {
         results: [
           {
@@ -215,10 +289,15 @@ describe('search-service contracts', () => {
 
     const result = await searchProvincialExemptions(exemptionRequest)
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/exemptions/search', expect.any(Object))
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/exemptions/search',
+      expect.any(Object),
+      { ttlMs: 10_000 },
+    )
     const params = readParams()
     expect(params.get('exemptionStatusCode')).toBe('NEW')
     expect(params.get('region')).toBe('22')
+    expect(params.has('sortField')).toBe(false)
     expect(result.content[0]).toEqual(
       expect.objectContaining({
         exemptionNumber: 'EX-2',
@@ -229,7 +308,7 @@ describe('search-service contracts', () => {
   })
 
   it('maps federal search data and sends client filter to owner and agent params', async () => {
-    getMock.mockResolvedValue({
+    getCachedResponseMock.mockResolvedValue({
       data: {
         results: [
           {
@@ -254,7 +333,11 @@ describe('search-service contracts', () => {
 
     const result = await searchFederalApplications(federalRequest)
 
-    expect(getMock).toHaveBeenCalledWith('/lexis/federal/applications/search', expect.any(Object))
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/federal/applications/search',
+      expect.any(Object),
+      { ttlMs: 10_000 },
+    )
     const params = readParams()
     expect(params.get('ownerClientNumber')).toBe('00011122')
     expect(params.get('agentClientNumber')).toBe('00011122')
@@ -264,6 +347,230 @@ describe('search-service contracts', () => {
         allowCreateExemption: true,
       }),
     )
+  })
+
+  it.each([
+    {
+      name: 'provincial applications',
+      endpoint: '/lexis/applications/search',
+      run: () => searchProvincialApplications({ ...applicationRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'provincial exemptions',
+      endpoint: '/lexis/exemptions/search',
+      run: () => searchProvincialExemptions({ ...exemptionRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'provincial offers',
+      endpoint: '/lexis/purchase-offers/search',
+      run: () => searchProvincialOffers({ ...offerRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'provincial permits',
+      endpoint: '/lexis/permits/search',
+      run: () => searchProvincialPermits({ ...permitRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'federal applications',
+      endpoint: '/lexis/federal/applications/search',
+      run: () => searchFederalApplications({ ...federalRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'application review',
+      endpoint: '/lexis/application-reviews/search',
+      run: () => searchApplicationReviews({ ...reviewRequest, page: 2, pageSize: 30 }),
+    },
+  ])(
+    '$name preserves backend pagination metadata and request page params',
+    async ({ endpoint, run }) => {
+      getCachedResponseMock.mockResolvedValue({
+        data: {
+          results: [],
+          total: 91,
+          page: 2,
+          size: 30,
+        },
+      })
+
+      const result = await run()
+
+      expect(getCachedResponseMock).toHaveBeenCalledWith(endpoint, expect.any(Object), {
+        ttlMs: 10_000,
+      })
+      const params = readParams()
+      expect(params.get('page')).toBe('2')
+      expect(params.get('size')).toBe('30')
+      expect(result.content).toEqual([])
+      expect(result.page).toEqual({
+        number: 2,
+        size: 30,
+        totalElements: 91,
+        totalPages: 4,
+      })
+    },
+  )
+
+  it.each([
+    {
+      name: 'provincial application',
+      run: () =>
+        searchProvincialApplications(
+          { ...applicationRequest, page: 2, pageSize: 30 },
+          { knownTotal: 91 },
+        ),
+    },
+    {
+      name: 'provincial exemption',
+      run: () =>
+        searchProvincialExemptions(
+          { ...exemptionRequest, page: 2, pageSize: 30 },
+          { knownTotal: 91 },
+        ),
+    },
+    {
+      name: 'provincial offer',
+      run: () =>
+        searchProvincialOffers({ ...offerRequest, page: 2, pageSize: 30 }, { knownTotal: 91 }),
+    },
+    {
+      name: 'provincial permit',
+      run: () =>
+        searchProvincialPermits({ ...permitRequest, page: 2, pageSize: 30 }, { knownTotal: 91 }),
+    },
+    {
+      name: 'federal application',
+      run: () =>
+        searchFederalApplications({ ...federalRequest, page: 2, pageSize: 30 }, { knownTotal: 91 }),
+    },
+    {
+      name: 'application review',
+      run: () =>
+        searchApplicationReviews({ ...reviewRequest, page: 2, pageSize: 30 }, { knownTotal: 91 }),
+    },
+  ])('$name search can reuse a known total without changing paging metadata', async ({ run }) => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [],
+        total: 91,
+        page: 2,
+        size: 30,
+      },
+    })
+
+    const result = await run()
+
+    const params = readParams()
+    expect(params.get('knownTotal')).toBe('91')
+    expect(result.page).toEqual({
+      number: 2,
+      size: 30,
+      totalElements: 91,
+      totalPages: 4,
+    })
+  })
+  it.each([
+    {
+      name: 'provincial applications',
+      endpoint: '/lexis/applications/search/count',
+      run: () => countProvincialApplications({ ...applicationRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'provincial exemptions',
+      endpoint: '/lexis/exemptions/search/count',
+      run: () => countProvincialExemptions({ ...exemptionRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'provincial offers',
+      endpoint: '/lexis/purchase-offers/search/count',
+      run: () => countProvincialOffers({ ...offerRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'provincial permits',
+      endpoint: '/lexis/permits/search/count',
+      run: () => countProvincialPermits({ ...permitRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'federal applications',
+      endpoint: '/lexis/federal/applications/search/count',
+      run: () => countFederalApplications({ ...federalRequest, page: 2, pageSize: 30 }),
+    },
+    {
+      name: 'application review',
+      endpoint: '/lexis/application-reviews/search/count',
+      run: () => countApplicationReviews({ ...reviewRequest, page: 2, pageSize: 30 }),
+    },
+  ])('$name count endpoint strips paging params', async ({ endpoint, run }) => {
+    getCachedResponseMock.mockResolvedValue({ data: { total: 42 } })
+
+    await expect(run()).resolves.toBe(42)
+
+    expect(getCachedResponseMock).toHaveBeenCalledWith(endpoint, expect.any(Object), {
+      ttlMs: 10_000,
+    })
+    const params = readParams()
+    expect(params.has('page')).toBe(false)
+    expect(params.has('size')).toBe(false)
+    expect(params.has('sortField')).toBe(false)
+  })
+
+  it('maps application review preview as a slice response', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          {
+            applicationNumber: 901,
+            volume: 12.5,
+            speciesEndUse: 'LOG',
+            listingDate: '2026-05-20',
+            status: 'NEW',
+            region: '22',
+            showInfoIcon: false,
+          },
+        ],
+        hasNext: true,
+        page: 0,
+        size: 5,
+      },
+    })
+
+    const result = await previewApplicationReviews({ ...reviewRequest, pageSize: 5 })
+
+    expect(getCachedResponseMock).toHaveBeenCalledWith(
+      '/lexis/application-reviews/search/preview',
+      expect.any(Object),
+      { ttlMs: 10_000 },
+    )
+    const params = readParams()
+    expect(params.get('size')).toBe('5')
+    expect(result.page).toEqual({ number: 0, size: 5, hasNext: true })
+    expect(result.content[0]).toEqual(
+      expect.objectContaining({
+        applicationNumber: '901',
+        speciesEndUse: 'LOG',
+      }),
+    )
+  })
+
+  it('sends application review region filters as numeric backend org unit params', async () => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [],
+        total: 0,
+        page: 0,
+        size: 10,
+      },
+    })
+
+    await searchApplicationReviews({
+      ...reviewRequest,
+      filters: {
+        ...reviewRequest.filters,
+        region: ['1818', 'not-a-region', '0', '1834'],
+      },
+    })
+
+    const params = readParams()
+    expect(params.getAll('region')).toEqual(['1818', '1834'])
   })
 
   it.each([
@@ -297,13 +604,8 @@ describe('search-service contracts', () => {
       run: () => searchApplicationReviews(reviewRequest),
       message: 'Backend application review response did not include results.',
     },
-    {
-      name: 'indigenous reserve permits',
-      run: () => searchIndianReservePermits(indigenousRequest),
-      message: 'Backend indigenous reserve permit response did not include results.',
-    },
   ])('rejects %s response when results payload is missing', async ({ run, message }) => {
-    getMock.mockResolvedValue({ data: { rows: [] } })
+    getCachedResponseMock.mockResolvedValue({ data: { rows: [] } })
 
     await expect(run()).rejects.toThrow(message)
   })

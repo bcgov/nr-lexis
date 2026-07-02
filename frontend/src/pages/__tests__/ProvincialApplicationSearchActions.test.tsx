@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,6 +6,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import ProvincialApplicationPage from '@/pages/ProvincialApplication'
 import { searchProvincialApplications } from '@/service/provincial-application-search-service'
 import { fetchProvincialApplicationOptions } from '@/service/search-options-service'
+import { createTestAuthContext } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -22,6 +23,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/provincial-application-search-service', () => ({
+  countProvincialApplications: vi.fn(),
   searchProvincialApplications: vi.fn(),
 }))
 
@@ -33,9 +35,9 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedSearchProvincialApplications = vi.mocked(searchProvincialApplications)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 
-const renderPage = () => {
+const renderPage = (path = '/provincial/application') => {
   render(
-    <MemoryRouter initialEntries={['/provincial/application']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/provincial/application" element={<ProvincialApplicationPage />} />
       </Routes>
@@ -77,15 +79,22 @@ const searchRowsWithMixedEligibility = [
 describe('Provincial Application Search Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedUseAuth.mockReturnValue({
-      canPerform: (action: string) =>
-        action === '/createExemption' || action === 'createApplication',
-    } as any)
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) =>
+          action === '/createExemption' ||
+          action === 'createApplication' ||
+          action === 'uploadApplicationSubmission',
+      }),
+    )
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
       exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
+      exemptionReasons: [],
       applicationStatuses: [{ value: 'NEW', label: 'New' }],
       productTypes: [{ value: 'LOG', label: 'Logs' }],
+      growthTypes: [],
       regions: [{ value: '11', label: 'Cariboo' }],
+      currentSchedules: [],
     })
     mockedSearchProvincialApplications.mockResolvedValue({
       content: searchRowsWithMixedEligibility,
@@ -103,12 +112,16 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
 
     const createExemptionButton = screen.getByRole('button', {
-      name: 'Create Exemption for Selected Applications',
+      name: 'Create exemption for Selected Applications',
     })
     expect(createExemptionButton).toBeDisabled()
 
     expect(screen.getByRole('checkbox', { name: 'Select 321' })).toBeEnabled()
     expect(screen.getByRole('checkbox', { name: 'Select 654' })).toBeDisabled()
+    expect(screen.getByRole('link', { name: 'Upload Application Submission' })).toHaveAttribute(
+      'href',
+      '/provincial/application/upload',
+    )
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
     expect(createExemptionButton).toBeEnabled()
@@ -122,6 +135,34 @@ describe('Provincial Application Search Actions', () => {
         ownerClientNumber: '22222222',
       },
     })
+  })
+
+  it('renders application search filters in the legacy order', async () => {
+    renderPage()
+    await screen.findByText('321')
+
+    const filterGrid = document.querySelector('.provincial-application-search-grid')
+    expect(filterGrid).toBeTruthy()
+    const fieldLabels = Array.from((filterGrid as HTMLElement).children).map((field) =>
+      field
+        .querySelector('label, .cds--label')
+        ?.textContent?.replace(/Total items selected:.*/, '')
+        .trim(),
+    )
+
+    expect(fieldLabels).toEqual([
+      'Application number',
+      'Application status',
+      'Package number',
+      'Exemption type',
+      'Exemption number',
+      'Product type',
+      'Region',
+      'Applicant client number',
+      'Owner client number',
+      'Listing from date',
+      'Listing to date',
+    ])
   })
 
   it('shows validation when selected rows do not share client numbers', async () => {
@@ -151,7 +192,7 @@ describe('Provincial Application Search Actions', () => {
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
     await userEvent.click(
-      screen.getByRole('button', { name: 'Create Exemption for Selected Applications' }),
+      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
     )
 
     await waitFor(() => {
@@ -170,13 +211,13 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
 
     const createExemptionButton = screen.getByRole('button', {
-      name: 'Create Exemption for Selected Applications',
+      name: 'Create exemption for Selected Applications',
     })
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
     expect(createExemptionButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Application Number'), '9')
+    await userEvent.type(screen.getByLabelText('Application number'), '9')
 
     await waitFor(() => {
       expect(createExemptionButton).toBeDisabled()
@@ -186,7 +227,174 @@ describe('Provincial Application Search Actions', () => {
             applicationNumber: '9',
           }),
         }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
+    })
+  })
+
+  it('does not default region filters when opened without query parameters', async () => {
+    renderPage()
+    await screen.findByText('321')
+
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          region: [],
+        }),
+      }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
+    )
+  })
+
+  it('debounces backend searches while filters are typed', async () => {
+    renderPage()
+    await screen.findByText('321')
+    mockedSearchProvincialApplications.mockClear()
+
+    await userEvent.type(screen.getByLabelText('Application number'), '987')
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            applicationNumber: '987',
+          }),
+        }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
+      )
+    })
+  })
+
+  it('sends selected region org unit numbers to the application search request', async () => {
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
+      exemptionReasons: [],
+      applicationStatuses: [{ value: 'NEW', label: 'New' }],
+      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      growthTypes: [],
+      regions: [{ value: '1818', label: 'TST' }],
+      currentSchedules: [],
+    })
+
+    renderPage('/provincial/application?region=1818')
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            region: ['1818'],
+          }),
+        }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
+      )
+    })
+  })
+
+  it('shows selected application search region names instead of only the selected count', async () => {
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
+      exemptionReasons: [],
+      applicationStatuses: [{ value: 'NEW', label: 'New' }],
+      productTypes: [{ value: 'LOG', label: 'Logs' }],
+      growthTypes: [],
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1908', label: 'Skeena Natural Resource Region' },
+      ],
+      currentSchedules: [],
+    })
+
+    renderPage()
+    await screen.findByText('321')
+
+    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
+    )
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'Skeena' } })
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'Skeena Natural Resource Region' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Selected: Cariboo Natural Resource Region, Skeena Natural Resource Region',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('ignores stale search responses that resolve after a newer search', async () => {
+    renderPage()
+    await screen.findByText('321')
+    mockedSearchProvincialApplications.mockReset()
+
+    let resolveFirstSearch: (
+      value: Awaited<ReturnType<typeof searchProvincialApplications>>,
+    ) => void
+    let resolveSecondSearch: (
+      value: Awaited<ReturnType<typeof searchProvincialApplications>>,
+    ) => void
+    mockedSearchProvincialApplications
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirstSearch = resolve
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveSecondSearch = resolve
+        }),
+      )
+
+    const applicationNumberInput = screen.getByLabelText('Application number')
+    await userEvent.type(applicationNumberInput, '1')
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
+    })
+
+    await userEvent.type(applicationNumberInput, '2')
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(2)
+    })
+
+    resolveSecondSearch!({
+      content: [
+        {
+          ...searchRowsWithMixedEligibility[0],
+          applicationNumber: '222',
+        },
+      ],
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+    expect(await screen.findByText('222')).toBeInTheDocument()
+
+    resolveFirstSearch!({
+      content: [
+        {
+          ...searchRowsWithMixedEligibility[0],
+          applicationNumber: '111',
+        },
+      ],
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText('111')).not.toBeInTheDocument()
+      expect(screen.getByText('222')).toBeInTheDocument()
     })
   })
 })

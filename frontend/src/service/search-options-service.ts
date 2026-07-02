@@ -1,43 +1,61 @@
 import apiService from '@/service/api-service'
+import { isRecord, mapRecordArray, stringField } from '@/utils/record'
 
 export type SearchOption = {
   value: string
   label: string
 }
 
-const parseOptions = (input: unknown): SearchOption[] => {
-  if (!Array.isArray(input)) {
-    return []
-  }
+const NATURAL_RESOURCE_REGION_CODES = new Set([
+  '1903',
+  '1904',
+  '1905',
+  '1906',
+  '1907',
+  '1908',
+  '1909',
+  '1910',
+])
 
-  return input
-    .map((item) => {
-      if (!item || typeof item !== 'object') {
-        return null
-      }
+const DISALLOWED_APPLICATION_STATUS_CODE = 'DAL'
+const DISALLOWED_APPLICATION_STATUS_LABEL = 'disallowed'
 
-      const code = typeof (item as any).code === 'string' ? (item as any).code.trim() : ''
-      const name = typeof (item as any).name === 'string' ? (item as any).name.trim() : ''
-      if (!code || !name) {
-        return null
-      }
-
-      return {
-        value: code,
-        label: name,
-      }
-    })
-    .filter((item): item is SearchOption => item !== null)
-}
-
-const fetchOptions = async (path: string): Promise<Record<string, unknown> | null> => {
-  try {
-    const response = await apiService.getAxiosInstance().get(path)
-    if (!response.data || typeof response.data !== 'object') {
+const parseOptions = (input: unknown, allowEmptyCode = false): SearchOption[] => {
+  return mapRecordArray(input, (item) => {
+    const code = stringField(item, 'code')
+    const name = stringField(item, 'name')
+    if ((!code && !allowEmptyCode) || !name) {
       return null
     }
 
-    return response.data
+    return {
+      value: code,
+      label: name,
+    }
+  })
+}
+
+const parseRegionOptions = (input: unknown): SearchOption[] =>
+  parseOptions(input).filter((option) => NATURAL_RESOURCE_REGION_CODES.has(option.value))
+
+const parseApplicationStatusOptions = (input: unknown): SearchOption[] =>
+  parseOptions(input).filter(
+    (option) =>
+      option.value !== DISALLOWED_APPLICATION_STATUS_CODE &&
+      option.label.trim().toLowerCase() !== DISALLOWED_APPLICATION_STATUS_LABEL,
+  )
+
+const fetchOptions = async (path: string): Promise<Record<string, unknown> | null> => {
+  try {
+    const data = await apiService.getCachedData<unknown>(path, undefined, {
+      cacheKey: `search-options:${path}`,
+      ttlMs: 5 * 60_000,
+    })
+    if (!isRecord(data)) {
+      return null
+    }
+
+    return data
   } catch (error) {
     console.warn(`Unable to load search options from ${path}.`, error)
     return null
@@ -46,25 +64,34 @@ const fetchOptions = async (path: string): Promise<Record<string, unknown> | nul
 
 export const fetchProvincialApplicationOptions = async (): Promise<{
   exemptionTypes: SearchOption[]
+  exemptionReasons: SearchOption[]
   applicationStatuses: SearchOption[]
   productTypes: SearchOption[]
+  growthTypes: SearchOption[]
   regions: SearchOption[]
+  currentSchedules: SearchOption[]
 }> => {
   const data = await fetchOptions('/lexis/applications/search/options')
   if (!data) {
     return {
       exemptionTypes: [],
+      exemptionReasons: [],
       applicationStatuses: [],
       productTypes: [],
+      growthTypes: [],
       regions: [],
+      currentSchedules: [],
     }
   }
 
   return {
     exemptionTypes: parseOptions(data.exemptionTypes),
-    applicationStatuses: parseOptions(data.applicationStatuses),
+    exemptionReasons: parseOptions(data.exemptionReasons),
+    applicationStatuses: parseApplicationStatusOptions(data.applicationStatuses),
     productTypes: parseOptions(data.productTypes),
-    regions: parseOptions(data.regions),
+    growthTypes: parseOptions(data.growthTypes),
+    regions: parseRegionOptions(data.regions),
+    currentSchedules: parseOptions(data.currentSchedules, true),
   }
 }
 
@@ -85,7 +112,7 @@ export const fetchProvincialExemptionOptions = async (): Promise<{
   return {
     exemptionTypes: parseOptions(data.exemptionTypes),
     exemptionStatuses: parseOptions(data.exemptionStatuses),
-    regions: parseOptions(data.regions),
+    regions: parseRegionOptions(data.regions),
   }
 }
 
@@ -103,7 +130,67 @@ export const fetchProvincialPermitOptions = async (): Promise<{
 
   return {
     permitStatuses: parseOptions(data.permitStatuses),
-    regions: parseOptions(data.regions),
+    regions: parseRegionOptions(data.regions),
+  }
+}
+
+export const fetchReportOptions = async (): Promise<{
+  currentSchedules: SearchOption[]
+  defaultRegion: string
+  regions: SearchOption[]
+  reportJurisdictions: SearchOption[]
+  biweeklyJurisdictions: SearchOption[]
+  teacJurisdictions: SearchOption[]
+  exemptionTypes: SearchOption[]
+  tenureExemptionTypes: SearchOption[]
+  exemptionReasons: SearchOption[]
+  exemptionStatuses: SearchOption[]
+  growthTypes: SearchOption[]
+  permitStatuses: SearchOption[]
+  destinationCountries: SearchOption[]
+  allDestinationCountries: SearchOption[]
+  portsOfExport: SearchOption[]
+}> => {
+  const data = await fetchOptions('/lexis/reports/options')
+  if (!data) {
+    return {
+      currentSchedules: [],
+      defaultRegion: '',
+      regions: [],
+      reportJurisdictions: [],
+      biweeklyJurisdictions: [],
+      teacJurisdictions: [],
+      exemptionTypes: [],
+      tenureExemptionTypes: [],
+      exemptionReasons: [],
+      exemptionStatuses: [],
+      growthTypes: [],
+      permitStatuses: [],
+      destinationCountries: [],
+      allDestinationCountries: [],
+      portsOfExport: [],
+    }
+  }
+
+  const regions = parseRegionOptions(data.regions)
+  const defaultRegion = stringField(data, 'defaultRegion')
+
+  return {
+    currentSchedules: parseOptions(data.currentSchedules, true),
+    defaultRegion: regions.some((region) => region.value === defaultRegion) ? defaultRegion : '',
+    regions,
+    reportJurisdictions: parseOptions(data.reportJurisdictions, true),
+    biweeklyJurisdictions: parseOptions(data.biweeklyJurisdictions, true),
+    teacJurisdictions: parseOptions(data.teacJurisdictions),
+    exemptionTypes: parseOptions(data.exemptionTypes, true),
+    tenureExemptionTypes: parseOptions(data.tenureExemptionTypes, true),
+    exemptionReasons: parseOptions(data.exemptionReasons, true),
+    exemptionStatuses: parseOptions(data.exemptionStatuses, true),
+    growthTypes: parseOptions(data.growthTypes, true),
+    permitStatuses: parseOptions(data.permitStatuses, true),
+    destinationCountries: parseOptions(data.destinationCountries, true),
+    allDestinationCountries: parseOptions(data.allDestinationCountries),
+    portsOfExport: parseOptions(data.portsOfExport, true),
   }
 }
 
@@ -118,7 +205,7 @@ export const fetchProvincialOfferOptions = async (): Promise<{
   }
 
   return {
-    regions: parseOptions(data.regions),
+    regions: parseRegionOptions(data.regions),
   }
 }
 
@@ -133,7 +220,7 @@ export const fetchFederalApplicationOptions = async (): Promise<{
   }
 
   return {
-    applicationStatuses: parseOptions(data.applicationStatuses),
+    applicationStatuses: parseApplicationStatusOptions(data.applicationStatuses),
   }
 }
 
@@ -153,7 +240,7 @@ export const fetchApplicationReviewOptions = async (): Promise<{
 
   return {
     productTypes: parseOptions(data.productTypes),
-    regions: parseOptions(data.regions),
-    reviewStatuses: parseOptions(data.reviewStatuses),
+    regions: parseRegionOptions(data.regions),
+    reviewStatuses: parseApplicationStatusOptions(data.reviewStatuses),
   }
 }

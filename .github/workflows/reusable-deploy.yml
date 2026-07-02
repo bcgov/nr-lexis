@@ -56,6 +56,9 @@ on:
       keystore_secret:
         description: Oracle keystore passphrase
         required: true
+      lexis_prod_rtm_only:
+        description: Enables PROD RTM-only feature restriction when set to true
+        required: false
 
     outputs:
       triggered:
@@ -101,6 +104,7 @@ jobs:
             -p DATABASE_USER="${{ secrets.database_user }}"
             -p DATABASE_PASSWORD="$DATABASE_PASSWORD"
             -p KEYSTORE_SECRET="$KEYSTORE_SECRET"
+            -p LEXIS_PROD_RTM_ONLY="${{ secrets.lexis_prod_rtm_only || 'false' }}"
           triggers: ${{ inputs.triggers }}
 
   frontend:
@@ -128,11 +132,17 @@ jobs:
             -p SLOT="${{ inputs.slot || inputs.target }}"
             -p NAME="${{ github.event.repository.name }}"
             -p IMAGE_TAG="${{ inputs.tag }}"
+            -p ROLLOUT_TRIGGER="${{ github.sha }}"
             -p REPLICAS="${{ inputs.frontend_replicas }}"
-            -p VITE_LOGIN_URL="${{ vars.VITE_LOGIN_URL }}"
-            -p VITE_LOGOUT_URL="${{ vars.VITE_LOGOUT_URL }}"
-            -p VITE_ENABLE_DEV_ROLE_SIMULATION="${{ vars.VITE_ENABLE_DEV_ROLE_SIMULATION }}"
-            -p VITE_ENABLE_SEARCH_MOCK_FALLBACK="${{ vars.VITE_ENABLE_SEARCH_MOCK_FALLBACK }}"
+            -p VITE_USER_POOLS_ID="${{ vars.VITE_USER_POOLS_ID }}"
+            -p VITE_USER_POOLS_WEB_CLIENT_ID="${{ vars.VITE_USER_POOLS_WEB_CLIENT_ID }}"
+            -p VITE_COGNITO_DOMAIN="${{ vars.VITE_COGNITO_DOMAIN }}"
+            -p VITE_REDIRECT_SIGN_IN="${{ vars.VITE_REDIRECT_SIGN_IN }}"
+            -p VITE_REDIRECT_SIGN_OUT="${{ vars.VITE_REDIRECT_SIGN_OUT }}"
+            -p VITE_COGNITO_SCOPES="${{ vars.VITE_COGNITO_SCOPES }}"
+            -p VITE_ZONE="${{ vars.VITE_ZONE }}"
+            -p VITE_LEXIS_PROD_RTM_ONLY="${{ secrets.lexis_prod_rtm_only || 'false' }}"
+            -p VITE_FAM_MANAGE_URL="${{ vars.VITE_FAM_MANAGE_URL }}"
             -p VITE_LEXIS_REPORT_ENDPOINT_BASE="${{ vars.VITE_LEXIS_REPORT_ENDPOINT_BASE }}"
             -p VITE_LEXIS_REPORT_API_BASE="${{ vars.VITE_LEXIS_REPORT_API_BASE }}"
           triggers: ${{ inputs.triggers }}

@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.session;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionWelcomeDto;
 import java.util.Arrays;
 import java.util.Collection;
@@ -21,6 +23,7 @@ public class LexisSessionService {
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
   private static final String ROLE_FEDERAL_SUBMITTER = "LEXIS_FEDERAL_SUBMITTER";
+  private static final String ROLE_DELEGATED_ADMIN = "LEXIS_DELEGATED_ADMIN";
 
   private static final Set<String> CANONICAL_ROLES =
       Set.of(
@@ -29,7 +32,8 @@ public class LexisSessionService {
           ROLE_APPLICATION_APPROVER,
           ROLE_EXEMPTION_APPROVER,
           ROLE_PROVINCIAL_SUBMITTER,
-          ROLE_FEDERAL_SUBMITTER);
+          ROLE_FEDERAL_SUBMITTER,
+          ROLE_DELEGATED_ADMIN);
 
   private final Set<String> configuredIndustryRoles;
 
@@ -41,27 +45,36 @@ public class LexisSessionService {
     List<String> roles = normalizeRoles(rawRoles);
     Set<String> roleSet = new LinkedHashSet<>(roles);
 
+    boolean adminUser = roleSet.contains(ROLE_ADMIN);
     boolean readOnlyUser = roleSet.contains(ROLE_READ_ONLY);
+    boolean provincialSubmitter = roleSet.contains(ROLE_PROVINCIAL_SUBMITTER);
+    boolean federalSubmitter = roleSet.contains(ROLE_FEDERAL_SUBMITTER);
     boolean industryUser = roleSet.stream().anyMatch(this::isIndustryRole);
-    boolean adminUserOnly = roleSet.size() == 1 && roleSet.contains(ROLE_ADMIN);
     boolean exemptionApprover = roleSet.contains(ROLE_EXEMPTION_APPROVER);
+    boolean delegatedAdminOnly = roleSet.size() == 1 && roleSet.contains(ROLE_DELEGATED_ADMIN);
 
     WelcomeTarget target;
-    if (readOnlyUser) {
+    if (adminUser) {
+      target = WelcomeTarget.ADMIN_USER;
+    } else if (readOnlyUser) {
       target = WelcomeTarget.READ_ONLY;
+    } else if (provincialSubmitter) {
+      target = WelcomeTarget.PROVINCIAL_SUBMITTER;
+    } else if (federalSubmitter) {
+      target = WelcomeTarget.FEDERAL_SUBMITTER;
     } else if (industryUser) {
       target = WelcomeTarget.INDUSTRY_USER;
-    } else if (adminUserOnly) {
-      target = WelcomeTarget.ADMIN_USER;
     } else if (exemptionApprover) {
       target = WelcomeTarget.EXEMPTION_APPROVER;
+    } else if (delegatedAdminOnly) {
+      target = WelcomeTarget.NO_ACCESS;
     } else {
       target = WelcomeTarget.MOFR_USER;
     }
 
     return new LexisSessionWelcomeDto(
         principalName != null && !principalName.isBlank(),
-        blankToNull(principalName),
+        trimToNull(principalName),
         roles,
         target.forwardName,
         target.legacyPath);
@@ -229,19 +242,14 @@ public class LexisSessionService {
     return ROLE_PROVINCIAL_SUBMITTER.equals(role);
   }
 
-  private String blankToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
   private enum WelcomeTarget {
     READ_ONLY("readOnly", "/applicationSearch.do?actionMapping=view"),
-    INDUSTRY_USER("industryUser", "/summary.do?actionMapping=view"),
+    PROVINCIAL_SUBMITTER("industryUser", "/applicationSearch.do?actionMapping=view"),
+    FEDERAL_SUBMITTER("industryUser", "/federalApplicationSearch.do?actionMapping=view"),
+    INDUSTRY_USER("industryUser", "/applicationSearch.do?actionMapping=view"),
     ADMIN_USER("adminUser", "/lexisAgentAdmin.do?actionMapping=view"),
     EXEMPTION_APPROVER("exemptionApprover", "/exemptionSearch.do?actionMapping=view"),
+    NO_ACCESS("noAccess", null),
     MOFR_USER("mofrUser", "/applicationsReview.do?actionMapping=view");
 
     private final String forwardName;
