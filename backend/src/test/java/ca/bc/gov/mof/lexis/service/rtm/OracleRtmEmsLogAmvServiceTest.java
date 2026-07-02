@@ -70,7 +70,7 @@ class OracleRtmEmsLogAmvServiceTest {
             any(LocalDate.class),
             any(BigDecimal.class)))
         .thenReturn("0");
-    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(matrixWorkbook(), null, null);
 
