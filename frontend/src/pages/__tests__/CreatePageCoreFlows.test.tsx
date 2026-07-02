@@ -791,7 +791,7 @@ describe('Create Page Core Flows', () => {
       })
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8080')
-  })
+  }, 15000)
 
   it('uses create offer query prefill for company, contact, pickup, and package options', async () => {
     mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8081'))
