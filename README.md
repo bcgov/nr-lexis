@@ -131,7 +131,9 @@ because repeated automated login attempts can lock the TEST account. See
 
 Production RTM-only rollout is controlled by the optional GitHub environment secret
 `lexis_prod_rtm_only`. Set it to `true` for PROD to pass `LEXIS_PROD_RTM_ONLY` to the backend and
-`VITE_LEXIS_PROD_RTM_ONLY` to the frontend.
+`VITE_LEXIS_PROD_RTM_ONLY` to the frontend. In that mode, the frontend only shows the Average
+Monthly Values module/sidebar item for LEXIS admins, and the backend denies non-session/non-RTM API
+routes.
 
 ## Component docs
 
