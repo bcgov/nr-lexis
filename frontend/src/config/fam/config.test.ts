@@ -38,10 +38,10 @@ describe('FAM auth config', () => {
 
   it('keeps sign-in on the current origin and uses the configured sign-out chain', async () => {
     const signOutUrl =
-      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.silver.devops.gov.bc.ca%2F'
+      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.gold.devops.gov.bc.ca%2F'
     window.config = {
       ...configuredRuntimeAuth,
-      VITE_REDIRECT_SIGN_IN: 'https://nr-lexis-dev.apps.silver.devops.gov.bc.ca/dashboard',
+      VITE_REDIRECT_SIGN_IN: 'https://nr-lexis-dev.apps.gold.devops.gov.bc.ca/dashboard',
       VITE_REDIRECT_SIGN_OUT: signOutUrl,
     }
 
@@ -62,7 +62,7 @@ describe('FAM auth config', () => {
 
   it('trims the configured BC Gov sign-out URL without rewriting the encoded return URL', async () => {
     const signOutUrl =
-      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.silver.devops.gov.bc.ca%2F'
+      'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi?retnow=1&returl=https%3A%2F%2Fnr-lexis-test.apps.gold.devops.gov.bc.ca%2F'
     window.config = {
       ...configuredRuntimeAuth,
       VITE_REDIRECT_SIGN_OUT: ` ${signOutUrl} `,

@@ -54,8 +54,8 @@ Override base URL when needed:
 
 ```bash
 E2E_BASE_URL=http://127.0.0.1:4173 npm run e2e
-E2E_BASE_URL=https://nr-lexis-test.apps.silver.devops.gov.bc.ca npm run e2e:regression
-E2E_BASE_URL=https://nr-lexis-test.apps.silver.devops.gov.bc.ca npm run e2e:regression:idir
+E2E_BASE_URL=https://nr-lexis-test.apps.gold.devops.gov.bc.ca npm run e2e:regression
+E2E_BASE_URL=https://nr-lexis-test.apps.gold.devops.gov.bc.ca npm run e2e:regression:idir
 ```
 
 For local `e2e:regression` runs, export the same `E2E_IDIR_*` credential variables in your shell

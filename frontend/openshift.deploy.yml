@@ -31,7 +31,7 @@ parameters:
     value: ghcr.io/bcgov/nr-lexis/frontend
   - name: DOMAIN
     description: Cluster apps domain (no leading dot)
-    value: apps.silver.devops.gov.bc.ca
+    value: apps.gold.devops.gov.bc.ca
   - name: FRONTEND_LOG_LEVEL
     value: INFO
   - name: VITE_USER_POOLS_ID

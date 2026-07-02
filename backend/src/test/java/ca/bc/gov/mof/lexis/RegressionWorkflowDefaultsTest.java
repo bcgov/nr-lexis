@@ -16,7 +16,7 @@ class RegressionWorkflowDefaultsTest {
     assertThat(workflow)
         .contains("name: Regression")
         .contains(
-            "E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.silver.devops.gov.bc.ca")
+            "E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.gold.devops.gov.bc.ca")
         .contains("environment: test")
         .contains("E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}")
         .contains("E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}")

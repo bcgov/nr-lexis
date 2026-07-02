@@ -29,7 +29,7 @@ jobs:
     outputs:
       regression-outcome: ${{ steps.run-regression.outcome }}
     env:
-      E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.silver.devops.gov.bc.ca
+      E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.gold.devops.gov.bc.ca
     steps:
       - uses: actions/checkout@v6
 
