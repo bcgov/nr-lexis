@@ -96,6 +96,8 @@ jobs:
             -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
             -p COGNITO_USERINFO_URI="${{ vars.COGNITO_USERINFO_URI }}"
             -p IDENTITY_LOOKUP_BASE_URL="${{ vars.IDENTITY_LOOKUP_BASE_URL }}"
+            -p LEXIS_FAM_ADMIN_BASE_URL="${{ vars.LEXIS_FAM_ADMIN_BASE_URL }}"
+            -p LEXIS_FAM_APPLICATION_ID="${{ vars.LEXIS_FAM_APPLICATION_ID }}"
             -p DATABASE_HOST="${{ secrets.database_host }}"
             -p DATABASE_SERVICE_NAME="${{ secrets.database_service_name }}"
             -p DATABASE_USER="${{ secrets.database_user }}"

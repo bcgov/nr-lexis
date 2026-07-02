@@ -42,6 +42,10 @@ parameters:
     required: true
   - name: IDENTITY_LOOKUP_BASE_URL
     required: true
+  - name: LEXIS_FAM_ADMIN_BASE_URL
+    value: ""
+  - name: LEXIS_FAM_APPLICATION_ID
+    value: ""
   - name: DATABASE_HOST
     required: true
   - name: DATABASE_SERVICE_NAME
@@ -130,6 +134,10 @@ objects:
                   value: ${COGNITO_USERINFO_URI}
                 - name: IDENTITY_LOOKUP_BASE_URL
                   value: ${IDENTITY_LOOKUP_BASE_URL}
+                - name: LEXIS_FAM_ADMIN_BASE_URL
+                  value: ${LEXIS_FAM_ADMIN_BASE_URL}
+                - name: LEXIS_FAM_APPLICATION_ID
+                  value: ${LEXIS_FAM_APPLICATION_ID}
                 - name: DATABASE_HOST
                   value: ${DATABASE_HOST}
                 - name: DATABASE_SERVICE_NAME
