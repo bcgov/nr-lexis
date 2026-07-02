@@ -93,6 +93,9 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.growthType()).isEqualTo("Standing");
     assertThat(response.scaleList()).hasSize(1);
     assertThat(response.scaleList().get(0).timbermark()).isEqualTo("TM1");
+    assertThat(response.scaleList().get(0).species()).isEqualTo("HEM");
+    assertThat(response.scaleList().get(0).grade()).isEqualTo("J");
+    assertThat(response.scaleList().get(0).fee()).isEqualTo("$10.25");
     assertThat(response.scaleList().get(0).permit()).isEqualTo("7000123");
   }
 
@@ -719,8 +722,8 @@ class OraclePermitDetailsRpcServiceTest {
   void documentDetailsShouldIncludePermitAndApplicationDocuments() {
     when(repository.findPermitDocumentDetailsByPermitNumber(7000123L))
         .thenReturn(List.of(new DocumentRow(50L, "permit.pdf", "", "INV")));
-    when(repository.findScaleDetailsByPermitNumber(7000123L))
-        .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 2.35d, 4L, "7000123", "PKG-903")));
+    when(repository.findApplicationNumbersByPermitNumber(7000123L))
+        .thenReturn(List.of(1000456L, 1000456L));
     when(repository.findApplicationDocumentDetailsByApplicationNumber(1000456L))
         .thenReturn(List.of(new DocumentRow(75L, "application.pdf", "", "INS")));
     when(repository.findAttachmentTypeDescription("INV")).thenReturn(Optional.of("Invoice"));
@@ -733,6 +736,8 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.get(0).type()).isEqualTo("Invoice");
     assertThat(response.get(1).name()).isEqualTo("application.pdf");
     assertThat(response.get(1).type()).isEqualTo("Insurance");
+    verify(repository, never()).findScaleDetailsByPermitNumber(7000123L);
+    verify(repository, times(1)).findApplicationDocumentDetailsByApplicationNumber(1000456L);
   }
 
   @Test

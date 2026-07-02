@@ -120,24 +120,29 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     List<PermitScaleDetailRow> allPermitScales = repository.findScaleDetailsByPermitNumber(permitNumber);
     FeeCalculationContext feeContext = buildFeeContext(permitNumber, countryCode, applicationDate);
 
-    double totalVolume = allPermitScales.stream().mapToDouble(PermitScaleDetailRow::speciesGradeVolume).sum();
-    long totalPieces = allPermitScales.stream().mapToLong(PermitScaleDetailRow::piecesCount).sum();
-    BigDecimal totalFees = sumFees(allPermitScales, feeContext);
-
     String normalizedPackageNumber = trimToNull(packageNumber);
-    List<PermitScaleDetailRow> selectedPackageScales =
-        normalizedPackageNumber == null
-            ? List.of()
-            : allPermitScales.stream()
-                .filter(scale -> normalizedPackageNumber.equals(scale.packageNumber()))
-                .toList();
-
-    BigDecimal totalFeeForPackage = sumFees(selectedPackageScales, feeContext);
     String permitNumberString = permitNumber.toString();
-    List<PermitRpcScaleItemDto> scaleList =
-        selectedPackageScales.stream()
-            .map(scale -> toSummaryScaleItem(scale, permitNumberString, ministryUser, feeContext))
-            .toList();
+    double totalVolume = 0.0d;
+    long totalPieces = 0L;
+    BigDecimal totalFees = BigDecimal.ZERO;
+    BigDecimal totalFeeForPackage = BigDecimal.ZERO;
+    List<PermitRpcScaleItemDto> scaleList = new ArrayList<>();
+    for (PermitScaleDetailRow scale : allPermitScales) {
+      BigDecimal fee = calculateRoundedFeeForScale(scale, feeContext);
+      totalVolume += scale.speciesGradeVolume();
+      totalPieces += scale.piecesCount();
+      totalFees = totalFees.add(fee);
+      if (normalizedPackageNumber != null && normalizedPackageNumber.equals(scale.packageNumber())) {
+        totalFeeForPackage = totalFeeForPackage.add(fee);
+        scaleList.add(
+            toSummaryScaleItem(
+                scale,
+                permitNumberString,
+                ministryUser,
+                fee,
+                getAverageMarketValueForScale(scale, feeContext)));
+      }
+    }
 
     boolean maskFees =
         shouldMaskFees(
@@ -1039,8 +1044,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     allDocuments.addAll(repository.findPermitDocumentDetailsByPermitNumber(permitNumber));
 
     List<Long> applicationNumbers =
-        repository.findScaleDetailsByPermitNumber(permitNumber).stream()
-            .map(PermitScaleDetailRow::applicationNumber)
+        repository.findApplicationNumbersByPermitNumber(permitNumber).stream()
             .filter(applicationNumber -> applicationNumber != null && applicationNumber > 0)
             .distinct()
             .toList();
@@ -1241,9 +1245,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       PermitScaleDetailRow scale,
       String permitNumber,
       boolean ministryUser,
-      FeeCalculationContext feeContext) {
-    BigDecimal fee = calculateRoundedFeeForScale(scale, feeContext);
-    BigDecimal amv = getAverageMarketValueForScale(scale, feeContext);
+      BigDecimal fee,
+      BigDecimal amv) {
     return new PermitRpcScaleItemDto(
         nonNull(scale.timberMark()),
         nonNull(scale.exportSpeciesCode()),
