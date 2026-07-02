@@ -1,6 +1,10 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
@@ -89,6 +93,9 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.growthType()).isEqualTo("Standing");
     assertThat(response.scaleList()).hasSize(1);
     assertThat(response.scaleList().get(0).timbermark()).isEqualTo("TM1");
+    assertThat(response.scaleList().get(0).species()).isEqualTo("HEM");
+    assertThat(response.scaleList().get(0).grade()).isEqualTo("J");
+    assertThat(response.scaleList().get(0).fee()).isEqualTo("$10.25");
     assertThat(response.scaleList().get(0).permit()).isEqualTo("7000123");
   }
 
@@ -154,6 +161,28 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void scaleFeesShouldResolveRepeatedSpeciesAndGradeDescriptionsOncePerRequest() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903"),
+                scale("102", "TM2", "HEM", "J", 3.40d, 5L, "7000123", "PKG-903")));
+    when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
+    when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
+    when(applicationService.findPackageByPackageNumber("PKG-903"))
+        .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-903", 1000456L, 11.0d, "S")));
+    when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
+
+    PermitScaleFeesRpcResponseDto response =
+        service.getScaleFeesForPackage("PKG-903", 7000123L, true);
+
+    assertThat(response.totalFeeForPackage()).isEqualTo("$11.00");
+    assertThat(response.scaleList()).hasSize(2);
+    verify(repository, times(1)).findSpeciesDescription("HEM");
+    verify(repository, times(1)).findGradeDescription("J");
+  }
+
+  @Test
   void scalesForPackageShouldMapScaleDetailsDescriptionsAndRegion() {
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903")));
@@ -176,6 +205,28 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.scaleList().get(0).permit()).isEqualTo("7000123");
     assertThat(response.scaleList().get(0).cascadeSplitCode()).isEqualTo("C");
     assertThat(response.scaleList().get(0).region()).isEqualTo("RCO");
+  }
+
+  @Test
+  void scalesForPackageShouldResolveRepeatedSpeciesAndGradeDescriptionsOncePerRequest() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903"),
+                scale("102", "TM2", "HEM", "J", 3.40d, 5L, "7000123", "PKG-903")));
+    when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
+    when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
+    when(repository.findApplicationInfoByNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationInfoRow(
+                    1000456L, "EX-700", 1835L, "RCO", "T", "S", "HE/UT")));
+
+    PermitScalesForPackageRpcResponseDto response = service.getScalesForPackage("PKG-903");
+
+    assertThat(response.scaleList()).hasSize(2);
+    verify(repository, times(1)).findSpeciesDescription("HEM");
+    verify(repository, times(1)).findGradeDescription("J");
   }
 
   @Test
@@ -330,21 +381,21 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Test
   void availablePackageListShouldExcludeSelectedAndAssignedPackages() {
-    when(repository.findApplicationNumbersByExemptionNumber("EX-700"))
-        .thenReturn(List.of(1000456L, 1000457L));
-    when(repository.findPackagesByApplicationNumber(1000456L))
+    when(repository.findPackagesByExemptionNumber("EX-700"))
         .thenReturn(
             List.of(
                 new PackageCandidateRow(1000456L, "PKG-901", 0L),
-                new PackageCandidateRow(1000456L, "PKG-902", 7000123L)));
-    when(repository.findPackagesByApplicationNumber(1000457L))
-        .thenReturn(List.of(new PackageCandidateRow(1000457L, "PKG-903", 0L)));
+                new PackageCandidateRow(1000456L, "PKG-902", 7000123L),
+                new PackageCandidateRow(1000457L, "PKG-903", 0L)));
 
     PermitAvailablePackageListRpcResponseDto response =
         service.getAvailablePackageList("EX-700", "PKG-903");
 
     assertThat(response.packageList()).containsExactly("PKG-901");
     assertThat(response.errorMessage()).isNull();
+    verify(repository, times(1)).findPackagesByExemptionNumber("EX-700");
+    verify(repository, never()).findApplicationNumbersByExemptionNumber("EX-700");
+    verify(repository, never()).findPackagesByApplicationNumber(anyLong());
   }
 
   @Test
@@ -671,8 +722,8 @@ class OraclePermitDetailsRpcServiceTest {
   void documentDetailsShouldIncludePermitAndApplicationDocuments() {
     when(repository.findPermitDocumentDetailsByPermitNumber(7000123L))
         .thenReturn(List.of(new DocumentRow(50L, "permit.pdf", "", "INV")));
-    when(repository.findScaleDetailsByPermitNumber(7000123L))
-        .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 2.35d, 4L, "7000123", "PKG-903")));
+    when(repository.findApplicationNumbersByPermitNumber(7000123L))
+        .thenReturn(List.of(1000456L, 1000456L));
     when(repository.findApplicationDocumentDetailsByApplicationNumber(1000456L))
         .thenReturn(List.of(new DocumentRow(75L, "application.pdf", "", "INS")));
     when(repository.findAttachmentTypeDescription("INV")).thenReturn(Optional.of("Invoice"));
@@ -685,6 +736,8 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.get(0).type()).isEqualTo("Invoice");
     assertThat(response.get(1).name()).isEqualTo("application.pdf");
     assertThat(response.get(1).type()).isEqualTo("Insurance");
+    verify(repository, never()).findScaleDetailsByPermitNumber(7000123L);
+    verify(repository, times(1)).findApplicationDocumentDetailsByApplicationNumber(1000456L);
   }
 
   @Test

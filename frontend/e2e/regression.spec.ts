@@ -98,9 +98,9 @@ const isSafeCredentialedRegressionBaseUrl = (rawUrl: string): boolean => {
       hostname === 'localhost' ||
       hostname === '127.0.0.1' ||
       hostname === '[::1]' ||
-      hostname === 'nr-lexis-dev.apps.silver.devops.gov.bc.ca' ||
-      hostname === 'nr-lexis-test.apps.silver.devops.gov.bc.ca' ||
-      /^nr-lexis-\d+\.apps\.silver\.devops\.gov\.bc\.ca$/.test(hostname)
+      hostname === 'nr-lexis-dev.apps.gold.devops.gov.bc.ca' ||
+      hostname === 'nr-lexis-test.apps.gold.devops.gov.bc.ca' ||
+      /^nr-lexis-\d+\.apps\.gold\.devops\.gov\.bc\.ca$/.test(hostname)
     )
   } catch {
     return false
