@@ -522,7 +522,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         repository.findPackagesByExemptionNumber(normalizedExemptionNumber).stream()
             .filter(row -> row.exportPermitNumber() == null || row.exportPermitNumber() < 1)
             .map(PackageCandidateRow::packageNumber)
-            .map(this::trimToNull)
+            .map(TextUtils::trimToNull)
             .filter(java.util.Objects::nonNull)
             .filter(packageNumber -> !selectedPackages.contains(packageNumber))
             .distinct()

@@ -205,6 +205,28 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void scalesForPackageShouldResolveRepeatedSpeciesAndGradeDescriptionsOncePerRequest() {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903"),
+                scale("102", "TM2", "HEM", "J", 3.40d, 5L, "7000123", "PKG-903")));
+    when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
+    when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
+    when(repository.findApplicationInfoByNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationInfoRow(
+                    1000456L, "EX-700", 1835L, "RCO", "T", "S", "HE/UT")));
+
+    PermitScalesForPackageRpcResponseDto response = service.getScalesForPackage("PKG-903");
+
+    assertThat(response.scaleList()).hasSize(2);
+    verify(repository, times(1)).findSpeciesDescription("HEM");
+    verify(repository, times(1)).findGradeDescription("J");
+  }
+
+  @Test
   void invalidInputsShouldReturnEmptyDefaults() {
     PermitSummaryRpcResponseDto summary = service.getPermitSummary(null, null, null, null, true);
     PermitTotalFeesRpcResponseDto total = service.getTotalFeesForPermit(null, null, null);
