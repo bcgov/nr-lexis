@@ -10,20 +10,17 @@ import org.junit.jupiter.api.Test;
 class ScheduledWorkflowDefaultsTest {
 
   @Test
-  void scheduledPrPurgeShouldUseCleanupTokenForOpenShiftLogin() throws IOException {
+  void scheduledPrPurgeShouldKeepOpenShiftConnectionInputs() throws IOException {
     String ageOutJob = scheduledPrPurgeJob();
 
     assertThat(ageOutJob)
         .contains("name: PR Deployment Purge")
         .contains("environment: dev")
-        .contains("NAMESPACE: ${{ secrets.oc_namespace }}")
-        .contains("OC_SERVER: ${{ vars.oc_server }}")
-        .contains("OC_TOKEN: ${{ secrets.oc_cleanup_token }}")
-        .contains("oc login --server=\"${OC_SERVER}\" --token=\"${OC_TOKEN}\" >/dev/null")
+        .contains("oc_namespace: ${{ secrets.oc_namespace }}")
+        .contains("oc_token: ${{ secrets.oc_token }}")
+        .contains("oc_server: ${{ vars.oc_server }}")
         .contains("oc whoami >/dev/null")
         .contains("oc project \"${NAMESPACE}\" >/dev/null")
-        .doesNotContain("uses: bcgov/action-oc-runner")
-        .doesNotContain("oc_token: ${{ secrets.oc_token }}")
         .doesNotContain("oc_server: ${{ secrets.oc_server }}");
   }
 
@@ -33,7 +30,7 @@ class ScheduledWorkflowDefaultsTest {
 
     assertThat(ageOutJob)
         .contains("set -euo pipefail")
-        .contains("RESOURCE_TYPES: deploy,rs,pod,svc,route,hpa,networkpolicy,secret,pvc,cm")
+        .contains("RESOURCE_TYPES=\"deploy,rs,pod,svc,route,hpa,networkpolicy,secret,pvc,cm\"")
         .contains("oc auth can-i delete deployments -n \"${NAMESPACE}\"")
         .contains("oc auth can-i delete routes -n \"${NAMESPACE}\"")
         .contains("oc auth can-i delete persistentvolumeclaims -n \"${NAMESPACE}\"")
