@@ -16,7 +16,7 @@ import {
 import { E2E_BASE_URL } from './utils'
 
 const sideNavSection = (name: string) =>
-  `.csp-side-nav__section:has(.csp-side-nav__category:text-is("${name}"))`
+  `.csp-side-nav__section:has(.csp-side-nav__category-text:text-is("${name}"))`
 
 const asStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.map((item) => String(item)) : []
@@ -430,7 +430,7 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/provincial/application/upload', /upload application submission/i],
   ['/provincial/application', /provincial application search/i],
   ['/federal', /federal application search/i],
-  ['/reports', /reports/i],
+  ['/reports', /application report/i],
   ['/admin/rtm/emslogamv', /average monthly values/i],
 ]
 
@@ -1065,23 +1065,21 @@ test.describe('TEST IDIR admin regression', () => {
     )
     const today = await browserLocalIsoToday(page)
 
-    await expect(page.getByRole('combobox', { name: 'Applicant type (required)' })).toHaveValue(
-      'Owner',
-    )
-    await expect(page.getByRole('combobox', { name: 'Product type (required)' })).toHaveValue(
+    await expect(page.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Owner')
+    await expect(page.getByRole('combobox', { name: 'Product type' })).toHaveValue(
       'Harvested Timber',
     )
-    await expect(page.getByRole('combobox', { name: 'Exemption reason (required)' })).toHaveValue(
+    await expect(page.getByRole('combobox', { name: 'Exemption reason' })).toHaveValue(
       'Surplus',
     )
-    await expect(page.getByRole('combobox', { name: 'Region (required)' })).toHaveValue(
+    await expect(page.getByRole('combobox', { name: 'Region' })).toHaveValue(
       'Cariboo Natural Resource Region',
     )
     await expect(
-      page.getByRole('textbox', { name: 'Application date (YYYY-MM-DD) (required)' }),
+      page.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' }),
     ).toHaveValue(today)
     await expect(
-      page.getByRole('textbox', { name: 'Received date (YYYY-MM-DD) (required)' }),
+      page.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' }),
     ).toHaveValue(today)
     await expect(page.getByRole('combobox', { name: 'Listing date' })).toHaveValue(nextListDate)
   })
@@ -1114,7 +1112,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('link', { name: 'Back to Search' })).toHaveCount(0)
 
     await page.getByRole('tab', { name: 'Documents' }).click()
-    await expect(page.getByRole('heading', { name: 'Documents' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Documents', exact: true })).toBeVisible()
     await expect(page.getByText('Upload documents')).toBeVisible()
     await expect(
       page.getByText('Multiple files can be queued and submitted together.'),
@@ -1310,10 +1308,11 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
-  test('uses 100 as the default browser search page size', async () => {
+  test('uses configured default browser search page sizes', async () => {
     const page = await authenticatedIdirPage()
 
     for (const contract of searchDefaultPageSizePages) {
+      const expectedPageSize = contract.source === 'application review search' ? '100' : '10'
       const searchResponsePromise = page.waitForResponse((response) => {
         if (response.request().method() !== 'GET') {
           return false
@@ -1336,8 +1335,8 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expect(
         searchUrl.searchParams.get('size'),
-        `${contract.source} should request the WG default page size`,
-      ).toBe('100')
+        `${contract.source} should request the configured default page size`,
+      ).toBe(expectedPageSize)
     }
   })
 
@@ -1405,7 +1404,11 @@ test.describe('TEST IDIR admin regression', () => {
     const firstScheduleDate = optionName(datedSchedules[0] ?? {})
     expect(firstScheduleDate).toMatch(isoDatePattern)
 
-    await expectAccessiblePage(page, '/reports?report=teacReport', /reports/i)
+    await expectAccessiblePage(
+      page,
+      '/reports/teacReport',
+      /timber export advisory committee package report/i,
+    )
     await expect(
       page.getByRole('heading', {
         name: 'Timber Export Advisory Committee package report',
@@ -1426,7 +1429,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('shows advertising list report listing date controls', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/reports?report=biweeklyListing', /reports/i)
+    await expectAccessiblePage(page, '/reports/biweeklyListing', /advertising list/i)
 
     await expect(page.getByRole('heading', { name: 'Advertising List' })).toBeVisible()
     await expect(page.getByText('Advertising list output in PDF or CSV format.')).toBeVisible()
@@ -1657,7 +1660,9 @@ test.describe('TEST IDIR admin regression', () => {
         /provincial application details/i,
       )
       await page.getByRole('tab', { name: 'Documents' }).click()
-      await expect(page.getByRole('heading', { name: 'Documents' })).toBeVisible()
+      await expect(
+        page.locator('.detail-tile-title').filter({ hasText: /^Documents\b/ }).first(),
+      ).toBeVisible()
       await expect(page.getByText('Upload documents').first()).toBeVisible()
       await expect(
         page.getByText('Multiple files can be queued and submitted together.').first(),
