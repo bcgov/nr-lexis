@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -20,6 +21,9 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
@@ -61,6 +65,48 @@ class OracleLexisUploadServiceTest {
             eq("App file"),
             eq("INS"),
             eq("PDF"),
+            eq("jsmith"),
+            any(byte[].class));
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "application.pdf, application/pdf, PDF",
+    "application.jpg, image/jpeg, JPG",
+    "application.png, image/png, PNG"
+  })
+  void uploadApplicationShouldScanLegacyDocumentUploadsBeforeOracleInsert(
+      String fileName, String contentType, String fileTypeCode) {
+    OracleLexisUploadService service = service();
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "formFile", fileName, contentType, "file-bytes".getBytes(StandardCharsets.UTF_8));
+    when(uploadRepository.isFileTypeCodeValid(fileTypeCode)).thenReturn(true);
+    when(
+            uploadRepository.insertApplicationFile(
+                eq(7000123L),
+                eq(fileName),
+                eq("Application document"),
+                eq("INS"),
+                eq(fileTypeCode),
+                eq("jsmith"),
+                any(byte[].class)))
+        .thenReturn(UploadPersistenceResult.success());
+
+    LexisUploadResultDto result =
+        service.uploadApplication(file, 7000123L, "Application document", "jsmith").orElseThrow();
+
+    assertThat(result.status()).isEqualTo("accepted");
+    InOrder ordered = inOrder(virusScanService, uploadRepository);
+    ordered.verify(virusScanService).assertClean(file);
+    ordered
+        .verify(uploadRepository)
+        .insertApplicationFile(
+            eq(7000123L),
+            eq(fileName),
+            eq("Application document"),
+            eq("INS"),
+            eq(fileTypeCode),
             eq("jsmith"),
             any(byte[].class));
   }

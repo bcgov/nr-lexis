@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -18,6 +19,9 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.Pack
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackageValidityItem;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScaleMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScalePersistenceResult;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -43,6 +47,7 @@ class ApplicationSubmissionImportServiceTest {
 
   @Mock private ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   @Mock private ApplicationDetailsRpcService applicationDetailsService;
+  @Mock private VirusScanService virusScanService;
 
   @Test
   void shouldImportLexisXmlAsApplicationPackageAndScales() {
@@ -439,6 +444,36 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors()).containsExactly("User reference must be 50 characters or fewer.");
+  }
+
+  @Test
+  void shouldRejectLexisXmlImportWhenVirusScanFailsBeforeParsing() {
+    MockMultipartFile file = sampleXml();
+    doThrow(VirusScanException.infected("stream: Eicar-Test-Signature FOUND"))
+        .when(virusScanService)
+        .assertClean(file);
+
+    ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(file, "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("The uploaded file failed virus scanning.");
+    verify(virusScanService).assertClean(file);
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRejectGeoJsonValidationWhenVirusScanFailsBeforeParsing() {
+    MockMultipartFile file = sampleGeoJson();
+    doThrow(VirusScanException.infected("stream: Eicar-Test-Signature FOUND"))
+        .when(virusScanService)
+        .assertClean(file);
+
+    ApplicationSubmissionImportResultDto result = service().validateApplicationSubmission(file);
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("The uploaded file failed virus scanning.");
+    verify(virusScanService).assertClean(file);
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -1083,7 +1118,9 @@ class ApplicationSubmissionImportServiceTest {
   private ApplicationSubmissionImportService service() {
     return new ApplicationSubmissionImportService(
         applicationDetailsServiceProvider,
-        Clock.fixed(Instant.parse("2026-06-12T12:00:00Z"), ZoneOffset.UTC));
+        Clock.fixed(Instant.parse("2026-06-12T12:00:00Z"), ZoneOffset.UTC),
+        new ObjectMapper(),
+        virusScanService);
   }
 
   private MockMultipartFile sampleXml() {
