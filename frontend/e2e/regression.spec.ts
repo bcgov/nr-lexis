@@ -703,7 +703,7 @@ const postRegressionApplicationSubmissionFile = async (
   return readJsonResponseWithStatuses<ApplicationSubmissionResponse>(
     await postWithCsrf(page, path, {
       multipart: {
-        userReference: `E2E ClamAV ${file.name}`,
+        userReference: 'E2E ClamAV scan',
         file,
       },
     }),
