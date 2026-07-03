@@ -13,6 +13,8 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.Pack
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackageValidityItem;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScaleMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScalePersistenceResult;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
@@ -28,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -115,26 +118,41 @@ public class ApplicationSubmissionImportService {
   private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   private final Clock clock;
   private final ObjectMapper objectMapper;
+  private final VirusScanService virusScanService;
 
   @Autowired
   public ApplicationSubmissionImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
-      ObjectMapper objectMapper) {
-    this(applicationDetailsServiceProvider, Clock.systemDefaultZone(), objectMapper);
+      ObjectMapper objectMapper,
+      VirusScanService virusScanService) {
+    this(
+        applicationDetailsServiceProvider,
+        Clock.systemDefaultZone(),
+        objectMapper,
+        virusScanService);
   }
 
   ApplicationSubmissionImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider, Clock clock) {
-    this(applicationDetailsServiceProvider, clock, new ObjectMapper());
+    this(applicationDetailsServiceProvider, clock, new ObjectMapper(), VirusScanService.NO_OP);
   }
 
   ApplicationSubmissionImportService(
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       Clock clock,
       ObjectMapper objectMapper) {
+    this(applicationDetailsServiceProvider, clock, objectMapper, VirusScanService.NO_OP);
+  }
+
+  ApplicationSubmissionImportService(
+      ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
+      Clock clock,
+      ObjectMapper objectMapper,
+      VirusScanService virusScanService) {
     this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
     this.clock = clock;
     this.objectMapper = objectMapper;
+    this.virusScanService = virusScanService;
   }
 
   public ApplicationSubmissionImportResultDto validateApplicationSubmission(MultipartFile file) {
@@ -148,6 +166,11 @@ public class ApplicationSubmissionImportService {
     List<String> userReferenceErrors = validateUserReference(normalizedUserReference);
     if (!userReferenceErrors.isEmpty()) {
       return rejected(fileName, fileSize, userReferenceErrors, List.of(), null, normalizedUserReference);
+    }
+    Optional<ApplicationSubmissionImportResultDto> virusScanRejection =
+        rejectFailedVirusScan(file, fileName, fileSize, normalizedUserReference);
+    if (virusScanRejection.isPresent()) {
+      return virusScanRejection.get();
     }
 
     ParsedUpload parsedUpload = parseUploadedLexisSubmission(file, fileName, fileSize);
@@ -230,6 +253,11 @@ public class ApplicationSubmissionImportService {
     List<String> userReferenceErrors = validateUserReference(normalizedUserReference);
     if (!userReferenceErrors.isEmpty()) {
       return rejected(fileName, fileSize, userReferenceErrors, List.of(), null, normalizedUserReference);
+    }
+    Optional<ApplicationSubmissionImportResultDto> virusScanRejection =
+        rejectFailedVirusScan(file, fileName, fileSize, normalizedUserReference);
+    if (virusScanRejection.isPresent()) {
+      return virusScanRejection.get();
     }
 
     ParsedUpload parsedUpload = parseUploadedLexisSubmission(file, fileName, fileSize);
@@ -1805,6 +1833,17 @@ public class ApplicationSubmissionImportService {
         normalizedWarnings,
         userReference,
         submissionSummary);
+  }
+
+  private Optional<ApplicationSubmissionImportResultDto> rejectFailedVirusScan(
+      MultipartFile file, String fileName, long fileSize, String userReference) {
+    try {
+      virusScanService.assertClean(file);
+      return Optional.empty();
+    } catch (VirusScanException ex) {
+      return Optional.of(
+          rejected(fileName, fileSize, List.of(ex.userMessage()), List.of(), null, userReference));
+    }
   }
 
   private String resolveFileName(MultipartFile file) {

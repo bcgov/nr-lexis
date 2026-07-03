@@ -10,6 +10,8 @@ import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.repository.rtm.OracleRtmEmsLogAmvRepository;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -39,15 +41,27 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
   private final OracleRtmEmsLogAmvRepository repository;
   private final Clock clock;
+  private final VirusScanService virusScanService;
 
   @Autowired
-  public OracleRtmEmsLogAmvService(OracleRtmEmsLogAmvRepository repository) {
-    this(repository, Clock.systemUTC());
+  public OracleRtmEmsLogAmvService(
+      OracleRtmEmsLogAmvRepository repository, VirusScanService virusScanService) {
+    this(repository, Clock.systemUTC(), virusScanService);
+  }
+
+  OracleRtmEmsLogAmvService(OracleRtmEmsLogAmvRepository repository) {
+    this(repository, Clock.systemUTC(), VirusScanService.NO_OP);
   }
 
   OracleRtmEmsLogAmvService(OracleRtmEmsLogAmvRepository repository, Clock clock) {
+    this(repository, clock, VirusScanService.NO_OP);
+  }
+
+  OracleRtmEmsLogAmvService(
+      OracleRtmEmsLogAmvRepository repository, Clock clock, VirusScanService virusScanService) {
     this.repository = repository;
     this.clock = clock == null ? Clock.systemUTC() : clock;
+    this.virusScanService = virusScanService;
   }
 
   @Override
@@ -118,6 +132,21 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     String fileName = trimToNull(file.getOriginalFilename());
     if (!isXlsx(file) ) {
       return buildPreview("rejected", "File type is not supported.", 0, List.of("Upload an XLSX file."), List.of());
+    }
+    try {
+      virusScanService.assertClean(file);
+    } catch (VirusScanException ex) {
+      return buildPreview(
+          "rejected",
+          ex.userMessage(),
+          0,
+          List.of(ex.userMessage()),
+          List.of(),
+          null,
+          null,
+          List.of(),
+          fileName,
+          file.getSize());
     }
 
     try {
@@ -456,6 +485,13 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     if (!isXlsx(file)) {
       errors.add("File type is not supported.");
+    }
+    if (errors.isEmpty()) {
+      try {
+        virusScanService.assertClean(file);
+      } catch (VirusScanException ex) {
+        errors.add(ex.userMessage());
+      }
     }
 
     return errors;

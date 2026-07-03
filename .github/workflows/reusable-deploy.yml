@@ -104,6 +104,8 @@ jobs:
             -p DATABASE_USER="${{ secrets.database_user }}"
             -p DATABASE_PASSWORD="$DATABASE_PASSWORD"
             -p KEYSTORE_SECRET="$KEYSTORE_SECRET"
+            -p CLAMAV_REGISTRY="ghcr.io/${{ github.repository }}/clamav"
+            -p CLAMAV_IMAGE_TAG="${{ inputs.tag }}"
             -p LEXIS_PROD_RTM_ONLY="${{ secrets.lexis_prod_rtm_only || 'false' }}"
           triggers: ${{ inputs.triggers }}
 

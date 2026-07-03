@@ -54,6 +54,19 @@ parameters:
     required: true
   - name: KEYSTORE_SECRET
     required: true
+  - name: LEXIS_VIRUS_SCAN_ENABLED
+    value: "true"
+  - name: LEXIS_VIRUS_SCAN_TIMEOUT
+    value: 10s
+  - name: CLAMAV_REGISTRY
+    description: ClamAV image registry path (no tag)
+    value: ghcr.io/bcgov/nr-lexis/clamav
+  - name: CLAMAV_IMAGE_TAG
+    description: ClamAV container image tag
+    value: latest
+  - name: CLAMAV_DEFINITION_MIRROR
+    description: Freshclam definition mirror
+    value: https://clamav-mirror.apps.silver.devops.gov.bc.ca
 
 objects:
   - apiVersion: apps/v1
@@ -163,6 +176,14 @@ objects:
                     secretKeyRef:
                       name: ${NAME}-backend-secret-${ZONE}
                       key: KEYSTORE_SECRET
+                - name: LEXIS_VIRUS_SCAN_ENABLED
+                  value: ${LEXIS_VIRUS_SCAN_ENABLED}
+                - name: LEXIS_VIRUS_SCAN_HOST
+                  value: ${NAME}-clamav-${ZONE}
+                - name: LEXIS_VIRUS_SCAN_PORT
+                  value: "3310"
+                - name: LEXIS_VIRUS_SCAN_TIMEOUT
+                  value: ${LEXIS_VIRUS_SCAN_TIMEOUT}
               resources:
                 requests:
                   cpu: ${MIN_CPU}
@@ -260,6 +281,165 @@ objects:
             target:
               type: Utilization
               averageUtilization: 200
+
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: ${NAME}-clamav-config-${ZONE}
+      labels:
+        app: ${NAME}-clamav-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
+    data:
+      clamd.conf: |
+        LogFile /dev/stdout
+        LogTime yes
+        DatabaseDirectory /opt/app-root/src
+        TCPSocket 3310
+        StreamMaxLength 25M
+        ReadTimeout 120
+        CommandReadTimeout 10
+        SendBufTimeout 500
+        MaxThreads 10
+        MaxQueue 30
+        Foreground yes
+        TemporaryDirectory /tmp/clamav
+        AllowSupplementaryGroups yes
+        ScanArchive yes
+        Bytecode yes
+      freshclam.conf: |
+        DatabaseDirectory /opt/app-root/src
+        LogTime yes
+        LogVerbose yes
+        DatabaseMirror ${CLAMAV_DEFINITION_MIRROR}
+        Foreground yes
+        ConnectTimeout 60
+        ReceiveTimeout 60
+
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: ${NAME}-clamav-${ZONE}
+      labels:
+        app: ${NAME}-clamav-${ZONE}
+        app.kubernetes.io/name: ${NAME}-clamav
+        app.kubernetes.io/instance: ${ZONE}
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: ${NAME}-clamav-${ZONE}
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          labels:
+            app: ${NAME}-clamav-${ZONE}
+            app.kubernetes.io/instance: ${ZONE}
+        spec:
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+          containers:
+            - name: ${NAME}-clamav
+              image: ${CLAMAV_REGISTRY}:${CLAMAV_IMAGE_TAG}
+              imagePullPolicy: Always
+              ports:
+                - containerPort: 3310
+                  protocol: TCP
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "1Gi"
+                  ephemeral-storage: "300Mi"
+                limits:
+                  cpu: "1500m"
+                  memory: "2Gi"
+                  ephemeral-storage: "1Gi"
+              livenessProbe:
+                exec:
+                  command:
+                    - /opt/app-root/clamdcheck.sh
+                initialDelaySeconds: 180
+                periodSeconds: 30
+                timeoutSeconds: 5
+                failureThreshold: 5
+              readinessProbe:
+                exec:
+                  command:
+                    - /opt/app-root/clamdcheck.sh
+                initialDelaySeconds: 60
+                periodSeconds: 15
+                timeoutSeconds: 5
+                failureThreshold: 20
+              volumeMounts:
+                - name: clamav-config
+                  mountPath: /usr/local/etc/clamd.conf
+                  subPath: clamd.conf
+                  readOnly: true
+                - name: clamav-config
+                  mountPath: /usr/local/etc/freshclam.conf
+                  subPath: freshclam.conf
+                  readOnly: true
+                - name: clamav-db
+                  mountPath: /opt/app-root/src
+                - name: clamav-logs
+                  mountPath: /var/log/clamav
+                - name: clamav-tmp
+                  mountPath: /tmp/clamav
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+          volumes:
+            - name: clamav-config
+              configMap:
+                name: ${NAME}-clamav-config-${ZONE}
+            - name: clamav-db
+              emptyDir: {}
+            - name: clamav-logs
+              emptyDir: {}
+            - name: clamav-tmp
+              emptyDir: {}
+
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: ${NAME}-clamav-${ZONE}
+      labels:
+        app: ${NAME}-clamav-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
+    spec:
+      selector:
+        app: ${NAME}-clamav-${ZONE}
+      ports:
+        - name: 3310-tcp
+          port: 3310
+          targetPort: 3310
+          protocol: TCP
+
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: ${NAME}-clamav-${ZONE}-ingress
+      labels:
+        app: ${NAME}-clamav-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
+    spec:
+      podSelector:
+        matchLabels:
+          app: ${NAME}-clamav-${ZONE}
+      ingress:
+        - from:
+            - podSelector:
+                matchLabels:
+                  app: ${NAME}-backend-${ZONE}
+          ports:
+            - protocol: TCP
+              port: 3310
+      policyTypes:
+        - Ingress
 
   - apiVersion: v1
     kind: PersistentVolumeClaim

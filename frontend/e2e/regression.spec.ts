@@ -144,6 +144,20 @@ type ApplicationSubmissionResponse = {
   errors?: unknown
 }
 
+type LexisUploadResponse = {
+  uploadType?: string
+  fileName?: string | null
+  fileSize?: number
+  status?: string
+  message?: string | null
+}
+
+type RegressionUploadFile = {
+  name: string
+  mimeType: string
+  buffer: Buffer
+}
+
 type PackageScaleResponse = {
   id?: string | null
   scaleId?: string | null
@@ -209,6 +223,7 @@ const missingApplicationNumber = '999999999'
 const rtmSuccessWorkbook = readFileSync(
   new URL('../public/templates/rtm-ems-log-amv-template.xlsx', import.meta.url),
 )
+const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionStatusRemark = 'Weekly credentialed regression status check'
 const regressionClientEmail = 'lexis-regression@example.test'
 const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
@@ -370,6 +385,93 @@ const regressionSubmissionXml = (
     </lexis:LexisSubmission>
   </esf:submissionContent>
 </esf:ESFSubmission>`
+
+const antivirusTestSignature = (): string =>
+  [
+    'X5O!P%@AP[4',
+    String.fromCharCode(92),
+    'PZX54(P^)7CC)7}$',
+    'EICAR',
+    '-STANDARD-',
+    'ANTIVIRUS-',
+    'TEST-FILE',
+    '!$H+H*',
+  ].join('')
+
+const infectedApplicationSubmissionFiles = (): RegressionUploadFile[] => {
+  const signature = antivirusTestSignature()
+  return [
+    {
+      name: 'eicar-application-import.xml',
+      mimeType: 'application/xml',
+      buffer: Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<lexisImport>
+  <manualTest>ClamAV regression payload. This is not real malware.</manualTest>
+  <virusSignature>${signature}</virusSignature>
+</lexisImport>`,
+        'utf8',
+      ),
+    },
+    {
+      name: 'eicar-application-import.geojson',
+      mimeType: 'application/geo+json',
+      buffer: Buffer.from(
+        `${JSON.stringify(
+          {
+            type: 'FeatureCollection',
+            features: [],
+            properties: {
+              manualTest: 'ClamAV regression payload. This is not real malware.',
+            },
+          },
+          null,
+          2,
+        )}
+${signature}`,
+        'utf8',
+      ),
+    },
+  ]
+}
+
+const infectedApplicationDocumentPdf = (): RegressionUploadFile => ({
+  name: 'eicar-application-upload.pdf',
+  mimeType: 'application/pdf',
+  buffer: Buffer.from(
+    [
+      '%PDF-1.4',
+      '% ClamAV regression payload. This is not real malware.',
+      `%${antivirusTestSignature()}`,
+      '1 0 obj',
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      'endobj',
+      '2 0 obj',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      'endobj',
+      '3 0 obj',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+      'endobj',
+      '4 0 obj',
+      '<< /Length 71 >>',
+      'stream',
+      'BT',
+      '/F1 12 Tf',
+      '36 96 Td',
+      '(ClamAV regression upload test file) Tj',
+      'ET',
+      'endstream',
+      'endobj',
+      '5 0 obj',
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+      'endobj',
+      'trailer',
+      '<< /Root 1 0 R >>',
+      '%%EOF',
+    ].join('\n'),
+    'utf8',
+  ),
+})
 
 const adminNavigationSections: Array<{
   section: string
@@ -655,6 +757,61 @@ const postRegressionSubmission = async (
       },
     }),
   )
+}
+
+const postRegressionApplicationSubmissionFile = async (
+  page: Page,
+  path: string,
+  file: RegressionUploadFile,
+): Promise<JsonWithStatus<ApplicationSubmissionResponse>> => {
+  return readJsonResponseWithStatuses<ApplicationSubmissionResponse>(
+    await postWithCsrf(page, path, {
+      multipart: {
+        userReference: `E2E ClamAV ${file.name}`,
+        file,
+      },
+    }),
+    [422],
+  )
+}
+
+const postRegressionApplicationDocumentFile = async (
+  page: Page,
+  file: RegressionUploadFile,
+): Promise<JsonWithStatus<LexisUploadResponse>> => {
+  return readJsonResponseWithStatuses<LexisUploadResponse>(
+    await postWithCsrf(page, '/api/lexis/fileApplicationUpload', {
+      multipart: {
+        applicationNumber: String(missingApplicationNumber),
+        fileDescription: 'E2E ClamAV application document regression',
+        file,
+      },
+    }),
+    [422],
+  )
+}
+
+const expectApplicationSubmissionVirusScanRejection = (
+  response: JsonWithStatus<ApplicationSubmissionResponse>,
+  source: string,
+): void => {
+  expect(response.status, `${source} should be rejected by ClamAV`).toBe(422)
+  expect(response.payload.status).toBe('rejected')
+  expect(response.payload.message ?? '').toContain(virusScanRejectionMessage)
+  expect(asStringArray(response.payload.errors).join(' ')).toContain(virusScanRejectionMessage)
+  expect(response.payload.applicationNumber ?? null).toBeNull()
+  expect(response.payload.packageNumber ?? null).toBeNull()
+  expect(response.payload.scaleRows ?? 0).toBe(0)
+}
+
+const expectApplicationDocumentVirusScanRejection = (
+  response: JsonWithStatus<LexisUploadResponse>,
+): void => {
+  expect(response.status, 'application document upload should be rejected by ClamAV').toBe(422)
+  expect(response.payload.uploadType).toBe('application')
+  expect(response.payload.fileName).toBe('eicar-application-upload.pdf')
+  expect(response.payload.status).toBe('rejected')
+  expect(response.payload.message ?? '').toContain(virusScanRejectionMessage)
 }
 
 const createRegressionExportSchedule = async (
@@ -1619,6 +1776,26 @@ test.describe('TEST IDIR admin regression', () => {
     } else {
       expect(rtmPreviewResponse.payload.status).toBe('validation_failed')
       expect(asStringArray(rtmPreviewResponse.payload.errors).join(' ')).toContain('update date')
+    }
+  })
+
+  test('rejects ClamAV test payloads on application document and submission uploads', async () => {
+    const page = await authenticatedIdirPage()
+
+    expectApplicationDocumentVirusScanRejection(
+      await postRegressionApplicationDocumentFile(page, infectedApplicationDocumentPdf()),
+    )
+
+    for (const file of infectedApplicationSubmissionFiles()) {
+      for (const path of [
+        '/api/lexis/application-submissions/validation',
+        '/api/lexis/application-submissions',
+      ] as const) {
+        expectApplicationSubmissionVirusScanRejection(
+          await postRegressionApplicationSubmissionFile(page, path, file),
+          `${file.name} ${path}`,
+        )
+      }
     }
   })
 
