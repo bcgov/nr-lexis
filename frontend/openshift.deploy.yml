@@ -31,7 +31,7 @@ parameters:
     value: ghcr.io/bcgov/nr-lexis/frontend
   - name: DOMAIN
     description: Cluster apps domain (no leading dot)
-    value: apps.silver.devops.gov.bc.ca
+    value: apps.gold.devops.gov.bc.ca
   - name: FRONTEND_LOG_LEVEL
     value: INFO
   - name: VITE_USER_POOLS_ID
@@ -49,6 +49,10 @@ parameters:
     value: "openid profile email"
   - name: VITE_ZONE
     value: dev
+  - name: VITE_LEXIS_PROD_RTM_ONLY
+    value: "false"
+  - name: VITE_FAM_MANAGE_URL
+    value: ""
   - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
     value: /api
   - name: VITE_LEXIS_REPORT_API_BASE
@@ -137,6 +141,10 @@ objects:
                   value: ${VITE_COGNITO_SCOPES}
                 - name: VITE_ZONE
                   value: ${VITE_ZONE}
+                - name: VITE_LEXIS_PROD_RTM_ONLY
+                  value: ${VITE_LEXIS_PROD_RTM_ONLY}
+                - name: VITE_FAM_MANAGE_URL
+                  value: ${VITE_FAM_MANAGE_URL}
                 - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
                   value: ${VITE_LEXIS_REPORT_ENDPOINT_BASE}
                 - name: VITE_LEXIS_REPORT_API_BASE

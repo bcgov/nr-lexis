@@ -10,8 +10,8 @@ export const parseCsvParam = (value: string | null): string[] => {
 }
 
 export const DEFAULT_SEARCH_PAGE = 1
-export const DEFAULT_SEARCH_PAGE_SIZE = 100
-export const SEARCH_PAGE_SIZE_OPTIONS = [20, 50, 100, 200] as const
+export const DEFAULT_SEARCH_PAGE_SIZE = 10
+export const SEARCH_PAGE_SIZE_OPTIONS = [10, 25, 50, 200] as const
 
 type SearchParamValue = string | number | string[] | null | undefined
 

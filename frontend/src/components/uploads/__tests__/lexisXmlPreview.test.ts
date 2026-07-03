@@ -37,6 +37,25 @@ const BARE_XML_PREVIEW_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
   </lexis:productDetail>
 </lexis:LexisSubmission>`
 
+const XML_NO_SUMMARY_PREVIEW_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
+<lexis:LexisSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis">
+  <lexis:applicant />
+  <lexis:applicationDetail />
+  <lexis:productDetail>
+    <lexis:harvestedTimberWithoutSummaryOfScale />
+    <lexis:harvestedTimberWithoutSummaryOfScale />
+  </lexis:productDetail>
+</lexis:LexisSubmission>`
+
+const XML_STANDING_TIMBER_PREVIEW_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
+<lexis:LexisSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis">
+  <lexis:applicant />
+  <lexis:applicationDetail />
+  <lexis:productDetail>
+    <lexis:standingTimber />
+  </lexis:productDetail>
+</lexis:LexisSubmission>`
+
 const GEOJSON_PREVIEW_FIXTURE = JSON.stringify({
   type: 'FeatureCollection',
   lexis: {
@@ -78,6 +97,24 @@ describe('lexisXmlPreview', () => {
         new File([BARE_XML_PREVIEW_FIXTURE], 'submission.xml', { type: 'application/xml' }),
       ),
     ).resolves.toBe('Preview: LEXIS XML structure detected, 1 scale row.')
+  })
+
+  it('summarizes harvested timber without summary XML submissions', async () => {
+    await expect(
+      buildLexisXmlPreviewMessage(
+        new File([XML_NO_SUMMARY_PREVIEW_FIXTURE], 'submission.xml', { type: 'application/xml' }),
+      ),
+    ).resolves.toBe('Preview: LEXIS XML structure detected, 2 no-summary timber marks.')
+  })
+
+  it('summarizes standing timber XML submissions', async () => {
+    await expect(
+      buildLexisXmlPreviewMessage(
+        new File([XML_STANDING_TIMBER_PREVIEW_FIXTURE], 'submission.xml', {
+          type: 'application/xml',
+        }),
+      ),
+    ).resolves.toBe('Preview: LEXIS XML structure detected, 1 standing timber mark.')
   })
 
   it('summarizes safe structure from a LEXIS GeoJSON submission', async () => {

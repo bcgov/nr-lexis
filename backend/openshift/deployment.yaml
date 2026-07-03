@@ -100,6 +100,8 @@ spec:
               value: ${SPRING_BOOT_AUTOCONFIG_LOG_LEVEL}
             - name: SPRING_JPA_SHOW_SQL
               value: "${SPRING_JPA_SHOW_SQL}"
+            - name: LEXIS_PROD_RTM_ONLY
+              value: "${LEXIS_PROD_RTM_ONLY}"
             - name: KEYSTORE_SECRET
               valueFrom:
                 secretKeyRef:

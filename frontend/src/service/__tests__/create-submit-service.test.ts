@@ -116,10 +116,16 @@ describe('create-submit-service', () => {
       companyName: 'Example Lumber',
       contactName: 'Alex Example',
       region: '11',
+      offerVolume: '99.9',
       purchaseOfferAmount: '25000',
       purchaseOfferDate: '2026-01-10',
-      offerEndDate: '2026-01-20',
+      offerWithdrawalDate: '2026-01-20',
       withdrawReason: 'Withdrawn by buyer',
+      teacReviewDate: '2026-01-15',
+      fairOfferIndicator: 'Y',
+      validOfferIndicator: 'Y',
+      approvalIndicator: 'N',
+      offerRemark: 'Needs review',
       pickupLocation: 'yard',
       offerCondition: 'none',
     })
@@ -128,7 +134,14 @@ describe('create-submit-service', () => {
     const [, body] = postMock.mock.calls[0]
     expect(body.get('companyName')).toBe('Example Lumber')
     expect(body.get('contactName')).toBe('Alex Example')
+    expect(body.get('offerVolume')).toBe('99.9')
+    expect(body.get('offerWithdrawalDate')).toBe('2026-01-20')
     expect(body.get('withdrawReason')).toBe('Withdrawn by buyer')
+    expect(body.get('teacReviewDate')).toBe('2026-01-15')
+    expect(body.get('fairOfferIndicator')).toBe('Y')
+    expect(body.get('validOfferIndicator')).toBe('Y')
+    expect(body.get('approvalIndicator')).toBe('N')
+    expect(body.get('offerRemark')).toBe('Needs review')
     expect(body.get('offerNumber')).toBeNull()
     expect(body.get('exportPurchaseOfferNumber')).toBeNull()
   })

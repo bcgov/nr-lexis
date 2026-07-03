@@ -65,7 +65,7 @@ public class LexisSessionController {
     List<String> grantedActions = authorizationService.resolveGrantedActions(welcome.roles());
     String orgUnitNo = principalService.resolveOrgUnitNo(principal);
 
-    LOGGER.info(
+    LOGGER.debug(
         "Resolved LEXIS session capabilities: authenticated={}, principalPresent={}, roles={}, welcomeTarget={}, grantedActionCount={}, orgUnitNo={}",
         welcome.authenticated(),
         welcome.principal() != null && !welcome.principal().isBlank(),

@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.session;
 
 import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
+import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -20,15 +21,19 @@ public class LexisAuthorizationService {
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
   private static final String ROLE_FEDERAL_SUBMITTER = "LEXIS_FEDERAL_SUBMITTER";
+  private static final Set<String> PROD_RTM_ONLY_ACTIONS = Set.of("/lexisAgentAdmin");
 
   private final Set<String> configuredIndustryRoles;
   private final Map<String, List<String>> configuredRoleActions;
+  private final LexisFeatureProperties featureProperties;
   private final LexisSessionService sessionService;
 
   public LexisAuthorizationService(
       LexisAuthorizationProperties authorizationProperties,
+      LexisFeatureProperties featureProperties,
       LexisSessionService sessionService) {
     this.sessionService = sessionService;
+    this.featureProperties = featureProperties;
     this.configuredIndustryRoles = Set.copyOf(sessionService.getConfiguredIndustryRoles());
     this.configuredRoleActions = normalizeRoleActions(authorizationProperties.getRoleActions());
   }
@@ -46,6 +51,10 @@ public class LexisAuthorizationService {
       if (configuredIndustryRoles.contains(role)) {
         appendRoleActions(granted, INDUSTRY_ROLE_KEY);
       }
+    }
+
+    if (featureProperties.isProdRtmOnly()) {
+      granted.retainAll(PROD_RTM_ONLY_ACTIONS);
     }
 
     return List.copyOf(granted);

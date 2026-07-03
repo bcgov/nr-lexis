@@ -28,6 +28,10 @@ type BackendProvincialApplicationSearchResult = {
   locked: boolean
 }
 
+type ProvincialApplicationSearchOptions = {
+  knownTotal?: number
+}
+
 export type ProvincialApplicationNumberOption = {
   value: string
   label: string
@@ -95,12 +99,16 @@ const parseBackendResponse = (payload: unknown): ProvincialApplicationSearchResp
 
 export const searchProvincialApplications = async (
   request: ProvincialApplicationSearchRequest,
+  options: ProvincialApplicationSearchOptions = {},
 ): Promise<ProvincialApplicationSearchResponse> => {
   try {
-    const response = await getCachedSearchResponse<unknown>(
-      '/lexis/applications/search',
-      buildBackendParams(request),
-    )
+    const params = buildBackendParams(request)
+    const knownTotal = options.knownTotal
+    if (Number.isInteger(knownTotal) && knownTotal !== undefined && knownTotal >= 0) {
+      params.append('knownTotal', String(knownTotal))
+    }
+
+    const response = await getCachedSearchResponse<unknown>('/lexis/applications/search', params)
 
     return requireParsedSearchResponse(
       parseBackendResponse(response.data),

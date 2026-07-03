@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.session;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
+import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,24 @@ class LexisAuthorizationServiceTest {
     List<String> granted = service.resolveGrantedActions(List.of("LEXIS_ADMIN"));
 
     assertThat(granted).containsExactlyElementsOf(service.getKnownActions());
+  }
+
+  @Test
+  void prodRtmOnlyModeShouldLimitWildcardAdminGrantsToRtmAdminAction() {
+    LexisAuthorizationService service =
+        createService(
+            "LEXIS_PROVINCIAL_SUBMITTER,LEXIS_FEDERAL_SUBMITTER",
+            Map.of(
+                "LEXIS_ADMIN", List.of("*"),
+                "LEXIS_READ_ONLY", List.of("/applicationSearch")),
+            true);
+
+    List<String> granted = service.resolveGrantedActions(List.of("LEXIS_ADMIN"));
+
+    assertThat(granted).containsExactly("/lexisAgentAdmin");
+    assertThat(service.canPerformAction(List.of("LEXIS_ADMIN"), "/lexisAgentAdmin")).isTrue();
+    assertThat(service.canPerformAction(List.of("LEXIS_ADMIN"), "/applicationSearch")).isFalse();
+    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "/applicationSearch")).isFalse();
   }
 
   @Test
@@ -186,10 +205,17 @@ class LexisAuthorizationServiceTest {
 
   private LexisAuthorizationService createService(
       String industryRolesCsv, Map<String, List<String>> roleActions) {
+    return createService(industryRolesCsv, roleActions, false);
+  }
+
+  private LexisAuthorizationService createService(
+      String industryRolesCsv, Map<String, List<String>> roleActions, boolean prodRtmOnly) {
     LexisAuthorizationProperties properties = new LexisAuthorizationProperties();
     Map<String, List<String>> orderedMappings = new LinkedHashMap<>(roleActions);
     properties.setRoleActions(orderedMappings);
+    LexisFeatureProperties featureProperties = new LexisFeatureProperties();
+    featureProperties.setProdRtmOnly(prodRtmOnly);
     LexisSessionService sessionService = new LexisSessionService(industryRolesCsv);
-    return new LexisAuthorizationService(properties, sessionService);
+    return new LexisAuthorizationService(properties, featureProperties, sessionService);
   }
 }

@@ -65,7 +65,8 @@ public class FederalApplicationController {
       @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
       @RequestParam(name = "agentClientNumber", required = false) String agentClientNumber,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
-      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size) {
+      @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
+      @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal) {
     FederalApplicationService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Federal application service unavailable - returning no content for search");
@@ -88,6 +89,9 @@ public class FederalApplicationController {
             page,
             size);
 
+    if (knownTotal != null) {
+      return ResponseEntity.ok(service.search(criteria, knownTotal));
+    }
     return ResponseEntity.ok(service.search(criteria));
   }
 

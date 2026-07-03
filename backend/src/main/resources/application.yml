@@ -36,6 +36,13 @@ management:
       exposure:
         include: health,info,prometheus
 
+ca:
+  bc:
+    gov:
+      nrs:
+        identity-lookup:
+          base-url: ${IDENTITY_LOOKUP_BASE_URL:}
+
 lexis:
   virus-scan:
     enabled: ${LEXIS_VIRUS_SCAN_ENABLED:false}
@@ -43,6 +50,8 @@ lexis:
     port: ${LEXIS_VIRUS_SCAN_PORT:3310}
     timeout: ${LEXIS_VIRUS_SCAN_TIMEOUT:10s}
     chunk-size: ${LEXIS_VIRUS_SCAN_CHUNK_SIZE:8192}
+  features:
+    prod-rtm-only: ${LEXIS_PROD_RTM_ONLY:false}
   mail:
     from: ${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}
   auth:

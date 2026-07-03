@@ -55,11 +55,18 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
 
   @Override
   public ApplicationReviewSearchResponseDto search(ApplicationReviewSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  @Override
+  public ApplicationReviewSearchResponseDto search(
+      ApplicationReviewSearchCriteria criteria, Integer knownTotal) {
     ApplicationReviewSearchCriteria normalized = normalizeCriteria(criteria);
     int page = normalized.page();
     int size = normalized.size();
 
-    Page<ApplicationReviewSearchResultDto> searchPage = repository.search(normalized);
+    Page<ApplicationReviewSearchResultDto> searchPage =
+        knownTotal == null ? repository.search(normalized) : repository.search(normalized, knownTotal);
     List<ApplicationReviewSearchResultDto> results = searchPage == null ? List.of() : safeList(searchPage.getContent());
 
     return new ApplicationReviewSearchResponseDto(

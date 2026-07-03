@@ -4,6 +4,8 @@ import {
   Checkbox,
   Column,
   Grid,
+  InlineNotification,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -16,6 +18,12 @@ import {
 } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import {
+  searchFamUserRoleAssignments,
+  type FamUserRoleAssignment,
+  type FamUserRoleAssignmentSearchResponse,
+} from '@/service/fam-user-access-service'
+import { resolveFamManageUrl } from '@/service/fam-manage-url'
 import { normalizeFilterText as normalizeText } from '@/utils/text'
 
 type LegacyLaunchTool = {
@@ -159,11 +167,49 @@ const ROUTE_ACCESS_CHECKS = [
   { label: 'Admin', action: '/lexisAgentAdmin' },
 ]
 
+const FAM_USER_ROLE_PAGE_SIZES = [10, 25, 50, 100]
+
+const displayValue = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined || String(value).trim().length === 0) {
+    return '-'
+  }
+  return String(value)
+}
+
+const roleScopeLabel = (assignment: FamUserRoleAssignment): string => {
+  if (assignment.scopeValue?.trim()) {
+    return assignment.scopeType?.trim()
+      ? `${assignment.scopeType}: ${assignment.scopeValue}`
+      : assignment.scopeValue
+  }
+  if (!assignment.forestClientNumber && !assignment.forestClientName) {
+    return 'Application'
+  }
+  const client = [assignment.forestClientNumber, assignment.forestClientName]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(' - ')
+  return client || 'Forest client'
+}
+
+const formatDate = (value: string | null): string => {
+  if (!value) {
+    return '-'
+  }
+  return value.slice(0, 10)
+}
+
 const AdminPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform, refresh } = useAuth()
   const [actionFilter, setActionFilter] = useState('')
   const [showGrantedOnly, setShowGrantedOnly] = useState(false)
+  const [famSearchText, setFamSearchText] = useState('')
+  const [famPageNumber, setFamPageNumber] = useState(1)
+  const [famPageSize, setFamPageSize] = useState(10)
+  const [famSearchResponse, setFamSearchResponse] =
+    useState<FamUserRoleAssignmentSearchResponse | null>(null)
+  const [famSearchError, setFamSearchError] = useState<string | null>(null)
+  const [isFamSearchLoading, setIsFamSearchLoading] = useState(false)
 
   const visibleActions = useMemo(() => {
     return LEGACY_ACTION_CATALOG.filter((action) => {
@@ -180,6 +226,42 @@ const AdminPage = () => {
   const grantedActionCount = useMemo(() => {
     return LEGACY_ACTION_CATALOG.filter((action) => canPerform(action)).length
   }, [canPerform])
+  const canSearchFamUserAccess = canPerform('/lexisAgentAdmin')
+  const famManageUrl = resolveFamManageUrl()
+
+  const runFamUserSearch = async (pageNumber = famPageNumber, pageSize = famPageSize) => {
+    const search = famSearchText.trim()
+    if (search.length < 3) {
+      setFamSearchError('Enter at least 3 characters to search FAM user access.')
+      setFamSearchResponse(null)
+      return
+    }
+
+    setIsFamSearchLoading(true)
+    setFamSearchError(null)
+    try {
+      const response = await searchFamUserRoleAssignments({
+        search,
+        pageNumber,
+        pageSize,
+        sortBy: 'user_name',
+        sortOrder: 'asc',
+      })
+      setFamSearchResponse(response)
+      setFamPageNumber(response.pageNumber || pageNumber)
+      setFamPageSize(response.pageSize || pageSize)
+      if (response.message) {
+        setFamSearchError(response.message)
+      }
+    } catch (error) {
+      setFamSearchError(
+        error instanceof Error ? error.message : 'Unable to search FAM user access.',
+      )
+      setFamSearchResponse(null)
+    } finally {
+      setIsFamSearchLoading(false)
+    }
+  }
 
   return (
     <Grid fullWidth className="default-grid">
@@ -241,6 +323,134 @@ const AdminPage = () => {
           </Table>
         </Tile>
       </Column>
+
+      {canSearchFamUserAccess && (
+        <Column sm={4} md={8} lg={16}>
+          <Tile>
+            <div className="admin-section-heading">
+              <div>
+                <h2 className="dashboard-title">FAM user access lookup</h2>
+                <p>Search IDIR or Business BCeID users to view their LEXIS role assignments.</p>
+              </div>
+              <Button
+                href={famManageUrl}
+                kind="tertiary"
+                rel="noopener noreferrer"
+                size="sm"
+                target="_blank"
+              >
+                Manage in FAM
+              </Button>
+            </div>
+
+            <div className="legacy-search-grid">
+              <TextInput
+                id="famUserSearch"
+                labelText="IDIR or Business BCeID username"
+                value={famSearchText}
+                onChange={(event) => setFamSearchText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    setFamPageNumber(1)
+                    void runFamUserSearch(1, famPageSize)
+                  }
+                }}
+              />
+              <div className="legacy-search-actions">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setFamPageNumber(1)
+                    void runFamUserSearch(1, famPageSize)
+                  }}
+                  disabled={isFamSearchLoading}
+                >
+                  Search FAM Access
+                </Button>
+              </div>
+            </div>
+
+            {famSearchError && (
+              <InlineNotification
+                kind={famSearchResponse?.configured === false ? 'warning' : 'error'}
+                lowContrast
+                title="FAM user access"
+                subtitle={famSearchError}
+              />
+            )}
+
+            <Table useZebraStyles size="sm">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>User</TableHeader>
+                  <TableHeader>Type</TableHeader>
+                  <TableHeader>Email</TableHeader>
+                  <TableHeader>Role</TableHeader>
+                  <TableHeader>Scope</TableHeader>
+                  <TableHeader>Created</TableHeader>
+                  <TableHeader>Expires</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(famSearchResponse?.results ?? []).map((assignment) => (
+                  <TableRow
+                    key={assignment.assignmentId ?? `${assignment.userName}-${assignment.roleName}`}
+                  >
+                    <TableCell>
+                      <strong>{displayValue(assignment.userName)}</strong>
+                      <div>{displayValue(assignment.fullName)}</div>
+                    </TableCell>
+                    <TableCell>
+                      {displayValue(assignment.userTypeDescription ?? assignment.userTypeCode)}
+                    </TableCell>
+                    <TableCell>{displayValue(assignment.email)}</TableCell>
+                    <TableCell>
+                      <strong>
+                        {displayValue(assignment.roleDisplayName ?? assignment.roleName)}
+                      </strong>
+                      <div>{displayValue(assignment.roleName)}</div>
+                    </TableCell>
+                    <TableCell>{roleScopeLabel(assignment)}</TableCell>
+                    <TableCell>{formatDate(assignment.createDate)}</TableCell>
+                    <TableCell>{formatDate(assignment.expiryDate)}</TableCell>
+                  </TableRow>
+                ))}
+                {famSearchResponse?.results.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7}>
+                      {famSearchResponse.configured
+                        ? 'No FAM role assignments matched the current search.'
+                        : 'FAM user access lookup is not configured.'}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!famSearchResponse && (
+                  <TableRow>
+                    <TableCell colSpan={7}>Search to view FAM role assignments.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+
+            {famSearchResponse && famSearchResponse.configured && (
+              <Pagination
+                backwardText="Previous page"
+                forwardText="Next page"
+                itemsPerPageText="Items per page"
+                page={famPageNumber}
+                pageSize={famPageSize}
+                pageSizes={FAM_USER_ROLE_PAGE_SIZES}
+                totalItems={famSearchResponse.total}
+                onChange={({ page, pageSize }) => {
+                  setFamPageNumber(page)
+                  setFamPageSize(pageSize)
+                  void runFamUserSearch(page, pageSize)
+                }}
+              />
+            )}
+          </Tile>
+        </Column>
+      )}
 
       <Column sm={4} md={8} lg={16}>
         <Tile>

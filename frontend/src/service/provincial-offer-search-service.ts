@@ -20,6 +20,10 @@ type BackendProvincialOfferSearchResult = {
   offerWithdrawalDate: string | null
 }
 
+type ProvincialOfferSearchOptions = {
+  knownTotal?: number
+}
+
 const buildBackendParams = (request: ProvincialOfferSearchRequest): URLSearchParams => {
   const { filters } = request
   return createSortedPagedSearchParams(
@@ -54,12 +58,16 @@ const parseBackendResponse = (payload: unknown): ProvincialOfferSearchResponse |
 
 export const searchProvincialOffers = async (
   request: ProvincialOfferSearchRequest,
+  options: ProvincialOfferSearchOptions = {},
 ): Promise<ProvincialOfferSearchResponse> => {
   try {
-    const response = await getCachedSearchResponse<unknown>(
-      '/lexis/purchase-offers/search',
-      buildBackendParams(request),
-    )
+    const params = buildBackendParams(request)
+    const knownTotal = options.knownTotal
+    if (Number.isInteger(knownTotal) && knownTotal !== undefined && knownTotal >= 0) {
+      params.append('knownTotal', String(knownTotal))
+    }
+
+    const response = await getCachedSearchResponse<unknown>('/lexis/purchase-offers/search', params)
 
     return requireParsedSearchResponse(
       parseBackendResponse(response.data),

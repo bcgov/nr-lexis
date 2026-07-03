@@ -139,13 +139,29 @@ export type FederalApplicationDetail = {
   statusDescription: string | null
   ownerClientNumber: string | null
   ownerClientLocationCode: string | null
+  ownerApplicantType?: string | null
+  ownerContactName?: string | null
+  ownerCompanyName?: string | null
   agentClientNumber: string | null
   agentClientLocationCode: string | null
+  agentApplicantType?: string | null
+  agentContactName?: string | null
+  agentCompanyName?: string | null
   exemptionNumber: string | null
   exemptionType: string | null
   exemptionReason: string | null
+  region?: string | null
+  productType?: string | null
+  applicationDate?: string | null
   receivedDate: string | null
   listingDate: string | null
+  termDays?: number | null
+  logLocation?: string | null
+  ageClass?: string | null
+  averageLogVolume?: number | null
+  applicationVolume?: number | null
+  endUse?: string | null
+  author?: string | null
   readOnly: boolean
   packages: string[]
   remarks: string[]

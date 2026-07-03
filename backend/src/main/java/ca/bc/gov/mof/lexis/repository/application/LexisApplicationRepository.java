@@ -107,10 +107,18 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   }
 
   public Page<LexisApplicationSearchResultDto> search(LexisApplicationSearchCriteria criteria) {
+    return search(criteria, null);
+  }
+
+  public Page<LexisApplicationSearchResultDto> search(
+      LexisApplicationSearchCriteria criteria, Integer knownTotal) {
     SqlWhere sqlWhere = buildSearchWhere(criteria);
     LocalDate today = LocalDate.now(ZoneId.systemDefault());
     int totalElements =
-        queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+        knownTotal == null
+            ? queryLegacyDynamicCountProcedure(
+                COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues())
+            : Math.max(0, knownTotal);
     return queryLegacyDynamicPage(
         FIND_APPLICATIONS_BY_CRITERIA,
         sqlWhere.sql(),

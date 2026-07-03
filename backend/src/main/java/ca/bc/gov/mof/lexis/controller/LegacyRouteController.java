@@ -184,6 +184,7 @@ public class LegacyRouteController {
         sortField,
         page,
         size,
+        null,
         authentication);
   }
 
@@ -240,7 +241,8 @@ public class LegacyRouteController {
         regionNumbers,
         sortField,
         page,
-        size);
+        size,
+        null);
   }
 
   @GetMapping({"/exemptionSearch", "/exemptionSearch.do"})
@@ -287,6 +289,7 @@ public class LegacyRouteController {
         regionNumbers,
         page,
         size,
+        null,
         authentication);
   }
 
@@ -341,7 +344,8 @@ public class LegacyRouteController {
         ownerClientNumber,
         agentClientNumber,
         page,
-        size);
+        size,
+        null);
   }
 
   @GetMapping({"/federalApplicationDetails", "/federalApplicationDetails.do"})
@@ -387,6 +391,7 @@ public class LegacyRouteController {
         sortField,
         page,
         size,
+        null,
         authentication);
   }
 

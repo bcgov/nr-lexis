@@ -140,8 +140,13 @@ class ApplicationSubmissionImportServiceTest {
         SAMPLE_XML
             .replace(
                 "<lexis:jurisdictionCode>P</lexis:jurisdictionCode>",
-                "<lexis:jurisdictionCode>F</lexis:jurisdictionCode>\n"
-                    + "          <lexis:federalApplicationNumber>700123</lexis:federalApplicationNumber>")
+                "<lexis:jurisdictionCode>F</lexis:jurisdictionCode>")
+            .replace(
+                "<lexis:applicantTypeCode>O</lexis:applicantTypeCode>",
+                "<lexis:applicantTypeCode>O</lexis:applicantTypeCode>\n"
+                    + "        <lexis:officeUseOnly>\n"
+                    + "          <lexis:internalOfficeUseRefId>700123</lexis:internalOfficeUseRefId>\n"
+                    + "        </lexis:officeUseOnly>")
             .replace("<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>", "<lexis:boomNumber>FED26-700123</lexis:boomNumber>");
 
     ApplicationSubmissionImportResultDto result =
@@ -163,6 +168,138 @@ class ApplicationSubmissionImportServiceTest {
     CreateApplicationRequest application = applicationCaptor.getValue();
     assertThat(application.jurisdictionCode()).isEqualTo("F");
     assertThat(application.federalApplicationNumber()).isEqualTo(700123L);
+  }
+
+  @Test
+  void shouldValidateHarvestedTimberWithoutSummaryOfScale() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("NCHWP"))
+        .thenReturn(new PackageValidityItem(true, null));
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    String xml =
+        xmlWithProductDetail(
+            """
+            <lexis:productDetail>
+              <lexis:productTypeCode>H</lexis:productTypeCode>
+              <lexis:exemptApplnVol>84.5</lexis:exemptApplnVol>
+              <lexis:averageLogVolume>0.7</lexis:averageLogVolume>
+              <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+              <lexis:productLocation>Port Alberni c/o Pacific Towing</lexis:productLocation>
+              <lexis:ageClass>S</lexis:ageClass>
+              <lexis:avgLength>6.7</lexis:avgLength>
+              <lexis:avgDiameter>12.8</lexis:avgDiameter>
+              <lexis:harvestedTimberWithoutSummaryOfScale>
+                <lexis:timberMark>NCHWP</lexis:timberMark>
+              </lexis:harvestedTimberWithoutSummaryOfScale>
+            </lexis:productDetail>
+            """);
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("without-summary.xml", xml));
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.packageNumber()).isEqualTo("NCHWP");
+    assertThat(result.scaleRows()).isZero();
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().applicationVolume()).isEqualTo(84.5d);
+    assertThat(result.submissionSummary().averageLogVolume()).isEqualTo(0.7d);
+
+    ArgumentCaptor<CreateApplicationRequest> validationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(validationCaptor.capture());
+    assertThat(validationCaptor.getValue().applicationVolume()).isEqualTo(84.5d);
+    assertThat(validationCaptor.getValue().averageLogVolume()).isEqualTo(0.7d);
+  }
+
+  @Test
+  void shouldValidateStandingTimber() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("STAND1"))
+        .thenReturn(new PackageValidityItem(true, null));
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    String xml =
+        xmlWithProductDetail(
+            """
+            <lexis:productDetail>
+              <lexis:productTypeCode>S</lexis:productTypeCode>
+              <lexis:exemptApplnVol>42.2</lexis:exemptApplnVol>
+              <lexis:avgLogVolume>0.5</lexis:avgLogVolume>
+              <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+              <lexis:productLocation>Port Alberni c/o Pacific Towing</lexis:productLocation>
+              <lexis:ageClass>O</lexis:ageClass>
+              <lexis:avgLength>6.7</lexis:avgLength>
+              <lexis:avgDiameter>12.8</lexis:avgDiameter>
+              <lexis:standingTimber>
+                <lexis:timberMark>STAND1</lexis:timberMark>
+              </lexis:standingTimber>
+            </lexis:productDetail>
+            """);
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("standing.xml", xml));
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.packageNumber()).isEqualTo("STAND1");
+    assertThat(result.scaleRows()).isZero();
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().productTypeCode()).isEqualTo("S");
+    assertThat(result.submissionSummary().ageClass()).isEqualTo("O");
+    assertThat(result.submissionSummary().applicationVolume()).isEqualTo(42.2d);
+    assertThat(result.submissionSummary().averageLogVolume()).isEqualTo(0.5d);
+  }
+
+  @Test
+  void shouldMapAgentApplicantAndOwnerSections() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2"))
+        .thenReturn(new PackageValidityItem(true, null));
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    String xml =
+        SAMPLE_XML
+            .replace(
+                "<lexis:applicantTypeCode>O</lexis:applicantTypeCode>",
+                "<lexis:applicantTypeCode>A</lexis:applicantTypeCode>")
+            .replace(
+                "</lexis:applicant>",
+                "</lexis:applicant>\n"
+                    + "        <lexis:owner>\n"
+                    + "          <lexis:ownerDetails>\n"
+                    + "            <lexis:clientNumber>2000</lexis:clientNumber>\n"
+                    + "            <lexis:clientLocnCode>1</lexis:clientLocnCode>\n"
+                    + "            <lexis:name>Owner Company Ltd.</lexis:name>\n"
+                    + "          </lexis:ownerDetails>\n"
+                    + "          <lexis:ownerContact>\n"
+                    + "            <lexis:contactSurname>OWNER</lexis:contactSurname>\n"
+                    + "            <lexis:contactFirstname>OLIVIA</lexis:contactFirstname>\n"
+                    + "          </lexis:ownerContact>\n"
+                    + "        </lexis:owner>\n");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("agent-submission.xml", xml));
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().ownerClientNumber()).isEqualTo("00002000");
+    assertThat(result.submissionSummary().ownerClientLocationCode()).isEqualTo("01");
+    assertThat(result.submissionSummary().ownerContactName()).isEqualTo("OLIVIA OWNER");
+
+    ArgumentCaptor<CreateApplicationRequest> validationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(validationCaptor.capture());
+    CreateApplicationRequest request = validationCaptor.getValue();
+    assertThat(request.applicantTypeCode()).isEqualTo("A");
+    assertThat(request.agentClientNumber()).isEqualTo("00001074");
+    assertThat(request.agentClientLocationCode()).isEqualTo("03");
+    assertThat(request.agentContactName()).isEqualTo("CUSTOMER SERVICE");
+    assertThat(request.ownerClientNumber()).isEqualTo("00002000");
+    assertThat(request.ownerClientLocationCode()).isEqualTo("01");
+    assertThat(request.ownerContactName()).isEqualTo("OLIVIA OWNER");
   }
 
   @Test
@@ -826,6 +963,53 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldRejectElectronicReAdvertisements() {
+    ApplicationSubmissionImportService service = service();
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:applicantTypeCode>O</lexis:applicantTypeCode>",
+            "<lexis:applicantTypeCode>O</lexis:applicantTypeCode>\n"
+                + "        <lexis:re-advertisement>true</lexis:re-advertisement>");
+
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(xmlFile("readvertisement.xml", xml), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains("Re-advertisements cannot be submitted electronically through LEXIS XML upload.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRejectUnsupportedSpecCodeValues() {
+    ApplicationSubmissionImportService service = service();
+    String xml =
+        SAMPLE_XML
+            .replace(
+                "<lexis:applStatusCode>A</lexis:applStatusCode>",
+                "<lexis:applStatusCode>C</lexis:applStatusCode>")
+            .replace(
+                "<lexis:exemptionRsnCde>S</lexis:exemptionRsnCde>",
+                "<lexis:exemptionRsnCde>O</lexis:exemptionRsnCde>")
+            .replace(
+                "<lexis:productTypeCode>H</lexis:productTypeCode>",
+                "<lexis:productTypeCode>X</lexis:productTypeCode>")
+            .replace("<lexis:ageClass>S</lexis:ageClass>", "<lexis:ageClass>X</lexis:ageClass>");
+
+    ApplicationSubmissionImportResultDto result =
+        service.importApplicationSubmission(xmlFile("bad-codes.xml", xml), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains(
+            "Application status code must be A for electronic LEXIS submissions.",
+            "Exemption reason code must be S for electronic LEXIS submissions.",
+            "Product type code must be H or S.",
+            "Age class must be O or S.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
   void shouldRejectPackageNumbersLongerThanTwentyCharacters() {
     ApplicationSubmissionImportService service = service();
     String xml =
@@ -907,6 +1091,11 @@ class ApplicationSubmissionImportServiceTest {
         "formFile", "6-652-7.xml", "application/xml", SAMPLE_XML.getBytes(StandardCharsets.UTF_8));
   }
 
+  private MockMultipartFile xmlFile(String fileName, String xml) {
+    return new MockMultipartFile(
+        "formFile", fileName, "application/xml", xml.getBytes(StandardCharsets.UTF_8));
+  }
+
   private MockMultipartFile sampleResourceXml(String fileName) throws Exception {
     String resourceName = "/lexis-upload-samples/" + fileName;
     try (InputStream input = getClass().getResourceAsStream(resourceName)) {
@@ -923,6 +1112,16 @@ class ApplicationSubmissionImportServiceTest {
   private MockMultipartFile sampleGeoJson() {
     return new MockMultipartFile(
         "formFile", "6-652-7.geojson", "application/geo+json", SAMPLE_GEOJSON.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private static String xmlWithProductDetail(String productDetail) {
+    String startTag = "<lexis:productDetail>";
+    String endTag = "</lexis:productDetail>";
+    int productStart = SAMPLE_XML.indexOf(startTag);
+    int productEnd = SAMPLE_XML.indexOf(endTag) + endTag.length();
+    return SAMPLE_XML.substring(0, productStart)
+        + productDetail
+        + SAMPLE_XML.substring(productEnd);
   }
 
   private MockMultipartFile zippedFile(String entryName, String xml) throws Exception {

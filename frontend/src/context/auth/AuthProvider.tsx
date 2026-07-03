@@ -5,6 +5,7 @@ import {
   idirProviderName,
   isCognitoConfigured,
 } from '@/config/fam/config'
+import { isProdRtmOnlyMode, PROD_RTM_ONLY_ROUTE } from '@/config/features'
 import { AuthContext } from '@/context/auth/AuthContext'
 import { hasRole } from '@/context/auth/role-utils'
 import {
@@ -56,6 +57,19 @@ const ACTION_PRIORITY: string[] = [
   'lexisAgentAdmin',
 ]
 
+const REPORT_ACTION_ROUTE_MAP: Record<string, string> = {
+  applicationreport: '/reports/applicationReport',
+  mofrlisting: '/reports/biweeklyListing',
+  offerreport: '/reports/offerReport',
+  teacreport: '/reports/teacReport',
+  exemptionreport: '/reports/exemptionReport',
+  permitledgerreport: '/reports/permitLedgerReport',
+  transportreport: '/reports/transportReport',
+  speciesgradereport: '/reports/speciesGradeReport',
+  feereport: '/reports/feeReport',
+  tenurereport: '/reports/tenureReport',
+}
+
 const REPORT_ACTIONS = new Set<string>([
   'applicationreport',
   'offerreport',
@@ -88,6 +102,7 @@ const ROLE_APPLICATION_APPROVER = 'APPLICATION_APPROVER'
 const ROLE_EXEMPTION_APPROVER = 'EXEMPTION_APPROVER'
 const ROLE_PROVINCIAL_SUBMITTER = 'PROVINCIAL_SUBMITTER'
 const ROLE_FEDERAL_SUBMITTER = 'FEDERAL_SUBMITTER'
+const PROD_RTM_ONLY_ACTION = '/lexisAgentAdmin'
 
 const INDUSTRY_ROLE_NAMES = new Set<string>([ROLE_PROVINCIAL_SUBMITTER, ROLE_FEDERAL_SUBMITTER])
 const SESSION_ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'scroll', 'focus']
@@ -179,9 +194,16 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   const isExemptionApproverUser = hasRole(capabilities.roles, ROLE_EXEMPTION_APPROVER)
   const grantedSet = new Set(capabilities.grantedActions.map(normalizeAction))
   const hasGrantedAction = (action: string): boolean => grantedSet.has(normalizeAction(action))
+  const reportRoute = Object.entries(REPORT_ACTION_ROUTE_MAP).find(([action]) =>
+    grantedSet.has(action),
+  )?.[1]
+
+  if (isProdRtmOnlyMode()) {
+    return isAdminUser ? PROD_RTM_ONLY_ROUTE : '/unauthorized'
+  }
 
   if (isAdminUser) {
-    return '/admin'
+    return '/provincial/review'
   }
 
   if (isReadOnlyUser) {
@@ -195,17 +217,20 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     if (isProvincialSubmitterUser && hasGrantedAction('createApplication')) {
       return '/provincial/application/create'
     }
-    if (isFederalSubmitterUser && hasGrantedAction('uploadApplicationSubmission')) {
-      return '/federal/application/upload'
-    }
     if (
       hasGrantedAction('/federalApplicationSearch') ||
       hasGrantedAction('viewFederalApplication')
     ) {
       return '/federal'
     }
+    if (isFederalSubmitterUser && !isProvincialSubmitterUser) {
+      return '/unauthorized'
+    }
     if (hasGrantedAction('uploadApplicationSubmission')) {
       return '/provincial/application/upload'
+    }
+    if (reportRoute) {
+      return reportRoute
     }
     return '/unauthorized'
   }
@@ -223,6 +248,10 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     if (grantedSet.has(normalizedAction)) {
       return LEGACY_ACTION_ROUTE_MAP[normalizedAction]
     }
+  }
+
+  if (reportRoute) {
+    return reportRoute
   }
 
   return '/unauthorized'
@@ -418,6 +447,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const canPerform = useCallback(
     (action: string): boolean => {
+      if (isProdRtmOnlyMode()) {
+        return (
+          hasRole(capabilities.roles, ROLE_ADMIN) &&
+          normalizeAction(action) === normalizeAction(PROD_RTM_ONLY_ACTION)
+        )
+      }
       if (hasRole(capabilities.roles, ROLE_ADMIN)) {
         return true
       }
