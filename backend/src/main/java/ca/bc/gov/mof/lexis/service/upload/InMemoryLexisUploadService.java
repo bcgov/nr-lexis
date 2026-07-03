@@ -1,6 +1,8 @@
 package ca.bc.gov.mof.lexis.service.upload;
 
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
 import java.math.BigDecimal;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
@@ -10,6 +12,16 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @Profile("!oracle")
 public class InMemoryLexisUploadService implements LexisUploadService {
+
+  private final VirusScanService virusScanService;
+
+  public InMemoryLexisUploadService(VirusScanService virusScanService) {
+    this.virusScanService = virusScanService;
+  }
+
+  InMemoryLexisUploadService() {
+    this(VirusScanService.NO_OP);
+  }
 
   @Override
   public Optional<LexisUploadResultDto> uploadApplication(
@@ -67,12 +79,18 @@ public class InMemoryLexisUploadService implements LexisUploadService {
             ? "uploaded-file"
             : file.getOriginalFilename();
 
-    return Optional.of(
-        new LexisUploadResultDto(
-            uploadType,
-            fileName,
-            file.getSize(),
-            "accepted",
-            "Upload accepted in local profile; persistence pipeline is not enabled."));
+    try {
+      virusScanService.assertClean(file);
+      return Optional.of(
+          new LexisUploadResultDto(
+              uploadType,
+              fileName,
+              file.getSize(),
+              "accepted",
+              "Upload accepted in local profile; persistence pipeline is not enabled."));
+    } catch (VirusScanException ex) {
+      return Optional.of(
+          new LexisUploadResultDto(uploadType, fileName, file.getSize(), "rejected", ex.userMessage()));
+    }
   }
 }

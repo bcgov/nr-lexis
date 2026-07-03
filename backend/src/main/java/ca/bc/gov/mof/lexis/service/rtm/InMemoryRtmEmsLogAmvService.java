@@ -9,6 +9,8 @@ import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -34,6 +36,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final List<String> UPLOAD_GROWTH_INDICATORS = List.of("O", "S");
 
   private final Clock clock;
+  private final VirusScanService virusScanService;
 
   private final List<RtmEmsLogAmvRowDto> rows = new ArrayList<>(
       List.of(
@@ -65,12 +68,21 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
               BigDecimal.valueOf(900.89),
               "0")));
 
-  public InMemoryRtmEmsLogAmvService() {
-    this(Clock.systemUTC());
+  InMemoryRtmEmsLogAmvService() {
+    this(Clock.systemUTC(), VirusScanService.NO_OP);
   }
 
   InMemoryRtmEmsLogAmvService(Clock clock) {
+    this(clock, VirusScanService.NO_OP);
+  }
+
+  public InMemoryRtmEmsLogAmvService(VirusScanService virusScanService) {
+    this(Clock.systemUTC(), virusScanService);
+  }
+
+  InMemoryRtmEmsLogAmvService(Clock clock, VirusScanService virusScanService) {
     this.clock = clock == null ? Clock.systemUTC() : clock;
+    this.virusScanService = virusScanService;
   }
 
   @Override
@@ -169,6 +181,21 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     String fileName = trimToNull(file.getOriginalFilename());
     if (!isXlsx(file) ) {
       return buildPreview("rejected", "File type is not supported.", 0, List.of("Upload an XLSX file."), List.of());
+    }
+    try {
+      virusScanService.assertClean(file);
+    } catch (VirusScanException ex) {
+      return buildPreview(
+          "rejected",
+          ex.userMessage(),
+          0,
+          List.of(ex.userMessage()),
+          List.of(),
+          null,
+          null,
+          List.of(),
+          fileName,
+          file.getSize());
     }
 
     try {
@@ -556,6 +583,13 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     if (!isXlsx(file)) {
       errors.add("File type is not supported.");
+    }
+    if (errors.isEmpty()) {
+      try {
+        virusScanService.assertClean(file);
+      } catch (VirusScanException ex) {
+        errors.add(ex.userMessage());
+      }
     }
 
     return errors;

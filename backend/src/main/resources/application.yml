@@ -37,6 +37,12 @@ management:
         include: health,info,prometheus
 
 lexis:
+  virus-scan:
+    enabled: ${LEXIS_VIRUS_SCAN_ENABLED:false}
+    host: ${LEXIS_VIRUS_SCAN_HOST:localhost}
+    port: ${LEXIS_VIRUS_SCAN_PORT:3310}
+    timeout: ${LEXIS_VIRUS_SCAN_TIMEOUT:10s}
+    chunk-size: ${LEXIS_VIRUS_SCAN_CHUNK_SIZE:8192}
   mail:
     from: ${LEXIS_MAIL_FROM:Provincial.Log.Export.Analyst@gov.bc.ca}
   auth:

@@ -105,6 +105,14 @@ spec:
                 secretKeyRef:
                   name: lexis-backend-secret
                   key: KEYSTORE_SECRET
+            - name: LEXIS_VIRUS_SCAN_ENABLED
+              value: "true"
+            - name: LEXIS_VIRUS_SCAN_HOST
+              value: lexis-clamav
+            - name: LEXIS_VIRUS_SCAN_PORT
+              value: "3310"
+            - name: LEXIS_VIRUS_SCAN_TIMEOUT
+              value: 10s
           resources:
             requests:
               cpu: ${MIN_CPU}
@@ -200,6 +208,161 @@ spec:
         target:
           type: Utilization
           averageUtilization: 200
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lexis-clamav-config
+  namespace: ${OC_NAMESPACE}
+  labels:
+    app: lexis-clamav
+data:
+  clamd.conf: |
+    LogFile /dev/stdout
+    LogTime yes
+    DatabaseDirectory /opt/app-root/src
+    TCPSocket 3310
+    StreamMaxLength 25M
+    ReadTimeout 120
+    CommandReadTimeout 10
+    SendBufTimeout 500
+    MaxThreads 10
+    MaxQueue 30
+    Foreground yes
+    TemporaryDirectory /tmp/clamav
+    AllowSupplementaryGroups yes
+    ScanArchive yes
+    Bytecode yes
+  freshclam.conf: |
+    DatabaseDirectory /opt/app-root/src
+    LogTime yes
+    LogVerbose yes
+    DatabaseMirror https://clamav-mirror.apps.silver.devops.gov.bc.ca
+    Foreground yes
+    ConnectTimeout 60
+    ReceiveTimeout 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lexis-clamav
+  namespace: ${OC_NAMESPACE}
+  labels:
+    app: lexis-clamav
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lexis-clamav
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: lexis-clamav
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: lexis-clamav
+          image: ${CLAMAV_IMAGE}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3310
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+              ephemeral-storage: 300Mi
+            limits:
+              cpu: 1500m
+              memory: 2Gi
+              ephemeral-storage: 1Gi
+          livenessProbe:
+            exec:
+              command:
+                - /opt/app-root/clamdcheck.sh
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - /opt/app-root/clamdcheck.sh
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 20
+          volumeMounts:
+            - name: clamav-config
+              mountPath: /usr/local/etc/clamd.conf
+              subPath: clamd.conf
+              readOnly: true
+            - name: clamav-config
+              mountPath: /usr/local/etc/freshclam.conf
+              subPath: freshclam.conf
+              readOnly: true
+            - name: clamav-db
+              mountPath: /opt/app-root/src
+            - name: clamav-logs
+              mountPath: /var/log/clamav
+            - name: clamav-tmp
+              mountPath: /tmp/clamav
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: clamav-config
+          configMap:
+            name: lexis-clamav-config
+        - name: clamav-db
+          emptyDir: {}
+        - name: clamav-logs
+          emptyDir: {}
+        - name: clamav-tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lexis-clamav
+  namespace: ${OC_NAMESPACE}
+  labels:
+    app: lexis-clamav
+spec:
+  selector:
+    app: lexis-clamav
+  ports:
+    - name: 3310-tcp
+      port: 3310
+      targetPort: 3310
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-backend-to-clamav
+  namespace: ${OC_NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: lexis-clamav
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: lexis-backend
+      ports:
+        - protocol: TCP
+          port: 3310
+  policyTypes:
+    - Ingress
 ---
 kind: PersistentVolumeClaim
 apiVersion: v1

@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.rtm.OracleRtmEmsLogAmvRepository;
+import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -37,6 +38,7 @@ class OracleRtmEmsLogAmvServiceTest {
       context.registerBean(
           OracleRtmEmsLogAmvRepository.class,
           () -> mock(OracleRtmEmsLogAmvRepository.class));
+      context.registerBean(VirusScanService.class, () -> VirusScanService.NO_OP);
       context.register(OracleRtmEmsLogAmvService.class);
 
       context.refresh();
@@ -70,7 +72,7 @@ class OracleRtmEmsLogAmvServiceTest {
             any(LocalDate.class),
             any(BigDecimal.class)))
         .thenReturn("0");
-    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, FIXED_CLOCK);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(matrixWorkbook(), null, null);
 
