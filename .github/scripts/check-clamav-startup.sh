@@ -26,8 +26,8 @@ docker build --pull -t "${IMAGE}" "${ROOT_DIR}/clamav"
 
 docker run -d --name "${CONTAINER}" -p 3310:3310 "${IMAGE}" sh -c '
   set -eu
-  cat > /opt/app-root/src/eicar.ndb <<EOF
-Eicar-Test-Signature:0:*:58354F2150254041505B345C505A58353428505E2937434329377D2445494341522D5354414E444152442D414E544956495255532D544553542D46494C452124482B482A
+  cat > /opt/app-root/src/ci-test.ndb <<EOF
+ClamAv-Ci-Test-Signature:0:*:58354F2150254041505B345C505A58353428505E2937434329377D2445494341522D5354414E444152442D414E544956495255532D544553542D46494C452124482B482A
 EOF
   exec clamd
 '
@@ -65,17 +65,21 @@ import socket
 import struct
 import sys
 
-eicar = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+test_signature_hex = (
+    "58354F2150254041505B345C505A58353428505E2937434329377D244549434152"
+    "2D5354414E444152442D414E544956495255532D544553542D46494C452124482B482A"
+)
+test_payload = bytes.fromhex(test_signature_hex)
 
 with socket.create_connection(("127.0.0.1", 3310), timeout=10) as sock:
     sock.sendall(b"zINSTREAM\0")
-    sock.sendall(struct.pack(">I", len(eicar)))
-    sock.sendall(eicar)
+    sock.sendall(struct.pack(">I", len(test_payload)))
+    sock.sendall(test_payload)
     sock.sendall(struct.pack(">I", 0))
     response = sock.recv(4096).decode("utf-8", errors="replace").strip("\0\r\n")
 
 print(response)
 if "FOUND" not in response:
-    print("Expected ClamAV to detect the EICAR test payload.", file=sys.stderr)
+    print("Expected ClamAV to detect the CI test payload.", file=sys.stderr)
     sys.exit(1)
 PY
