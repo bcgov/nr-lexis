@@ -232,8 +232,7 @@ const selectedNaturalResourceRegionText =
 const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Create and manage applications, view offers and permits'
-const famManageUrlPattern =
-  /^https:\/\/fam(?:-(?:dev|tst|tools))?\.nrs\.gov\.bc\.ca(?:\/.*)?$/
+const famManageUrlPattern = /^https:\/\/fam(?:-(?:dev|tst|tools))?\.nrs\.gov\.bc\.ca(?:\/.*)?$/
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   const regions = asRecordArray(value)
@@ -386,91 +385,28 @@ const regressionSubmissionXml = (
   </esf:submissionContent>
 </esf:ESFSubmission>`
 
-const antivirusTestSignature = (): string =>
-  [
-    'X5O!P%@AP[4',
-    String.fromCharCode(92),
-    'PZX54(P^)7CC)7}$',
-    'EICAR',
-    '-STANDARD-',
-    'ANTIVIRUS-',
-    'TEST-FILE',
-    '!$H+H*',
-  ].join('')
+const antivirusTestPayloadHex =
+  '58354f2150254041505b345c505a58353428505e2937434329377d2445494341522d5354414e444152442d414e544956495255532d544553542d46494c452124482b482a'
 
-const infectedApplicationSubmissionFiles = (): RegressionUploadFile[] => {
-  const signature = antivirusTestSignature()
-  return [
-    {
-      name: 'eicar-application-import.xml',
-      mimeType: 'application/xml',
-      buffer: Buffer.from(
-        `<?xml version="1.0" encoding="UTF-8"?>
-<lexisImport>
-  <manualTest>ClamAV regression payload. This is not real malware.</manualTest>
-  <virusSignature>${signature}</virusSignature>
-</lexisImport>`,
-        'utf8',
-      ),
-    },
-    {
-      name: 'eicar-application-import.geojson',
-      mimeType: 'application/geo+json',
-      buffer: Buffer.from(
-        `${JSON.stringify(
-          {
-            type: 'FeatureCollection',
-            features: [],
-            properties: {
-              manualTest: 'ClamAV regression payload. This is not real malware.',
-            },
-          },
-          null,
-          2,
-        )}
-${signature}`,
-        'utf8',
-      ),
-    },
-  ]
-}
+const antivirusTestPayload = (): Buffer => Buffer.from(antivirusTestPayloadHex, 'hex')
+
+const infectedApplicationSubmissionFiles = (): RegressionUploadFile[] => [
+  {
+    name: 'antivirus-test-application-import.xml',
+    mimeType: 'application/xml',
+    buffer: antivirusTestPayload(),
+  },
+  {
+    name: 'antivirus-test-application-import.geojson',
+    mimeType: 'application/geo+json',
+    buffer: antivirusTestPayload(),
+  },
+]
 
 const infectedApplicationDocumentPdf = (): RegressionUploadFile => ({
-  name: 'eicar-application-upload.pdf',
+  name: 'antivirus-test-application-upload.pdf',
   mimeType: 'application/pdf',
-  buffer: Buffer.from(
-    [
-      '%PDF-1.4',
-      '% ClamAV regression payload. This is not real malware.',
-      `%${antivirusTestSignature()}`,
-      '1 0 obj',
-      '<< /Type /Catalog /Pages 2 0 R >>',
-      'endobj',
-      '2 0 obj',
-      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-      'endobj',
-      '3 0 obj',
-      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
-      'endobj',
-      '4 0 obj',
-      '<< /Length 71 >>',
-      'stream',
-      'BT',
-      '/F1 12 Tf',
-      '36 96 Td',
-      '(ClamAV regression upload test file) Tj',
-      'ET',
-      'endstream',
-      'endobj',
-      '5 0 obj',
-      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-      'endobj',
-      'trailer',
-      '<< /Root 1 0 R >>',
-      '%%EOF',
-    ].join('\n'),
-    'utf8',
-  ),
+  buffer: antivirusTestPayload(),
 })
 
 const adminNavigationSections: Array<{
@@ -809,7 +745,7 @@ const expectApplicationDocumentVirusScanRejection = (
 ): void => {
   expect(response.status, 'application document upload should be rejected by ClamAV').toBe(422)
   expect(response.payload.uploadType).toBe('application')
-  expect(response.payload.fileName).toBe('eicar-application-upload.pdf')
+  expect(response.payload.fileName).toBe('antivirus-test-application-upload.pdf')
   expect(response.payload.status).toBe('rejected')
   expect(response.payload.message ?? '').toContain(virusScanRejectionMessage)
 }
@@ -1226,18 +1162,16 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('combobox', { name: 'Product type' })).toHaveValue(
       'Harvested Timber',
     )
-    await expect(page.getByRole('combobox', { name: 'Exemption reason' })).toHaveValue(
-      'Surplus',
-    )
+    await expect(page.getByRole('combobox', { name: 'Exemption reason' })).toHaveValue('Surplus')
     await expect(page.getByRole('combobox', { name: 'Region' })).toHaveValue(
       'Cariboo Natural Resource Region',
     )
-    await expect(
-      page.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' }),
-    ).toHaveValue(today)
-    await expect(
-      page.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' }),
-    ).toHaveValue(today)
+    await expect(page.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
+      today,
+    )
+    await expect(page.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue(
+      today,
+    )
     await expect(page.getByRole('combobox', { name: 'Listing date' })).toHaveValue(nextListDate)
   })
 
@@ -1838,7 +1772,10 @@ test.describe('TEST IDIR admin regression', () => {
       )
       await page.getByRole('tab', { name: 'Documents' }).click()
       await expect(
-        page.locator('.detail-tile-title').filter({ hasText: /^Documents\b/ }).first(),
+        page
+          .locator('.detail-tile-title')
+          .filter({ hasText: /^Documents\b/ })
+          .first(),
       ).toBeVisible()
       await expect(page.getByText('Upload documents').first()).toBeVisible()
       await expect(

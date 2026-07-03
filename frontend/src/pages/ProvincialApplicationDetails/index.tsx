@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Accordion,
+  AccordionItem,
   Button,
   Column,
   Grid,
@@ -772,6 +774,7 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canAddApplicationDocuments =
     canUploadApplicationDocuments && !documentUploadUnavailableMessage
+  const hasApplicationDocuments = documentRows.length > 0
   const canManageItems =
     canPerform('createApplication') &&
     !detail?.readOnly &&
@@ -3177,71 +3180,93 @@ const ProvincialApplicationDetailsPage = () => {
                               }
                             />
                           )}
-                        {canAddApplicationDocuments && (
-                          <DetailDocumentUploadPanel
-                            workflowType="application"
-                            targetNumber={String(detail.applicationNumber ?? '')}
-                            inputId="applicationDocumentUpload"
-                            disabled={!detail.applicationNumber}
-                            onUploadComplete={refreshApplicationDocuments}
-                          />
+                        {hasApplicationDocuments && (
+                          <section
+                            className="application-documents-list"
+                            aria-label="Application documents"
+                          >
+                            <TextInput
+                              id="applicationDetailDocumentsFilter"
+                              labelText="Filter document rows"
+                              value={documentsFilter}
+                              onChange={(event) =>
+                                updateFilterParam('documentsFilter', event.target.value)
+                              }
+                              placeholder="Filter by file name, description, type, or id"
+                            />
+                            <Table useZebraStyles>
+                              <TableHead>
+                                <TableRow>
+                                  <TableHeader>File Name</TableHeader>
+                                  <TableHeader>Description</TableHeader>
+                                  <TableHeader>Type</TableHeader>
+                                  <TableHeader>Actions</TableHeader>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {filteredDocumentRows.map((row) => (
+                                  <TableRow key={row.id}>
+                                    <TableCell>{row.name || '-'}</TableCell>
+                                    <TableCell>{row.description || '-'}</TableCell>
+                                    <TableCell>{row.type || '-'}</TableCell>
+                                    <TableCell>
+                                      <div className="legacy-search-actions">
+                                        <Button
+                                          kind="ghost"
+                                          size="sm"
+                                          onClick={() => void onOpenDocument(row)}
+                                        >
+                                          Open
+                                        </Button>
+                                        <Button
+                                          kind="danger--ghost"
+                                          size="sm"
+                                          disabled={
+                                            !canDeleteDocuments || isRemovingDocumentId === row.id
+                                          }
+                                          onClick={() => void onRemoveDocument(row)}
+                                        >
+                                          {isRemovingDocumentId === row.id
+                                            ? 'Deleting...'
+                                            : 'Delete'}
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                {filteredDocumentRows.length === 0 && (
+                                  <TableRow>
+                                    <TableCell colSpan={4}>
+                                      No document rows matched the current filter.
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </section>
                         )}
-                        <TextInput
-                          id="applicationDetailDocumentsFilter"
-                          labelText="Filter document rows"
-                          value={documentsFilter}
-                          onChange={(event) =>
-                            updateFilterParam('documentsFilter', event.target.value)
-                          }
-                          placeholder="Filter by file name, description, type, or id"
-                        />
-                        <Table useZebraStyles>
-                          <TableHead>
-                            <TableRow>
-                              <TableHeader>File Name</TableHeader>
-                              <TableHeader>Description</TableHeader>
-                              <TableHeader>Type</TableHeader>
-                              <TableHeader>Actions</TableHeader>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {filteredDocumentRows.map((row) => (
-                              <TableRow key={row.id}>
-                                <TableCell>{row.name || '-'}</TableCell>
-                                <TableCell>{row.description || '-'}</TableCell>
-                                <TableCell>{row.type || '-'}</TableCell>
-                                <TableCell>
-                                  <div className="legacy-search-actions">
-                                    <Button
-                                      kind="ghost"
-                                      size="sm"
-                                      onClick={() => void onOpenDocument(row)}
-                                    >
-                                      Open
-                                    </Button>
-                                    <Button
-                                      kind="danger--ghost"
-                                      size="sm"
-                                      disabled={
-                                        !canDeleteDocuments || isRemovingDocumentId === row.id
-                                      }
-                                      onClick={() => void onRemoveDocument(row)}
-                                    >
-                                      {isRemovingDocumentId === row.id ? 'Deleting...' : 'Delete'}
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                            {filteredDocumentRows.length === 0 && (
-                              <TableRow>
-                                <TableCell colSpan={4}>
-                                  No document rows matched the current filter.
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
+                        {canAddApplicationDocuments &&
+                          (hasApplicationDocuments ? (
+                            <Accordion className="application-documents-upload-accordion">
+                              <AccordionItem title="Upload new documents">
+                                <DetailDocumentUploadPanel
+                                  workflowType="application"
+                                  targetNumber={String(detail.applicationNumber ?? '')}
+                                  inputId="applicationDocumentUpload"
+                                  disabled={!detail.applicationNumber}
+                                  onUploadComplete={refreshApplicationDocuments}
+                                />
+                              </AccordionItem>
+                            </Accordion>
+                          ) : (
+                            <DetailDocumentUploadPanel
+                              workflowType="application"
+                              targetNumber={String(detail.applicationNumber ?? '')}
+                              inputId="applicationDocumentUpload"
+                              disabled={!detail.applicationNumber}
+                              onUploadComplete={refreshApplicationDocuments}
+                            />
+                          ))}
                       </Tile>
                     </Column>
                   </Grid>
