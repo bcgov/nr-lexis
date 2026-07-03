@@ -20,7 +20,6 @@ import {
   openExemptionDocument,
   removeExemptionDocument,
 } from '@/service/provincial-exemption-documents-service'
-import { runReport } from '@/service/report-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -44,12 +43,6 @@ vi.mock('@/service/federal-application-documents-service', () => ({
   removeFederalApplicationDocument: vi.fn(),
 }))
 
-vi.mock('@/service/report-service', () => ({
-  runReport: vi.fn(),
-}))
-
-Element.prototype.scrollIntoView = vi.fn()
-
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchFederalApplicationDetail = vi.mocked(fetchFederalApplicationDetail)
 const mockedFetchProvincialExemptionDetail = vi.mocked(fetchProvincialExemptionDetail)
@@ -59,7 +52,6 @@ const mockedRemoveFederalApplicationDocument = vi.mocked(removeFederalApplicatio
 const mockedFetchExemptionDocuments = vi.mocked(fetchExemptionDocuments)
 const mockedOpenExemptionDocument = vi.mocked(openExemptionDocument)
 const mockedRemoveExemptionDocument = vi.mocked(removeExemptionDocument)
-const mockedRunReport = vi.mocked(runReport)
 
 const selectDetailTab = async (name: string) => {
   const tab = await screen.findByRole('tab', { name })
@@ -167,15 +159,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
       success: true,
       source: 'api',
     })
-    mockedRunReport.mockResolvedValue({
-      source: 'api',
-      blob: new Blob(['approved-exemption-report']),
-      filename: 'approved-exemption-report.pdf',
-      contentType: 'application/pdf',
-    })
   })
 
-  it('jumps from the exemption action to the embedded upload panel', async () => {
+  it('shows the embedded exemption upload panel on the documents tab without header actions', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
         <Routes>
@@ -190,13 +176,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
     for (const tabName of ['Summary', 'Permits', 'Documents', 'Remarks']) {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Exemption Document' })
-    expect(uploadButton).toBeEnabled()
-    await userEvent.click(uploadButton)
+    expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Upload Exemption Document' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open Approved Exemption Report' })).toBeNull()
 
-    await waitFor(() => {
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
-    })
+    await selectDetailTab('Documents')
     expect(await screen.findByText('Upload exemption documents')).toBeInTheDocument()
   })
 
@@ -314,10 +298,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    const uploadButton = await screen.findByRole('button', { name: 'Upload Exemption Document' })
-    expect(uploadButton).toBeDisabled()
-
     await selectDetailTab('Documents')
+    expect(screen.queryByRole('button', { name: 'Upload Exemption Document' })).toBeNull()
+    expect(screen.queryByText('Upload exemption documents')).not.toBeInTheDocument()
     const documentName = await screen.findByText('locked-exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -326,41 +309,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
     expect(deleteButton).toBeDisabled()
     expect(mockedRemoveExemptionDocument).not.toHaveBeenCalled()
-  })
-
-  it('uses report service blob response when opening approved exemption report', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
-        <Routes>
-          <Route
-            path="/provincial/exemption/:exemptionNumber"
-            element={<ProvincialExemptionDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const reportButton = await screen.findByRole('button', {
-      name: 'Open Approved Exemption Report',
-    })
-    expect(reportButton).toBeEnabled()
-    await userEvent.click(reportButton)
-
-    expect(mockedRunReport).toHaveBeenCalledWith({
-      reportId: 'approvedExemptionReport',
-      actionMapping: 'generate',
-      values: {
-        exemptionNumber: 'EX-777',
-        outputFormat: 'PDF',
-      },
-    })
-    expect(openSpy).toHaveBeenCalledWith(
-      expect.stringContaining('blob:'),
-      'approvedExemptionReportWindow',
-      expect.any(String),
-    )
   })
 
   it('renders federal application details with the legacy tab structure', async () => {

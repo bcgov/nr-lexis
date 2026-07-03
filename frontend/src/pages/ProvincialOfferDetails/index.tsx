@@ -1,28 +1,19 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Button, Column, Grid, InlineLoading, Tile } from '@carbon/react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Column, Grid, InlineLoading } from '@carbon/react'
+import { useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
-import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
-import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { fetchProvincialOfferDetail } from '@/service/lexis-detail-service'
 
 const ProvincialOfferDetailsPage = () => {
-  const navigate = useNavigate()
-  const { canPerform } = useAuth()
   const { offerNumber } = useParams()
-  const [searchParams] = useSearchParams()
   const [detail, setDetail] = useState<ProvincialOfferDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const beginDetailRequest = useLatestRequestGuard()
-  const withCurrentSearch = useCallback(
-    (path: string): string => appendSearchParamsToPath(path, searchParams),
-    [searchParams],
-  )
 
   useEffect(() => {
     const load = async () => {
@@ -91,39 +82,6 @@ const ProvincialOfferDetailsPage = () => {
 
       {!loading && detail && (
         <>
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">Actions</h2>
-              <div className="legacy-search-actions">
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!canPerform('/offersSearch')}
-                  onClick={() => navigate(withCurrentSearch('/provincial/offers'))}
-                >
-                  Back to Offer search Results
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={
-                    !detail.applicationNumber ||
-                    !canPerform('/applicationSearch') ||
-                    !canPerform('/applicationDetails')
-                  }
-                  onClick={() => {
-                    if (detail.applicationNumber) {
-                      navigate(
-                        withCurrentSearch(`/provincial/application/${detail.applicationNumber}`),
-                      )
-                    }
-                  }}
-                >
-                  Open Application Detail
-                </Button>
-              </div>
-            </Tile>
-          </Column>
           <Column sm={4} md={8} lg={16}>
             <DetailFieldTile
               title="Offer summary"

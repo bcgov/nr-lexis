@@ -1898,21 +1898,8 @@ body {
   margin: 0;
 }
 
-.application-detail-action-bar {
-  align-items: center;
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-.application-detail-action-bar .detail-tile-title,
-.application-detail-action-bar .legacy-search-actions {
-  margin: 0;
-}
-
-.application-detail-action-bar .cds--btn {
-  max-inline-size: none;
-  min-inline-size: 10rem;
+.application-detail-documents .detail-empty-message + .detail-document-upload {
+  margin-top: 1rem;
 }
 
 .application-detail-status-strip .detail-tile-title {
@@ -2171,8 +2158,7 @@ body {
 
   .application-detail-header-metrics,
   .application-detail-documents .legacy-search-grid,
-  .application-detail-remarks .legacy-search-actions,
-  .application-detail-action-bar {
+  .application-detail-remarks .legacy-search-actions {
     grid-template-columns: 1fr;
   }
 }

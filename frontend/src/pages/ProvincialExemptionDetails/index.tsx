@@ -40,8 +40,7 @@ import {
   removeExemptionDocument,
   type ProvincialExemptionDocumentRow,
 } from '@/service/provincial-exemption-documents-service'
-import { runReport } from '@/service/report-service'
-import { openBlobInNewTab, triggerBrowserDownload } from '@/utils/download'
+import { triggerBrowserDownload } from '@/utils/download'
 
 const EXEMPTION_DETAIL_TAB_INDEX = {
   summary: 0,
@@ -63,7 +62,6 @@ const ProvincialExemptionDetailsPage = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
-  const [isOpeningApprovedExemptionReport, setIsOpeningApprovedExemptionReport] = useState(false)
   const [selectedExemptionTabIndex, setSelectedExemptionTabIndex] = useState(
     EXEMPTION_DETAIL_TAB_INDEX.summary,
   )
@@ -178,39 +176,6 @@ const ProvincialExemptionDetailsPage = () => {
 
   const canManageDocuments = canPerform('/fileExemptionUpload')
 
-  const onOpenApprovedExemptionReport = useCallback(async () => {
-    if (!detail) {
-      return
-    }
-
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    setIsOpeningApprovedExemptionReport(true)
-    try {
-      const runResult = await runReport({
-        reportId: 'approvedExemptionReport',
-        actionMapping: 'generate',
-        values: {
-          exemptionNumber: detail.exemptionNumber,
-          outputFormat: 'PDF',
-        },
-      })
-
-      const opened = openBlobInNewTab(runResult.blob, 'approvedExemptionReportWindow')
-      if (!opened) {
-        triggerBrowserDownload(runResult.blob, runResult.filename)
-        setActionErrorMessage(
-          'Popup blocked while opening approved exemption report preview. Downloaded the report file instead.',
-        )
-      }
-    } catch (error) {
-      console.error(error)
-      setActionErrorMessage('Unable to generate approved exemption report.')
-    } finally {
-      setIsOpeningApprovedExemptionReport(false)
-    }
-  }, [detail])
-
   const refreshExemptionDocuments = useCallback(async () => {
     if (!exemptionNumber) {
       return
@@ -220,19 +185,6 @@ const ProvincialExemptionDetailsPage = () => {
     setDocumentRows(documentsResult.rows)
     setDocumentsErrorMessage('')
   }, [exemptionNumber])
-
-  const onOpenExemptionUpload = useCallback(() => {
-    if (!detail) {
-      return
-    }
-
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    setSelectedExemptionTabIndex(EXEMPTION_DETAIL_TAB_INDEX.documents)
-    window.setTimeout(() => {
-      document.getElementById('exemptionDocumentUpload')?.scrollIntoView({ block: 'start' })
-    }, 0)
-  }, [detail])
 
   const onOpenDocument = useCallback(async (row: ProvincialExemptionDocumentRow) => {
     setActionErrorMessage('')
@@ -349,70 +301,6 @@ const ProvincialExemptionDetailsPage = () => {
               />
             </Column>
           )}
-
-          <Column sm={4} md={8} lg={16}>
-            <Tile>
-              <h2 className="detail-tile-title">Actions</h2>
-              <div className="legacy-search-actions">
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!canPerform('/exemptionSearch')}
-                  onClick={() => navigate(withCurrentSearch('/provincial/exemption'))}
-                >
-                  Back to Exemption search Results
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={
-                    !detail.applicationNumber ||
-                    !canPerform('/applicationSearch') ||
-                    !canPerform('/applicationDetails')
-                  }
-                  onClick={() => {
-                    if (detail.applicationNumber) {
-                      navigate(
-                        withCurrentSearch(`/provincial/application/${detail.applicationNumber}`),
-                      )
-                    }
-                  }}
-                >
-                  Open Application Detail
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!canPerform('/permitSearch')}
-                  onClick={() => navigate(withCurrentSearch('/provincial/permit'))}
-                >
-                  Open Permit search
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={!canManageDocuments || !detail.exemptionNumber}
-                  onClick={onOpenExemptionUpload}
-                >
-                  Upload Exemption Document
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  disabled={
-                    !detail.exemptionNumber ||
-                    !canPerform('/approvedExemptionReport') ||
-                    isOpeningApprovedExemptionReport
-                  }
-                  onClick={() => void onOpenApprovedExemptionReport()}
-                >
-                  {isOpeningApprovedExemptionReport
-                    ? 'Opening Approved Exemption Report...'
-                    : 'Open Approved Exemption Report'}
-                </Button>
-              </div>
-            </Tile>
-          </Column>
 
           <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
             <Tabs

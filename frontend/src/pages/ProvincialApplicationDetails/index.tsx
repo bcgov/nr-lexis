@@ -22,7 +22,6 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Add, ArrowLeft, Launch, Search, Upload } from '@carbon/icons-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
@@ -1648,46 +1647,6 @@ const ProvincialApplicationDetailsPage = () => {
     void loadReviewOptions()
   }, [canReviewApplication])
 
-  const onCreateOffer = useCallback(() => {
-    if (!detail) {
-      return
-    }
-
-    const params = new URLSearchParams()
-    params.set('applicationNumber', String(detail.applicationNumber))
-    const packageNumbers = detail.packages
-      .map((item) => item.packageNumber.trim())
-      .filter((packageNumber) => packageNumber.length > 0)
-    if (packageNumbers.length > 0) {
-      params.set('packageNumber', packageNumbers[0])
-      params.set('packageNumbers', packageNumbers.join(','))
-    }
-    if (detail.ownerClientNumber) {
-      params.set('offeringClientNumber', detail.ownerClientNumber)
-    }
-    if (ownerClientData?.companyName) {
-      params.set('companyName', ownerClientData.companyName)
-    }
-    if (summaryForm?.ownerContactName) {
-      params.set('contactName', summaryForm.ownerContactName)
-    }
-    if (detail.orgUnitNumber !== null) {
-      params.set('region', String(detail.orgUnitNumber))
-    }
-    if (summaryForm?.productLocation) {
-      params.set('pickupLocation', summaryForm.productLocation)
-    }
-
-    const query = params.toString()
-    navigate(query.length > 0 ? `/provincial/offers/create?${query}` : '/provincial/offers/create')
-  }, [
-    detail,
-    navigate,
-    ownerClientData?.companyName,
-    summaryForm?.ownerContactName,
-    summaryForm?.productLocation,
-  ])
-
   const refreshApplicationDocuments = useCallback(async () => {
     if (!applicationNumber) {
       return
@@ -1697,18 +1656,6 @@ const ProvincialApplicationDetailsPage = () => {
     setDocumentRows(documentsResult.rows)
     setDocumentsErrorMessage('')
   }, [applicationNumber])
-
-  const onOpenApplicationUpload = useCallback(() => {
-    if (!detail) {
-      return
-    }
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    setSelectedApplicationTabIndex(APPLICATION_DETAIL_TAB_INDEX.documents)
-    window.setTimeout(() => {
-      document.getElementById('applicationDocumentUpload')?.scrollIntoView({ block: 'start' })
-    }, 0)
-  }, [detail])
 
   const onOpenDocument = useCallback(async (row: ProvincialApplicationDocumentRow) => {
     setActionErrorMessage('')
@@ -2411,77 +2358,6 @@ const ProvincialApplicationDetailsPage = () => {
             </Column>
           )}
 
-          <Column sm={4} md={8} lg={16}>
-            <Tile className="application-detail-action-bar">
-              <h2 className="detail-tile-title">Actions</h2>
-              <div className="legacy-search-actions">
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  renderIcon={ArrowLeft}
-                  disabled={!canPerform('/applicationSearch')}
-                  onClick={() => navigate(withCurrentSearch('/provincial/application'))}
-                >
-                  Back to Application search Results
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  renderIcon={Launch}
-                  disabled={
-                    !detail.exemptionNumber ||
-                    !canPerform('/exemptionSearch') ||
-                    !canPerform('/exemptionDetails')
-                  }
-                  onClick={() => {
-                    if (detail.exemptionNumber) {
-                      navigate(
-                        withCurrentSearch(
-                          `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`,
-                        ),
-                      )
-                    }
-                  }}
-                >
-                  Open Exemption Detail
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  renderIcon={Search}
-                  disabled={!canPerform('/offersSearch')}
-                  onClick={() => navigate(withCurrentSearch('/provincial/offers'))}
-                >
-                  Open Offers Search
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  renderIcon={Upload}
-                  disabled={!canAddApplicationDocuments || !detail.applicationNumber}
-                  onClick={onOpenApplicationUpload}
-                >
-                  Upload Application Document
-                </Button>
-                <Button
-                  kind="primary"
-                  size="sm"
-                  renderIcon={Add}
-                  disabled={
-                    !canPerform('/offersSearch') ||
-                    !canPerform('createOffer') ||
-                    !detail.canCreateOffers ||
-                    detail.industryUser ||
-                    detail.packages.length === 0
-                  }
-                  onClick={onCreateOffer}
-                >
-                  Create offer
-                </Button>
-              </div>
-            </Tile>
-          </Column>
-
           <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
             <Tabs
               selectedIndex={selectedApplicationTabIndex}
@@ -3180,6 +3056,11 @@ const ProvincialApplicationDetailsPage = () => {
                               }
                             />
                           )}
+                        {!hasApplicationDocuments && (
+                          <p className="detail-empty-message">
+                            No documents are on file for this application yet.
+                          </p>
+                        )}
                         {hasApplicationDocuments && (
                           <section
                             className="application-documents-list"
