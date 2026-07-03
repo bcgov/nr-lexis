@@ -220,7 +220,7 @@ metadata:
     app: lexis-clamav
 data:
   clamd.conf: |
-    LogFile /dev/stdout
+    LogFile /var/log/clamav/clamav.log
     LogTime yes
     DatabaseDirectory /opt/app-root/src
     TCPSocket 3310
@@ -232,7 +232,6 @@ data:
     MaxQueue 30
     Foreground yes
     TemporaryDirectory /tmp/clamav
-    AllowSupplementaryGroups yes
     ScanArchive yes
     Bytecode yes
   freshclam.conf: |
